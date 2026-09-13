@@ -1986,14 +1986,25 @@ async function renderPermissions(){
     </section>
 
     <section class="card">
-      <div class="section-label">Coach / Captain access</div>
-      <h2>Keep elevated access controlled.</h2>
-      <div class="help">A playing captain or coach should simply use the normal <strong>Player sign-up</strong> above. Then assign their Captain/Coach role and access below.</div>
+      <div class="section-label">Captain / Coach permissions</div>
+      <h2>Everyone who plays joins as a Player first.</h2>
 
-      <div class="notice"><strong>Non-playing coach?</strong><br>They can use a separate staff join link, choose <strong>Coach / Captain</strong>, and then wait for an Admin to assign access.</div>
+      <div class="notice">
+        <strong>Playing captain or coach?</strong><br>
+        Use the normal <strong>Player sign-up</strong> above. Once they appear in the club, the Admin adds their Captain/Coach role and chooses what they can view or edit.
+      </div>
+
+      <div class="help" style="margin-top:14px">
+        This means there is only <strong>one normal sign-up process for the playing group</strong>. Captains and player-coaches do not need a different link or a second account.
+      </div>
+
+      <div class="permission-explainer">
+        <strong>Rare exception: non-playing coach</strong>
+        <span>If someone coaches the club but does not play, they need a staff-only join link because they should not receive a Player Plan.</span>
+      </div>
 
       <div class="btnrow">
-        <button class="btn ghost" id="copyStaffJoinLink">Copy non-playing coach link</button>
+        <button class="btn ghost" id="copyStaffJoinLink">Copy non-playing coach sign-up link</button>
       </div>
       <div id="staffJoinStatus" class="help"></div>
 
