@@ -135,3 +135,79 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.splash{padding:
   .new-contributor-row{grid-template-columns:1fr}
   .remove-new-contributor{justify-self:start}
 }
+
+
+/* ---------- v0.5.4 club join invitation UX ---------- */
+.join-share-box{
+  margin-top:14px;
+  padding:13px;
+  border:1px solid #cbd3ee;
+  background:#f6f8ff;
+  border-radius:12px;
+}
+.join-share-label{
+  font-size:9px;
+  font-weight:950;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--navy2);
+  margin-bottom:8px;
+}
+.manual-code{
+  margin:12px 0;
+  display:grid;
+  grid-template-columns:1fr auto auto;
+  gap:12px;
+  align-items:center;
+  border:1px solid var(--line);
+  border-radius:11px;
+  padding:12px;
+  background:#fff;
+}
+.manual-code span{
+  display:block;
+  font-size:9px;
+  font-weight:950;
+  color:var(--navy2);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.manual-code small{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  font-size:8.8px;
+  line-height:1.4;
+}
+.manual-code strong{
+  font-size:17px;
+  letter-spacing:.13em;
+  color:var(--navy2);
+}
+.invite-code-confirm{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  margin:14px 0;
+  padding:11px 13px;
+  border:1px solid #cbd3ee;
+  background:#f6f8ff;
+  border-radius:10px;
+}
+.invite-code-confirm span{
+  font-size:9px;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--muted);
+}
+.invite-code-confirm strong{
+  font-size:16px;
+  letter-spacing:.12em;
+  color:var(--navy2);
+}
+@media(max-width:720px){
+  .manual-code{grid-template-columns:1fr}
+  .manual-code strong{font-size:15px}
+}
