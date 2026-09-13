@@ -114,3 +114,24 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.splash{padding:
   .invite-form{grid-template-columns:1fr}
   .pending-invite-row{align-items:flex-start;flex-direction:column}
 }
+
+
+/* ---------- v0.5.3 multi-person philosophy invite builder ---------- */
+.new-contributor-rows{display:grid;gap:8px;margin-top:10px}
+.new-contributor-row{
+  display:grid;
+  grid-template-columns:1fr 1.35fr auto;
+  gap:8px;
+  align-items:end;
+  padding:9px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#fff;
+}
+.new-contributor-row .field{margin:0}
+.add-person-btn{margin-top:8px}
+.remove-new-contributor{white-space:nowrap}
+@media(max-width:800px){
+  .new-contributor-row{grid-template-columns:1fr}
+  .remove-new-contributor{justify-self:start}
+}
