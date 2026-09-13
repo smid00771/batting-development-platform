@@ -202,6 +202,7 @@ async function routeAuth(){
   const paymentToken=params.get('payment');
   const adminInviteToken=params.get('admin_invite');
   const philosophyInviteToken=params.get('philosophy_invite');
+  const leadHandoverToken=params.get('lead_handover');
   const playerJoinToken=params.get('player_join');
   const joinCodeToken=params.get('join');
 
@@ -209,6 +210,7 @@ async function routeAuth(){
   if(paymentToken){await renderPaymentRoute(paymentToken);return;}
   if(adminInviteToken){await renderAdminInviteRoute(adminInviteToken);return;}
   if(philosophyInviteToken){await renderPhilosophyInviteRoute(philosophyInviteToken);return;}
+  if(leadHandoverToken){await renderLeadAdminHandoverRoute(leadHandoverToken);return;}
   if(playerJoinToken){await renderPlayerJoinRoute(playerJoinToken);return;}
 
   if(joinCodeToken){
@@ -251,7 +253,7 @@ async function loadContext(){
 
   const {data:memberships,error}=await supabase
     .from('club_memberships')
-    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,primary_colour,accent_colour,season_start,season_end)')
+    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,season_start,season_end)')
     .eq('user_id',session.user.id);
 
   if(error){
@@ -1920,10 +1922,11 @@ async function renderPermissions(){
   }
 
   const userIds=(members||[]).map(m=>m.user_id);
-  const [{data:profiles},{data:grants},{data:players}]=await Promise.all([
+  const [{data:profiles},{data:grants},{data:players},{data:pendingHandovers}]=await Promise.all([
     userIds.length?supabase.from('user_profiles').select('*').in('user_id',userIds):Promise.resolve({data:[]}),
     supabase.from('club_access_grants').select('*').eq('club_id',club.id),
-    supabase.from('players').select('id,user_id,display_name,grade').eq('club_id',club.id)
+    supabase.from('players').select('id,user_id,display_name,grade,active').eq('club_id',club.id),
+    supabase.from('club_admin_handovers').select('*').eq('club_id',club.id).eq('status','pending').order('created_at',{ascending:false}).limit(1)
   ]);
 
   const pMap=new Map((profiles||[]).map(p=>[p.user_id,p]));
@@ -1934,7 +1937,11 @@ async function renderPermissions(){
   }
 
   const grades=[...new Set((players||[]).map(p=>p.grade).filter(Boolean))].sort();
-  const activePlayerCount=(players||[]).length;
+  const activePlayerCount=(players||[]).filter(p=>p.active!==false).length;
+  const leadAdminId=club.lead_admin_user_id;
+  const leadAdminName=pMap.get(leadAdminId)?.display_name||'Club Admin';
+  const amLeadAdmin=leadAdminId===session.user.id;
+  const pendingHandover=(pendingHandovers||[])[0]||null;
   const playerJoinLink=`${location.origin}${location.pathname}?player_join=${encodeURIComponent(club.player_join_token||'')}`;
   const staffJoinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}`;
   const signupOpen=club.player_signup_open!==false;
@@ -2015,6 +2022,86 @@ async function renderPermissions(){
     </section>
   </div>
 
+  <section class="card admin-continuity-card" style="margin-top:16px">
+    <div class="admin-continuity-head">
+      <div>
+        <div class="section-label">Admin continuity</div>
+        <h2>Lead Admin</h2>
+        <div class="help">A club can have several Club Admins. The <strong>Lead Admin</strong> is simply the current custodian responsible for formally handing the system to the next person when committee or coaching roles change.</div>
+      </div>
+      <div class="lead-admin-badge">
+        <span>Current Lead Admin</span>
+        <strong>${esc(leadAdminName)}</strong>
+      </div>
+    </div>
+
+    ${pendingHandover?`
+      <div class="handover-pending">
+        <div>
+          <strong>Handover pending</strong>
+          <span>${esc(pendingHandover.invited_name||pendingHandover.invited_email)} has been nominated. Nothing changes until they accept.</span>
+        </div>
+        ${amLeadAdmin?`<button class="btn ghost" id="cancelLeadHandover">Cancel handover</button>`:''}
+      </div>
+    `:amLeadAdmin?`
+      <div class="handover-start">
+        <div>
+          <strong>Leaving the role?</strong>
+          <span>Use a formal handover rather than changing Admin permissions manually. Your successor accepts first, then they decide what access you retain.</span>
+        </div>
+        <button class="btn secondary" id="openLeadHandover">Hand over Lead Admin</button>
+      </div>
+
+      <div id="leadHandoverForm" class="lead-handover-form" style="display:none">
+        <div class="section-label">Choose your successor</div>
+        <div class="handover-successor-choice">
+          <label class="handover-option on">
+            <input type="radio" name="handoverSuccessorType" value="existing" checked>
+            <strong>Someone already in this club</strong>
+            <span>Choose any registered player, coach, captain or existing Admin.</span>
+          </label>
+          <label class="handover-option">
+            <input type="radio" name="handoverSuccessorType" value="external">
+            <strong>Someone not in the system yet</strong>
+            <span>Send the handover directly to their email.</span>
+          </label>
+        </div>
+
+        <div id="existingSuccessorBox">
+          <div class="field">
+            <label>Successor</label>
+            <select id="handoverExistingUser">
+              <option value="">Choose a person…</option>
+              ${(members||[]).filter(m=>m.user_id!==session.user.id).map(m=>{
+                const nm=pMap.get(m.user_id)?.display_name||'Profile not completed';
+                return `<option value="${m.user_id}">${esc(nm)} · ${esc(labelInvolvement(m.involvement))}</option>`;
+              }).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div id="externalSuccessorBox" style="display:none">
+          <div class="grid handover-external-grid">
+            <div class="field"><label>Name</label><input id="handoverExternalName" placeholder="Full name"></div>
+            <div class="field"><label>Email</label><input id="handoverExternalEmail" type="email" placeholder="name@example.com"></div>
+          </div>
+        </div>
+
+        <div class="notice"><strong>Your access does not change when you send this.</strong><br>The nominated person must accept the handover. During acceptance, they set your new club role and access — including removing your club access entirely if you have left.</div>
+
+        <div class="btnrow">
+          <button class="btn secondary" id="sendLeadHandover">Send handover</button>
+          <button class="btn ghost" id="closeLeadHandover">Cancel</button>
+          <span class="status" id="leadHandoverFormStatus"></span>
+        </div>
+
+        <div id="leadHandoverTestLink" class="test-link-box" style="display:none"></div>
+      </div>
+    `:`
+      <div class="notice"><strong>${esc(leadAdminName)} is responsible for the next formal handover.</strong><br>Other Club Admins still have full administration access, but the Lead Admin designation cannot be casually removed through the permission dropdowns.</div>
+    `}
+  </section>
+
   <section class="card" style="margin-top:16px">
     <div class="section-label">Club people</div>
     <h2>Roles & access</h2>
@@ -2028,7 +2115,22 @@ async function renderPermissions(){
       else if(gs.some(g=>g.scope==='grade'&&g.can_edit)){access='grade_edit';grade=gs.find(g=>g.scope==='grade'&&g.can_edit)?.grade||'';}
       else if(gs.some(g=>g.scope==='grade'&&g.can_view)){access='grade_view';grade=gs.find(g=>g.scope==='grade'&&g.can_view)?.grade||'';}
 
+      const isLead=m.user_id===leadAdminId;
       const selfAdmin=m.user_id===session.user.id && m.permission_role==='admin';
+
+      if(isLead){
+        return `<div class="member">
+          <div>
+            <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
+            <small>${esc(labelInvolvement(m.involvement))}</small>
+          </div>
+          <div class="primary-admin-summary lead">
+            <strong>Lead Admin</strong>
+            <span>Full club access · formal handover required</span>
+          </div>
+        </div>`;
+      }
+
       if(selfAdmin){
         return `<div class="member">
           <div>
@@ -2119,6 +2221,96 @@ async function renderPermissions(){
   };
 
   renderPlayerQRCode(playerJoinLink);
+
+  if(document.getElementById('openLeadHandover')){
+    document.getElementById('openLeadHandover').onclick=()=>{
+      document.getElementById('leadHandoverForm').style.display='block';
+      document.getElementById('openLeadHandover').disabled=true;
+    };
+  }
+
+  if(document.getElementById('closeLeadHandover')){
+    document.getElementById('closeLeadHandover').onclick=()=>{
+      document.getElementById('leadHandoverForm').style.display='none';
+      document.getElementById('openLeadHandover').disabled=false;
+    };
+  }
+
+  document.querySelectorAll('input[name="handoverSuccessorType"]').forEach(r=>r.onchange=()=>{
+    document.querySelectorAll('.handover-option').forEach(x=>x.classList.toggle('on',x.querySelector('input').checked));
+    const type=document.querySelector('input[name="handoverSuccessorType"]:checked')?.value||'existing';
+    document.getElementById('existingSuccessorBox').style.display=type==='existing'?'block':'none';
+    document.getElementById('externalSuccessorBox').style.display=type==='external'?'block':'none';
+  });
+
+  if(document.getElementById('sendLeadHandover')){
+    document.getElementById('sendLeadHandover').onclick=async()=>{
+      const st=document.getElementById('leadHandoverFormStatus');
+      const btn=document.getElementById('sendLeadHandover');
+      const type=document.querySelector('input[name="handoverSuccessorType"]:checked')?.value||'existing';
+
+      let successorUserId=null;
+      let successorName='';
+      let successorEmail='';
+
+      if(type==='existing'){
+        successorUserId=document.getElementById('handoverExistingUser').value||null;
+        if(!successorUserId){
+          st.textContent='Choose the person who should take over.';
+          return;
+        }
+      }else{
+        successorName=val('handoverExternalName');
+        successorEmail=val('handoverExternalEmail');
+        if(!successorEmail || !successorEmail.includes('@')){
+          st.textContent='Enter a valid successor email address.';
+          return;
+        }
+      }
+
+      btn.disabled=true;
+      btn.textContent='Sending…';
+      st.textContent='';
+
+      const {data,error}=await supabase.rpc('initiate_lead_admin_handover',{
+        p_club_id:club.id,
+        p_successor_user_id:successorUserId,
+        p_successor_name:successorName,
+        p_successor_email:successorEmail
+      });
+
+      if(error){
+        btn.disabled=false;
+        btn.textContent='Send handover';
+        st.textContent=error.message;
+        return;
+      }
+
+      btn.textContent='Handover sent ✓';
+      st.textContent='Nothing has changed yet. The nominated person must accept first.';
+
+      const testLink=`${location.origin}${location.pathname}?lead_handover=${encodeURIComponent(data.handover_token)}`;
+      const box=document.getElementById('leadHandoverTestLink');
+      box.style.display='block';
+      box.innerHTML=`<strong>Prototype test link</strong><span>Until live email delivery is connected, use this to test the acceptance flow.</span><button class="btn ghost" id="copyLeadHandoverTestLink">Copy test link</button>`;
+
+      document.getElementById('copyLeadHandoverTestLink').onclick=()=>copyText(
+        testLink,'Handover test link','leadHandoverFormStatus'
+      );
+    };
+  }
+
+  if(document.getElementById('cancelLeadHandover')){
+    document.getElementById('cancelLeadHandover').onclick=async()=>{
+      const ok=confirm('Cancel the pending Lead Admin handover? Nothing else will change.');
+      if(!ok)return;
+      const {error}=await supabase.rpc('cancel_lead_admin_handover',{
+        p_handover_id:pendingHandover.id
+      });
+      if(error){alert(error.message);return;}
+      await loadContext();
+    };
+  }
 
   document.querySelectorAll('[data-save-user]').forEach(b=>b.onclick=()=>saveMemberPermission(b.dataset.saveUser));
 }
@@ -2767,6 +2959,215 @@ async function renderPhilosophyInviteRoute(token){
     history.replaceState({},'',location.pathname);
     await loadPlatformContext();
     currentTab='workshop';
+    await loadContext();
+  };
+}
+
+
+async function renderLeadAdminHandoverRoute(token){
+  const {data:h,error}=await supabase.rpc('get_public_lead_admin_handover',{p_token:token});
+
+  if(error || !h){
+    app.innerHTML=`<div class="login">
+      <div class="section-label">Lead Admin handover</div>
+      <h1>Handover invitation unavailable.</h1>
+      <p>${esc(error?.message||'This invitation may have expired, been cancelled, or been replaced.')}</p>
+    </div>`;
+    return;
+  }
+
+  if(h.status==='accepted'){
+    if(session){
+      localStorage.setItem('bdp-context','club');
+      localStorage.setItem('bdp-club-id',h.club_id);
+      history.replaceState({},'',location.pathname);
+      await loadPlatformContext();
+      await loadContext();
+      return;
+    }
+
+    app.innerHTML=`<div class="login">
+      <div class="success-mark">✓</div>
+      <h1>Handover already completed.</h1>
+      <p>${esc(h.club_name)} already has its new Lead Admin in place.</p>
+      <button class="btn secondary" id="handoverHome">Open platform</button>
+    </div>`;
+    document.getElementById('handoverHome').onclick=()=>{history.replaceState({},'',location.pathname);routeAuth();};
+    return;
+  }
+
+  if(h.status!=='pending'){
+    app.innerHTML=`<div class="login">
+      <div class="section-label">Lead Admin handover</div>
+      <h1>This handover is no longer active.</h1>
+      <p>Ask the club’s current Lead Admin to create a new handover if required.</p>
+    </div>`;
+    return;
+  }
+
+  if(!session){
+    app.innerHTML=`<div class="login" style="max-width:680px">
+      <div class="section-label">Lead Admin handover</div>
+      <h1>${esc(h.club_name)}</h1>
+      <p><strong>${esc(h.outgoing_name)}</strong> has nominated you to take over as the club’s Lead Admin.</p>
+      <div class="notice"><strong>Nothing changes until you accept.</strong><br>After you sign in, you’ll also decide what access ${esc(h.outgoing_name)} should retain after the handover.</div>
+      <div class="field"><label>Email address this invitation was sent to</label><input id="routeEmail" type="email"></div>
+      <button class="btn secondary" id="routeSignIn">Send secure sign-in link</button>
+      <div id="routeStatus" class="help"></div>
+    </div>`;
+
+    document.getElementById('routeSignIn').onclick=async()=>{
+      const st=document.getElementById('routeStatus');
+      st.textContent='Sending…';
+      const e=await sendRouteMagicLink(val('routeEmail'));
+      st.textContent=e?e.message:'Check your email and tap the secure link to return to the handover.';
+    };
+    return;
+  }
+
+  const outgoingRoleOptions=[
+    ['remove','No club access — remove from club'],
+    ...(h.outgoing_is_player?[['player','Player only — own Player Plan']]:[]),
+    ['captain','Captain'],
+    ['coach','Coach'],
+    ['head_coach','Head Coach'],
+    ['admin','Remain a Club Admin']
+  ];
+
+  app.innerHTML=`<div class="handover-shell">
+    <section class="handover-hero">
+      <div class="section-label">Formal Lead Admin handover</div>
+      <h1>Take over ${esc(h.club_name)}</h1>
+      <p>${esc(h.outgoing_name)} is formally passing responsibility for the platform to you.</p>
+    </section>
+
+    <section class="card handover-card">
+      <div class="handover-step">
+        <span>1</span>
+        <div>
+          <strong>You become Lead Admin</strong>
+          <p>You’ll receive full club administration access. Other existing Club Admins are not changed.</p>
+        </div>
+      </div>
+
+      <div class="handover-step">
+        <span>2</span>
+        <div>
+          <strong>Set ${esc(h.outgoing_name)}’s ongoing access</strong>
+          <p>The outgoing Admin does not decide this themselves. You set their new role as part of accepting the handover.</p>
+        </div>
+      </div>
+
+      ${h.outgoing_is_philosophy_lead?`<div class="notice"><strong>${esc(h.outgoing_name)} is also the current Philosophy Lead.</strong><br>If you remove them from the club completely, Philosophy Lead responsibility will transfer to you temporarily so the club is never stranded. You can reassign it later.</div>`:''}
+
+      <div class="field">
+        <label>Your name</label>
+        <input id="handoverAcceptName" value="${esc(h.invited_name||'')}" placeholder="Full name">
+      </div>
+
+      <div class="field">
+        <label>${esc(h.outgoing_name)} after handover</label>
+        <select id="outgoingPostRole">
+          ${outgoingRoleOptions.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}
+        </select>
+      </div>
+
+      <div id="outgoingAccessBox" style="display:none">
+        <div class="field">
+          <label>Player Plan access</label>
+          <select id="outgoingPostAccess">
+            <option value="none">No additional Player Plan access</option>
+            <option value="grade_view">One grade · view</option>
+            <option value="grade_edit">One grade · view + edit</option>
+            <option value="whole_view">Whole club · view</option>
+            <option value="whole_edit">Whole club · view + edit</option>
+          </select>
+        </div>
+        <div class="field" id="outgoingGradeBox" style="display:none">
+          <label>Grade</label>
+          <input id="outgoingPostGrade" placeholder="e.g. 2nd Grade">
+        </div>
+      </div>
+
+      <div id="handoverAccessExplanation" class="handover-access-explanation"></div>
+
+      <div class="btnrow">
+        <button class="btn secondary" id="acceptLeadHandover">Accept handover</button>
+        <button class="btn ghost" id="handoverUseDifferentEmail">Use a different email</button>
+        <span class="status" id="leadHandoverStatus"></span>
+      </div>
+    </section>
+  </div>`;
+
+  const refreshOutgoingAccessUI=()=>{
+    const role=document.getElementById('outgoingPostRole').value;
+    const accessBox=document.getElementById('outgoingAccessBox');
+    const gradeBox=document.getElementById('outgoingGradeBox');
+    const explain=document.getElementById('handoverAccessExplanation');
+
+    const staffRole=['captain','coach','head_coach'].includes(role);
+    accessBox.style.display=staffRole?'block':'none';
+
+    const access=staffRole?document.getElementById('outgoingPostAccess').value:'none';
+    gradeBox.style.display=staffRole && ['grade_view','grade_edit'].includes(access)?'block':'none';
+
+    const messages={
+      remove:`${h.outgoing_name} will leave ${h.club_name}. Their historical club records remain, but they will no longer be able to open the club.`,
+      player:`${h.outgoing_name} will keep their own Player Plan only.`,
+      captain:`${h.outgoing_name} will remain a Captain. Choose the Player Plan access they should have.`,
+      coach:`${h.outgoing_name} will remain a Coach. Choose the Player Plan access they should have.`,
+      head_coach:`${h.outgoing_name} will remain Head Coach. Choose the Player Plan access they should have.`,
+      admin:`${h.outgoing_name} will remain a Club Admin with full club access, but you become the Lead Admin responsible for the next formal handover.`
+    };
+    explain.textContent=messages[role]||'';
+  };
+
+  document.getElementById('outgoingPostRole').onchange=refreshOutgoingAccessUI;
+  document.getElementById('outgoingPostAccess').onchange=refreshOutgoingAccessUI;
+  refreshOutgoingAccessUI();
+
+  document.getElementById('handoverUseDifferentEmail').onclick=()=>supabase.auth.signOut();
+
+  document.getElementById('acceptLeadHandover').onclick=async()=>{
+    const st=document.getElementById('leadHandoverStatus');
+    const btn=document.getElementById('acceptLeadHandover');
+    const role=document.getElementById('outgoingPostRole').value;
+    const access=['captain','coach','head_coach'].includes(role)
+      ?document.getElementById('outgoingPostAccess').value
+      :'none';
+    const grade=['grade_view','grade_edit'].includes(access)
+      ?val('outgoingPostGrade')
+      :'';
+
+    if(['grade_view','grade_edit'].includes(access) && !grade){
+      st.textContent='Enter the grade for grade-based access.';
+      return;
+    }
+
+    btn.disabled=true;
+    btn.textContent='Completing handover…';
+    st.textContent='';
+
+    const {data:clubId,error:aErr}=await supabase.rpc('accept_lead_admin_handover',{
+      p_token:token,
+      p_display_name:val('handoverAcceptName'),
+      p_outgoing_role:role,
+      p_outgoing_access:access,
+      p_outgoing_grade:grade
+    });
+
+    if(aErr){
+      btn.disabled=false;
+      btn.textContent='Accept handover';
+      st.textContent=aErr.message;
+      return;
+    }
+
+    localStorage.setItem('bdp-context','club');
+    localStorage.setItem('bdp-club-id',clubId);
+    history.replaceState({},'',location.pathname);
+    await loadPlatformContext();
+    currentTab='permissions';
     await loadContext();
   };
 }
