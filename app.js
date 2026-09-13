@@ -2029,6 +2029,19 @@ async function renderPermissions(){
       else if(gs.some(g=>g.scope==='grade'&&g.can_view)){access='grade_view';grade=gs.find(g=>g.scope==='grade'&&g.can_view)?.grade||'';}
 
       const selfAdmin=m.user_id===session.user.id && m.permission_role==='admin';
+      if(selfAdmin){
+        return `<div class="member">
+          <div>
+            <strong>${esc(name)} · You</strong>
+            <small>${esc(labelInvolvement(m.involvement))}</small>
+          </div>
+          <div class="primary-admin-summary">
+            <strong>Club Admin</strong>
+            <span>Full club access</span>
+          </div>
+        </div>`;
+      }
+
       return `<div class="member">
         <div>
           <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
@@ -2036,7 +2049,7 @@ async function renderPermissions(){
           ${m.permission_role==='none'&&m.involvement!=='player'?'<span class="pending">ACCESS PENDING</span>':''}
         </div>
         <div class="member-controls">
-          <select data-role-user="${m.user_id}" ${selfAdmin?'disabled':''}>
+          <select data-role-user="${m.user_id}">
             ${[
               ['none','No special role'],
               ['captain','Captain'],
@@ -2045,15 +2058,15 @@ async function renderPermissions(){
               ['admin','Admin']
             ].map(([v,l])=>`<option value="${v}" ${m.permission_role===v?'selected':''}>${l}</option>`).join('')}
           </select>
-          <select data-access-user="${m.user_id}" ${selfAdmin?'disabled':''}>
+          <select data-access-user="${m.user_id}">
             <option value="pending" ${access==='pending'?'selected':''}>No assigned access</option>
             <option value="whole_view" ${access==='whole_view'?'selected':''}>Whole club · view</option>
             <option value="whole_edit" ${access==='whole_edit'?'selected':''}>Whole club · view + edit</option>
             <option value="grade_view" ${access==='grade_view'?'selected':''}>One grade · view</option>
             <option value="grade_edit" ${access==='grade_edit'?'selected':''}>One grade · view + edit</option>
           </select>
-          <input data-grade-user="${m.user_id}" placeholder="Grade" value="${esc(grade)}" list="gradeList" ${selfAdmin?'disabled':''}>
-          ${selfAdmin?'<span class="help" style="margin:0">Primary Admin</span>':`<button class="btn ghost" data-save-user="${m.user_id}">Save</button>`}
+          <input data-grade-user="${m.user_id}" placeholder="Grade" value="${esc(grade)}" list="gradeList">
+          <button class="btn ghost" data-save-user="${m.user_id}">Save</button>
         </div>
       </div>`;
     }).join('')}</div>
