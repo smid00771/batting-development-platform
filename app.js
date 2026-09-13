@@ -202,11 +202,22 @@ async function routeAuth(){
   const paymentToken=params.get('payment');
   const adminInviteToken=params.get('admin_invite');
   const philosophyInviteToken=params.get('philosophy_invite');
+  const joinCodeToken=params.get('join');
 
   if(prospectToken){await renderProspectRoute(prospectToken);return;}
   if(paymentToken){await renderPaymentRoute(paymentToken);return;}
   if(adminInviteToken){await renderAdminInviteRoute(adminInviteToken);return;}
   if(philosophyInviteToken){await renderPhilosophyInviteRoute(philosophyInviteToken);return;}
+
+  if(joinCodeToken){
+    if(!session){
+      renderLogin('Sign in to continue joining the club. Your invitation link will still be here after sign-in.');
+      return;
+    }
+    await loadPlatformContext();
+    await renderJoinByCode(joinCodeToken);
+    return;
+  }
 
   if(!session){renderLogin();return;}
   await loadPlatformContext();
@@ -526,6 +537,65 @@ function renderShell(){
 
   document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;renderTab();});
   renderTab();
+}
+
+
+async function renderJoinByCode(joinCode){
+  const {data:profileData}=await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('user_id',session.user.id)
+    .maybeSingle();
+
+  userProfile=profileData||null;
+
+  app.innerHTML=`<div class="login" style="max-width:720px">
+    <div class="section-label">Club invitation</div>
+    <h1>Join your club.</h1>
+    <p>Your club invitation is ready. Confirm your name and how you are involved; the club controls any additional coaching/captain permissions separately.</p>
+
+    <div class="invite-code-confirm">
+      <span>Club code</span>
+      <strong>${esc(joinCode.toUpperCase())}</strong>
+    </div>
+
+    <div class="field"><label>Your name</label><input id="joinName" value="${esc(userProfile?.display_name||'')}" placeholder="Full name"></div>
+
+    <div class="section-label">How are you involved?</div>
+    ${roleCards('joinRole','player')}
+
+    <div class="btnrow">
+      <button class="btn secondary" id="joinClub">Join club</button>
+      <button class="btn ghost" id="cancelJoinLink">Cancel</button>
+      <span class="status" id="joinStatus"></span>
+    </div>
+  </div>`;
+
+  wireRoleCards();
+
+  document.getElementById('cancelJoinLink').onclick=async()=>{
+    history.replaceState({},'',location.pathname);
+    await loadContext();
+  };
+
+  document.getElementById('joinClub').onclick=async()=>{
+    const involvement=document.querySelector('input[name="joinRole"]:checked')?.value;
+    const st=document.getElementById('joinStatus');
+    st.textContent='Joining…';
+
+    const {data,error}=await supabase.rpc('join_club_by_code',{
+      p_join_code:joinCode,
+      p_display_name:val('joinName'),
+      p_involvement:involvement
+    });
+
+    if(error){st.textContent=error.message;return;}
+
+    localStorage.setItem('bdp-context','club');
+    localStorage.setItem('bdp-club-id',data);
+    history.replaceState({},'',location.pathname);
+    await loadContext();
+  };
 }
 
 function renderJoinAnotherClub(){
@@ -1754,11 +1824,29 @@ async function renderPermissions(){
 
   document.getElementById('page').innerHTML=`<div class="grid">
     <section class="card">
-      <div class="section-label">Invite people with one code</div>
-      <h2>Club join code</h2>
-      <div class="help">Players and coaches/captains use the same code. Their first screen asks whether they are a Player, Coach / Captain, or Both.</div>
-      <div class="join-code">${esc(club.join_code||'—')}</div>
-      <div class="notice">Choosing <strong>Coach / Captain</strong> does not give access to anyone’s plan. They stay pending until an Admin assigns it here.</div>
+      <div class="section-label">Bring people into the club</div>
+      <h2>Invite players, coaches & captains</h2>
+      <div class="help">The easiest method is to send the club join link. When they open it, the club code is already supplied. They sign in, choose <strong>Player</strong>, <strong>Coach / Captain</strong>, or <strong>Both</strong>, and join ${esc(club.name)}.</div>
+
+      <div class="join-share-box">
+        <div class="join-share-label">Shareable club invitation</div>
+        <div class="btnrow">
+          <button class="btn secondary" id="copyJoinLink">Copy join link</button>
+          <button class="btn ghost" id="copyJoinMessage">Copy invitation message</button>
+          <span class="status" id="joinCopyStatus"></span>
+        </div>
+      </div>
+
+      <div class="manual-code">
+        <div>
+          <span>Manual join code</span>
+          <small>Use this only if someone is already on the site and chooses “Join another club”.</small>
+        </div>
+        <strong>${esc(club.join_code||'—')}</strong>
+        <button class="btn ghost" id="copyJoinCode">Copy code</button>
+      </div>
+
+      <div class="notice"><strong>Coach / Captain does not automatically unlock Player Plans.</strong><br>They join the club with access pending until an Admin assigns the appropriate view/edit permissions below.</div>
     </section>
     <section class="card">
       <div class="section-label">Simple permission model</div>
@@ -1809,6 +1897,29 @@ async function renderPermissions(){
     }).join('')}</div>
     <datalist id="gradeList">${grades.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
   </section>`;
+
+  const joinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}`;
+  const joinMessage=`You’ve been invited to join ${club.name} on the Batting Development platform.\n\nOpen this link, sign in with your email, then choose whether you are a Player, Coach / Captain, or Both:\n${joinLink}`;
+
+  const copyText=async(text,label)=>{
+    const st=document.getElementById('joinCopyStatus');
+    try{
+      await navigator.clipboard.writeText(text);
+      if(st)st.textContent=`${label} copied ✓`;
+    }catch(e){
+      if(st)st.textContent='Could not copy automatically — select and copy it manually.';
+    }
+  };
+
+  if(document.getElementById('copyJoinLink')){
+    document.getElementById('copyJoinLink').onclick=()=>copyText(joinLink,'Join link');
+  }
+  if(document.getElementById('copyJoinMessage')){
+    document.getElementById('copyJoinMessage').onclick=()=>copyText(joinMessage,'Invitation message');
+  }
+  if(document.getElementById('copyJoinCode')){
+    document.getElementById('copyJoinCode').onclick=()=>copyText(club.join_code||'','Join code');
+  }
 
   document.querySelectorAll('[data-save-user]').forEach(b=>b.onclick=()=>saveMemberPermission(b.dataset.saveUser));
 }
