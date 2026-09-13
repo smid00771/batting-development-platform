@@ -202,12 +202,14 @@ async function routeAuth(){
   const paymentToken=params.get('payment');
   const adminInviteToken=params.get('admin_invite');
   const philosophyInviteToken=params.get('philosophy_invite');
+  const playerJoinToken=params.get('player_join');
   const joinCodeToken=params.get('join');
 
   if(prospectToken){await renderProspectRoute(prospectToken);return;}
   if(paymentToken){await renderPaymentRoute(paymentToken);return;}
   if(adminInviteToken){await renderAdminInviteRoute(adminInviteToken);return;}
   if(philosophyInviteToken){await renderPhilosophyInviteRoute(philosophyInviteToken);return;}
+  if(playerJoinToken){await renderPlayerJoinRoute(playerJoinToken);return;}
 
   if(joinCodeToken){
     if(!session){
@@ -249,7 +251,7 @@ async function loadContext(){
 
   const {data:memberships,error}=await supabase
     .from('club_memberships')
-    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,primary_colour,accent_colour,season_start,season_end)')
+    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,primary_colour,accent_colour,season_start,season_end)')
     .eq('user_id',session.user.id);
 
   if(error){
@@ -539,6 +541,117 @@ function renderShell(){
   renderTab();
 }
 
+
+
+async function renderPlayerJoinRoute(token){
+  const {data:info,error}=await supabase.rpc('get_public_player_join',{p_token:token});
+
+  if(error || !info){
+    app.innerHTML=`<div class="login">
+      <div class="section-label">Player sign-up</div>
+      <h1>This player link is no longer valid.</h1>
+      <p>Ask your club for its current Player Sign-up link or QR code.</p>
+    </div>`;
+    return;
+  }
+
+  if(!info.open){
+    app.innerHTML=`<div class="login" style="max-width:650px">
+      <div class="section-label">${esc(info.club_name)}</div>
+      <h1>Player sign-up is currently closed.</h1>
+      <p>Your club has temporarily closed self-service player registration. Speak to a club coach or administrator if you still need access.</p>
+    </div>`;
+    return;
+  }
+
+  if(!session){
+    app.innerHTML=`<div class="login" style="max-width:650px">
+      <div class="section-label">Player sign-up</div>
+      <h1>Join ${esc(info.club_name)}</h1>
+      <p>This link registers you as a <strong>Player</strong>. If you are also a captain or coach, the Club Admin can add those permissions afterwards.</p>
+      <div class="field"><label>Your email</label><input id="playerJoinEmail" type="email" placeholder="you@example.com"></div>
+      <button class="btn secondary" id="playerJoinSignIn">Send secure sign-in link</button>
+      <div id="playerJoinStatus" class="help"></div>
+    </div>`;
+
+    document.getElementById('playerJoinSignIn').onclick=async()=>{
+      const email=val('playerJoinEmail');
+      const st=document.getElementById('playerJoinStatus');
+      if(!email){st.textContent='Enter your email address.';return;}
+      st.textContent='Sending…';
+      const {error:e}=await supabase.auth.signInWithOtp({
+        email,
+        options:{emailRedirectTo:redirectUrl()}
+      });
+      st.textContent=e?e.message:'Check your email and tap the secure sign-in link. It will bring you straight back here.';
+    };
+    return;
+  }
+
+  const {data:profileData}=await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('user_id',session.user.id)
+    .maybeSingle();
+
+  app.innerHTML=`<div class="login" style="max-width:650px">
+    <div class="section-label">Player sign-up</div>
+    <h1>Join ${esc(info.club_name)}</h1>
+    <p>You’re joining as a <strong>Player</strong>. Captain/coach access is assigned separately by the club.</p>
+    <div class="field"><label>Your name</label><input id="playerJoinName" value="${esc(profileData?.display_name||'')}" placeholder="Full name"></div>
+    <button class="btn secondary" id="completePlayerJoin">Join ${esc(info.club_name)}</button>
+    <div id="completePlayerJoinStatus" class="help"></div>
+  </div>`;
+
+  document.getElementById('completePlayerJoin').onclick=async()=>{
+    const st=document.getElementById('completePlayerJoinStatus');
+    st.textContent='Joining…';
+
+    const {data:clubId,error:jErr}=await supabase.rpc('join_club_as_player',{
+      p_token:token,
+      p_display_name:val('playerJoinName')
+    });
+
+    if(jErr){st.textContent=jErr.message;return;}
+
+    localStorage.setItem('bdp-context','club');
+    localStorage.setItem('bdp-club-id',clubId);
+    history.replaceState({},'',location.pathname);
+    currentTab='myplan';
+    await loadPlatformContext();
+    await loadContext();
+  };
+}
+
+async function renderPlayerQRCode(link){
+  const img=document.getElementById('playerSignupQR');
+  const dl=document.getElementById('downloadPlayerQR');
+  const fallback=document.getElementById('qrFallback');
+  if(!img)return;
+
+  try{
+    const mod=await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm');
+    const QRCode=mod.default||mod;
+    const dataUrl=await QRCode.toDataURL(link,{
+      width:260,
+      margin:2,
+      errorCorrectionLevel:'M'
+    });
+    img.src=dataUrl;
+    img.style.display='block';
+    if(dl){
+      dl.href=dataUrl;
+      dl.download=`${slug(club.name)||'club'}-player-signup-qr.png`;
+      dl.style.display='inline-flex';
+    }
+    if(fallback)fallback.style.display='none';
+  }catch(e){
+    if(fallback){
+      fallback.style.display='block';
+      fallback.textContent='QR could not load on this device. The WhatsApp/link buttons still work normally.';
+    }
+  }
+}
 
 async function renderJoinByCode(joinCode){
   const {data:profileData}=await supabase
@@ -1821,41 +1934,79 @@ async function renderPermissions(){
   }
 
   const grades=[...new Set((players||[]).map(p=>p.grade).filter(Boolean))].sort();
+  const activePlayerCount=(players||[]).length;
+  const playerJoinLink=`${location.origin}${location.pathname}?player_join=${encodeURIComponent(club.player_join_token||'')}`;
+  const staffJoinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}`;
+  const signupOpen=club.player_signup_open!==false;
 
-  document.getElementById('page').innerHTML=`<div class="grid">
-    <section class="card">
-      <div class="section-label">Bring people into the club</div>
-      <h2>Invite players, coaches & captains</h2>
-      <div class="help">The easiest method is to send the club join link. When they open it, the club code is already supplied. They sign in, choose <strong>Player</strong>, <strong>Coach / Captain</strong>, or <strong>Both</strong>, and join ${esc(club.name)}.</div>
+  document.getElementById('page').innerHTML=`<div class="grid permissions-top-grid">
+    <section class="card player-signup-card">
+      <div class="section-label">Player sign-up</div>
+      <h2>One post. Players register themselves.</h2>
+      <div class="help">Post the WhatsApp message in the players chat, or use the QR code at training / on a noticeboard. Everyone coming through this route joins automatically as a <strong>Player</strong>.</div>
 
-      <div class="join-share-box">
-        <div class="join-share-label">Shareable club invitation</div>
-        <div class="btnrow">
-          <button class="btn secondary" id="copyJoinLink">Copy join link</button>
-          <button class="btn ghost" id="copyJoinMessage">Copy invitation message</button>
-          <span class="status" id="joinCopyStatus"></span>
-        </div>
-      </div>
-
-      <div class="manual-code">
+      <div class="signup-status-row">
         <div>
-          <span>Manual join code</span>
-          <small>Use this only if someone is already on the site and chooses “Join another club”.</small>
+          <span class="signup-pill ${signupOpen?'open':'closed'}">${signupOpen?'● SIGN-UP OPEN':'○ SIGN-UP CLOSED'}</span>
+          <div class="signup-count"><strong>${activePlayerCount}</strong> players registered</div>
         </div>
-        <strong>${esc(club.join_code||'—')}</strong>
-        <button class="btn ghost" id="copyJoinCode">Copy code</button>
+        <button class="btn ghost" id="togglePlayerSignup">${signupOpen?'Close sign-up':'Open sign-up'}</button>
       </div>
 
-      <div class="notice"><strong>Coach / Captain does not automatically unlock Player Plans.</strong><br>They join the club with access pending until an Admin assigns the appropriate view/edit permissions below.</div>
+      <div class="player-share-layout">
+        <div class="qr-panel">
+          <div class="qr-frame">
+            <img id="playerSignupQR" alt="${esc(club.name)} player sign-up QR code" style="display:none">
+            <div id="qrFallback" class="qr-loading">Generating QR…</div>
+          </div>
+          <a class="btn ghost" id="downloadPlayerQR" style="display:none">Download QR image</a>
+        </div>
+
+        <div class="share-actions">
+          <h3>For the Players WhatsApp chat</h3>
+          <p>Use the message button — the link is easier for players who are already reading it on their phone.</p>
+          <button class="btn secondary" id="copyPlayerWhatsApp">Copy WhatsApp message</button>
+          <button class="btn ghost" id="copyPlayerLink">Copy player sign-up link</button>
+          <div id="playerShareStatus" class="help"></div>
+
+          <div class="share-preview">
+            <strong>What players experience</strong>
+            <span>Open link → enter email → secure sign-in → confirm name → joined as Player.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="join-security-row">
+        <div>
+          <strong>Need to replace the link?</strong>
+          <span>Regenerating invalidates the old Player link and QR immediately.</span>
+        </div>
+        <button class="btn ghost" id="regeneratePlayerLink">Regenerate link & QR</button>
+      </div>
     </section>
+
     <section class="card">
-      <div class="section-label">Simple permission model</div>
-      <h2>What access means</h2>
-      <div class="help"><strong>Viewing follows access.</strong> Editing follows coaching responsibility. Grade-based access follows the player automatically when their grade is updated.</div>
+      <div class="section-label">Coach / Captain access</div>
+      <h2>Keep elevated access controlled.</h2>
+      <div class="help">A playing captain or coach should simply use the normal <strong>Player sign-up</strong> above. Then assign their Captain/Coach role and access below.</div>
+
+      <div class="notice"><strong>Non-playing coach?</strong><br>They can use a separate staff join link, choose <strong>Coach / Captain</strong>, and then wait for an Admin to assign access.</div>
+
+      <div class="btnrow">
+        <button class="btn ghost" id="copyStaffJoinLink">Copy non-playing coach link</button>
+      </div>
+      <div id="staffJoinStatus" class="help"></div>
+
+      <div class="permission-explainer">
+        <strong>Viewing follows access.</strong>
+        <span>Grade-based access follows the player automatically when their grade changes. Editing is assigned separately.</span>
+      </div>
     </section>
   </div>
+
   <section class="card" style="margin-top:16px">
-    <h2>People & access</h2>
+    <div class="section-label">Club people</div>
+    <h2>Roles & access</h2>
     <div class="member-list">${(members||[]).map(m=>{
       const prof=pMap.get(m.user_id);
       const name=prof?.display_name||'Profile not completed';
@@ -1898,11 +2049,10 @@ async function renderPermissions(){
     <datalist id="gradeList">${grades.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
   </section>`;
 
-  const joinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}`;
-  const joinMessage=`You’ve been invited to join ${club.name} on the Batting Development platform.\n\nOpen this link, sign in with your email, then choose whether you are a Player, Coach / Captain, or Both:\n${joinLink}`;
+  const playerWhatsAppMessage=`${club.name} players — our Batting Development system is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
 
-  const copyText=async(text,label)=>{
-    const st=document.getElementById('joinCopyStatus');
+  const copyText=async(text,label,statusId)=>{
+    const st=document.getElementById(statusId);
     try{
       await navigator.clipboard.writeText(text);
       if(st)st.textContent=`${label} copied ✓`;
@@ -1911,15 +2061,40 @@ async function renderPermissions(){
     }
   };
 
-  if(document.getElementById('copyJoinLink')){
-    document.getElementById('copyJoinLink').onclick=()=>copyText(joinLink,'Join link');
-  }
-  if(document.getElementById('copyJoinMessage')){
-    document.getElementById('copyJoinMessage').onclick=()=>copyText(joinMessage,'Invitation message');
-  }
-  if(document.getElementById('copyJoinCode')){
-    document.getElementById('copyJoinCode').onclick=()=>copyText(club.join_code||'','Join code');
-  }
+  document.getElementById('copyPlayerWhatsApp').onclick=()=>copyText(
+    playerWhatsAppMessage,'WhatsApp message','playerShareStatus'
+  );
+  document.getElementById('copyPlayerLink').onclick=()=>copyText(
+    playerJoinLink,'Player sign-up link','playerShareStatus'
+  );
+  document.getElementById('copyStaffJoinLink').onclick=()=>copyText(
+    staffJoinLink,'Non-playing coach link','staffJoinStatus'
+  );
+
+  document.getElementById('togglePlayerSignup').onclick=async()=>{
+    const button=document.getElementById('togglePlayerSignup');
+    button.disabled=true;
+    button.textContent=signupOpen?'Closing…':'Opening…';
+    const {error}=await supabase.rpc('set_player_signup_open',{
+      p_club_id:club.id,
+      p_open:!signupOpen
+    });
+    if(error){alert(error.message);button.disabled=false;return;}
+    await loadContext();
+  };
+
+  document.getElementById('regeneratePlayerLink').onclick=async()=>{
+    const ok=confirm('Regenerate the Player Sign-up link and QR? The current link and QR will stop working immediately.');
+    if(!ok)return;
+    const button=document.getElementById('regeneratePlayerLink');
+    button.disabled=true;
+    button.textContent='Regenerating…';
+    const {error}=await supabase.rpc('regenerate_player_join_token',{p_club_id:club.id});
+    if(error){alert(error.message);button.disabled=false;button.textContent='Regenerate link & QR';return;}
+    await loadContext();
+  };
+
+  renderPlayerQRCode(playerJoinLink);
 
   document.querySelectorAll('[data-save-user]').forEach(b=>b.onclick=()=>saveMemberPermission(b.dataset.saveUser));
 }
