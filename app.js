@@ -201,10 +201,12 @@ async function routeAuth(){
   const prospectToken=params.get('prospect');
   const paymentToken=params.get('payment');
   const adminInviteToken=params.get('admin_invite');
+  const philosophyInviteToken=params.get('philosophy_invite');
 
   if(prospectToken){await renderProspectRoute(prospectToken);return;}
   if(paymentToken){await renderPaymentRoute(paymentToken);return;}
   if(adminInviteToken){await renderAdminInviteRoute(adminInviteToken);return;}
+  if(philosophyInviteToken){await renderPhilosophyInviteRoute(philosophyInviteToken);return;}
 
   if(!session){renderLogin();return;}
   await loadPlatformContext();
@@ -257,7 +259,8 @@ async function loadContext(){
     return;
   }
 
-  const savedClub=localStorage.getItem('bdp-club-id');
+  const routeClub=new URLSearchParams(location.search).get('club');
+  const savedClub=routeClub||localStorage.getItem('bdp-club-id');
   membership=allMemberships.find(m=>m.club_id===savedClub)||allMemberships[0];
   club=membership.clubs;
   localStorage.setItem('bdp-club-id',club.id);
@@ -571,9 +574,10 @@ async function renderClubDashboard(){
   const page=document.getElementById('page');
   page.innerHTML='<div class="splash">Loading club setup…</div>';
 
-  const [{data:entitlement},{data:contributors},{data:players}]=await Promise.all([
+  const [{data:entitlement},{data:contributors},{data:pendingInvites},{data:players}]=await Promise.all([
     supabase.rpc('get_club_entitlement',{p_club_id:club.id}),
     supabase.from('philosophy_contributors').select('user_id,status').eq('club_id',club.id),
+    supabase.from('philosophy_contributor_invites').select('id,status').eq('club_id',club.id).eq('status','pending'),
     supabase.from('players').select('id,active').eq('club_id',club.id).eq('active',true)
   ]);
 
@@ -585,7 +589,7 @@ async function renderClubDashboard(){
   const collaborative=workshop?.mode==='collaborative';
   const additionalContributors=(contributors||[]).filter(
     x=>x.user_id!==workshop?.philosophy_lead_user_id
-  ).length;
+  ).length + (pendingInvites||[]).length;
 
   const steps=[
     ['Subscription / entitlement active',entitlementActive],
@@ -648,13 +652,15 @@ function contributorStatusLabel(status){
 async function renderWorkshop(){
   document.getElementById('page').innerHTML='<div class="splash">Loading Philosophy Workshop…</div>';
 
-  const {data:contribRows,error:cErr}=await supabase
-    .from('philosophy_contributors')
-    .select('*')
-    .eq('club_id',club.id);
+  const [{data:contribRows,error:cErr},{data:externalInvites,error:iErr}]=await Promise.all([
+    supabase.from('philosophy_contributors').select('*').eq('club_id',club.id),
+    (isAdmin() || isPhilosophyLead())
+      ?supabase.from('philosophy_contributor_invites').select('*').eq('club_id',club.id).order('created_at',{ascending:true})
+      :Promise.resolve({data:[],error:null})
+  ]);
 
-  if(cErr){
-    document.getElementById('page').innerHTML=`<div class="notice">${esc(cErr.message)}</div>`;
+  if(cErr || iErr){
+    document.getElementById('page').innerHTML=`<div class="notice">${esc((cErr||iErr).message)}</div>`;
     return;
   }
 
@@ -682,9 +688,11 @@ async function renderWorkshop(){
   const pMap=new Map(profiles.map(x=>[x.user_id,x]));
   const submittedCount=(contribRows||[]).filter(x=>x.status==='submitted').length;
   const totalCount=(contribRows||[]).length;
+  const pendingExternal=(externalInvites||[]).filter(x=>x.status==='pending');
   const me=(contribRows||[]).find(x=>x.user_id===session.user.id)||myContributor;
   const canSeeSynthesis=!!me && (me.status==='submitted' || (isPhilosophyLead() && workshop?.status==='review'));
   const allSubmitted=totalCount>0 && submittedCount===totalCount;
+  const collaborative=workshop?.mode==='collaborative';
 
   let html=`<div class="workshop-grid">`;
 
@@ -692,19 +700,23 @@ async function renderWorkshop(){
     html+=`<section class="card workshop-setup">
       <div class="section-label">Admin setup</div>
       <h2>How should the club build its philosophy?</h2>
-      <div class="help">Choose whether one person builds it, or selected people contribute independently before the Philosophy Lead makes the final call.</div>
+      <div class="help">Choose Solo, or let selected coaches/captains contribute independently before the Philosophy Lead makes the final call.</div>
 
       <div class="mode-choice">
-        <label class="mode-card ${workshop?.mode!=='collaborative'?'on':''}">
-          <input type="radio" name="workshopMode" value="solo" ${workshop?.mode!=='collaborative'?'checked':''}>
+        <label class="mode-card ${!collaborative?'on':''}">
+          <input type="radio" name="workshopMode" value="solo" ${!collaborative?'checked':''}>
           <strong>Solo</strong>
           <span>One nominated Philosophy Lead completes and publishes the club philosophy.</span>
         </label>
-        <label class="mode-card ${workshop?.mode==='collaborative'?'on':''}">
-          <input type="radio" name="workshopMode" value="collaborative" ${workshop?.mode==='collaborative'?'checked':''}>
+        <label class="mode-card ${collaborative?'on':''}">
+          <input type="radio" name="workshopMode" value="collaborative" ${collaborative?'checked':''}>
           <strong>Collaborative</strong>
           <span>Selected people respond independently, then the system shows consensus and discussion points.</span>
         </label>
+      </div>
+
+      <div id="modeFeedback" class="mode-feedback ${collaborative?'show':''}">
+        ${collaborative?'<strong>Collaborative selected.</strong> Choose the people whose batting perspective you want below.':''}
       </div>
 
       <div class="field">
@@ -717,23 +729,55 @@ async function renderWorkshop(){
         </select>
       </div>
 
-      <div id="contributorPicker">
-        <label class="field-label">Who should contribute?</label>
+      <div id="contributorPicker" class="collaborative-panel ${collaborative?'show':''}">
+        <div class="collab-intro">
+          <div>
+            <div class="section-label">Independent contributors</div>
+            <h3>Who should have a say?</h3>
+            <p>They answer privately first. They do not see everyone else's answers until they have submitted their own.</p>
+          </div>
+        </div>
+
+        <label class="field-label">People already in this club</label>
         <div class="contributor-picker">
           ${members.map(m=>{
             const name=pMap.get(m.user_id)?.display_name||'Profile not completed';
             const selected=(contribRows||[]).some(c=>c.user_id===m.user_id);
-            return `<label class="contributor-check">
-              <input type="checkbox" data-contributor-user="${m.user_id}" ${selected?'checked':''}>
-              <span><strong>${esc(name)}</strong><small>${esc(labelInvolvement(m.involvement))}</small></span>
+            const isLead=m.user_id===workshop?.philosophy_lead_user_id;
+            return `<label class="contributor-check ${isLead?'lead-person':''}">
+              <input type="checkbox" data-contributor-user="${m.user_id}" ${selected||isLead?'checked':''} ${isLead?'disabled':''}>
+              <span><strong>${esc(name)}${isLead?' · Philosophy Lead':''}</strong><small>${esc(labelInvolvement(m.involvement))}</small></span>
             </label>`;
           }).join('')}
         </div>
-        <div class="help">In Solo mode, only the Philosophy Lead will contribute. In Collaborative mode, choose anyone whose batting perspective you want.</div>
+
+        <div class="external-invite-box">
+          <div class="section-label">Not in the system yet?</div>
+          <h3>Invite them by email</h3>
+          <p class="help">They can join as a <strong>Philosophy Contributor only</strong>. This does not give them Player Plan access or any coaching permissions.</p>
+          <div class="invite-form">
+            <div class="field"><label>Name</label><input id="externalContributorName" placeholder="e.g. Sam Brown"></div>
+            <div class="field"><label>Email</label><input id="externalContributorEmail" type="email" placeholder="sam@example.com"></div>
+            <button class="btn ghost" id="sendExternalContributor">Send invitation</button>
+          </div>
+          <div id="externalInviteStatus" class="help"></div>
+          <div class="help">Prototype note: the invitation is added to the Email Queue with its secure link. Once the live email provider is connected, this same action will send it automatically.</div>
+
+          ${externalInvites?.length?`<div class="pending-invites">
+            ${externalInvites.map(i=>`<div class="pending-invite-row">
+              <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>${esc(i.invited_email)} · ${esc(i.status)}</small></div>
+              <div class="member-controls">
+                ${i.status==='pending'?`<button class="btn ghost" data-resend-philosophy-invite="${i.id}">Resend</button><button class="btn ghost" data-cancel-philosophy-invite="${i.id}">Cancel</button>`:''}
+              </div>
+            </div>`).join('')}
+          </div>`:''}
+        </div>
+
+        <div class="notice compact"><strong>No committee meeting required.</strong><br>Invite people now; they complete their response independently when it suits them.</div>
       </div>
 
       <div class="btnrow">
-        <button class="btn secondary" id="saveWorkshopSetup">Save workshop setup</button>
+        <button class="btn secondary" id="saveWorkshopSetup">${collaborative?'Save & send invitations':'Save Solo Workshop'}</button>
         <span class="status" id="workshopSetupStatus"></span>
       </div>
     </section>`;
@@ -744,8 +788,8 @@ async function renderWorkshop(){
     <h2>${esc(workshopModeLabel())} philosophy process</h2>
     <div class="workshop-progress">
       <div><strong>${submittedCount}</strong><span>submitted</span></div>
-      <div><strong>${Math.max(totalCount-submittedCount,0)}</strong><span>still to respond</span></div>
-      <div><strong>${philosophyVersions[0]?.version_number||0}</strong><span>published versions</span></div>
+      <div><strong>${Math.max(totalCount-submittedCount,0)}</strong><span>accepted / still to respond</span></div>
+      <div><strong>${pendingExternal.length}</strong><span>email invitations pending</span></div>
     </div>`;
 
   if(me){
@@ -781,7 +825,10 @@ async function renderWorkshop(){
               ${c.status==='submitted' && isAdmin()?`<button class="btn ghost" data-reopen-contributor="${c.user_id}">Reopen</button>`:''}
             </div>
           </div>`;
-        }).join('')||'<div class="notice">No contributors selected yet.</div>'}
+        }).join('')||'<div class="notice">No accepted contributors selected yet.</div>'}
+        ${pendingExternal.map(i=>`<div class="member">
+          <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>Invitation sent · waiting to accept</small></div>
+        </div>`).join('')}
       </div>
     </section>`;
   }
@@ -815,20 +862,82 @@ async function renderWorkshop(){
 
   document.getElementById('page').innerHTML=html;
 
+  const applyModeUI=()=>{
+    const mode=document.querySelector('input[name="workshopMode"]:checked')?.value||'solo';
+    const panel=document.getElementById('contributorPicker');
+    const feedback=document.getElementById('modeFeedback');
+    const save=document.getElementById('saveWorkshopSetup');
+    const collaborativeNow=mode==='collaborative';
+
+    if(panel)panel.classList.toggle('show',collaborativeNow);
+    if(feedback){
+      feedback.classList.toggle('show',collaborativeNow);
+      feedback.innerHTML=collaborativeNow
+        ?'<strong>Collaborative selected.</strong> Choose the people whose batting perspective you want below.'
+        :'';
+    }
+    if(save)save.textContent=collaborativeNow?'Save & send invitations':'Save Solo Workshop';
+  };
+
   document.querySelectorAll('.mode-card input').forEach(r=>r.onchange=()=>{
     document.querySelectorAll('.mode-card').forEach(x=>x.classList.toggle('on',x.querySelector('input').checked));
-    const collaborative=r.value==='collaborative';
-    document.querySelectorAll('[data-contributor-user]').forEach(x=>x.disabled=!collaborative);
+    applyModeUI();
   });
 
-  const currentMode=document.querySelector('input[name="workshopMode"]:checked')?.value;
-  if(currentMode==='solo'){
-    document.querySelectorAll('[data-contributor-user]').forEach(x=>x.disabled=true);
+  if(document.getElementById('leadUser')){
+    document.getElementById('leadUser').onchange=()=>{
+      const lead=document.getElementById('leadUser').value;
+      document.querySelectorAll('[data-contributor-user]').forEach(x=>{
+        const isLead=x.dataset.contributorUser===lead;
+        x.disabled=isLead;
+        if(isLead)x.checked=true;
+        x.closest('.contributor-check')?.classList.toggle('lead-person',isLead);
+      });
+    };
   }
 
   if(document.getElementById('saveWorkshopSetup')){
-    document.getElementById('saveWorkshopSetup').onclick=()=>saveWorkshopSetup(contribRows||[]);
+    document.getElementById('saveWorkshopSetup').onclick=()=>saveWorkshopSetup(contribRows||[],externalInvites||[]);
   }
+
+  if(document.getElementById('sendExternalContributor')){
+    document.getElementById('sendExternalContributor').onclick=async()=>{
+      const st=document.getElementById('externalInviteStatus');
+      const name=val('externalContributorName');
+      const email=val('externalContributorEmail');
+      if(!email){st.textContent='Enter an email address first.';return;}
+
+      // Ensure the workshop is already collaborative before the invite RPC checks it.
+      const {error:wErr}=await supabase
+        .from('philosophy_workshops')
+        .update({mode:'collaborative',status:'collecting',updated_at:new Date().toISOString()})
+        .eq('club_id',club.id);
+
+      if(wErr){st.textContent=wErr.message;return;}
+
+      st.textContent='Sending invitation…';
+      const {error}=await supabase.rpc('invite_philosophy_contributor_by_email',{
+        p_club_id:club.id,p_name:name,p_email:email
+      });
+      if(error){st.textContent=error.message;return;}
+      st.textContent='Invitation queued ✓';
+      await loadData();
+      await renderWorkshop();
+    };
+  }
+
+  document.querySelectorAll('[data-resend-philosophy-invite]').forEach(b=>b.onclick=async()=>{
+    b.textContent='Sending…';
+    const {error}=await supabase.rpc('resend_philosophy_contributor_invite',{p_invite_id:b.dataset.resendPhilosophyInvite});
+    if(error){alert(error.message);b.textContent='Resend';return;}
+    b.textContent='Queued ✓';
+  });
+
+  document.querySelectorAll('[data-cancel-philosophy-invite]').forEach(b=>b.onclick=async()=>{
+    const {error}=await supabase.rpc('cancel_philosophy_contributor_invite',{p_invite_id:b.dataset.cancelPhilosophyInvite});
+    if(error){alert(error.message);return;}
+    await renderWorkshop();
+  });
 
   if(document.getElementById('myResponseAction')){
     document.getElementById('myResponseAction').onclick=async()=>{
@@ -860,9 +969,11 @@ async function renderWorkshop(){
   }
 }
 
-async function saveWorkshopSetup(existingRows){
+async function saveWorkshopSetup(existingRows,externalInvites=[]){
   const s=document.getElementById('workshopSetupStatus');
+  const btn=document.getElementById('saveWorkshopSetup');
   s.textContent='Saving…';
+  btn.disabled=true;
 
   const mode=document.querySelector('input[name="workshopMode"]:checked')?.value||'solo';
   const lead=document.getElementById('leadUser').value;
@@ -882,16 +993,16 @@ async function saveWorkshopSetup(existingRows){
     })
     .eq('club_id',club.id);
 
-  if(wErr){s.textContent=wErr.message;return;}
+  if(wErr){s.textContent=wErr.message;btn.disabled=false;return;}
 
   const existingMap=new Map(existingRows.map(x=>[x.user_id,x]));
 
   for(const userId of selected){
     if(!existingMap.has(userId)){
-      const {error}=await supabase.from('philosophy_contributors').insert({
-        club_id:club.id,user_id:userId,status:'invited',can_view_synthesis:true
+      const {error}=await supabase.rpc('invite_existing_philosophy_contributor',{
+        p_club_id:club.id,p_user_id:userId
       });
-      if(error){s.textContent=error.message;return;}
+      if(error){s.textContent=error.message;btn.disabled=false;return;}
     }
   }
 
@@ -902,13 +1013,19 @@ async function saveWorkshopSetup(existingRows){
         .delete()
         .eq('club_id',club.id)
         .eq('user_id',row.user_id);
-      if(error){s.textContent=error.message;return;}
+      if(error){s.textContent=error.message;btn.disabled=false;return;}
     }
   }
 
-  s.textContent='Saved';
+  if(mode==='solo'){
+    for(const invite of externalInvites.filter(x=>x.status==='pending')){
+      await supabase.rpc('cancel_philosophy_contributor_invite',{p_invite_id:invite.id});
+    }
+  }
+
+  s.textContent=mode==='collaborative'?'Saved — invitations queued ✓':'Solo workshop saved ✓';
   await loadData();
-  renderShell();
+  setTimeout(()=>renderShell(),350);
 }
 
 function consensusClass(ratio){
@@ -1638,7 +1755,15 @@ async function renderPermissions(){
 }
 
 function labelInvolvement(v){
-  return v==='player'?'Player':v==='coach_captain'?'Coach / Captain':v==='both'?'Player + Coach / Captain':'Not set';
+  return v==='player'
+    ?'Player'
+    :v==='coach_captain'
+      ?'Coach / Captain'
+      :v==='both'
+        ?'Player + Coach / Captain'
+        :v==='philosophy_contributor'
+          ?'Philosophy Contributor'
+          :'Not set';
 }
 
 async function saveMemberPermission(userId){
@@ -2202,6 +2327,79 @@ async function renderPaymentRoute(token){
       await renderPaymentRoute(token);
     };
   }
+}
+
+
+async function renderPhilosophyInviteRoute(token){
+  const {data:i,error}=await supabase.rpc('get_public_philosophy_invite',{p_token:token});
+
+  if(error || !i){
+    app.innerHTML=`<div class="login"><h1>Invitation not found.</h1><p>${esc(error?.message||'This philosophy invitation is invalid or no longer available.')}</p></div>`;
+    return;
+  }
+
+  if(i.status==='accepted'){
+    if(session){
+      localStorage.setItem('bdp-context','club');
+      localStorage.setItem('bdp-club-id',i.club_id);
+      history.replaceState({},'',location.pathname);
+      await loadPlatformContext();
+      await loadContext();
+      return;
+    }
+    app.innerHTML=`<div class="login"><h1>Invitation already accepted.</h1><p>Sign in normally to continue with ${esc(i.club_name)}.</p><button class="btn secondary" id="normalSignIn">Sign in</button></div>`;
+    document.getElementById('normalSignIn').onclick=()=>{history.replaceState({},'',location.pathname);renderLogin();};
+    return;
+  }
+
+  if(!session){
+    app.innerHTML=`<div class="login" style="max-width:650px">
+      <div class="section-label">Philosophy contributor invitation</div>
+      <h1>${esc(i.club_name)}</h1>
+      <p>You’ve been invited to have an independent say in the club’s batting philosophy.</p>
+      <div class="notice"><strong>No committee meeting required.</strong><br>You’ll work through Club Identity → What We Value → Format Emphasis privately. Your answers are combined with the other contributors only after submission.</div>
+      <div class="field"><label>Email address this invitation was sent to</label><input id="routeEmail" type="email"></div>
+      <button class="btn secondary" id="routeSignIn">Send secure sign-in link</button>
+      <div id="routeStatus" class="help"></div>
+    </div>`;
+
+    document.getElementById('routeSignIn').onclick=async()=>{
+      const st=document.getElementById('routeStatus');
+      st.textContent='Sending…';
+      const e=await sendRouteMagicLink(val('routeEmail'));
+      st.textContent=e?e.message:'Check your email and tap the secure link to return to this invitation.';
+    };
+    return;
+  }
+
+  app.innerHTML=`<div class="login" style="max-width:650px">
+    <div class="section-label">Philosophy contributor invitation</div>
+    <h1>Contribute to ${esc(i.club_name)}</h1>
+    <p>This gives you access only to the Philosophy Workshop unless the club separately gives you another role or permission.</p>
+    <div class="field"><label>Your name</label><input id="philosophyInviteName" value="${esc(i.invited_name||'')}"></div>
+    <div class="btnrow">
+      <button class="btn secondary" id="acceptPhilosophyInvite">Accept & start</button>
+      <button class="btn ghost" id="inviteSignOut">Use a different email</button>
+    </div>
+    <div id="philosophyInviteStatus" class="help"></div>
+  </div>`;
+
+  document.getElementById('inviteSignOut').onclick=()=>supabase.auth.signOut();
+
+  document.getElementById('acceptPhilosophyInvite').onclick=async()=>{
+    const st=document.getElementById('philosophyInviteStatus');
+    st.textContent='Accepting…';
+    const {data:clubId,error:aErr}=await supabase.rpc('accept_philosophy_contributor_invite',{
+      p_token:token,p_display_name:val('philosophyInviteName')
+    });
+    if(aErr){st.textContent=aErr.message;return;}
+    localStorage.setItem('bdp-context','club');
+    localStorage.setItem('bdp-club-id',clubId);
+    history.replaceState({},'',location.pathname);
+    await loadPlatformContext();
+    currentTab='workshop';
+    await loadContext();
+  };
 }
 
 async function renderAdminInviteRoute(token){
