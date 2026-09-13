@@ -458,6 +458,7 @@ function renderIdentity(){
         <label class="format-chip"><input type="checkbox" data-format="${k}" ${clubProfile.formats_enabled?.[k]!==false?'checked':''}>${l}</label>`).join('')}
       </div>
       <div class="identity-summary"><div class="title">What we’re hearing</div><p id="identitySummary">${esc(identitySummary())}</p></div>
+      <div id="identityError" class="notice" style="display:none;background:#fff0f0;color:#9f1d1d;border:1px solid #efb8b8"></div>
       <div class="btnrow"><button class="btn secondary" id="saveIdentity">Save & continue</button><span class="status" id="identityStatus"></span></div>
     </section>
   </div>`;
@@ -469,9 +470,24 @@ function renderIdentity(){
   });
 
   document.getElementById('saveIdentity').onclick=async()=>{
+    const btn=document.getElementById('saveIdentity');
+    const err=document.getElementById('identityError');
     collectIdentity(true);
+    btn.disabled=true;
+    btn.textContent='Saving…';
+    err.style.display='none';
+    err.textContent='';
     const ok=await saveClubProfile('identityStatus');
-    if(ok){currentTab='dimensions';renderTab();}
+    if(ok){
+      btn.textContent='Saved ✓';
+      setTimeout(()=>{
+        currentTab='dimensions';
+        renderTab();
+      },350);
+    }else{
+      btn.disabled=false;
+      btn.textContent='Save & continue';
+    }
   };
 }
 
@@ -483,12 +499,34 @@ function collectIdentity(withNote=true){
 
 async function saveClubProfile(statusId){
   const s=document.getElementById(statusId);
+  const errBox=document.getElementById('identityError');
   if(s)s.textContent='Saving…';
-  const payload={...clubProfile,club_id:club.id,updated_at:new Date().toISOString()};
-  delete payload.id;
-  const {error}=await supabase.from('philosophy_profiles').upsert(payload,{onConflict:'club_id'});
-  if(s)s.textContent=error?error.message:'Saved';
-  return !error;
+
+  const payload={
+    identity_values:clubProfile.identity_values||[],
+    identity_note:clubProfile.identity_note||'',
+    formats_enabled:clubProfile.formats_enabled||{t20:true,limited_overs:true,long_form:true},
+    updated_at:new Date().toISOString()
+  };
+
+  const {data,error}=await supabase
+    .from('philosophy_profiles')
+    .update(payload)
+    .eq('club_id',club.id)
+    .select('club_id')
+    .single();
+
+  if(error){
+    if(s)s.textContent='';
+    if(errBox){
+      errBox.style.display='block';
+      errBox.innerHTML=`<strong>Couldn’t save yet.</strong><br>${esc(error.message)}<br><br>Nothing has been lost.`;
+    }
+    return false;
+  }
+
+  if(s)s.textContent='Saved';
+  return !!data;
 }
 
 function renderDimensions(){
