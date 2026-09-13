@@ -31,6 +31,10 @@ let workflow=null;
 let currentTab='workshop';
 let previewFormat='limited_overs';
 let builderSection='core';
+let howWeBatDraft=null;
+let howWeBatVersions=[];
+let howWeBatBuilderFormat='limited_overs';
+let publishedHowWeBatFormat='limited_overs';
 
 const FORMATS=[
   ['t20','T20'],
@@ -72,6 +76,145 @@ const DEFAULT_WEIGHTS={
  innovation:{t20:3,limited_overs:2,long_form:1},
  patience:{t20:1,limited_overs:2,long_form:4},
  partnerships:{t20:2,limited_overs:4,long_form:4}
+};
+
+const HOW_WE_BAT_BANNERS={
+  value_wicket:{
+    title:'VALUE YOUR WICKET',
+    dimensions:{
+      wicket_preservation:1,
+      leaving_defending:.9,
+      patience:.8,
+      risk_management:.55,
+      reset_routines:.25,
+      partnerships:.2
+    },
+    identity:{wicket_value:1,smart_risk:.45,composure:.2},
+    messages:{
+      t20:'Protect the wicket without becoming passive. Choose risk deliberately and keep your strongest scoring options available.',
+      limited_overs:'Make the bowler earn your wicket. Build the innings, manage risk and give the team the chance to use its overs.',
+      long_form:'Make the bowler earn your wicket. Leave and defend with conviction, stay patient and expand only when the game gives you the opportunity.'
+    }
+  },
+  keep_moving:{
+    title:'KEEP THE INNINGS MOVING',
+    dimensions:{
+      strike_rotation:1,
+      running:.85,
+      dot_ball_management:.7,
+      partnerships:.45,
+      scoring_areas:.3,
+      tempo:.25
+    },
+    identity:{partnerships:.6,pressure:.45,intent:.25},
+    messages:{
+      t20:'When the boundary is not there, keep solving the over. Find safe singles, run hard and stop dot balls becoming emotional pressure.',
+      limited_overs:'Know your get-off-strike options against pace and spin. Keep partnerships moving and make the bowler continually adjust.',
+      long_form:'Rotate strike without widening your risk. A controlled single changes the bowler’s problem and keeps the partnership active.'
+    }
+  },
+  scoring_game:{
+    title:'KNOW WHERE YOU SCORE',
+    dimensions:{
+      scoring_areas:1,
+      boundary_access:.9,
+      pace_method:.7,
+      spin_method:.7,
+      matchups:.4,
+      innovation:.2
+    },
+    identity:{play_strengths:.8,commit:.55,intent:.25},
+    messages:{
+      t20:'Know the deliveries and areas you can access with conviction. Expand the scoring game deliberately rather than manufacturing shots under pressure.',
+      limited_overs:'Build the innings around the scoring options you genuinely own. When the bowler misses into your areas, commit.',
+      long_form:'Be clear about the balls you want to score from. Let the bowler come into your strengths rather than searching for runs from good bowling.'
+    }
+  },
+  control_tempo:{
+    title:'CONTROL THE TEMPO',
+    dimensions:{
+      tempo:1,
+      risk_management:.6,
+      dot_ball_management:.55,
+      partnerships:.45,
+      reset_routines:.4,
+      boundary_access:.25
+    },
+    identity:{strong_decisions:.5,smart_risk:.6,composure:.45,intent:.3},
+    messages:{
+      t20:'Know when the game needs acceleration and when it needs control. Change tempo because the match demands it, not because frustration does.',
+      limited_overs:'Move through the innings deliberately. Build, rotate and accelerate with the match situation rather than drifting between gears.',
+      long_form:'Control the rhythm of the innings. Stay patient through strong bowling and recognise when the game has shifted in your favour.'
+    }
+  },
+  pressure_bowler:{
+    title:'MAKE THE BOWLER SOLVE PROBLEMS',
+    dimensions:{
+      matchups:.8,
+      strike_rotation:.55,
+      running:.45,
+      scoring_areas:.4,
+      innovation:.35,
+      powerplay:.4,
+      death_overs:.4
+    },
+    identity:{pressure:1,adapt:.35,commit:.25},
+    messages:{
+      t20:'Use matchups, movement, running and scoring access to stop the bowler settling into one problem for six balls.',
+      limited_overs:'Change strike, expose different strengths and use the field. Make the bowler and captain continually adjust to the partnership.',
+      long_form:'Pressure does not have to mean boundary hitting. Change strike, own your scoring areas and stop the bowler controlling every ball on their terms.'
+    }
+  },
+  read_game:{
+    title:'READ THE GAME',
+    dimensions:{
+      matchups:.7,
+      pace_method:.55,
+      spin_method:.55,
+      tempo:.5,
+      risk_management:.45,
+      reset_routines:.4,
+      partnerships:.25
+    },
+    identity:{adapt:1,strong_decisions:.7,composure:.35},
+    messages:{
+      t20:'Read the bowler, field and match phase. Use your game differently when the problem in front of you changes.',
+      limited_overs:'Your plan gives you a core game; the match tells you how to use it. Read the bowler, field, score and partnership before changing method.',
+      long_form:'Conditions, bowling plans and fields change. Keep your core method, but adapt how you access runs and defend your wicket.'
+    }
+  },
+  use_phase:{
+    title:'USE THE PHASE',
+    dimensions:{
+      powerplay:1,
+      death_overs:1,
+      tempo:.55,
+      boundary_access:.45,
+      matchups:.35,
+      risk_management:.3
+    },
+    identity:{strong_decisions:.35,pressure:.35,smart_risk:.35},
+    messages:{
+      t20:'Field restrictions, middle overs and the death ask different questions. Know which scoring options and risks belong in each phase.',
+      limited_overs:'Use field restrictions and late-innings opportunities deliberately. The right option changes as the innings moves through its phases.',
+      long_form:'Different periods of the day create different opportunities. Recognise when to absorb pressure, rebuild or expand.'
+    }
+  }
+};
+
+const HOW_WE_BAT_FORMAT_COPY={
+  t20:{
+    intro:'T20 demands clarity under time pressure. Keep the core of the club philosophy, then widen the scoring game when the match requires it.',
+    callout:'Create pressure without turning every ball into a boundary attempt.'
+  },
+  limited_overs:{
+    intro:'Limited-overs batting is about using the available balls well: protect the wicket, keep the innings moving and commit when the scoring ball arrives.',
+    callout:'Score from more balls without needlessly increasing the risk of dismissal.'
+  },
+  long_form:{
+    intro:'Long-form batting rewards discipline. Make the bowler earn the wicket, keep the partnership alive and expand only when the game gives you the right opportunity.',
+    callout:'Be hard to dismiss without becoming easy to contain.'
+  }
 };
 
 const QUESTION_LIBRARY={
@@ -377,7 +520,7 @@ function renderFirstIdentitySetup(){
 
 
 async function loadData(){
-  const [pRes,dRes,sdRes,wRes,playerRes,workshopRes,myContributorRes,versionsRes]=await Promise.all([
+  const [pRes,dRes,sdRes,wRes,playerRes,workshopRes,myContributorRes,versionsRes,hwbDraftRes,hwbVersionsRes]=await Promise.all([
     supabase.from('philosophy_profiles').select('*').eq('club_id',club.id).single(),
     supabase.from('philosophy_dimension_catalogue').select('*').order('sort_order'),
     supabase.from('club_philosophy_dimensions').select('*').eq('club_id',club.id),
@@ -385,7 +528,9 @@ async function loadData(){
     supabase.from('players').select('*').eq('club_id',club.id).eq('user_id',session.user.id).maybeSingle(),
     supabase.from('philosophy_workshops').select('*').eq('club_id',club.id).maybeSingle(),
     supabase.from('philosophy_contributors').select('*').eq('club_id',club.id).eq('user_id',session.user.id).maybeSingle(),
-    supabase.from('philosophy_versions').select('*').eq('club_id',club.id).order('version_number',{ascending:false})
+    supabase.from('philosophy_versions').select('*').eq('club_id',club.id).order('version_number',{ascending:false}),
+    supabase.from('how_we_bat_drafts').select('*').eq('club_id',club.id).maybeSingle(),
+    supabase.from('how_we_bat_versions').select('*').eq('club_id',club.id).order('philosophy_version',{ascending:false})
   ]);
 
   publishedProfile=pRes.data||{};
@@ -398,6 +543,8 @@ async function loadData(){
   workshop=workshopRes.data||null;
   myContributor=myContributorRes.data||null;
   philosophyVersions=versionsRes.data||[];
+  howWeBatDraft=hwbDraftRes.data||null;
+  howWeBatVersions=hwbVersionsRes.data||[];
   myContribution=null;
 
   if(myContributor){
@@ -477,11 +624,12 @@ function renderShell(){
       ['identity','1. Club Identity'],
       ['dimensions','2. What We Value'],
       ['formats','3. Format Emphasis'],
-      ['preview','4. How We Bat'],
+      ['preview',workshop?.final_draft_ready&&isPhilosophyLead()?'4. How We Bat Builder':'4. How We Bat'],
       ['plan','5. Player Plan Structure']
     );
   }
   if(isAdmin())nav.push(['permissions','Permissions']);
+  if(howWeBatVersions.length)nav.push(['howwebat','How We Bat']);
   if(isPlayerUser())nav.push(['myplan','My Player Plan']);
 
   if(!nav.some(([k])=>k===currentTab)){
@@ -749,6 +897,7 @@ function renderTab(){
     preview:renderPreview,
     plan:renderPlanStructure,
     permissions:renderPermissions,
+    howwebat:renderPublishedHowWeBat,
     myplan:renderMyPlan
   };
   (map[currentTab]||renderMyPlan)();
@@ -784,6 +933,7 @@ async function renderClubDashboard(){
       ? ['Philosophy contributors selected',additionalContributors>0]
       : ['Solo Philosophy Workshop ready',hasLead],
     ['Club philosophy published',published],
+    ['How We Bat published',howWeBatVersions.length>0],
     ['Player Plans open',published]
   ];
 
@@ -1164,6 +1314,12 @@ async function renderWorkshop(){
   if(document.getElementById('buildFinalDraft')){
     document.getElementById('buildFinalDraft').onclick=()=>beginFinalDraftFromSynthesis();
   }
+  if(document.getElementById('openHwbBuilder')){
+    document.getElementById('openHwbBuilder').onclick=()=>{currentTab='preview';renderTab();};
+  }
+  if(document.getElementById('myResponseAction2')){
+    document.getElementById('myResponseAction2').onclick=()=>{currentTab='identity';renderTab();};
+  }
   if(document.getElementById('publishPhilosophy')){
     document.getElementById('publishPhilosophy').onclick=publishPhilosophy;
   }
@@ -1359,7 +1515,8 @@ function buildConsensusDraft(responses){
 function renderSynthesis(responses,pMap,allSubmitted){
   const syn=buildSynthesis(responses);
   const leadReady=isPhilosophyLead() && myContributor?.status==='submitted';
-  const canPublish=isPhilosophyLead() && workshop?.final_draft_ready && myContributor?.status==='submitted';
+  const hwbReady=howWeBatDraft?.status==='ready';
+  const canPublish=isPhilosophyLead() && workshop?.final_draft_ready && myContributor?.status==='submitted' && hwbReady;
 
   return `<section class="card synthesis" style="margin-top:16px">
     <div class="section-label">Curated group picture</div>
@@ -1407,11 +1564,17 @@ function renderSynthesis(responses,pMap,allSubmitted){
         <div class="section-label">Philosophy Lead</div>
         <strong>${workshop?.final_draft_ready?'Final draft stage':'Turn the synthesis into a working draft'}</strong>
         <p>${workshop?.final_draft_ready
-          ?'Adjust the draft through the three philosophy pages, submit it, then publish when you are satisfied.'
+          ?(howWeBatDraft?.status==='ready'
+            ?'The detailed philosophy and the player-facing How We Bat page are ready. Submit the final philosophy response if needed, then publish them together.'
+            :'Adjust the detailed philosophy, then use How We Bat Builder to compress it into a small number of memorable format-specific messages.')
           :'Use the majority view and median format weightings as a starting point. Discussion flags are deliberately not “solved” for you — you make the final call.'}</p>
       </div>
       ${workshop?.final_draft_ready
-        ?(canPublish?'<button class="btn secondary" id="publishPhilosophy">Approve & publish club philosophy</button>':'<button class="btn secondary" id="myResponseAction2">Continue final draft</button>')
+        ?(!hwbReady
+          ?'<button class="btn secondary" id="openHwbBuilder">Build How We Bat</button>'
+          :canPublish
+            ?'<button class="btn secondary" id="publishPhilosophy">Approve & publish philosophy + How We Bat</button>'
+            :'<button class="btn secondary" id="myResponseAction2">Continue / submit final draft</button>')
         :(leadReady?'<button class="btn secondary" id="buildFinalDraft">Create final draft from synthesis</button>':'<span class="help">Submit your own independent response before creating the final draft.</span>')}
     </div>`:''}
   </section>`;
@@ -1482,10 +1645,10 @@ async function publishPhilosophy(){
   if(error){alert(error.message);return;}
 
   alert(firstPublish
-    ?`Published as Club Philosophy v${data}. Player Plans are now open and player notification messages have been queued.`
-    :`Published as Club Philosophy v${data}.`);
+    ?`Published as Club Philosophy v${data}. How We Bat is now live, Player Plans are open, and player notification messages have been queued.`
+    :`Published as Club Philosophy v${data}. The matching How We Bat version is now live.`);
   await loadData();
-  currentTab='dashboard';
+  currentTab=howWeBatVersions.length?'howwebat':'dashboard';
   renderShell();
 }
 
@@ -1607,6 +1770,7 @@ async function saveClubProfile(statusId){
   }
 
   myContribution=data;
+  if(workshop?.final_draft_ready && isPhilosophyLead() && howWeBatDraft)howWeBatDraft.status='draft';
   if(s)s.textContent='Saved';
   return true;
 }
@@ -1703,6 +1867,7 @@ async function saveDimensions(){
   if(error){s.textContent=error.message;return;}
 
   myContribution=data;
+  if(workshop?.final_draft_ready && isPhilosophyLead() && howWeBatDraft)howWeBatDraft.status='draft';
   s.textContent='Saved';
   currentTab='formats';
   renderTab();
@@ -1782,6 +1947,7 @@ async function saveWeights(statusId){
 
   if(error){if(s)s.textContent=error.message;return false;}
   myContribution=data;
+  if(workshop?.final_draft_ready && isPhilosophyLead() && howWeBatDraft)howWeBatDraft.status='draft';
   if(s)s.textContent='Saved';
   return true;
 }
@@ -1805,6 +1971,437 @@ function publishedTopEmphasis(format){
   return topEmphasisFrom(format,publishedSelectedDims,publishedWeights);
 }
 
+function identitySummaryFor(profile){
+  const chosen=IDENTITY_OPTIONS
+    .filter(([k])=>(profile?.identity_values||[]).includes(k))
+    .map(([,l])=>l.toLowerCase());
+  if(!chosen.length)return `${club.name} wants batters to understand their game, read the situation and make strong decisions.`;
+  return `Across formats, ${club.name} wants batters who ${naturalList(chosen)}.`;
+}
+
+function howWeBatBannerCandidates(format){
+  const identityValues=new Set(clubProfile.identity_values||[]);
+  const rows=[];
+
+  for(const [key,spec] of Object.entries(HOW_WE_BAT_BANNERS)){
+    let score=0;
+    let highCount=0;
+    let veryHighCount=0;
+    const support=[];
+
+    for(const [dimKey,coefficient] of Object.entries(spec.dimensions||{})){
+      if(!selectedDims.has(dimKey))continue;
+      const weight=Number(weights.get(`${dimKey}:${format}`)??0);
+      if(weight<=0)continue;
+      score+=weight*coefficient;
+      if(coefficient>=.55 && weight>=3)highCount++;
+      if(coefficient>=.55 && weight===4)veryHighCount++;
+      if(weight>=2 && coefficient>=.3){
+        support.push({
+          key:dimKey,
+          label:dimensions.find(d=>d.dimension_key===dimKey)?.label||dimKey,
+          weight,
+          coefficient
+        });
+      }
+    }
+
+    for(const [identityKey,boost] of Object.entries(spec.identity||{})){
+      if(identityValues.has(identityKey))score+=boost;
+    }
+
+    // Reinforcement is deliberate: several related High / Very High dimensions
+    // should beat one isolated Very High dimension.
+    if(highCount>=2)score+=(highCount-1)*1.65;
+    if(veryHighCount>=2)score+=(veryHighCount-1)*.8;
+
+    // A banner supported by only one real dimension is possible, but it should
+    // have to work much harder than a coherent cluster.
+    if(support.length===1)score*=.72;
+
+    // Phase language should not dominate long-form unless the club genuinely
+    // weighted those phase dimensions strongly.
+    if(key==='use_phase' && format==='long_form')score*=.72;
+
+    if(score<=0)continue;
+    support.sort((a,b)=>b.weight-a.weight||b.coefficient-a.coefficient||a.label.localeCompare(b.label));
+    rows.push({
+      key,
+      title:spec.title,
+      message:spec.messages?.[format]||'',
+      score:Number(score.toFixed(2)),
+      highCount,
+      veryHighCount,
+      support
+    });
+  }
+
+  // Initial score order, then apply a modest overlap penalty so three banners
+  // do not all win because of the same shared dimension.
+  const remaining=rows.sort((a,b)=>b.score-a.score);
+  const ordered=[];
+  const alreadyUsed=new Set();
+  while(remaining.length){
+    let bestIndex=0;
+    let bestAdjusted=-Infinity;
+    for(let i=0;i<remaining.length;i++){
+      const row=remaining[i];
+      const overlap=row.support.filter(x=>x.coefficient>=.55 && alreadyUsed.has(x.key)).length;
+      const adjusted=row.score-(overlap*1.15);
+      if(adjusted>bestAdjusted){bestAdjusted=adjusted;bestIndex=i;}
+    }
+    const [chosen]=remaining.splice(bestIndex,1);
+    chosen.adjustedScore=Number(bestAdjusted.toFixed(2));
+    ordered.push(chosen);
+    chosen.support.filter(x=>x.coefficient>=.55).forEach(x=>alreadyUsed.add(x.key));
+  }
+  return ordered;
+}
+
+function howWeBatStrength(row){
+  if(row.highCount>=4 || row.adjustedScore>=15)return 'Very strongly reinforced';
+  if(row.highCount>=3 || row.adjustedScore>=11)return 'Strongly reinforced';
+  if(row.highCount>=2 || row.adjustedScore>=7)return 'Reinforced';
+  return 'Single-theme signal';
+}
+
+function generatedHowWeBatFormat(format){
+  const candidates=howWeBatBannerCandidates(format);
+  const banners=candidates.slice(0,Math.min(3,candidates.length)).map(x=>({
+    key:x.key,
+    title:x.title,
+    message:x.message,
+    supporting_dimensions:x.support.map(y=>({key:y.key,label:y.label,weight:y.weight})),
+    score:x.adjustedScore,
+    strength:howWeBatStrength(x)
+  }));
+  const copy=HOW_WE_BAT_FORMAT_COPY[format]||HOW_WE_BAT_FORMAT_COPY.limited_overs;
+  return {intro:copy.intro,callout:copy.callout,banners};
+}
+
+function generatedHowWeBatDraft(){
+  const formats={};
+  for(const [format] of enabledFormats())formats[format]=generatedHowWeBatFormat(format);
+  const identity=identitySummaryFor(clubProfile)+(clubProfile.identity_note?` ${clubProfile.identity_note}`:'');
+
+  const aggregate={};
+  for(const [format] of enabledFormats()){
+    for(const row of howWeBatBannerCandidates(format).slice(0,4)){
+      aggregate[row.key]=(aggregate[row.key]||0)+row.adjustedScore;
+    }
+  }
+  const strap=Object.entries(aggregate)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,3)
+    .map(([k])=>HOW_WE_BAT_BANNERS[k]?.title)
+    .filter(Boolean)
+    .join(' · ');
+
+  return {
+    club_id:club.id,
+    identity_statement:identity,
+    closing_strapline:strap,
+    formats,
+    status:'draft'
+  };
+}
+
+function ensureHowWeBatWorkingDraft(){
+  if(!howWeBatDraft){
+    howWeBatDraft=generatedHowWeBatDraft();
+  }else{
+    howWeBatDraft.formats=howWeBatDraft.formats||{};
+    for(const [format] of enabledFormats()){
+      if(!howWeBatDraft.formats[format])howWeBatDraft.formats[format]=generatedHowWeBatFormat(format);
+    }
+  }
+  return howWeBatDraft;
+}
+
+function howWeBatBannerEditorRows(format){
+  const draft=ensureHowWeBatWorkingDraft();
+  const saved=draft.formats?.[format]?.banners||[];
+  const savedMap=new Map(saved.map((x,i)=>[x.key,{...x,order:i}]));
+  const candidates=howWeBatBannerCandidates(format);
+  const candidateKeys=new Set(candidates.map(x=>x.key));
+  for(const existing of saved){
+    if(candidateKeys.has(existing.key))continue;
+    const spec=HOW_WE_BAT_BANNERS[existing.key]||{};
+    candidates.push({
+      key:existing.key,
+      title:existing.title||spec.title||'CUSTOM BANNER',
+      message:existing.message||spec.messages?.[format]||'',
+      score:Number(existing.score||0),
+      adjustedScore:Number(existing.score||0),
+      highCount:0,
+      veryHighCount:0,
+      support:(existing.supporting_dimensions||[]).map(x=>({...x,coefficient:1}))
+    });
+  }
+
+  return candidates.map((c,i)=>{
+    const existing=savedMap.get(c.key);
+    return {
+      ...c,
+      selected:!!existing,
+      order:existing?.order??999+i,
+      title:existing?.title||c.title,
+      message:existing?.message||c.message,
+      supporting_dimensions:existing?.supporting_dimensions||c.support.map(x=>({key:x.key,label:x.label,weight:x.weight})),
+      strength:existing?.strength||(existing?'Lead-selected banner':howWeBatStrength(c))
+    };
+  }).sort((a,b)=>a.order-b.order||b.adjustedScore-a.adjustedScore);
+}
+
+function renderHowWeBatBuilder(){
+  const draft=ensureHowWeBatWorkingDraft();
+  const formats=enabledFormats();
+  if(!formats.some(([k])=>k===howWeBatBuilderFormat))howWeBatBuilderFormat=formats[0]?.[0]||'limited_overs';
+  const formatLabel=FORMATS.find(([k])=>k===howWeBatBuilderFormat)?.[1]||'Format';
+  const formatDraft=draft.formats[howWeBatBuilderFormat]||generatedHowWeBatFormat(howWeBatBuilderFormat);
+  const rows=howWeBatBannerEditorRows(howWeBatBuilderFormat);
+
+  document.getElementById('page').innerHTML=`<div class="hwb-builder-shell">
+    <section class="card hwb-builder-intro">
+      <div>
+        <div class="section-label">Communication layer</div>
+        <h2>Turn the philosophy into messages players can remember</h2>
+        <div class="help">The detailed dimensions remain underneath the system and continue to drive Player Plans. <strong>How We Bat is deliberately compressed.</strong> Related High / Very High dimensions reinforce a shared banner rather than becoming separate rules.</div>
+      </div>
+      <div class="hwb-budget"><strong>Message budget</strong><span>2–4 banners per format</span></div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <div class="section-label">Club-wide identity · appears above all three format tabs</div>
+      <div class="field"><label>Opening identity statement</label><textarea id="hwbIdentity" rows="3">${esc(draft.identity_statement||'')}</textarea></div>
+      <div class="field"><label>Closing strapline</label><input id="hwbStrap" value="${esc(draft.closing_strapline||'')}" placeholder="e.g. VALUE YOUR WICKET · KEEP IT MOVING · KNOW WHERE YOU SCORE"></div>
+    </section>
+
+    <section class="card hwb-format-builder" style="margin-top:16px">
+      <div class="format-tabs hwb-tabs">${formats.map(([k,l])=>`<button data-hwb-format="${k}" class="${k===howWeBatBuilderFormat?'active':''}">${esc(l)}</button>`).join('')}</div>
+      <div class="hwb-format-heading">
+        <div><div class="section-label">${esc(formatLabel)}</div><h2>Choose the banners that carry the message</h2></div>
+        <button class="btn ghost" id="regenerateHwbFormat">Regenerate ${esc(formatLabel)} suggestions</button>
+      </div>
+
+      <div class="field"><label>Short opening for this format</label><textarea id="hwbFormatIntro" rows="3">${esc(formatDraft.intro||'')}</textarea></div>
+      <div class="field"><label>One central callout</label><textarea id="hwbCallout" rows="2">${esc(formatDraft.callout||'')}</textarea></div>
+
+      <div class="hwb-banner-list">
+        ${rows.map((row,index)=>`<div class="hwb-banner-editor ${row.selected?'selected':''}" data-hwb-banner-row="${row.key}">
+          <div class="hwb-banner-select">
+            <label><input type="checkbox" data-hwb-use="${row.key}" ${row.selected?'checked':''}> <strong>Use this banner</strong></label>
+            <span class="hwb-strength">${esc(row.strength)}</span>
+          </div>
+          <div class="field"><label>Banner</label><input data-hwb-title="${row.key}" value="${esc(row.title)}"></div>
+          <div class="field"><label>Player-facing message</label><textarea data-hwb-message="${row.key}" rows="3">${esc(row.message)}</textarea></div>
+          <div class="hwb-evidence">
+            <strong>Why it is being prioritised</strong>
+            <div>${row.support.map(x=>`<span>${esc(x.label)} · ${esc(WEIGHT_LABELS[x.weight])}</span>`).join('')||'<span>No strong supporting dimension in this format.</span>'}</div>
+          </div>
+          <div class="hwb-order-actions">
+            <button class="btn tiny ghost" data-hwb-up="${row.key}" ${!row.selected?'disabled':''}>↑ Earlier</button>
+            <button class="btn tiny ghost" data-hwb-down="${row.key}" ${!row.selected?'disabled':''}>↓ Later</button>
+          </div>
+        </div>`).join('')}
+      </div>
+
+      <div class="notice hwb-rule-note"><strong>Priority rule:</strong> several related High / Very High dimensions strengthen the shared banner. One isolated Very High dimension does not automatically become a headline.</div>
+
+      <div class="btnrow hwb-builder-actions">
+        <button class="btn secondary" id="saveHwbDraft">Save How We Bat draft</button>
+        <button class="btn secondary" id="readyHwbDraft">Mark How We Bat ready</button>
+        <span class="status" id="hwbStatus"></span>
+      </div>
+    </section>
+
+    ${renderHowWeBatLivePreview(draft,howWeBatBuilderFormat,true)}
+  </div>`;
+
+  document.querySelectorAll('[data-hwb-format]').forEach(b=>b.onclick=()=>{
+    collectHowWeBatBuilderPage();
+    howWeBatBuilderFormat=b.dataset.hwbFormat;
+    renderHowWeBatBuilder();
+  });
+
+  document.querySelectorAll('[data-hwb-use]').forEach(cb=>cb.onchange=()=>{
+    const checked=[...document.querySelectorAll('[data-hwb-use]:checked')];
+    if(checked.length>4){cb.checked=false;alert('Keep How We Bat to a maximum of four banners in each format.');}
+    collectHowWeBatBuilderPage();
+    renderHowWeBatBuilder();
+  });
+
+  document.querySelectorAll('[data-hwb-up]').forEach(b=>b.onclick=()=>moveHowWeBatBanner(b.dataset.hwbUp,-1));
+  document.querySelectorAll('[data-hwb-down]').forEach(b=>b.onclick=()=>moveHowWeBatBanner(b.dataset.hwbDown,1));
+
+  document.getElementById('regenerateHwbFormat').onclick=()=>{
+    const ok=confirm(`Regenerate the ${formatLabel} suggestions from the current final philosophy? Any edits to this format's banners and wording will be replaced.`);
+    if(!ok)return;
+    collectHowWeBatBuilderPage();
+    howWeBatDraft.formats[howWeBatBuilderFormat]=generatedHowWeBatFormat(howWeBatBuilderFormat);
+    howWeBatDraft.status='draft';
+    renderHowWeBatBuilder();
+  };
+
+  document.getElementById('saveHwbDraft').onclick=()=>saveHowWeBatBuilder('draft');
+  document.getElementById('readyHwbDraft').onclick=()=>saveHowWeBatBuilder('ready');
+}
+
+function collectHowWeBatBuilderPage(){
+  const draft=ensureHowWeBatWorkingDraft();
+  const identity=document.getElementById('hwbIdentity');
+  const strap=document.getElementById('hwbStrap');
+  if(identity)draft.identity_statement=identity.value.trim();
+  if(strap)draft.closing_strapline=strap.value.trim();
+
+  const intro=document.getElementById('hwbFormatIntro');
+  const callout=document.getElementById('hwbCallout');
+  if(!intro || !callout)return draft;
+
+  const rows=howWeBatBannerEditorRows(howWeBatBuilderFormat);
+  const rowMap=new Map(rows.map(x=>[x.key,x]));
+  const selected=[...document.querySelectorAll('[data-hwb-use]:checked')].map(x=>x.dataset.hwbUse);
+  const existingOrder=(draft.formats?.[howWeBatBuilderFormat]?.banners||[]).map(x=>x.key);
+  selected.sort((a,b)=>{
+    const ai=existingOrder.indexOf(a),bi=existingOrder.indexOf(b);
+    if(ai>=0||bi>=0)return (ai<0?999:ai)-(bi<0?999:bi);
+    return rows.findIndex(x=>x.key===a)-rows.findIndex(x=>x.key===b);
+  });
+
+  draft.formats[howWeBatBuilderFormat]={
+    intro:intro.value.trim(),
+    callout:callout.value.trim(),
+    banners:selected.map(key=>{
+      const base=rowMap.get(key);
+      return {
+        key,
+        title:document.querySelector(`[data-hwb-title="${key}"]`)?.value.trim()||base?.title||'',
+        message:document.querySelector(`[data-hwb-message="${key}"]`)?.value.trim()||base?.message||'',
+        supporting_dimensions:(base?.support||[]).map(x=>({key:x.key,label:x.label,weight:x.weight})),
+        score:base?.adjustedScore??base?.score??0,
+        strength:howWeBatStrength(base||{highCount:0,adjustedScore:0})
+      };
+    })
+  };
+  return draft;
+}
+
+function moveHowWeBatBanner(key,direction){
+  collectHowWeBatBuilderPage();
+  const banners=howWeBatDraft.formats[howWeBatBuilderFormat].banners||[];
+  const i=banners.findIndex(x=>x.key===key);
+  if(i<0)return;
+  const j=i+direction;
+  if(j<0||j>=banners.length)return;
+  [banners[i],banners[j]]=[banners[j],banners[i]];
+  renderHowWeBatBuilder();
+}
+
+async function saveHowWeBatBuilder(status){
+  const st=document.getElementById('hwbStatus');
+  collectHowWeBatBuilderPage();
+  const draft=ensureHowWeBatWorkingDraft();
+
+  if(status==='ready'){
+    for(const [format,label] of enabledFormats()){
+      const f=draft.formats?.[format];
+      if(!f || !f.intro || !f.callout || (f.banners||[]).length<2 || (f.banners||[]).length>4){
+        st.textContent=`Review ${label}: it needs an opening, callout and 2–4 banners.`;
+        return;
+      }
+      if((f.banners||[]).some(x=>!x.title||!x.message)){
+        st.textContent=`Review ${label}: every selected banner needs a title and message.`;
+        return;
+      }
+    }
+    if(!draft.identity_statement){st.textContent='Add the club-wide identity statement first.';return;}
+  }
+
+  st.textContent=status==='ready'?'Checking all formats…':'Saving…';
+  const {error}=await supabase.rpc('save_how_we_bat_draft',{
+    p_club_id:club.id,
+    p_identity_statement:draft.identity_statement||'',
+    p_closing_strapline:draft.closing_strapline||'',
+    p_formats:draft.formats||{},
+    p_status:status
+  });
+  if(error){st.textContent=error.message;return;}
+
+  await loadData();
+  st.textContent=status==='ready'?'How We Bat is ready to publish ✓':'Draft saved ✓';
+  if(status==='ready'){
+    currentTab='workshop';
+    renderShell();
+  }else{
+    renderHowWeBatBuilder();
+  }
+}
+
+function renderHowWeBatLivePreview(draft,format,isBuilder=false){
+  const f=draft.formats?.[format];
+  if(!f)return '';
+  const label=FORMATS.find(([k])=>k===format)?.[1]||format;
+  return `<section class="hwb-publication-preview ${isBuilder?'builder-preview':''}">
+    <div class="hwb-public-hero">
+      <div class="k">${esc(club.name)}</div>
+      <h2>How We Bat</h2>
+      <p>${esc(draft.identity_statement||'')}</p>
+    </div>
+    <div class="hwb-public-tabs"><button class="active">${esc(label)}</button></div>
+    <div class="hwb-public-body">
+      <p class="hwb-public-intro">${esc(f.intro||'')}</p>
+      <div class="hwb-public-banner-grid">${(f.banners||[]).map((b,i)=>`<article class="hwb-public-banner ${i===1?'feature':''}">
+        <span>Key message ${i+1}</span>
+        <h3>${esc(b.title||'')}</h3>
+        <p>${esc(b.message||'')}</p>
+      </article>`).join('')}</div>
+      <div class="hwb-public-callout">${esc(f.callout||'')}</div>
+    </div>
+    ${draft.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(draft.closing_strapline)}</strong></div>`:''}
+  </section>`;
+}
+
+function renderPublishedHowWeBat(){
+  const version=howWeBatVersions[0];
+  if(!version){
+    document.getElementById('page').innerHTML='<div class="card"><h2>How We Bat has not been published yet.</h2></div>';
+    return;
+  }
+  const snap=version.snapshot||{};
+  const formats=FORMATS.filter(([k])=>snap.formats?.[k]);
+  if(!formats.some(([k])=>k===publishedHowWeBatFormat))publishedHowWeBatFormat=formats[0]?.[0]||'limited_overs';
+  const f=snap.formats?.[publishedHowWeBatFormat];
+  const formatLabel=FORMATS.find(([k])=>k===publishedHowWeBatFormat)?.[1]||'';
+
+  document.getElementById('page').innerHTML=`<div class="hwb-published-shell">
+    <section class="hwb-publication-preview published">
+      <div class="hwb-public-hero">
+        <div class="k">${esc(club.name)}</div>
+        <h2>How We Bat</h2>
+        <p>${esc(snap.identity_statement||'')}</p>
+      </div>
+      <div class="hwb-public-tabs">${formats.map(([k,l])=>`<button data-public-hwb-format="${k}" class="${k===publishedHowWeBatFormat?'active':''}">${esc(l)}</button>`).join('')}</div>
+      <div class="hwb-public-body">
+        <div class="section-label">${esc(formatLabel)}</div>
+        <p class="hwb-public-intro">${esc(f?.intro||'')}</p>
+        <div class="hwb-public-banner-grid">${(f?.banners||[]).map((b,i)=>`<article class="hwb-public-banner ${i===1?'feature':''}">
+          <span>Key message ${i+1}</span>
+          <h3>${esc(b.title||'')}</h3>
+          <p>${esc(b.message||'')}</p>
+        </article>`).join('')}</div>
+        <div class="hwb-public-callout">${esc(f?.callout||'')}</div>
+      </div>
+      ${snap.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(snap.closing_strapline)}</strong><span>Know your game. Then read the moment.</span></div>`:''}
+    </section>
+    <div class="published-version-note">Published with Club Philosophy v${esc(version.philosophy_version)} · ${new Date(version.published_at).toLocaleDateString()}</div>
+  </div>`;
+
+  document.querySelectorAll('[data-public-hwb-format]').forEach(b=>b.onclick=()=>{
+    publishedHowWeBatFormat=b.dataset.publicHwbFormat;
+    renderPublishedHowWeBat();
+  });
+}
+
 function formatNarrative(format){
   const top=topEmphasis(format);
   if(!top.length)return 'This format has not yet been given any specific emphasis.';
@@ -1820,6 +2417,10 @@ function formatNarrative(format){
 
 function renderPreview(){
   if(!myContribution){currentTab='workshop';renderTab();return;}
+  if(isPhilosophyLead() && workshop?.final_draft_ready){
+    renderHowWeBatBuilder();
+    return;
+  }
   const formats=enabledFormats();
   if(!formats.some(([k])=>k===previewFormat))previewFormat=formats[0]?.[0]||'limited_overs';
   const identity=identitySummary()+(clubProfile.identity_note?` ${clubProfile.identity_note}`:'');
