@@ -753,15 +753,20 @@ async function renderWorkshop(){
 
         <div class="external-invite-box">
           <div class="section-label">Not in the system yet?</div>
-          <h3>Invite them by email</h3>
-          <p class="help">They can join as a <strong>Philosophy Contributor only</strong>. This does not give them Player Plan access or any coaching permissions.</p>
-          <div class="invite-form">
-            <div class="field"><label>Name</label><input id="externalContributorName" placeholder="e.g. Sam Brown"></div>
-            <div class="field"><label>Email</label><input id="externalContributorEmail" type="email" placeholder="sam@example.com"></div>
-            <button class="btn ghost" id="sendExternalContributor">Send invitation</button>
+          <h3>Invite people by email</h3>
+          <p class="help">Add everyone you want involved, then send the invitations together. They join as <strong>Philosophy Contributor only</strong> unless the Admin later gives them another role.</p>
+
+          <div id="newContributorRows" class="new-contributor-rows">
+            <div class="new-contributor-row" data-new-contributor-row>
+              <div class="field"><label>Name</label><input data-new-name placeholder="e.g. Sam Brown"></div>
+              <div class="field"><label>Email</label><input data-new-email type="email" placeholder="sam@example.com"></div>
+              <button class="btn ghost remove-new-contributor" type="button" data-remove-new-contributor style="visibility:hidden">Remove</button>
+            </div>
           </div>
+
+          <button class="btn ghost add-person-btn" id="addContributorRow" type="button">+ Add another person</button>
           <div id="externalInviteStatus" class="help"></div>
-          <div class="help">Prototype note: the invitation is added to the Email Queue with its secure link. Once the live email provider is connected, this same action will send it automatically.</div>
+          <div class="help">Prototype note: invitations are added to the Email Queue with secure links. Once the live email provider is connected, these will send automatically.</div>
 
           ${externalInvites?.length?`<div class="pending-invites">
             ${externalInvites.map(i=>`<div class="pending-invite-row">
@@ -900,31 +905,41 @@ async function renderWorkshop(){
     document.getElementById('saveWorkshopSetup').onclick=()=>saveWorkshopSetup(contribRows||[],externalInvites||[]);
   }
 
-  if(document.getElementById('sendExternalContributor')){
-    document.getElementById('sendExternalContributor').onclick=async()=>{
-      const st=document.getElementById('externalInviteStatus');
-      const name=val('externalContributorName');
-      const email=val('externalContributorEmail');
-      if(!email){st.textContent='Enter an email address first.';return;}
+  const refreshNewContributorRemoveButtons=()=>{
+    const rows=[...document.querySelectorAll('[data-new-contributor-row]')];
+    rows.forEach((row,i)=>{
+      const remove=row.querySelector('[data-remove-new-contributor]');
+      if(remove)remove.style.visibility=rows.length===1?'hidden':'visible';
+    });
+  };
 
-      // Ensure the workshop is already collaborative before the invite RPC checks it.
-      const {error:wErr}=await supabase
-        .from('philosophy_workshops')
-        .update({mode:'collaborative',status:'collecting',updated_at:new Date().toISOString()})
-        .eq('club_id',club.id);
+  const wireNewContributorRows=()=>{
+    document.querySelectorAll('[data-remove-new-contributor]').forEach(b=>{
+      b.onclick=()=>{
+        b.closest('[data-new-contributor-row]')?.remove();
+        refreshNewContributorRemoveButtons();
+      };
+    });
+    refreshNewContributorRemoveButtons();
+  };
 
-      if(wErr){st.textContent=wErr.message;return;}
-
-      st.textContent='Sending invitation…';
-      const {error}=await supabase.rpc('invite_philosophy_contributor_by_email',{
-        p_club_id:club.id,p_name:name,p_email:email
-      });
-      if(error){st.textContent=error.message;return;}
-      st.textContent='Invitation queued ✓';
-      await loadData();
-      await renderWorkshop();
+  if(document.getElementById('addContributorRow')){
+    document.getElementById('addContributorRow').onclick=()=>{
+      const wrap=document.getElementById('newContributorRows');
+      const row=document.createElement('div');
+      row.className='new-contributor-row';
+      row.setAttribute('data-new-contributor-row','');
+      row.innerHTML=`
+        <div class="field"><label>Name</label><input data-new-name placeholder="e.g. Sam Brown"></div>
+        <div class="field"><label>Email</label><input data-new-email type="email" placeholder="sam@example.com"></div>
+        <button class="btn ghost remove-new-contributor" type="button" data-remove-new-contributor>Remove</button>`;
+      wrap.appendChild(row);
+      wireNewContributorRows();
+      row.querySelector('[data-new-name]')?.focus();
     };
   }
+
+  wireNewContributorRows();
 
   document.querySelectorAll('[data-resend-philosophy-invite]').forEach(b=>b.onclick=async()=>{
     b.textContent='Sending…';
@@ -972,6 +987,30 @@ async function renderWorkshop(){
 async function saveWorkshopSetup(existingRows,externalInvites=[]){
   const s=document.getElementById('workshopSetupStatus');
   const btn=document.getElementById('saveWorkshopSetup');
+  const externalStatus=document.getElementById('externalInviteStatus');
+
+  const newPeople=[...document.querySelectorAll('[data-new-contributor-row]')]
+    .map(row=>({
+      name:row.querySelector('[data-new-name]')?.value.trim()||'',
+      email:row.querySelector('[data-new-email]')?.value.trim()||''
+    }))
+    .filter(x=>x.name||x.email);
+
+  if(newPeople.some(x=>!x.email || !x.email.includes('@'))){
+    if(externalStatus)externalStatus.textContent='Each new person needs a valid email address.';
+    return;
+  }
+
+  const emailSet=new Set();
+  for(const person of newPeople){
+    const e=person.email.toLowerCase();
+    if(emailSet.has(e)){
+      if(externalStatus)externalStatus.textContent=`${person.email} has been entered more than once.`;
+      return;
+    }
+    emailSet.add(e);
+  }
+
   s.textContent='Saving…';
   btn.disabled=true;
 
@@ -1015,6 +1054,26 @@ async function saveWorkshopSetup(existingRows,externalInvites=[]){
         .eq('user_id',row.user_id);
       if(error){s.textContent=error.message;btn.disabled=false;return;}
     }
+  }
+
+  if(mode==='collaborative' && newPeople.length){
+    if(externalStatus)externalStatus.textContent=`Queuing ${newPeople.length} invitation${newPeople.length===1?'':'s'}…`;
+
+    for(const person of newPeople){
+      const {error}=await supabase.rpc('invite_philosophy_contributor_by_email',{
+        p_club_id:club.id,
+        p_name:person.name,
+        p_email:person.email
+      });
+      if(error){
+        if(externalStatus)externalStatus.textContent=error.message;
+        s.textContent='Some invitations were not sent.';
+        btn.disabled=false;
+        return;
+      }
+    }
+
+    if(externalStatus)externalStatus.textContent=`${newPeople.length} invitation${newPeople.length===1?'':'s'} queued ✓`;
   }
 
   if(mode==='solo'){
