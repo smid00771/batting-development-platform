@@ -303,3 +303,194 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.splash{padding:
   .qr-frame{width:230px;height:230px}
   .join-security-row,.signup-status-row{align-items:flex-start;flex-direction:column}
 }
+
+
+/* ---------- v0.5.9 formal Lead Admin handover ---------- */
+.admin-continuity-card{overflow:hidden}
+.admin-continuity-head{
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  align-items:flex-start;
+}
+.lead-admin-badge{
+  min-width:210px;
+  padding:11px 13px;
+  border:1px solid #cbd3ee;
+  border-radius:11px;
+  background:#f6f8ff;
+}
+.lead-admin-badge span{
+  display:block;
+  font-size:8px;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--muted);
+}
+.lead-admin-badge strong{
+  display:block;
+  margin-top:4px;
+  font-size:13px;
+  color:var(--navy2);
+}
+.handover-start,.handover-pending{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  align-items:center;
+  margin-top:14px;
+  padding:12px 13px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:#fafbfe;
+}
+.handover-pending{background:#fff8e9;border-color:#ecd5a7}
+.handover-start strong,.handover-pending strong{
+  display:block;
+  font-size:10px;
+  color:var(--navy2);
+}
+.handover-start span,.handover-pending span{
+  display:block;
+  margin-top:3px;
+  font-size:9px;
+  line-height:1.45;
+  color:var(--muted);
+}
+.lead-handover-form{
+  margin-top:14px;
+  padding:14px;
+  border:1px solid #cbd3ee;
+  border-radius:12px;
+  background:#f7f8fe;
+}
+.handover-successor-choice{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  margin:8px 0 12px;
+}
+.handover-option{
+  position:relative;
+  display:block;
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:11px;
+  padding:12px 34px 12px 12px;
+  cursor:pointer;
+}
+.handover-option.on{
+  border-color:#aeb8ea;
+  background:#f1f4ff;
+}
+.handover-option input{
+  position:absolute;
+  right:11px;
+  top:12px;
+}
+.handover-option strong{
+  display:block;
+  font-size:10px;
+  color:var(--navy2);
+}
+.handover-option span{
+  display:block;
+  margin-top:4px;
+  font-size:8.8px;
+  line-height:1.4;
+  color:var(--muted);
+}
+.handover-external-grid{grid-template-columns:1fr 1fr}
+.test-link-box{
+  margin-top:12px;
+  padding:11px;
+  border:1px dashed #aeb8ea;
+  border-radius:10px;
+  background:#fff;
+}
+.test-link-box strong,.test-link-box span{display:block}
+.test-link-box strong{font-size:9.5px;color:var(--navy2)}
+.test-link-box span{font-size:8.8px;line-height:1.4;color:var(--muted);margin:3px 0 8px}
+.primary-admin-summary{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  justify-content:center;
+  text-align:right;
+}
+.primary-admin-summary strong{font-size:10px;color:var(--navy2)}
+.primary-admin-summary span{font-size:8.8px;color:var(--muted);margin-top:3px}
+.primary-admin-summary.lead strong{color:#17225d}
+
+.handover-shell{
+  max-width:760px;
+  margin:38px auto;
+  padding:0 18px 36px;
+}
+.handover-hero{
+  padding:22px 4px 16px;
+}
+.handover-hero h1{
+  margin:3px 0 7px;
+  color:var(--navy2);
+  font-size:30px;
+}
+.handover-hero p{
+  margin:0;
+  color:var(--muted);
+  line-height:1.5;
+}
+.handover-card{padding:18px}
+.handover-step{
+  display:grid;
+  grid-template-columns:34px 1fr;
+  gap:11px;
+  align-items:start;
+  padding:10px 0;
+  border-bottom:1px solid var(--line);
+}
+.handover-step>span{
+  width:30px;
+  height:30px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+  background:#eef1ff;
+  color:var(--navy2);
+  font-size:11px;
+  font-weight:950;
+}
+.handover-step strong{
+  display:block;
+  font-size:11px;
+  color:var(--navy2);
+}
+.handover-step p{
+  margin:3px 0 0;
+  font-size:9.2px;
+  line-height:1.45;
+  color:var(--muted);
+}
+.handover-access-explanation{
+  margin:10px 0 2px;
+  padding:10px 11px;
+  border-radius:9px;
+  background:#f5f6fa;
+  font-size:9px;
+  line-height:1.45;
+  color:#596174;
+}
+@media(max-width:760px){
+  .admin-continuity-head,
+  .handover-start,
+  .handover-pending{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .lead-admin-badge{min-width:0;width:100%}
+  .handover-successor-choice,
+  .handover-external-grid{grid-template-columns:1fr}
+  .primary-admin-summary{align-items:flex-start;text-align:left}
+}
