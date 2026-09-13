@@ -573,7 +573,7 @@ async function renderClubDashboard(){
 
   const [{data:entitlement},{data:contributors},{data:players}]=await Promise.all([
     supabase.rpc('get_club_entitlement',{p_club_id:club.id}),
-    supabase.from('philosophy_contributors').select('status').eq('club_id',club.id),
+    supabase.from('philosophy_contributors').select('user_id,status').eq('club_id',club.id),
     supabase.from('players').select('id,active').eq('club_id',club.id).eq('active',true)
   ]);
 
@@ -582,12 +582,18 @@ async function renderClubDashboard(){
   const published=philosophyVersions.length>0;
   const hasLead=!!workshop?.philosophy_lead_user_id;
   const entitlementActive=entitlement?.active!==false;
+  const collaborative=workshop?.mode==='collaborative';
+  const additionalContributors=(contributors||[]).filter(
+    x=>x.user_id!==workshop?.philosophy_lead_user_id
+  ).length;
 
   const steps=[
     ['Subscription / entitlement active',entitlementActive],
     ['Club Admin appointed',true],
     ['Philosophy Lead chosen',hasLead],
-    ['Philosophy contributors invited',total>0],
+    collaborative
+      ? ['Philosophy contributors selected',additionalContributors>0]
+      : ['Solo Philosophy Workshop ready',hasLead],
     ['Club philosophy published',published],
     ['Player Plans open',published]
   ];
@@ -612,7 +618,7 @@ async function renderClubDashboard(){
         ?`Published Philosophy v${philosophyVersions[0]?.version_number}. Players can now build plans from the live club philosophy.`
         :'Players can join the club now, but they will see a holding message until the Philosophy Lead publishes the club philosophy.'}</p>
       <div class="dashboard-stats">
-        <div><strong>${submitted}/${total}</strong><span>philosophy responses</span></div>
+        <div><strong>${submitted}/${total}</strong><span>${collaborative?'philosophy responses':'lead response'}</span></div>
         <div><strong>${players?.length||0}</strong><span>active players</span></div>
         <div><strong>${philosophyVersions[0]?.version_number||0}</strong><span>published version</span></div>
       </div>
