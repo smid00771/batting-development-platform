@@ -3618,3 +3618,5 @@ async function renderPlatformSettings(){
     st.textContent=error?error.message:'Saved';
   };
 }
+
+boot();
