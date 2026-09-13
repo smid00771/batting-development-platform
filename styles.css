@@ -91,3 +91,26 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.splash{padding:
 @media(max-width:800px){.workshop-grid,.mode-choice,.contributor-picker,.consensus-grid,.prospect-value-grid,.form-grid,.platform-metrics,.dashboard-stats{grid-template-columns:1fr}.platform-header,.active-club-row,.message-row{flex-direction:column}.platform-page{padding:14px}.platform-header{padding:20px 16px}.platform-nav{padding:9px 14px}.prospect-hero{padding:24px 20px}.prospect-hero h1{font-size:30px}.header-actions{justify-content:flex-start}.context-switch{max-width:200px}}
 
 @media print{.btn,.platform-nav,.header-actions,#wrongContact,#committeeApproved{display:none!important}.prospect-shell{padding:0}.prospect-hero{box-shadow:none;background:#fff;color:#111;border:1px solid #ddd}.prospect-hero .section-label{color:#333}.prospect-card{border:0;box-shadow:none}}
+
+
+/* ---------- v0.5.2 responsive philosophy contributor invitations ---------- */
+.collaborative-panel{display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
+.collaborative-panel.show{display:block}
+.mode-feedback{display:none;margin:10px 0;padding:10px 12px;border-radius:10px;background:#eef1ff;color:var(--navy2);font-size:9.5px;line-height:1.45}
+.mode-feedback.show{display:block}
+.collab-intro{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}
+.collab-intro h3,.external-invite-box h3{margin:2px 0 4px;color:var(--navy2);font-size:15px}
+.collab-intro p{margin:0;font-size:9.5px;line-height:1.45;color:var(--muted)}
+.contributor-check.lead-person{background:#f4f6ff;border-color:#aeb8ea}
+.external-invite-box{margin-top:14px;padding:13px;border:1px solid var(--line);border-radius:12px;background:#fafbfe}
+.invite-form{display:grid;grid-template-columns:1fr 1.35fr auto;gap:8px;align-items:end;margin-top:9px}
+.invite-form .field{margin:0}
+.pending-invites{display:grid;gap:6px;margin-top:12px}
+.pending-invite-row{display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px}
+.pending-invite-row strong{display:block;font-size:9.8px;color:var(--navy2)}
+.pending-invite-row small{display:block;font-size:8.5px;color:var(--muted);margin-top:2px}
+.notice.compact{margin-top:12px;padding:9px 10px}
+@media(max-width:800px){
+  .invite-form{grid-template-columns:1fr}
+  .pending-invite-row{align-items:flex-start;flex-direction:column}
+}
