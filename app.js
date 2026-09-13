@@ -253,7 +253,7 @@ async function loadContext(){
 
   const {data:memberships,error}=await supabase
     .from('club_memberships')
-    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,season_start,season_end)')
+    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,subscription_calendar,season_start,season_end)')
     .eq('user_id',session.user.id);
 
   if(error){
@@ -3250,13 +3250,13 @@ async function renderPlatformProspects(){
 
   if(platformSelectedProspectId){
     const p=prospects.find(x=>x.id===platformSelectedProspectId);
-    if(p){renderPlatformProspectDetail(p);return;}
+    if(p){await renderPlatformProspectDetail(p);return;}
   }
 
   const counts={active:prospects.filter(x=>x.status==='active').length,waiting:prospects.filter(x=>['awaiting_payment','awaiting_admin_handoff','admin_invited'].includes(x.status)).length,beta:prospects.filter(x=>x.entry_route!=='standard').length};
   page.innerHTML=`<div class="platform-metrics"><div><strong>${prospects.length}</strong><span>prospects / activations</span></div><div><strong>${counts.waiting}</strong><span>waiting on next step</span></div><div><strong>${counts.beta}</strong><span>Beta routes</span></div></div>
   <section class="admin-card"><div class="admin-card-head"><div><div class="section-label">Club pipeline</div><h2>Prospects & onboarding</h2></div><button class="btn secondary" id="newProspectQuick">New club</button></div>
-    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Club</th><th>Route</th><th>Status</th><th>Private adjustment</th><th>Amount</th><th>Contact</th><th></th></tr></thead><tbody>
+    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Club</th><th>Route</th><th>Status</th><th>Rate reduction</th><th>Amount</th><th>Contact</th><th></th></tr></thead><tbody>
     ${prospects.map(x=>`<tr><td><strong>${esc(x.club_name)}</strong><small>${esc(niceDate(x.offer_end))}</small></td><td>${esc(x.entry_route.replaceAll('_',' '))}</td><td><span class="status-pill">${esc(x.status.replaceAll('_',' '))}</span></td><td>${Number(x.adjustment_percent).toFixed(0)}%${x.adjustment_end?`<small>to ${esc(niceDate(x.adjustment_end))}</small>`:''}</td><td>${esc(money(x.amount_due_cents))}</td><td>${esc(x.primary_contact_email)}</td><td><button class="btn ghost" data-manage-prospect="${x.id}">Manage</button></td></tr>`).join('')||'<tr><td colspan="7">No prospects yet.</td></tr>'}
     </tbody></table></div>
   </section>`;
@@ -3264,8 +3264,56 @@ async function renderPlatformProspects(){
   page.querySelectorAll('[data-manage-prospect]').forEach(b=>b.onclick=()=>{platformSelectedProspectId=b.dataset.manageProspect;renderPlatformProspects();});
 }
 
-function renderPlatformProspectDetail(p){
+async function loadSubscriptionCalendars(){
+  const {data,error}=await supabase.from('subscription_calendars').select('*').eq('active',true).order('sort_order');
+  if(error)return {data:[],error};
+  return {data:data||[],error:null};
+}
+
+function calendarStartLabel(c){
+  if(!c)return '';
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${c.club_year_start_day} ${months[c.club_year_start_month-1]}`;
+}
+
+function nextDayIso(value){
+  if(!value)return '';
+  const d=new Date(`${String(value).slice(0,10)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate()+1);
+  return d.toISOString().slice(0,10);
+}
+
+function calendarOptions(calendars,selected='australia'){
+  return (calendars||[]).map(c=>`<option value="${esc(c.code)}" ${c.code===selected?'selected':''}>${esc(c.label)} · renews ${esc(calendarStartLabel(c))}</option>`).join('');
+}
+
+function commercialPreviewHtml(q){
+  if(!q)return '<div class="help">Choose a subscription calendar and access date to preview the term.</div>';
+  const bundled=q.bundled_next_full_year===true || q.bundled_next_full_year==='true';
+  return `<div class="commercial-preview-grid">
+    <div><span>Access starts</span><strong>${esc(niceDate(q.access_start))}</strong></div>
+    <div><span>Current term ends</span><strong>${esc(niceDate(q.offer_end))}</strong></div>
+    <div><span>Next renewal</span><strong>${esc(niceDate(q.next_renewal))}</strong></div>
+    <div><span>Standard annual price</span><strong>${esc(money(q.standard_annual_price_cents,q.currency))}</strong></div>
+    <div><span>Current term before reduction</span><strong>${esc(money(q.base_prorated_cents,q.currency))}</strong></div>
+    <div><span>Club price now</span><strong>${esc(money(q.amount_due_cents,q.currency))}</strong></div>
+  </div>
+  ${bundled?`<div class="notice compact"><strong>Near the renewal date:</strong> the short remaining period is included, and the charge covers the next full Club Year.</div>`:''}`;
+}
+
+async function getCommercialPreview(calendar,accessStart,reduction=0,adjustmentEnd=''){
+  if(!calendar||!accessStart)return {data:null,error:null};
+  return supabase.rpc('platform_preview_offer',{
+    p_subscription_calendar:calendar,
+    p_access_start:accessStart,
+    p_adjustment_percent:Number(reduction||0),
+    p_adjustment_end:adjustmentEnd||null
+  });
+}
+
+async function renderPlatformProspectDetail(p){
   const page=document.getElementById('platformPage');
+  const {data:calendars}=await loadSubscriptionCalendars();
   const publicLink=`${location.origin}${location.pathname}?prospect=${p.public_token}`;
   page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backProspects">← Back to prospects</button></div>
   <div class="grid">
@@ -3276,13 +3324,14 @@ function renderPlatformProspectDetail(p){
       <button class="btn ghost" id="copyProspectLink">Copy link</button>
     </section>
     <section class="admin-card">
-      <div class="section-label">Private commercial terms</div><h2>Rate adjustment</h2>
-      <div class="private-note">Only Platform Admins see these fields. The club sees only the price and dates you have authorised.</div>
-      <div class="field"><label>Adjustment %</label><input id="editAdjustment" type="number" min="0" max="100" step="1" value="${esc(p.adjustment_percent)}"></div>
-      <div class="field"><label>Charge from</label><input id="editChargeFrom" type="date" value="${esc(String(p.charge_from).slice(0,10))}"></div>
-      <div class="field"><label>Adjustment starts</label><input id="editAdjStart" type="date" value="${esc(p.adjustment_start?String(p.adjustment_start).slice(0,10):'')}"></div>
-      <div class="field"><label>Adjustment ends</label><input id="editAdjEnd" type="date" value="${esc(p.adjustment_end?String(p.adjustment_end).slice(0,10):'')}"></div>
+      <div class="section-label">Private commercial terms</div><h2>Club price & annual calendar</h2>
+      <div class="private-note">Only Platform Admins see these controls. <strong>0% reduction = full standard price. 100% reduction = free.</strong> The club sees only its actual price and dates.</div>
+      <div class="field"><label>Subscription calendar</label><select id="editCalendar">${calendarOptions(calendars,p.subscription_calendar||'australia')}</select></div>
+      <div class="field"><label>Access starts</label><input id="editChargeFrom" type="date" value="${esc(String(p.charge_from).slice(0,10))}"></div>
+      <div class="field"><label>Private rate reduction from standard price</label><input id="editAdjustment" type="number" min="0" max="100" step="1" value="${esc(p.adjustment_percent)}"><small>0% = standard price · 100% = complimentary</small></div>
+      <div class="field"><label>Special rate ends (optional)</label><input id="editAdjEnd" type="date" value="${esc(p.adjustment_end?String(p.adjustment_end).slice(0,10):'')}"></div>
       <div class="field"><label>At expiry</label><select id="editExpiry"><option value="renewal_approval" ${p.expiry_action==='renewal_approval'?'selected':''}>Require renewal approval</option><option value="return_standard" ${p.expiry_action==='return_standard'?'selected':''}>Return to standard rate</option><option value="end_subscription" ${p.expiry_action==='end_subscription'?'selected':''}>End subscription</option></select></div>
+      ${p.entry_route!=='standard'?'<div class="notice compact"><strong>Beta route:</strong> it bypasses charging, so the rate reduction must remain at 100%.</div>':''}
       ${['owner','commercial_admin'].includes(platformRole)&&!['payment_received','awaiting_admin_handoff','admin_invited','active'].includes(p.status)?'<button class="btn secondary" id="saveProspectTerms">Recalculate & save terms</button>':'<div class="notice">Activated clubs are managed under Active Clubs rather than changing the original offer.</div>'}
       <div id="prospectTermsStatus" class="help"></div>
     </section>
@@ -3291,50 +3340,68 @@ function renderPlatformProspectDetail(p){
   document.getElementById('copyProspectLink').onclick=async()=>{await navigator.clipboard.writeText(publicLink);document.getElementById('copyProspectLink').textContent='Copied ✓';};
   if(document.getElementById('saveProspectTerms'))document.getElementById('saveProspectTerms').onclick=async()=>{
     const st=document.getElementById('prospectTermsStatus');st.textContent='Saving…';
+    const reduction=Number(val('editAdjustment')||0);
     const {data,error}=await supabase.rpc('platform_update_prospect_terms',{
-      p_prospect_id:p.id,p_adjustment_percent:Number(val('editAdjustment')||0),
-      p_adjustment_start:val('editAdjStart')||null,p_adjustment_end:val('editAdjEnd')||null,
-      p_expiry_action:document.getElementById('editExpiry').value,p_charge_from:val('editChargeFrom')
+      p_prospect_id:p.id,
+      p_subscription_calendar:document.getElementById('editCalendar').value,
+      p_adjustment_percent:reduction,
+      p_adjustment_start:reduction>0?val('editChargeFrom'):null,
+      p_adjustment_end:val('editAdjEnd')||null,
+      p_expiry_action:document.getElementById('editExpiry').value,
+      p_access_start:val('editChargeFrom')
     });
     if(error){st.textContent=error.message;return;}
-    st.textContent=`Saved. New amount: ${money(data.amount_due_cents)}.`;
-    setTimeout(()=>renderPlatformProspects(),600);
+    st.textContent=`Saved. New amount: ${money(data.amount_due_cents)} · next renewal ${niceDate(data.next_renewal)}.`;
+    setTimeout(()=>renderPlatformProspects(),700);
   };
 }
 
-function seasonDefaults(){
-  const now=new Date();
-  const y=now.getFullYear();
-  const start=now.getMonth()>=6?`${y}-09-01`:`${y-1}-09-01`;
-  const end=now.getMonth()>=6?`${y+1}-03-31`:`${y}-03-31`;
-  return {start,end,charge:now.toISOString().slice(0,10)};
-}
-
-function renderPlatformNewClub(){
+async function renderPlatformNewClub(){
   const page=document.getElementById('platformPage');
-  const d=seasonDefaults();
+  page.innerHTML='<div class="splash">Loading commercial settings…</div>';
+
+  const [{data:settings,error:settingsError},{data:calendars,error:calendarError}]=await Promise.all([
+    supabase.from('platform_settings').select('*').eq('singleton',true).single(),
+    loadSubscriptionCalendars()
+  ]);
+
+  if(settingsError||calendarError){
+    page.innerHTML=`<div class="notice">${esc(settingsError?.message||calendarError?.message||'Could not load commercial settings.')}</div>`;
+    return;
+  }
+
+  const today=new Date().toISOString().slice(0,10);
+  const defaultCalendar=(calendars||[]).some(c=>c.code==='australia')?'australia':(calendars?.[0]?.code||'');
+
   page.innerHTML=`<section class="admin-card form-wide">
     <div class="section-label">Create prospect / Beta club</div><h2>How should this club enter the platform?</h2>
-    <div class="field"><label>Entry route</label><select id="entryRoute"><option value="standard">Standard subscription — Secretary first</option><option value="direct_beta">Direct Beta — trial lead becomes initial Admin</option><option value="full_flow_beta">Full-flow Beta — Secretary handoff, $0</option></select></div>
+    <div class="field"><label>Entry route</label><select id="entryRoute"><option value="standard">Standard subscription — Secretary first</option><option value="direct_beta">Direct Beta — trial lead becomes initial Admin</option><option value="full_flow_beta">Full-flow Beta — Secretary handoff, $0 test flow</option></select></div>
+    <div id="entryRouteHelp" class="notice compact"></div>
+
     <div class="form-grid">
       <div class="field"><label>Club name</label><input id="newClubName"></div>
       <div class="field"><label id="contactNameLabel">Club Secretary / contact name</label><input id="newContactName"></div>
       <div class="field"><label id="contactEmailLabel">Club Secretary / contact email</label><input id="newContactEmail" type="email"></div>
-      <div class="field"><label>Season starts</label><input id="seasonStart" type="date" value="${d.start}"></div>
-      <div class="field"><label>Season ends</label><input id="seasonEnd" type="date" value="${d.end}"></div>
-      <div class="field"><label>Charge / access starts</label><input id="chargeFrom" type="date" value="${d.charge}"></div>
+      <div class="field"><label>Subscription calendar</label><select id="subscriptionCalendar">${calendarOptions(calendars,defaultCalendar)}</select><small>Sets the club's universal annual renewal date. It does not delay access until the cricket season starts.</small></div>
+      <div class="field"><label>Access starts</label><input id="accessStart" type="date" value="${today}"><small>Normally the activation/payment date — coaches can use the platform through preseason.</small></div>
     </div>
+
     <div class="commercial-box">
       <div class="section-label">Private commercial terms</div>
-      <p class="help">These controls never appear to normal clubs. They see only the price and dates you choose.</p>
+      <p class="help">These controls never appear to normal clubs. <strong>Rate reduction defaults to 0%.</strong></p>
       <div class="form-grid">
-        <div class="field"><label>Private rate adjustment %</label><input id="adjustmentPct" type="number" min="0" max="100" value="0"></div>
-        <div class="field"><label>Adjustment starts (optional)</label><input id="adjustmentStart" type="date"></div>
-        <div class="field"><label>Adjustment ends (required for Beta / special rate)</label><input id="adjustmentEnd" type="date"></div>
+        <div class="field"><label>Private rate reduction from standard price</label><input id="adjustmentPct" type="number" min="0" max="100" value="0"><small>0% = full standard price · 100% = free</small></div>
+        <div class="field"><label>Special rate ends (optional)</label><input id="adjustmentEnd" type="date"><small>Leave blank for a standard-rate club. Beta routes default to the end of the Club Year if left blank.</small></div>
         <div class="field"><label>At expiry</label><select id="expiryAction"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div>
       </div>
-      <div class="field"><label>Internal note</label><textarea id="internalNote" placeholder="e.g. Beta partner / association club / 25% relationship rate"></textarea></div>
+      <div class="field"><label>Internal note</label><textarea id="internalNote" placeholder="e.g. Founding Beta club / association partner / negotiated relationship rate"></textarea></div>
     </div>
+
+    <div class="commercial-calculation">
+      <div class="section-label">Calculated offer</div>
+      <div id="newClubOfferPreview"><div class="help">Calculating…</div></div>
+    </div>
+
     <div class="btnrow"><button class="btn secondary" id="createProspect">Create & queue invitation</button><span class="status" id="createProspectStatus"></span></div>
     <div id="createdProspectResult"></div>
   </section>`;
@@ -3342,55 +3409,173 @@ function renderPlatformNewClub(){
   const route=document.getElementById('entryRoute');
   const updateRoute=()=>{
     const beta=route.value!=='standard';
-    document.getElementById('adjustmentPct').value=beta?'100':'0';
-    document.getElementById('adjustmentEnd').value=beta?d.end:'';
     document.getElementById('contactNameLabel').textContent=route.value==='direct_beta'?'Trial lead name':'Club Secretary / contact name';
     document.getElementById('contactEmailLabel').textContent=route.value==='direct_beta'?'Trial lead email':'Club Secretary / contact email';
+    document.getElementById('entryRouteHelp').innerHTML=beta
+      ?'<strong>Beta routes still start at 0% reduction.</strong> Because Beta bypasses real charging, deliberately set the rate reduction to <strong>100%</strong> when you want complimentary Beta access.'
+      :'<strong>Standard subscription.</strong> The club receives immediate access from the date below and renews on its regional Club Year date.';
   };
-  route.onchange=updateRoute;
+
+  const refreshPreview=async()=>{
+    const box=document.getElementById('newClubOfferPreview');
+    box.innerHTML='<div class="help">Calculating…</div>';
+    const {data,error}=await getCommercialPreview(
+      document.getElementById('subscriptionCalendar').value,
+      val('accessStart'),
+      Number(val('adjustmentPct')||0),
+      val('adjustmentEnd')||''
+    );
+    if(error){box.innerHTML=`<div class="notice compact">${esc(error.message)}</div>`;return;}
+    box.innerHTML=commercialPreviewHtml(data);
+  };
+
+  route.onchange=()=>{updateRoute();refreshPreview();};
+  ['subscriptionCalendar','accessStart','adjustmentPct','adjustmentEnd'].forEach(id=>{
+    document.getElementById(id).onchange=refreshPreview;
+    if(id==='adjustmentPct')document.getElementById(id).oninput=refreshPreview;
+  });
+  updateRoute();
+  await refreshPreview();
 
   document.getElementById('createProspect').onclick=async()=>{
     const st=document.getElementById('createProspectStatus');st.textContent='Creating…';
+    const reduction=Number(val('adjustmentPct')||0);
     const {data,error}=await supabase.rpc('platform_create_prospect',{
-      p_club_name:val('newClubName'),p_entry_route:route.value,p_contact_name:val('newContactName'),p_contact_email:val('newContactEmail'),
-      p_season_start:val('seasonStart'),p_season_end:val('seasonEnd'),p_charge_from:val('chargeFrom'),
-      p_adjustment_percent:Number(val('adjustmentPct')||0),p_adjustment_start:val('adjustmentStart')||null,
-      p_adjustment_end:val('adjustmentEnd')||null,p_expiry_action:document.getElementById('expiryAction').value,p_internal_note:val('internalNote')
+      p_club_name:val('newClubName'),
+      p_entry_route:route.value,
+      p_contact_name:val('newContactName'),
+      p_contact_email:val('newContactEmail'),
+      p_subscription_calendar:document.getElementById('subscriptionCalendar').value,
+      p_access_start:val('accessStart'),
+      p_adjustment_percent:reduction,
+      p_adjustment_start:reduction>0?val('accessStart'):null,
+      p_adjustment_end:val('adjustmentEnd')||null,
+      p_expiry_action:document.getElementById('expiryAction').value,
+      p_internal_note:val('internalNote')
     });
     if(error){st.textContent=error.message;return;}
     st.textContent='Created';
     const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
-    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Invitation ready</strong><span>Amount under this offer: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The notification is also in the Email Queue. Until a live email provider is connected, copy this link into your test/promo email.</small></div>`;
+    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Invitation ready</strong><span>Amount under this offer: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The notification is also in the Email Queue. Until a live email provider is connected, copy this link into your test/promo email.</small></div>`;
     document.getElementById('copyCreatedLink').onclick=async()=>{await navigator.clipboard.writeText(link);document.getElementById('copyCreatedLink').textContent='Copied ✓';};
   };
 }
 
 async function renderPlatformActiveClubs(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading active clubs…</div>';
-  const {data:subs,error}=await supabase.from('club_subscriptions').select('*,clubs(id,name)').in('status',['active','grace']).order('active_until');
-  if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
-  page.innerHTML=`<section class="admin-card"><div class="section-label">Private commercial management</div><h2>Active clubs</h2><div class="help">Extend a Beta, change a private rate period, or set what happens when that arrangement ends. Clubs do not see the adjustment percentage.</div>
-    <div class="active-club-list">${(subs||[]).map(s=>`<div class="active-club-row">
-      <div><strong>${esc(s.clubs?.name||'Club')}</strong><small>${esc(s.source.replaceAll('_',' '))} · active to ${esc(niceDate(s.active_until))}</small></div>
-      <div class="active-club-controls">
-        <label>Adjustment %<input data-sub-adjust="${s.club_id}" type="number" min="0" max="100" value="${esc(s.adjustment_percent)}"></label>
-        <label>Special rate ends<input data-sub-adjend="${s.club_id}" type="date" value="${esc(s.adjustment_end?String(s.adjustment_end).slice(0,10):'')}"></label>
-        <label>Access active to<input data-sub-active="${s.club_id}" type="date" value="${esc(String(s.active_until).slice(0,10))}"></label>
-        <label>At expiry<select data-sub-expiry="${s.club_id}"><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return standard</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End</option></select></label>
-        ${['owner','commercial_admin'].includes(platformRole)?`<button class="btn ghost" data-save-sub="${s.club_id}">Save</button>`:''}
+  const [{data:subs,error:subsError},{data:clubs,error:clubsError},{data:calendars,error:calendarError},{data:settings,error:settingsError}]=await Promise.all([
+    supabase.from('club_subscriptions').select('*,clubs(id,name)').in('status',['active','grace']).order('active_until'),
+    supabase.from('clubs').select('id,name,subscription_calendar,season_start,season_end').order('name'),
+    loadSubscriptionCalendars(),
+    supabase.from('platform_settings').select('*').eq('singleton',true).single()
+  ]);
+
+  const loadError=subsError||clubsError||calendarError||settingsError;
+  if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
+
+  const calendarMap=new Map((calendars||[]).map(c=>[c.code,c]));
+  const activeIds=new Set((subs||[]).map(s=>s.club_id));
+  const unactivated=(clubs||[]).filter(c=>!activeIds.has(c.id));
+  const canCommercial=['owner','commercial_admin'].includes(platformRole);
+  const today=new Date().toISOString().slice(0,10);
+  const defaultCalendar=(calendars||[]).some(c=>c.code==='australia')?'australia':(calendars?.[0]?.code||'');
+
+  page.innerHTML=`<section class="admin-card">
+    <div class="section-label">Private commercial management</div><h2>Active clubs</h2>
+    <div class="help">Annual access is based on the club's regional <strong>Club Year</strong>, not its playing season. Clubs do not see the private rate-reduction percentage.</div>
+    <div class="active-club-list">${(subs||[]).map(s=>{
+      const cal=calendarMap.get(s.subscription_calendar);
+      const renewal=nextDayIso(s.season_end);
+      return `<div class="active-club-row">
+        <div><strong>${esc(s.clubs?.name||'Club')}</strong><small>${esc(cal?.label||s.subscription_calendar||'Club Year')} · Club Year ${esc(niceDate(s.season_start))} – ${esc(niceDate(s.season_end))} · annual renewal ${esc(niceDate(renewal))}</small></div>
+        <div class="active-club-controls">
+          <label>Rate reduction %<input data-sub-adjust="${s.club_id}" type="number" min="0" max="100" value="${esc(s.adjustment_percent)}"><small>0 = full price · 100 = free</small></label>
+          <label>Special rate ends<input data-sub-adjend="${s.club_id}" type="date" value="${esc(s.adjustment_end?String(s.adjustment_end).slice(0,10):'')}"></label>
+          <label>Current access to<input data-sub-active="${s.club_id}" type="date" value="${esc(String(s.active_until).slice(0,10))}"></label>
+          <label>At expiry<select data-sub-expiry="${s.club_id}"><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return standard</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End</option></select></label>
+          ${canCommercial?`<button class="btn ghost" data-save-sub="${s.club_id}">Save</button>`:''}
+        </div>
+      </div>`;
+    }).join('')||'<div class="notice">No commercially activated clubs yet.</div>'}</div>
+  </section>
+
+  ${unactivated.length?`<section class="admin-card form-wide" style="margin-top:16px">
+    <div class="section-label">Existing club migration</div><h2>Attach commercial terms to an existing club</h2>
+    <div class="notice"><strong>Use this for clubs created before commercial onboarding existed.</strong><br>This attaches an annual entitlement to the existing club. It does not recreate the club and does not touch players, philosophy work or permissions.</div>
+    ${canCommercial?`
+      <div class="form-grid">
+        <div class="field"><label>Existing club</label><select id="legacyClubId">${unactivated.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Subscription calendar</label><select id="legacyCalendar">${calendarOptions(calendars,unactivated[0]?.subscription_calendar||defaultCalendar)}</select></div>
+        <div class="field"><label>Access starts</label><input id="legacyAccessStart" type="date" value="${today}"></div>
+        <div class="field"><label>Private rate reduction from standard price</label><input id="legacyReduction" type="number" min="0" max="100" value="0"><small>0% = full standard price · 100% = free</small></div>
+        <div class="field"><label>Special rate ends (optional)</label><input id="legacyAdjustmentEnd" type="date"></div>
+        <div class="field"><label>At expiry</label><select id="legacyExpiry"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div>
       </div>
-    </div>`).join('')||'<div class="notice">No commercially activated clubs yet.</div>'}</div></section>`;
+      <div class="field"><label>Internal note</label><textarea id="legacyNote" placeholder="e.g. Existing pilot club migrated into commercial model"></textarea></div>
+      <div class="commercial-calculation"><div class="section-label">Calculated entitlement</div><div id="legacyOfferPreview"><div class="help">Calculating…</div></div></div>
+      <div class="btnrow"><button class="btn secondary" id="activateExistingClub">Activate existing club</button><span class="status" id="legacyActivateStatus"></span></div>
+    `:'<div class="help">Only Platform Owner / Commercial Admin can attach commercial terms.</div>'}
+  </section>`:''}`;
+
   page.querySelectorAll('[data-save-sub]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.saveSub;
     b.textContent='Saving…';
     const {error}=await supabase.rpc('platform_update_subscription_terms',{
-      p_club_id:id,p_adjustment_percent:Number(document.querySelector(`[data-sub-adjust="${id}"]`).value||0),
-      p_adjustment_start:null,p_adjustment_end:document.querySelector(`[data-sub-adjend="${id}"]`).value||null,
+      p_club_id:id,
+      p_adjustment_percent:Number(document.querySelector(`[data-sub-adjust="${id}"]`).value||0),
+      p_adjustment_start:null,
+      p_adjustment_end:document.querySelector(`[data-sub-adjend="${id}"]`).value||null,
       p_expiry_action:document.querySelector(`[data-sub-expiry="${id}"]`).value,
       p_active_until:document.querySelector(`[data-sub-active="${id}"]`).value
     });
     b.textContent=error?'Error':'Saved ✓';if(error)alert(error.message);
   });
+
+  if(document.getElementById('activateExistingClub')){
+    const selectedClub=()=>unactivated.find(c=>c.id===document.getElementById('legacyClubId').value);
+    const syncLegacyCalendar=()=>{
+      const c=selectedClub();
+      if(c?.subscription_calendar && (calendars||[]).some(x=>x.code===c.subscription_calendar))document.getElementById('legacyCalendar').value=c.subscription_calendar;
+    };
+    const refreshLegacyPreview=async()=>{
+      const box=document.getElementById('legacyOfferPreview');box.innerHTML='<div class="help">Calculating…</div>';
+      const {data,error}=await getCommercialPreview(
+        document.getElementById('legacyCalendar').value,
+        val('legacyAccessStart'),
+        Number(val('legacyReduction')||0),
+        val('legacyAdjustmentEnd')||''
+      );
+      box.innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:commercialPreviewHtml(data);
+    };
+    document.getElementById('legacyClubId').onchange=()=>{syncLegacyCalendar();refreshLegacyPreview();};
+    ['legacyCalendar','legacyAccessStart','legacyReduction','legacyAdjustmentEnd'].forEach(id=>{
+      document.getElementById(id).onchange=refreshLegacyPreview;
+      if(id==='legacyReduction')document.getElementById(id).oninput=refreshLegacyPreview;
+    });
+    await refreshLegacyPreview();
+
+    document.getElementById('activateExistingClub').onclick=async()=>{
+      const st=document.getElementById('legacyActivateStatus');
+      const btn=document.getElementById('activateExistingClub');
+      const c=selectedClub();
+      const reduction=Number(val('legacyReduction')||0);
+      const ok=confirm(`Attach commercial terms to ${c?.name||'this club'}? This keeps the existing club and all of its cricket data.`);
+      if(!ok)return;
+      btn.disabled=true;btn.textContent='Activating…';st.textContent='';
+      const {data,error}=await supabase.rpc('platform_activate_existing_club',{
+        p_club_id:document.getElementById('legacyClubId').value,
+        p_subscription_calendar:document.getElementById('legacyCalendar').value,
+        p_access_start:val('legacyAccessStart'),
+        p_adjustment_percent:reduction,
+        p_adjustment_end:val('legacyAdjustmentEnd')||null,
+        p_expiry_action:document.getElementById('legacyExpiry').value,
+        p_internal_note:val('legacyNote')
+      });
+      if(error){btn.disabled=false;btn.textContent='Activate existing club';st.textContent=error.message;return;}
+      st.textContent=`Activated through ${niceDate(data.active_until)}.`;
+      setTimeout(()=>renderPlatformActiveClubs(),700);
+    };
+  }
 }
 
 async function renderPlatformOutbox(){
@@ -3405,16 +3590,25 @@ async function renderPlatformOutbox(){
 
 async function renderPlatformSettings(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading settings…</div>';
-  const {data:s,error}=await supabase.from('platform_settings').select('*').eq('singleton',true).single();
-  if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
+  const [{data:s,error},{data:calendars,error:calendarError}]=await Promise.all([
+    supabase.from('platform_settings').select('*').eq('singleton',true).single(),
+    loadSubscriptionCalendars()
+  ]);
+  if(error||calendarError){page.innerHTML=`<div class="notice">${esc(error?.message||calendarError?.message)}</div>`;return;}
   const canCommercial=['owner','commercial_admin'].includes(platformRole);
   page.innerHTML=`<section class="admin-card form-wide"><div class="section-label">Platform defaults</div><h2>Commercial settings</h2><div class="form-grid">
-    <div class="field"><label>Standard season price (${esc(s.currency)})</label><input id="settingPrice" type="number" step="0.01" value="${(s.standard_season_price_cents/100).toFixed(2)}" ${canCommercial?'':'disabled'}></div>
-    <div class="field"><label>Minimum days for a pro-rata charge</label><input id="settingMinDays" type="number" value="${s.minimum_prorata_days}" ${canCommercial?'':'disabled'}></div>
+    <div class="field"><label>Standard annual club price (${esc(s.currency)})</label><input id="settingPrice" type="number" step="0.01" value="${(s.standard_season_price_cents/100).toFixed(2)}" ${canCommercial?'':'disabled'}><small>This is the full 12-month Club Year price before any private rate reduction.</small></div>
+    <div class="field"><label>Minimum days before renewal for a pro-rata term</label><input id="settingMinDays" type="number" value="${s.minimum_prorata_days}" ${canCommercial?'':'disabled'}><small>If fewer days remain, those days are included and the club is charged for the next full Club Year instead.</small></div>
     <div class="field"><label>Payment grace period</label><input id="settingGrace" type="number" value="${s.payment_grace_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Payment mode</label><select id="settingMode" ${canCommercial?'':'disabled'}><option value="prototype" ${s.payment_mode==='prototype'?'selected':''}>Prototype — simulate payment</option><option value="live" ${s.payment_mode==='live'?'selected':''}>Live provider</option></select></div>
-  </div>${canCommercial?'<button class="btn secondary" id="savePlatformSettings">Save settings</button>':''}<div id="settingsStatus" class="help"></div></section>`;
+  </div>
+  <div class="commercial-box" style="margin-top:16px">
+    <div class="section-label">Regional Club Years</div>
+    <p class="help">These universal renewal dates give clubs access before their playing season instead of trying to identify each club's exact season start and finish.</p>
+    <div class="calendar-list">${(calendars||[]).map(c=>`<div><strong>${esc(c.label)}</strong><span>Club Year renews ${esc(calendarStartLabel(c))}</span></div>`).join('')}</div>
+  </div>
+  ${canCommercial?'<button class="btn secondary" id="savePlatformSettings">Save settings</button>':''}<div id="settingsStatus" class="help"></div></section>`;
   if(document.getElementById('savePlatformSettings'))document.getElementById('savePlatformSettings').onclick=async()=>{
     const st=document.getElementById('settingsStatus');st.textContent='Saving…';
     const {error}=await supabase.from('platform_settings').update({
@@ -3424,5 +3618,3 @@ async function renderPlatformSettings(){
     st.textContent=error?error.message:'Saved';
   };
 }
-
-boot();
