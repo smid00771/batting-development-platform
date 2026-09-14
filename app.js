@@ -217,6 +217,154 @@ const HOW_WE_BAT_FORMAT_COPY={
   }
 };
 
+
+const HOW_WE_BAT_REFERENCE={
+  value_wicket:{
+    t20:[
+      'Protecting your wicket does not mean becoming passive. Keep looking for low-risk ways to score.',
+      'Choose extra risk because the match situation justifies it — not because a few dot balls have made you impatient.',
+      'A good ball can earn a dot. Your job is to make the bowler produce enough good balls to control you.',
+      'If the bowler misses into one of your strong areas, commit rather than batting half-heartedly.'
+    ],
+    limited_overs:[
+      'Your wicket gives the team access to more of its available deliveries. Make the bowler earn it.',
+      'Build the innings without becoming stuck: defend the good ball, rotate when the safe single is available and punish genuine scoring balls.',
+      'Choose risk according to wickets in hand, the score, the partnership and the stage of the innings.',
+      'Getting out playing the right option is an execution issue. Giving your wicket away outside your plan is a decision issue.'
+    ],
+    long_form:[
+      'Leave and defend with conviction. You do not need to manufacture a scoring option from a ball that has not earned one.',
+      'Patience is active: keep reading the bowler, field and conditions while waiting for the contest to move into your strengths.',
+      'Make the bowler repeatedly execute their plan. The longer you occupy the crease, the more often they must solve you again.',
+      'Expand your scoring game when you are established or the bowling gives you the opportunity — not simply because time has passed.'
+    ]
+  },
+  keep_moving:{
+    t20:[
+      'When the boundary is not there, identify the safest way to turn the ball into one or two.',
+      'Read the field before the ball. Know where the low-risk single is likely to be and what delivery lets you access it.',
+      'Run hard enough that fielders feel pressure even when you are not hitting boundaries.',
+      'Do not let dot-ball pressure trick you into manufacturing a boundary option that is not part of your game.'
+    ],
+    limited_overs:[
+      'A single should not be something you discover after playing the ball. Read the field and know your get-off-strike zones before the delivery.',
+      'Have reliable ways of getting off strike against both pace and spin. Different batters will use different options.',
+      'Every time you change strike, the bowler has a new batter, a new set of strengths and often a new plan to solve.',
+      'Strong running turns safe scoring options into partnership pressure without requiring more boundary risk.'
+    ],
+    long_form:[
+      'Strike rotation can keep the partnership active without widening your scoring envelope.',
+      'Use soft hands, field awareness and trusted scoring areas to take singles when the bowler gives you access.',
+      'A controlled single changes the bowler’s problem and can stop one bowler settling into a long sequence against the same batter.',
+      'Do not force the single from a ball that does not allow it. A good dot remains a good result when the bowling has earned it.'
+    ]
+  },
+  scoring_game:{
+    t20:[
+      'Know the shots, balls and target areas you genuinely own before the pressure of the match arrives.',
+      'Widen your scoring game deliberately. Adding options is useful; inventing unfamiliar shots because the required rate rises is not.',
+      'Understand which options work against pace and which work against spin — they do not have to be the same.',
+      'When the bowler enters one of your strong scoring zones, commit fully to the option you have chosen.'
+    ],
+    limited_overs:[
+      'Build your innings around the small number of scoring options you genuinely trust, not every shot you are technically capable of playing.',
+      'For each trusted shot, know the delivery that brings it into play and the area you are trying to access.',
+      'If it is not your boundary ball but can be scored from safely, look for the get-off-strike option instead.',
+      'When the bowler misses into your strength area, commit. Hesitation turns good decisions into poor execution.'
+    ],
+    long_form:[
+      'Be clear about which deliveries you want to score from and let the bowler come into those areas.',
+      'Your scoring game can begin narrow. Good bowling does not need to be attacked simply because you have been at the crease for a while.',
+      'As you become established, expand the number of balls you can score from safely before simply adding higher-risk boundary options.',
+      'The aim is to make your strengths repeatable over a long innings, not to demonstrate how many shots you possess.'
+    ]
+  },
+  control_tempo:{
+    t20:[
+      'Tempo should change because the match demands it, not because emotion demands it.',
+      'Know when a partnership needs control, when one batter can take more responsibility and when acceleration is required.',
+      'Use singles and twos to stop a quiet period becoming panic.',
+      'When you accelerate, expand from trusted options first before reaching for lower-percentage choices.'
+    ],
+    limited_overs:[
+      'Move through the innings deliberately: settle, build, rotate and accelerate rather than drifting between gears.',
+      'Required rate, wickets in hand and partnership strength should influence how wide your scoring game becomes.',
+      'A few dot balls do not automatically mean the next ball must be attacked.',
+      'Recognise when the match has shifted and be prepared to change gear without abandoning your core game.'
+    ],
+    long_form:[
+      'Control the rhythm of your innings rather than allowing the previous ball or over to dictate your emotions.',
+      'Absorb periods of strong bowling without feeling that something must happen immediately.',
+      'Recognise when conditions, fatigue, field changes or bowling changes create a period you can use.',
+      'Tempo in long-form cricket can change through strike rotation and control as well as boundary hitting.'
+    ]
+  },
+  pressure_bowler:{
+    t20:[
+      'Pressure the bowler with more than boundary hitting: move the strike, run hard, use the field and exploit favourable matchups.',
+      'Make it difficult for a bowler to execute the same plan for six balls against the same batter.',
+      'Use movement or innovation only when it connects to an option you genuinely practise.',
+      'A partnership that keeps changing the problem can force the field and bowling plan to change.'
+    ],
+    limited_overs:[
+      'Change strike often enough that the bowler and captain must continually reset their plan.',
+      'Use your different strengths as a partnership. The safest scoring option may change when the other batter is on strike.',
+      'Notice fielders who are being protected, gaps the captain is conceding and areas the bowler is trying to deny.',
+      'Pressure is created by making the opposition solve repeated problems, not simply by swinging harder.'
+    ],
+    long_form:[
+      'Pressure can be quiet: occupying the crease, changing strike and scoring in trusted areas all make the bowler work.',
+      'Do not let a bowler settle into endless deliveries to one batter when safe rotation is available.',
+      'Use the partnership to expose different strengths and make field settings harder to maintain.',
+      'The goal is to stop the bowler controlling every ball on their terms without widening your risk unnecessarily.'
+    ]
+  },
+  read_game:{
+    t20:[
+      'Read the bowler: what line, length, pace or variation are they trying to use?',
+      'Read the field: where is the safe run and which area is the captain trying hardest to protect?',
+      'Read the match: required rate, wickets in hand, matchup and phase all affect the best option.',
+      'Then use your own plan. Adapt how you use your game rather than becoming a different batter.'
+    ],
+    limited_overs:[
+      'Your Player Plan tells you what your game is; the match tells you how to use it.',
+      'Read the bowler, field, score, wickets, overs and partnership before deciding that your method needs to change.',
+      'Look for the lowest-risk scoring option the field and bowling plan are already giving you.',
+      'Adapt within your strengths first. Do not abandon your plan simply because the opposition has created pressure.'
+    ],
+    long_form:[
+      'Conditions, bowling plans and fields will change across a long innings. Keep updating the problem you are solving.',
+      'Know when the bowler is attacking your wicket and when they are trying to make you chase a scoring option.',
+      'Use changes in field and bowling to find safe access to runs without losing the discipline of your core method.',
+      'Adaptation means applying your game intelligently — not replacing it every time the contest changes.'
+    ]
+  },
+  use_phase:{
+    t20:[
+      'Powerplay, middle overs and the death create different fields and different scoring opportunities.',
+      'Know which of your options become more valuable when fielders are inside the circle and which remain reliable when the boundary is protected.',
+      'Middle overs still need intent: rotate, use matchups and prevent the innings from becoming dependent on late boundaries.',
+      'At the death, choose the high-intent options you have actually practised and keep a safe scoring fallback.'
+    ],
+    limited_overs:[
+      'Field restrictions can create opportunities, but they do not require every ball to be attacked.',
+      'Middle overs are often where strong rotation and partnerships create the platform for later acceleration.',
+      'As the innings moves toward its final phase, widen the scoring envelope according to wickets in hand and the match requirement.',
+      'Use the phase to choose between your existing options rather than inventing a completely new game.'
+    ],
+    long_form:[
+      'Different periods of a long match create different levels of risk and opportunity.',
+      'Recognise when new-ball bowling, a difficult spell or conditions demand a narrower scoring game.',
+      'Use tiring bowlers, softer balls, changing fields or favourable match periods when they genuinely shift the contest.',
+      'The phase may change your emphasis, but your core batting identity should remain recognisable.'
+    ]
+  }
+};
+
+function generatedBannerReference(key,format){
+  return [...(HOW_WE_BAT_REFERENCE[key]?.[format]||[])];
+}
+
 const QUESTION_LIBRARY={
   core_strengths:{
     label:'My trusted scoring options',
@@ -908,7 +1056,20 @@ function renderTab(){
     howwebat:renderPublishedHowWeBat,
     myplan:renderMyPlan
   };
-  (map[currentTab]||renderMyPlan)();
+  try{
+    const result=(map[currentTab]||renderMyPlan)();
+    if(result && typeof result.then==='function'){
+      result.catch(err=>{
+        console.error(err);
+        const page=document.getElementById('page');
+        if(page)page.innerHTML=`<section class="card"><div class="section-label">This page could not finish loading</div><h2>Something interrupted the page.</h2><div class="notice">${esc(err?.message||String(err))}</div><div class="help" style="margin-top:10px">Your saved data has not been deleted. Refresh once; if this returns, send us the wording above.</div></section>`;
+      });
+    }
+  }catch(err){
+    console.error(err);
+    const page=document.getElementById('page');
+    if(page)page.innerHTML=`<section class="card"><div class="section-label">This page could not finish loading</div><h2>Something interrupted the page.</h2><div class="notice">${esc(err?.message||String(err))}</div></section>`;
+  }
 }
 
 
@@ -2733,6 +2894,7 @@ function generatedHowWeBatFormat(format){
     title:x.title,
     message:x.message,
     supporting_dimensions:x.support.map(y=>({key:y.key,label:y.label,weight:y.weight})),
+    reference_points:generatedBannerReference(x.key,format),
     score:x.adjustedScore,
     strength:howWeBatStrength(x)
   }));
@@ -2809,6 +2971,9 @@ function howWeBatBannerEditorRows(format){
       title:existing?.title||c.title,
       message:existing?.message||c.message,
       supporting_dimensions:existing?.supporting_dimensions||c.support.map(x=>({key:x.key,label:x.label,weight:x.weight})),
+      reference_points:Array.isArray(existing?.reference_points)&&existing.reference_points.length
+        ?existing.reference_points
+        :generatedBannerReference(c.key,format),
       strength:existing?.strength||(existing?'Lead-selected banner':howWeBatStrength(c))
     };
   }).sort((a,b)=>a.order-b.order||b.adjustedScore-a.adjustedScore);
@@ -2822,6 +2987,9 @@ function renderHowWeBatBuilder(){
   const formatDraft=draft.formats[howWeBatBuilderFormat]||generatedHowWeBatFormat(howWeBatBuilderFormat);
   const rows=howWeBatBannerEditorRows(howWeBatBuilderFormat);
 
+  const builderIsReady=draft.status==='ready';
+  const builderSaved=!!draft.updated_at;
+
   document.getElementById('page').innerHTML=`<div class="hwb-builder-shell">
     <section class="card hwb-builder-intro">
       <div>
@@ -2829,7 +2997,10 @@ function renderHowWeBatBuilder(){
         <h2>Turn the philosophy into messages players can remember</h2>
         <div class="help">The detailed dimensions remain underneath the system and continue to drive Player Plans. <strong>How We Bat is deliberately compressed.</strong> Related High / Very High dimensions reinforce a shared banner rather than becoming separate rules.</div>
       </div>
-      <div class="hwb-budget"><strong>Message budget</strong><span>2–4 banners per format</span></div>
+      <div class="hwb-builder-state ${builderIsReady?'ready':'draft'}">
+        <strong>${builderIsReady?'HOW WE BAT READY':'WORKING DRAFT'}</strong>
+        <span>${builderIsReady?'Player Plan Structure is unlocked.':'2–4 memorable Key Messages per format.'}</span>
+      </div>
     </section>
 
     <section class="card" style="margin-top:16px">
@@ -2855,7 +3026,12 @@ function renderHowWeBatBuilder(){
             <span class="hwb-strength">${esc(row.strength)}</span>
           </div>
           <div class="field"><label>Banner</label><input data-hwb-title="${row.key}" value="${esc(row.title)}"></div>
-          <div class="field"><label>Player-facing message</label><textarea data-hwb-message="${row.key}" rows="3">${esc(row.message)}</textarea></div>
+          <div class="field"><label>Short player-facing message</label><textarea data-hwb-message="${row.key}" rows="3">${esc(row.message)}</textarea></div>
+          <div class="field hwb-reference-editor">
+            <label>When a player opens this Key Message</label>
+            <div class="help">One useful coaching point per line. This becomes the richer reference layer inside How We Bat and the Player Plan.</div>
+            <textarea data-hwb-reference="${row.key}" rows="6">${esc((row.reference_points||[]).join('\n'))}</textarea>
+          </div>
           <div class="hwb-evidence">
             <strong>Why it is being prioritised</strong>
             <div>${row.support.map(x=>`<span>${esc(x.label)} · ${esc(WEIGHT_LABELS[x.weight])}</span>`).join('')||'<span>No strong supporting dimension in this format.</span>'}</div>
@@ -2870,9 +3046,10 @@ function renderHowWeBatBuilder(){
       <div class="notice hwb-rule-note"><strong>Priority rule:</strong> several related High / Very High dimensions strengthen the shared banner. One isolated Very High dimension does not automatically become a headline.</div>
 
       <div class="btnrow hwb-builder-actions">
-        <button class="btn secondary" id="saveHwbDraft">Save How We Bat draft</button>
-        <button class="btn secondary" id="readyHwbDraft">Mark How We Bat ready</button>
-        <span class="status" id="hwbStatus"></span>
+        ${builderIsReady
+          ?'<button class="btn ghost" id="reopenHwbDraft">Reopen for editing</button><button class="btn secondary" id="continueFromReadyHwb">Continue to Player Plan Structure</button>'
+          :`<button class="btn secondary" id="saveHwbDraft">${builderSaved?'Draft saved ✓':'Save How We Bat draft'}</button><button class="btn secondary" id="readyHwbDraft">Mark How We Bat ready</button>`}
+        <span class="status" id="hwbStatus">${builderIsReady?'Ready ✓':''}</span>
       </div>
     </section>
 
@@ -2904,8 +3081,38 @@ function renderHowWeBatBuilder(){
     renderHowWeBatBuilder();
   };
 
-  document.getElementById('saveHwbDraft').onclick=()=>saveHowWeBatBuilder('draft');
-  document.getElementById('readyHwbDraft').onclick=()=>saveHowWeBatBuilder('ready');
+  const markHwbDirty=()=>{
+    const save=document.getElementById('saveHwbDraft');
+    const st=document.getElementById('hwbStatus');
+    if(save){
+      save.disabled=false;
+      save.textContent='Save changes';
+    }
+    if(st && howWeBatDraft?.status!=='ready')st.textContent='Unsaved changes';
+  };
+
+  document.querySelectorAll('#hwbIdentity,#hwbStrap,#hwbFormatIntro,#hwbCallout,[data-hwb-title],[data-hwb-message],[data-hwb-reference]')
+    .forEach(el=>el.addEventListener('input',markHwbDirty));
+
+  if(document.getElementById('saveHwbDraft')){
+    document.getElementById('saveHwbDraft').onclick=()=>saveHowWeBatBuilder('draft');
+  }
+  if(document.getElementById('readyHwbDraft')){
+    document.getElementById('readyHwbDraft').onclick=()=>saveHowWeBatBuilder('ready');
+  }
+  if(document.getElementById('reopenHwbDraft')){
+    document.getElementById('reopenHwbDraft').onclick=async()=>{
+      const ok=confirm('Reopen How We Bat for editing? Player Plan Structure will lock again until you mark How We Bat ready.');
+      if(!ok)return;
+      await saveHowWeBatBuilder('draft');
+    };
+  }
+  if(document.getElementById('continueFromReadyHwb')){
+    document.getElementById('continueFromReadyHwb').onclick=()=>{
+      currentTab='plan';
+      renderTab();
+    };
+  }
 }
 
 function collectHowWeBatBuilderPage(){
@@ -2938,6 +3145,8 @@ function collectHowWeBatBuilderPage(){
         key,
         title:document.querySelector(`[data-hwb-title="${key}"]`)?.value.trim()||base?.title||'',
         message:document.querySelector(`[data-hwb-message="${key}"]`)?.value.trim()||base?.message||'',
+        reference_points:(document.querySelector(`[data-hwb-reference="${key}"]`)?.value||'')
+          .split(/\n+/).map(x=>x.trim()).filter(Boolean),
         supporting_dimensions:(base?.support||[]).map(x=>({key:x.key,label:x.label,weight:x.weight})),
         score:base?.adjustedScore??base?.score??0,
         strength:howWeBatStrength(base||{highCount:0,adjustedScore:0})
@@ -2974,6 +3183,10 @@ async function saveHowWeBatBuilder(status){
         st.textContent=`Review ${label}: every selected banner needs a title and message.`;
         return;
       }
+      if((f.banners||[]).some(x=>!Array.isArray(x.reference_points)||x.reference_points.length<2)){
+        st.textContent=`Review ${label}: every Key Message needs at least two useful reference points.`;
+        return;
+      }
     }
     if(!draft.identity_statement){st.textContent='Add the club-wide identity statement first.';return;}
 
@@ -3006,6 +3219,25 @@ async function saveHowWeBatBuilder(status){
   }
 }
 
+
+function renderKeyMessageReferenceCard(b,index,context='hwb'){
+  const points=Array.isArray(b.reference_points)&&b.reference_points.length
+    ?b.reference_points
+    :[];
+  return `<details class="hwb-public-banner ${index===1?'feature':''} ${context==='plan'?'plan-reference':''}">
+    <summary>
+      <span>Key message ${index+1}</span>
+      <h3>${esc(b.title||'')}</h3>
+      <p>${esc(b.message||'')}</p>
+      <em>Open key message ↓</em>
+    </summary>
+    <div class="hwb-banner-expanded">
+      <div class="section-label">What this means in your batting</div>
+      <ul>${points.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
+    </div>
+  </details>`;
+}
+
 function renderHowWeBatLivePreview(draft,format,isBuilder=false){
   const f=draft.formats?.[format];
   if(!f)return '';
@@ -3019,11 +3251,7 @@ function renderHowWeBatLivePreview(draft,format,isBuilder=false){
     <div class="hwb-public-tabs"><button class="active">${esc(label)}</button></div>
     <div class="hwb-public-body">
       <p class="hwb-public-intro">${esc(f.intro||'')}</p>
-      <div class="hwb-public-banner-grid">${(f.banners||[]).map((b,i)=>`<article class="hwb-public-banner ${i===1?'feature':''}">
-        <span>Key message ${i+1}</span>
-        <h3>${esc(b.title||'')}</h3>
-        <p>${esc(b.message||'')}</p>
-      </article>`).join('')}</div>
+      <div class="hwb-public-banner-grid">${(f.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb')).join('')}</div>
       <div class="hwb-public-callout">${esc(f.callout||'')}</div>
     </div>
     ${draft.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(draft.closing_strapline)}</strong></div>`:''}
@@ -3053,11 +3281,7 @@ function renderPublishedHowWeBat(){
       <div class="hwb-public-body">
         <div class="section-label">${esc(formatLabel)}</div>
         <p class="hwb-public-intro">${esc(f?.intro||'')}</p>
-        <div class="hwb-public-banner-grid">${(f?.banners||[]).map((b,i)=>`<article class="hwb-public-banner ${i===1?'feature':''}">
-          <span>Key message ${i+1}</span>
-          <h3>${esc(b.title||'')}</h3>
-          <p>${esc(b.message||'')}</p>
-        </article>`).join('')}</div>
+        <div class="hwb-public-banner-grid">${(f?.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb')).join('')}</div>
         <div class="hwb-public-callout">${esc(f?.callout||'')}</div>
       </div>
       ${snap.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(snap.closing_strapline)}</strong><span>Know your game. Then read the moment.</span></div>`:''}
@@ -3143,6 +3367,10 @@ async function renderPlanStructure(){
   const formats=enabledFormats();
   const page=document.getElementById('page');
   const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
+
+  if(planStructureReady){
+    page.innerHTML='<div class="splash">Loading Player Plan Structure…</div>';
+  }
 
   if(!planStructureReady){
     const lead=isPhilosophyLead();
@@ -3998,6 +4226,23 @@ async function renderMyPlan(){
     ?'Core'
     :(FORMATS.find(([k])=>k===builderSection)?.[1]||builderSection);
 
+  const liveHowWeBat=howWeBatVersions?.[0]?.snapshot||null;
+  const formatReferenceHtml=builderSection==='core'
+    ?''
+    :(()=>{
+        const refFormat=liveHowWeBat?.formats?.[builderSection];
+        if(!refFormat?.banners?.length)return '';
+        const refLabel=FORMATS.find(([k])=>k===builderSection)?.[1]||builderSection;
+        return `<section class="card player-plan-key-messages">
+          <div class="section-label">${esc(refLabel)} · How We Bat</div>
+          <h2>Your club’s key messages for this format</h2>
+          <div class="help">These are reference points, not extra questions. Open any Key Message whenever you want to reconnect your Player Plan to the club philosophy.</div>
+          <div class="hwb-public-banner-grid plan-key-message-grid">
+            ${refFormat.banners.map((b,i)=>renderKeyMessageReferenceCard(b,i,'plan')).join('')}
+          </div>
+        </section>`;
+      })();
+
   const formatCard=(key,label)=>{
     const req=requirementMap.get(key)||{required:false,due_date:null,sources:[]};
     const complete=!!sectionStatus[key];
@@ -4038,6 +4283,8 @@ async function renderMyPlan(){
       ${formats.map(([k,l])=>formatCard(k,l)).join('')}
     </div>
   </section>
+
+  ${formatReferenceHtml}
 
   <div class="grid" style="margin-top:16px">
     <section class="card">
