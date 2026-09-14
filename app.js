@@ -818,7 +818,7 @@ function renderShell(){
         <div>
           <div class="k">${esc(club.name)}</div>
           <h1>Batting Development</h1>
-          <p>${isAdmin()?'Set the club up, build the philosophy, manage access, and guide players from reflection to an approved plan.':'Your club philosophy becomes the framework for player development.'}</p>
+          <p>${isAdmin()?'Set the club up, build the philosophy, manage access, and guide players through their Player Plans.':'Your club philosophy becomes the framework for player development.'}</p>
         </div>
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch">${contextOptions}</select>`:''}
@@ -4323,6 +4323,120 @@ function answerFor(section,key){
   return raw.formats?.[section]?.[key]||{choices:[],comment:''};
 }
 
+
+let playerPlanAutosaveTimer=null;
+
+function requiredPlayerPlanSections(rollout){
+  const keys=['core',...(rollout?.requirements||[])
+    .filter(r=>r.required)
+    .map(r=>r.format_key)];
+  return [...new Set(keys)];
+}
+
+function answerHasContent(answer){
+  return !!(
+    (answer?.choices||[]).length ||
+    String(answer?.comment||'').trim()
+  );
+}
+
+function sectionProgress(section,raw){
+  const questions=playerPlanQuestionsFor(section);
+  const required=questions.filter(q=>q.required);
+  const answeredRequired=required.filter(q=>{
+    const a=section==='core'
+      ?raw.core?.[q.id]
+      :raw.formats?.[section]?.[q.id];
+    return answerHasContent(a);
+  }).length;
+
+  const answeredAny=questions.filter(q=>{
+    const a=section==='core'
+      ?raw.core?.[q.id]
+      :raw.formats?.[section]?.[q.id];
+    return answerHasContent(a);
+  }).length;
+
+  const complete=required.length
+    ?answeredRequired===required.length
+    :answeredAny>0;
+
+  return {
+    complete,
+    requiredCount:required.length,
+    answeredRequired,
+    answeredAny,
+    totalQuestions:questions.length
+  };
+}
+
+function automaticSectionStatus(raw){
+  const previous=workflow?.section_status||{};
+  const next={};
+  const sections=['core',...publishedEnabledFormats().map(([k])=>k)];
+
+  for(const section of sections){
+    const progress=sectionProgress(section,raw);
+    if(progress.complete){
+      next[section]=previous[section]||new Date().toISOString();
+    }
+  }
+  return next;
+}
+
+async function savePlayerPlanProgressSilently(){
+  if(!myPlayer)return;
+
+  if(playerPlanAutosaveTimer){
+    clearTimeout(playerPlanAutosaveTimer);
+    playerPlanAutosaveTimer=null;
+  }
+
+  collectBuilderAnswers();
+  const raw=localRaw||rawAnswers();
+  const curated=curate(raw);
+  const sectionStatus=automaticSectionStatus(raw);
+
+  const payload={
+    player_id:myPlayer.id,
+    raw_answers:raw,
+    curated_draft:curated,
+    section_status:sectionStatus,
+    status:'in_progress',
+    submitted_at:null,
+    updated_at:new Date().toISOString()
+  };
+
+  const st=document.getElementById('builderStatus');
+  if(st)st.textContent='Saving…';
+
+  const {data,error}=await supabase
+    .from('player_plan_workflows')
+    .upsert(payload,{onConflict:'player_id'})
+    .select()
+    .single();
+
+  if(error){
+    if(st)st.textContent=`Save problem: ${error.message}`;
+    return false;
+  }
+
+  workflow=data;
+  localRaw=null;
+  if(st)st.textContent='Saved ✓';
+  return true;
+}
+
+function queuePlayerPlanAutosave(){
+  const st=document.getElementById('builderStatus');
+  if(st)st.textContent='Unsaved changes';
+
+  if(playerPlanAutosaveTimer)clearTimeout(playerPlanAutosaveTimer);
+  playerPlanAutosaveTimer=setTimeout(()=>{
+    savePlayerPlanProgressSilently();
+  },700);
+}
+
 async function renderMyPlan(){
   if(!philosophyVersions.length){
     document.getElementById('page').innerHTML=`<div class="card player-gate">
@@ -4330,7 +4444,7 @@ async function renderMyPlan(){
       <div class="section-label">Player Plans are not open yet</div>
       <h2>Your club is still finalising its batting philosophy.</h2>
       <p>The framework that will guide your Player Plan has not been published yet, so there is nothing you need to complete at the moment.</p>
-      <div class="notice">We’ll let players know when the Philosophy Lead publishes the club philosophy. When it goes live, you’ll be guided through your own plan and then review the draft with a coach.</div>
+      <div class="notice">We’ll let players know when the Philosophy Lead releases the Club Batting System. When it goes live, you’ll be guided through your own Player Plan.</div>
     </div>`;
     return;
   }
@@ -4349,14 +4463,23 @@ async function renderMyPlan(){
   const {data:rolloutData,error:rolloutErr}=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:club.id});
   const rollout=rolloutErr?{groups:[],requirements:[]}:(rolloutData||{groups:[],requirements:[]});
   const requirementMap=new Map((rollout.requirements||[]).map(r=>[r.format_key,r]));
-  const sectionStatus=workflow?.section_status&&typeof workflow.section_status==='object'
-    ?workflow.section_status
-    :{};
-  const status=workflow?.status||'in_progress';
-  const currentComplete=!!sectionStatus[builderSection];
+  const rawForProgress=localRaw||rawAnswers();
+  const calculatedSectionStatus=automaticSectionStatus(rawForProgress);
+  const sectionStatus={
+    ...(workflow?.section_status&&typeof workflow.section_status==='object'
+      ?workflow.section_status
+      :{}),
+    ...calculatedSectionStatus
+  };
+
+  const currentProgress=sectionProgress(builderSection,rawForProgress);
+  const currentComplete=currentProgress.complete;
   const currentLabel=builderSection==='core'
     ?'Core'
     :(FORMATS.find(([k])=>k===builderSection)?.[1]||builderSection);
+
+  const requiredSections=requiredPlayerPlanSections(rollout);
+  const completedRequiredSections=requiredSections.filter(key=>sectionProgress(key,rawForProgress).complete).length;
 
   const liveHowWeBat=howWeBatVersions?.[0]?.snapshot||null;
   const formatReferenceHtml=builderSection==='core'
@@ -4377,15 +4500,23 @@ async function renderMyPlan(){
 
   const formatCard=(key,label)=>{
     const req=requirementMap.get(key)||{required:false,due_date:null,sources:[]};
-    const complete=!!sectionStatus[key];
+    const progress=sectionProgress(key,rawForProgress);
     const due=req.required
       ?(req.due_date?`Required by ${niceDate(req.due_date)}`:'Required now')
       :'Available anytime';
-    const source=(req.sources||[]).length?` · ${req.sources.join(' + ')}`:'';
-    return `<button class="plan-format-card ${builderSection===key?'active':''} ${complete?'complete':''} ${req.required?'required':''}" data-builder-section="${key}">
+    const source=(req.sources||[]).length?req.sources.join(' + '):'';
+    const progressText=progress.requiredCount
+      ?`${progress.answeredRequired} of ${progress.requiredCount} required questions answered`
+      :progress.answeredAny
+        ?`${progress.answeredAny} question${progress.answeredAny===1?'':'s'} answered`
+        :'You can work ahead whenever you like.';
+
+    return `<button class="plan-format-card ${builderSection===key?'active':''} ${progress.complete?'complete':''} ${req.required?'required':''}" data-builder-section="${key}">
       <span class="plan-format-name">${esc(label)}</span>
-      <strong>${complete?'✓ Complete':esc(due)}</strong>
-      <small>${complete&&req.required?esc(due):req.required?esc(source.replace(/^ · /,'')):'You can work ahead whenever you like.'}</small>
+      <strong>${progress.complete?'✓ Complete':esc(due)}</strong>
+      <small>${progress.complete
+        ?esc(req.required?due:'Completed')
+        :esc(req.required&&source?`${progressText} · ${source}`:progressText)}</small>
     </button>`;
   };
 
@@ -4396,7 +4527,11 @@ async function renderMyPlan(){
         <h2>Complete the formats when they matter — or work ahead.</h2>
         <div class="help">Every format your club uses is available now. The club may require particular sections by different dates depending on your Playing Groups, but nothing is locked.</div>
       </div>
-      <span class="workflow-status ${status==='ready_for_review'?'ready':status==='approved'?'approved':''}">${status==='ready_for_review'?'READY FOR REVIEW':status==='approved'?'APPROVED':'IN PROGRESS'}</span>
+      <span class="workflow-status ${completedRequiredSections===requiredSections.length?'approved':''}">
+        ${completedRequiredSections===requiredSections.length
+          ?'REQUIRED WORK COMPLETE'
+          :`${completedRequiredSections}/${requiredSections.length} REQUIRED SECTIONS COMPLETE`}
+      </span>
     </div>
 
     <div class="player-group-summary">
@@ -4407,10 +4542,12 @@ async function renderMyPlan(){
     </div>
 
     <div class="plan-format-cards">
-      <button class="plan-format-card core ${builderSection==='core'?'active':''} ${sectionStatus.core?'complete':''}" data-builder-section="core">
+      <button class="plan-format-card core ${builderSection==='core'?'active':''} ${sectionProgress('core',rawForProgress).complete?'complete':''}" data-builder-section="core">
         <span class="plan-format-name">Core</span>
-        <strong>${sectionStatus.core?'✓ Complete':'Build your batting identity'}</strong>
-        <small>Your strengths, danger signs, reset and current focus.</small>
+        <strong>${sectionProgress('core',rawForProgress).complete?'✓ Complete':'Build your batting identity'}</strong>
+        <small>${sectionProgress('core',rawForProgress).complete
+          ?'Required Core questions complete.'
+          :`${sectionProgress('core',rawForProgress).answeredRequired} of ${sectionProgress('core',rawForProgress).requiredCount} required questions answered`}</small>
       </button>
       ${formats.map(([k,l])=>formatCard(k,l)).join('')}
     </div>
@@ -4426,16 +4563,27 @@ async function renderMyPlan(){
           <h2>${esc(myPlayer.display_name)}</h2>
           <div class="help">Choose what genuinely describes your game. Add comments only where the options do not capture it.</div>
         </div>
-        <span class="section-completion ${currentComplete?'done':''}">${currentComplete?'✓ SECTION COMPLETE':'IN PROGRESS'}</span>
+        <span class="section-completion ${currentComplete?'done':''}">
+          ${currentComplete
+            ?'✓ SECTION COMPLETE'
+            :currentProgress.requiredCount
+              ?`${currentProgress.answeredRequired}/${currentProgress.requiredCount} REQUIRED QUESTIONS`
+              :'OPTIONAL SECTION'}
+        </span>
       </div>
 
       <div id="builderQuestions">${renderQuestions(builderSection)}</div>
 
-      <div class="btnrow player-plan-actions">
-        <button class="btn secondary" id="saveReflection">Save progress</button>
-        <button class="btn ghost" id="toggleSectionComplete">${currentComplete?'Reopen this section':'Mark this section complete'}</button>
-        <button class="btn" id="submitReflection">Ready for coach review</button>
-        <span class="status" id="builderStatus"></span>
+      <div class="player-plan-simple-status">
+        <div>
+          <strong>${currentComplete?'Section complete ✓':'Keep going'}</strong>
+          <span>${currentComplete
+            ?'You can still change any answer later.'
+            :currentProgress.requiredCount
+              ?`Answer the remaining required question${currentProgress.requiredCount-currentProgress.answeredRequired===1?'':'s'} and this section will complete automatically.`
+              :'This section is optional. Answer as much or as little as is useful.'}</span>
+        </div>
+        <span class="status" id="builderStatus">Saved ✓</span>
       </div>
     </section>
 
@@ -4447,49 +4595,49 @@ async function renderMyPlan(){
     </section>
   </div>`;
 
-  document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=()=>{
-    collectBuilderAnswers();
+  document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=async()=>{
+    await savePlayerPlanProgressSilently();
     builderSection=b.dataset.builderSection;
-    renderMyPlan();
+    await renderMyPlan();
   });
 
   document.querySelectorAll('.option-chip input').forEach(x=>x.onchange=()=>{
     collectBuilderAnswers();
     document.getElementById('draftPreview').innerHTML=renderDraftPreviewFromLocal();
+
+    const raw=localRaw||rawAnswers();
+    const progress=sectionProgress(builderSection,raw);
+    const badge=document.querySelector('.section-completion');
+    if(badge){
+      badge.classList.toggle('done',progress.complete);
+      badge.textContent=progress.complete
+        ?'✓ SECTION COMPLETE'
+        :progress.requiredCount
+          ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
+          :'OPTIONAL SECTION';
+    }
+
+    queuePlayerPlanAutosave();
   });
 
   document.querySelectorAll('[data-comment-key]').forEach(x=>x.oninput=()=>{
     collectBuilderAnswers();
     document.getElementById('draftPreview').innerHTML=renderDraftPreviewFromLocal();
-  });
 
-  document.getElementById('saveReflection').onclick=()=>saveWorkflow('in_progress');
-
-  document.getElementById('toggleSectionComplete').onclick=()=>saveSectionCompletion(
-    builderSection,
-    !currentComplete
-  );
-
-  document.getElementById('submitReflection').onclick=()=>{
-    const incompleteRequired=(rollout.requirements||[])
-      .filter(r=>r.required && !sectionStatus[r.format_key])
-      .map(r=>FORMATS.find(([k])=>k===r.format_key)?.[1]||r.format_key);
-
-    const missing=[
-      ...(!sectionStatus.core?['Core']:[]),
-      ...incompleteRequired
-    ];
-
-    if(missing.length){
-      const ok=confirm(
-        `These sections are not marked complete: ${missing.join(', ')}.\n\n`+
-        `You can still send the current plan to a coach for review, or cancel and finish them first.`
-      );
-      if(!ok)return;
+    const raw=localRaw||rawAnswers();
+    const progress=sectionProgress(builderSection,raw);
+    const badge=document.querySelector('.section-completion');
+    if(badge){
+      badge.classList.toggle('done',progress.complete);
+      badge.textContent=progress.complete
+        ?'✓ SECTION COMPLETE'
+        :progress.requiredCount
+          ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
+          :'OPTIONAL SECTION';
     }
 
-    saveWorkflow('ready_for_review');
-  };
+    queuePlayerPlanAutosave();
+  });
 }
 
 function renderQuestions(section){
@@ -4596,7 +4744,7 @@ async function saveSectionCompletion(section,complete){
   }
 
   const st=document.getElementById('builderStatus');
-  if(st)st.textContent=complete?'Marking complete…':'Reopening…';
+  if(st)st.textContent=complete?'Finishing section…':'Reopening section…';
 
   const payload={
     player_id:myPlayer.id,
@@ -4650,7 +4798,7 @@ async function saveWorkflow(status){
   if(error){s.textContent=error.message;return;}
   workflow=data;
   localRaw=null;
-  s.textContent=status==='ready_for_review'?'Sent to coach for review':'Saved';
+  s.textContent='Saved ✓';
   renderMyPlan();
 }
 
