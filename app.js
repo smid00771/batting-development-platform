@@ -1779,8 +1779,11 @@ async function renderWorkshop(){
   if(document.getElementById('myResponseAction2')){
     document.getElementById('myResponseAction2').onclick=()=>{currentTab='identity';renderTab();};
   }
-  if(document.getElementById('publishPhilosophy')){
-    document.getElementById('publishPhilosophy').onclick=publishPhilosophy;
+  if(document.getElementById('continueToPlanStructure')){
+    document.getElementById('continueToPlanStructure').onclick=()=>{
+      currentTab='plan';
+      renderTab();
+    };
   }
 }
 
@@ -2040,7 +2043,7 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
         <strong>${workshop?.final_draft_ready?'Final draft stage':'Turn the synthesis into a working draft'}</strong>
         <p>${workshop?.final_draft_ready
           ?(howWeBatDraft?.status==='ready'
-            ?'The detailed philosophy and the player-facing How We Bat page are ready. Submit the final philosophy response if needed, then publish them together.'
+            ?'The detailed philosophy and the player-facing How We Bat page are ready. Continue forward to Player Plan Structure — publishing now happens only at the end of that stage.'
             :'Adjust the detailed philosophy, then use How We Bat Builder to compress it into a small number of memorable format-specific messages.')
           :'Use the majority view and median format weightings as a starting point. Discussion flags are deliberately not “solved” for you — you make the final call.'}</p>
       </div>
@@ -2048,9 +2051,7 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
         ?`<div class="btnrow">
             ${!hwbReady
               ?'<button class="btn secondary" id="openHwbBuilder">Build How We Bat</button>'
-              :canPublish
-                ?'<button class="btn secondary" id="publishPhilosophy">Approve & publish philosophy + How We Bat</button>'
-                :'<button class="btn secondary" id="myResponseAction2">Continue / submit final draft</button>'}
+              :'<button class="btn secondary" id="continueToPlanStructure">Continue to Player Plan Structure</button>'}
             ${!currentDraftPublished
               ?'<button class="btn ghost" id="discardFinalDraft">Discard draft & restart synthesis</button>'
               :''}
@@ -2243,27 +2244,72 @@ async function beginFinalDraftFromSynthesis(){
 
 async function publishPhilosophy(){
   const firstPublish=philosophyVersions.length===0;
+
   const ok=confirm(firstPublish
-    ?'Publish this as the club’s first official batting philosophy? This will open Player Plans and queue the “your Player Plan is ready” message for every current Player / Both member.'
-    :'Publish this as the club’s new official batting philosophy version? The current published version stays live until you confirm.');
+    ?`Publish ${club.name}'s Club Batting System?\n\n`+
+      `This will:\n`+
+      `• publish the current Philosophy as v1\n`+
+      `• publish the matching How We Bat\n`+
+      `• activate the Player Plan Structure\n`+
+      `• open Player Plans to registered players\n`+
+      `• queue the Player Plan notification for current players\n\n`+
+      `Nothing is published until you confirm.`
+    :`Publish this as a new Club Batting System version?\n\n`+
+      `The currently published version remains live until you confirm. This release will publish the current Philosophy and matching How We Bat together.`);
   if(!ok)return;
+
+  const publishButton=document.getElementById('publishClubSystem');
+  const publishStatus=document.getElementById('publishClubSystemStatus');
+
+  if(publishButton){
+    publishButton.disabled=true;
+    publishButton.textContent='Publishing…';
+  }
+  if(publishStatus)publishStatus.textContent='Finalising the release…';
+
+  // The Lead's independent response was converted into the editable final draft
+  // when synthesis began. If that working draft has not yet been re-submitted,
+  // finalise it here rather than forcing the Lead backwards through earlier pages.
+  if(myContributor?.status!=='submitted'){
+    const {error:submitError}=await supabase.rpc('submit_my_philosophy_response',{
+      p_club_id:club.id
+    });
+
+    if(submitError){
+      if(publishButton){
+        publishButton.disabled=false;
+        publishButton.textContent='Publish Club Batting System';
+      }
+      if(publishStatus)publishStatus.textContent=submitError.message;
+      return;
+    }
+  }
 
   let notifyPlayers=firstPublish;
   if(!firstPublish){
-    notifyPlayers=confirm('Would you also like to queue a notification to current players about this philosophy update?');
+    notifyPlayers=confirm('Would you also like to notify current players that the club batting system has been updated?');
   }
 
   const {data,error}=await supabase.rpc('publish_philosophy',{
     p_club_id:club.id,
     p_notify_players:notifyPlayers
   });
-  if(error){alert(error.message);return;}
+
+  if(error){
+    if(publishButton){
+      publishButton.disabled=false;
+      publishButton.textContent='Publish Club Batting System';
+    }
+    if(publishStatus)publishStatus.textContent=error.message;
+    return;
+  }
 
   alert(firstPublish
-    ?`Published as Club Philosophy v${data}. How We Bat is now live, Player Plans are open, and player notification messages have been queued.`
-    :`Published as Club Philosophy v${data}. The matching How We Bat version is now live.`);
+    ?`Club Batting System v${data} is live. How We Bat is published, Player Plans are open, and player notification messages have been queued.`
+    :`Club Batting System v${data} is now live. The matching Philosophy and How We Bat version have been published together.`);
+
   await loadData();
-  currentTab=howWeBatVersions.length?'howwebat':'dashboard';
+  currentTab='howwebat';
   renderShell();
 }
 
@@ -3229,6 +3275,50 @@ async function renderPlanStructure(){
     </section>`;
   }
 
+  const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
+  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>
+    v.published_at && new Date(v.published_at)>=draftStartedAt
+  );
+  const latestVersion=philosophyVersions?.[0]?.version_number||null;
+
+  const releaseHtml=currentDraftPublished
+    ?`<section class="card club-system-release published-release" style="margin-top:16px">
+        <div class="section-label">Club Batting System</div>
+        <h2>Published ✓</h2>
+        <div class="notice">
+          <strong>Club Batting System v${esc(latestVersion||'')}</strong><br>
+          The Philosophy, How We Bat and Player Plan framework for this release are live.
+        </div>
+      </section>`
+    :isPhilosophyLead()
+      ?`<section class="card club-system-release" style="margin-top:16px">
+          <div class="section-label">Final step</div>
+          <h2>Publish Club Batting System</h2>
+          <div class="help">Publishing is the point at which the club moves from <strong>building</strong> to <strong>live</strong>. Nothing above is public to players merely because How We Bat is marked Ready.</div>
+
+          <div class="release-checklist">
+            <div class="release-check done"><span>✓</span><div><strong>Final Philosophy</strong><small>Working draft created from the workshop synthesis.</small></div></div>
+            <div class="release-check done"><span>✓</span><div><strong>How We Bat</strong><small>Marked Ready across the club’s enabled formats.</small></div></div>
+            <div class="release-check done"><span>✓</span><div><strong>Player Plan Structure</strong><small>You are reviewing the final structure now.</small></div></div>
+            <div class="release-check ${requirements.length?'done':'optional'}"><span>${requirements.length?'✓':'○'}</span><div><strong>Rollout requirements</strong><small>${requirements.length?`${requirements.length} active requirement${requirements.length===1?'':'s'} set.`:'Optional — players can still complete all enabled formats without deadlines.'}</small></div></div>
+          </div>
+
+          <div class="notice release-warning">
+            <strong>When you publish</strong><br>
+            Philosophy + How We Bat are versioned together, Player Plans open to players, and the first release queues the “your Player Plan is ready” notification.
+          </div>
+
+          <div class="btnrow">
+            <button class="btn secondary" id="publishClubSystem">Publish Club Batting System</button>
+            <span class="status" id="publishClubSystemStatus"></span>
+          </div>
+        </section>`
+      :`<section class="card club-system-release" style="margin-top:16px">
+          <div class="section-label">Final step</div>
+          <h2>Ready for the Philosophy Lead to publish.</h2>
+          <div class="help">Only the Philosophy Lead can publish the Club Batting System. They will publish the Philosophy and How We Bat together once the Player Plan Structure has been reviewed.</div>
+        </section>`;
+
   page.innerHTML=`<div class="grid">
     <section class="card">
       <div class="section-label">Always the same player</div>
@@ -3250,7 +3340,12 @@ async function renderPlanStructure(){
       </div>`).join('')}
     </section>
   </div>
-  ${rolloutHtml}`;
+  ${rolloutHtml}
+  ${releaseHtml}`;
+
+  if(document.getElementById('publishClubSystem')){
+    document.getElementById('publishClubSystem').onclick=publishPhilosophy;
+  }
 
   if(!isAdmin())return;
 
