@@ -1032,6 +1032,11 @@ async function renderWorkshop(){
   }
 
   const pMap=new Map(profiles.map(x=>[x.user_id,x]));
+  const elevatedCricketRoles=new Set(['captain','coach','head_coach','admin']);
+  const staffMembers=(members||[]).filter(m=>elevatedCricketRoles.has(m.permission_role));
+  const leadCandidates=(members||[]).filter(m=>
+    elevatedCricketRoles.has(m.permission_role) || m.user_id===workshop?.philosophy_lead_user_id
+  );
   const submittedCount=(contribRows||[]).filter(x=>x.status==='submitted').length;
   const totalCount=(contribRows||[]).length;
   const pendingExternal=(externalInvites||[]).filter(x=>x.status==='pending');
@@ -1075,9 +1080,10 @@ async function renderWorkshop(){
       <div class="field">
         <label>Philosophy Lead — final approval and publishing</label>
         <select id="leadUser">
-          ${members.map(m=>{
+          ${leadCandidates.map(m=>{
             const name=pMap.get(m.user_id)?.display_name||'Profile not completed';
-            return `<option value="${m.user_id}" ${workshop?.philosophy_lead_user_id===m.user_id?'selected':''}>${esc(name)} · ${esc(labelInvolvement(m.involvement))}</option>`;
+            const roleLabel=m.permission_role==='head_coach'?'Head Coach':m.permission_role==='admin'?'Club Admin':m.permission_role==='captain'?'Captain':m.permission_role==='coach'?'Coach':labelInvolvement(m.involvement);
+            return `<option value="${m.user_id}" ${workshop?.philosophy_lead_user_id===m.user_id?'selected':''}>${esc(name)} · ${esc(roleLabel)}</option>`;
           }).join('')}
         </select>
       </div>
@@ -1091,23 +1097,35 @@ async function renderWorkshop(){
           </div>
         </div>
 
-        <label class="field-label">People already in this club</label>
+        <div class="workshop-flow-step">
+          <div class="workshop-step-num">1</div>
+          <div>
+            <label class="field-label">Choose coaches / captains already in this club</label>
+            <div class="help">Only people who have already been given an elevated cricket role appear here. Ordinary players are not listed.</div>
+          </div>
+        </div>
         <div class="contributor-picker">
-          ${members.map(m=>{
+          ${staffMembers.length?staffMembers.map(m=>{
             const name=pMap.get(m.user_id)?.display_name||'Profile not completed';
             const selected=(contribRows||[]).some(c=>c.user_id===m.user_id);
             const isLead=m.user_id===workshop?.philosophy_lead_user_id;
+            const roleLabel=m.permission_role==='head_coach'?'Head Coach':m.permission_role==='admin'?'Club Admin':m.permission_role==='captain'?'Captain':'Coach';
             return `<label class="contributor-check ${isLead?'lead-person':''}">
               <input type="checkbox" data-contributor-user="${m.user_id}" ${selected||isLead?'checked':''} ${isLead?'disabled':''}>
-              <span><strong>${esc(name)}${isLead?' · Philosophy Lead':''}</strong><small>${esc(labelInvolvement(m.involvement))}</small></span>
+              <span><strong>${esc(name)}${isLead?' · Philosophy Lead':''}</strong><small>${esc(roleLabel)}</small></span>
             </label>`;
-          }).join('')}
+          }).join(''):'<div class="notice compact">No other coaches or captains have elevated club permissions yet.</div>'}
         </div>
 
         <div class="external-invite-box">
-          <div class="section-label">Not in the system yet?</div>
-          <h3>Invite people by email</h3>
-          <p class="help">Add everyone you want involved, then send the invitations together. They join as <strong>Philosophy Contributor only</strong> unless the Admin later gives them another role.</p>
+          <div class="workshop-flow-step">
+            <div class="workshop-step-num">2</div>
+            <div>
+              <div class="section-label">Additional contributors</div>
+              <h3>Invite someone else by email</h3>
+              <p class="help">Use this only for someone who is not already available above. They join as <strong>Philosophy Contributor only</strong> unless the Admin later gives them another club role.</p>
+            </div>
+          </div>
 
           <div id="newContributorRows" class="new-contributor-rows">
             <div class="new-contributor-row" data-new-contributor-row>
@@ -1119,25 +1137,43 @@ async function renderWorkshop(){
 
           <button class="btn ghost add-person-btn" id="addContributorRow" type="button">+ Add another person</button>
           <div id="externalInviteStatus" class="help"></div>
-          <div class="help">Prototype note: invitations are added to the Email Queue with secure links. Once the live email provider is connected, these will send automatically.</div>
-
-          ${externalInvites?.length?`<div class="pending-invites">
-            ${externalInvites.map(i=>`<div class="pending-invite-row">
-              <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>${esc(i.invited_email)} · ${esc(i.status)}</small></div>
-              <div class="member-controls">
-                ${i.status==='pending'?`<button class="btn ghost" data-resend-philosophy-invite="${i.id}">Resend</button><button class="btn ghost" data-cancel-philosophy-invite="${i.id}">Cancel</button>`:''}
-              </div>
-            </div>`).join('')}
-          </div>`:''}
+          <div class="help">Prototype note: new invitations are added to the Email Queue with secure links. Once live email delivery is connected, they will send automatically.</div>
         </div>
 
         <div class="notice compact"><strong>No committee meeting required.</strong><br>Invite people now; they complete their response independently when it suits them.</div>
       </div>
 
-      <div class="btnrow">
-        <button class="btn secondary" id="saveWorkshopSetup">${collaborative?'Save & send invitations':'Save Solo Workshop'}</button>
-        <span class="status" id="workshopSetupStatus"></span>
+      <div class="workshop-save-block">
+        <div class="workshop-flow-step">
+          <div class="workshop-step-num">3</div>
+          <div>
+            <strong class="workshop-step-title">Save this workshop setup</strong>
+            <div class="help">In Collaborative mode, this sends invitations only to new email addresses entered above. People already invited are not sent another invitation.</div>
+          </div>
+        </div>
+        <div class="btnrow workshop-save-row">
+          <button class="btn secondary" id="saveWorkshopSetup">${collaborative?'Save selections & send new invitations':'Save Solo Workshop'}</button>
+          <span class="status" id="workshopSetupStatus"></span>
+        </div>
       </div>
+
+      ${externalInvites?.length?`<div class="collaborative-invite-history ${collaborative?'show':''}" id="collaborativeInviteHistory">
+        <div class="invite-history-head">
+          <div>
+            <div class="section-label">Invitations already sent</div>
+            <h3>Manage existing invitations</h3>
+            <p class="help">These people have already been invited. Saving the selections above <strong>does not invite them again</strong>. Use Resend only if someone needs the invitation sent again.</p>
+          </div>
+        </div>
+        <div class="pending-invites">
+          ${externalInvites.map(i=>`<div class="pending-invite-row">
+            <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>${esc(i.invited_email)} · ${esc(i.status)}</small></div>
+            <div class="member-controls">
+              ${i.status==='pending'?`<button class="btn ghost" data-resend-philosophy-invite="${i.id}">Resend</button><button class="btn ghost" data-cancel-philosophy-invite="${i.id}">Cancel</button>`:''}
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>`:''}
     </section>`;
   }
 
@@ -1267,13 +1303,14 @@ async function renderWorkshop(){
     const collaborativeNow=mode==='collaborative';
 
     if(panel)panel.classList.toggle('show',collaborativeNow);
+    document.getElementById('collaborativeInviteHistory')?.classList.toggle('show',collaborativeNow);
     if(feedback){
       feedback.classList.toggle('show',collaborativeNow);
       feedback.innerHTML=collaborativeNow
         ?'<strong>Collaborative selected.</strong> Choose the people whose batting perspective you want below.'
         :'';
     }
-    if(save)save.textContent=collaborativeNow?'Save & send invitations':'Save Solo Workshop';
+    if(save)save.textContent=collaborativeNow?'Save selections & send new invitations':'Save Solo Workshop';
   };
 
   document.querySelectorAll('.mode-card input').forEach(r=>r.onchange=()=>{
@@ -1514,8 +1551,16 @@ async function saveWorkshopSetup(existingRows,externalInvites=[]){
     }
   }
 
+  const pickerUserIds=new Set(
+    [...document.querySelectorAll('[data-contributor-user]')].map(x=>x.dataset.contributorUser)
+  );
+
   for(const row of existingRows){
-    if(!selected.includes(row.user_id)){
+    const shouldRemove=mode==='solo'
+      ?row.user_id!==lead
+      :pickerUserIds.has(row.user_id) && !selected.includes(row.user_id);
+
+    if(shouldRemove){
       const {error}=await supabase
         .from('philosophy_contributors')
         .delete()
@@ -1551,7 +1596,7 @@ async function saveWorkshopSetup(existingRows,externalInvites=[]){
     }
   }
 
-  s.textContent=mode==='collaborative'?'Saved — invitations queued ✓':'Solo workshop saved ✓';
+  s.textContent=mode==='collaborative'?'Saved — new invitations queued ✓':'Solo workshop saved ✓';
   await loadData();
   setTimeout(()=>renderShell(),350);
 }
