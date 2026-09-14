@@ -3660,11 +3660,14 @@ async function renderPlanStructure(){
       ?`<section class="card club-system-release" style="margin-top:16px"><div class="section-label">Final step</div><h2>Publish Club Batting System</h2><div class="release-checklist">
           <div class="release-check done"><span>✓</span><div><strong>Final Philosophy</strong><small>Working draft created from the workshop synthesis.</small></div></div>
           <div class="release-check done"><span>✓</span><div><strong>How We Bat</strong><small>Marked Ready across the club’s enabled formats.</small></div></div>
-          <div class="release-check ${structureReady?'done':'optional'}"><span>${structureReady?'✓':'○'}</span><div><strong>Player Plan Structure</strong><small>${structureReady?'Reviewed and marked Ready.':'Review the questions and mark this structure Ready before publishing.'}</small></div></div>
+          <div class="release-check ${structureReady?'done':'optional'}"><span>${structureReady?'✓':'○'}</span><div><strong>Player Plan Structure</strong><small>${structureReady?'Ready — reviewed and confirmed.':'Review the questions, then confirm this structure before publishing.'}</small></div></div>
           <div class="release-check ${requirements.length?'done':'optional'}"><span>${requirements.length?'✓':'○'}</span><div><strong>Rollout requirements</strong><small>${requirements.length?`${requirements.length} active requirement${requirements.length===1?'':'s'} set.`:'Optional — players can still complete all enabled formats without deadlines.'}</small></div></div>
         </div>
         <div class="notice release-warning"><strong>When you publish</strong><br>Philosophy + How We Bat + this exact Player Plan Structure are versioned together. Player Plans then open to players.</div>
-        <div class="btnrow"><button class="btn secondary" id="publishClubSystem" ${structureReady?'':'disabled'}>${structureReady?'Publish Club Batting System':'Mark Player Plan Structure ready first'}</button><span class="status" id="publishClubSystemStatus"></span></div></section>`
+        <div class="btnrow">${structureReady
+          ?'<button class="btn secondary" id="publishClubSystem">Publish Club Batting System</button>'
+          :'<button class="btn secondary" id="confirmPlanStructureRelease">Confirm Player Plan Structure</button>'}
+          <span class="status" id="publishClubSystemStatus"></span></div></section>`
       :`<section class="card club-system-release" style="margin-top:16px"><div class="section-label">Final step</div><h2>Waiting for the Philosophy Lead.</h2><div class="help">The Philosophy Lead controls the final Player Plan Structure and publication.</div></section>`;
 
   page.innerHTML=`<section class="card plan-structure-builder-card">
@@ -3676,7 +3679,7 @@ async function renderPlanStructure(){
     <div class="plan-section-head"><div><div class="section-label">${esc(planStructureSectionLabel(playerPlanStructureSection))}</div><h3>${activeQuestions.length} question${activeQuestions.length===1?'':'s'} included</h3></div>${editable?'<button class="btn ghost" id="addPlanQuestion">+ Add club-specific question</button>':''}</div>
     <div class="plan-question-editor-list">${questionsHtml}</div>
     ${removedHtml}
-    ${editable?`<div class="btnrow plan-structure-actions"><button class="btn secondary" id="savePlanStructure" ${structureSaved?'disabled':''}>${structureSaved?'Saved ✓':'Save Player Plan Structure'}</button>${structureReady?'<button class="btn ghost" id="reopenPlanStructure">Reopen for editing</button>':'<button class="btn secondary" id="readyPlanStructure">Mark Player Plan Structure ready</button>'}<span class="status" id="planStructureStatus">${structureReady?'Ready ✓':''}</span></div>`:''}
+    ${editable?`<div class="btnrow plan-structure-actions"><button class="btn secondary" id="savePlanStructure" ${structureSaved?'disabled':''}>${structureSaved?'Saved ✓':'Save Player Plan Structure'}</button>${structureReady?'<button class="btn ghost" id="reopenPlanStructure">Reopen for editing</button>':'<button class="btn secondary" id="readyPlanStructure">Confirm Player Plan Structure</button>'}<span class="status" id="planStructureStatus">${structureReady?'Ready ✓':''}</span></div>`:''}
   </section>
   ${rolloutHtml}
   ${releaseHtml}`;
@@ -3735,10 +3738,15 @@ async function renderPlanStructure(){
     });
 
     document.getElementById('savePlanStructure').onclick=()=>savePlayerPlanStructure('draft');
-    if(document.getElementById('readyPlanStructure'))document.getElementById('readyPlanStructure').onclick=()=>savePlayerPlanStructure('ready');
+    if(document.getElementById('readyPlanStructure')){
+      document.getElementById('readyPlanStructure').onclick=()=>savePlayerPlanStructure('ready',document.getElementById('readyPlanStructure'));
+    }
     if(document.getElementById('reopenPlanStructure'))document.getElementById('reopenPlanStructure').onclick=async()=>{const ok=confirm('Reopen the Player Plan Structure for editing? It will need to be marked Ready again before publishing.');if(ok)await savePlayerPlanStructure('draft');};
   }
 
+  if(document.getElementById('confirmPlanStructureRelease')){
+    document.getElementById('confirmPlanStructureRelease').onclick=()=>savePlayerPlanStructure('ready',document.getElementById('confirmPlanStructureRelease'));
+  }
   if(document.getElementById('publishClubSystem'))document.getElementById('publishClubSystem').onclick=publishPhilosophy;
 
   if(isAdmin()){
@@ -3749,20 +3757,20 @@ async function renderPlanStructure(){
   }
 }
 
-async function savePlayerPlanStructure(status){
+async function savePlayerPlanStructure(status,triggerButton=null){
   collectPlanStructureEditor();
   const st=document.getElementById('planStructureStatus');
-  const btn=status==='ready'?document.getElementById('readyPlanStructure'):document.getElementById('savePlanStructure');
+  const btn=triggerButton||(status==='ready'?document.getElementById('readyPlanStructure'):document.getElementById('savePlanStructure'));
   if(status==='ready'){
     const problems=validatePlanStructure(playerPlanStructureWorking);
     if(problems.length){alert(`Player Plan Structure still needs attention:\n\n${problems.slice(0,8).join('\n')}`);return;}
-    const ok=confirm('Mark Player Plan Structure ready?\n\nThis freezes the current question structure for final review and enables Publish Club Batting System. It does not publish anything yet.');
+    const ok=confirm('Confirm Player Plan Structure?\n\nThis confirms the current question structure as the version you intend to publish and enables Publish Club Batting System.\n\nIt does not publish anything yet.');
     if(!ok)return;
   }
-  if(btn){btn.disabled=true;btn.textContent=status==='ready'?'Saving…':'Saving…';}
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
   if(st)st.textContent='Saving…';
   const {error}=await supabase.rpc('save_player_plan_structure_draft',{p_club_id:club.id,p_structure:playerPlanStructureWorking,p_status:status});
-  if(error){if(st)st.textContent=error.message;if(btn){btn.disabled=false;btn.textContent=status==='ready'?'Mark Player Plan Structure ready':'Save changes';}return;}
+  if(error){if(st)st.textContent=error.message;if(btn){btn.disabled=false;btn.textContent=status==='ready'?'Confirm Player Plan Structure':'Save changes';}return;}
   await loadData();
   playerPlanStructureSection=playerPlanStructureSection||'core';
   await renderPlanStructure();
