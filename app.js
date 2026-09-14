@@ -1482,6 +1482,9 @@ async function renderWorkshop(){
   if(document.getElementById('openHwbBuilder')){
     document.getElementById('openHwbBuilder').onclick=()=>{currentTab='preview';renderTab();};
   }
+  if(document.getElementById('discardFinalDraft')){
+    document.getElementById('discardFinalDraft').onclick=discardFinalDraftAndRestart;
+  }
   if(document.getElementById('myResponseAction2')){
     document.getElementById('myResponseAction2').onclick=()=>{currentTab='identity';renderTab();};
   }
@@ -1690,6 +1693,10 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
   const leadReady=isPhilosophyLead() && myContributor?.status==='submitted';
   const hwbReady=howWeBatDraft?.status==='ready';
   const canPublish=isPhilosophyLead() && workshop?.final_draft_ready && myContributor?.status==='submitted' && hwbReady;
+  const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
+  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>
+    v.published_at && new Date(v.published_at)>=draftStartedAt
+  );
 
   return `<section class="card synthesis" style="margin-top:16px">
     <div class="section-label">Curated group picture</div>
@@ -1747,11 +1754,16 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
           :'Use the majority view and median format weightings as a starting point. Discussion flags are deliberately not “solved” for you — you make the final call.'}</p>
       </div>
       ${workshop?.final_draft_ready
-        ?(!hwbReady
-          ?'<button class="btn secondary" id="openHwbBuilder">Build How We Bat</button>'
-          :canPublish
-            ?'<button class="btn secondary" id="publishPhilosophy">Approve & publish philosophy + How We Bat</button>'
-            :'<button class="btn secondary" id="myResponseAction2">Continue / submit final draft</button>')
+        ?`<div class="btnrow">
+            ${!hwbReady
+              ?'<button class="btn secondary" id="openHwbBuilder">Build How We Bat</button>'
+              :canPublish
+                ?'<button class="btn secondary" id="publishPhilosophy">Approve & publish philosophy + How We Bat</button>'
+                :'<button class="btn secondary" id="myResponseAction2">Continue / submit final draft</button>'}
+            ${!currentDraftPublished
+              ?'<button class="btn ghost" id="discardFinalDraft">Discard draft & restart synthesis</button>'
+              :''}
+          </div>`
         :(leadReady
           ?`<button class="btn secondary" id="buildFinalDraft">${!allSubmitted
             ?`Create final draft with ${syn.n} response${syn.n===1?'':'s'}`
@@ -1862,6 +1874,47 @@ function renderLatePhilosophyResponses(actions,pMap){
       }).join('')}</div>
     </details>`:''}
   </section>`;
+}
+
+
+async function discardFinalDraftAndRestart(){
+  const ok=confirm(
+    `Discard the current UNPUBLISHED final philosophy draft and How We Bat draft?\n\n`+
+    `What WILL be discarded:\n`+
+    `• edits made to the current final philosophy draft\n`+
+    `• the current unpublished How We Bat draft\n\n`+
+    `What WILL be kept:\n`+
+    `• every contributor's submitted workshop response\n`+
+    `• late responses already submitted\n`+
+    `• every published Philosophy / How We Bat version\n\n`+
+    `Your own original independent response will be restored from the frozen snapshot. `+
+    `You can then create a fresh synthesis using all responses currently submitted.\n\n`+
+    `This cannot restore manual edits made only in the discarded draft.`
+  );
+  if(!ok)return;
+
+  const btn=document.getElementById('discardFinalDraft');
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Discarding…';
+  }
+
+  const {error}=await supabase.rpc('discard_unpublished_philosophy_draft',{
+    p_club_id:club.id
+  });
+
+  if(error){
+    alert(error.message);
+    if(btn){
+      btn.disabled=false;
+      btn.textContent='Discard draft & restart synthesis';
+    }
+    return;
+  }
+
+  await loadData();
+  currentTab='workshop';
+  renderShell();
 }
 
 async function beginFinalDraftFromSynthesis(){
