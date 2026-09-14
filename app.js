@@ -35,6 +35,11 @@ let howWeBatDraft=null;
 let howWeBatVersions=[];
 let howWeBatBuilderFormat='limited_overs';
 let publishedHowWeBatFormat='limited_overs';
+let playerPlanStructureDraft=null;
+let playerPlanStructureVersions=[];
+let playerPlanStructureSection='core';
+let playerPlanStructureWorking=null;
+let playerPlanStructureDirty=false;
 
 const FORMATS=[
   ['t20','T20'],
@@ -671,7 +676,7 @@ function renderFirstIdentitySetup(){
 
 
 async function loadData(){
-  const [pRes,dRes,sdRes,wRes,playerRes,workshopRes,myContributorRes,versionsRes,hwbDraftRes,hwbVersionsRes]=await Promise.all([
+  const [pRes,dRes,sdRes,wRes,playerRes,workshopRes,myContributorRes,versionsRes,hwbDraftRes,hwbVersionsRes,planDraftRes,planVersionsRes]=await Promise.all([
     supabase.from('philosophy_profiles').select('*').eq('club_id',club.id).single(),
     supabase.from('philosophy_dimension_catalogue').select('*').order('sort_order'),
     supabase.from('club_philosophy_dimensions').select('*').eq('club_id',club.id),
@@ -681,7 +686,9 @@ async function loadData(){
     supabase.from('philosophy_contributors').select('*').eq('club_id',club.id).eq('user_id',session.user.id).maybeSingle(),
     supabase.from('philosophy_versions').select('*').eq('club_id',club.id).order('version_number',{ascending:false}),
     supabase.from('how_we_bat_drafts').select('*').eq('club_id',club.id).maybeSingle(),
-    supabase.from('how_we_bat_versions').select('*').eq('club_id',club.id).order('philosophy_version',{ascending:false})
+    supabase.from('how_we_bat_versions').select('*').eq('club_id',club.id).order('philosophy_version',{ascending:false}),
+    supabase.from('player_plan_structure_drafts').select('*').eq('club_id',club.id).maybeSingle(),
+    supabase.from('player_plan_structure_versions').select('*').eq('club_id',club.id).order('philosophy_version',{ascending:false})
   ]);
 
   publishedProfile=pRes.data||{};
@@ -696,6 +703,10 @@ async function loadData(){
   philosophyVersions=versionsRes.data||[];
   howWeBatDraft=hwbDraftRes.data||null;
   howWeBatVersions=hwbVersionsRes.data||[];
+  playerPlanStructureDraft=planDraftRes.data||null;
+  playerPlanStructureVersions=planVersionsRes.data||[];
+  playerPlanStructureWorking=null;
+  playerPlanStructureDirty=false;
   myContribution=null;
 
   if(myContributor){
@@ -781,9 +792,9 @@ function renderShell(){
       ['preview',workshop?.final_draft_ready&&isPhilosophyLead()?'4. How We Bat Builder':'4. How We Bat']
     );
   }
-  if(canContributePhilosophy() || isAdmin()){
+  if(isPhilosophyLead() || isAdmin()){
     const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
-    const planLabel=canContributePhilosophy()?'5. Player Plan Structure':'Player Plan Structure';
+    const planLabel=isPhilosophyLead()?'5. Player Plan Structure':'Player Plan Structure';
     nav.push(['plan',planStructureReady?planLabel:`${planLabel} · Locked`]);
   }
   if(isAdmin())nav.push(['permissions','Permissions']);
@@ -3390,6 +3401,174 @@ function questionSpecFor(format,key){
   return {...base,...(byFormat[format]||{})};
 }
 
+
+function generatedPlayerPlanQuestion(section,key,weight=null,usePublished=false){
+  const spec=questionSpecFor(section==='core'?'core':section,key);
+  const dim=dimensions.find(d=>d.dimension_key===key);
+  const formatLabel=FORMATS.find(([k])=>k===section)?.[1]||section;
+  const guidance=section==='core'
+    ?(spec.why||'Choose what genuinely describes your game.')
+    :`${dim?.label||spec.label} is ${WEIGHT_LABELS[weight].toLowerCase()} in the club’s ${formatLabel} philosophy.`;
+  return {
+    id:key,
+    source_type:section==='core'?'core':'generated',
+    source_dimension:section==='core'?null:key,
+    source_weight:section==='core'?null:Number(weight??0),
+    label:spec.label,
+    guidance,
+    response_type:'choices',
+    options:[...(spec.options||[])],
+    required:true,
+    active:true
+  };
+}
+
+function generatedPlayerPlanStructure(usePublished=false){
+  const coreKeys=['core_strengths','core_danger','core_reset','core_focus'];
+  const structure={
+    core:coreKeys.map(k=>generatedPlayerPlanQuestion('core',k,null,usePublished)),
+    formats:{}
+  };
+  const formatList=usePublished?publishedEnabledFormats():enabledFormats();
+  for(const [format] of formatList){
+    const rows=(usePublished?publishedTopEmphasis(format):topEmphasis(format))
+      .filter(x=>x.weight>=2 && QUESTION_LIBRARY[x.key]);
+    structure.formats[format]=rows.map(x=>generatedPlayerPlanQuestion(format,x.key,x.weight,usePublished));
+  }
+  return structure;
+}
+
+function normalisePlayerPlanStructure(value,usePublished=false){
+  const generated=generatedPlayerPlanStructure(usePublished);
+  if(!value || typeof value!=='object')return generated;
+  const out={core:Array.isArray(value.core)?structuredClone(value.core):generated.core,formats:{}};
+  for(const [format] of (usePublished?publishedEnabledFormats():enabledFormats())){
+    out.formats[format]=Array.isArray(value.formats?.[format])
+      ?structuredClone(value.formats[format])
+      :(generated.formats[format]||[]);
+  }
+  const clean=q=>({
+    id:String(q?.id||`custom_${Date.now()}_${Math.random().toString(36).slice(2,7)}`),
+    source_type:q?.source_type||'custom',
+    source_dimension:q?.source_dimension||null,
+    source_weight:q?.source_weight==null?null:Number(q.source_weight),
+    label:String(q?.label||'Untitled question'),
+    guidance:String(q?.guidance||''),
+    response_type:q?.response_type==='text'?'text':'choices',
+    options:Array.isArray(q?.options)?q.options.map(String):[],
+    required:q?.required!==false,
+    active:q?.active!==false
+  });
+  out.core=out.core.map(clean);
+  for(const k of Object.keys(out.formats))out.formats[k]=out.formats[k].map(clean);
+  return out;
+}
+
+function planStructureArray(structure,section){
+  return section==='core' ? structure.core : (structure.formats?.[section]||[]);
+}
+
+function publishedPlayerPlanStructure(){
+  const snap=playerPlanStructureVersions?.[0]?.snapshot;
+  return normalisePlayerPlanStructure(snap||generatedPlayerPlanStructure(true),true);
+}
+
+function playerPlanQuestionsFor(section){
+  const structure=publishedPlayerPlanStructure();
+  return planStructureArray(structure,section).filter(q=>q.active!==false);
+}
+
+function planQuestionSpec(section,key){
+  return playerPlanQuestionsFor(section).find(q=>q.id===key)||null;
+}
+
+function planStructureSectionLabel(section){
+  if(section==='core')return 'Core Player Plan';
+  return FORMATS.find(([k])=>k===section)?.[1]||section;
+}
+
+function collectPlanStructureEditor(){
+  if(!playerPlanStructureWorking)return;
+  const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
+  document.querySelectorAll('[data-plan-question]').forEach(row=>{
+    const q=arr.find(x=>x.id===row.dataset.planQuestion);
+    if(!q)return;
+    q.label=row.querySelector('[data-plan-label]')?.value.trim()||q.label;
+    q.guidance=row.querySelector('[data-plan-guidance]')?.value.trim()||'';
+    q.response_type=row.querySelector('[data-plan-response-type]')?.value==='text'?'text':'choices';
+    q.required=!!row.querySelector('[data-plan-required]')?.checked;
+    if(q.response_type==='choices'){
+      q.options=(row.querySelector('[data-plan-options]')?.value||'')
+        .split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    }
+  });
+}
+
+function markPlanStructureDirty(){
+  playerPlanStructureDirty=true;
+  const save=document.getElementById('savePlanStructure');
+  const st=document.getElementById('planStructureStatus');
+  if(save){save.disabled=false;save.textContent='Save changes';}
+  if(st)st.textContent='Unsaved changes';
+}
+
+function validatePlanStructure(structure){
+  const problems=[];
+  const sections=[['core','Core'],...enabledFormats()];
+  for(const [section,label] of sections){
+    const active=planStructureArray(structure,section).filter(q=>q.active!==false);
+    if(!active.length){problems.push(`${label}: keep at least one question.`);continue;}
+    for(const q of active){
+      if(!q.label?.trim())problems.push(`${label}: every question needs wording.`);
+      if(q.response_type==='choices' && (!Array.isArray(q.options)||q.options.length<2)){
+        problems.push(`${label}: “${q.label||'Untitled question'}” needs at least two answer options, or change it to Written response.`);
+      }
+    }
+  }
+  return problems;
+}
+
+function requiredQuestionGaps(section,raw){
+  return playerPlanQuestionsFor(section)
+    .filter(q=>q.required)
+    .filter(q=>{
+      const a=section==='core'?raw.core?.[q.id]:raw.formats?.[section]?.[q.id];
+      if(!a)return true;
+      return !((a.choices||[]).length || String(a.comment||'').trim());
+    })
+    .map(q=>q.label);
+}
+
+function renderPlanStructureQuestion(q,index,editable=true){
+  const dimLabel=q.source_dimension
+    ?(dimensions.find(d=>d.dimension_key===q.source_dimension)?.label||q.source_dimension)
+    :null;
+  const source=q.source_type==='custom'
+    ?'<span class="plan-source custom">CLUB-SPECIFIC</span>'
+    :q.source_type==='adapted'
+      ?`<span class="plan-source adapted">ADAPTED · ${esc(dimLabel||'generated question')}</span>`
+      :q.source_type==='core'
+        ?'<span class="plan-source core">CORE</span>'
+        :`<span class="plan-source generated">FROM ${esc(dimLabel||'PHILOSOPHY')} · ${esc(WEIGHT_LABELS[q.source_weight]||'')}</span>`;
+  if(!q.active){
+    return `<div class="plan-question-removed"><span>${esc(q.label)}</span>${editable?`<button class="btn ghost" data-plan-restore="${esc(q.id)}">Restore</button>`:''}</div>`;
+  }
+  return `<article class="plan-question-editor" data-plan-question="${esc(q.id)}">
+    <div class="plan-question-editor-head">
+      <div><span class="question-number">${String(index+1).padStart(2,'0')}</span>${source}</div>
+      ${editable?`<div class="plan-order-controls"><button class="mini-icon-btn" data-plan-move="${esc(q.id)}" data-direction="up">↑</button><button class="mini-icon-btn" data-plan-move="${esc(q.id)}" data-direction="down">↓</button></div>`:''}
+    </div>
+    <div class="field"><label>Question</label><input data-plan-label value="${esc(q.label)}" ${editable?'':'disabled'}></div>
+    <div class="field"><label>Why / guidance shown to the player</label><textarea data-plan-guidance rows="2" ${editable?'':'disabled'}>${esc(q.guidance||'')}</textarea></div>
+    <div class="plan-question-settings">
+      <div class="field"><label>Response style</label><select data-plan-response-type ${editable?'':'disabled'}><option value="choices" ${q.response_type!=='text'?'selected':''}>Choose from options</option><option value="text" ${q.response_type==='text'?'selected':''}>Written response</option></select></div>
+      <label class="plan-required-toggle"><input type="checkbox" data-plan-required ${q.required?'checked':''} ${editable?'':'disabled'}><span>Required question</span></label>
+    </div>
+    <div class="field plan-options-field" style="display:${q.response_type==='text'?'none':'block'}"><label>Answer options · one per line</label><textarea data-plan-options rows="5" ${editable?'':'disabled'}>${esc((q.options||[]).join('\n'))}</textarea></div>
+    ${editable?`<div class="btnrow plan-question-actions"><button class="btn ghost" data-plan-duplicate="${esc(q.id)}">Split / duplicate</button><button class="btn ghost danger-lite" data-plan-remove="${esc(q.id)}">Remove from plan</button></div>`:''}
+  </article>`;
+}
+
 function overlayModules(format){
   return topEmphasis(format)
     .filter(x=>x.weight>=2 && QUESTION_LIBRARY[x.key])
@@ -3401,45 +3580,21 @@ async function renderPlanStructure(){
   const page=document.getElementById('page');
   const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
 
-  if(planStructureReady){
-    page.innerHTML='<div class="splash">Loading Player Plan Structure…</div>';
-  }
-
   if(!planStructureReady){
     const lead=isPhilosophyLead();
-
     page.innerHTML=`<section class="card player-gate">
       <div class="gate-state locked">🔒</div>
       <div class="section-label">Player Plan Structure is not available yet</div>
       <h2>Finish How We Bat first.</h2>
       <p>The Player Plan questions are built from the club’s final philosophy and its player-facing <strong>How We Bat</strong> messages. Until those messages are finalised, we would be building the Player Plan against a moving target.</p>
-
-      <div class="notice">
-        <strong>What needs to happen next</strong><br>
-        ${lead
-          ?'Complete the How We Bat Builder and click <strong>Mark How We Bat ready</strong>. Player Plan Structure will then unlock automatically.'
-          :'The Philosophy Lead is still finalising How We Bat. Player Plan Structure will unlock automatically once they mark it ready.'}
-      </div>
-
-      <div class="help" style="margin-top:12px">
-        How We Bat does not need to be published yet. This gate simply ensures the communication layer is settled before the Player Plan Structure is reviewed.
-      </div>
-
-      ${canContributePhilosophy()
-        ?`<div class="btnrow" style="margin-top:14px">
-            <button class="btn secondary" id="backToHowWeBat">${lead?'Go to How We Bat Builder':'View How We Bat'}</button>
-          </div>`
-        :''}
+      <div class="notice"><strong>What needs to happen next</strong><br>${lead?'Complete the How We Bat Builder and click <strong>Mark How We Bat ready</strong>. Player Plan Structure will then unlock automatically.':'The Philosophy Lead is still finalising How We Bat. Player Plan Structure will unlock automatically once they mark it ready.'}</div>
+      ${lead?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">Go to How We Bat Builder</button></div>':''}
     </section>`;
-
-    if(document.getElementById('backToHowWeBat')){
-      document.getElementById('backToHowWeBat').onclick=()=>{
-        currentTab='preview';
-        renderTab();
-      };
-    }
+    if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab='preview';renderTab();};
     return;
   }
+
+  page.innerHTML='<div class="splash">Loading Player Plan Structure…</div>';
 
   let rolloutHtml='';
   let groups=[];
@@ -3454,227 +3609,163 @@ async function renderPlanStructure(){
       supabase.from('player_plan_requirements').select('*').eq('club_id',club.id).eq('active',true).order('format_key').order('due_date',{ascending:true,nullsFirst:true}),
       supabase.rpc('get_plan_rollout_progress',{p_club_id:club.id})
     ]);
-
-    groups=g||[];
-    players=p||[];
-    requirements=r||[];
-
-    if(!progressErr){
-      progressMap=new Map((progress||[]).map(x=>[x.requirement_id,x]));
-    }
-
+    groups=g||[];players=p||[];requirements=r||[];
+    if(!progressErr)progressMap=new Map((progress||[]).map(x=>[x.requirement_id,x]));
     const gMap=new Map(groups.map(x=>[x.id,x]));
     const pMap=new Map(players.map(x=>[x.id,x]));
     const planFormats=philosophyVersions.length?publishedEnabledFormats():formats;
-
     const requirementRows=requirements.map(r=>{
       const label=FORMATS.find(([k])=>k===r.format_key)?.[1]||r.format_key;
-      const target=r.target_type==='all'
-        ?'Everyone'
-        :r.target_type==='playing_group'
-          ?gMap.get(r.playing_group_id)?.name||'Inactive Playing Group'
-          :pMap.get(r.player_id)?.display_name||'Player';
+      const target=r.target_type==='all'?'Everyone':r.target_type==='playing_group'?(gMap.get(r.playing_group_id)?.name||'Inactive Playing Group'):(pMap.get(r.player_id)?.display_name||'Player');
       const prog=progressMap.get(r.id);
-      const progressText=prog
-        ?`${prog.completed_count}/${prog.eligible_count} complete`
-        :'Progress unavailable';
-      return `<div class="rollout-rule-row">
-        <div><strong>${esc(label)}</strong><span>${esc(target)}</span></div>
-        <div><strong>${r.due_date?`Due ${esc(niceDate(r.due_date))}`:'Required now'}</strong><span>${esc(progressText)}</span></div>
-        <button class="btn ghost danger-lite" data-remove-plan-requirement="${r.id}">Remove</button>
-      </div>`;
+      return `<div class="rollout-rule-row"><div><strong>${esc(label)}</strong><span>${esc(target)}</span></div><div><strong>${r.due_date?`Due ${esc(niceDate(r.due_date))}`:'Required now'}</strong><span>${prog?`${prog.completed_count}/${prog.eligible_count} complete`:'Progress unavailable'}</span></div><button class="btn ghost danger-lite" data-remove-plan-requirement="${r.id}">Remove</button></div>`;
     }).join('');
-
     rolloutHtml=`<section class="card plan-rollout-card" style="margin-top:16px">
-      <div class="section-label">Player Plan Rollout</div>
-      <h2>Set requirements — not locks.</h2>
+      <div class="section-label">Player Plan Rollout</div><h2>Set requirements — not locks.</h2>
       <div class="help">Every enabled format remains available to every player from day one. Use this section only to say <strong>what is required, for whom, and by when</strong>. Players can always work ahead.</div>
-
-      <div class="rollout-principle">
-        <strong>Example</strong>
-        <span>Limited Overs → Everyone → 25 Sep &nbsp; · &nbsp; T20 → U16 → 5 Oct &nbsp; · &nbsp; T20 → Dennis Broad Cup — Eligible Pool → 20 Oct</span>
-      </div>
-
       <div class="rollout-builder">
-        <div class="field">
-          <label>Format</label>
-          <select id="rolloutFormat">
-            ${planFormats.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Who is this required for?</label>
-          <select id="rolloutTargetType">
-            <option value="all">Everyone</option>
-            <option value="playing_group">A Playing Group</option>
-            <option value="player">One player</option>
-          </select>
-        </div>
-
-        <div class="field" id="rolloutTargetBox" style="display:none">
-          <label id="rolloutTargetLabel">Playing Group</label>
-          <select id="rolloutTarget"></select>
-        </div>
-
-        <div class="field">
-          <label>Required by</label>
-          <input id="rolloutDueDate" type="date">
-          <small>Optional. Leave blank for “Required now”.</small>
-        </div>
-
-        <div class="rollout-add-action">
-          <button class="btn secondary" id="addPlanRequirement">Add requirement</button>
-          <span class="status" id="rolloutStatus"></span>
-        </div>
+        <div class="field"><label>Format</label><select id="rolloutFormat">${planFormats.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select></div>
+        <div class="field"><label>Who is this required for?</label><select id="rolloutTargetType"><option value="all">Everyone</option><option value="playing_group">A Playing Group</option><option value="player">One player</option></select></div>
+        <div class="field" id="rolloutTargetBox" style="display:none"><label id="rolloutTargetLabel">Playing Group</label><select id="rolloutTarget"></select></div>
+        <div class="field"><label>Required by</label><input id="rolloutDueDate" type="date"><small>Optional. Leave blank for “Required now”.</small></div>
+        <div class="rollout-add-action"><button class="btn secondary" id="addPlanRequirement">Add requirement</button><span class="status" id="rolloutStatus"></span></div>
       </div>
-
-      <div class="rollout-current">
-        <h3>Current requirements</h3>
-        ${requirementRows||'<div class="notice compact">No deadlines have been set yet. Players can still complete any available format now.</div>'}
-      </div>
+      <div class="rollout-current"><h3>Current requirements</h3>${requirementRows||'<div class="notice compact">No deadlines have been set yet. Players can still complete any available format now.</div>'}</div>
     </section>`;
   }
 
+  const editable=isPhilosophyLead();
+  if(!playerPlanStructureWorking){
+    playerPlanStructureWorking=normalisePlayerPlanStructure(playerPlanStructureDraft?.structure||generatedPlayerPlanStructure(false),false);
+    playerPlanStructureDirty=!playerPlanStructureDraft;
+  }
+  const validSections=['core',...formats.map(([k])=>k)];
+  if(!validSections.includes(playerPlanStructureSection))playerPlanStructureSection='core';
+  const sectionArray=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
+  const activeQuestions=sectionArray.filter(q=>q.active!==false);
+  const removedQuestions=sectionArray.filter(q=>q.active===false);
+  const structureReady=playerPlanStructureDraft?.status==='ready' && !playerPlanStructureDirty;
+  const structureSaved=!!playerPlanStructureDraft && !playerPlanStructureDirty;
+
+  const sectionTabs=[['core','Core'],...formats].map(([k,l])=>`<button class="${playerPlanStructureSection===k?'active':''}" data-plan-section="${k}">${esc(l)}</button>`).join('');
+  const questionsHtml=activeQuestions.map((q,i)=>renderPlanStructureQuestion(q,i,editable)).join('')||'<div class="notice">No questions are currently included in this section.</div>';
+  const removedHtml=removedQuestions.length?`<details class="plan-removed-list"><summary>Removed from this section (${removedQuestions.length})</summary>${removedQuestions.map(q=>renderPlanStructureQuestion(q,0,editable)).join('')}</details>`:'';
+
   const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
-  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>
-    v.published_at && new Date(v.published_at)>=draftStartedAt
-  );
+  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>v.published_at&&new Date(v.published_at)>=draftStartedAt);
   const latestVersion=philosophyVersions?.[0]?.version_number||null;
-
   const releaseHtml=currentDraftPublished
-    ?`<section class="card club-system-release published-release" style="margin-top:16px">
-        <div class="section-label">Club Batting System</div>
-        <h2>Published ✓</h2>
-        <div class="notice">
-          <strong>Club Batting System v${esc(latestVersion||'')}</strong><br>
-          The Philosophy, How We Bat and Player Plan framework for this release are live.
-        </div>
-      </section>`
+    ?`<section class="card club-system-release published-release" style="margin-top:16px"><div class="section-label">Club Batting System</div><h2>Published ✓</h2><div class="notice"><strong>Club Batting System v${esc(latestVersion||'')}</strong><br>The Philosophy, How We Bat and Player Plan Structure for this release are live.</div></section>`
     :isPhilosophyLead()
-      ?`<section class="card club-system-release" style="margin-top:16px">
-          <div class="section-label">Final step</div>
-          <h2>Publish Club Batting System</h2>
-          <div class="help">Publishing is the point at which the club moves from <strong>building</strong> to <strong>live</strong>. Nothing above is public to players merely because How We Bat is marked Ready.</div>
+      ?`<section class="card club-system-release" style="margin-top:16px"><div class="section-label">Final step</div><h2>Publish Club Batting System</h2><div class="release-checklist">
+          <div class="release-check done"><span>✓</span><div><strong>Final Philosophy</strong><small>Working draft created from the workshop synthesis.</small></div></div>
+          <div class="release-check done"><span>✓</span><div><strong>How We Bat</strong><small>Marked Ready across the club’s enabled formats.</small></div></div>
+          <div class="release-check ${structureReady?'done':'optional'}"><span>${structureReady?'✓':'○'}</span><div><strong>Player Plan Structure</strong><small>${structureReady?'Reviewed and marked Ready.':'Review the questions and mark this structure Ready before publishing.'}</small></div></div>
+          <div class="release-check ${requirements.length?'done':'optional'}"><span>${requirements.length?'✓':'○'}</span><div><strong>Rollout requirements</strong><small>${requirements.length?`${requirements.length} active requirement${requirements.length===1?'':'s'} set.`:'Optional — players can still complete all enabled formats without deadlines.'}</small></div></div>
+        </div>
+        <div class="notice release-warning"><strong>When you publish</strong><br>Philosophy + How We Bat + this exact Player Plan Structure are versioned together. Player Plans then open to players.</div>
+        <div class="btnrow"><button class="btn secondary" id="publishClubSystem" ${structureReady?'':'disabled'}>${structureReady?'Publish Club Batting System':'Mark Player Plan Structure ready first'}</button><span class="status" id="publishClubSystemStatus"></span></div></section>`
+      :`<section class="card club-system-release" style="margin-top:16px"><div class="section-label">Final step</div><h2>Waiting for the Philosophy Lead.</h2><div class="help">The Philosophy Lead controls the final Player Plan Structure and publication.</div></section>`;
 
-          <div class="release-checklist">
-            <div class="release-check done"><span>✓</span><div><strong>Final Philosophy</strong><small>Working draft created from the workshop synthesis.</small></div></div>
-            <div class="release-check done"><span>✓</span><div><strong>How We Bat</strong><small>Marked Ready across the club’s enabled formats.</small></div></div>
-            <div class="release-check done"><span>✓</span><div><strong>Player Plan Structure</strong><small>You are reviewing the final structure now.</small></div></div>
-            <div class="release-check ${requirements.length?'done':'optional'}"><span>${requirements.length?'✓':'○'}</span><div><strong>Rollout requirements</strong><small>${requirements.length?`${requirements.length} active requirement${requirements.length===1?'':'s'} set.`:'Optional — players can still complete all enabled formats without deadlines.'}</small></div></div>
-          </div>
-
-          <div class="notice release-warning">
-            <strong>When you publish</strong><br>
-            Philosophy + How We Bat are versioned together, Player Plans open to players, and the first release queues the “your Player Plan is ready” notification.
-          </div>
-
-          <div class="btnrow">
-            <button class="btn secondary" id="publishClubSystem">Publish Club Batting System</button>
-            <span class="status" id="publishClubSystemStatus"></span>
-          </div>
-        </section>`
-      :`<section class="card club-system-release" style="margin-top:16px">
-          <div class="section-label">Final step</div>
-          <h2>Ready for the Philosophy Lead to publish.</h2>
-          <div class="help">Only the Philosophy Lead can publish the Club Batting System. They will publish the Philosophy and How We Bat together once the Player Plan Structure has been reviewed.</div>
-        </section>`;
-
-  page.innerHTML=`<div class="grid">
-    <section class="card">
-      <div class="section-label">Always the same player</div>
-      <h2>Core reflection</h2>
-      <div class="modules">
-        ${[
-          ['Trusted strengths','Structured choices + optional comments'],
-          ['Danger + Reset','Structured danger signs and reset cues'],
-          ['Current Focus','Choose priorities, then refine with coach']
-        ].map((m,i)=>`<div class="module"><div class="icon">${i+1}</div><div><strong>${m[0]}</strong><p>${m[1]}</p></div><div class="badge">CORE</div></div>`).join('')}
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="section-label">Questions morph by club + format</div>
-      <h2>Format overlays</h2>
-      ${formats.map(([f,l])=>`<h3>${l}</h3><div class="modules">
-        ${overlayModules(f).map((m,i)=>`<div class="module"><div class="icon">${i+1}</div><div><strong>${esc(m.label)}</strong><p>Asked because ${esc(dimensions.find(d=>d.dimension_key===m.key)?.label||m.key)} is ${WEIGHT_LABELS[m.weight].toLowerCase()} in this format.</p></div><div class="badge format">${WEIGHT_LABELS[m.weight]}</div></div>`).join('')||'<div class="notice">No overlay modules yet.</div>'}
-      </div>`).join('')}
-    </section>
-  </div>
+  page.innerHTML=`<section class="card plan-structure-builder-card">
+    <div class="plan-structure-builder-head"><div><div class="section-label">Player Plan Structure Builder</div><h2>Decide what players actually need to think about.</h2><div class="help">The system has generated a structure from the philosophy. This is a <strong>draft</strong>. Keep, remove, reword, reorder or split questions — and add club-specific questions where the generated version is not quite right.</div></div>
+      <div class="plan-structure-state ${structureReady?'ready':'draft'}"><strong>${structureReady?'STRUCTURE READY':structureSaved?'DRAFT SAVED':'WORKING DRAFT'}</strong><span>${structureReady?'Ready for publication.':editable?'Nothing goes live until you publish.':'View only.'}</span></div>
+    </div>
+    <div class="notice plan-structure-rule"><strong>Philosophy tells us what matters. Player Plan Structure decides what players are asked.</strong><br>Removing a question does not remove that idea from How We Bat or the underlying philosophy.</div>
+    <div class="plan-structure-tabs">${sectionTabs}</div>
+    <div class="plan-section-head"><div><div class="section-label">${esc(planStructureSectionLabel(playerPlanStructureSection))}</div><h3>${activeQuestions.length} question${activeQuestions.length===1?'':'s'} included</h3></div>${editable?'<button class="btn ghost" id="addPlanQuestion">+ Add club-specific question</button>':''}</div>
+    <div class="plan-question-editor-list">${questionsHtml}</div>
+    ${removedHtml}
+    ${editable?`<div class="btnrow plan-structure-actions"><button class="btn secondary" id="savePlanStructure" ${structureSaved?'disabled':''}>${structureSaved?'Saved ✓':'Save Player Plan Structure'}</button>${structureReady?'<button class="btn ghost" id="reopenPlanStructure">Reopen for editing</button>':'<button class="btn secondary" id="readyPlanStructure">Mark Player Plan Structure ready</button>'}<span class="status" id="planStructureStatus">${structureReady?'Ready ✓':''}</span></div>`:''}
+  </section>
   ${rolloutHtml}
   ${releaseHtml}`;
 
-  if(document.getElementById('publishClubSystem')){
-    document.getElementById('publishClubSystem').onclick=publishPhilosophy;
+  document.querySelectorAll('[data-plan-section]').forEach(b=>b.onclick=()=>{collectPlanStructureEditor();playerPlanStructureSection=b.dataset.planSection;renderPlanStructure();});
+
+  if(editable){
+    document.querySelectorAll('[data-plan-question] input,[data-plan-question] textarea,[data-plan-question] select').forEach(el=>{
+      el.addEventListener('input',()=>{const row=el.closest('[data-plan-question]');if(el.matches('[data-plan-response-type]')){const f=row.querySelector('.plan-options-field');if(f)f.style.display=el.value==='text'?'none':'block';}markPlanStructureDirty();});
+      el.addEventListener('change',markPlanStructureDirty);
+    });
+
+    document.getElementById('addPlanQuestion').onclick=()=>{
+      collectPlanStructureEditor();
+      const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
+      arr.push({id:`custom_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,source_type:'custom',source_dimension:null,source_weight:null,label:'New club-specific question',guidance:'What do you want the player to think about here?',response_type:'choices',options:['Option 1','Option 2'],required:false,active:true});
+      playerPlanStructureDirty=true;renderPlanStructure();
+    };
+
+    document.querySelectorAll('[data-plan-duplicate]').forEach(b=>b.onclick=()=>{
+      collectPlanStructureEditor();
+      const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
+      const i=arr.findIndex(q=>q.id===b.dataset.planDuplicate);if(i<0)return;
+      const q=arr[i];
+      const copy=structuredClone(q);
+      copy.id=`adapted_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+      copy.source_type=q.source_dimension?'adapted':'custom';
+      copy.label=`${q.label} — new question`;
+      arr.splice(i+1,0,copy);playerPlanStructureDirty=true;renderPlanStructure();
+    });
+
+    document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{
+      collectPlanStructureEditor();
+      const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
+      const q=arr.find(x=>x.id===b.dataset.planRemove);if(!q)return;
+      if(q.source_dimension && Number(q.source_weight)===4){
+        const other=arr.some(x=>x.active!==false&&x.id!==q.id&&x.source_dimension===q.source_dimension);
+        if(!other){
+          const dim=dimensions.find(d=>d.dimension_key===q.source_dimension)?.label||q.source_dimension;
+          const ok=confirm(`${dim} is a VERY HIGH part of this format philosophy.\n\nRemoving this question means players will no longer be directly asked to reflect on it in this section.\n\nRemove anyway?`);
+          if(!ok)return;
+        }
+      }
+      q.active=false;playerPlanStructureDirty=true;renderPlanStructure();
+    });
+
+    document.querySelectorAll('[data-plan-restore]').forEach(b=>b.onclick=()=>{const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);const q=arr.find(x=>x.id===b.dataset.planRestore);if(q){q.active=true;playerPlanStructureDirty=true;renderPlanStructure();}});
+
+    document.querySelectorAll('[data-plan-move]').forEach(b=>b.onclick=()=>{
+      collectPlanStructureEditor();
+      const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
+      const activeIdx=arr.map((q,i)=>q.active!==false?i:null).filter(i=>i!==null);
+      const pos=activeIdx.findIndex(i=>arr[i].id===b.dataset.planMove);if(pos<0)return;
+      const otherPos=b.dataset.direction==='up'?pos-1:pos+1;if(otherPos<0||otherPos>=activeIdx.length)return;
+      const a=activeIdx[pos],c=activeIdx[otherPos];[arr[a],arr[c]]=[arr[c],arr[a]];playerPlanStructureDirty=true;renderPlanStructure();
+    });
+
+    document.getElementById('savePlanStructure').onclick=()=>savePlayerPlanStructure('draft');
+    if(document.getElementById('readyPlanStructure'))document.getElementById('readyPlanStructure').onclick=()=>savePlayerPlanStructure('ready');
+    if(document.getElementById('reopenPlanStructure'))document.getElementById('reopenPlanStructure').onclick=async()=>{const ok=confirm('Reopen the Player Plan Structure for editing? It will need to be marked Ready again before publishing.');if(ok)await savePlayerPlanStructure('draft');};
   }
 
-  if(!isAdmin())return;
+  if(document.getElementById('publishClubSystem'))document.getElementById('publishClubSystem').onclick=publishPhilosophy;
 
-  const updateTargetPicker=()=>{
-    const type=document.getElementById('rolloutTargetType').value;
-    const box=document.getElementById('rolloutTargetBox');
-    const select=document.getElementById('rolloutTarget');
-    const label=document.getElementById('rolloutTargetLabel');
+  if(isAdmin()){
+    const updateTargetPicker=()=>{const type=document.getElementById('rolloutTargetType').value;const box=document.getElementById('rolloutTargetBox');const select=document.getElementById('rolloutTarget');const label=document.getElementById('rolloutTargetLabel');if(type==='all'){box.style.display='none';select.innerHTML='';return;}box.style.display='block';if(type==='playing_group'){label.textContent='Playing Group';select.innerHTML=groups.length?groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join(''):'<option value="">No active Playing Groups</option>';}else{label.textContent='Player';select.innerHTML=players.length?players.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join(''):'<option value="">No active players</option>';}};
+    document.getElementById('rolloutTargetType').onchange=updateTargetPicker;updateTargetPicker();
+    document.getElementById('addPlanRequirement').onclick=async()=>{const st=document.getElementById('rolloutStatus');const type=document.getElementById('rolloutTargetType').value;const target=type==='all'?null:document.getElementById('rolloutTarget').value||null;if(type!=='all'&&!target){st.textContent=type==='playing_group'?'Create or choose a Playing Group first.':'Choose a player.';return;}st.textContent='Adding…';const {error}=await supabase.rpc('create_plan_requirement',{p_club_id:club.id,p_format_key:document.getElementById('rolloutFormat').value,p_target_type:type,p_playing_group_id:type==='playing_group'?target:null,p_player_id:type==='player'?target:null,p_due_date:document.getElementById('rolloutDueDate').value||null});if(error){st.textContent=error.message;return;}await renderPlanStructure();};
+    document.querySelectorAll('[data-remove-plan-requirement]').forEach(b=>b.onclick=async()=>{const ok=confirm('Remove this Player Plan requirement? Players keep any work they have already completed.');if(!ok)return;const {error}=await supabase.rpc('deactivate_plan_requirement',{p_requirement_id:b.dataset.removePlanRequirement});if(error){alert(error.message);return;}await renderPlanStructure();});
+  }
+}
 
-    if(type==='all'){
-      box.style.display='none';
-      select.innerHTML='';
-      return;
-    }
-
-    box.style.display='block';
-
-    if(type==='playing_group'){
-      label.textContent='Playing Group';
-      select.innerHTML=groups.length
-        ?groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')
-        :'<option value="">No active Playing Groups</option>';
-    }else{
-      label.textContent='Player';
-      select.innerHTML=players.length
-        ?players.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join('')
-        :'<option value="">No active players</option>';
-    }
-  };
-
-  document.getElementById('rolloutTargetType').onchange=updateTargetPicker;
-  updateTargetPicker();
-
-  document.getElementById('addPlanRequirement').onclick=async()=>{
-    const st=document.getElementById('rolloutStatus');
-    const type=document.getElementById('rolloutTargetType').value;
-    const target=type==='all'?null:document.getElementById('rolloutTarget').value||null;
-
-    if(type!=='all'&&!target){
-      st.textContent=type==='playing_group'?'Create or choose a Playing Group first.':'Choose a player.';
-      return;
-    }
-
-    st.textContent='Adding…';
-    const {error}=await supabase.rpc('create_plan_requirement',{
-      p_club_id:club.id,
-      p_format_key:document.getElementById('rolloutFormat').value,
-      p_target_type:type,
-      p_playing_group_id:type==='playing_group'?target:null,
-      p_player_id:type==='player'?target:null,
-      p_due_date:document.getElementById('rolloutDueDate').value||null
-    });
-
-    if(error){st.textContent=error.message;return;}
-    await renderPlanStructure();
-  };
-
-  document.querySelectorAll('[data-remove-plan-requirement]').forEach(b=>b.onclick=async()=>{
-    const ok=confirm('Remove this Player Plan requirement? Players keep any work they have already completed.');
+async function savePlayerPlanStructure(status){
+  collectPlanStructureEditor();
+  const st=document.getElementById('planStructureStatus');
+  const btn=status==='ready'?document.getElementById('readyPlanStructure'):document.getElementById('savePlanStructure');
+  if(status==='ready'){
+    const problems=validatePlanStructure(playerPlanStructureWorking);
+    if(problems.length){alert(`Player Plan Structure still needs attention:\n\n${problems.slice(0,8).join('\n')}`);return;}
+    const ok=confirm('Mark Player Plan Structure ready?\n\nThis freezes the current question structure for final review and enables Publish Club Batting System. It does not publish anything yet.');
     if(!ok)return;
-
-    const {error}=await supabase.rpc('deactivate_plan_requirement',{
-      p_requirement_id:b.dataset.removePlanRequirement
-    });
-
-    if(error){alert(error.message);return;}
-    await renderPlanStructure();
-  });
+  }
+  if(btn){btn.disabled=true;btn.textContent=status==='ready'?'Saving…':'Saving…';}
+  if(st)st.textContent='Saving…';
+  const {error}=await supabase.rpc('save_player_plan_structure_draft',{p_club_id:club.id,p_structure:playerPlanStructureWorking,p_status:status});
+  if(error){if(st)st.textContent=error.message;if(btn){btn.disabled=false;btn.textContent=status==='ready'?'Mark Player Plan Structure ready':'Save changes';}return;}
+  await loadData();
+  playerPlanStructureSection=playerPlanStructureSection||'core';
+  await renderPlanStructure();
 }
 
 async function submitPhilosophyResponse(){
@@ -4394,44 +4485,18 @@ async function renderMyPlan(){
 }
 
 function renderQuestions(section){
-  if(section==='core'){
-    const keys=['core_strengths','core_danger','core_reset','core_focus'];
-    return keys.map(k=>renderQuestion(section,k,QUESTION_LIBRARY[k])).join('');
-  }
-
-  const modules=publishedTopEmphasis(section)
-    .filter(x=>x.weight>=2 && QUESTION_LIBRARY[x.key]);
-
-  if(!modules.length){
-    return '<div class="notice">Your club has not given this format any Player Plan dimensions yet.</div>';
-  }
-
-  return modules.map(x=>{
-    const spec=questionSpecFor(section,x.key);
-    const dim=dimensions.find(d=>d.dimension_key===x.key);
-
-    return renderQuestion(section,x.key,{
-      ...spec,
-      why:`${dim?.label||spec.label} is ${WEIGHT_LABELS[x.weight].toLowerCase()} in your club’s ${FORMATS.find(([k])=>k===section)?.[1]||section} philosophy.`
-    });
-  }).join('');
+  const questions=playerPlanQuestionsFor(section);
+  if(!questions.length)return '<div class="notice">Your club has not included any Player Plan questions in this section.</div>';
+  return questions.map(q=>renderQuestion(section,q.id,q)).join('');
 }
 
 function renderQuestion(section,key,spec){
   const a=answerFor(section,key);
-  return `<div class="question">
-    <h3>${esc(spec.label)}</h3>
-    <div class="why">${esc(spec.why||'Choose all that genuinely apply.')}</div>
-    <div class="option-grid">
-      ${(spec.options||[]).map((o,i)=>{
-        const id=`q_${section}_${key}_${i}`;
-        return `<label class="option-chip"><input type="checkbox" id="${id}" data-answer-section="${section}" data-answer-key="${key}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;
-      }).join('')}
-    </div>
-    <div class="optional-comment">
-      <textarea data-comment-key="${key}" data-comment-section="${section}" placeholder="Anything else? Optional.">${esc(a.comment||'')}</textarea>
-    </div>
-  </div>`;
+  const badge=spec.required?'<span class="question-requirement required">REQUIRED</span>':'<span class="question-requirement optional">OPTIONAL</span>';
+  if(spec.response_type==='text'){
+    return `<div class="question"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Write the response that best describes your game.')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Your response…">${esc(a.comment||'')}</textarea></div></div>`;
+  }
+  return `<div class="question"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${(spec.options||[]).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Anything else? Optional.">${esc(a.comment||'')}</textarea></div></div>`;
 }
 
 let localRaw=null;
@@ -4446,7 +4511,10 @@ function collectBuilderAnswers(){
     if(!localRaw.formats[section])localRaw.formats[section]={};
   }
 
-  const keys=[...new Set([...document.querySelectorAll('[data-answer-key]')].map(x=>x.dataset.answerKey))];
+  const keys=[...new Set([
+    ...[...document.querySelectorAll('[data-answer-key]')].map(x=>x.dataset.answerKey),
+    ...[...document.querySelectorAll('[data-comment-key]')].map(x=>x.dataset.commentKey)
+  ])];
 
   for(const key of keys){
     const choices=[...document.querySelectorAll(`[data-answer-key="${key}"][data-answer-section="${section}"]:checked`)].map(x=>x.value);
@@ -4459,33 +4527,20 @@ function collectBuilderAnswers(){
 
 function curate(raw){
   const result={core:[],formats:{}};
-
-  const coreLabels={
-    core_strengths:'Trusted strengths',
-    core_danger:'My danger',
-    core_reset:'My reset',
-    core_focus:'Current focus'
-  };
-
-  for(const [k,label] of Object.entries(coreLabels)){
-    const a=raw.core?.[k];
-    if(!a)continue;
-    const bits=[...(a.choices||[])];
-    if(a.comment)bits.push(a.comment);
-    if(bits.length)result.core.push({label,value:bits.join(' · ')});
+  for(const q of playerPlanQuestionsFor('core')){
+    const a=raw.core?.[q.id];if(!a)continue;
+    const bits=[...(a.choices||[])];if(a.comment)bits.push(a.comment);
+    if(bits.length)result.core.push({label:q.label,value:bits.join(' · ')});
   }
-
-  for(const [f,label] of enabledFormats()){
+  for(const [f,label] of publishedEnabledFormats()){
     const lines=[];
-    for(const [k,a] of Object.entries(raw.formats?.[f]||{})){
-      const spec=QUESTION_LIBRARY[k];
-      const bits=[...(a.choices||[])];
-      if(a.comment)bits.push(a.comment);
-      if(bits.length)lines.push({label:spec?.label||k,value:bits.join(' · ')});
+    for(const q of playerPlanQuestionsFor(f)){
+      const a=raw.formats?.[f]?.[q.id];if(!a)continue;
+      const bits=[...(a.choices||[])];if(a.comment)bits.push(a.comment);
+      if(bits.length)lines.push({label:q.label,value:bits.join(' · ')});
     }
     result.formats[f]={label,lines};
   }
-
   return result;
 }
 
@@ -4515,6 +4570,14 @@ function renderCuratedDraft(curated){
 async function saveSectionCompletion(section,complete){
   collectBuilderAnswers();
   const raw=localRaw||rawAnswers();
+  if(complete){
+    const gaps=requiredQuestionGaps(section,raw);
+    if(gaps.length){
+      const st=document.getElementById('builderStatus');
+      if(st)st.textContent=`Complete the required questions first: ${gaps.slice(0,3).join(', ')}${gaps.length>3?'…':''}`;
+      return;
+    }
+  }
   const curated=curate(raw);
   const sectionStatus=structuredClone(workflow?.section_status||{});
 
