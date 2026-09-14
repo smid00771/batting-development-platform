@@ -615,7 +615,10 @@ function renderShell(){
   document.documentElement.style.setProperty('--red',club.accent_colour||'#d8232a');
 
   const nav=[];
-  if(isAdmin())nav.push(['dashboard','Club Setup']);
+  if(isAdmin()){
+    nav.push(['dashboard','Club Setup']);
+    nav.push(['groups','Playing Groups']);
+  }
   if(isAdmin() || canContributePhilosophy() || isPhilosophyLead()){
     nav.push(['workshop','Philosophy Workshop']);
   }
@@ -624,9 +627,11 @@ function renderShell(){
       ['identity','1. Club Identity'],
       ['dimensions','2. What We Value'],
       ['formats','3. Format Emphasis'],
-      ['preview',workshop?.final_draft_ready&&isPhilosophyLead()?'4. How We Bat Builder':'4. How We Bat'],
-      ['plan','5. Player Plan Structure']
+      ['preview',workshop?.final_draft_ready&&isPhilosophyLead()?'4. How We Bat Builder':'4. How We Bat']
     );
+  }
+  if(canContributePhilosophy() || isAdmin()){
+    nav.push(['plan',canContributePhilosophy()?'5. Player Plan Structure':'Player Plan Structure']);
   }
   if(isAdmin())nav.push(['permissions','Permissions']);
   if(howWeBatVersions.length)nav.push(['howwebat','How We Bat']);
@@ -890,6 +895,7 @@ function renderTab(){
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
   const map={
     dashboard:renderClubDashboard,
+    groups:renderPlayingGroups,
     workshop:renderWorkshop,
     identity:renderIdentity,
     dimensions:renderDimensions,
@@ -947,6 +953,7 @@ async function renderClubDashboard(){
         ${!hasLead?'<button class="btn secondary" data-go="workshop">Choose Philosophy Lead</button>':''}
         ${hasLead&&!published?'<button class="btn secondary" data-go="workshop">Continue Philosophy Workshop</button>':''}
         ${published?'<button class="btn secondary" data-go="permissions">Invite / manage people</button>':''}
+        <button class="btn ghost" data-go="groups">Manage Playing Groups</button>
       </div>
     </section>
     <section class="card">
@@ -973,6 +980,288 @@ async function renderClubDashboard(){
 
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;renderTab();});
 }
+
+
+/* ---------------- PLAYING GROUPS ---------------- */
+
+async function renderPlayingGroups(){
+  const page=document.getElementById('page');
+  page.innerHTML='<div class="splash">Loading Playing Groups…</div>';
+
+  const [{data:groups,error:gErr},{data:players,error:pErr},{data:assignments,error:aErr}]=await Promise.all([
+    supabase.from('playing_groups').select('*').eq('club_id',club.id).order('active',{ascending:false}).order('sort_order').order('name'),
+    supabase.from('players').select('id,user_id,display_name,active').eq('club_id',club.id).eq('active',true).order('display_name'),
+    supabase.from('player_playing_groups').select('*').eq('club_id',club.id)
+  ]);
+
+  if(gErr||pErr||aErr){
+    page.innerHTML=`<div class="notice">${esc((gErr||pErr||aErr).message)}</div>`;
+    return;
+  }
+
+  const activeGroups=(groups||[]).filter(g=>g.active);
+  const inactiveGroups=(groups||[]).filter(g=>!g.active);
+  const byPlayer=new Map();
+
+  for(const a of assignments||[]){
+    if(!byPlayer.has(a.player_id))byPlayer.set(a.player_id,[]);
+    byPlayer.get(a.player_id).push(a.playing_group_id);
+  }
+
+  const groupMap=new Map((groups||[]).map(g=>[g.id,g]));
+  const unassigned=(players||[]).filter(p=>(byPlayer.get(p.id)||[]).filter(id=>groupMap.get(id)?.active).length===0);
+
+  const renderGroupRow=(g,i,list)=>`<div class="playing-group-row ${g.active?'':'inactive'}">
+    <div class="playing-group-order">
+      <button class="mini-icon-btn" data-move-group="${g.id}" data-direction="up" ${i===0?'disabled':''} title="Move up">↑</button>
+      <button class="mini-icon-btn" data-move-group="${g.id}" data-direction="down" ${i===list.length-1?'disabled':''} title="Move down">↓</button>
+    </div>
+    <div class="playing-group-name">
+      <input value="${esc(g.name)}" data-group-name="${g.id}" ${g.active?'':'disabled'}>
+      <small>${g.active?'Stable coaching / eligibility group':'Inactive · historical assignments retained'}</small>
+    </div>
+    <div class="btnrow">
+      ${g.active?`
+        <button class="btn ghost" data-rename-group="${g.id}">Save name</button>
+        <button class="btn ghost danger-lite" data-toggle-group="${g.id}" data-active="false">Deactivate</button>
+      `:`<button class="btn ghost" data-toggle-group="${g.id}" data-active="true">Reactivate</button>`}
+    </div>
+  </div>`;
+
+  page.innerHTML=`<div class="grid playing-groups-top">
+    <section class="card">
+      <div class="section-label">Club Setup · Playing Groups</div>
+      <h2>Use the groups your club actually uses.</h2>
+      <div class="help">Playing Groups can be grades, junior sides, XI teams, development pools or competition eligibility groups. A player can belong to more than one.</div>
+
+      <div class="notice" style="margin-top:14px">
+        <strong>Playing Groups are not weekly team sheets.</strong><br>
+        Use stable groups such as <em>U16</em>, <em>3rd Grade</em>, <em>Senior Lower Grades</em> or <em>Dennis Broad Cup — Eligible Pool</em>. Weekly selection can change without needing to update this system.
+      </div>
+
+      <div class="new-group-row">
+        <input id="newPlayingGroupName" placeholder="e.g. U16, 3rd Grade, Sunday T20 Eligible Pool">
+        <button class="btn secondary" id="addPlayingGroup">+ Add Playing Group</button>
+      </div>
+      <div id="playingGroupStatus" class="help"></div>
+
+      <div class="playing-group-list">
+        ${activeGroups.length
+          ?activeGroups.map((g,i)=>renderGroupRow(g,i,activeGroups)).join('')
+          :'<div class="notice compact">No Playing Groups yet. Add the groups your club needs — there is no predefined list.</div>'}
+      </div>
+
+      ${inactiveGroups.length?`<details class="inactive-groups">
+        <summary>Inactive Playing Groups (${inactiveGroups.length})</summary>
+        <div class="playing-group-list">${inactiveGroups.map((g,i)=>renderGroupRow(g,i,inactiveGroups)).join('')}</div>
+      </details>`:''}
+    </section>
+
+    <section class="card">
+      <div class="section-label">New players</div>
+      <h2>Unassigned is a valid starting point.</h2>
+      <div class="help">Players register themselves through the normal Player QR/link. They do <strong>not</strong> guess which grade they are in. The club assigns Playing Groups later, when it actually knows.</div>
+
+      <div class="unassigned-summary">
+        <strong>${unassigned.length}</strong>
+        <span>active player${unassigned.length===1?'':'s'} currently unassigned</span>
+      </div>
+
+      ${unassigned.length&&activeGroups.length?`
+        <div class="bulk-assignment-box">
+          <div class="bulk-player-list">
+            ${unassigned.map(p=>`<label><input type="checkbox" data-unassigned-player="${p.id}"><span>${esc(p.display_name)}</span></label>`).join('')}
+          </div>
+          <div class="bulk-assignment-actions">
+            <select id="bulkPlayingGroup">
+              <option value="">Choose Playing Group…</option>
+              ${activeGroups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+            </select>
+            <button class="btn secondary" id="assignSelectedPlayers">Add selected players</button>
+          </div>
+          <div id="bulkAssignmentStatus" class="help"></div>
+        </div>
+      `:unassigned.length?'<div class="notice compact">Create at least one Playing Group before assigning players.</div>':'<div class="notice compact">Everyone currently belongs to at least one active Playing Group.</div>'}
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:16px">
+    <div class="player-assignment-head">
+      <div>
+        <div class="section-label">Player assignments</div>
+        <h2>One player can belong to several groups.</h2>
+        <div class="help">Group membership controls rollout requirements, filtering and group-based coach/captain access. It never deletes or changes a player’s plan.</div>
+      </div>
+      <input id="groupPlayerSearch" class="player-search" placeholder="Search players…">
+    </div>
+
+    ${activeGroups.length?`<div class="group-bulk-tool">
+      <div>
+        <strong>Bulk add a pool of players</strong>
+        <span>Useful for groups such as “Dennis Broad Cup — Eligible Pool”. Choose an existing group (or everyone/unassigned), then add that whole pool to another group.</span>
+      </div>
+      <select id="bulkSourceGroup">
+        <option value="all">All active players</option>
+        <option value="unassigned">Currently unassigned</option>
+        ${activeGroups.map(g=>`<option value="${g.id}">Players in ${esc(g.name)}</option>`).join('')}
+      </select>
+      <span class="bulk-arrow">→</span>
+      <select id="bulkTargetGroup">
+        <option value="">Add to Playing Group…</option>
+        ${activeGroups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+      </select>
+      <button class="btn ghost" id="bulkAddPool">Add pool</button>
+      <span id="bulkPoolStatus" class="status"></span>
+    </div>`:''}
+
+    <div class="player-group-assignment-list">
+      ${(players||[]).map(p=>{
+        const assigned=(byPlayer.get(p.id)||[])
+          .map(id=>groupMap.get(id))
+          .filter(Boolean)
+          .sort((a,b)=>(a.sort_order-b.sort_order)||a.name.localeCompare(b.name));
+        const available=activeGroups.filter(g=>!assigned.some(a=>a.id===g.id));
+        return `<div class="player-group-assignment-row" data-player-assignment-row data-player-name="${esc((p.display_name||'').toLowerCase())}">
+          <div class="player-group-person">
+            <strong>${esc(p.display_name)}</strong>
+            <small>${assigned.filter(g=>g.active).length?'Assigned':'Unassigned'}</small>
+          </div>
+          <div class="player-group-chips">
+            ${assigned.length?assigned.map(g=>`<span class="group-chip ${g.active?'':'inactive'}">
+              ${esc(g.name)}
+              ${g.active?`<button title="Remove from ${esc(g.name)}" data-remove-player-group="${p.id}" data-group-id="${g.id}">×</button>`:''}
+            </span>`).join(''):'<span class="unassigned-chip">Unassigned</span>'}
+          </div>
+          <div class="player-group-add">
+            <select data-add-group-player="${p.id}" ${!available.length?'disabled':''}>
+              <option value="">${available.length?'Add to group…':'No more active groups'}</option>
+              ${available.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+            </select>
+            <button class="btn ghost" data-add-player-group="${p.id}" ${!available.length?'disabled':''}>Add</button>
+          </div>
+        </div>`;
+      }).join('')||'<div class="notice">No active players have registered yet.</div>'}
+    </div>
+  </section>`;
+
+  document.getElementById('addPlayingGroup').onclick=async()=>{
+    const name=val('newPlayingGroupName');
+    const st=document.getElementById('playingGroupStatus');
+    if(!name){st.textContent='Enter a group name first.';return;}
+    st.textContent='Adding…';
+    const {error}=await supabase.rpc('create_playing_group',{p_club_id:club.id,p_name:name});
+    if(error){st.textContent=error.message;return;}
+    await renderPlayingGroups();
+  };
+
+  document.querySelectorAll('[data-rename-group]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.renameGroup;
+    const input=document.querySelector(`[data-group-name="${id}"]`);
+    const {error}=await supabase.rpc('rename_playing_group',{p_group_id:id,p_name:input.value.trim()});
+    if(error){alert(error.message);return;}
+    await renderPlayingGroups();
+  });
+
+  document.querySelectorAll('[data-toggle-group]').forEach(b=>b.onclick=async()=>{
+    const becomingActive=b.dataset.active==='true';
+    if(!becomingActive){
+      const ok=confirm('Deactivate this Playing Group? Existing player assignments are kept for history, but active Player Plan requirements for this group will be switched off.');
+      if(!ok)return;
+    }
+    const {error}=await supabase.rpc('set_playing_group_active',{p_group_id:b.dataset.toggleGroup,p_active:becomingActive});
+    if(error){alert(error.message);return;}
+    await renderPlayingGroups();
+  });
+
+  document.querySelectorAll('[data-move-group]').forEach(b=>b.onclick=async()=>{
+    const {error}=await supabase.rpc('move_playing_group',{
+      p_group_id:b.dataset.moveGroup,
+      p_direction:b.dataset.direction
+    });
+    if(error){alert(error.message);return;}
+    await renderPlayingGroups();
+  });
+
+  if(document.getElementById('assignSelectedPlayers')){
+    document.getElementById('assignSelectedPlayers').onclick=async()=>{
+      const groupId=document.getElementById('bulkPlayingGroup').value;
+      const ids=[...document.querySelectorAll('[data-unassigned-player]:checked')].map(x=>x.dataset.unassignedPlayer);
+      const st=document.getElementById('bulkAssignmentStatus');
+      if(!groupId){st.textContent='Choose a Playing Group.';return;}
+      if(!ids.length){st.textContent='Select at least one player.';return;}
+      st.textContent='Assigning…';
+      const {error}=await supabase.rpc('assign_players_to_playing_group',{
+        p_group_id:groupId,
+        p_player_ids:ids
+      });
+      if(error){st.textContent=error.message;return;}
+      await renderPlayingGroups();
+    };
+  }
+
+  if(document.getElementById('bulkAddPool')){
+    document.getElementById('bulkAddPool').onclick=async()=>{
+      const source=document.getElementById('bulkSourceGroup').value;
+      const target=document.getElementById('bulkTargetGroup').value;
+      const st=document.getElementById('bulkPoolStatus');
+
+      if(!target){st.textContent='Choose the group to add players to.';return;}
+      if(source===target){st.textContent='Choose a different target group.';return;}
+
+      let ids=[];
+      if(source==='all'){
+        ids=(players||[]).map(p=>p.id);
+      }else if(source==='unassigned'){
+        ids=unassigned.map(p=>p.id);
+      }else{
+        ids=(players||[])
+          .filter(p=>(byPlayer.get(p.id)||[]).includes(source))
+          .map(p=>p.id);
+      }
+
+      if(!ids.length){st.textContent='No players match that source group.';return;}
+
+      st.textContent='Adding…';
+      const {data:count,error}=await supabase.rpc('assign_players_to_playing_group',{
+        p_group_id:target,
+        p_player_ids:ids
+      });
+
+      if(error){st.textContent=error.message;return;}
+      st.textContent=`${count||0} new assignment${Number(count)===1?'':'s'} added.`;
+      await renderPlayingGroups();
+    };
+  }
+
+  document.querySelectorAll('[data-add-player-group]').forEach(b=>b.onclick=async()=>{
+    const playerId=b.dataset.addPlayerGroup;
+    const groupId=document.querySelector(`[data-add-group-player="${playerId}"]`)?.value;
+    if(!groupId)return;
+    const {error}=await supabase.rpc('assign_players_to_playing_group',{
+      p_group_id:groupId,
+      p_player_ids:[playerId]
+    });
+    if(error){alert(error.message);return;}
+    await renderPlayingGroups();
+  });
+
+  document.querySelectorAll('[data-remove-player-group]').forEach(b=>b.onclick=async()=>{
+    const {error}=await supabase.rpc('remove_player_from_playing_group',{
+      p_player_id:b.dataset.removePlayerGroup,
+      p_group_id:b.dataset.groupId
+    });
+    if(error){alert(error.message);return;}
+    await renderPlayingGroups();
+  });
+
+  document.getElementById('groupPlayerSearch').oninput=e=>{
+    const q=e.target.value.trim().toLowerCase();
+    document.querySelectorAll('[data-player-assignment-row]').forEach(row=>{
+      row.style.display=!q||row.dataset.playerName.includes(q)?'grid':'none';
+    });
+  };
+}
+
 
 /* ---------------- PHILOSOPHY WORKSHOP ---------------- */
 
@@ -2794,9 +3083,106 @@ function overlayModules(format){
     .map(x=>({key:x.key,label:questionSpecFor(format,x.key).label,weight:x.weight}));
 }
 
-function renderPlanStructure(){
+async function renderPlanStructure(){
   const formats=enabledFormats();
-  document.getElementById('page').innerHTML=`<div class="grid">
+  const page=document.getElementById('page');
+
+  let rolloutHtml='';
+  let groups=[];
+  let players=[];
+  let requirements=[];
+  let progressMap=new Map();
+
+  if(isAdmin()){
+    const [{data:g},{data:p},{data:r},{data:progress,error:progressErr}]=await Promise.all([
+      supabase.from('playing_groups').select('*').eq('club_id',club.id).eq('active',true).order('sort_order').order('name'),
+      supabase.from('players').select('id,display_name,active').eq('club_id',club.id).eq('active',true).order('display_name'),
+      supabase.from('player_plan_requirements').select('*').eq('club_id',club.id).eq('active',true).order('format_key').order('due_date',{ascending:true,nullsFirst:true}),
+      supabase.rpc('get_plan_rollout_progress',{p_club_id:club.id})
+    ]);
+
+    groups=g||[];
+    players=p||[];
+    requirements=r||[];
+
+    if(!progressErr){
+      progressMap=new Map((progress||[]).map(x=>[x.requirement_id,x]));
+    }
+
+    const gMap=new Map(groups.map(x=>[x.id,x]));
+    const pMap=new Map(players.map(x=>[x.id,x]));
+    const planFormats=philosophyVersions.length?publishedEnabledFormats():formats;
+
+    const requirementRows=requirements.map(r=>{
+      const label=FORMATS.find(([k])=>k===r.format_key)?.[1]||r.format_key;
+      const target=r.target_type==='all'
+        ?'Everyone'
+        :r.target_type==='playing_group'
+          ?gMap.get(r.playing_group_id)?.name||'Inactive Playing Group'
+          :pMap.get(r.player_id)?.display_name||'Player';
+      const prog=progressMap.get(r.id);
+      const progressText=prog
+        ?`${prog.completed_count}/${prog.eligible_count} complete`
+        :'Progress unavailable';
+      return `<div class="rollout-rule-row">
+        <div><strong>${esc(label)}</strong><span>${esc(target)}</span></div>
+        <div><strong>${r.due_date?`Due ${esc(niceDate(r.due_date))}`:'Required now'}</strong><span>${esc(progressText)}</span></div>
+        <button class="btn ghost danger-lite" data-remove-plan-requirement="${r.id}">Remove</button>
+      </div>`;
+    }).join('');
+
+    rolloutHtml=`<section class="card plan-rollout-card" style="margin-top:16px">
+      <div class="section-label">Player Plan Rollout</div>
+      <h2>Set requirements — not locks.</h2>
+      <div class="help">Every enabled format remains available to every player from day one. Use this section only to say <strong>what is required, for whom, and by when</strong>. Players can always work ahead.</div>
+
+      <div class="rollout-principle">
+        <strong>Example</strong>
+        <span>Limited Overs → Everyone → 25 Sep &nbsp; · &nbsp; T20 → U16 → 5 Oct &nbsp; · &nbsp; T20 → Dennis Broad Cup — Eligible Pool → 20 Oct</span>
+      </div>
+
+      <div class="rollout-builder">
+        <div class="field">
+          <label>Format</label>
+          <select id="rolloutFormat">
+            ${planFormats.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Who is this required for?</label>
+          <select id="rolloutTargetType">
+            <option value="all">Everyone</option>
+            <option value="playing_group">A Playing Group</option>
+            <option value="player">One player</option>
+          </select>
+        </div>
+
+        <div class="field" id="rolloutTargetBox" style="display:none">
+          <label id="rolloutTargetLabel">Playing Group</label>
+          <select id="rolloutTarget"></select>
+        </div>
+
+        <div class="field">
+          <label>Required by</label>
+          <input id="rolloutDueDate" type="date">
+          <small>Optional. Leave blank for “Required now”.</small>
+        </div>
+
+        <div class="rollout-add-action">
+          <button class="btn secondary" id="addPlanRequirement">Add requirement</button>
+          <span class="status" id="rolloutStatus"></span>
+        </div>
+      </div>
+
+      <div class="rollout-current">
+        <h3>Current requirements</h3>
+        ${requirementRows||'<div class="notice compact">No deadlines have been set yet. Players can still complete any available format now.</div>'}
+      </div>
+    </section>`;
+  }
+
+  page.innerHTML=`<div class="grid">
     <section class="card">
       <div class="section-label">Always the same player</div>
       <h2>Core reflection</h2>
@@ -2808,6 +3194,7 @@ function renderPlanStructure(){
         ].map((m,i)=>`<div class="module"><div class="icon">${i+1}</div><div><strong>${m[0]}</strong><p>${m[1]}</p></div><div class="badge">CORE</div></div>`).join('')}
       </div>
     </section>
+
     <section class="card">
       <div class="section-label">Questions morph by club + format</div>
       <h2>Format overlays</h2>
@@ -2815,7 +3202,76 @@ function renderPlanStructure(){
         ${overlayModules(f).map((m,i)=>`<div class="module"><div class="icon">${i+1}</div><div><strong>${esc(m.label)}</strong><p>Asked because ${esc(dimensions.find(d=>d.dimension_key===m.key)?.label||m.key)} is ${WEIGHT_LABELS[m.weight].toLowerCase()} in this format.</p></div><div class="badge format">${WEIGHT_LABELS[m.weight]}</div></div>`).join('')||'<div class="notice">No overlay modules yet.</div>'}
       </div>`).join('')}
     </section>
-  </div>`;
+  </div>
+  ${rolloutHtml}`;
+
+  if(!isAdmin())return;
+
+  const updateTargetPicker=()=>{
+    const type=document.getElementById('rolloutTargetType').value;
+    const box=document.getElementById('rolloutTargetBox');
+    const select=document.getElementById('rolloutTarget');
+    const label=document.getElementById('rolloutTargetLabel');
+
+    if(type==='all'){
+      box.style.display='none';
+      select.innerHTML='';
+      return;
+    }
+
+    box.style.display='block';
+
+    if(type==='playing_group'){
+      label.textContent='Playing Group';
+      select.innerHTML=groups.length
+        ?groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')
+        :'<option value="">No active Playing Groups</option>';
+    }else{
+      label.textContent='Player';
+      select.innerHTML=players.length
+        ?players.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join('')
+        :'<option value="">No active players</option>';
+    }
+  };
+
+  document.getElementById('rolloutTargetType').onchange=updateTargetPicker;
+  updateTargetPicker();
+
+  document.getElementById('addPlanRequirement').onclick=async()=>{
+    const st=document.getElementById('rolloutStatus');
+    const type=document.getElementById('rolloutTargetType').value;
+    const target=type==='all'?null:document.getElementById('rolloutTarget').value||null;
+
+    if(type!=='all'&&!target){
+      st.textContent=type==='playing_group'?'Create or choose a Playing Group first.':'Choose a player.';
+      return;
+    }
+
+    st.textContent='Adding…';
+    const {error}=await supabase.rpc('create_plan_requirement',{
+      p_club_id:club.id,
+      p_format_key:document.getElementById('rolloutFormat').value,
+      p_target_type:type,
+      p_playing_group_id:type==='playing_group'?target:null,
+      p_player_id:type==='player'?target:null,
+      p_due_date:document.getElementById('rolloutDueDate').value||null
+    });
+
+    if(error){st.textContent=error.message;return;}
+    await renderPlanStructure();
+  };
+
+  document.querySelectorAll('[data-remove-plan-requirement]').forEach(b=>b.onclick=async()=>{
+    const ok=confirm('Remove this Player Plan requirement? Players keep any work they have already completed.');
+    if(!ok)return;
+
+    const {error}=await supabase.rpc('deactivate_plan_requirement',{
+      p_requirement_id:b.dataset.removePlanRequirement
+    });
+
+    if(error){alert(error.message);return;}
+    await renderPlanStructure();
+  });
 }
 
 async function submitPhilosophyResponse(){
@@ -2847,10 +3303,11 @@ async function renderPermissions(){
   }
 
   const userIds=(members||[]).map(m=>m.user_id);
-  const [{data:profiles},{data:grants},{data:players},{data:pendingHandovers}]=await Promise.all([
+  const [{data:profiles},{data:grants},{data:players},{data:playingGroups},{data:pendingHandovers}]=await Promise.all([
     userIds.length?supabase.from('user_profiles').select('*').in('user_id',userIds):Promise.resolve({data:[]}),
     supabase.from('club_access_grants').select('*').eq('club_id',club.id),
-    supabase.from('players').select('id,user_id,display_name,grade,active').eq('club_id',club.id),
+    supabase.from('players').select('id,user_id,display_name,active').eq('club_id',club.id),
+    supabase.from('playing_groups').select('*').eq('club_id',club.id).eq('active',true).order('sort_order').order('name'),
     supabase.from('club_admin_handovers').select('*').eq('club_id',club.id).eq('status','pending').order('created_at',{ascending:false}).limit(1)
   ]);
 
@@ -2861,7 +3318,8 @@ async function renderPermissions(){
     grantMap.get(g.user_id).push(g);
   }
 
-  const grades=[...new Set((players||[]).map(p=>p.grade).filter(Boolean))].sort();
+  const activeGroups=playingGroups||[];
+  const groupNameMap=new Map(activeGroups.map(g=>[g.id,g.name]));
   const activePlayerCount=(players||[]).filter(p=>p.active!==false).length;
   const leadAdminId=club.lead_admin_user_id;
   const leadAdminName=pMap.get(leadAdminId)?.display_name||'Club Admin';
@@ -2941,8 +3399,8 @@ async function renderPermissions(){
       <div id="staffJoinStatus" class="help"></div>
 
       <div class="permission-explainer">
-        <strong>Viewing follows access.</strong>
-        <span>Grade-based access follows the player automatically when their grade changes. Editing is assigned separately.</span>
+        <strong>Viewing follows Playing Groups.</strong>
+        <span>Give a captain or coach access to one or more Playing Groups. If a player is added to or removed from those groups, access follows automatically.</span>
       </div>
     </section>
   </div>
@@ -3034,11 +3492,18 @@ async function renderPermissions(){
       const prof=pMap.get(m.user_id);
       const name=prof?.display_name||'Profile not completed';
       const gs=grantMap.get(m.user_id)||[];
-      let access='pending',grade='';
+      let access='pending';
+      let selectedGroupIds=[];
       if(gs.some(g=>g.scope==='whole_club'&&g.can_edit))access='whole_edit';
       else if(gs.some(g=>g.scope==='whole_club'&&g.can_view))access='whole_view';
-      else if(gs.some(g=>g.scope==='grade'&&g.can_edit)){access='grade_edit';grade=gs.find(g=>g.scope==='grade'&&g.can_edit)?.grade||'';}
-      else if(gs.some(g=>g.scope==='grade'&&g.can_view)){access='grade_view';grade=gs.find(g=>g.scope==='grade'&&g.can_view)?.grade||'';}
+      else if(gs.some(g=>g.scope==='playing_group'&&g.can_edit)){
+        access='groups_edit';
+        selectedGroupIds=gs.filter(g=>g.scope==='playing_group'&&g.can_edit).map(g=>g.playing_group_id).filter(Boolean);
+      }
+      else if(gs.some(g=>g.scope==='playing_group'&&g.can_view)){
+        access='groups_view';
+        selectedGroupIds=gs.filter(g=>g.scope==='playing_group'&&g.can_view).map(g=>g.playing_group_id).filter(Boolean);
+      }
 
       const isLead=m.user_id===leadAdminId;
       const selfAdmin=m.user_id===session.user.id && m.permission_role==='admin';
@@ -3089,15 +3554,19 @@ async function renderPermissions(){
             <option value="pending" ${access==='pending'?'selected':''}>No assigned access</option>
             <option value="whole_view" ${access==='whole_view'?'selected':''}>Whole club · view</option>
             <option value="whole_edit" ${access==='whole_edit'?'selected':''}>Whole club · view + edit</option>
-            <option value="grade_view" ${access==='grade_view'?'selected':''}>One grade · view</option>
-            <option value="grade_edit" ${access==='grade_edit'?'selected':''}>One grade · view + edit</option>
+            <option value="groups_view" ${access==='groups_view'?'selected':''}>Selected Playing Groups · view</option>
+            <option value="groups_edit" ${access==='groups_edit'?'selected':''}>Selected Playing Groups · view + edit</option>
           </select>
-          <input data-grade-user="${m.user_id}" placeholder="Grade" value="${esc(grade)}" list="gradeList">
+          <div class="permission-group-picker" data-group-picker-user="${m.user_id}" style="display:${['groups_view','groups_edit'].includes(access)?'flex':'none'}">
+            ${activeGroups.length?activeGroups.map(g=>`<label>
+              <input type="checkbox" data-access-group-user="${m.user_id}" value="${g.id}" ${selectedGroupIds.includes(g.id)?'checked':''}>
+              <span>${esc(g.name)}</span>
+            </label>`).join(''):'<span class="help">No active Playing Groups yet.</span>'}
+          </div>
           <button class="btn ghost" data-save-user="${m.user_id}">Save</button>
         </div>
       </div>`;
     }).join('')}</div>
-    <datalist id="gradeList">${grades.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
   </section>`;
 
   const playerWhatsAppMessage=`${club.name} players — our Batting Development system is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
@@ -3237,6 +3706,11 @@ async function renderPermissions(){
     };
   }
 
+  document.querySelectorAll('[data-access-user]').forEach(s=>s.onchange=()=>{
+    const picker=document.querySelector(`[data-group-picker-user="${s.dataset.accessUser}"]`);
+    if(picker)picker.style.display=['groups_view','groups_edit'].includes(s.value)?'flex':'none';
+  });
+
   document.querySelectorAll('[data-save-user]').forEach(b=>b.onclick=()=>saveMemberPermission(b.dataset.saveUser));
 }
 
@@ -3255,7 +3729,7 @@ function labelInvolvement(v){
 async function saveMemberPermission(userId){
   const role=document.querySelector(`[data-role-user="${userId}"]`).value;
   const access=document.querySelector(`[data-access-user="${userId}"]`).value;
-  const grade=document.querySelector(`[data-grade-user="${userId}"]`).value.trim();
+  const selectedGroupIds=[...document.querySelectorAll(`[data-access-group-user="${userId}"]:checked`)].map(x=>x.value);
 
   const {error:roleError}=await supabase
     .from('club_memberships')
@@ -3273,20 +3747,30 @@ async function saveMemberPermission(userId){
 
   if(deleteError){alert(deleteError.message);return;}
 
-  let row=null;
-  if(access==='whole_view')row={club_id:club.id,user_id:userId,scope:'whole_club',can_view:true,can_edit:false};
-  if(access==='whole_edit')row={club_id:club.id,user_id:userId,scope:'whole_club',can_view:true,can_edit:true};
-  if(access==='grade_view'){
-    if(!grade){alert('Enter the grade this person should view.');return;}
-    row={club_id:club.id,user_id:userId,scope:'grade',grade,can_view:true,can_edit:false};
+  let rows=[];
+  if(access==='whole_view'){
+    rows=[{club_id:club.id,user_id:userId,scope:'whole_club',can_view:true,can_edit:false}];
   }
-  if(access==='grade_edit'){
-    if(!grade){alert('Enter the grade this person should coach.');return;}
-    row={club_id:club.id,user_id:userId,scope:'grade',grade,can_view:true,can_edit:true};
+  if(access==='whole_edit'){
+    rows=[{club_id:club.id,user_id:userId,scope:'whole_club',can_view:true,can_edit:true}];
+  }
+  if(access==='groups_view' || access==='groups_edit'){
+    if(!selectedGroupIds.length){
+      alert('Choose at least one Playing Group for this access level.');
+      return;
+    }
+    rows=selectedGroupIds.map(groupId=>({
+      club_id:club.id,
+      user_id:userId,
+      scope:'playing_group',
+      playing_group_id:groupId,
+      can_view:true,
+      can_edit:access==='groups_edit'
+    }));
   }
 
-  if(row){
-    const {error}=await supabase.from('club_access_grants').insert(row);
+  if(rows.length){
+    const {error}=await supabase.from('club_access_grants').insert(rows);
     if(error){alert(error.message);return;}
   }
 
@@ -3303,12 +3787,12 @@ function rawAnswers(){
 }
 
 function answerFor(section,key){
-  const raw=rawAnswers();
+  const raw=localRaw||rawAnswers();
   if(section==='core')return raw.core?.[key]||{choices:[],comment:''};
   return raw.formats?.[section]?.[key]||{choices:[],comment:''};
 }
 
-function renderMyPlan(){
+async function renderMyPlan(){
   if(!philosophyVersions.length){
     document.getElementById('page').innerHTML=`<div class="card player-gate">
       <div class="gate-state locked">🔒</div>
@@ -3331,28 +3815,75 @@ function renderMyPlan(){
   const formats=publishedEnabledFormats();
   if(builderSection!=='core'&&!formats.some(([k])=>k===builderSection))builderSection='core';
 
+  const {data:rolloutData,error:rolloutErr}=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:club.id});
+  const rollout=rolloutErr?{groups:[],requirements:[]}:(rolloutData||{groups:[],requirements:[]});
+  const requirementMap=new Map((rollout.requirements||[]).map(r=>[r.format_key,r]));
+  const sectionStatus=workflow?.section_status&&typeof workflow.section_status==='object'
+    ?workflow.section_status
+    :{};
   const status=workflow?.status||'in_progress';
+  const currentComplete=!!sectionStatus[builderSection];
+  const currentLabel=builderSection==='core'
+    ?'Core'
+    :(FORMATS.find(([k])=>k===builderSection)?.[1]||builderSection);
 
-  document.getElementById('page').innerHTML=`<div class="grid">
-    <section class="card">
-      <div class="builder-head">
-        <div>
-          <div class="section-label">Guided Player Reflection</div>
-          <h2>${esc(myPlayer.display_name)}</h2>
-          <div class="help">Choose what genuinely describes your game. Add comments only where the options do not capture it. Your coach will review the draft with you.</div>
-        </div>
-        <span class="workflow-status ${status==='ready_for_review'?'ready':status==='approved'?'approved':''}">${status==='ready_for_review'?'READY FOR REVIEW':status==='approved'?'APPROVED':'IN PROGRESS'}</span>
+  const formatCard=(key,label)=>{
+    const req=requirementMap.get(key)||{required:false,due_date:null,sources:[]};
+    const complete=!!sectionStatus[key];
+    const due=req.required
+      ?(req.due_date?`Required by ${niceDate(req.due_date)}`:'Required now')
+      :'Available anytime';
+    const source=(req.sources||[]).length?` · ${req.sources.join(' + ')}`:'';
+    return `<button class="plan-format-card ${builderSection===key?'active':''} ${complete?'complete':''} ${req.required?'required':''}" data-builder-section="${key}">
+      <span class="plan-format-name">${esc(label)}</span>
+      <strong>${complete?'✓ Complete':esc(due)}</strong>
+      <small>${complete&&req.required?esc(due):req.required?esc(source.replace(/^ · /,'')):'You can work ahead whenever you like.'}</small>
+    </button>`;
+  };
+
+  document.getElementById('page').innerHTML=`<section class="card plan-rollout-player">
+    <div class="builder-head">
+      <div>
+        <div class="section-label">Your Player Plan</div>
+        <h2>Complete the formats when they matter — or work ahead.</h2>
+        <div class="help">Every format your club uses is available now. The club may require particular sections by different dates depending on your Playing Groups, but nothing is locked.</div>
       </div>
+      <span class="workflow-status ${status==='ready_for_review'?'ready':status==='approved'?'approved':''}">${status==='ready_for_review'?'READY FOR REVIEW':status==='approved'?'APPROVED':'IN PROGRESS'}</span>
+    </div>
 
-      <div class="subnav">
-        <button data-builder-section="core" class="${builderSection==='core'?'active':''}">Core</button>
-        ${formats.map(([k,l])=>`<button data-builder-section="${k}" class="${builderSection===k?'active':''}">${l}</button>`).join('')}
+    <div class="player-group-summary">
+      <strong>Your Playing Groups</strong>
+      ${(rollout.groups||[]).length
+        ?`<span>${(rollout.groups||[]).map(g=>esc(g.name)).join(' · ')}</span>`
+        :'<span>Unassigned for now — that is completely fine. Your club can add groups later.</span>'}
+    </div>
+
+    <div class="plan-format-cards">
+      <button class="plan-format-card core ${builderSection==='core'?'active':''} ${sectionStatus.core?'complete':''}" data-builder-section="core">
+        <span class="plan-format-name">Core</span>
+        <strong>${sectionStatus.core?'✓ Complete':'Build your batting identity'}</strong>
+        <small>Your strengths, danger signs, reset and current focus.</small>
+      </button>
+      ${formats.map(([k,l])=>formatCard(k,l)).join('')}
+    </div>
+  </section>
+
+  <div class="grid" style="margin-top:16px">
+    <section class="card">
+      <div class="builder-head compact">
+        <div>
+          <div class="section-label">${esc(currentLabel)} reflection</div>
+          <h2>${esc(myPlayer.display_name)}</h2>
+          <div class="help">Choose what genuinely describes your game. Add comments only where the options do not capture it.</div>
+        </div>
+        <span class="section-completion ${currentComplete?'done':''}">${currentComplete?'✓ SECTION COMPLETE':'IN PROGRESS'}</span>
       </div>
 
       <div id="builderQuestions">${renderQuestions(builderSection)}</div>
 
-      <div class="btnrow">
+      <div class="btnrow player-plan-actions">
         <button class="btn secondary" id="saveReflection">Save progress</button>
+        <button class="btn ghost" id="toggleSectionComplete">${currentComplete?'Reopen this section':'Mark this section complete'}</button>
         <button class="btn" id="submitReflection">Ready for coach review</button>
         <span class="status" id="builderStatus"></span>
       </div>
@@ -3361,7 +3892,7 @@ function renderMyPlan(){
     <section class="card">
       <div class="section-label">Curated draft</div>
       <h2>What your plan is becoming</h2>
-      <div class="help">For this prototype the curation is rules-based. Later, AI can tighten the wording while staying traceable to your actual answers.</div>
+      <div class="help">The format sections are overlays on one batting identity. Completing one now does not stop you adding or refining another later.</div>
       <div id="draftPreview">${renderDraftPreview()}</div>
     </section>
   </div>`;
@@ -3376,13 +3907,39 @@ function renderMyPlan(){
     collectBuilderAnswers();
     document.getElementById('draftPreview').innerHTML=renderDraftPreviewFromLocal();
   });
+
   document.querySelectorAll('[data-comment-key]').forEach(x=>x.oninput=()=>{
     collectBuilderAnswers();
     document.getElementById('draftPreview').innerHTML=renderDraftPreviewFromLocal();
   });
 
   document.getElementById('saveReflection').onclick=()=>saveWorkflow('in_progress');
-  document.getElementById('submitReflection').onclick=()=>saveWorkflow('ready_for_review');
+
+  document.getElementById('toggleSectionComplete').onclick=()=>saveSectionCompletion(
+    builderSection,
+    !currentComplete
+  );
+
+  document.getElementById('submitReflection').onclick=()=>{
+    const incompleteRequired=(rollout.requirements||[])
+      .filter(r=>r.required && !sectionStatus[r.format_key])
+      .map(r=>FORMATS.find(([k])=>k===r.format_key)?.[1]||r.format_key);
+
+    const missing=[
+      ...(!sectionStatus.core?['Core']:[]),
+      ...incompleteRequired
+    ];
+
+    if(missing.length){
+      const ok=confirm(
+        `These sections are not marked complete: ${missing.join(', ')}.\n\n`+
+        `You can still send the current plan to a coach for review, or cancel and finish them first.`
+      );
+      if(!ok)return;
+    }
+
+    saveWorkflow('ready_for_review');
+  };
 }
 
 function renderQuestions(section){
@@ -3521,6 +4078,48 @@ function renderCuratedDraft(curated){
   </div>`;
 }
 
+
+async function saveSectionCompletion(section,complete){
+  collectBuilderAnswers();
+  const raw=localRaw||rawAnswers();
+  const curated=curate(raw);
+  const sectionStatus=structuredClone(workflow?.section_status||{});
+
+  if(complete){
+    sectionStatus[section]=new Date().toISOString();
+  }else{
+    delete sectionStatus[section];
+  }
+
+  const st=document.getElementById('builderStatus');
+  if(st)st.textContent=complete?'Marking complete…':'Reopening…';
+
+  const payload={
+    player_id:myPlayer.id,
+    raw_answers:raw,
+    curated_draft:curated,
+    section_status:sectionStatus,
+    status:workflow?.status||'in_progress',
+    submitted_at:workflow?.submitted_at||null,
+    updated_at:new Date().toISOString()
+  };
+
+  const {data,error}=await supabase
+    .from('player_plan_workflows')
+    .upsert(payload,{onConflict:'player_id'})
+    .select()
+    .single();
+
+  if(error){
+    if(st)st.textContent=error.message;
+    return;
+  }
+
+  workflow=data;
+  localRaw=null;
+  await renderMyPlan();
+}
+
 async function saveWorkflow(status){
   collectBuilderAnswers();
   const raw=localRaw||rawAnswers();
@@ -3529,6 +4128,7 @@ async function saveWorkflow(status){
     player_id:myPlayer.id,
     raw_answers:raw,
     curated_draft:curated,
+    section_status:workflow?.section_status||{},
     status,
     submitted_at:status==='ready_for_review'?new Date().toISOString():workflow?.submitted_at||null,
     updated_at:new Date().toISOString()
@@ -3930,6 +4530,9 @@ async function renderLeadAdminHandoverRoute(token){
     return;
   }
 
+  const {data:handoverGroups}=await supabase.rpc('get_public_handover_playing_groups',{p_token:token});
+  const activeHandoverGroups=handoverGroups||[];
+
   if(!session){
     app.innerHTML=`<div class="login" style="max-width:680px">
       <div class="section-label">Lead Admin handover</div>
@@ -4002,15 +4605,18 @@ async function renderLeadAdminHandoverRoute(token){
           <label>Player Plan access</label>
           <select id="outgoingPostAccess">
             <option value="none">No additional Player Plan access</option>
-            <option value="grade_view">One grade · view</option>
-            <option value="grade_edit">One grade · view + edit</option>
+            <option value="grade_view">One Playing Group · view</option>
+            <option value="grade_edit">One Playing Group · view + edit</option>
             <option value="whole_view">Whole club · view</option>
             <option value="whole_edit">Whole club · view + edit</option>
           </select>
         </div>
         <div class="field" id="outgoingGradeBox" style="display:none">
-          <label>Grade</label>
-          <input id="outgoingPostGrade" placeholder="e.g. 2nd Grade">
+          <label>Playing Group</label>
+          <select id="outgoingPostGrade">
+            <option value="">Choose Playing Group…</option>
+            ${activeHandoverGroups.map(g=>`<option value="${esc(g.name)}">${esc(g.name)}</option>`).join('')}
+          </select>
         </div>
       </div>
 
@@ -4061,11 +4667,11 @@ async function renderLeadAdminHandoverRoute(token){
       ?document.getElementById('outgoingPostAccess').value
       :'none';
     const grade=['grade_view','grade_edit'].includes(access)
-      ?val('outgoingPostGrade')
+      ?document.getElementById('outgoingPostGrade').value
       :'';
 
     if(['grade_view','grade_edit'].includes(access) && !grade){
-      st.textContent='Enter the grade for grade-based access.';
+      st.textContent='Choose the Playing Group for this access.';
       return;
     }
 
