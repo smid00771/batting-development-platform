@@ -2930,9 +2930,16 @@ async function saveHowWeBatBuilder(status){
       }
     }
     if(!draft.identity_statement){st.textContent='Add the club-wide identity statement first.';return;}
+
+    const ok=confirm(
+      `Mark How We Bat ready?\n\n`+
+      `This will save the current How We Bat content for all enabled formats and unlock Player Plan Structure.\n\n`+
+      `It does NOT publish the philosophy yet.`
+    );
+    if(!ok)return;
   }
 
-  st.textContent=status==='ready'?'Checking all formats…':'Saving…';
+  st.textContent=status==='ready'?'Saving How We Bat…':'Saving…';
   const {error}=await supabase.rpc('save_how_we_bat_draft',{
     p_club_id:club.id,
     p_identity_statement:draft.identity_statement||'',
@@ -2943,11 +2950,12 @@ async function saveHowWeBatBuilder(status){
   if(error){st.textContent=error.message;return;}
 
   await loadData();
-  st.textContent=status==='ready'?'How We Bat is ready to publish ✓':'Draft saved ✓';
+
   if(status==='ready'){
-    currentTab='workshop';
+    currentTab='plan';
     renderShell();
   }else{
+    st.textContent='Draft saved ✓';
     renderHowWeBatBuilder();
   }
 }
