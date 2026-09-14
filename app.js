@@ -686,7 +686,7 @@ function renderShell(){
   if(document.getElementById('claimPlatform')){
     document.getElementById('claimPlatform').onclick=async()=>{
       const {error}=await supabase.rpc('bootstrap_platform_owner');
-      if(error){alert(error.message);return;}
+      if(error){restoreUnsavedButton();alert(error.message);return;}
       await loadPlatformContext();
       renderShell();
     };
@@ -3563,7 +3563,7 @@ async function renderPermissions(){
               <span>${esc(g.name)}</span>
             </label>`).join(''):'<span class="help">No active Playing Groups yet.</span>'}
           </div>
-          <button class="btn ghost" data-save-user="${m.user_id}">Save</button>
+          <button class="btn ghost" data-save-user="${m.user_id}" disabled>Saved ✓</button>
         </div>
       </div>`;
     }).join('')}</div>
@@ -3706,9 +3706,25 @@ async function renderPermissions(){
     };
   }
 
+  const markPermissionDirty=userId=>{
+    const button=document.querySelector(`[data-save-user="${userId}"]`);
+    if(!button)return;
+    button.disabled=false;
+    button.textContent='Save changes';
+  };
+
+  document.querySelectorAll('[data-role-user]').forEach(s=>s.onchange=()=>{
+    markPermissionDirty(s.dataset.roleUser);
+  });
+
   document.querySelectorAll('[data-access-user]').forEach(s=>s.onchange=()=>{
     const picker=document.querySelector(`[data-group-picker-user="${s.dataset.accessUser}"]`);
     if(picker)picker.style.display=['groups_view','groups_edit'].includes(s.value)?'flex':'none';
+    markPermissionDirty(s.dataset.accessUser);
+  });
+
+  document.querySelectorAll('[data-access-group-user]').forEach(x=>x.onchange=()=>{
+    markPermissionDirty(x.dataset.accessGroupUser);
   });
 
   document.querySelectorAll('[data-save-user]').forEach(b=>b.onclick=()=>saveMemberPermission(b.dataset.saveUser));
@@ -3727,9 +3743,21 @@ function labelInvolvement(v){
 }
 
 async function saveMemberPermission(userId){
+  const button=document.querySelector(`[data-save-user="${userId}"]`);
   const role=document.querySelector(`[data-role-user="${userId}"]`).value;
   const access=document.querySelector(`[data-access-user="${userId}"]`).value;
   const selectedGroupIds=[...document.querySelectorAll(`[data-access-group-user="${userId}"]:checked`)].map(x=>x.value);
+
+  if(button){
+    button.disabled=true;
+    button.textContent='Saving…';
+  }
+
+  const restoreUnsavedButton=()=>{
+    if(!button)return;
+    button.disabled=false;
+    button.textContent='Save changes';
+  };
 
   const {error:roleError}=await supabase
     .from('club_memberships')
@@ -3737,7 +3765,7 @@ async function saveMemberPermission(userId){
     .eq('club_id',club.id)
     .eq('user_id',userId);
 
-  if(roleError){alert(roleError.message);return;}
+  if(roleError){restoreUnsavedButton();alert(roleError.message);return;}
 
   const {error:deleteError}=await supabase
     .from('club_access_grants')
@@ -3745,7 +3773,7 @@ async function saveMemberPermission(userId){
     .eq('club_id',club.id)
     .eq('user_id',userId);
 
-  if(deleteError){alert(deleteError.message);return;}
+  if(deleteError){restoreUnsavedButton();alert(deleteError.message);return;}
 
   let rows=[];
   if(access==='whole_view'){
@@ -3756,6 +3784,7 @@ async function saveMemberPermission(userId){
   }
   if(access==='groups_view' || access==='groups_edit'){
     if(!selectedGroupIds.length){
+      restoreUnsavedButton();
       alert('Choose at least one Playing Group for this access level.');
       return;
     }
@@ -3774,7 +3803,7 @@ async function saveMemberPermission(userId){
     if(error){alert(error.message);return;}
   }
 
-  alert('Access updated.');
+  if(button)button.textContent='Saved ✓';
   await loadContext();
 }
 
