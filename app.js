@@ -987,15 +987,26 @@ function contributorStatusLabel(status){
 async function renderWorkshop(){
   document.getElementById('page').innerHTML='<div class="splash">Loading Philosophy Workshop…</div>';
 
-  const [{data:contribRows,error:cErr},{data:externalInvites,error:iErr}]=await Promise.all([
+  const [
+    {data:contribRows,error:cErr},
+    {data:externalInvites,error:iErr},
+    {data:draftSnapshot,error:snapErr},
+    {data:lateActions,error:lateErr}
+  ]=await Promise.all([
     supabase.from('philosophy_contributors').select('*').eq('club_id',club.id),
     (isAdmin() || isPhilosophyLead())
       ?supabase.from('philosophy_contributor_invites').select('*').eq('club_id',club.id).order('created_at',{ascending:true})
+      :Promise.resolve({data:[],error:null}),
+    workshop?.final_draft_ready
+      ?supabase.from('philosophy_final_draft_snapshots').select('*').eq('club_id',club.id).maybeSingle()
+      :Promise.resolve({data:null,error:null}),
+    workshop?.final_draft_ready
+      ?supabase.from('philosophy_late_response_actions').select('*').eq('club_id',club.id).order('submitted_at',{ascending:false})
       :Promise.resolve({data:[],error:null})
   ]);
 
-  if(cErr || iErr){
-    document.getElementById('page').innerHTML=`<div class="notice">${esc((cErr||iErr).message)}</div>`;
+  if(cErr || iErr || snapErr || lateErr){
+    document.getElementById('page').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr).message)}</div>`;
     return;
   }
 
@@ -1024,10 +1035,17 @@ async function renderWorkshop(){
   const submittedCount=(contribRows||[]).filter(x=>x.status==='submitted').length;
   const totalCount=(contribRows||[]).length;
   const pendingExternal=(externalInvites||[]).filter(x=>x.status==='pending');
+  const invitedTotal=totalCount+pendingExternal.length;
+  const outstandingCount=Math.max(invitedTotal-submittedCount,0);
   const me=(contribRows||[]).find(x=>x.user_id===session.user.id)||myContributor;
   const canSeeSynthesis=!!me && (me.status==='submitted' || (isPhilosophyLead() && workshop?.status==='review'));
-  const allSubmitted=totalCount>0 && submittedCount===totalCount;
+  const allSubmitted=invitedTotal>0 && submittedCount===invitedTotal;
   const collaborative=workshop?.mode==='collaborative';
+  const snapshotResponses=Array.isArray(draftSnapshot?.responses)?draftSnapshot.responses:[];
+  const snapshotCount=Number(draftSnapshot?.response_count||snapshotResponses.length||0);
+  const snapshotInvitedCount=Number(draftSnapshot?.source_invited_count||snapshotCount||0);
+  const pendingLate=(lateActions||[]).filter(x=>x.status==='pending');
+  const myLateAction=(lateActions||[]).find(x=>x.user_id===session.user.id && x.status==='pending')||null;
 
   let html=`<div class="workshop-grid">`;
 
@@ -1127,23 +1145,37 @@ async function renderWorkshop(){
     <div class="section-label">Current workshop</div>
     <h2>${esc(workshopModeLabel())} philosophy process</h2>
     <div class="workshop-progress">
-      <div><strong>${submittedCount}</strong><span>submitted</span></div>
-      <div><strong>${Math.max(totalCount-submittedCount,0)}</strong><span>accepted / still to respond</span></div>
-      <div><strong>${pendingExternal.length}</strong><span>email invitations pending</span></div>
+      ${workshop?.final_draft_ready && draftSnapshot
+        ?`<div><strong>${snapshotCount}</strong><span>included in final-draft snapshot</span></div>
+          <div><strong>${pendingLate.length}</strong><span>late response${pendingLate.length===1?'':'s'} awaiting decision</span></div>
+          <div><strong>${Math.max(snapshotInvitedCount-snapshotCount-pendingLate.length,0)}</strong><span>still outstanding from snapshot round</span></div>`
+        :`<div><strong>${submittedCount}</strong><span>submitted</span></div>
+          <div><strong>${outstandingCount}</strong><span>still outstanding</span></div>
+          <div><strong>${pendingExternal.length}</strong><span>email invitations pending</span></div>`}
     </div>`;
 
   if(me){
     html+=`<div class="my-response-card">
       <div>
-        <div class="section-label">Your contribution</div>
-        <strong>${esc(contributorStatusLabel(me.status))}</strong>
-        <p>${me.status==='submitted'
-          ?'Your independent response is locked. You can now review the synthesis when it is available.'
-          :me.status==='in_progress'
-            ?'Continue through Club Identity → What We Value → Format Emphasis. Other contributors cannot see your answers while you work.'
-            :'You have been invited to contribute independently.'}</p>
+        <div class="section-label">${isPhilosophyLead() && workshop?.final_draft_ready?'Your final working draft':'Your contribution'}</div>
+        <strong>${esc(isPhilosophyLead() && workshop?.final_draft_ready
+          ?(me.status==='submitted'?'Final draft submitted':'Final draft in progress')
+          :contributorStatusLabel(me.status))}</strong>
+        <p>${isPhilosophyLead() && workshop?.final_draft_ready
+          ?(me.status==='submitted'
+            ?'Your final philosophy draft is locked and ready for the remaining publication steps.'
+            :'Continue editing the working draft created from the frozen response snapshot.')
+          :me.status==='submitted'
+            ?(myLateAction
+              ?'Your response was submitted after the final-draft snapshot. It is locked and the Philosophy Lead will decide whether to incorporate it.'
+              :'Your independent response is locked. You can now review the synthesis when it is available.')
+            :me.status==='in_progress'
+              ?'Continue through Club Identity → What We Value → Format Emphasis. Other contributors cannot see your answers while you work.'
+              :'You have been invited to contribute independently.'}</p>
       </div>
-      <button class="btn secondary" id="myResponseAction">${me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue my response':'Review my response'}</button>
+      <button class="btn secondary" id="myResponseAction">${isPhilosophyLead() && workshop?.final_draft_ready
+        ?(me.status==='submitted'?'Review final draft':'Continue final draft')
+        :me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue my response':'Review my response'}</button>
     </div>`;
   }else if(!isAdmin()){
     html+=`<div class="notice">You have not been invited to contribute to this philosophy round.</div>`;
@@ -1160,7 +1192,9 @@ async function renderWorkshop(){
           const name=pMap.get(c.user_id)?.display_name||'Contributor';
           return `<div class="member">
             <div><strong>${esc(name)}${c.user_id===workshop?.philosophy_lead_user_id?' · Philosophy Lead':''}</strong>
-            <small>${esc(contributorStatusLabel(c.status))}</small></div>
+            <small>${esc(c.user_id===workshop?.philosophy_lead_user_id && workshop?.final_draft_ready
+              ?(c.status==='submitted'?'Final draft submitted':'Final draft in progress')
+              :contributorStatusLabel(c.status))}</small></div>
             <div class="member-controls">
               ${c.status==='submitted' && isAdmin()?`<button class="btn ghost" data-reopen-contributor="${c.user_id}">Reopen</button>`:''}
             </div>
@@ -1174,14 +1208,37 @@ async function renderWorkshop(){
   }
 
   if(canSeeSynthesis){
-    const {data:responses}=await supabase
-      .from('philosophy_contributions')
-      .select('*')
-      .eq('club_id',club.id)
-      .not('submitted_at','is',null);
+    let responses=[];
+    let synthesisMeta=null;
 
-    if(responses?.length){
-      html+=renderSynthesis(responses,pMap,allSubmitted);
+    if(workshop?.final_draft_ready && snapshotResponses.length){
+      responses=snapshotResponses;
+      synthesisMeta={
+        snapshot:true,
+        responseCount:snapshotCount,
+        invitedCount:snapshotInvitedCount,
+        createdAt:draftSnapshot?.created_at||workshop?.final_draft_started_at
+      };
+    }else{
+      const {data:liveResponses}=await supabase
+        .from('philosophy_contributions')
+        .select('*')
+        .eq('club_id',club.id)
+        .not('submitted_at','is',null);
+      responses=liveResponses||[];
+      synthesisMeta={
+        snapshot:false,
+        responseCount:responses.length,
+        invitedCount:invitedTotal
+      };
+    }
+
+    if(responses.length){
+      html+=renderSynthesis(responses,pMap,allSubmitted,synthesisMeta);
+    }
+
+    if(isPhilosophyLead() && workshop?.final_draft_ready && (lateActions||[]).length){
+      html+=renderLatePhilosophyResponses(lateActions||[],pMap);
     }
   }else if(totalCount>1 && me){
     html+=`<section class="card synthesis-locked" style="margin-top:16px">
@@ -1314,6 +1371,77 @@ async function renderWorkshop(){
   if(document.getElementById('buildFinalDraft')){
     document.getElementById('buildFinalDraft').onclick=()=>beginFinalDraftFromSynthesis();
   }
+
+  document.querySelectorAll('[data-review-late]').forEach(b=>b.onclick=async()=>{
+    const actionId=b.dataset.reviewLate;
+    const detail=document.getElementById(`late-detail-${actionId}`);
+    const opening=detail?.style.display==='none';
+    if(detail)detail.style.display=opening?'block':'none';
+    b.textContent=opening?'Hide contribution':'Review contribution';
+
+    if(opening){
+      const {error}=await supabase.rpc('review_late_philosophy_response',{p_action_id:actionId});
+      if(error)alert(error.message);
+    }
+  });
+
+  document.querySelectorAll('[data-ignore-late]').forEach(b=>b.onclick=async()=>{
+    const action=(lateActions||[]).find(x=>x.id===b.dataset.ignoreLate);
+    const name=pMap.get(action?.user_id)?.display_name||'this contributor';
+    const ok=confirm(`Ignore the late response from ${name}? It will remain in the audit history but will not affect the final draft.`);
+    if(!ok)return;
+
+    b.disabled=true;
+    const {error}=await supabase.rpc('ignore_late_philosophy_response',{p_action_id:b.dataset.ignoreLate});
+    if(error){alert(error.message);b.disabled=false;return;}
+
+    await loadData();
+    renderShell();
+  });
+
+  document.querySelectorAll('[data-incorporate-late]').forEach(b=>b.onclick=async()=>{
+    const action=(lateActions||[]).find(x=>x.id===b.dataset.incorporateLate);
+    if(!action)return;
+
+    const name=pMap.get(action.user_id)?.display_name||'this contributor';
+    const currentSnapshot=Array.isArray(draftSnapshot?.responses)?draftSnapshot.responses:[];
+    const expanded=[
+      ...currentSnapshot.filter(r=>r.user_id!==action.user_id),
+      action.response_snapshot
+    ];
+
+    const draft=buildConsensusDraft(expanded);
+    const ok=confirm(
+      `Incorporate the late response from ${name}?\n\n`+
+      `This will rebuild the current working draft from the revised ${expanded.length}-response synthesis. `+
+      `Any edits you have already made to the unpublished final draft will be replaced. Nothing happens unless you confirm.`
+    );
+    if(!ok)return;
+
+    b.disabled=true;
+    b.textContent='Incorporating…';
+
+    const {error}=await supabase.rpc('incorporate_late_philosophy_response',{
+      p_action_id:action.id,
+      p_identity_values:draft.identity_values,
+      p_identity_note:draft.identity_note,
+      p_formats_enabled:draft.formats_enabled,
+      p_selected_dimensions:draft.selected_dimensions,
+      p_dimension_notes:draft.dimension_notes,
+      p_format_weights:draft.format_weights
+    });
+
+    if(error){
+      alert(error.message);
+      b.disabled=false;
+      b.textContent='Incorporate into draft';
+      return;
+    }
+
+    await loadData();
+    renderShell();
+  });
+
   if(document.getElementById('openHwbBuilder')){
     document.getElementById('openHwbBuilder').onclick=()=>{currentTab='preview';renderTab();};
   }
@@ -1512,7 +1640,7 @@ function buildConsensusDraft(responses){
   };
 }
 
-function renderSynthesis(responses,pMap,allSubmitted){
+function renderSynthesis(responses,pMap,allSubmitted,meta=null){
   const syn=buildSynthesis(responses);
   const leadReady=isPhilosophyLead() && myContributor?.status==='submitted';
   const hwbReady=howWeBatDraft?.status==='ready';
@@ -1523,7 +1651,11 @@ function renderSynthesis(responses,pMap,allSubmitted){
     <h2>What the contributors seem to be saying</h2>
     <div class="help">This synthesis does not average disagreements away. It highlights consensus, variation and the places where a human conversation is worth having.</div>
 
-    ${!allSubmitted?`<div class="notice">This is provisional: ${syn.n} submitted response${syn.n===1?'':'s'} are currently included. It will update as others submit.</div>`:''}
+    ${meta?.snapshot
+      ?`<div class="notice snapshot-notice"><strong>Final-draft snapshot:</strong> ${meta.responseCount} of ${meta.invitedCount} invited contributor${meta.invitedCount===1?'':'s'} were included when the draft was created.${meta.responseCount<meta.invitedCount?' Outstanding or late responses cannot change this synthesis automatically.':''}</div>`
+      :!allSubmitted
+        ?`<div class="notice"><strong>${meta?.responseCount||syn.n} of ${meta?.invitedCount||syn.n} contributors have submitted.</strong><br>${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)} response${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)===1?' is':'s are'} still outstanding. You can wait, or the Philosophy Lead can continue using the responses received so far.</div>`
+        :''}
 
     <h3>Club identity</h3>
     <div class="consensus-grid">${syn.identity.filter(x=>x.ratio>=.35).map(x=>`
@@ -1575,7 +1707,11 @@ function renderSynthesis(responses,pMap,allSubmitted){
           :canPublish
             ?'<button class="btn secondary" id="publishPhilosophy">Approve & publish philosophy + How We Bat</button>'
             :'<button class="btn secondary" id="myResponseAction2">Continue / submit final draft</button>')
-        :(leadReady?'<button class="btn secondary" id="buildFinalDraft">Create final draft from synthesis</button>':'<span class="help">Submit your own independent response before creating the final draft.</span>')}
+        :(leadReady
+          ?`<button class="btn secondary" id="buildFinalDraft">${!allSubmitted
+            ?`Create final draft with ${syn.n} response${syn.n===1?'':'s'}`
+            :`Create final draft from ${syn.n} response${syn.n===1?'':'s'}`}</button>`
+          :'<span class="help">Submit your own independent response before creating the final draft.</span>')}
     </div>`:''}
   </section>`;
 }
@@ -1596,6 +1732,93 @@ function renderSourceComments(responses,pMap){
   return `<details class="source-responses"><summary>View source comments</summary><div class="source-comments">${items.join('')}</div></details>`;
 }
 
+function renderLateResponseDetail(response){
+  const r=response||{};
+  const identities=(r.identity_values||[])
+    .map(k=>IDENTITY_OPTIONS.find(([key])=>key===k)?.[1]||k);
+
+  const dims=(r.selected_dimensions||[]).map(k=>{
+    const label=dimensions.find(d=>d.dimension_key===k)?.label||k;
+    const weights=FORMATS
+      .filter(([f])=>r.formats_enabled?.[f]!==false)
+      .map(([f,fl])=>{
+        const raw=Number(r.format_weights?.[`${k}:${f}`]);
+        return Number.isFinite(raw)?`${fl}: ${WEIGHT_LABELS[raw]||raw}`:null;
+      })
+      .filter(Boolean)
+      .join(' · ');
+    const note=r.dimension_notes?.[k];
+    return `<div class="late-detail-dimension">
+      <strong>${esc(label)}</strong>
+      ${weights?`<span>${esc(weights)}</span>`:''}
+      ${note?`<p>${esc(note)}</p>`:''}
+    </div>`;
+  }).join('');
+
+  const formats=FORMATS
+    .filter(([f])=>r.formats_enabled?.[f]!==false)
+    .map(([,fl])=>fl);
+
+  return `<div class="late-response-detail-grid">
+    <div>
+      <div class="section-label">Club identity</div>
+      <p>${identities.length?esc(identities.join(' · ')):'No identity options selected.'}</p>
+      ${r.identity_note?`<div class="source-comment"><p>${esc(r.identity_note)}</p></div>`:''}
+    </div>
+    <div>
+      <div class="section-label">Formats</div>
+      <p>${formats.length?esc(formats.join(' · ')):'No formats enabled.'}</p>
+    </div>
+  </div>
+  <div class="section-label" style="margin-top:12px">Dimensions + emphasis</div>
+  <div class="late-detail-dimensions">${dims||'<div class="help">No dimensions selected.</div>'}</div>`;
+}
+
+function renderLatePhilosophyResponses(actions,pMap){
+  const pending=(actions||[]).filter(a=>a.status==='pending');
+  const actioned=(actions||[]).filter(a=>a.status!=='pending');
+
+  return `<section class="card late-contributions-card" style="margin-top:16px">
+    <div class="section-label">After the final-draft snapshot</div>
+    <h2>Late contributions</h2>
+    <div class="help">These responses arrived after the working draft was created. They cannot alter the draft unless you explicitly choose to incorporate them.</div>
+
+    ${pending.length?`<div class="late-contribution-list">${pending.map(a=>{
+      const name=pMap.get(a.user_id)?.display_name||'Contributor';
+      return `<div class="late-contribution pending">
+        <div class="late-contribution-head">
+          <div>
+            <strong>${esc(name)}</strong>
+            <span>Submitted ${new Date(a.submitted_at).toLocaleString()}${a.reviewed_at?' · reviewed':''}</span>
+          </div>
+          <span class="pending">LATE RESPONSE</span>
+        </div>
+        <div class="late-contribution-actions">
+          <button class="btn ghost" data-review-late="${a.id}">Review contribution</button>
+          <button class="btn secondary" data-incorporate-late="${a.id}">Incorporate into draft</button>
+          <button class="btn ghost" data-ignore-late="${a.id}">Ignore</button>
+        </div>
+        <div class="late-response-detail" id="late-detail-${a.id}" style="display:none">
+          ${renderLateResponseDetail(a.response_snapshot)}
+        </div>
+      </div>`;
+    }).join('')}</div>`:'<div class="notice">There are no late responses awaiting a decision.</div>'}
+
+    ${actioned.length?`<details class="late-history">
+      <summary>Previously actioned late responses</summary>
+      <div class="late-contribution-list">${actioned.map(a=>{
+        const name=pMap.get(a.user_id)?.display_name||'Contributor';
+        return `<div class="late-contribution actioned">
+          <div>
+            <strong>${esc(name)}</strong>
+            <span>${a.status==='incorporated'?'Incorporated into the final-draft snapshot':'Ignored'} · ${new Date(a.submitted_at).toLocaleString()}</span>
+          </div>
+        </div>`;
+      }).join('')}</div>
+    </details>`:''}
+  </section>`;
+}
+
 async function beginFinalDraftFromSynthesis(){
   const {data:responses,error}=await supabase
     .from('philosophy_contributions')
@@ -1607,7 +1830,10 @@ async function beginFinalDraftFromSynthesis(){
   if(!responses?.length){alert('No submitted responses yet.');return;}
 
   const draft=buildConsensusDraft(responses);
-  const ok=confirm('Create a final working draft from the group synthesis? You will still be able to change every choice before publishing.');
+  const ok=confirm(
+    `Create the final working draft using the ${responses.length} response${responses.length===1?'':'s'} submitted right now?\n\n`+
+    `This creates a snapshot. Any response submitted later will NOT change the draft unless you explicitly choose to incorporate it.`
+  );
   if(!ok)return;
 
   const {error:e}=await supabase.rpc('begin_final_philosophy_draft',{
