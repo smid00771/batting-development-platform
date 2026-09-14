@@ -631,7 +631,9 @@ function renderShell(){
     );
   }
   if(canContributePhilosophy() || isAdmin()){
-    nav.push(['plan',canContributePhilosophy()?'5. Player Plan Structure':'Player Plan Structure']);
+    const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
+    const planLabel=canContributePhilosophy()?'5. Player Plan Structure':'Player Plan Structure';
+    nav.push(['plan',planStructureReady?planLabel:`${planLabel} · Locked`]);
   }
   if(isAdmin())nav.push(['permissions','Permissions']);
   if(howWeBatVersions.length)nav.push(['howwebat','How We Bat']);
@@ -3086,6 +3088,43 @@ function overlayModules(format){
 async function renderPlanStructure(){
   const formats=enabledFormats();
   const page=document.getElementById('page');
+  const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
+
+  if(!planStructureReady){
+    const lead=isPhilosophyLead();
+
+    page.innerHTML=`<section class="card player-gate">
+      <div class="gate-state locked">🔒</div>
+      <div class="section-label">Player Plan Structure is not available yet</div>
+      <h2>Finish How We Bat first.</h2>
+      <p>The Player Plan questions are built from the club’s final philosophy and its player-facing <strong>How We Bat</strong> messages. Until those messages are finalised, we would be building the Player Plan against a moving target.</p>
+
+      <div class="notice">
+        <strong>What needs to happen next</strong><br>
+        ${lead
+          ?'Complete the How We Bat Builder and click <strong>Mark How We Bat ready</strong>. Player Plan Structure will then unlock automatically.'
+          :'The Philosophy Lead is still finalising How We Bat. Player Plan Structure will unlock automatically once they mark it ready.'}
+      </div>
+
+      <div class="help" style="margin-top:12px">
+        How We Bat does not need to be published yet. This gate simply ensures the communication layer is settled before the Player Plan Structure is reviewed.
+      </div>
+
+      ${canContributePhilosophy()
+        ?`<div class="btnrow" style="margin-top:14px">
+            <button class="btn secondary" id="backToHowWeBat">${lead?'Go to How We Bat Builder':'View How We Bat'}</button>
+          </div>`
+        :''}
+    </section>`;
+
+    if(document.getElementById('backToHowWeBat')){
+      document.getElementById('backToHowWeBat').onclick=()=>{
+        currentTab='preview';
+        renderTab();
+      };
+    }
+    return;
+  }
 
   let rolloutHtml='';
   let groups=[];
