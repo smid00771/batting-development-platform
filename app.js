@@ -572,6 +572,9 @@ async function loadContext(){
   localStorage.setItem('bdp-club-id',club.id);
   localStorage.setItem('bdp-context','club');
 
+  const savedTab=localStorage.getItem(`bdp-tab-${club.id}`);
+  if(savedTab)currentTab=savedTab;
+
   const {data:profileData}=await supabase
     .from('user_profiles')
     .select('*')
@@ -794,6 +797,8 @@ function renderShell(){
     else currentTab=nav[0]?.[0]||'myplan';
   }
 
+  localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+
   const contextOptions=[...allMemberships.map(m=>`<option value="club:${m.club_id}" ${m.club_id===club.id?'selected':''}>${esc(m.clubs?.name||'Club')}</option>`),platformRole?`<option value="platform">Platform Admin</option>`:''].join('');
 
   app.innerHTML=`<div class="shell">
@@ -842,7 +847,11 @@ function renderShell(){
     };
   }
 
-  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;renderTab();});
+  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{
+    currentTab=b.dataset.tab;
+    localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+    renderTab();
+  });
   renderTab();
 }
 
@@ -3357,6 +3366,30 @@ function renderPreview(){
   }
 }
 
+
+function questionSpecFor(format,key){
+  const base=QUESTION_LIBRARY[key]||{label:key,options:[]};
+
+  if(key!=='strike_rotation')return base;
+
+  const byFormat={
+    t20:{
+      label:'When the boundary option is not there, how do you keep the innings moving?',
+      options:['Take the safe single','Use a gap to change strike','Run hard on misfields','Turn ones into twos','Manipulate the field','Use pace behind square','Use feet to spin for one','Keep the right batter on strike when the matchup matters','Avoid forcing a boundary after dots']
+    },
+    limited_overs:{
+      label:'Where are your reliable get-off-strike options?',
+      options:['Clip into leg side','Drop into cover','Push to mid-on / mid-off','Use soft hands into point','Use feet to spin for one','Sweep for one','Run hard on misfields','Turn ones into twos','Identify the single before the ball','Rotate after a boundary']
+    },
+    long_form:{
+      label:'How can you deliberately get off strike without expanding your risk?',
+      options:['Clip the pads for one','Drop the ball into a safe gap','Push straight for one','Use soft hands into point','Use feet safely to spin','Sweep for a controlled single','Wait for the field to offer a low-risk single','Run hard on the misfield','Change strike after pressure has built','Keep my scoring envelope narrow']
+    }
+  };
+
+  return {...base,...(byFormat[format]||{})};
+}
+
 function overlayModules(format){
   return topEmphasis(format)
     .filter(x=>x.weight>=2 && QUESTION_LIBRARY[x.key])
@@ -4374,26 +4407,8 @@ function renderQuestions(section){
   }
 
   return modules.map(x=>{
-    let spec=QUESTION_LIBRARY[x.key];
+    const spec=questionSpecFor(section,x.key);
     const dim=dimensions.find(d=>d.dimension_key===x.key);
-
-    if(x.key==='strike_rotation'){
-      const byFormat={
-        t20:{
-          label:'When the boundary option is not there, how do you keep the innings moving?',
-          options:['Take the safe single','Use a gap to change strike','Run hard on misfields','Turn ones into twos','Manipulate the field','Use pace behind square','Use feet to spin for one','Keep the right batter on strike when the matchup matters','Avoid forcing a boundary after dots']
-        },
-        limited_overs:{
-          label:'Where are your reliable get-off-strike options?',
-          options:['Clip into leg side','Drop into cover','Push to mid-on / mid-off','Use soft hands into point','Use feet to spin for one','Sweep for one','Run hard on misfields','Turn ones into twos','Identify the single before the ball','Rotate after a boundary']
-        },
-        long_form:{
-          label:'How can you deliberately get off strike without expanding your risk?',
-          options:['Clip the pads for one','Drop the ball into a safe gap','Push straight for one','Use soft hands into point','Use feet safely to spin','Sweep for a controlled single','Wait for the field to offer a low-risk single','Run hard on the misfield','Change strike after pressure has built','Keep my scoring envelope narrow']
-        }
-      };
-      spec={...spec,...(byFormat[section]||{})};
-    }
 
     return renderQuestion(section,x.key,{
       ...spec,
