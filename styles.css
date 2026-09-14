@@ -693,3 +693,15 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}.splash{padding:
   .late-contribution-head{flex-direction:column}
   .late-response-detail-grid{grid-template-columns:1fr}
 }
+
+/* ---------- v0.6.3 clearer Philosophy Workshop invitation flow ---------- */
+.workshop-flow-step{display:grid;grid-template-columns:28px 1fr;gap:9px;align-items:start;margin:12px 0 7px}
+.workshop-step-num{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#eef1ff;color:var(--navy2);font-size:9px;font-weight:950}
+.workshop-step-title{display:block;color:var(--navy2);font-size:10px;margin-top:2px}
+.workshop-save-block{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.workshop-save-row{margin-top:8px}
+.collaborative-invite-history{display:none;margin-top:15px;padding-top:14px;border-top:1px solid var(--line)}
+.collaborative-invite-history.show{display:block}
+.invite-history-head h3{margin:2px 0 4px;color:var(--navy2);font-size:15px}
+.invite-history-head .help{max-width:720px}
+@media(max-width:800px){.workshop-flow-step{grid-template-columns:24px 1fr}.workshop-step-num{width:22px;height:22px}}
