@@ -69,7 +69,8 @@ let feedbackWorkspaceDiscussionKey=null;
 
 let clubBrandingDraftClubId=null;
 let clubBrandingDraft=null;
-let clubBrandingSuggestions=[];
+let clubBrandingLogoSuggestions=[];
+let clubBrandingWebsiteSuggestion=null;
 
 const FORMATS=[
   ['t20','T20'],
@@ -700,7 +701,8 @@ function ensureBrandingDraft(){
       primary_colour:normaliseHex(club?.primary_colour,PLATFORM_PRIMARY),
       accent_colour:normaliseHex(club?.accent_colour,PLATFORM_ACCENT)
     };
-    clubBrandingSuggestions=[];
+    clubBrandingLogoSuggestions=[];
+    clubBrandingWebsiteSuggestion=null;
   }
   return clubBrandingDraft;
 }
@@ -1496,7 +1498,8 @@ async function renderClubDashboard(){
         <div>
           <div class="section-label">Club branding</div>
           <h2>Make the player-facing system look like your club.</h2>
-          <p class="help">Paste a snip of the club logo, drag or choose an image, then use the club website to suggest a colour theme. Nothing changes for members until you click <strong>Save branding</strong>.</p>
+          <p class="help">Add the club logo, find colours from the club website, then choose the combination you want. <strong>Adding a logo will not change your colours.</strong> Nothing changes for members until you click <strong>Save branding</strong>.</p>
+          <div class="branding-steps"><span><b>1</b> Add logo</span><span><b>2</b> Find website colours</span><span><b>3</b> Choose primary + accent</span></div>
         </div>
       </div>
 
@@ -1513,21 +1516,26 @@ async function renderClubDashboard(){
             <button class="btn ghost" id="removeClubLogo">Remove logo</button>
           </div>
           <div id="clubLogoStatus" class="help branding-inline-status"></div>
+          <div id="logoColourSuggestions" class="branding-source-panel"></div>
         </div>
 
         <div>
           <div class="field branding-website-field">
             <label>Club website</label>
             <div class="branding-url-row"><input id="clubWebsiteUrl" placeholder="https://yourclub.com.au"><button class="btn secondary" id="detectClubColours">Find club colours</button></div>
-            <div class="help">We look for the website's brand/theme colours. If the site does not expose them clearly, colours detected from the logo are a useful fallback.</div>
-          </div>
-
-          <div class="branding-colour-grid">
-            <label class="branding-colour-control"><span>Primary colour</span><div><input type="color" id="clubPrimaryPicker"><input id="clubPrimaryHex" maxlength="7"></div></label>
-            <label class="branding-colour-control"><span>Accent colour</span><div><input type="color" id="clubAccentPicker"><input id="clubAccentHex" maxlength="7"></div></label>
+            <div class="help">This finds a suggested website theme. It will <strong>not</strong> replace your current colours until you choose to use it.</div>
           </div>
           <div id="brandingDetectionStatus" class="branding-detection-status"></div>
-          <div id="brandingSuggestions" class="branding-suggestions"></div>
+          <div id="websiteColourSuggestion" class="branding-source-panel"></div>
+
+          <div class="branding-colour-heading">
+            <div><span class="branding-mini-label">Choose your colours</span><p>Primary is the dominant club colour. Accent is used for highlights. Click either colour square to choose any colour.</p></div>
+            <button class="btn ghost compact-btn" id="swapBrandColours" type="button">Swap primary ↔ accent</button>
+          </div>
+          <div class="branding-colour-grid">
+            <label class="branding-colour-control"><span>Primary colour</span><div><input type="color" id="clubPrimaryPicker" title="Choose primary colour"><input id="clubPrimaryHex" maxlength="7"></div></label>
+            <label class="branding-colour-control"><span>Accent colour</span><div><input type="color" id="clubAccentPicker" title="Choose accent colour"><input id="clubAccentHex" maxlength="7"></div></label>
+          </div>
           <button class="btn ghost branding-reset-colours" id="resetBrandColours">Reset colours to platform default</button>
         </div>
       </div>
@@ -1623,17 +1631,33 @@ function wireClubBrandingControls(page){
     if(ap)ap.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT).toLowerCase();
     if(ah && document.activeElement!==ah)ah.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT);
 
-    const suggestions=page.querySelector('#brandingSuggestions');
-    if(suggestions){
-      suggestions.innerHTML=clubBrandingSuggestions.length?`<span>Detected colours</span>${clubBrandingSuggestions.slice(0,6).map(c=>`<button type="button" class="branding-swatch" data-brand-swatch="${c}" style="--swatch:${c}" title="${c} · click to use as primary"><i></i><b>${c}</b></button>`).join('')}`:'';
-      suggestions.querySelectorAll('[data-brand-swatch]').forEach((b,i)=>b.onclick=()=>{
-        const colour=b.dataset.brandSwatch;
-        if(i===0 || !validHex(d.primary_colour))d.primary_colour=colour;
-        else if(colourDistance(colour,d.primary_colour)>45)d.accent_colour=colour;
-        else d.primary_colour=colour;
-        draw();
-      });
+    const renderAssignableSwatches=colours=>colours.slice(0,6).map(c=>`<div class="branding-palette-choice" style="--swatch:${c}"><i></i><b>${c}</b><button type="button" data-set-primary="${c}">Primary</button><button type="button" data-set-accent="${c}">Accent</button></div>`).join('');
+
+    const logoPanel=page.querySelector('#logoColourSuggestions');
+    if(logoPanel){
+      logoPanel.innerHTML=clubBrandingLogoSuggestions.length
+        ?`<div class="branding-source-title"><strong>Colours found in logo</strong><span>Suggestions only — the logo has not changed your theme.</span></div><div class="branding-palette-list">${renderAssignableSwatches(clubBrandingLogoSuggestions)}</div>`
+        :'';
     }
+
+    const websitePanel=page.querySelector('#websiteColourSuggestion');
+    if(websitePanel){
+      if(clubBrandingWebsiteSuggestion){
+        const ws=clubBrandingWebsiteSuggestion;
+        websitePanel.innerHTML=`<div class="branding-source-title"><strong>Website suggestion</strong><span>${esc(ws.host||'Club website')} recommends this starting combination.</span></div><div class="branding-theme-pair"><div style="--swatch:${ws.primary}"><i></i><span>Primary</span><b>${ws.primary}</b></div><div style="--swatch:${ws.accent}"><i></i><span>Accent</span><b>${ws.accent}</b></div><button type="button" class="btn ghost" id="useWebsiteBrandTheme">Use website suggestion</button></div>${ws.candidates?.length?`<div class="branding-palette-list">${renderAssignableSwatches(ws.candidates)}</div>`:''}`;
+      }else websitePanel.innerHTML='';
+    }
+
+    page.querySelectorAll('[data-set-primary]').forEach(b=>b.onclick=()=>{d.primary_colour=b.dataset.setPrimary;draw();});
+    page.querySelectorAll('[data-set-accent]').forEach(b=>b.onclick=()=>{d.accent_colour=b.dataset.setAccent;draw();});
+    page.querySelector('#useWebsiteBrandTheme')?.addEventListener('click',()=>{
+      const ws=clubBrandingWebsiteSuggestion;if(!ws)return;
+      d.primary_colour=ws.primary;d.accent_colour=ws.accent;
+      setStatus(detectStatus,'Website suggestion applied to the preview. Save branding when you are happy with it.','good');
+      draw();
+    });
+
+
 
     const preview=page.querySelector('#clubBrandPreview');
     if(preview){
@@ -1643,7 +1667,7 @@ function wireClubBrandingControls(page){
       preview.style.setProperty('--preview-primary-contrast',contrastFor(primary));
       preview.style.setProperty('--preview-accent',accent);
       preview.style.setProperty('--preview-accent-contrast',contrastFor(accent));
-      preview.innerHTML=`<div class="club-brand-preview-head">${d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="">`:''}<div><span>${esc(club.name)}</span><strong>How We Bat</strong></div></div><div class="club-brand-preview-body"><span class="preview-brand-pill">Key Message</span><b>Player-facing preview</b><p>Your club colours and logo flow through the live system while the platform keeps the layout readable.</p><button type="button">Primary action</button><em>Accent</em></div>`;
+      preview.innerHTML=`<div class="club-brand-preview-head">${d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="">`:''}<div><span>${esc(club.name)}</span><strong>How We Bat</strong></div></div><div class="club-brand-preview-body"><span class="preview-brand-pill">Key Message</span><b>Player-facing preview</b><p>Your club colours and logo flow through the live system while the platform keeps the layout readable.</p><button type="button">Primary colour</button><em>Accent colour</em></div>`;
     }
   };
 
@@ -1652,11 +1676,9 @@ function wireClubBrandingControls(page){
       setStatus(logoStatus,'Reading image…');
       const result=await processClubLogoFile(file);
       draft.logo_data_url=result.dataUrl;
-      clubBrandingSuggestions=result.palette||[];
-      if(result.palette?.length){
-        draft.primary_colour=result.palette[0];
-        draft.accent_colour=result.palette.find(c=>colourDistance(c,result.palette[0])>65)||result.palette[1]||draft.accent_colour;
-        setStatus(logoStatus,'Logo ready. Colours have been suggested from the image.','good');
+      clubBrandingLogoSuggestions=(result.palette||[]).filter(validHex).map(c=>c.toUpperCase());
+      if(clubBrandingLogoSuggestions.length){
+        setStatus(logoStatus,'Logo ready. Colours found in the logo are shown below as optional suggestions — your current theme has not changed.','good');
       }else setStatus(logoStatus,'Logo ready. Choose colours manually or analyse the club website.','good');
       draw();
     }catch(err){setStatus(logoStatus,err?.message||String(err),'bad');}
@@ -1673,7 +1695,7 @@ function wireClubBrandingControls(page){
   zone?.addEventListener('click',()=>zone.focus());
   page.querySelector('#chooseClubLogo')?.addEventListener('click',()=>fileInput?.click());
   fileInput?.addEventListener('change',()=>{if(fileInput.files?.[0])acceptLogo(fileInput.files[0]);fileInput.value='';});
-  page.querySelector('#removeClubLogo')?.addEventListener('click',()=>{draft.logo_data_url='';clubBrandingSuggestions=[];setStatus(logoStatus,'Logo removed from this draft. Save branding to apply.');draw();});
+  page.querySelector('#removeClubLogo')?.addEventListener('click',()=>{draft.logo_data_url='';clubBrandingLogoSuggestions=[];setStatus(logoStatus,'Logo removed from this draft. Save branding to apply.');draw();});
 
   const syncHex=(key,value)=>{
     const v=String(value||'').toUpperCase();
@@ -1685,8 +1707,14 @@ function wireClubBrandingControls(page){
   page.querySelector('#clubAccentHex')?.addEventListener('change',e=>{if(validHex(e.target.value))syncHex('accent_colour',e.target.value);else{e.target.value=draft.accent_colour;setStatus(detectStatus,'Accent colour must look like #D8232A.','bad');}});
   page.querySelector('#clubWebsiteUrl')?.addEventListener('input',e=>draft.website_url=e.target.value);
 
+  page.querySelector('#swapBrandColours')?.addEventListener('click',()=>{
+    const oldPrimary=draft.primary_colour;draft.primary_colour=draft.accent_colour;draft.accent_colour=oldPrimary;
+    setStatus(detectStatus,'Primary and accent colours swapped in the preview. Save branding when you are happy with it.','good');
+    draw();
+  });
+
   page.querySelector('#resetBrandColours')?.addEventListener('click',()=>{
-    draft.primary_colour=PLATFORM_PRIMARY;draft.accent_colour=PLATFORM_ACCENT;clubBrandingSuggestions=[];setStatus(detectStatus,'Platform colours restored in the preview. Save branding to apply.');draw();
+    draft.primary_colour=PLATFORM_PRIMARY;draft.accent_colour=PLATFORM_ACCENT;setStatus(detectStatus,'Platform colours restored in the preview. Save branding to apply.');draw();
   });
 
   page.querySelector('#detectClubColours')?.addEventListener('click',async()=>{
@@ -1702,13 +1730,17 @@ function wireClubBrandingControls(page){
       const {data,error}=await supabase.functions.invoke('detect-club-branding',{body:{club_id:club.id,url}});
       if(error)throw error;
       if(!data?.primary)throw new Error(data?.error||'No reliable colours were found.');
-      draft.primary_colour=normaliseHex(data.primary,draft.primary_colour);
-      draft.accent_colour=normaliseHex(data.accent,draft.accent_colour);
-      clubBrandingSuggestions=(data.candidates||[]).filter(validHex).map(x=>x.toUpperCase());
-      setStatus(detectStatus,`Colours suggested from ${new URL(data.analysed_url||url).hostname}. Review the preview, then save. `,'good');
+      const analysedHost=new URL(data.analysed_url||url).hostname;
+      clubBrandingWebsiteSuggestion={
+        primary:normaliseHex(data.primary,draft.primary_colour),
+        accent:normaliseHex(data.accent,draft.accent_colour),
+        candidates:(data.candidates||[]).filter(validHex).map(x=>x.toUpperCase()),
+        host:analysedHost
+      };
+      setStatus(detectStatus,`Website colours found from ${analysedHost}. Choose “Use website suggestion”, assign individual colours below, or keep your current theme.`,'good');
       draw();
     }catch(err){
-      setStatus(detectStatus,'Could not reliably read colours from that website. You can still use the colours detected from the logo or choose them manually.','bad');
+      setStatus(detectStatus,'Could not reliably read colours from that website. Your current theme has not changed. You can use colours detected from the logo or choose colours manually.','bad');
       console.warn('Brand website detection failed',err);
     }finally{button.disabled=false;button.textContent='Find club colours';}
   });
