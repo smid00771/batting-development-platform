@@ -41,6 +41,15 @@ let playerPlanStructureSection='core';
 let playerPlanStructureWorking=null;
 let playerPlanStructureDirty=false;
 
+let playersWorkspaceClubId=null;
+let playersWorkspaceData=null;
+let playersWorkspaceSelectedId=null;
+let playersWorkspaceSection='summary';
+let playersWorkspaceLocalRaw=null;
+let playersWorkspaceAutosaveTimer=null;
+let playersWorkspaceSearch='';
+let playersWorkspaceGroupFilter='all';
+
 const FORMATS=[
   ['t20','T20'],
   ['limited_overs','Limited Overs'],
@@ -761,6 +770,9 @@ function isCoachCaptain(){
 function isPlayerUser(){
   return ['player','both'].includes(membership.involvement);
 }
+function canUsePlayersWorkspace(){
+  return isAdmin() || ['captain','coach','head_coach'].includes(membership.permission_role);
+}
 function isPhilosophyLead(){
   return !!workshop && workshop.philosophy_lead_user_id===session.user.id;
 }
@@ -781,6 +793,7 @@ function renderShell(){
     nav.push(['dashboard','Club Setup']);
     nav.push(['groups','Playing Groups']);
   }
+  if(canUsePlayersWorkspace())nav.push(['players','Players']);
   if(isAdmin() || canContributePhilosophy() || isPhilosophyLead()){
     nav.push(['workshop','Philosophy Workshop']);
   }
@@ -1066,6 +1079,7 @@ function renderTab(){
   const map={
     dashboard:renderClubDashboard,
     groups:renderPlayingGroups,
+    players:renderPlayersWorkspace,
     workshop:renderWorkshop,
     identity:renderIdentity,
     dimensions:renderDimensions,
@@ -4332,6 +4346,586 @@ async function saveMemberPermission(userId){
   await loadContext();
 }
 
+
+/* ---------------- PLAYERS WORKSPACE ---------------- */
+
+function permissionRoleLabel(role){
+  return role==='captain'
+    ?'Captain'
+    :role==='coach'
+      ?'Coach'
+      :role==='head_coach'
+        ?'Head Coach'
+        :role==='admin'
+          ?'Club Admin'
+          :'Club member';
+}
+
+function emptyPlayerPlanRaw(){
+  return {core:{},formats:{}};
+}
+
+function workspacePlayerRaw(player){
+  const raw=player?.workflow?.raw_answers;
+  return raw&&typeof raw==='object'
+    ?structuredClone(raw)
+    :emptyPlayerPlanRaw();
+}
+
+function workspaceRequirements(player){
+  const grouped=new Map();
+  for(const r of player?.requirements||[]){
+    if(!r?.format_key)continue;
+    if(!grouped.has(r.format_key)){
+      grouped.set(r.format_key,{
+        format_key:r.format_key,
+        required:true,
+        due_date:r.due_date||null,
+        sources:[]
+      });
+    }
+    const x=grouped.get(r.format_key);
+    if(r.due_date && (!x.due_date || String(r.due_date)<String(x.due_date)))x.due_date=r.due_date;
+    if(r.source_label && !x.sources.includes(r.source_label))x.sources.push(r.source_label);
+  }
+  return grouped;
+}
+
+function workspaceRequiredSections(player){
+  return ['core',...workspaceRequirements(player).keys()];
+}
+
+function workspaceSectionState(section,raw){
+  const progress=sectionProgress(section,raw);
+  if(progress.complete)return {key:'complete',label:'Complete',progress};
+  if(progress.answeredAny)return {key:'started',label:'Started',progress};
+  return {key:'not-started',label:'Not started',progress};
+}
+
+function workspacePlayerProgress(player){
+  const raw=workspacePlayerRaw(player);
+  const required=workspaceRequiredSections(player);
+  const complete=required.filter(section=>sectionProgress(section,raw).complete).length;
+  return {raw,required,complete,total:required.length};
+}
+
+function workspaceRequirementText(player,section){
+  if(section==='core')return 'Required core section';
+  const req=workspaceRequirements(player).get(section);
+  if(!req)return 'Available anytime';
+  const source=req.sources?.length?` · ${req.sources.join(' + ')}`:'';
+  return req.due_date
+    ?`Required by ${niceDate(req.due_date)}${source}`
+    :`Required now${source}`;
+}
+
+function workspaceUpdatedLabel(player){
+  const updated=player?.workflow?.updated_at;
+  if(!updated)return 'No Player Plan work saved yet';
+  const d=new Date(updated);
+  return Number.isNaN(d.getTime())
+    ?'Player Plan saved'
+    :`Last saved ${d.toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}`;
+}
+
+function resetPlayersWorkspaceForClub(){
+  if(playersWorkspaceClubId===club.id)return;
+  playersWorkspaceClubId=club.id;
+  playersWorkspaceData=null;
+  playersWorkspaceSelectedId=null;
+  playersWorkspaceSection='summary';
+  playersWorkspaceLocalRaw=null;
+  playersWorkspaceSearch='';
+  playersWorkspaceGroupFilter='all';
+  if(playersWorkspaceAutosaveTimer){
+    clearTimeout(playersWorkspaceAutosaveTimer);
+    playersWorkspaceAutosaveTimer=null;
+  }
+}
+
+async function renderPlayersWorkspace(){
+  resetPlayersWorkspaceForClub();
+  const page=document.getElementById('page');
+
+  if(!canUsePlayersWorkspace()){
+    page.innerHTML=`<section class="card player-gate">
+      <div class="gate-state locked">🔒</div>
+      <div class="section-label">Player access</div>
+      <h2>This workspace has not been assigned to you.</h2>
+      <p>Player Plan access is controlled by the Club Admin through roles and Playing Group permissions.</p>
+    </section>`;
+    return;
+  }
+
+  if(!philosophyVersions.length){
+    page.innerHTML=`<section class="card player-gate">
+      <div class="gate-state locked">🔒</div>
+      <div class="section-label">Players</div>
+      <h2>Player Plans are not open yet.</h2>
+      <p>The club can register players and assign Playing Groups now, but Player Plans remain locked until the Club Batting System is published.</p>
+    </section>`;
+    return;
+  }
+
+  page.innerHTML='<div class="splash">Loading players…</div>';
+
+  const {data,error}=await supabase.rpc('get_players_workspace',{p_club_id:club.id});
+  if(error){
+    page.innerHTML=`<section class="card">
+      <div class="section-label">Players</div>
+      <h2>Player access could not load.</h2>
+      <div class="notice">${esc(error.message)}</div>
+    </section>`;
+    return;
+  }
+
+  playersWorkspaceData=data||{role:membership.permission_role,groups:[],players:[]};
+  playersWorkspaceData.players=Array.isArray(playersWorkspaceData.players)?playersWorkspaceData.players:[];
+  playersWorkspaceData.groups=Array.isArray(playersWorkspaceData.groups)?playersWorkspaceData.groups:[];
+
+  if(playersWorkspaceSelectedId && !playersWorkspaceData.players.some(p=>p.id===playersWorkspaceSelectedId)){
+    playersWorkspaceSelectedId=null;
+    playersWorkspaceSection='summary';
+    playersWorkspaceLocalRaw=null;
+  }
+
+  if(playersWorkspaceSelectedId)renderPlayersWorkspacePlayer();
+  else renderPlayersWorkspaceList();
+}
+
+function renderPlayersWorkspaceList(){
+  const page=document.getElementById('page');
+  const data=playersWorkspaceData||{players:[],groups:[]};
+  const players=data.players||[];
+  const role=permissionRoleLabel(data.role||membership.permission_role);
+  const query=playersWorkspaceSearch.trim().toLowerCase();
+
+  const filtered=players.filter(player=>{
+    const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
+    const groups=player.groups||[];
+    const matchesGroup=playersWorkspaceGroupFilter==='all'
+      ||groups.some(g=>g.id===playersWorkspaceGroupFilter);
+    return matchesName&&matchesGroup;
+  });
+
+  const anyEditable=players.some(p=>p.can_edit);
+  const allEditable=players.length>0&&players.every(p=>p.can_edit);
+  const accessSummary=isAdmin()
+    ?'Full club Player Plan access'
+    :allEditable
+      ?'View + edit access'
+      :anyEditable
+        ?'Mixed view / edit access'
+        :'View-only access';
+
+  const sections=[['core','Core'],...publishedEnabledFormats()];
+
+  const cards=filtered.map(player=>{
+    const {raw,required,complete,total}=workspacePlayerProgress(player);
+    const requiredSet=new Set(required);
+    const groups=(player.groups||[]).map(g=>`<span class="workspace-group-pill">${esc(g.name)}</span>`).join('');
+    const statusChips=sections.map(([key,label])=>{
+      const state=workspaceSectionState(key,raw);
+      const requiredHere=requiredSet.has(key);
+      return `<span class="workspace-section-chip ${state.key} ${requiredHere?'required':''}">
+        <strong>${esc(label)}</strong>
+        <small>${state.label}${requiredHere?' · Required':''}</small>
+      </span>`;
+    }).join('');
+
+    return `<article class="workspace-player-card" data-workspace-player-card="${player.id}">
+      <div class="workspace-player-card-head">
+        <div>
+          <h3>${esc(player.display_name||'Player')}</h3>
+          <div class="workspace-player-groups">${groups||'<span class="workspace-group-pill muted">Unassigned</span>'}</div>
+        </div>
+        <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
+      </div>
+      <div class="workspace-section-statuses">${statusChips}</div>
+      <div class="workspace-player-card-foot">
+        <div>
+          <strong>${complete===total?'Required work complete ✓':`${complete}/${total} required sections complete`}</strong>
+          <span>${esc(workspaceUpdatedLabel(player))}</span>
+        </div>
+        <button class="btn secondary" data-open-workspace-player="${player.id}">Open Player Plan</button>
+      </div>
+    </article>`;
+  }).join('');
+
+  page.innerHTML=`<section class="card players-workspace-head">
+    <div>
+      <div class="section-label">${esc(role)} workspace</div>
+      <h2>Players</h2>
+      <div class="help">Open the Player Plans you have been given access to. Playing Group membership controls the list automatically as players move between groups.</div>
+    </div>
+    <div class="workspace-access-summary">
+      <strong>${esc(accessSummary)}</strong>
+      <span>${players.length} player${players.length===1?'':'s'} in your access</span>
+    </div>
+  </section>
+
+  <section class="card players-workspace-tools">
+    <div class="field">
+      <label>Find a player</label>
+      <input id="workspacePlayerSearch" value="${esc(playersWorkspaceSearch)}" placeholder="Search by name">
+    </div>
+    <div class="field">
+      <label>Playing Group</label>
+      <select id="workspaceGroupFilter">
+        <option value="all">All players I can access</option>
+        ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="workspace-filter-count"><strong>${filtered.length}</strong><span>shown</span></div>
+  </section>
+
+  <div class="workspace-player-list">
+    ${cards||`<section class="card workspace-empty">
+      <div class="section-label">No players to show</div>
+      <h2>${players.length?'No players match those filters.':'No Player Plan access is currently assigned.'}</h2>
+      <p>${players.length?'Clear the search or change the Playing Group filter.':isAdmin()?'Players will appear here once they register.':'A Club Admin can assign whole-club or Playing Group access in Permissions.'}</p>
+    </section>`}
+  </div>`;
+
+  const search=document.getElementById('workspacePlayerSearch');
+  if(search)search.oninput=()=>{
+    playersWorkspaceSearch=search.value;
+    renderPlayersWorkspaceList();
+    requestAnimationFrame(()=>{
+      const next=document.getElementById('workspacePlayerSearch');
+      if(next){next.focus();next.setSelectionRange(playersWorkspaceSearch.length,playersWorkspaceSearch.length);}
+    });
+  };
+
+  const filter=document.getElementById('workspaceGroupFilter');
+  if(filter)filter.onchange=()=>{
+    playersWorkspaceGroupFilter=filter.value;
+    renderPlayersWorkspaceList();
+  };
+
+  document.querySelectorAll('[data-open-workspace-player]').forEach(b=>b.onclick=()=>{
+    playersWorkspaceSelectedId=b.dataset.openWorkspacePlayer;
+    playersWorkspaceSection='summary';
+    playersWorkspaceLocalRaw=null;
+    renderPlayersWorkspacePlayer();
+  });
+}
+
+function workspaceSelectedPlayer(){
+  return playersWorkspaceData?.players?.find(p=>p.id===playersWorkspaceSelectedId)||null;
+}
+
+function workspaceAnswerFor(raw,section,key){
+  if(section==='core')return raw.core?.[key]||{choices:[],comment:''};
+  return raw.formats?.[section]?.[key]||{choices:[],comment:''};
+}
+
+function renderWorkspaceQuestion(section,spec,raw,editable){
+  const a=workspaceAnswerFor(raw,section,spec.id);
+  const badge=spec.required
+    ?'<span class="question-requirement required">REQUIRED</span>'
+    :'<span class="question-requirement optional">OPTIONAL</span>';
+
+  if(!editable){
+    const values=[...(a.choices||[])];
+    return `<div class="question workspace-view-question">
+      <div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div>
+      <div class="why">${esc(spec.guidance||'')}</div>
+      ${values.length
+        ?`<div class="workspace-answer-chips">${values.map(v=>`<span>${esc(v)}</span>`).join('')}</div>`
+        :''}
+      ${a.comment?`<div class="workspace-answer-comment">${esc(a.comment)}</div>`:''}
+      ${!values.length&&!a.comment?'<div class="workspace-unanswered">Not answered yet.</div>':''}
+    </div>`;
+  }
+
+  if(spec.response_type==='text'){
+    return `<div class="question">
+      <div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div>
+      <div class="why">${esc(spec.guidance||'Write the response that best describes this player’s game.')}</div>
+      <div class="optional-comment">
+        <textarea data-workspace-comment-key="${esc(spec.id)}" data-workspace-comment-section="${section}" placeholder="Player response…">${esc(a.comment||'')}</textarea>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="question">
+    <div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div>
+    <div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div>
+    <div class="option-grid">${(spec.options||[]).map((o,i)=>{
+      const id=`staff_${section}_${spec.id}_${i}`;
+      return `<label class="option-chip">
+        <input type="checkbox" id="${esc(id)}" data-workspace-answer-section="${section}" data-workspace-answer-key="${esc(spec.id)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}>
+        <span>${esc(o)}</span>
+      </label>`;
+    }).join('')}</div>
+    <div class="optional-comment">
+      <textarea data-workspace-comment-key="${esc(spec.id)}" data-workspace-comment-section="${section}" placeholder="Anything else? Optional.">${esc(a.comment||'')}</textarea>
+    </div>
+  </div>`;
+}
+
+function collectWorkspacePlayerAnswers(){
+  const player=workspaceSelectedPlayer();
+  if(!player)return;
+  if(!playersWorkspaceLocalRaw)playersWorkspaceLocalRaw=workspacePlayerRaw(player);
+
+  const section=playersWorkspaceSection;
+  if(section==='summary')return;
+
+  if(section==='core'&&!playersWorkspaceLocalRaw.core)playersWorkspaceLocalRaw.core={};
+  if(section!=='core'){
+    if(!playersWorkspaceLocalRaw.formats)playersWorkspaceLocalRaw.formats={};
+    if(!playersWorkspaceLocalRaw.formats[section])playersWorkspaceLocalRaw.formats[section]={};
+  }
+
+  const keys=[...new Set([
+    ...[...document.querySelectorAll('[data-workspace-answer-key]')].map(x=>x.dataset.workspaceAnswerKey),
+    ...[...document.querySelectorAll('[data-workspace-comment-key]')].map(x=>x.dataset.workspaceCommentKey)
+  ])];
+
+  for(const key of keys){
+    const choices=[...document.querySelectorAll(`[data-workspace-answer-key="${key}"][data-workspace-answer-section="${section}"]:checked`)].map(x=>x.value);
+    const comment=document.querySelector(`[data-workspace-comment-key="${key}"][data-workspace-comment-section="${section}"]`)?.value.trim()||'';
+    const answer={choices,comment};
+    if(section==='core')playersWorkspaceLocalRaw.core[key]=answer;
+    else playersWorkspaceLocalRaw.formats[section][key]=answer;
+  }
+}
+
+function updateWorkspaceSectionBadge(){
+  const raw=playersWorkspaceLocalRaw||workspacePlayerRaw(workspaceSelectedPlayer());
+  const progress=sectionProgress(playersWorkspaceSection,raw);
+  const badge=document.getElementById('workspaceSectionCompletion');
+  if(!badge)return;
+  badge.classList.toggle('done',progress.complete);
+  badge.textContent=progress.complete
+    ?'✓ SECTION COMPLETE'
+    :progress.requiredCount
+      ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
+      :'OPTIONAL SECTION';
+}
+
+async function saveWorkspacePlayerPlanSilently(){
+  const player=workspaceSelectedPlayer();
+  if(!player?.can_edit)return true;
+
+  if(playersWorkspaceAutosaveTimer){
+    clearTimeout(playersWorkspaceAutosaveTimer);
+    playersWorkspaceAutosaveTimer=null;
+  }
+
+  collectWorkspacePlayerAnswers();
+  const raw=playersWorkspaceLocalRaw||workspacePlayerRaw(player);
+  const curated=curate(raw);
+  const sectionStatus=automaticSectionStatusForRaw(raw,player.workflow?.section_status||{});
+  const st=document.getElementById('workspaceSaveStatus');
+  if(st)st.textContent='Saving…';
+
+  const {data,error}=await supabase.rpc('save_staff_player_plan',{
+    p_player_id:player.id,
+    p_raw_answers:raw,
+    p_curated_draft:curated,
+    p_section_status:sectionStatus
+  });
+
+  if(error){
+    if(st)st.textContent=`Save problem: ${error.message}`;
+    return false;
+  }
+
+  player.workflow=data||{
+    ...(player.workflow||{}),
+    raw_answers:raw,
+    curated_draft:curated,
+    section_status:sectionStatus,
+    updated_at:new Date().toISOString()
+  };
+  playersWorkspaceLocalRaw=null;
+  if(st)st.textContent='Saved ✓';
+  return true;
+}
+
+function queueWorkspacePlayerPlanAutosave(){
+  const st=document.getElementById('workspaceSaveStatus');
+  if(st)st.textContent='Unsaved changes';
+  if(playersWorkspaceAutosaveTimer)clearTimeout(playersWorkspaceAutosaveTimer);
+  playersWorkspaceAutosaveTimer=setTimeout(()=>saveWorkspacePlayerPlanSilently(),700);
+}
+
+function renderPlayersWorkspacePlayer(){
+  const page=document.getElementById('page');
+  const player=workspaceSelectedPlayer();
+  if(!player){
+    playersWorkspaceSelectedId=null;
+    renderPlayersWorkspaceList();
+    return;
+  }
+
+  const sections=[['summary','Summary'],['core','Core'],...publishedEnabledFormats()];
+  if(!sections.some(([k])=>k===playersWorkspaceSection))playersWorkspaceSection='summary';
+
+  const raw=playersWorkspaceLocalRaw||workspacePlayerRaw(player);
+  const {required,complete,total}=workspacePlayerProgress({...player,workflow:{...(player.workflow||{}),raw_answers:raw}});
+  const requiredSet=new Set(required);
+  const groups=(player.groups||[]).map(g=>`<span class="workspace-group-pill">${esc(g.name)}</span>`).join('');
+  const canEdit=!!player.can_edit;
+
+  const sectionTabs=sections.map(([key,label])=>{
+    if(key==='summary'){
+      return `<button data-workspace-section="${key}" class="${playersWorkspaceSection===key?'active':''}">${esc(label)}</button>`;
+    }
+    const state=workspaceSectionState(key,raw);
+    return `<button data-workspace-section="${key}" class="${playersWorkspaceSection===key?'active':''} ${state.key}">
+      ${esc(label)}${state.key==='complete'?' ✓':''}
+    </button>`;
+  }).join('');
+
+  let body='';
+
+  if(playersWorkspaceSection==='summary'){
+    const curated=player.workflow?.curated_draft&&Object.keys(player.workflow.curated_draft||{}).length&&!playersWorkspaceLocalRaw
+      ?player.workflow.curated_draft
+      :curate(raw);
+
+    const progressCards=[['core','Core'],...publishedEnabledFormats()].map(([key,label])=>{
+      const state=workspaceSectionState(key,raw);
+      return `<div class="workspace-progress-card ${state.key} ${requiredSet.has(key)?'required':''}">
+        <strong>${esc(label)}</strong>
+        <span>${state.label}</span>
+        <small>${esc(workspaceRequirementText(player,key))}</small>
+      </div>`;
+    }).join('');
+
+    body=`<div class="workspace-summary-grid">
+      <section class="card">
+        <div class="section-label">Plan progress</div>
+        <h2>${complete===total?'Required work complete ✓':`${complete}/${total} required sections complete`}</h2>
+        <div class="workspace-progress-grid">${progressCards}</div>
+        <div class="help workspace-updated">${esc(workspaceUpdatedLabel(player))}</div>
+      </section>
+      <section class="card workspace-plan-preview">
+        ${renderCuratedDraft(curated,player.display_name,'Player Plan')}
+      </section>
+    </div>`;
+  }else{
+    const section=playersWorkspaceSection;
+    const label=section==='core'?'Core':(FORMATS.find(([k])=>k===section)?.[1]||section);
+    const progress=sectionProgress(section,raw);
+    const questions=playerPlanQuestionsFor(section);
+
+    const liveHowWeBat=howWeBatVersions?.[0]?.snapshot||null;
+    const refFormat=section==='core'?null:liveHowWeBat?.formats?.[section];
+    const howWeBatHtml=refFormat?.banners?.length
+      ?`<section class="card player-plan-key-messages workspace-key-messages">
+        <div class="section-label">${esc(label)} · How We Bat</div>
+        <h2>Club key messages</h2>
+        <div class="help">Use these as reference while discussing the player’s own plan.</div>
+        <div class="hwb-public-banner-grid plan-key-message-grid">
+          ${refFormat.banners.map((b,i)=>renderKeyMessageReferenceCard(b,i,'plan',section)).join('')}
+        </div>
+      </section>`
+      :'';
+
+    body=`${howWeBatHtml}
+      <div class="workspace-player-plan-grid">
+        <section class="card">
+          <div class="builder-head compact">
+            <div>
+              <div class="section-label">${esc(label)} Player Plan</div>
+              <h2>${esc(player.display_name||'Player')}</h2>
+              <div class="help">${canEdit
+                ?'Work through the player’s plan together. Changes save automatically and the player can keep editing later.'
+                :'You have view-only access to this Player Plan.'}</div>
+              <div class="workspace-requirement-line">${esc(workspaceRequirementText(player,section))}</div>
+            </div>
+            <span id="workspaceSectionCompletion" class="section-completion ${progress.complete?'done':''}">
+              ${progress.complete
+                ?'✓ SECTION COMPLETE'
+                :progress.requiredCount
+                  ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
+                  :'OPTIONAL SECTION'}
+            </span>
+          </div>
+
+          <div class="workspace-question-list">
+            ${questions.length
+              ?questions.map(q=>renderWorkspaceQuestion(section,q,raw,canEdit)).join('')
+              :'<div class="notice">The club has not included any Player Plan questions in this section.</div>'}
+          </div>
+
+          <div class="player-plan-simple-status workspace-save-row">
+            <div>
+              <strong>${canEdit?'Co-create with the player':'View only'}</strong>
+              <span>${canEdit?'No approval step is created — you are simply editing the same Player Plan the player owns.':'Your access lets you use the plan for coaching, training and match conversations without changing it.'}</span>
+            </div>
+            <span class="status" id="workspaceSaveStatus">${canEdit?'Saved ✓':'VIEW ONLY'}</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-label">Current Player Plan</div>
+          <h2>What this section is becoming</h2>
+          <div class="help">This is the same plan the player sees in their own account.</div>
+          <div id="workspaceDraftPreview">${renderCuratedDraft(curate(raw),player.display_name,'Player Plan')}</div>
+        </section>
+      </div>`;
+  }
+
+  page.innerHTML=`<section class="card workspace-player-header">
+    <div class="workspace-player-header-main">
+      <button class="btn ghost" id="workspaceBackToPlayers">← All players</button>
+      <div>
+        <div class="section-label">${esc(permissionRoleLabel(playersWorkspaceData?.role||membership.permission_role))} workspace</div>
+        <h2>${esc(player.display_name||'Player')}</h2>
+        <div class="workspace-player-groups">${groups||'<span class="workspace-group-pill muted">Unassigned</span>'}</div>
+      </div>
+    </div>
+    <div class="workspace-player-access">
+      <span class="workspace-access-badge ${canEdit?'edit':'view'}">${canEdit?'VIEW + EDIT':'VIEW ONLY'}</span>
+      <small>${esc(workspaceUpdatedLabel(player))}</small>
+    </div>
+  </section>
+
+  <div class="workspace-player-tabs">${sectionTabs}</div>
+
+  ${body}`;
+
+  document.getElementById('workspaceBackToPlayers').onclick=async()=>{
+    await saveWorkspacePlayerPlanSilently();
+    playersWorkspaceSelectedId=null;
+    playersWorkspaceSection='summary';
+    playersWorkspaceLocalRaw=null;
+    renderPlayersWorkspaceList();
+  };
+
+  document.querySelectorAll('[data-workspace-section]').forEach(b=>b.onclick=async()=>{
+    if(b.dataset.workspaceSection===playersWorkspaceSection)return;
+    await saveWorkspacePlayerPlanSilently();
+    playersWorkspaceSection=b.dataset.workspaceSection;
+    playersWorkspaceLocalRaw=null;
+    renderPlayersWorkspacePlayer();
+  });
+
+  if(canEdit && playersWorkspaceSection!=='summary'){
+    document.querySelectorAll('[data-workspace-answer-key]').forEach(x=>x.onchange=()=>{
+      collectWorkspacePlayerAnswers();
+      updateWorkspaceSectionBadge();
+      const preview=document.getElementById('workspaceDraftPreview');
+      if(preview)preview.innerHTML=renderCuratedDraft(curate(playersWorkspaceLocalRaw||workspacePlayerRaw(player)),player.display_name,'Player Plan');
+      queueWorkspacePlayerPlanAutosave();
+    });
+
+    document.querySelectorAll('[data-workspace-comment-key]').forEach(x=>x.oninput=()=>{
+      collectWorkspacePlayerAnswers();
+      updateWorkspaceSectionBadge();
+      const preview=document.getElementById('workspaceDraftPreview');
+      if(preview)preview.innerHTML=renderCuratedDraft(curate(playersWorkspaceLocalRaw||workspacePlayerRaw(player)),player.display_name,'Player Plan');
+      queueWorkspacePlayerPlanAutosave();
+    });
+  }
+}
+
 /* ---------------- GUIDED PLAYER PLAN ---------------- */
 
 function rawAnswers(){
@@ -4393,18 +4987,21 @@ function sectionProgress(section,raw){
   };
 }
 
-function automaticSectionStatus(raw){
-  const previous=workflow?.section_status||{};
+function automaticSectionStatusForRaw(raw,previous={}){
   const next={};
   const sections=['core',...publishedEnabledFormats().map(([k])=>k)];
 
   for(const section of sections){
     const progress=sectionProgress(section,raw);
     if(progress.complete){
-      next[section]=previous[section]||new Date().toISOString();
+      next[section]=previous?.[section]||new Date().toISOString();
     }
   }
   return next;
+}
+
+function automaticSectionStatus(raw){
+  return automaticSectionStatusForRaw(raw,workflow?.section_status||{});
 }
 
 async function savePlayerPlanProgressSilently(){
@@ -4734,12 +5331,13 @@ function renderDraftPreview(){
   return renderCuratedDraft(curated);
 }
 
-function renderCuratedDraft(curated){
+function renderCuratedDraft(curated,playerName=null,kicker='Draft Player Plan'){
   const core=curated.core||[];
   const formats=curated.formats||{};
+  const displayName=playerName||myPlayer?.display_name||'Player';
 
   return `<div class="plan-draft">
-    <div class="plan-draft-head"><div class="section-label" style="color:#fff;opacity:.75">Draft Player Plan</div><h2>${esc(myPlayer?.display_name||'Player')}</h2></div>
+    <div class="plan-draft-head"><div class="section-label" style="color:#fff;opacity:.75">${esc(kicker)}</div><h2>${esc(displayName)}</h2></div>
     ${core.length?core.map(x=>`<div class="plan-line"><div class="label">${esc(x.label)}</div><div class="value">${esc(x.value)}</div></div>`).join(''):'<div class="plan-line"><div class="value">Start answering the guided questions to build your draft.</div></div>'}
     ${Object.values(formats).map(f=>f.lines?.length?`<div class="plan-line"><div class="label">${esc(f.label)}</div><div class="value">${f.lines.map(x=>`<strong>${esc(x.label)}:</strong> ${esc(x.value)}`).join('<br><br>')}</div></div>`:'').join('')}
   </div>`;
