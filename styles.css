@@ -2302,3 +2302,212 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
   details.admin-card>summary{padding:17px}
   .collapsible-admin-body{padding:0 17px 17px}
 }
+
+/* ============================================================
+   v0.8.1 — SERVER-SIDE DISCOVERY + LIVE EMAIL PROVIDER
+   ============================================================ */
+.discovery-result-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin:20px 0 10px;
+}
+.discovery-result-head strong{font-size:15px}
+.discovery-result-head span{font-size:12px;color:var(--muted,#667085);font-weight:700}
+.discovery-result-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.discovery-result-card{
+  min-width:0;
+  border:1px solid var(--line,#e6e8ee);
+  border-radius:16px;
+  background:#fff;
+  padding:15px;
+  box-shadow:0 4px 12px rgba(24,40,95,.035);
+}
+.discovery-card-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:12px;
+}
+.discovery-card-top>div{min-width:0;display:flex;flex-direction:column;gap:3px}
+.discovery-card-top strong{font-size:15px;line-height:1.3}
+.discovery-card-top small{color:var(--muted,#667085);font-size:11px}
+.discovery-confidence{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:5px 8px;
+  border-radius:999px;
+  border:1px solid #d0d5dd;
+  background:#f2f4f7;
+  color:#344054;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.035em;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+.discovery-confidence.high{background:#ecfdf3;border-color:#abefc6;color:#067647}
+.discovery-confidence.medium{background:#eff8ff;border-color:#b2ddff;color:#175cd3}
+.discovery-confidence.needs_review{background:#fffaeb;border-color:#fedf89;color:#b54708}
+.discovery-card-lines{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+  border-top:1px solid var(--line,#e6e8ee);
+  border-bottom:1px solid var(--line,#e6e8ee);
+}
+.discovery-card-lines>div{
+  display:grid;
+  grid-template-columns:92px minmax(0,1fr);
+  gap:10px;
+  align-items:start;
+  padding:9px 0;
+  border-bottom:1px solid var(--line,#e6e8ee);
+}
+.discovery-card-lines>div:last-child{border-bottom:0}
+.discovery-card-lines span{font-size:11px;font-weight:800;color:var(--muted,#667085);text-transform:uppercase;letter-spacing:.035em}
+.discovery-card-lines strong,.discovery-card-lines a{min-width:0;font-size:12px;overflow-wrap:anywhere}
+.discovery-actions{margin-top:12px}
+.discovery-loading{
+  margin-top:16px;
+  padding:13px 14px;
+  border:1px solid #d6e4ff;
+  border-radius:12px;
+  background:#f5f8ff;
+  color:#344054;
+  font-size:13px;
+}
+.provider-mini-status{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:14px;
+}
+.provider-mini-status span{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:7px 10px;
+  border:1px solid rgba(255,255,255,.24);
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  font-size:12px;
+  font-weight:700;
+}
+.provider-check-box{
+  display:flex;
+  align-items:center;
+  min-height:42px;
+  padding:10px 12px;
+  border:1px solid var(--line,#e6e8ee);
+  border-radius:11px;
+  background:#f8fafc;
+  color:#475467;
+  font-size:13px;
+  font-weight:750;
+}
+.provider-check-box.ok{background:#ecfdf3;border-color:#abefc6;color:#067647}
+.provider-check-box.bad{background:#fef3f2;border-color:#fecdca;color:#b42318}
+.provider-check-btn{margin-top:8px;align-self:flex-start}
+.email-provider-actions .form-grid{align-items:end}
+.message-row-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  flex-wrap:wrap;
+}
+.email-error{color:#b42318!important;margin-top:3px}
+
+@media (max-width:880px){
+  .discovery-result-grid{grid-template-columns:1fr}
+}
+@media (max-width:620px){
+  .discovery-result-head{align-items:flex-start;flex-direction:column;gap:3px}
+  .discovery-card-top{flex-direction:column}
+  .discovery-card-lines>div{grid-template-columns:1fr;gap:3px}
+  .provider-mini-status{align-items:stretch;flex-direction:column}
+  .provider-mini-status span{border-radius:10px}
+  .message-row-actions{justify-content:flex-start}
+}
+
+/* ============================================================
+   v0.8.2 — MARKET DISCOVERY
+   Country → region → association → club inventory
+   ============================================================ */
+
+.market-hero{margin-bottom:16px}
+.market-metrics{margin-bottom:18px}
+.market-region-card{border-top:4px solid var(--navy)}
+.market-region-grid{grid-template-columns:minmax(220px,.7fr) minmax(260px,1fr)}
+.market-live-pill{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:7px 10px;border-radius:999px;background:#e8f7ee;color:#146b3a;
+  font-size:10px;font-weight:950;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap
+}
+.market-source-note{
+  margin:4px 0 14px;padding:12px 14px;border:1px solid #e3e8f2;border-radius:12px;
+  background:#f8f9fc;color:#45506b;font-size:12px;line-height:1.55
+}
+.market-action-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.market-action-row .status{margin:0}
+.market-bulk-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.market-progress{min-height:20px;margin:4px 0 10px;font-size:12px;font-weight:800;color:var(--navy2)}
+
+.market-association-list{display:grid;gap:8px;margin-top:12px}
+.market-association-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;
+  padding:10px 12px;border:1px solid #e2e6ef;border-radius:13px;background:#fff
+}
+.market-association-row.selected{border-color:var(--navy);box-shadow:0 0 0 2px color-mix(in srgb,var(--navy) 10%,transparent)}
+.market-association-main{
+  border:0;background:transparent;padding:2px 4px;text-align:left;cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;gap:18px;min-width:0;color:inherit
+}
+.market-association-main>span:first-child{display:grid;gap:3px;min-width:0}
+.market-association-main strong{font-size:13px;color:var(--navy2)}
+.market-association-main small{font-size:10.5px;color:var(--muted)}
+.market-association-count{font-size:11px;color:#667085;white-space:nowrap}
+.market-association-count b{color:var(--navy2)}
+.market-association-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.btn.compact{padding:7px 9px!important;min-height:auto;font-size:10px;border-radius:9px}
+
+.market-club-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 10px}
+.market-club-list{display:grid;gap:7px}
+.market-club-row{
+  display:grid;grid-template-columns:minmax(220px,1.05fr) minmax(230px,.95fr) auto;
+  gap:14px;align-items:center;padding:10px 12px;border:1px solid #e3e7ef;border-radius:12px;background:#fff
+}
+.market-club-main,.market-club-contact{display:grid;gap:3px;min-width:0}
+.market-club-main strong{font-size:12.5px;color:var(--navy2)}
+.market-club-main small,.market-club-contact small{font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+.market-club-contact>strong{font-size:11px;color:#26324a;overflow-wrap:anywhere}
+.market-club-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.market-readiness{
+  display:inline-flex;width:max-content;padding:4px 7px;border-radius:999px;
+  font-size:8.5px;font-weight:950;letter-spacing:.06em;text-transform:uppercase
+}
+.market-readiness.ready{background:#e7f6ec;color:#146b3a}
+.market-readiness.partial{background:#eef2fb;color:#304a8a}
+.market-readiness.missing{background:#fff2df;color:#8a5700}
+
+@media(max-width:980px){
+  .market-association-row{grid-template-columns:1fr}
+  .market-association-actions{justify-content:flex-start}
+  .market-club-row{grid-template-columns:1fr}
+  .market-club-actions{justify-content:flex-start}
+}
+@media(max-width:720px){
+  .market-region-grid{grid-template-columns:1fr}
+  .market-association-main{align-items:flex-start;flex-direction:column;gap:5px}
+  .market-bulk-actions{justify-content:flex-start}
+  .market-club-toolbar{align-items:flex-start;flex-direction:column}
+}
