@@ -2156,3 +2156,149 @@ details.hwb-public-banner[open] .key-message-close{display:inline}
   .setup-collapsible-toggle{padding-top:3px}
   .setup-collapsible-body{padding:14px}
 }
+
+/* ================================================================
+   v0.8.0 — Platform prospect acquisition + onboarding
+   ================================================================ */
+
+.platform-flow-card{
+  background:var(--navy,#17285f);
+  color:#fff;
+  border-radius:22px;
+  padding:24px;
+  margin-bottom:18px;
+  box-shadow:0 10px 30px rgba(18,31,73,.12);
+}
+.platform-flow-card .section-label{color:rgba(255,255,255,.68)}
+.platform-flow-card h2{margin:4px 0 8px;color:#fff}
+.platform-flow-card p{margin:0;max-width:900px;color:rgba(255,255,255,.84);line-height:1.55}
+.pipeline-strip{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+.pipeline-strip span{
+  display:inline-flex;
+  align-items:center;
+  min-height:34px;
+  padding:7px 11px;
+  border:1px solid rgba(255,255,255,.24);
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.07em;
+}
+.pipeline-strip b{opacity:.5;font-size:15px}
+
+/* Collapsible platform cards */
+details.admin-card{padding:0;overflow:hidden}
+details.admin-card>summary{
+  list-style:none;
+  cursor:pointer;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:18px;
+  padding:20px 22px;
+  user-select:none;
+}
+details.admin-card>summary::-webkit-details-marker{display:none}
+details.admin-card>summary h2{margin:3px 0 4px}
+details.admin-card>summary p{margin:0;color:var(--muted,#667085);font-size:14px}
+details.admin-card>summary>span:last-child{font-size:20px;transition:transform .18s ease}
+details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
+.collapsible-admin-body{padding:0 22px 22px;border-top:1px solid var(--line,#e6e8ee)}
+.collapsible-admin-body>.form-grid:first-child,
+.collapsible-admin-body>.field:first-child{margin-top:18px}
+
+.prospect-filter-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.prospect-filter-row input{min-width:230px}
+.prospect-filter-row select{min-width:170px}
+
+.sales-prospect-list,.ready-onboarding-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top:14px;
+}
+.sales-prospect-row{
+  width:100%;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  gap:12px;
+  align-items:center;
+  text-align:left;
+  padding:13px 14px;
+  border:1px solid var(--line,#e6e8ee);
+  border-radius:14px;
+  background:#fff;
+  color:inherit;
+  cursor:pointer;
+  font:inherit;
+}
+.sales-prospect-row:hover{border-color:rgba(32,47,120,.34);box-shadow:0 5px 14px rgba(24,40,95,.06)}
+.sales-prospect-main{min-width:0;display:flex;flex-direction:column;gap:3px}
+.sales-prospect-main strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sales-prospect-main small{color:var(--muted,#667085);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sales-arrow{font-size:24px;line-height:1;color:var(--muted,#667085)}
+.sales-status{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 9px;
+  border-radius:999px;
+  background:#f2f4f7;
+  border:1px solid #e4e7ec;
+  font-size:11px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.045em;
+  white-space:nowrap;
+}
+.sales-status.interested{background:#ecfdf3;border-color:#abefc6;color:#067647}
+.sales-status.contacted{background:#eff8ff;border-color:#b2ddff;color:#175cd3}
+.sales-status.ready_to_contact,.sales-status.discovered{background:#fffaeb;border-color:#fedf89;color:#b54708}
+.sales-status.maybe_later{background:#f9f5ff;border-color:#d6bbfb;color:#6941c6}
+.sales-status.declined,.sales-status.do_not_contact,.sales-status.wrong_contact{background:#fef3f2;border-color:#fecdca;color:#b42318}
+.sales-status.onboarding{background:#f2f4f7;border-color:#d0d5dd;color:#344054}
+
+.sales-detail-grid{grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr)}
+.quick-status-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.fullwidth{width:100%;justify-content:center;margin-top:10px}
+.prospect-event-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.prospect-event-list>div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line,#e6e8ee)}
+.prospect-event-list>div:last-child{border-bottom:0}
+.prospect-event-list span{color:var(--muted,#667085);font-size:13px;white-space:nowrap}
+
+.prospect-response-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.prospect-response-actions .btn{justify-content:center;min-height:46px}
+.sales-response-shell .prospect-card{max-width:720px;margin-inline:auto}
+
+.onboarding-create{margin-top:16px}
+.ready-onboarding-list{margin-top:8px}
+
+@media (max-width:760px){
+  .platform-flow-card{padding:19px;border-radius:18px}
+  .pipeline-strip{gap:7px}
+  .pipeline-strip span{font-size:10px;padding:6px 8px}
+  .pipeline-strip b{display:none}
+  .prospect-filter-row{width:100%;align-items:stretch}
+  .prospect-filter-row input,.prospect-filter-row select{width:100%;min-width:0}
+  .sales-prospect-row{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:12px}
+  .sales-prospect-row .sales-status{grid-column:1/2;justify-self:start}
+  .sales-arrow{grid-column:2;grid-row:1/3;align-self:center}
+  .sales-detail-grid{grid-template-columns:1fr}
+  .prospect-response-actions{grid-template-columns:1fr}
+  .prospect-event-list>div{flex-direction:column;gap:3px}
+  .prospect-event-list span{white-space:normal}
+  details.admin-card>summary{padding:17px}
+  .collapsible-admin-body{padding:0 17px 17px}
+}
