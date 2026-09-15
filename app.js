@@ -3662,9 +3662,17 @@ async function renderPlanStructure(){
       <div class="help">Every enabled format remains available to every player from day one. Use this section only to say <strong>what is required, for whom, and by when</strong>. Players can always work ahead.</div>
       <div class="rollout-builder">
         <div class="field"><label>Format</label><select id="rolloutFormat">${planFormats.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select></div>
-        <div class="field"><label>Who is this required for?</label><select id="rolloutTargetType"><option value="all">Everyone</option><option value="playing_group">A Playing Group</option><option value="player">One player</option></select></div>
+        <div class="field"><label>Who is this required for?</label><select id="rolloutTargetType"><option value="all">Everyone</option><option value="playing_group">A Playing Group</option><option value="multiple_playing_groups">Multiple Playing Groups</option><option value="player">One player</option></select></div>
         <div class="field" id="rolloutTargetBox" style="display:none"><label id="rolloutTargetLabel">Playing Group</label><select id="rolloutTarget"></select></div>
         <div class="field"><label>Required by</label><input id="rolloutDueDate" type="date"><small>Optional. Leave blank for “Required now”.</small></div>
+        <div class="field rollout-multi-group-box" id="rolloutMultiGroupBox" style="display:none">
+          <div class="rollout-multi-group-head">
+            <div><label>Playing Groups</label><small>Select every group that should receive the same requirement.</small></div>
+            <div class="rollout-multi-group-actions"><button class="btn ghost tiny" id="selectAllRolloutGroups" type="button">Select all</button><button class="btn ghost tiny" id="clearRolloutGroups" type="button">Clear</button></div>
+          </div>
+          <div class="rollout-group-picker" id="rolloutGroupPicker"></div>
+          <div class="rollout-group-count" id="rolloutGroupCount">0 groups selected</div>
+        </div>
         <div class="rollout-add-action"><button class="btn secondary" id="addPlanRequirement">Add requirement</button><span class="status" id="rolloutStatus"></span></div>
       </div>
       <div class="rollout-current"><h3>Current requirements</h3>${requirementRows||'<div class="notice compact">No deadlines have been set yet. Players can still complete any available format now.</div>'}</div>
@@ -3787,9 +3795,138 @@ async function renderPlanStructure(){
   if(document.getElementById('publishClubSystem'))document.getElementById('publishClubSystem').onclick=publishPhilosophy;
 
   if(isAdmin()){
-    const updateTargetPicker=()=>{const type=document.getElementById('rolloutTargetType').value;const box=document.getElementById('rolloutTargetBox');const select=document.getElementById('rolloutTarget');const label=document.getElementById('rolloutTargetLabel');if(type==='all'){box.style.display='none';select.innerHTML='';return;}box.style.display='block';if(type==='playing_group'){label.textContent='Playing Group';select.innerHTML=groups.length?groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join(''):'<option value="">No active Playing Groups</option>';}else{label.textContent='Player';select.innerHTML=players.length?players.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join(''):'<option value="">No active players</option>';}};
-    document.getElementById('rolloutTargetType').onchange=updateTargetPicker;updateTargetPicker();
-    document.getElementById('addPlanRequirement').onclick=async()=>{const st=document.getElementById('rolloutStatus');const type=document.getElementById('rolloutTargetType').value;const target=type==='all'?null:document.getElementById('rolloutTarget').value||null;if(type!=='all'&&!target){st.textContent=type==='playing_group'?'Create or choose a Playing Group first.':'Choose a player.';return;}st.textContent='Adding…';const {error}=await supabase.rpc('create_plan_requirement',{p_club_id:club.id,p_format_key:document.getElementById('rolloutFormat').value,p_target_type:type,p_playing_group_id:type==='playing_group'?target:null,p_player_id:type==='player'?target:null,p_due_date:document.getElementById('rolloutDueDate').value||null});if(error){st.textContent=error.message;return;}await renderPlanStructure();};
+    const rolloutTargetType=document.getElementById('rolloutTargetType');
+    const rolloutTargetBox=document.getElementById('rolloutTargetBox');
+    const rolloutTarget=document.getElementById('rolloutTarget');
+    const rolloutTargetLabel=document.getElementById('rolloutTargetLabel');
+    const rolloutMultiGroupBox=document.getElementById('rolloutMultiGroupBox');
+    const rolloutGroupPicker=document.getElementById('rolloutGroupPicker');
+    const rolloutGroupCount=document.getElementById('rolloutGroupCount');
+    const addRequirementButton=document.getElementById('addPlanRequirement');
+
+    const selectedRolloutGroupIds=()=>[...document.querySelectorAll('[data-rollout-group]:checked')].map(x=>x.value);
+    const updateRolloutGroupCount=()=>{
+      if(!rolloutGroupCount)return;
+      const count=selectedRolloutGroupIds().length;
+      rolloutGroupCount.textContent=`${count} group${count===1?'':'s'} selected`;
+    };
+
+    const updateTargetPicker=()=>{
+      const type=rolloutTargetType.value;
+      rolloutTargetBox.style.display='none';
+      rolloutMultiGroupBox.style.display='none';
+      rolloutTarget.innerHTML='';
+      addRequirementButton.textContent=type==='multiple_playing_groups'?'Add requirements':'Add requirement';
+
+      if(type==='all')return;
+
+      if(type==='multiple_playing_groups'){
+        rolloutMultiGroupBox.style.display='block';
+        rolloutGroupPicker.innerHTML=groups.length
+          ?groups.map(g=>`<label class="rollout-group-option"><input type="checkbox" data-rollout-group value="${g.id}"><span>${esc(g.name)}</span></label>`).join('')
+          :'<div class="help">No active Playing Groups have been created yet.</div>';
+        document.querySelectorAll('[data-rollout-group]').forEach(x=>x.onchange=updateRolloutGroupCount);
+        updateRolloutGroupCount();
+        return;
+      }
+
+      rolloutTargetBox.style.display='block';
+      if(type==='playing_group'){
+        rolloutTargetLabel.textContent='Playing Group';
+        rolloutTarget.innerHTML=groups.length?groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join(''):'<option value="">No active Playing Groups</option>';
+      }else{
+        rolloutTargetLabel.textContent='Player';
+        rolloutTarget.innerHTML=players.length?players.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join(''):'<option value="">No active players</option>';
+      }
+    };
+
+    rolloutTargetType.onchange=updateTargetPicker;
+    updateTargetPicker();
+
+    document.getElementById('selectAllRolloutGroups').onclick=()=>{
+      document.querySelectorAll('[data-rollout-group]').forEach(x=>x.checked=true);
+      updateRolloutGroupCount();
+    };
+    document.getElementById('clearRolloutGroups').onclick=()=>{
+      document.querySelectorAll('[data-rollout-group]').forEach(x=>x.checked=false);
+      updateRolloutGroupCount();
+    };
+
+    addRequirementButton.onclick=async()=>{
+      const st=document.getElementById('rolloutStatus');
+      const type=rolloutTargetType.value;
+      const formatKey=document.getElementById('rolloutFormat').value;
+      const dueDate=document.getElementById('rolloutDueDate').value||null;
+
+      if(type==='multiple_playing_groups'){
+        const selectedIds=selectedRolloutGroupIds();
+        if(!selectedIds.length){st.textContent='Choose at least one Playing Group.';return;}
+
+        const existingIds=new Set(
+          requirements
+            .filter(r=>r.format_key===formatKey && r.target_type==='playing_group')
+            .map(r=>r.playing_group_id)
+        );
+        const toCreate=selectedIds.filter(id=>!existingIds.has(id));
+        const skipped=selectedIds.length-toCreate.length;
+
+        if(!toCreate.length){
+          st.textContent='Every selected Playing Group already has a requirement for this format.';
+          return;
+        }
+
+        addRequirementButton.disabled=true;
+        st.textContent=`Adding ${toCreate.length} requirement${toCreate.length===1?'':'s'}…`;
+        let created=0;
+        let failure=null;
+
+        for(const groupId of toCreate){
+          const {error}=await supabase.rpc('create_plan_requirement',{
+            p_club_id:club.id,
+            p_format_key:formatKey,
+            p_target_type:'playing_group',
+            p_playing_group_id:groupId,
+            p_player_id:null,
+            p_due_date:dueDate
+          });
+          if(error){failure=error;break;}
+          created+=1;
+        }
+
+        await renderPlanStructure();
+        const refreshedStatus=document.getElementById('rolloutStatus');
+        if(refreshedStatus){
+          if(failure){
+            refreshedStatus.textContent=`${created} added. ${failure.message}`;
+          }else if(skipped){
+            refreshedStatus.textContent=`${created} added · ${skipped} already existed and were left unchanged.`;
+          }else{
+            refreshedStatus.textContent=`${created} requirement${created===1?'':'s'} added ✓`;
+          }
+        }
+        return;
+      }
+
+      const target=type==='all'?null:rolloutTarget.value||null;
+      if(type!=='all'&&!target){
+        st.textContent=type==='playing_group'?'Create or choose a Playing Group first.':'Choose a player.';
+        return;
+      }
+
+      st.textContent='Adding…';
+      const {error}=await supabase.rpc('create_plan_requirement',{
+        p_club_id:club.id,
+        p_format_key:formatKey,
+        p_target_type:type,
+        p_playing_group_id:type==='playing_group'?target:null,
+        p_player_id:type==='player'?target:null,
+        p_due_date:dueDate
+      });
+      if(error){st.textContent=error.message;return;}
+      await renderPlanStructure();
+      const refreshedStatus=document.getElementById('rolloutStatus');
+      if(refreshedStatus)refreshedStatus.textContent='Requirement added ✓';
+    };
     document.querySelectorAll('[data-remove-plan-requirement]').forEach(b=>b.onclick=async()=>{const ok=confirm('Remove this Player Plan requirement? Players keep any work they have already completed.');if(!ok)return;const {error}=await supabase.rpc('deactivate_plan_requirement',{p_requirement_id:b.dataset.removePlanRequirement});if(error){alert(error.message);return;}await renderPlanStructure();});
   }
 }
