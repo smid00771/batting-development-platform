@@ -1338,3 +1338,84 @@ details.hwb-public-banner[open] .key-message-close{display:inline}
   .workspace-section-statuses,.workspace-progress-grid{grid-template-columns:1fr}
   .workspace-player-card-foot .btn{width:100%}
 }
+
+/* ---------- v0.6.8.1 rollout: multiple Playing Groups ---------- */
+.rollout-multi-group-box{
+  grid-column:1/-1;
+  margin:0;
+  padding:12px;
+  border:1px solid #dfe3f0;
+  border-radius:11px;
+  background:#fff;
+}
+.rollout-multi-group-head{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  align-items:flex-start;
+  margin-bottom:10px;
+}
+.rollout-multi-group-head label{margin-bottom:3px}
+.rollout-multi-group-head small{
+  display:block;
+  color:var(--muted);
+  font-size:9px;
+  line-height:1.4;
+}
+.rollout-multi-group-actions{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.rollout-multi-group-actions .btn.tiny{
+  padding:6px 9px;
+  font-size:8.5px;
+}
+.rollout-group-picker{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:7px;
+}
+.rollout-group-option{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:38px;
+  padding:8px 10px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:#fafbfe;
+  cursor:pointer;
+}
+.rollout-group-option:hover{border-color:#c5cceb;background:#f6f7ff}
+.rollout-group-option:has(input:checked){
+  border-color:var(--navy);
+  background:#eef1ff;
+  box-shadow:0 0 0 1px rgba(32,47,120,.08) inset;
+}
+.rollout-group-option input{
+  width:16px;
+  height:16px;
+  margin:0;
+  accent-color:var(--navy);
+}
+.rollout-group-option span{
+  font-size:9.5px;
+  font-weight:850;
+  color:var(--navy2);
+}
+.rollout-group-count{
+  margin-top:8px;
+  font-size:8.8px;
+  font-weight:850;
+  color:var(--muted);
+}
+
+@media(max-width:850px){
+  .rollout-group-picker{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+  .rollout-multi-group-head{flex-direction:column}
+  .rollout-group-picker{grid-template-columns:1fr}
+}
+
