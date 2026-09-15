@@ -1042,8 +1042,18 @@ function renderShell(){
     };
   }
 
-  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{
-    currentTab=b.dataset.tab;
+  document.querySelectorAll('.nav button').forEach(b=>b.onclick=async()=>{
+    const nextTab=b.dataset.tab;
+
+    // If a player is open inside the Players workspace, clicking the main
+    // Players navigation button should behave like the on-page ← Players
+    // control and return to the Players landing screen.
+    if(nextTab==='players' && currentTab==='players' && playersWorkspaceSelectedId){
+      await returnToPlayersWorkspaceList();
+      return;
+    }
+
+    currentTab=nextTab;
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
     renderTab();
   });
@@ -6230,6 +6240,16 @@ function renderWorkspacePlayerDiscussionPanel(player){
   </section>`;
 }
 
+async function returnToPlayersWorkspaceList(){
+  await saveWorkspacePlayerPlanSilently();
+  playersWorkspaceSelectedId=null;
+  playersWorkspaceSection='summary';
+  playersWorkspaceDevelopmentMode=null;
+  playersWorkspaceDevelopmentMatchId=null;
+  playersWorkspaceLocalRaw=null;
+  renderPlayersWorkspaceList();
+}
+
 async function renderPlayersWorkspacePlayer(){
   const page=document.getElementById('page');
   const player=workspaceSelectedPlayer();
@@ -6386,15 +6406,7 @@ async function renderPlayersWorkspacePlayer(){
 
   ${body}`;
 
-  document.getElementById('workspaceBackToPlayers').onclick=async()=>{
-    await saveWorkspacePlayerPlanSilently();
-    playersWorkspaceSelectedId=null;
-    playersWorkspaceSection='summary';
-    playersWorkspaceDevelopmentMode=null;
-    playersWorkspaceDevelopmentMatchId=null;
-    playersWorkspaceLocalRaw=null;
-    renderPlayersWorkspaceList();
-  };
+  document.getElementById('workspaceBackToPlayers').onclick=returnToPlayersWorkspaceList;
 
   document.querySelectorAll('[data-workspace-section]').forEach(b=>b.onclick=async()=>{
     if(b.dataset.workspaceSection===playersWorkspaceSection)return;
