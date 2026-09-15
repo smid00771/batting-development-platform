@@ -4874,7 +4874,6 @@ function renderMyReflectionForm(match=null){
   return `<section class="card development-entry-form" id="myReflectionForm">
     <div class="development-form-head">
       <div><div class="section-label">Player reflection</div><h2>${match?'Update this innings':'Reflect on an innings'}</h2><div class="help">Keep it short. This is a useful check-in, not homework.</div></div>
-      <button class="btn ghost" id="cancelMyReflection">Cancel</button>
     </div>
     <div class="development-match-fields">
       <div class="field"><label>Date</label><input id="reflectionDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
@@ -4891,7 +4890,7 @@ function renderMyReflectionForm(match=null){
     </div>
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="reflectionNextFocus" maxlength="240" value="${esc(r.next_training_focus||'')}" placeholder="One useful focus is enough"></div>
     <div class="field"><label>Anything else? <span>optional</span></label><textarea id="reflectionNote" maxlength="500" rows="3" placeholder="Short note only if it adds something useful">${esc(r.note||'')}</textarea></div>
-    <div class="btnrow"><button class="btn secondary" id="saveMyReflection">Save reflection</button><span class="status" id="myReflectionStatus"></span></div>
+    <div class="btnrow"><button class="btn secondary" id="saveMyReflection">Save reflection</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus"></span></div>
   </section>`;
 }
 
@@ -4921,11 +4920,17 @@ function renderHowWeTrainFormat(format,snapshot){
 
 function renderTrainMyPlan(raw,formats){
   const coreCards=coreTrainingCards(raw);
+  const coreProgress=sectionProgress('core',raw);
+  const coreReady=coreProgress.complete;
   const formatBlocks=formats.map(format=>{
     const cards=formatTrainingCards(raw,format);
+    const progress=sectionProgress(format,raw);
+    const ready=coreReady&&progress.complete;
     return `<div class="train-my-format">
       <div class="train-my-format-head"><div><div class="section-label">${esc(formatLabel(format))}</div><h3>Train my ${esc(formatLabel(format))} plan</h3></div></div>
-      ${cards.length?`<div class="train-personal-grid">${cards.map(c=>`<article class="train-personal-card"><small>${esc(c.label)}</small><strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join('')}</div>`:`<div class="notice">There are no saved ${esc(formatLabel(format))} answers yet. Complete that part of My Player Plan and this section will become specific to you.</div>`}
+      ${ready
+        ?(cards.length?`<div class="train-personal-grid">${cards.map(c=>`<article class="train-personal-card"><small>${esc(c.label)}</small><strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join('')}</div>`:`<div class="notice">Your ${esc(formatLabel(format))} plan is complete, but there are no training cues to display yet.</div>`)
+        :`<div class="train-plan-gate"><div><strong>Complete your ${esc(formatLabel(format))} Player Plan to unlock targeted ${esc(formatLabel(format))} training.</strong><span>How We Train uses your Core batting identity plus your ${esc(formatLabel(format))} answers. Until both are complete, this section stays general rather than pretending to be personalised.</span></div><button class="btn secondary" data-go="myplan">Complete My Player Plan</button></div>`}
     </div>`;
   }).join('');
 
@@ -4934,7 +4939,9 @@ function renderTrainMyPlan(raw,formats){
       <div><div class="section-label">Train My Plan</div><h2>Practise the game you have actually chosen.</h2><div class="help">Your Player Plan becomes the brief for your training. Train the decision as well as the shot.</div></div>
       <button class="btn ghost" data-go="myplan">Open My Player Plan</button>
     </div>
-    ${coreCards.length?`<div class="train-personal-grid core">${coreCards.map(c=>`<article class="train-personal-card"><small>${esc(c.label)}</small><h3>${esc(c.title)}</h3><strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join('')}</div>`:`<div class="notice">Start My Player Plan to turn this page into your own training brief.</div>`}
+    ${coreReady
+      ?(coreCards.length?`<div class="train-personal-grid core">${coreCards.map(c=>`<article class="train-personal-card"><small>${esc(c.label)}</small><h3>${esc(c.title)}</h3><strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join('')}</div>`:`<div class="notice">Your Core Player Plan is complete. Complete a format section below to unlock its targeted training plan.</div>`)
+      :`<div class="train-plan-gate core"><div><strong>Start with your Core Player Plan.</strong><span>Your training plan needs your batting identity, trusted options, Danger and Reset before format-specific practice can be genuinely targeted.</span></div><button class="btn secondary" data-go="myplan">Complete My Player Plan</button></div>`}
     ${formatBlocks}
   </section>`;
 }
@@ -4986,6 +4993,28 @@ async function renderHowWeTrain(){
     ?feedback.matches.find(m=>m.id===howWeTrainReflectionEditId)||null
     :null;
 
+  const trainingPlanReadinessHtml=myPlayer?(()=>{
+    const coreProgress=sectionProgress('core',raw);
+    const formatStatuses=selected.map(format=>({format,progress:sectionProgress(format,raw)}));
+    const allReady=coreProgress.complete&&formatStatuses.every(x=>x.progress.complete);
+    const selectedNames=formatStatuses.map(x=>formatLabel(x.format));
+    return `<section class="card train-plan-readiness ${allReady?'ready':'needs-plan'}">
+      <div class="train-plan-readiness-copy">
+        <div class="section-label">YOUR TRAINING PLAN STARTS WITH YOUR PLAYER PLAN</div>
+        <h2>${allReady?'Your selected formats are ready to train.':'Complete your Player Plan before relying on this as a targeted training plan.'}</h2>
+        <p><strong>How We Train creates personalised practice from what you have actually put in My Player Plan.</strong> For this page to be genuinely useful, complete your <strong>Core</strong> plan and the plan for every format you are preparing for${selectedNames.length?` — ${esc(selectedNames.join(' + '))}`:''}.</p>
+        <p class="train-plan-readiness-note">The club-wide training principles remain useful at any time. The personalised <strong>Train My Plan</strong> section only unlocks when the relevant Player Plan is complete.</p>
+      </div>
+      <div class="train-plan-readiness-side">
+        <div class="train-plan-status-list">
+          <div class="train-plan-status ${coreProgress.complete?'ready':'missing'}"><span>${coreProgress.complete?'✓':'!'}</span><div><strong>Core Player Plan</strong><small>${coreProgress.complete?'Ready to train':'Complete this first'}</small></div></div>
+          ${formatStatuses.map(x=>`<div class="train-plan-status ${x.progress.complete?'ready':'missing'}"><span>${x.progress.complete?'✓':'!'}</span><div><strong>${esc(formatLabel(x.format))}</strong><small>${x.progress.complete?'Ready to train':`${x.progress.answeredRequired}/${x.progress.requiredCount} required answered`}</small></div></div>`).join('')}
+        </div>
+        ${allReady?'':`<button class="btn secondary" data-go="myplan">Complete My Player Plan</button>`}
+      </div>
+    </section>`;
+  })():'';
+
   const focusHtml=myPlayer?`<section class="card current-training-focus">
     <div class="current-training-focus-head">
       <div><div class="section-label">Current training focus</div><h2>${focusItems.length?'What should I train next?':'Start with the Player Plan.'}</h2></div>
@@ -5013,8 +5042,8 @@ async function renderHowWeTrain(){
     </div>
   </section>`:'';
 
-  const staffPrompt=!myPlayer&&canUsePlayersWorkspace()?`<section class="card coach-train-prompt">
-    <div><div class="section-label">Coach / Captain</div><h2>See something useful at training?</h2><p>Open a player from the Players workspace and add a quick Training Observation. It is designed to take seconds, not become another coaching report.</p></div>
+  const staffPrompt=canUsePlayersWorkspace()?`<section class="card coach-train-prompt">
+    <div><div class="section-label">Coach / Captain tools</div><h2>Observe a player. Check it against their plan.</h2><p>Open a player in the Players workspace, then use <strong>Development</strong> to add a quick Training Observation or Match Coaching Feedback. This is available even when you are also a player yourself.</p></div>
     <button class="btn secondary" data-go="players">Open Players</button>
   </section>`:'';
 
@@ -5025,6 +5054,7 @@ async function renderHowWeTrain(){
     <div class="train-hero-callout">Practice should make match-day decisions <strong>simpler</strong>, not give you more things to think about.</div>
   </section>
 
+  ${trainingPlanReadinessHtml}
   ${focusHtml}
 
   <section class="card train-foundations">
@@ -5062,13 +5092,27 @@ async function renderHowWeTrain(){
     document.getElementById('jumpToDevelopmentFeedback').onclick=()=>document.getElementById('trainingFeedbackLoop')?.scrollIntoView({behavior:'smooth',block:'start'});
   }
 
+  const rerenderHowWeTrainAt=async(targetId)=>{
+    await renderHowWeTrain();
+    requestAnimationFrame(()=>document.getElementById(targetId)?.scrollIntoView({behavior:'smooth',block:'start'}));
+  };
+
   if(document.getElementById('newMyReflection')){
-    document.getElementById('newMyReflection').onclick=()=>{howWeTrainReflectionEditId='new';renderHowWeTrain();};
+    document.getElementById('newMyReflection').onclick=async()=>{
+      howWeTrainReflectionEditId='new';
+      await rerenderHowWeTrainAt('myReflectionForm');
+    };
   }
-  page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=()=>{howWeTrainReflectionEditId=b.dataset.editMyReflection;renderHowWeTrain();});
+  page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=async()=>{
+    howWeTrainReflectionEditId=b.dataset.editMyReflection;
+    await rerenderHowWeTrainAt('myReflectionForm');
+  });
 
   if(document.getElementById('cancelMyReflection')){
-    document.getElementById('cancelMyReflection').onclick=()=>{howWeTrainReflectionEditId=null;renderHowWeTrain();};
+    document.getElementById('cancelMyReflection').onclick=async()=>{
+      howWeTrainReflectionEditId=null;
+      await rerenderHowWeTrainAt('trainingFeedbackLoop');
+    };
   }
 
   wireQuickChoices(page);
@@ -5097,7 +5141,7 @@ async function renderHowWeTrain(){
       });
       if(error){btn.disabled=false;btn.textContent='Save reflection';st.textContent=error.message;return;}
       howWeTrainReflectionEditId=null;
-      await renderHowWeTrain();
+      await rerenderHowWeTrainAt('trainingFeedbackLoop');
     };
   }
 }
@@ -5105,14 +5149,14 @@ async function renderHowWeTrain(){
 function renderStaffTrainingObservationForm(player){
   const enabled=publishedEnabledFormats();
   return `<section class="card development-entry-form" id="staffDevelopmentForm">
-    <div class="development-form-head"><div><div class="section-label">Training observation</div><h2>Record what you noticed.</h2><div class="help">This should take seconds. Leave the format unticked if the observation was general/core practice.</div></div><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button></div>
+    <div class="development-form-head"><div><div class="section-label">Training observation</div><h2>Record what you noticed.</h2><div class="help">This should take seconds. Leave the format unticked if the observation was general/core practice.</div></div></div>
     <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${todayIso()}"></div>
     <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}"><span>${esc(l)}</span></label>`).join('')}</div></div>
     <div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],'mostly')}</div>
     <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),'right_shots_right_balls')}</div>
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffTrainingNextFocus" maxlength="240" placeholder="One useful focus is enough"></div>
     <div class="field"><label>Short note <span>optional</span></label><textarea id="staffTrainingNote" maxlength="500" rows="3" placeholder="Only add detail if it helps the player"></textarea></div>
-    <div class="btnrow"><button class="btn secondary" id="saveTrainingObservation">Save observation</button><span class="status" id="staffDevelopmentStatus"></span></div>
+    <div class="btnrow"><button class="btn secondary" id="saveTrainingObservation">Save observation</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
   </section>`;
 }
 
@@ -5122,7 +5166,7 @@ function renderStaffMatchFeedbackForm(player,data){
     :null;
   const format=match?.format_key||publishedEnabledFormats()[0]?.[0]||'limited_overs';
   return `<section class="card development-entry-form" id="staffDevelopmentForm">
-    <div class="development-form-head"><div><div class="section-label">Match coaching feedback</div><h2>${match?'Add your view to this innings':'Add feedback from an innings'}</h2><div class="help">Keep the coaching feedback short enough to be useful in the next training session.</div></div><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button></div>
+    <div class="development-form-head"><div><div class="section-label">Match coaching feedback</div><h2>${match?'Add your view to this innings':'Add feedback from an innings'}</h2><div class="help">Keep the coaching feedback short enough to be useful in the next training session.</div></div></div>
     <div class="development-match-fields">
       <div class="field"><label>Date</label><input id="staffMatchDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
       <div class="field"><label>Format</label><select id="staffMatchFormat">${publishedEnabledFormats().map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
@@ -5135,13 +5179,13 @@ function renderStaffMatchFeedbackForm(player,data){
     <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select></div>
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" maxlength="240" placeholder="One useful focus is enough"></div>
     <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed"></textarea></div>
-    <div class="btnrow"><button class="btn secondary" id="saveStaffMatchFeedback">Save coaching feedback</button><span class="status" id="staffDevelopmentStatus"></span></div>
+    <div class="btnrow"><button class="btn secondary" id="saveStaffMatchFeedback">Save coaching feedback</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
   </section>`;
 }
 
 function renderStaffDevelopmentBody(player,canEdit,data){
   return `<div class="staff-development-shell">
-    <section class="card development-overview">
+    <section class="card development-overview" id="developmentOverview">
       <div class="development-loop-head">
         <div><div class="section-label">Plan → train → play → learn</div><h2>Development feedback</h2><div class="help">Compare the player’s own reflection with coaching observations, then turn the useful part back into training.</div></div>
         ${canEdit?`<div class="btnrow"><button class="btn secondary" id="addTrainingObservation">Add training observation</button><button class="btn ghost" id="addNewMatchFeedback">Add match feedback</button></div>`:'<span class="workspace-access-badge view">VIEW ONLY</span>'}
@@ -5168,25 +5212,30 @@ function wireStaffDevelopmentControls(player,canEdit,data){
   wireQuickChoices(page);
   if(!canEdit)return;
 
-  if(document.getElementById('addTrainingObservation'))document.getElementById('addTrainingObservation').onclick=()=>{
+  const rerenderStaffDevelopmentAt=async(targetId)=>{
+    await renderPlayersWorkspacePlayer();
+    requestAnimationFrame(()=>document.getElementById(targetId)?.scrollIntoView({behavior:'smooth',block:'start'}));
+  };
+
+  if(document.getElementById('addTrainingObservation'))document.getElementById('addTrainingObservation').onclick=async()=>{
     playersWorkspaceDevelopmentMode='training';
     playersWorkspaceDevelopmentMatchId=null;
-    renderPlayersWorkspacePlayer();
+    await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   };
-  if(document.getElementById('addNewMatchFeedback'))document.getElementById('addNewMatchFeedback').onclick=()=>{
+  if(document.getElementById('addNewMatchFeedback'))document.getElementById('addNewMatchFeedback').onclick=async()=>{
     playersWorkspaceDevelopmentMode='match';
     playersWorkspaceDevelopmentMatchId=null;
-    renderPlayersWorkspacePlayer();
+    await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   };
-  page.querySelectorAll('[data-add-coach-feedback]').forEach(b=>b.onclick=()=>{
+  page.querySelectorAll('[data-add-coach-feedback]').forEach(b=>b.onclick=async()=>{
     playersWorkspaceDevelopmentMode='match';
     playersWorkspaceDevelopmentMatchId=b.dataset.addCoachFeedback;
-    renderPlayersWorkspacePlayer();
+    await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   });
-  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=()=>{
+  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=async()=>{
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
-    renderPlayersWorkspacePlayer();
+    await rerenderStaffDevelopmentAt('developmentOverview');
   };
 
   if(document.getElementById('saveTrainingObservation'))document.getElementById('saveTrainingObservation').onclick=async()=>{
@@ -5209,7 +5258,7 @@ function wireStaffDevelopmentControls(player,canEdit,data){
     if(error){btn.disabled=false;btn.textContent='Save observation';st.textContent=error.message;return;}
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
-    await renderPlayersWorkspacePlayer();
+    await rerenderStaffDevelopmentAt('developmentOverview');
   };
 
   if(document.getElementById('saveStaffMatchFeedback'))document.getElementById('saveStaffMatchFeedback').onclick=async()=>{
@@ -5236,7 +5285,7 @@ function wireStaffDevelopmentControls(player,canEdit,data){
     if(error){btn.disabled=false;btn.textContent='Save coaching feedback';st.textContent=error.message;return;}
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
-    await renderPlayersWorkspacePlayer();
+    await rerenderStaffDevelopmentAt('developmentOverview');
   };
 }
 
