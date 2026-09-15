@@ -71,6 +71,8 @@ let clubBrandingDraftClubId=null;
 let clubBrandingDraft=null;
 let clubBrandingLogoSuggestions=[];
 let clubBrandingWebsiteSuggestion=null;
+let clubBrandingLogoPaletteSource='';
+let clubBrandingLogoPaletteLoading=false;
 
 const FORMATS=[
   ['t20','T20'],
@@ -703,6 +705,8 @@ function ensureBrandingDraft(){
     };
     clubBrandingLogoSuggestions=[];
     clubBrandingWebsiteSuggestion=null;
+    clubBrandingLogoPaletteSource='';
+    clubBrandingLogoPaletteLoading=false;
   }
   return clubBrandingDraft;
 }
@@ -781,6 +785,25 @@ async function processClubLogoFile(file){
     paletteCanvas.getContext('2d').drawImage(canvas,0,0,paletteCanvas.width,paletteCanvas.height);
     return {dataUrl,palette:paletteFromCanvas(paletteCanvas)};
   }finally{URL.revokeObjectURL(objectUrl);}
+}
+
+async function paletteFromLogoDataUrl(dataUrl){
+  if(!dataUrl)return [];
+  const img=await new Promise((resolve,reject)=>{
+    const x=new Image();
+    x.onload=()=>resolve(x);
+    x.onerror=()=>reject(new Error('Could not read the saved club logo.'));
+    x.src=dataUrl;
+  });
+  const max=120;
+  const scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+  canvas.height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  return paletteFromCanvas(canvas);
 }
 
 async function boot(){
@@ -1518,7 +1541,7 @@ async function renderClubDashboard(){
         <div>
           <div class="section-label">Club branding</div>
           <h2>Make the player-facing system look like your club.</h2>
-          <p class="help">Add the club logo and website. We can suggest a colour combination from either source, but <strong>you choose what to use</strong>. You can also ignore both suggestions and pick any colours manually. Nothing changes for members until you click <strong>Save branding</strong>.</p>
+          <p class="help">Add the club logo and website. We can suggest a colour combination from either source, but <strong>you choose what to use</strong>. The preview begins with the club's currently saved colours (or the platform defaults for a new club). Adding a logo does not automatically change them. You can also ignore both suggestions and pick any colours manually. Nothing changes for members until you click <strong>Save branding</strong>.</p>
           <div class="branding-steps"><span><b>1</b> Add logo</span><span><b>2</b> Find website colours</span><span><b>3</b> Use a suggestion or choose manually</span></div>
         </div>
       </div>
@@ -1672,7 +1695,11 @@ function wireClubBrandingControls(page){
       if(clubBrandingLogoSuggestions.length){
         const ls=logoBrandSuggestion(clubBrandingLogoSuggestions);
         logoPanel.innerHTML=`<div class="branding-source-title"><strong>Logo suggestion</strong><span>Suggested from the colours found in your logo. Nothing changes until you choose it.</span></div>${ls?`<div class="branding-theme-pair"><div style="--swatch:${ls.primary}"><i></i><span>Primary</span><b>${ls.primary}</b></div><div style="--swatch:${ls.accent}"><i></i><span>Accent</span><b>${ls.accent}</b></div><button type="button" class="btn ghost" id="useLogoBrandTheme">Use logo suggestion</button></div>`:''}<div class="branding-palette-list">${renderAssignableSwatches(clubBrandingLogoSuggestions)}</div>`;
-      }else logoPanel.innerHTML='';
+      }else{
+        logoPanel.innerHTML=d.logo_data_url
+          ?`<div class="branding-source-title"><strong>Logo suggestion</strong><span>${clubBrandingLogoPaletteLoading?'Reading colours from the saved logo…':'Logo colours are being prepared. Your current theme has not changed.'}</span></div>`
+          :`<div class="branding-source-title"><strong>No logo added</strong><span>That is fine — use the website suggestion or choose Primary and Accent colours manually.</span></div>`;
+      }
     }
 
     const websitePanel=page.querySelector('#websiteColourSuggestion');
@@ -1718,6 +1745,8 @@ function wireClubBrandingControls(page){
       const result=await processClubLogoFile(file);
       draft.logo_data_url=result.dataUrl;
       clubBrandingLogoSuggestions=(result.palette||[]).filter(validHex).map(c=>c.toUpperCase());
+      clubBrandingLogoPaletteSource=result.dataUrl;
+      clubBrandingLogoPaletteLoading=false;
       if(clubBrandingLogoSuggestions.length){
         setStatus(logoStatus,'Logo ready. Use the logo suggestion, assign any detected colour as Primary or Accent, or choose colours manually. Your current theme has not changed.','good');
       }else setStatus(logoStatus,'Logo ready. Choose colours manually or analyse the club website.','good');
@@ -1736,7 +1765,7 @@ function wireClubBrandingControls(page){
   zone?.addEventListener('click',()=>zone.focus());
   page.querySelector('#chooseClubLogo')?.addEventListener('click',()=>fileInput?.click());
   fileInput?.addEventListener('change',()=>{if(fileInput.files?.[0])acceptLogo(fileInput.files[0]);fileInput.value='';});
-  page.querySelector('#removeClubLogo')?.addEventListener('click',()=>{draft.logo_data_url='';clubBrandingLogoSuggestions=[];setStatus(logoStatus,'Logo removed from this draft. Save branding to apply.');draw();});
+  page.querySelector('#removeClubLogo')?.addEventListener('click',()=>{draft.logo_data_url='';clubBrandingLogoSuggestions=[];clubBrandingLogoPaletteSource='';clubBrandingLogoPaletteLoading=false;setStatus(logoStatus,'Logo removed from this draft. Website and manual colour choices are still available. Save branding to apply.');draw();});
 
   const syncHex=(key,value)=>{
     const v=String(value||'').toUpperCase();
@@ -1824,6 +1853,32 @@ function wireClubBrandingControls(page){
   });
 
   draw();
+
+  // A saved logo should always offer the same explicit Logo suggestion as a newly added logo.
+  // Rebuild its palette when Club Setup opens; never apply those colours automatically.
+  if(draft.logo_data_url && clubBrandingLogoPaletteSource!==draft.logo_data_url && !clubBrandingLogoPaletteLoading){
+    clubBrandingLogoPaletteLoading=true;
+    draw();
+    paletteFromLogoDataUrl(draft.logo_data_url)
+      .then(palette=>{
+        if(ensureBrandingDraft().logo_data_url!==draft.logo_data_url)return;
+        clubBrandingLogoSuggestions=(palette||[]).filter(validHex).map(c=>c.toUpperCase());
+        clubBrandingLogoPaletteSource=draft.logo_data_url;
+        clubBrandingLogoPaletteLoading=false;
+        setStatus(logoStatus,clubBrandingLogoSuggestions.length
+          ?'Logo colours ready. Choose Use logo suggestion, assign individual colours, use the website suggestion, or choose colours manually.'
+          :'Logo is saved, but no reliable colour pair was detected. Use the website suggestion or choose colours manually.',
+          clubBrandingLogoSuggestions.length?'good':'');
+        draw();
+      })
+      .catch(err=>{
+        clubBrandingLogoPaletteSource=draft.logo_data_url;
+        clubBrandingLogoPaletteLoading=false;
+        setStatus(logoStatus,'Logo is saved, but its colours could not be read. Use the website suggestion or choose colours manually.','bad');
+        console.warn('Saved logo palette detection failed',err);
+        draw();
+      });
+  }
 }
 
 
