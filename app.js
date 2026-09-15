@@ -957,33 +957,38 @@ function renderShell(){
   document.documentElement.style.setProperty('--red',club.accent_colour||'#d8232a');
 
   const nav=[];
+
+  // The horizontal menu is organised by purpose rather than trying to carry
+  // the club-build workflow itself. Club Setup explains the full sequence.
   if(isAdmin()){
-    nav.push(['dashboard','Club Setup']);
-    nav.push(['groups','Playing Groups']);
+    nav.push(['dashboard','Club Setup','manage']);
+    nav.push(['groups','Playing Groups','manage']);
+    nav.push(['permissions','Permissions','manage']);
   }
   if(canUsePlayersWorkspace()){
-    nav.push(['players','Players']);
+    nav.push(['players','Players','manage']);
   }
+
   if(isAdmin() || canContributePhilosophy() || isPhilosophyLead()){
-    nav.push(['workshop','Philosophy Workshop']);
+    nav.push(['workshop','Philosophy Workshop','build']);
   }
   if(canContributePhilosophy()){
     nav.push(
-      ['identity','1. Club Identity'],
-      ['dimensions','2. What We Value'],
-      ['formats','3. Format Emphasis'],
-      ['preview',workshop?.final_draft_ready&&isPhilosophyLead()?'4. How We Bat Builder':'4. How We Bat']
+      ['identity','Club Identity','build'],
+      ['dimensions','What We Value','build'],
+      ['formats','Format Emphasis','build'],
+      ['preview',workshop?.final_draft_ready&&isPhilosophyLead()?'How We Bat Builder':'How We Bat Draft','build']
     );
   }
   if(isPhilosophyLead() || isAdmin()){
     const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
-    const planLabel=isPhilosophyLead()?'5. Player Plan Structure':'Player Plan Structure';
-    nav.push(['plan',planStructureReady?planLabel:`${planLabel} · Locked`]);
+    const planLabel='Player Plan Structure';
+    nav.push(['plan',planStructureReady?planLabel:`${planLabel} · Locked`,'build']);
   }
-  if(isAdmin())nav.push(['permissions','Permissions']);
-  if(howWeBatVersions.length)nav.push(['howwebat','How We Bat']);
-  if(isPlayerUser())nav.push(['myplan','My Player Plan']);
-  if(howWeBatVersions.length)nav.push(['howwetrain','How We Train']);
+
+  if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','use']);
+  if(isPlayerUser())nav.push(['myplan','My Player Plan','use']);
+  if(howWeBatVersions.length)nav.push(['howwetrain','How We Train','use']);
 
   if(!nav.some(([k])=>k===currentTab)){
     if(isAdmin())currentTab='dashboard';
@@ -1012,7 +1017,7 @@ function renderShell(){
         </div>
       </div>
     </header>
-    <nav class="nav">${nav.map(([k,l])=>`<button data-tab="${k}">${l}</button>`).join('')}</nav>
+    <nav class="nav">${(()=>{let previousGroup=null;return nav.map(([k,l,g])=>{const startsNewGroup=previousGroup!==null&&previousGroup!==g;previousGroup=g;return `<button data-tab="${k}" class="${startsNewGroup?'nav-group-start':''}" data-nav-group="${g||''}">${l}</button>`;}).join('');})()}</nav>
     <main class="page" id="page"></main>
   </div>`;
 
@@ -1294,71 +1299,145 @@ async function renderClubDashboard(){
   const page=document.getElementById('page');
   page.innerHTML='<div class="splash">Loading club setup…</div>';
 
-  const [{data:entitlement},{data:contributors},{data:pendingInvites},{data:players}]=await Promise.all([
+  const [
+    {data:entitlement},
+    {data:contributors},
+    {data:pendingInvites},
+    {data:players},
+    {data:groups},
+    {data:structureVersions}
+  ]=await Promise.all([
     supabase.rpc('get_club_entitlement',{p_club_id:club.id}),
     supabase.from('philosophy_contributors').select('user_id,status').eq('club_id',club.id),
     supabase.from('philosophy_contributor_invites').select('id,status').eq('club_id',club.id).eq('status','pending'),
-    supabase.from('players').select('id,active').eq('club_id',club.id).eq('active',true)
+    supabase.from('players').select('id,active').eq('club_id',club.id).eq('active',true),
+    supabase.from('playing_groups').select('id,active').eq('club_id',club.id).eq('active',true),
+    supabase.from('player_plan_structure_versions').select('id,version_number').eq('club_id',club.id).order('version_number',{ascending:false}).limit(1)
   ]);
 
   const submitted=(contributors||[]).filter(x=>x.status==='submitted').length;
   const total=(contributors||[]).length;
-  const published=philosophyVersions.length>0;
   const hasLead=!!workshop?.philosophy_lead_user_id;
   const entitlementActive=entitlement?.active!==false;
   const collaborative=workshop?.mode==='collaborative';
   const additionalContributors=(contributors||[]).filter(
     x=>x.user_id!==workshop?.philosophy_lead_user_id
   ).length + (pendingInvites||[]).length;
+  const philosophyReady=!!workshop?.final_draft_ready || philosophyVersions.length>0;
+  const howWeBatReady=howWeBatVersions.length>0;
+  const structureReady=(structureVersions||[]).length>0;
+  const systemLive=philosophyVersions.length>0 && howWeBatVersions.length>0 && structureReady;
 
-  const steps=[
+  const setupChecks=[
     ['Subscription / entitlement active',entitlementActive],
-    ['Club Admin appointed',true],
+    ['At least one Playing Group created',(groups||[]).length>0],
     ['Philosophy Lead chosen',hasLead],
     collaborative
-      ? ['Philosophy contributors selected',additionalContributors>0]
-      : ['Solo Philosophy Workshop ready',hasLead],
-    ['Club philosophy published',published],
-    ['How We Bat published',howWeBatVersions.length>0],
-    ['Player Plans open',published]
+      ?['Philosophy contributors selected',additionalContributors>0]
+      :['Solo Philosophy Workshop ready',hasLead],
+    ['Final philosophy prepared',philosophyReady],
+    ['How We Bat published',howWeBatReady],
+    ['Player Plan Structure published',structureReady],
+    ['Club Batting System live',systemLive]
   ];
 
-  page.innerHTML=`<div class="grid">
-    <section class="card">
-      <div class="section-label">Getting ${esc(club.name)} ready</div>
-      <h2>Club setup</h2>
-      <div class="setup-steps">${steps.map(([label,done])=>`
-        <div class="setup-step ${done?'done':''}"><span>${done?'✓':'○'}</span><strong>${esc(label)}</strong></div>`).join('')}</div>
-      <div class="btnrow">
-        ${!hasLead?'<button class="btn secondary" data-go="workshop">Choose Philosophy Lead</button>':''}
-        ${hasLead&&!published?'<button class="btn secondary" data-go="workshop">Continue Philosophy Workshop</button>':''}
-        ${published?'<button class="btn secondary" data-go="permissions">Invite / manage people</button>':''}
-        <button class="btn ghost" data-go="groups">Manage Playing Groups</button>
-      </div>
-    </section>
-    <section class="card">
-      <div class="section-label">Current position</div>
-      <h2>${published?'Player Plans are open':'Player Plans are locked'}</h2>
-      <div class="gate-state ${published?'open':'locked'}">${published?'🔓':'🔒'}</div>
-      <p class="help">${published
-        ?`Published Philosophy v${philosophyVersions[0]?.version_number}. Players can now build plans from the live club philosophy.`
-        :'Players can join the club now, but they will see a holding message until the Philosophy Lead publishes the club philosophy.'}</p>
-      <div class="dashboard-stats">
-        <div><strong>${submitted}/${total}</strong><span>${collaborative?'philosophy responses':'lead response'}</span></div>
-        <div><strong>${players?.length||0}</strong><span>active players</span></div>
-        <div><strong>${philosophyVersions[0]?.version_number||0}</strong><span>published version</span></div>
-      </div>
-    </section>
-  </div>
-  <section class="card" style="margin-top:16px">
-    <div class="section-label">Commercial status</div>
-    <h2>${entitlement?.status==='development_legacy'?'Development / legacy club':entitlementActive?'Active':'Needs attention'}</h2>
-    <div class="help">${entitlement?.status==='development_legacy'
-      ?'This club existed before the commercial onboarding system was added. Platform Admin can attach commercial terms later without changing any cricket data.'
-      :`Access ${entitlementActive?'is active':'has expired'}${entitlement?.active_until?` through ${new Date(entitlement.active_until+'T00:00:00').toLocaleDateString()}`:''}. Commercial terms are managed only in Platform Admin.`}</div>
-  </section>`;
+  const workflow=[
+    {
+      n:'1',title:'Set the club up',who:'Club Admin',
+      text:'Create Playing Groups, assign permissions, choose the Philosophy Lead and decide whether the philosophy process is Solo or Collaborative.'
+    },
+    {
+      n:'2',title:'Build the club philosophy',who:'Philosophy Lead + invited contributors',
+      text:'Contributors respond independently through Club Identity, What We Value and Format Emphasis. Their working answers are not player-facing.'
+    },
+    {
+      n:'3',title:'Create How We Bat',who:'Philosophy Lead',
+      text:'Turn the detailed philosophy into a small number of memorable, format-specific Key Messages that players can actually use.'
+    },
+    {
+      n:'4',title:'Set the Player Plan Structure',who:'Philosophy Lead',
+      text:'Decide what players will be asked about their own game, then confirm the final question structure.'
+    },
+    {
+      n:'5',title:'Publish the Club Batting System',who:'Philosophy Lead',
+      text:'Release the matching Philosophy, How We Bat and Player Plan Structure together. This is the point where the finished system becomes live.'
+    },
+    {
+      n:'6',title:'Players use it. Coaches develop it.',who:'Players + authorised coaches/captains',
+      text:'Players build their Player Plan and train from it. Coaches and captains use the Players workspace only for the Playing Groups or players they have permission to access.'
+    }
+  ];
 
-  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;renderTab();});
+  page.innerHTML=`
+    <section class="card setup-workflow-hero">
+      <div class="section-label">How the platform works</div>
+      <h2>Build it here. Players get the usable system.</h2>
+      <p class="setup-workflow-lead">The setup and philosophy pages are <strong>working areas for the people building the club system</strong>. Ordinary players do not see those screens. Once the Club Batting System is published, players see the simple tools they need to bat, plan, train and reflect.</p>
+      <div class="setup-player-callout"><strong>Players are not being shown the workshop.</strong><span>They receive the finished output — How We Bat, their own Player Plan and How We Train.</span></div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <div class="section-label">Club workflow</div>
+      <h2>From club beliefs to player development</h2>
+      <div class="club-workflow-list">
+        ${workflow.map(s=>`<div class="club-workflow-step">
+          <div class="club-workflow-number">${s.n}</div>
+          <div><strong>${esc(s.title)}</strong><small>${esc(s.who)}</small><p>${esc(s.text)}</p></div>
+        </div>`).join('')}
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <div class="section-label">Who sees what?</div>
+      <h2>Access follows role and permission.</h2>
+      <p class="help">A person's involvement in the philosophy process does not automatically give them access to player information. Player access is controlled separately.</p>
+      <div class="role-visibility-grid">
+        <div class="role-visibility-card player"><strong>Player</strong><span>After publication</span><p><b>How We Bat</b><br><b>My Player Plan</b><br><b>How We Train</b></p><small>Players see their own development tools — not the philosophy-building workspace.</small></div>
+        <div class="role-visibility-card coach"><strong>Coach / Captain / Head Coach</strong><span>According to permissions</span><p><b>Players</b><br><b>How We Bat</b><br><b>How We Train</b></p><small>The Players workspace only contains Playing Groups and players they have been authorised to access.</small></div>
+        <div class="role-visibility-card contributor"><strong>Philosophy Contributor</strong><span>During the build</span><p><b>Philosophy Workshop</b><br><b>Their own response sections</b></p><small>This role alone does not expose Player Plans, Training Plans or coaching feedback.</small></div>
+        <div class="role-visibility-card lead"><strong>Philosophy Lead</strong><span>Build + release</span><p><b>Workshop and final draft</b><br><b>How We Bat Builder</b><br><b>Player Plan Structure</b></p><small>Being Philosophy Lead does not automatically grant access to individual players. That requires separate coach/admin permission.</small></div>
+        <div class="role-visibility-card admin"><strong>Club Admin</strong><span>Club management</span><p><b>Setup + Playing Groups</b><br><b>Permissions + Players</b><br><b>Build and live system</b></p><small>Admins manage the club framework and have full club Player Plan access.</small></div>
+      </div>
+    </section>
+
+    <div class="grid" style="margin-top:16px">
+      <section class="card">
+        <div class="section-label">Current setup</div>
+        <h2>${esc(club.name)}</h2>
+        <div class="setup-steps">${setupChecks.map(([label,done])=>`
+          <div class="setup-step ${done?'done':''}"><span>${done?'✓':'○'}</span><strong>${esc(label)}</strong></div>`).join('')}</div>
+        <div class="btnrow">
+          ${!hasLead?'<button class="btn secondary" data-go="workshop">Choose Philosophy Lead</button>':''}
+          ${hasLead&&!systemLive?'<button class="btn secondary" data-go="workshop">Continue club build</button>':''}
+          <button class="btn ghost" data-go="groups">Playing Groups</button>
+          <button class="btn ghost" data-go="permissions">Permissions</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-label">Live system</div>
+        <h2>${systemLive?'Club Batting System is live':'Player-facing system not fully released'}</h2>
+        <div class="gate-state ${systemLive?'open':'locked'}">${systemLive?'🔓':'🔒'}</div>
+        <p class="help">${systemLive
+          ?`The published club system is available. Players can build their own Player Plans and use targeted How We Train guidance.`
+          :'People can still be invited and assigned roles while the club build is underway. The finished player-facing system becomes available when the Club Batting System is published.'}</p>
+        <div class="dashboard-stats">
+          <div><strong>${submitted}/${total}</strong><span>${collaborative?'philosophy responses':'lead response'}</span></div>
+          <div><strong>${groups?.length||0}</strong><span>Playing Groups</span></div>
+          <div><strong>${players?.length||0}</strong><span>active players</span></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card setup-commercial" style="margin-top:16px">
+      <div class="section-label">Commercial status</div>
+      <h3>${entitlement?.status==='development_legacy'?'Development / legacy club':entitlementActive?'Active':'Needs attention'}</h3>
+      <div class="help">${entitlement?.status==='development_legacy'
+        ?'This club existed before the commercial onboarding system was added. Platform Admin can attach commercial terms later without changing any cricket data.'
+        :`Access ${entitlementActive?'is active':'has expired'}${entitlement?.active_until?` through ${new Date(entitlement.active_until+'T00:00:00').toLocaleDateString()}`:''}. Commercial terms are managed only in Platform Admin.`}</div>
+    </section>`;
+
+  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
 }
 
 
@@ -1653,6 +1732,14 @@ function contributorStatusLabel(status){
   return status==='submitted'?'Submitted':status==='in_progress'?'In progress':'Invited';
 }
 
+function buildWorkspaceAudienceNotice(){
+  return `<div class="build-audience-notice">
+    <div class="build-audience-icon">BUILD</div>
+    <div><strong>This is a club-building workspace — ordinary players do not see it.</strong>
+    <span>Your response helps the Philosophy Lead build the finished Club Batting System. Players see the published <strong>How We Bat</strong>, their own <strong>Player Plan</strong> and <strong>How We Train</strong>. Workshop access does not give access to player plans or coaching feedback unless you have been given that permission separately.</span></div>
+  </div>`;
+}
+
 async function renderWorkshop(){
   document.getElementById('page').innerHTML='<div class="splash">Loading Philosophy Workshop…</div>';
 
@@ -1721,7 +1808,7 @@ async function renderWorkshop(){
   const pendingLate=(lateActions||[]).filter(x=>x.status==='pending');
   const myLateAction=(lateActions||[]).find(x=>x.user_id===session.user.id && x.status==='pending')||null;
 
-  let html=`<div class="workshop-grid">`;
+  let html=`${buildWorkspaceAudienceNotice()}<div class="workshop-grid">`;
 
   if(isAdmin()){
     html+=`<section class="card workshop-setup">
@@ -2712,7 +2799,7 @@ function renderIdentity(){
   }
 
   const locked=contributionLocked();
-  document.getElementById('page').innerHTML=`${locked?'<div class="submitted-banner">✓ Independent response submitted. It is locked so the group synthesis cannot influence your original answers.</div>':''}
+  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ Independent response submitted. It is locked so the group synthesis cannot influence your original answers.</div>':''}
   <div class="grid">
     <section class="card">
       <div class="section-label">What should survive every format?</div>
@@ -2818,7 +2905,7 @@ function renderDimensions(){
   if(!myContribution){currentTab='workshop';renderTab();return;}
   const locked=contributionLocked();
 
-  document.getElementById('page').innerHTML=`${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
+  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
   <div class="grid">
     <section class="card">
       <div class="section-label">Stimulus, not a prescription</div>
@@ -2935,7 +3022,7 @@ function renderFormats(){
   const formats=enabledFormats();
   const locked=contributionLocked();
 
-  document.getElementById('page').innerHTML=`${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
+  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
   <div class="card">
     <div class="section-label">When does each thing matter most?</div>
     <h2>Format emphasis</h2>
@@ -3559,7 +3646,7 @@ function renderPreview(){
   const identity=identitySummary()+(clubProfile.identity_note?` ${clubProfile.identity_note}`:'');
   const locked=contributionLocked();
 
-  document.getElementById('page').innerHTML=`${locked?'<div class="submitted-banner">✓ This is your locked independent response.</div>':''}
+  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ This is your locked independent response.</div>':''}
   <div class="grid">
     <section><div class="preview">
       <div class="preview-head"><div class="k">${esc(club.name)}</div><h2>How We Bat</h2><div style="font-size:11px;line-height:1.5;opacity:.9">${esc(identity)}</div></div>
