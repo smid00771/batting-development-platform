@@ -1732,3 +1732,231 @@ details.hwb-public-banner[open] .key-message-close{display:inline}
   .feedback-filter-count{text-align:left}
   .feedback-recent-head{flex-direction:column}
 }
+
+
+/* ---------- v0.7.2 — unified Players / Feedback workspace ---------- */
+
+.players-workspace-head.compact{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:18px;
+  padding:20px 22px;
+}
+.players-workspace-head.compact h2{margin:3px 0 6px}
+.workspace-access-inline{
+  flex:0 0 auto;
+  font-size:10px;
+  font-weight:900;
+  color:var(--muted);
+  padding:8px 10px;
+  border-radius:999px;
+  background:var(--soft);
+  border:1px solid var(--line);
+}
+.players-workspace-tools.compact{
+  display:grid;
+  grid-template-columns:minmax(220px,1fr) minmax(260px,1fr) auto;
+  gap:12px;
+  align-items:end;
+  padding:16px 18px;
+}
+.players-workspace-tools.compact .field{margin:0}
+.workspace-filter-count.compact{padding:5px 4px 4px;text-align:center;min-width:58px}
+.workspace-filter-count.compact strong{display:block;font-size:20px;line-height:1;color:var(--navy2)}
+.workspace-filter-count.compact span{display:block;margin-top:3px;font-size:8px;letter-spacing:.08em;font-weight:950;color:var(--muted);text-transform:uppercase}
+
+.workspace-roster-list{display:grid;gap:8px;margin-top:12px}
+.workspace-roster-row{
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+  padding:13px 15px;
+}
+.workspace-roster-person{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.workspace-roster-person h3{
+  margin:0;
+  font-size:17px;
+  color:var(--navy2);
+  line-height:1.2;
+}
+.workspace-roster-groups{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  margin-top:5px;
+}
+.workspace-roster-groups span{
+  font-size:8px;
+  font-weight:850;
+  color:var(--muted);
+  background:var(--soft);
+  border-radius:999px;
+  padding:4px 7px;
+}
+.workspace-roster-actions{
+  display:flex;
+  gap:2px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin-top:10px;
+  padding-top:9px;
+  border-top:1px solid var(--line);
+}
+.workspace-text-link{
+  appearance:none;
+  border:0;
+  background:transparent;
+  padding:5px 8px;
+  border-radius:8px;
+  color:var(--navy);
+  font-size:10px;
+  font-weight:900;
+  cursor:pointer;
+  text-decoration:none;
+}
+.workspace-text-link:hover{background:var(--blue-soft)}
+.workspace-text-link.add{color:var(--red)}
+.workspace-text-link.strong{background:var(--blue-soft);white-space:nowrap}
+.workspace-roster-empty{
+  padding:20px 22px;
+  text-align:center;
+}
+.workspace-roster-empty strong{display:block;color:var(--navy2);font-size:14px}
+.workspace-roster-empty span{display:block;margin-top:5px;color:var(--muted);font-size:11px;line-height:1.45}
+
+.workspace-roster-discussion{
+  margin-top:10px;
+  border-left:4px solid var(--red);
+  border-radius:0 10px 10px 0;
+  background:var(--soft);
+  padding:10px 11px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+}
+.workspace-roster-discussion.amber{border-left-color:#d69b2d}
+.workspace-roster-discussion.blue{border-left-color:var(--navy)}
+.workspace-roster-discussion.green{border-left-color:var(--ok)}
+.workspace-roster-discussion-copy strong{
+  display:block;
+  margin-top:4px;
+  color:var(--navy2);
+  font-size:11.5px;
+  line-height:1.35;
+}
+.workspace-roster-discussion-copy small{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  font-size:9.8px;
+  line-height:1.4;
+}
+.workspace-discussion-badge{
+  display:inline-flex;
+  border-radius:999px;
+  padding:4px 7px;
+  background:#fff4df;
+  color:#8a5a00;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.08em;
+}
+.workspace-discussion-outcomes{
+  grid-column:1/-1;
+  padding-top:9px;
+  border-top:1px solid var(--line);
+}
+.workspace-discussion-outcomes>span{
+  display:block;
+  color:var(--navy2);
+  font-size:10px;
+  font-weight:750;
+  line-height:1.4;
+  margin-bottom:7px;
+}
+.workspace-discussion-outcomes>div{display:flex;gap:6px;flex-wrap:wrap}
+.workspace-discussion-outcomes button{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:999px;
+  padding:7px 9px;
+  font-size:8.5px;
+  font-weight:900;
+  color:var(--navy2);
+  cursor:pointer;
+}
+.workspace-discussion-outcomes button:hover{border-color:var(--navy);background:var(--blue-soft)}
+
+.workspace-training-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:20px;
+}
+.workspace-training-head h2{margin:4px 0 6px}
+.workspace-training-head p{
+  margin:0;
+  max-width:690px;
+  color:var(--muted);
+  font-size:11.5px;
+  line-height:1.5;
+}
+.workspace-training-statuses{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:6px;
+  max-width:430px;
+}
+.workspace-training-statuses span{
+  display:inline-flex;
+  gap:5px;
+  align-items:center;
+  border-radius:999px;
+  padding:6px 8px;
+  font-size:8.5px;
+  font-weight:900;
+  border:1px solid var(--line);
+  background:#fff;
+  color:var(--muted);
+}
+.workspace-training-statuses span.ready{background:#eaf7ef;color:var(--ok);border-color:#cce7d7}
+.workspace-training-statuses span.missing{background:#fff1f1;color:var(--red);border-color:#efc6c8}
+.workspace-training-statuses b{font-size:9px}
+
+.workspace-player-discussion-panel{margin-bottom:12px}
+.workspace-player-discussion-panel>.section-label{color:#8a5a00;margin-bottom:8px}
+.workspace-player-discussion-item{
+  border-left:4px solid var(--red);
+  padding:10px 12px;
+  background:var(--soft);
+  border-radius:0 10px 10px 0;
+  margin-top:7px;
+}
+.workspace-player-discussion-item.amber{border-left-color:#d69b2d}
+.workspace-player-discussion-item.blue{border-left-color:var(--navy)}
+.workspace-player-discussion-item.green{border-left-color:var(--ok)}
+.workspace-player-discussion-item strong{display:block;color:var(--navy2);font-size:12px}
+.workspace-player-discussion-item span{display:block;margin-top:3px;color:var(--muted);font-size:10px;line-height:1.4}
+.workspace-player-discussion-item small{display:block;margin-top:6px;color:var(--navy2);font-size:9.5px;font-weight:750;line-height:1.4}
+
+@media(max-width:820px){
+  .players-workspace-head.compact,.workspace-training-head{flex-direction:column;align-items:stretch}
+  .workspace-access-inline{align-self:flex-start}
+  .players-workspace-tools.compact{grid-template-columns:1fr}
+  .workspace-filter-count.compact{text-align:left;padding-left:0}
+  .workspace-training-statuses{justify-content:flex-start;max-width:none}
+}
+@media(max-width:620px){
+  .workspace-roster-person{align-items:flex-start}
+  .workspace-roster-actions{gap:0}
+  .workspace-text-link{padding:6px 7px}
+  .workspace-roster-discussion{grid-template-columns:1fr}
+}
