@@ -48,9 +48,11 @@ let playersWorkspaceSection='summary';
 let playersWorkspaceLocalRaw=null;
 let playersWorkspaceAutosaveTimer=null;
 let playersWorkspaceSearch='';
-let playersWorkspaceGroupFilter='all';
+let playersWorkspaceGroupFilter='';
 let playersWorkspaceDevelopmentMode=null;
 let playersWorkspaceDevelopmentMatchId=null;
+let playersWorkspaceFeedbackData=null;
+let playersWorkspaceDiscussionKey=null;
 
 let howWeTrainSelectedFormats=new Set(['limited_overs']);
 let howWeTrainReflectionEditId=null;
@@ -961,7 +963,6 @@ function renderShell(){
   }
   if(canUsePlayersWorkspace()){
     nav.push(['players','Players']);
-    nav.push(['feedback','Feedback']);
   }
   if(isAdmin() || canContributePhilosophy() || isPhilosophyLead()){
     nav.push(['workshop','Philosophy Workshop']);
@@ -5237,7 +5238,7 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
     :null;
   const format=match?.format_key||publishedEnabledFormats()[0]?.[0]||'limited_overs';
   return `<section class="card development-entry-form" id="staffDevelopmentForm">
-    <div class="development-form-head"><div><div class="section-label">Match coaching feedback</div><h2>${match?'Add your view to this innings':'Add feedback from an innings'}</h2><div class="help">Keep the coaching feedback short enough to be useful in the next training session.</div></div></div>
+    <div class="development-form-head"><div><div class="section-label">Match observation</div><h2>${match?'Add your view to this innings':'Record what you noticed in the innings'}</h2><div class="help">Keep the coaching feedback short enough to be useful in the next training session.</div></div></div>
     <div class="development-match-fields">
       <div class="field"><label>Date</label><input id="staffMatchDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
       <div class="field"><label>Format</label><select id="staffMatchFormat">${publishedEnabledFormats().map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
@@ -5259,7 +5260,7 @@ function renderStaffDevelopmentBody(player,canEdit,data){
     <section class="card development-overview" id="developmentOverview">
       <div class="development-loop-head">
         <div><div class="section-label">Plan → train → play → learn</div><h2>Development feedback</h2><div class="help">Compare the player’s own reflection with coaching observations, then turn the useful part back into training.</div></div>
-        ${canEdit?`<div class="btnrow"><button class="btn secondary" id="addTrainingObservation">Add training observation</button><button class="btn ghost" id="addNewMatchFeedback">Add match feedback</button></div>`:'<span class="workspace-access-badge view">VIEW ONLY</span>'}
+        ${canEdit?`<div class="btnrow"><button class="btn secondary" id="addTrainingObservation">Add training observation</button><button class="btn ghost" id="addNewMatchFeedback">Add match observation</button></div>`:'<span class="workspace-access-badge view">VIEW ONLY</span>'}
       </div>
     </section>
     ${playersWorkspaceDevelopmentMode==='training'&&canEdit?renderStaffTrainingObservationForm(player):''}
@@ -5306,6 +5307,7 @@ function wireStaffDevelopmentControls(player,canEdit,data){
   if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=async()=>{
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
+    await refreshPlayersWorkspaceFeedback();
     await rerenderStaffDevelopmentAt('developmentOverview');
   };
 
@@ -5329,6 +5331,7 @@ function wireStaffDevelopmentControls(player,canEdit,data){
     if(error){btn.disabled=false;btn.textContent='Save observation';st.textContent=error.message;return;}
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
+    await refreshPlayersWorkspaceFeedback();
     await rerenderStaffDevelopmentAt('developmentOverview');
   };
 
@@ -5750,9 +5753,11 @@ function resetPlayersWorkspaceForClub(){
   playersWorkspaceSection='summary';
   playersWorkspaceLocalRaw=null;
   playersWorkspaceSearch='';
-  playersWorkspaceGroupFilter='all';
+  playersWorkspaceGroupFilter='';
   playersWorkspaceDevelopmentMode=null;
   playersWorkspaceDevelopmentMatchId=null;
+  playersWorkspaceFeedbackData=null;
+  playersWorkspaceDiscussionKey=null;
   if(playersWorkspaceAutosaveTimer){
     clearTimeout(playersWorkspaceAutosaveTimer);
     playersWorkspaceAutosaveTimer=null;
@@ -5785,19 +5790,30 @@ async function renderPlayersWorkspace(){
 
   page.innerHTML='<div class="splash">Loading players…</div>';
 
-  const {data,error}=await supabase.rpc('get_players_workspace',{p_club_id:club.id});
-  if(error){
+  const [playersRes,feedbackRes]=await Promise.all([
+    supabase.rpc('get_players_workspace',{p_club_id:club.id}),
+    supabase.rpc('get_feedback_workspace',{p_club_id:club.id})
+  ]);
+
+  if(playersRes.error){
     page.innerHTML=`<section class="card">
       <div class="section-label">Players</div>
       <h2>Player access could not load.</h2>
-      <div class="notice">${esc(error.message)}</div>
+      <div class="notice">${esc(playersRes.error.message)}</div>
     </section>`;
     return;
   }
 
-  playersWorkspaceData=data||{role:membership.permission_role,groups:[],players:[]};
+  playersWorkspaceData=playersRes.data||{role:membership.permission_role,groups:[],players:[]};
   playersWorkspaceData.players=Array.isArray(playersWorkspaceData.players)?playersWorkspaceData.players:[];
   playersWorkspaceData.groups=Array.isArray(playersWorkspaceData.groups)?playersWorkspaceData.groups:[];
+
+  if(feedbackRes.error){
+    playersWorkspaceFeedbackData={role:membership.permission_role,players:[],error:feedbackRes.error.message};
+  }else{
+    playersWorkspaceFeedbackData=feedbackRes.data||{role:membership.permission_role,players:[]};
+    playersWorkspaceFeedbackData.players=Array.isArray(playersWorkspaceFeedbackData.players)?playersWorkspaceFeedbackData.players:[];
+  }
 
   if(playersWorkspaceSelectedId && !playersWorkspaceData.players.some(p=>p.id===playersWorkspaceSelectedId)){
     playersWorkspaceSelectedId=null;
@@ -5809,81 +5825,151 @@ async function renderPlayersWorkspace(){
   else renderPlayersWorkspaceList();
 }
 
+function workspaceFeedbackPlayer(playerId){
+  return (playersWorkspaceFeedbackData?.players||[]).find(p=>p.id===playerId)||null;
+}
+
+function workspaceDiscussionSignals(){
+  return feedbackDiscussionSignals(playersWorkspaceFeedbackData||{players:[]});
+}
+
+function workspaceSignalsForPlayer(playerId){
+  return workspaceDiscussionSignals().filter(s=>s.player.id===playerId);
+}
+
+function workspaceOpenPlayer(playerId,section='summary',developmentMode=null){
+  playersWorkspaceSelectedId=playerId;
+  playersWorkspaceSection=section;
+  playersWorkspaceDevelopmentMode=developmentMode;
+  playersWorkspaceDevelopmentMatchId=null;
+  playersWorkspaceLocalRaw=null;
+  renderPlayersWorkspacePlayer().then(()=>{
+    if(developmentMode){
+      requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'}));
+    }
+  });
+}
+
+function workspaceFeedbackCount(playerId){
+  const p=workspaceFeedbackPlayer(playerId);
+  if(!p)return 0;
+  return (p.matches?.length||0)+(p.training_observations?.length||0);
+}
+
+function renderWorkspaceRosterDiscussion(player,signals){
+  if(!signals.length)return '';
+  const primary=signals[0];
+  const isOpen=playersWorkspaceDiscussionKey===primary.key;
+  return `<div class="workspace-roster-discussion ${primary.tone}">
+    <div class="workspace-roster-discussion-copy">
+      <span class="workspace-discussion-badge">NEEDS DISCUSSION${signals.length>1?` · ${signals.length} ITEMS`:''}</span>
+      <strong>${esc(primary.title)}</strong>
+      <small>${esc(primary.summary)}</small>
+    </div>
+    ${player.can_edit?`<button class="workspace-text-link strong" data-toggle-roster-discussion="${esc(primary.key)}">${isOpen?'Close':'Mark discussed'}</button>`:''}
+    ${isOpen&&player.can_edit?`<div class="workspace-discussion-outcomes">
+      <span>${esc(primary.suggestion)}</span>
+      <div>
+        <button data-roster-discussion-outcome="keep_plan" data-signal-key="${esc(primary.key)}">Keep plan</button>
+        <button data-roster-discussion-outcome="adjust_training" data-signal-key="${esc(primary.key)}">Adjust training</button>
+        <button data-roster-discussion-outcome="review_plan" data-signal-key="${esc(primary.key)}">Review Player Plan</button>
+        <button data-roster-discussion-outcome="no_action" data-signal-key="${esc(primary.key)}">No action needed</button>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
+  const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
+  const feedbackCount=workspaceFeedbackCount(player.id);
+  return `<article class="workspace-roster-row">
+    <div class="workspace-roster-person">
+      <div>
+        <h3>${esc(player.display_name||'Player')}</h3>
+        <div class="workspace-roster-groups">${groups||'<span>Unassigned</span>'}</div>
+      </div>
+      <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
+    </div>
+    ${discussionMode?renderWorkspaceRosterDiscussion(player,signals):''}
+    <div class="workspace-roster-actions">
+      <button class="workspace-text-link" data-open-workspace-player="${player.id}">Player Plan</button>
+      <button class="workspace-text-link" data-open-training-plan="${player.id}">Training Plan</button>
+      <button class="workspace-text-link" data-open-player-feedback="${player.id}">Feedback${feedbackCount?` · ${feedbackCount}`:''}</button>
+      ${player.can_edit?`<button class="workspace-text-link add" data-quick-match-observation="${player.id}">+ Match observation</button>
+      <button class="workspace-text-link add" data-quick-training-observation="${player.id}">+ Training observation</button>`:''}
+    </div>
+  </article>`;
+}
+
+async function refreshPlayersWorkspaceFeedback(){
+  try{
+    playersWorkspaceFeedbackData=await loadFeedbackWorkspaceData();
+  }catch(e){
+    playersWorkspaceFeedbackData={role:membership.permission_role,players:[],error:e?.message||String(e)};
+  }
+}
+
 function renderPlayersWorkspaceList(){
   const page=document.getElementById('page');
   const data=playersWorkspaceData||{players:[],groups:[]};
   const players=data.players||[];
   const role=permissionRoleLabel(data.role||membership.permission_role);
   const query=playersWorkspaceSearch.trim().toLowerCase();
+  const allSignals=workspaceDiscussionSignals();
+  const signalPlayerIds=new Set(allSignals.map(s=>s.player.id));
+  const discussionMode=playersWorkspaceGroupFilter==='__discussion__';
 
-  const filtered=players.filter(player=>{
-    const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
-    const groups=player.groups||[];
-    const matchesGroup=playersWorkspaceGroupFilter==='all'
-      ||groups.some(g=>g.id===playersWorkspaceGroupFilter);
-    return matchesName&&matchesGroup;
-  });
+  let filtered=[];
+  if(discussionMode){
+    filtered=players.filter(player=>{
+      const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
+      return matchesName&&signalPlayerIds.has(player.id);
+    });
+  }else if(playersWorkspaceGroupFilter){
+    filtered=players.filter(player=>{
+      const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
+      const matchesGroup=(player.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter);
+      return matchesName&&matchesGroup;
+    });
+  }else if(query){
+    filtered=players.filter(player=>String(player.display_name||'').toLowerCase().includes(query));
+  }
 
-  const anyEditable=players.some(p=>p.can_edit);
-  const allEditable=players.length>0&&players.every(p=>p.can_edit);
-  const accessSummary=isAdmin()
-    ?'Full club Player Plan access'
-    :allEditable
-      ?'View + edit access'
-      :anyEditable
-        ?'Mixed view / edit access'
-        :'View-only access';
+  const playerSignals=new Map();
+  for(const signal of allSignals){
+    if(!playerSignals.has(signal.player.id))playerSignals.set(signal.player.id,[]);
+    playerSignals.get(signal.player.id).push(signal);
+  }
 
-  const sections=[['core','Core'],...publishedEnabledFormats()];
+  const roster=filtered.map(player=>renderWorkspaceRosterRow(player,{
+    discussionMode,
+    signals:playerSignals.get(player.id)||[]
+  })).join('');
 
-  const cards=filtered.map(player=>{
-    const {raw,required,complete,total}=workspacePlayerProgress(player);
-    const requiredSet=new Set(required);
-    const groups=(player.groups||[]).map(g=>`<span class="workspace-group-pill">${esc(g.name)}</span>`).join('');
-    const statusChips=sections.map(([key,label])=>{
-      const state=workspaceSectionState(key,raw);
-      const requiredHere=requiredSet.has(key);
-      return `<span class="workspace-section-chip ${state.key} ${requiredHere?'required':''}">
-        <strong>${esc(label)}</strong>
-        <small>${state.label}${requiredHere?' · Required':''}</small>
-      </span>`;
-    }).join('');
+  const discussionPlayers=signalPlayerIds.size;
+  const accessLabel=isAdmin()?'Full club access':`${players.length} player${players.length===1?'':'s'} within your permissions`;
 
-    return `<article class="workspace-player-card" data-workspace-player-card="${player.id}">
-      <div class="workspace-player-card-head">
-        <div>
-          <h3>${esc(player.display_name||'Player')}</h3>
-          <div class="workspace-player-groups">${groups||'<span class="workspace-group-pill muted">Unassigned</span>'}</div>
-        </div>
-        <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
-      </div>
-      <div class="workspace-section-statuses">${statusChips}</div>
-      <div class="workspace-player-card-foot">
-        <div>
-          <strong>${complete===total?'Required work complete ✓':`${complete}/${total} required sections complete`}</strong>
-          <span>${esc(workspaceUpdatedLabel(player))}</span>
-        </div>
-        <div class="workspace-card-actions">
-          ${player.can_edit?`<button class="btn ghost" data-quick-training-observation="${player.id}">Training observation</button>`:''}
-          <button class="btn secondary" data-open-workspace-player="${player.id}">Open Player Plan</button>
-        </div>
-      </div>
-    </article>`;
-  }).join('');
+  let emptyCopy='';
+  if(!playersWorkspaceGroupFilter&&!query){
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>Select a Playing Group or search for a player.</strong><span>Only players and Playing Groups within your permissions are available here.</span></section>`;
+  }else if(discussionMode){
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>No coaching conversations waiting.</strong><span>When feedback creates something worth discussing, the player will appear here automatically.</span></section>`;
+  }else if(query&&!filtered.length){
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>No matching player found.</strong><span>Search only covers players you have permission to access.</span></section>`;
+  }else{
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>No players to show.</strong><span>There are no accessible players in this Playing Group.</span></section>`;
+  }
 
-  page.innerHTML=`<section class="card players-workspace-head">
+  page.innerHTML=`<section class="card players-workspace-head compact">
     <div>
       <div class="section-label">${esc(role)} workspace</div>
       <h2>Players</h2>
-      <div class="help">Open the Player Plans you have been given access to. Playing Group membership controls the list automatically as players move between groups.</div>
+      <div class="help">Choose a Playing Group or search for a player. Open their Player Plan, Training Plan or add a quick observation from the same list.</div>
     </div>
-    <div class="workspace-access-summary">
-      <strong>${esc(accessSummary)}</strong>
-      <span>${players.length} player${players.length===1?'':'s'} in your access</span>
-    </div>
+    <div class="workspace-access-inline">${esc(accessLabel)}</div>
   </section>
 
-  <section class="card players-workspace-tools">
+  <section class="card players-workspace-tools compact">
     <div class="field">
       <label>Find a player</label>
       <input id="workspacePlayerSearch" value="${esc(playersWorkspaceSearch)}" placeholder="Search by name">
@@ -5891,20 +5977,17 @@ function renderPlayersWorkspaceList(){
     <div class="field">
       <label>Playing Group</label>
       <select id="workspaceGroupFilter">
-        <option value="all">All players I can access</option>
+        <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>Select a Playing Group…</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
+        <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
       </select>
     </div>
-    <div class="workspace-filter-count"><strong>${filtered.length}</strong><span>shown</span></div>
+    ${(playersWorkspaceGroupFilter||query)?`<div class="workspace-filter-count compact"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
   </section>
 
-  <div class="workspace-player-list">
-    ${cards||`<section class="card workspace-empty">
-      <div class="section-label">No players to show</div>
-      <h2>${players.length?'No players match those filters.':'No Player Plan access is currently assigned.'}</h2>
-      <p>${players.length?'Clear the search or change the Playing Group filter.':isAdmin()?'Players will appear here once they register.':'A Club Admin can assign whole-club or Playing Group access in Permissions.'}</p>
-    </section>`}
-  </div>`;
+  ${playersWorkspaceFeedbackData?.error?`<div class="notice compact">Coaching feedback could not be loaded, so discussion flags are temporarily unavailable: ${esc(playersWorkspaceFeedbackData.error)}</div>`:''}
+
+  <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
   const search=document.getElementById('workspacePlayerSearch');
   if(search)search.oninput=()=>{
@@ -5919,26 +6002,36 @@ function renderPlayersWorkspaceList(){
   const filter=document.getElementById('workspaceGroupFilter');
   if(filter)filter.onchange=()=>{
     playersWorkspaceGroupFilter=filter.value;
+    playersWorkspaceDiscussionKey=null;
     renderPlayersWorkspaceList();
   };
 
-  document.querySelectorAll('[data-open-workspace-player]').forEach(b=>b.onclick=()=>{
-    playersWorkspaceSelectedId=b.dataset.openWorkspacePlayer;
-    playersWorkspaceSection='summary';
-    playersWorkspaceDevelopmentMode=null;
-    playersWorkspaceDevelopmentMatchId=null;
-    playersWorkspaceLocalRaw=null;
-    renderPlayersWorkspacePlayer();
+  document.querySelectorAll('[data-open-workspace-player]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openWorkspacePlayer,'summary'));
+  document.querySelectorAll('[data-open-training-plan]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openTrainingPlan,'training'));
+  document.querySelectorAll('[data-open-player-feedback]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openPlayerFeedback,'development'));
+  document.querySelectorAll('[data-quick-match-observation]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.quickMatchObservation,'development','match'));
+  document.querySelectorAll('[data-quick-training-observation]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.quickTrainingObservation,'development','training'));
+
+  document.querySelectorAll('[data-toggle-roster-discussion]').forEach(b=>b.onclick=()=>{
+    playersWorkspaceDiscussionKey=playersWorkspaceDiscussionKey===b.dataset.toggleRosterDiscussion?null:b.dataset.toggleRosterDiscussion;
+    renderPlayersWorkspaceList();
   });
 
-  document.querySelectorAll('[data-quick-training-observation]').forEach(b=>b.onclick=()=>{
-    feedbackWorkspaceClubId=club.id;
-    feedbackWorkspaceSelectedPlayerId=b.dataset.quickTrainingObservation;
-    feedbackWorkspaceEntryMode='training';
-    feedbackWorkspaceMatchId=null;
-    feedbackWorkspaceSection='add';
-    currentTab='feedback';
-    renderTab();
+  document.querySelectorAll('[data-roster-discussion-outcome]').forEach(b=>b.onclick=async()=>{
+    const signal=allSignals.find(s=>s.key===b.dataset.signalKey);
+    if(!signal)return;
+    b.disabled=true;
+    const {error}=await supabase.rpc('mark_development_discussion',{
+      p_player_id:signal.player.id,
+      p_signal_key:signal.key,
+      p_source_at:signal.sourceAt,
+      p_outcome:b.dataset.rosterDiscussionOutcome,
+      p_note:''
+    });
+    if(error){alert(error.message);b.disabled=false;return;}
+    playersWorkspaceDiscussionKey=null;
+    await refreshPlayersWorkspaceFeedback();
+    renderPlayersWorkspaceList();
   });
 }
 
@@ -6085,6 +6178,61 @@ function queueWorkspacePlayerPlanAutosave(){
   playersWorkspaceAutosaveTimer=setTimeout(()=>saveWorkspacePlayerPlanSilently(),700);
 }
 
+
+function renderStaffTrainingFormatAccordion(player,format,raw,feedback){
+  const coreProgress=sectionProgress('core',raw);
+  const formatProgress=sectionProgress(format,raw);
+  const ready=coreProgress.complete&&formatProgress.complete;
+  const label=formatLabel(format);
+  const cards=ready?[...coreTrainingCards(raw),...formatTrainingCards(raw,format)].slice(0,7):[];
+  const feedbackFocus=ready?trainingFocusForFormat(feedback,format,false):[];
+
+  return `<details class="card train-format-accordion ${ready?'ready':'locked'}">
+    <summary>
+      <div><div class="section-label">${esc(label)}</div><strong>${ready?`${esc(player.display_name||'Player')} · ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?'Targeted from the player’s completed Player Plan.':'Nothing appears here until Core and this format Player Plan are complete.'}</span></div>
+      <div class="train-accordion-state"><b>${ready?'TRAINING PLAN READY':'PLAYER PLAN NOT COMPLETE'}</b><em>Open ↓</em></div>
+    </summary>
+    <div class="train-simple-body">
+      ${ready?`
+        <div class="train-plan-lines">
+          ${cards.length?cards.map(c=>`<article><small>${esc(c.label)}</small>${c.title?`<h3>${esc(c.title)}</h3>`:''}<strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join(''):'<div class="notice">The Player Plan is complete, but there are no specific training cues to show yet.</div>'}
+        </div>
+        ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
+      `:`<div class="train-format-empty"><strong>No targeted ${esc(label)} plan yet.</strong><span>The player needs to complete Core and ${esc(label)} in their Player Plan before a targeted training plan can be generated.</span></div>`}
+    </div>
+  </details>`;
+}
+
+function renderStaffPlayerTrainingPlan(player,raw,feedback){
+  const enabled=publishedEnabledFormats();
+  const coreProgress=sectionProgress('core',raw);
+  const statuses=enabled.map(([format,label])=>({format,label,progress:sectionProgress(format,raw)}));
+  return `<section class="card workspace-training-head">
+    <div>
+      <div class="section-label">Training Plan</div>
+      <h2>${esc(player.display_name||'Player')}</h2>
+      <p>This is generated from the player’s completed Player Plan. Incomplete formats stay locked rather than producing generic advice.</p>
+    </div>
+    <div class="workspace-training-statuses">
+      <span class="${coreProgress.complete?'ready':'missing'}"><b>${coreProgress.complete?'✓':'!'}</b> Core</span>
+      ${statuses.map(x=>`<span class="${coreProgress.complete&&x.progress.complete?'ready':'missing'}"><b>${coreProgress.complete&&x.progress.complete?'✓':'!'}</b> ${esc(x.label)}</span>`).join('')}
+    </div>
+  </section>
+  ${renderClubTrainingPrinciples()}
+  <div class="train-format-accordion-list">${enabled.map(([format])=>renderStaffTrainingFormatAccordion(player,format,raw,feedback)).join('')}</div>`;
+}
+
+function renderWorkspacePlayerDiscussionPanel(player){
+  const signals=workspaceSignalsForPlayer(player.id);
+  if(!signals.length)return '';
+  return `<section class="card workspace-player-discussion-panel">
+    <div class="section-label">Needs a Coaching Conversation</div>
+    ${signals.map(s=>`<div class="workspace-player-discussion-item ${s.tone}">
+      <div><strong>${esc(s.title)}</strong><span>${esc(s.summary)}</span><small>${esc(s.suggestion)}</small></div>
+    </div>`).join('')}
+  </section>`;
+}
+
 async function renderPlayersWorkspacePlayer(){
   const page=document.getElementById('page');
   const player=workspaceSelectedPlayer();
@@ -6094,7 +6242,7 @@ async function renderPlayersWorkspacePlayer(){
     return;
   }
 
-  const sections=[['summary','Summary'],['core','Core'],...publishedEnabledFormats()];
+  const sections=[['summary','Player Plan'],['training','Training Plan'],['development','Feedback'],['core','Core'],...publishedEnabledFormats()];
   if(!sections.some(([k])=>k===playersWorkspaceSection))playersWorkspaceSection='summary';
 
   const raw=playersWorkspaceLocalRaw||workspacePlayerRaw(player);
@@ -6103,10 +6251,9 @@ async function renderPlayersWorkspacePlayer(){
   const groups=(player.groups||[]).map(g=>`<span class="workspace-group-pill">${esc(g.name)}</span>`).join('');
   const canEdit=!!player.can_edit;
 
-  let developmentData={matches:[],training_observations:[]};
+  let developmentData=workspaceFeedbackPlayer(player.id)||{matches:[],training_observations:[],discussions:[]};
   let developmentError='';
-  if(playersWorkspaceSection==='development'){
-    page.innerHTML='<div class="splash">Loading player development…</div>';
+  if((playersWorkspaceSection==='development'||playersWorkspaceSection==='training')&&!workspaceFeedbackPlayer(player.id)){
     try{
       developmentData=await loadDevelopmentFeedback(player.id);
     }catch(e){
@@ -6115,7 +6262,7 @@ async function renderPlayersWorkspacePlayer(){
   }
 
   const sectionTabs=sections.map(([key,label])=>{
-    if(key==='summary'||key==='development'){
+    if(key==='summary'||key==='training'||key==='development'){
       return `<button data-workspace-section="${key}" class="${playersWorkspaceSection===key?'active':''}">${esc(label)}</button>`;
     }
     const state=workspaceSectionState(key,raw);
@@ -6151,10 +6298,14 @@ async function renderPlayersWorkspacePlayer(){
         ${renderCuratedDraft(curated,player.display_name,'Player Plan')}
       </section>
     </div>`;
+  }else if(playersWorkspaceSection==='training'){
+    body=developmentError
+      ?`<section class="card"><div class="section-label">Training Plan</div><h2>This training plan could not load.</h2><div class="notice">${esc(developmentError)}</div></section>`
+      :renderStaffPlayerTrainingPlan(player,raw,developmentData);
   }else if(playersWorkspaceSection==='development'){
     body=developmentError
-      ?`<section class="card"><div class="section-label">Development feedback</div><h2>This section could not load.</h2><div class="notice">${esc(developmentError)}</div><div class="help" style="margin-top:10px">If v0.7.0 has just been deployed, make sure its Supabase migration was run first.</div></section>`
-      :renderStaffDevelopmentBody(player,canEdit,developmentData);
+      ?`<section class="card"><div class="section-label">Feedback</div><h2>This section could not load.</h2><div class="notice">${esc(developmentError)}</div><div class="help" style="margin-top:10px">If v0.7.0 has just been deployed, make sure its Supabase migration was run first.</div></section>`
+      :`${renderWorkspacePlayerDiscussionPanel(player)}${renderStaffDevelopmentBody(player,canEdit,developmentData)}`;
   }else{
     const section=playersWorkspaceSection;
     const label=section==='core'?'Core':(FORMATS.find(([k])=>k===section)?.[1]||section);
@@ -6221,7 +6372,7 @@ async function renderPlayersWorkspacePlayer(){
 
   page.innerHTML=`<section class="card workspace-player-header">
     <div class="workspace-player-header-main">
-      <button class="btn ghost" id="workspaceBackToPlayers">← All players</button>
+      <button class="btn ghost" id="workspaceBackToPlayers">← Players</button>
       <div>
         <div class="section-label">${esc(permissionRoleLabel(playersWorkspaceData?.role||membership.permission_role))} workspace</div>
         <h2>${esc(player.display_name||'Player')}</h2>
@@ -6262,7 +6413,7 @@ async function renderPlayersWorkspacePlayer(){
     wireStaffDevelopmentControls(player,canEdit,developmentData);
   }
 
-  if(canEdit && playersWorkspaceSection!=='summary' && playersWorkspaceSection!=='development'){
+  if(canEdit && !['summary','training','development'].includes(playersWorkspaceSection)){
     document.querySelectorAll('[data-workspace-answer-key]').forEach(x=>x.onchange=()=>{
       collectWorkspacePlayerAnswers();
       updateWorkspaceSectionBadge();
