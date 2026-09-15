@@ -10,6 +10,8 @@ let platformRole=null;
 let canBootstrapPlatform=false;
 let platformView='home';
 let platformSelectedProspectId=null;
+let platformSelectedOnboardingId=null;
+let platformOnboardingSeed=null;
 let club=null;
 let membership=null;
 let userProfile=null;
@@ -829,6 +831,7 @@ async function loadPlatformContext(){
 
 async function routeAuth(){
   const params=new URLSearchParams(location.search);
+  const leadToken=params.get('lead');
   const prospectToken=params.get('prospect');
   const paymentToken=params.get('payment');
   const adminInviteToken=params.get('admin_invite');
@@ -837,6 +840,7 @@ async function routeAuth(){
   const playerJoinToken=params.get('player_join');
   const joinCodeToken=params.get('join');
 
+  if(leadToken){await renderSalesProspectRoute(leadToken);return;}
   if(prospectToken){await renderProspectRoute(prospectToken);return;}
   if(paymentToken){await renderPaymentRoute(paymentToken);return;}
   if(adminInviteToken){await renderAdminInviteRoute(adminInviteToken);return;}
@@ -7508,6 +7512,76 @@ async function sendRouteMagicLink(email){
   return error;
 }
 
+
+async function renderSalesProspectRoute(token){
+  const {data:p,error}=await supabase.rpc('get_public_sales_prospect',{p_token:token});
+  if(error||!p){
+    app.innerHTML=`<div class="login"><h1>Invitation unavailable.</h1><p>${esc(error?.message||'This prospect link is no longer available.')}</p></div>`;
+    return;
+  }
+
+  if(['interested','maybe_later','wrong_contact','declined','do_not_contact'].includes(p.status)){
+    const messages={
+      interested:['Thanks — we’d like to keep talking.','Your response has been recorded. We’ll follow up with the club about the next step.'],
+      maybe_later:['Thanks — we’ll leave it there for now.','We’ve recorded that the timing is not right.'],
+      wrong_contact:['Thanks for pointing us in the right direction.','We won’t keep prospecting this address.'],
+      declined:['Thanks for letting us know.','We won’t send further prospecting emails to this address.'],
+      do_not_contact:['You’ve been unsubscribed.','We won’t send further prospecting emails to this address.']
+    };
+    const m=messages[p.status]||messages.declined;
+    app.innerHTML=`<div class="login" style="max-width:700px"><div class="success-mark">✓</div><h1>${esc(m[0])}</h1><p>${esc(m[1])}</p></div>`;
+    return;
+  }
+
+  const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
+  app.innerHTML=`<div class="prospect-shell sales-response-shell">
+    <section class="prospect-hero">
+      <div class="section-label">Batting Development Platform</div>
+      <h1>${esc(p.club_name)}</h1>
+      ${place?`<p class="help">${esc(place)}</p>`:''}
+      <p>We’re building a club-wide batting development system that connects <strong>how the club wants to bat</strong> with each player’s <strong>Player Plan, targeted training and simple coaching feedback</strong>.</p>
+    </section>
+    <section class="card prospect-card">
+      <h2>Is this worth exploring for your club?</h2>
+      <p class="help">This is not a sign-up or payment screen. It simply tells us whether to keep the conversation going.</p>
+      <div class="prospect-response-actions">
+        <button class="btn secondary" data-sales-response="interested">Yes — I’m interested</button>
+        <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
+        <button class="btn ghost" id="wrongContactBtn">I’m not the right person</button>
+        <button class="btn ghost" data-sales-response="declined">Not interested</button>
+      </div>
+      <div id="wrongContactBox" class="handoff-box" style="display:none;margin-top:16px">
+        <div class="section-label">Right club contact</div>
+        <p class="help">If you know who looks after cricket/coaching decisions, you can point us in the right direction. This is optional.</p>
+        <div class="field"><label>Name</label><input id="salesReferralName"></div>
+        <div class="field"><label>Email</label><input id="salesReferralEmail" type="email"></div>
+        <div class="btnrow"><button class="btn secondary" id="sendSalesReferral">Send referral</button><button class="btn ghost" id="cancelSalesReferral">Cancel</button></div>
+      </div>
+      <div id="salesResponseStatus" class="help"></div>
+    </section>
+  </div>`;
+
+  const respond=async(response,referralName='',referralEmail='')=>{
+    const st=document.getElementById('salesResponseStatus');st.textContent='Saving…';
+    const {data,error:e}=await supabase.rpc('respond_sales_prospect',{
+      p_token:token,p_response:response,p_referral_name:referralName,p_referral_email:referralEmail
+    });
+    if(e){st.textContent=e.message;return;}
+    const copy=response==='interested'
+      ?['Thanks — we’d like to keep talking.','Your response has been recorded. We’ll follow up with the club about the next step.']
+      :response==='maybe_later'
+        ?['Thanks — we’ll leave it there for now.','We’ve recorded that the timing is not right.']
+        :response==='wrong_contact'
+          ?[referralEmail?'Thanks — that helps.':'Thanks for letting us know.',referralEmail?'We’ll contact the person you nominated instead.':'We won’t keep prospecting this address.']
+          :['Thanks for letting us know.','We won’t send further prospecting emails to this address.'];
+    app.innerHTML=`<div class="login" style="max-width:700px"><div class="success-mark">✓</div><h1>${esc(copy[0])}</h1><p>${esc(copy[1])}</p></div>`;
+  };
+  document.querySelectorAll('[data-sales-response]').forEach(b=>b.onclick=()=>respond(b.dataset.salesResponse));
+  document.getElementById('wrongContactBtn').onclick=()=>{document.getElementById('wrongContactBox').style.display='block';document.getElementById('wrongContactBtn').style.display='none';};
+  document.getElementById('cancelSalesReferral').onclick=()=>{document.getElementById('wrongContactBox').style.display='none';document.getElementById('wrongContactBtn').style.display='';};
+  document.getElementById('sendSalesReferral').onclick=()=>respond('wrong_contact',val('salesReferralName'),val('salesReferralEmail'));
+}
+
 async function renderProspectRoute(token){
   const {data:p,error}=await supabase.rpc('get_public_prospect',{p_token:token});
   if(error||!p){
@@ -8088,14 +8162,14 @@ async function renderPlatformConsole(){
 
   app.innerHTML=`<div class="platform-shell">
     <header class="platform-header">
-      <div><div class="section-label">Private Platform Administration</div><h1>Batting Development Platform</h1><p>Prospects, private commercial terms, subscriptions and club activation.</p></div>
+      <div><div class="section-label">Private Platform Administration</div><h1>Batting Development Platform</h1><p>Find clubs, manage outreach, onboard interested clubs and manage active subscriptions.</p></div>
       <div class="header-actions">
         ${allMemberships.length?`<select id="platformContextSwitch" class="context-switch"><option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}</select>`:''}
         <button class="btn ghost" id="platformOut">Sign out</button>
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['home','Prospects'],['new','New Club'],['clubs','Active Clubs'],['outbox','Email Queue'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['home','Prospects'],['onboarding','Onboarding'],['clubs','Active Clubs'],['outbox','Email Queue'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
@@ -8105,13 +8179,13 @@ async function renderPlatformConsole(){
     if(e.target.value==='platform')return;
     localStorage.setItem('bdp-context','club');localStorage.setItem('bdp-club-id',e.target.value);await loadContext();
   };
-  document.querySelectorAll('[data-platform-view]').forEach(b=>b.onclick=()=>{platformView=b.dataset.platformView;platformSelectedProspectId=null;renderPlatformView();});
+  document.querySelectorAll('[data-platform-view]').forEach(b=>b.onclick=()=>{platformView=b.dataset.platformView;platformSelectedProspectId=null;platformSelectedOnboardingId=null;if(platformView!=='onboarding')platformOnboardingSeed=null;renderPlatformView();});
   await renderPlatformView();
 }
 
 async function renderPlatformView(){
   document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===platformView));
-  if(platformView==='new')return renderPlatformNewClub();
+  if(platformView==='onboarding')return renderPlatformOnboarding();
   if(platformView==='clubs')return renderPlatformActiveClubs();
   if(platformView==='outbox')return renderPlatformOutbox();
   if(platformView==='settings')return renderPlatformSettings();
@@ -8120,23 +8194,167 @@ async function renderPlatformView(){
 
 async function renderPlatformProspects(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading prospects…</div>';
-  const {data:prospects,error}=await supabase.from('club_prospects').select('*').order('created_at',{ascending:false});
+  const {data:prospects,error}=await supabase.from('sales_prospects').select('*').order('updated_at',{ascending:false});
   if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
+  const rows=prospects||[];
 
   if(platformSelectedProspectId){
-    const p=prospects.find(x=>x.id===platformSelectedProspectId);
-    if(p){await renderPlatformProspectDetail(p);return;}
+    const p=rows.find(x=>x.id===platformSelectedProspectId);
+    if(p){await renderPlatformSalesProspectDetail(p);return;}
   }
 
-  const counts={active:prospects.filter(x=>x.status==='active').length,waiting:prospects.filter(x=>['awaiting_payment','awaiting_admin_handoff','admin_invited'].includes(x.status)).length,beta:prospects.filter(x=>x.entry_route!=='standard').length};
-  page.innerHTML=`<div class="platform-metrics"><div><strong>${prospects.length}</strong><span>prospects / activations</span></div><div><strong>${counts.waiting}</strong><span>waiting on next step</span></div><div><strong>${counts.beta}</strong><span>Beta routes</span></div></div>
-  <section class="admin-card"><div class="admin-card-head"><div><div class="section-label">Club pipeline</div><h2>Prospects & onboarding</h2></div><button class="btn secondary" id="newProspectQuick">New club</button></div>
-    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Club</th><th>Route</th><th>Status</th><th>Rate reduction</th><th>Amount</th><th>Contact</th><th></th></tr></thead><tbody>
-    ${prospects.map(x=>`<tr><td><strong>${esc(x.club_name)}</strong><small>${esc(niceDate(x.offer_end))}</small></td><td>${esc(x.entry_route.replaceAll('_',' '))}</td><td><span class="status-pill">${esc(x.status.replaceAll('_',' '))}</span></td><td>${Number(x.adjustment_percent).toFixed(0)}%${x.adjustment_end?`<small>to ${esc(niceDate(x.adjustment_end))}</small>`:''}</td><td>${esc(money(x.amount_due_cents))}</td><td>${esc(x.primary_contact_email)}</td><td><button class="btn ghost" data-manage-prospect="${x.id}">Manage</button></td></tr>`).join('')||'<tr><td colspan="7">No prospects yet.</td></tr>'}
-    </tbody></table></div>
-  </section>`;
-  document.getElementById('newProspectQuick').onclick=()=>{platformView='new';renderPlatformConsole();};
-  page.querySelectorAll('[data-manage-prospect]').forEach(b=>b.onclick=()=>{platformSelectedProspectId=b.dataset.manageProspect;renderPlatformProspects();});
+  const counts={
+    discovered:rows.filter(x=>['discovered','ready_to_contact'].includes(x.status)).length,
+    contacted:rows.filter(x=>x.status==='contacted').length,
+    interested:rows.filter(x=>x.status==='interested').length,
+    onboarding:rows.filter(x=>x.status==='onboarding').length
+  };
+  const statusLabel=s=>({discovered:'Discovered',ready_to_contact:'Ready to contact',contacted:'Contacted',interested:'Interested',maybe_later:'Maybe later',wrong_contact:'Wrong contact',declined:'Declined',onboarding:'Onboarding',do_not_contact:'Do not contact'}[s]||String(s||'').replaceAll('_',' '));
+
+  page.innerHTML=`
+  <section class="platform-flow-card">
+    <div class="section-label">Club acquisition</div>
+    <h2>Find → Contact → Interested → Onboarding</h2>
+    <p>Prospects are clubs we are trying to win. A club only moves to <strong>Onboarding</strong> after it is interested or we deliberately start the process.</p>
+    <div class="pipeline-strip"><span>DISCOVER</span><b>→</b><span>CONTACT</span><b>→</b><span>INTERESTED</span><b>→</b><span>ONBOARD</span><b>→</b><span>ACTIVE</span></div>
+  </section>
+
+  <div class="platform-metrics"><div><strong>${counts.discovered}</strong><span>to research / contact</span></div><div><strong>${counts.contacted}</strong><span>awaiting response</span></div><div><strong>${counts.interested}</strong><span>ready to onboard</span></div><div><strong>${counts.onboarding}</strong><span>moved to onboarding</span></div></div>
+
+  <details class="admin-card platform-discovery" open>
+    <summary><div><div class="section-label">Discovery</div><h2>Find clubs in a locale</h2><p>Build a targeted public-web search now. Automated discovery can plug into this same workspace later.</p></div><span>⌄</span></summary>
+    <div class="collapsible-admin-body">
+      <div class="form-grid">
+        <div class="field"><label>Locality / city</label><input id="discoveryLocality" placeholder="e.g. Newcastle"></div>
+        <div class="field"><label>Region / state</label><input id="discoveryRegion" placeholder="e.g. NSW"></div>
+        <div class="field"><label>Country</label><input id="discoveryCountry" value="Australia"></div>
+      </div>
+      <div class="btnrow"><button class="btn secondary" id="launchDiscovery">Search the public web</button></div>
+      <div class="help">This deliberately opens a targeted web search rather than scraping search engines from the browser. The next integration will return candidate clubs here automatically through a server-side discovery provider.</div>
+    </div>
+  </details>
+
+  <section class="admin-card">
+    <div class="admin-card-head"><div><div class="section-label">Prospect pipeline</div><h2>Clubs</h2></div><div class="prospect-filter-row"><input id="salesProspectSearch" placeholder="Search club, place or email"><select id="salesProspectStatus"><option value="all">All active prospects</option><option value="interested">Interested</option><option value="contacted">Contacted</option><option value="ready_to_contact">Ready to contact</option><option value="discovered">Discovered</option><option value="maybe_later">Maybe later</option><option value="wrong_contact">Wrong contact</option><option value="declined">Declined</option><option value="onboarding">Onboarding</option></select></div></div>
+    <div id="salesProspectList"></div>
+  </section>
+
+  <details class="admin-card manual-prospect-card">
+    <summary><div><div class="section-label">Manual / referral</div><h2>Add a prospect manually</h2><p>Use this for referrals, known clubs and Beta clubs you already have a relationship with.</p></div><span>⌄</span></summary>
+    <div class="collapsible-admin-body">
+      <div class="form-grid">
+        <div class="field"><label>Club name</label><input id="salesClubName"></div>
+        <div class="field"><label>Locality</label><input id="salesLocality"></div>
+        <div class="field"><label>Region / state</label><input id="salesRegion"></div>
+        <div class="field"><label>Country</label><input id="salesCountry" value="Australia"></div>
+        <div class="field"><label>Club website</label><input id="salesWebsite" placeholder="https://..."></div>
+        <div class="field"><label>Public contact source</label><input id="salesSourceUrl" placeholder="Page where the contact was published"></div>
+        <div class="field"><label>Contact name</label><input id="salesContactName"></div>
+        <div class="field"><label>Contact role</label><input id="salesContactRole" value="Club Secretary / contact"></div>
+        <div class="field"><label>Public contact email</label><input id="salesContactEmail" type="email"></div>
+        <div class="field"><label>Likely route</label><select id="salesIntendedRoute"><option value="standard">Standard subscription</option><option value="full_flow_beta">Full-flow Beta</option><option value="direct_beta">Direct Beta</option></select></div>
+      </div>
+      <div class="field"><label>Internal note</label><textarea id="salesNotes"></textarea></div>
+      <div class="btnrow"><button class="btn secondary" id="addSalesProspect">Add prospect</button><span id="addSalesStatus" class="status"></span></div>
+    </div>
+  </details>`;
+
+  const renderList=()=>{
+    const q=(document.getElementById('salesProspectSearch').value||'').trim().toLowerCase();
+    const filter=document.getElementById('salesProspectStatus').value;
+    let shown=rows.filter(x=>filter==='all'?!['declined','do_not_contact'].includes(x.status):x.status===filter);
+    if(q)shown=shown.filter(x=>[x.club_name,x.locality,x.region,x.country,x.contact_email,x.contact_name].some(v=>String(v||'').toLowerCase().includes(q)));
+    document.getElementById('salesProspectList').innerHTML=shown.length?`<div class="sales-prospect-list">${shown.map(x=>{
+      const place=[x.locality,x.region,x.country].filter(Boolean).join(', ');
+      return `<button class="sales-prospect-row" data-sales-id="${x.id}"><span class="sales-prospect-main"><strong>${esc(x.club_name)}</strong><small>${esc(place||'Location not recorded')}${x.contact_email?` · ${esc(x.contact_email)}`:''}</small></span><span class="sales-status ${esc(x.status)}">${esc(statusLabel(x.status))}</span><span class="sales-arrow">›</span></button>`;
+    }).join('')}</div>`:'<div class="notice">No prospects match this view.</div>';
+    document.querySelectorAll('[data-sales-id]').forEach(b=>b.onclick=()=>{platformSelectedProspectId=b.dataset.salesId;renderPlatformProspects();});
+  };
+  document.getElementById('salesProspectSearch').oninput=renderList;
+  document.getElementById('salesProspectStatus').onchange=renderList;
+  renderList();
+
+  document.getElementById('launchDiscovery').onclick=()=>{
+    const locality=val('discoveryLocality'),region=val('discoveryRegion'),country=val('discoveryCountry');
+    const where=[locality,region,country].filter(Boolean).join(' ');
+    const query=encodeURIComponent(`${where} cricket clubs secretary contact email club website`);
+    window.open(`https://www.google.com/search?q=${query}`,'_blank','noopener');
+  };
+
+  document.getElementById('addSalesProspect').onclick=async()=>{
+    const st=document.getElementById('addSalesStatus');st.textContent='Adding…';
+    const email=val('salesContactEmail').trim().toLowerCase();
+    const status=email?'ready_to_contact':'discovered';
+    const {data,error}=await supabase.from('sales_prospects').insert({
+      club_name:val('salesClubName'),locality:val('salesLocality'),region:val('salesRegion'),country:val('salesCountry')||'Australia',website_url:val('salesWebsite'),
+      contact_name:val('salesContactName'),contact_role:val('salesContactRole')||'Club Secretary / contact',contact_email:email,contact_source_url:val('salesSourceUrl'),
+      source_type:'manual',intended_route:document.getElementById('salesIntendedRoute').value,status,notes:val('salesNotes')
+    }).select('id').single();
+    if(error){st.textContent=error.message;return;}
+    st.textContent='Added ✓';platformSelectedProspectId=data.id;setTimeout(()=>renderPlatformProspects(),300);
+  };
+}
+
+async function renderPlatformSalesProspectDetail(p){
+  const page=document.getElementById('platformPage');
+  const {data:events}=await supabase.from('sales_prospect_events').select('*').eq('sales_prospect_id',p.id).order('created_at',{ascending:false}).limit(20);
+  const publicLink=`${location.origin}${location.pathname}?lead=${p.public_token}`;
+  const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
+  const canContact=!!p.contact_email&&!p.do_not_contact&&!['declined','do_not_contact','onboarding'].includes(p.status);
+  page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backSalesProspects">← Prospects</button></div>
+    <div class="grid sales-detail-grid">
+      <section class="admin-card">
+        <div class="section-label">Prospect</div><h2>${esc(p.club_name)}</h2>
+        <div class="detail-grid"><div><span>Status</span><strong>${esc(String(p.status||'').replaceAll('_',' '))}</strong></div><div><span>Location</span><strong>${esc(place||'—')}</strong></div><div><span>Likely route</span><strong>${esc(String(p.intended_route||'standard').replaceAll('_',' '))}</strong></div><div><span>Last contacted</span><strong>${esc(p.last_contacted_at?niceDate(p.last_contacted_at):'Not yet')}</strong></div></div>
+        ${p.website_url?`<p><a href="${esc(p.website_url)}" target="_blank" rel="noopener">Open club website ↗</a></p>`:''}
+        ${p.contact_source_url?`<p class="help">Contact source: <a href="${esc(p.contact_source_url)}" target="_blank" rel="noopener">public source ↗</a></p>`:''}
+        <div class="field"><label>Contact name</label><input id="editSalesContactName" value="${esc(p.contact_name||'')}"></div>
+        <div class="field"><label>Contact role</label><input id="editSalesContactRole" value="${esc(p.contact_role||'')}"></div>
+        <div class="field"><label>Contact email</label><input id="editSalesContactEmail" type="email" value="${esc(p.contact_email||'')}"></div>
+        <div class="field"><label>Internal note</label><textarea id="editSalesNotes">${esc(p.notes||'')}</textarea></div>
+        <div class="btnrow"><button class="btn ghost" id="saveSalesProspect">Save details</button></div>
+      </section>
+      <section class="admin-card">
+        <div class="section-label">Next action</div><h2>${p.status==='interested'?'Ready for onboarding':'Prospect outreach'}</h2>
+        ${p.status==='interested'?'<div class="notice success"><strong>The club has indicated interest.</strong><br>Start formal onboarding and choose the actual Beta / subscription terms.</div>':''}
+        ${canContact?`<button class="btn secondary" id="queueSalesIntro">${p.status==='contacted'?'Queue another introduction':'Queue introduction'}</button>`:''}
+        ${!p.contact_email?'<div class="notice">Add a public club contact email before outreach can be queued.</div>':''}
+        ${p.do_not_contact||['declined','do_not_contact'].includes(p.status)?'<div class="notice"><strong>Do not contact.</strong> This email is suppressed from prospecting.</div>':''}
+        <div class="field"><label>Response link</label><input id="salesResponseLink" value="${esc(publicLink)}" readonly></div>
+        <button class="btn ghost" id="copySalesLink">Copy response link</button>
+        <div class="quick-status-actions">
+          <button class="btn ghost" data-sales-status="interested">Mark interested</button>
+          <button class="btn ghost" data-sales-status="maybe_later">Maybe later</button>
+          <button class="btn ghost" data-sales-status="declined">Not interested</button>
+        </div>
+        ${!p.onboarding_prospect_id?'<button class="btn secondary fullwidth" id="startSalesOnboarding">Start onboarding →</button>':'<div class="notice success"><strong>Moved to Onboarding.</strong></div>'}
+        <div id="salesActionStatus" class="help"></div>
+      </section>
+    </div>
+    <section class="admin-card" style="margin-top:16px"><div class="section-label">History</div><h2>Prospect activity</h2><div class="prospect-event-list">${(events||[]).map(e=>`<div><strong>${esc(String(e.event_type).replaceAll('_',' '))}</strong><span>${esc(new Date(e.created_at).toLocaleString())}</span></div>`).join('')||'<div class="help">No activity yet.</div>'}</div></section>`;
+
+  document.getElementById('backSalesProspects').onclick=()=>{platformSelectedProspectId=null;renderPlatformProspects();};
+  document.getElementById('copySalesLink').onclick=async()=>{await navigator.clipboard.writeText(publicLink);document.getElementById('copySalesLink').textContent='Copied ✓';};
+  document.getElementById('saveSalesProspect').onclick=async()=>{
+    const nextEmail=val('editSalesContactEmail').trim().toLowerCase();
+    const contactChanged=!!nextEmail&&nextEmail!==String(p.contact_email||'').trim().toLowerCase();
+    const patch={contact_name:val('editSalesContactName'),contact_role:val('editSalesContactRole'),contact_email:nextEmail,notes:val('editSalesNotes'),updated_at:new Date().toISOString()};
+    if(contactChanged&&p.status==='wrong_contact'){patch.status='ready_to_contact';patch.do_not_contact=false;}
+    const {error}=await supabase.from('sales_prospects').update(patch).eq('id',p.id);
+    if(error){alert(error.message);return;}renderPlatformProspects();
+  };
+  if(document.getElementById('queueSalesIntro'))document.getElementById('queueSalesIntro').onclick=async()=>{
+    const st=document.getElementById('salesActionStatus');st.textContent='Queuing…';
+    const {error}=await supabase.rpc('platform_queue_sales_intro',{p_sales_prospect_id:p.id});
+    if(error){st.textContent=error.message;return;}st.textContent='Introduction queued ✓';setTimeout(()=>renderPlatformProspects(),500);
+  };
+  document.querySelectorAll('[data-sales-status]').forEach(b=>b.onclick=async()=>{
+    const {error}=await supabase.rpc('platform_set_sales_prospect_status',{p_sales_prospect_id:p.id,p_status:b.dataset.salesStatus});
+    if(error){alert(error.message);return;}renderPlatformProspects();
+  });
+  if(document.getElementById('startSalesOnboarding'))document.getElementById('startSalesOnboarding').onclick=()=>{
+    platformOnboardingSeed=p;platformSelectedProspectId=null;platformView='onboarding';renderPlatformConsole();
+  };
 }
 
 async function loadSubscriptionCalendars(){
@@ -8186,11 +8404,11 @@ async function getCommercialPreview(calendar,accessStart,reduction=0,adjustmentE
   });
 }
 
-async function renderPlatformProspectDetail(p){
+async function renderPlatformOnboardingDetail(p){
   const page=document.getElementById('platformPage');
   const {data:calendars}=await loadSubscriptionCalendars();
   const publicLink=`${location.origin}${location.pathname}?prospect=${p.public_token}`;
-  page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backProspects">← Back to prospects</button></div>
+  page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backOnboarding">← Back to onboarding</button></div>
   <div class="grid">
     <section class="admin-card">
       <div class="section-label">Prospect</div><h2>${esc(p.club_name)}</h2>
@@ -8211,7 +8429,7 @@ async function renderPlatformProspectDetail(p){
       <div id="prospectTermsStatus" class="help"></div>
     </section>
   </div>`;
-  document.getElementById('backProspects').onclick=()=>{platformSelectedProspectId=null;renderPlatformProspects();};
+  document.getElementById('backOnboarding').onclick=()=>{platformSelectedOnboardingId=null;renderPlatformOnboarding();};
   document.getElementById('copyProspectLink').onclick=async()=>{await navigator.clipboard.writeText(publicLink);document.getElementById('copyProspectLink').textContent='Copied ✓';};
   if(document.getElementById('saveProspectTerms'))document.getElementById('saveProspectTerms').onclick=async()=>{
     const st=document.getElementById('prospectTermsStatus');st.textContent='Saving…';
@@ -8227,112 +8445,104 @@ async function renderPlatformProspectDetail(p){
     });
     if(error){st.textContent=error.message;return;}
     st.textContent=`Saved. New amount: ${money(data.amount_due_cents)} · next renewal ${niceDate(data.next_renewal)}.`;
-    setTimeout(()=>renderPlatformProspects(),700);
+    setTimeout(()=>renderPlatformOnboarding(),700);
   };
 }
 
-async function renderPlatformNewClub(){
+async function renderPlatformOnboarding(){
   const page=document.getElementById('platformPage');
-  page.innerHTML='<div class="splash">Loading commercial settings…</div>';
-
-  const [{data:settings,error:settingsError},{data:calendars,error:calendarError}]=await Promise.all([
+  page.innerHTML='<div class="splash">Loading onboarding…</div>';
+  const [{data:settings,error:settingsError},{data:calendars,error:calendarError},{data:onboarding,error:onboardingError},{data:interested,error:interestedError}]=await Promise.all([
     supabase.from('platform_settings').select('*').eq('singleton',true).single(),
-    loadSubscriptionCalendars()
+    loadSubscriptionCalendars(),
+    supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
+    supabase.from('sales_prospects').select('*').eq('status','interested').order('updated_at',{ascending:false})
   ]);
+  const loadError=settingsError||calendarError||onboardingError||interestedError;
+  if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
 
-  if(settingsError||calendarError){
-    page.innerHTML=`<div class="notice">${esc(settingsError?.message||calendarError?.message||'Could not load commercial settings.')}</div>`;
-    return;
+  const records=onboarding||[];
+  if(platformSelectedOnboardingId){
+    const p=records.find(x=>x.id===platformSelectedOnboardingId);
+    if(p){await renderPlatformOnboardingDetail(p);return;}
   }
 
   const today=new Date().toISOString().slice(0,10);
   const defaultCalendar=(calendars||[]).some(c=>c.code==='australia')?'australia':(calendars?.[0]?.code||'');
+  const seed=platformOnboardingSeed;
+  const waiting=records.filter(x=>!['active'].includes(x.status));
+  const ready=interested||[];
 
-  page.innerHTML=`<section class="admin-card form-wide">
-    <div class="section-label">Create prospect / Beta club</div><h2>How should this club enter the platform?</h2>
-    <div class="field"><label>Entry route</label><select id="entryRoute"><option value="standard">Standard subscription — Secretary first</option><option value="direct_beta">Direct Beta — trial lead becomes initial Admin</option><option value="full_flow_beta">Full-flow Beta — Secretary handoff, $0 test flow</option></select></div>
-    <div id="entryRouteHelp" class="notice compact"></div>
+  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Formal onboarding</div><h2>Interested club → offer → activation → Club Admin handoff</h2><p>This is where a willing club becomes a real platform club. Prospecting belongs on the Prospects tab; commercial/Beta terms belong here.</p></section>
+    ${ready.length&&!seed?`<section class="admin-card"><div class="admin-card-head"><div><div class="section-label">Ready to onboard</div><h2>${ready.length} interested club${ready.length===1?'':'s'}</h2></div></div><div class="ready-onboarding-list">${ready.map(x=>`<button class="sales-prospect-row" data-start-onboarding="${x.id}"><span class="sales-prospect-main"><strong>${esc(x.club_name)}</strong><small>${esc([x.locality,x.region,x.country].filter(Boolean).join(', '))} · ${esc(x.contact_email||'No email')}</small></span><span class="sales-status interested">Start onboarding</span><span class="sales-arrow">›</span></button>`).join('')}</div></section>`:''}
+    <section class="admin-card"><div class="section-label">Current onboarding</div><h2>Offers & handoffs</h2><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Club</th><th>Route</th><th>Status</th><th>Amount</th><th>Contact</th><th></th></tr></thead><tbody>${records.map(x=>`<tr><td><strong>${esc(x.club_name)}</strong><small>${esc(niceDate(x.offer_end))}</small></td><td>${esc(x.entry_route.replaceAll('_',' '))}</td><td><span class="status-pill">${esc(x.status.replaceAll('_',' '))}</span></td><td>${esc(money(x.amount_due_cents))}</td><td>${esc(x.primary_contact_email)}</td><td><button class="btn ghost" data-manage-onboarding="${x.id}">Manage</button></td></tr>`).join('')||'<tr><td colspan="6">No formal onboarding records yet.</td></tr>'}</tbody></table></div></section>
 
-    <div class="form-grid">
-      <div class="field"><label>Club name</label><input id="newClubName"></div>
-      <div class="field"><label id="contactNameLabel">Club Secretary / contact name</label><input id="newContactName"></div>
-      <div class="field"><label id="contactEmailLabel">Club Secretary / contact email</label><input id="newContactEmail" type="email"></div>
-      <div class="field"><label>Subscription calendar</label><select id="subscriptionCalendar">${calendarOptions(calendars,defaultCalendar)}</select><small>Sets the club's universal annual renewal date. It does not delay access until the cricket season starts.</small></div>
-      <div class="field"><label>Access starts</label><input id="accessStart" type="date" value="${today}"><small>Normally the activation/payment date — coaches can use the platform through preseason.</small></div>
-    </div>
-
-    <div class="commercial-box">
-      <div class="section-label">Private commercial terms</div>
-      <p class="help">These controls never appear to normal clubs. <strong>Rate reduction defaults to 0%.</strong></p>
-      <div class="form-grid">
-        <div class="field"><label>Private rate reduction from standard price</label><input id="adjustmentPct" type="number" min="0" max="100" value="0"><small>0% = full standard price · 100% = free</small></div>
-        <div class="field"><label>Special rate ends (optional)</label><input id="adjustmentEnd" type="date"><small>Leave blank for a standard-rate club. Beta routes default to the end of the Club Year if left blank.</small></div>
-        <div class="field"><label>At expiry</label><select id="expiryAction"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div>
+    <details class="admin-card form-wide onboarding-create" ${seed?'open':''}>
+      <summary><div><div class="section-label">${seed?'Interested prospect':'Manual onboarding'}</div><h2>${seed?`Onboard ${esc(seed.club_name)}`:'Create an onboarding record manually'}</h2><p>${seed?'Prospect details are pre-filled. Confirm the actual route and commercial terms before sending the formal invitation.':'Use this only when a club reaches you outside the Prospects pipeline.'}</p></div><span>⌄</span></summary>
+      <div class="collapsible-admin-body">
+        <div class="field"><label>Entry route</label><select id="entryRoute"><option value="standard" ${(seed?.intended_route||'standard')==='standard'?'selected':''}>Standard subscription — Club Contact first</option><option value="direct_beta" ${seed?.intended_route==='direct_beta'?'selected':''}>Direct Beta — trial lead becomes initial Admin</option><option value="full_flow_beta" ${seed?.intended_route==='full_flow_beta'?'selected':''}>Full-flow Beta — Club Contact handoff, $0 test flow</option></select></div>
+        <div id="entryRouteHelp" class="notice compact"></div>
+        <div class="form-grid">
+          <div class="field"><label>Club name</label><input id="newClubName" value="${esc(seed?.club_name||'')}"></div>
+          <div class="field"><label id="contactNameLabel">Club Secretary / contact name</label><input id="newContactName" value="${esc(seed?.contact_name||'')}"></div>
+          <div class="field"><label id="contactEmailLabel">Club Secretary / contact email</label><input id="newContactEmail" type="email" value="${esc(seed?.contact_email||'')}"></div>
+          <div class="field"><label>Subscription calendar</label><select id="subscriptionCalendar">${calendarOptions(calendars,defaultCalendar)}</select><small>Sets the club's universal annual renewal date.</small></div>
+          <div class="field"><label>Access starts</label><input id="accessStart" type="date" value="${today}"><small>Normally the activation/payment date.</small></div>
+        </div>
+        <div class="commercial-box">
+          <div class="section-label">Private commercial terms</div><p class="help">These controls never appear to normal clubs. <strong>0% reduction = full standard price. 100% reduction = complimentary.</strong></p>
+          <div class="form-grid"><div class="field"><label>Private rate reduction</label><input id="adjustmentPct" type="number" min="0" max="100" value="${seed?.intended_route&&seed.intended_route!=='standard'?'100':'0'}"></div><div class="field"><label>Special rate ends (optional)</label><input id="adjustmentEnd" type="date"></div><div class="field"><label>At expiry</label><select id="expiryAction"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div></div>
+          <div class="field"><label>Internal note</label><textarea id="internalNote">${esc(seed?`Started from prospect pipeline${seed.notes?` — ${seed.notes}`:''}`:'')}</textarea></div>
+        </div>
+        <div class="commercial-calculation"><div class="section-label">Calculated offer</div><div id="newClubOfferPreview"><div class="help">Calculating…</div></div></div>
+        <div class="btnrow"><button class="btn secondary" id="createProspect">Create onboarding & queue invitation</button>${seed?'<button class="btn ghost" id="cancelOnboardingSeed">Cancel</button>':''}<span class="status" id="createProspectStatus"></span></div>
+        <div id="createdProspectResult"></div>
       </div>
-      <div class="field"><label>Internal note</label><textarea id="internalNote" placeholder="e.g. Founding Beta club / association partner / negotiated relationship rate"></textarea></div>
-    </div>
+    </details>`;
 
-    <div class="commercial-calculation">
-      <div class="section-label">Calculated offer</div>
-      <div id="newClubOfferPreview"><div class="help">Calculating…</div></div>
-    </div>
-
-    <div class="btnrow"><button class="btn secondary" id="createProspect">Create & queue invitation</button><span class="status" id="createProspectStatus"></span></div>
-    <div id="createdProspectResult"></div>
-  </section>`;
+  page.querySelectorAll('[data-manage-onboarding]').forEach(b=>b.onclick=()=>{platformSelectedOnboardingId=b.dataset.manageOnboarding;renderPlatformOnboarding();});
+  page.querySelectorAll('[data-start-onboarding]').forEach(b=>b.onclick=()=>{platformOnboardingSeed=ready.find(x=>x.id===b.dataset.startOnboarding)||null;renderPlatformOnboarding();});
+  if(document.getElementById('cancelOnboardingSeed'))document.getElementById('cancelOnboardingSeed').onclick=()=>{platformOnboardingSeed=null;renderPlatformOnboarding();};
 
   const route=document.getElementById('entryRoute');
   const updateRoute=()=>{
     const beta=route.value!=='standard';
     document.getElementById('contactNameLabel').textContent=route.value==='direct_beta'?'Trial lead name':'Club Secretary / contact name';
     document.getElementById('contactEmailLabel').textContent=route.value==='direct_beta'?'Trial lead email':'Club Secretary / contact email';
-    document.getElementById('entryRouteHelp').innerHTML=beta
-      ?'<strong>Beta routes still start at 0% reduction.</strong> Because Beta bypasses real charging, deliberately set the rate reduction to <strong>100%</strong> when you want complimentary Beta access.'
-      :'<strong>Standard subscription.</strong> The club receives immediate access from the date below and renews on its regional Club Year date.';
+    document.getElementById('entryRouteHelp').innerHTML=route.value==='full_flow_beta'
+      ?'<strong>Full-flow Beta:</strong> no payment is taken, but the club still tests the real Club Contact → Club Admin handoff.'
+      :route.value==='direct_beta'
+        ?'<strong>Direct Beta:</strong> skip the organisational handoff and make the trial lead the initial Club Admin.'
+        :'<strong>Standard subscription:</strong> the Club Contact approves, nominates the payer if needed, payment is completed, then the Club Contact nominates the Club Admin.';
+    if(beta&&Number(val('adjustmentPct')||0)!==100){document.getElementById('adjustmentPct').value=100;}
   };
-
   const refreshPreview=async()=>{
-    const box=document.getElementById('newClubOfferPreview');
-    box.innerHTML='<div class="help">Calculating…</div>';
-    const {data,error}=await getCommercialPreview(
-      document.getElementById('subscriptionCalendar').value,
-      val('accessStart'),
-      Number(val('adjustmentPct')||0),
-      val('adjustmentEnd')||''
-    );
-    if(error){box.innerHTML=`<div class="notice compact">${esc(error.message)}</div>`;return;}
-    box.innerHTML=commercialPreviewHtml(data);
+    const box=document.getElementById('newClubOfferPreview');box.innerHTML='<div class="help">Calculating…</div>';
+    const {data,error}=await getCommercialPreview(document.getElementById('subscriptionCalendar').value,val('accessStart'),Number(val('adjustmentPct')||0),val('adjustmentEnd')||'');
+    box.innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:commercialPreviewHtml(data);
   };
-
   route.onchange=()=>{updateRoute();refreshPreview();};
-  ['subscriptionCalendar','accessStart','adjustmentPct','adjustmentEnd'].forEach(id=>{
-    document.getElementById(id).onchange=refreshPreview;
-    if(id==='adjustmentPct')document.getElementById(id).oninput=refreshPreview;
-  });
-  updateRoute();
-  await refreshPreview();
+  ['subscriptionCalendar','accessStart','adjustmentPct','adjustmentEnd'].forEach(id=>{document.getElementById(id).onchange=refreshPreview;if(id==='adjustmentPct')document.getElementById(id).oninput=refreshPreview;});
+  updateRoute();await refreshPreview();
 
   document.getElementById('createProspect').onclick=async()=>{
     const st=document.getElementById('createProspectStatus');st.textContent='Creating…';
     const reduction=Number(val('adjustmentPct')||0);
     const {data,error}=await supabase.rpc('platform_create_prospect',{
-      p_club_name:val('newClubName'),
-      p_entry_route:route.value,
-      p_contact_name:val('newContactName'),
-      p_contact_email:val('newContactEmail'),
-      p_subscription_calendar:document.getElementById('subscriptionCalendar').value,
-      p_access_start:val('accessStart'),
-      p_adjustment_percent:reduction,
-      p_adjustment_start:reduction>0?val('accessStart'):null,
-      p_adjustment_end:val('adjustmentEnd')||null,
-      p_expiry_action:document.getElementById('expiryAction').value,
-      p_internal_note:val('internalNote')
+      p_club_name:val('newClubName'),p_entry_route:route.value,p_contact_name:val('newContactName'),p_contact_email:val('newContactEmail'),
+      p_subscription_calendar:document.getElementById('subscriptionCalendar').value,p_access_start:val('accessStart'),p_adjustment_percent:reduction,
+      p_adjustment_start:reduction>0?val('accessStart'):null,p_adjustment_end:val('adjustmentEnd')||null,p_expiry_action:document.getElementById('expiryAction').value,p_internal_note:val('internalNote')
     });
     if(error){st.textContent=error.message;return;}
+    if(seed){
+      const {error:linkError}=await supabase.rpc('platform_link_sales_onboarding',{p_sales_prospect_id:seed.id,p_onboarding_prospect_id:data.prospect_id});
+      if(linkError){st.textContent=`Onboarding created, but prospect link failed: ${linkError.message}`;return;}
+    }
     st.textContent='Created';
     const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
-    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Invitation ready</strong><span>Amount under this offer: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The notification is also in the Email Queue. Until a live email provider is connected, copy this link into your test/promo email.</small></div>`;
+    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Formal invitation ready</strong><span>Amount: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The invitation is also in Email Queue.</small></div>`;
     document.getElementById('copyCreatedLink').onclick=async()=>{await navigator.clipboard.writeText(link);document.getElementById('copyCreatedLink').textContent='Copied ✓';};
+    platformOnboardingSeed=null;
   };
 }
 
@@ -8455,11 +8665,16 @@ async function renderPlatformActiveClubs(){
 
 async function renderPlatformOutbox(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading email queue…</div>';
-  const {data:msgs,error}=await supabase.from('outbound_messages').select('*').order('created_at',{ascending:false}).limit(100);
+  const [{data:msgs,error},{data:settings}]=await Promise.all([
+    supabase.from('outbound_messages').select('*').order('created_at',{ascending:false}).limit(150),
+    supabase.from('platform_settings').select('email_mode,email_provider').eq('singleton',true).single()
+  ]);
   if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
-  page.innerHTML=`<section class="admin-card"><div class="section-label">Notification infrastructure</div><h2>Email Queue</h2><div class="notice"><strong>Prototype state:</strong> the system is creating the real notification records and links, but a live email provider has not yet been connected. For testing, copy the generated link and send it manually. When we connect the email service, these same queued records become automatic emails.</div>
-    <div class="message-list">${(msgs||[]).map(m=>{const path=m.payload?.link_path;const link=path?`${location.origin}${location.pathname}${path}`:'';return `<div class="message-row"><div><strong>${esc(m.subject)}</strong><small>${esc(m.recipient_email)} · ${esc(m.template_key)} · ${esc(m.status)}</small></div>${link?`<button class="btn ghost" data-copy-message="${esc(link)}">Copy link</button>`:''}</div>`;}).join('')||'<div class="notice">No messages queued yet.</div>'}</div>
-  </section>`;
+  const live=settings?.email_mode==='live';
+  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Email delivery</div><h2>${live?'Live email delivery':'Prototype queue'}</h2><p>${live?`Queued messages are sent by the configured provider (${esc(settings?.email_provider||'provider')}).`:'Every workflow already creates the real message record. For Beta testing, copy the generated link and send it manually. When live delivery is connected, the queue stays the same and a server-side sender delivers it.'}</p></section>
+    <section class="admin-card"><div class="section-label">Queue</div><h2>Outbound messages</h2>
+      <div class="message-list">${(msgs||[]).map(m=>{const path=m.payload?.link_path;const link=path?`${location.origin}${location.pathname}${path}`:'';const delivery=m.sent_at?'sent':(m.failed_at?'failed':(m.status||'queued'));return `<div class="message-row"><div><strong>${esc(m.subject)}</strong><small>${esc(m.recipient_email)} · ${esc(m.template_key)} · ${esc(delivery)}</small>${m.last_error?`<small>${esc(m.last_error)}</small>`:''}</div>${link?`<button class="btn ghost" data-copy-message="${esc(link)}">Copy link</button>`:''}</div>`;}).join('')||'<div class="notice">No messages queued yet.</div>'}</div>
+    </section>`;
   page.querySelectorAll('[data-copy-message]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.copyMessage);b.textContent='Copied ✓';});
 }
 
@@ -8477,7 +8692,11 @@ async function renderPlatformSettings(){
     <div class="field"><label>Payment grace period</label><input id="settingGrace" type="number" value="${s.payment_grace_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Payment mode</label><select id="settingMode" ${canCommercial?'':'disabled'}><option value="prototype" ${s.payment_mode==='prototype'?'selected':''}>Prototype — simulate payment</option><option value="live" ${s.payment_mode==='live'?'selected':''}>Live provider</option></select></div>
+    <div class="field"><label>Payment provider</label><select id="settingPaymentProvider" ${canCommercial?'':'disabled'}><option value="stripe" ${(s.payment_provider||'stripe')==='stripe'?'selected':''}>Stripe</option></select><small>Recommended production path: hosted Stripe Checkout / invoices. Card data never touches this app.</small></div>
+    <div class="field"><label>Email mode</label><select id="settingEmailMode" ${canCommercial?'':'disabled'}><option value="prototype" ${(s.email_mode||'prototype')==='prototype'?'selected':''}>Prototype queue</option><option value="live" ${s.email_mode==='live'?'selected':''}>Live provider</option></select></div>
+    <div class="field"><label>Email provider</label><select id="settingEmailProvider" ${canCommercial?'':'disabled'}><option value="resend" ${(s.email_provider||'resend')==='resend'?'selected':''}>Resend</option></select><small>Recommended production path: Supabase Edge Function → Resend. Authentication email should use a separate sending stream/domain.</small></div>
   </div>
+  <div class="notice" style="margin-top:16px"><strong>Production architecture</strong><br>Email and payment are deliberately provider-backed rather than self-hosted. The database remains the source of truth; providers deliver the email or collect the money and report the result back by webhook.</div>
   <div class="commercial-box" style="margin-top:16px">
     <div class="section-label">Regional Club Years</div>
     <p class="help">These universal renewal dates give clubs access before their playing season instead of trying to identify each club's exact season start and finish.</p>
@@ -8488,7 +8707,7 @@ async function renderPlatformSettings(){
     const st=document.getElementById('settingsStatus');st.textContent='Saving…';
     const {error}=await supabase.from('platform_settings').update({
       standard_season_price_cents:Math.round(Number(val('settingPrice'))*100),minimum_prorata_days:Number(val('settingMinDays')),
-      payment_grace_days:Number(val('settingGrace')),commercial_adjustment_warning_days:Number(val('settingWarn')),payment_mode:document.getElementById('settingMode').value,updated_at:new Date().toISOString()
+      payment_grace_days:Number(val('settingGrace')),commercial_adjustment_warning_days:Number(val('settingWarn')),payment_mode:document.getElementById('settingMode').value,payment_provider:document.getElementById('settingPaymentProvider').value,email_mode:document.getElementById('settingEmailMode').value,email_provider:document.getElementById('settingEmailProvider').value,updated_at:new Date().toISOString()
     }).eq('singleton',true);
     st.textContent=error?error.message:'Saved';
   };
