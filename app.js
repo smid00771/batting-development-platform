@@ -1552,11 +1552,21 @@ async function renderClubDashboard(){
             <div><span class="branding-mini-label">Manual colour override</span><p>Ignore either suggestion and choose any colours you want. Primary is the dominant club colour; Accent is used for highlights. Use the colour squares or type a HEX value.</p></div>
             <button class="btn ghost compact-btn" id="swapBrandColours" type="button">Swap primary ↔ accent</button>
           </div>
-          <div class="branding-colour-grid">
-            <label class="branding-colour-control"><span>Primary colour</span><div><input type="color" id="clubPrimaryPicker" title="Choose primary colour"><input id="clubPrimaryHex" maxlength="7"></div></label>
-            <label class="branding-colour-control"><span>Accent colour</span><div><input type="color" id="clubAccentPicker" title="Choose accent colour"><input id="clubAccentHex" maxlength="7"></div></label>
+          <div class="branding-colour-grid branding-manual-grid">
+            <div class="branding-manual-colour">
+              <span class="branding-manual-title">Primary colour</span>
+              <button type="button" class="btn ghost branding-pick-colour" id="choosePrimaryColour"><i id="primaryManualSwatch"></i><span>Choose any primary colour</span></button>
+              <input type="color" id="clubPrimaryPicker" title="Choose primary colour" hidden>
+              <div class="branding-hex-row"><input id="clubPrimaryHex" maxlength="7" aria-label="Primary colour HEX"><button type="button" class="btn ghost compact-btn" id="applyPrimaryHex">Use HEX</button></div>
+            </div>
+            <div class="branding-manual-colour">
+              <span class="branding-manual-title">Accent colour</span>
+              <button type="button" class="btn ghost branding-pick-colour" id="chooseAccentColour"><i id="accentManualSwatch"></i><span>Choose any accent colour</span></button>
+              <input type="color" id="clubAccentPicker" title="Choose accent colour" hidden>
+              <div class="branding-hex-row"><input id="clubAccentHex" maxlength="7" aria-label="Accent colour HEX"><button type="button" class="btn ghost compact-btn" id="applyAccentHex">Use HEX</button></div>
+            </div>
           </div>
-          <button class="btn ghost branding-reset-colours" id="resetBrandColours">Reset colours to platform default</button>
+          <div class="branding-manual-actions"><button class="btn ghost branding-reset-colours" id="resetBrandColours">Reset colours to platform default</button></div>
         </div>
       </div>
 
@@ -1650,6 +1660,10 @@ function wireClubBrandingControls(page){
     if(ph && document.activeElement!==ph)ph.value=normaliseHex(d.primary_colour,PLATFORM_PRIMARY);
     if(ap)ap.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT).toLowerCase();
     if(ah && document.activeElement!==ah)ah.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT);
+    const primaryManualSwatch=page.querySelector('#primaryManualSwatch');
+    const accentManualSwatch=page.querySelector('#accentManualSwatch');
+    if(primaryManualSwatch)primaryManualSwatch.style.background=normaliseHex(d.primary_colour,PLATFORM_PRIMARY);
+    if(accentManualSwatch)accentManualSwatch.style.background=normaliseHex(d.accent_colour,PLATFORM_ACCENT);
 
     const renderAssignableSwatches=colours=>colours.slice(0,6).map(c=>`<div class="branding-palette-choice" style="--swatch:${c}"><i></i><b>${c}</b><button type="button" data-set-primary="${c}">Primary</button><button type="button" data-set-accent="${c}">Accent</button></div>`).join('');
 
@@ -1728,10 +1742,26 @@ function wireClubBrandingControls(page){
     const v=String(value||'').toUpperCase();
     if(validHex(v)){draft[key]=v;draw();}
   };
-  page.querySelector('#clubPrimaryPicker')?.addEventListener('input',e=>syncHex('primary_colour',e.target.value));
-  page.querySelector('#clubAccentPicker')?.addEventListener('input',e=>syncHex('accent_colour',e.target.value));
-  page.querySelector('#clubPrimaryHex')?.addEventListener('change',e=>{if(validHex(e.target.value))syncHex('primary_colour',e.target.value);else{e.target.value=draft.primary_colour;setStatus(detectStatus,'Primary colour must look like #20347B.','bad');}});
-  page.querySelector('#clubAccentHex')?.addEventListener('change',e=>{if(validHex(e.target.value))syncHex('accent_colour',e.target.value);else{e.target.value=draft.accent_colour;setStatus(detectStatus,'Accent colour must look like #D8232A.','bad');}});
+  page.querySelector('#choosePrimaryColour')?.addEventListener('click',()=>page.querySelector('#clubPrimaryPicker')?.click());
+  page.querySelector('#chooseAccentColour')?.addEventListener('click',()=>page.querySelector('#clubAccentPicker')?.click());
+  page.querySelector('#clubPrimaryPicker')?.addEventListener('input',e=>{syncHex('primary_colour',e.target.value);setStatus(detectStatus,'Manual primary colour applied to the preview. Save branding when you are happy with it.','good');});
+  page.querySelector('#clubAccentPicker')?.addEventListener('input',e=>{syncHex('accent_colour',e.target.value);setStatus(detectStatus,'Manual accent colour applied to the preview. Save branding when you are happy with it.','good');});
+
+  const applyManualHex=(key,inputId,label)=>{
+    const input=page.querySelector(inputId);
+    const value=String(input?.value||'').trim().toUpperCase();
+    if(!validHex(value)){
+      if(input)input.value=draft[key];
+      setStatus(detectStatus,`${label} colour must look like #20347B.`,'bad');
+      return;
+    }
+    syncHex(key,value);
+    setStatus(detectStatus,`Manual ${label.toLowerCase()} colour applied to the preview. Save branding when you are happy with it.`,'good');
+  };
+  page.querySelector('#applyPrimaryHex')?.addEventListener('click',()=>applyManualHex('primary_colour','#clubPrimaryHex','Primary'));
+  page.querySelector('#applyAccentHex')?.addEventListener('click',()=>applyManualHex('accent_colour','#clubAccentHex','Accent'));
+  page.querySelector('#clubPrimaryHex')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyManualHex('primary_colour','#clubPrimaryHex','Primary');}});
+  page.querySelector('#clubAccentHex')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyManualHex('accent_colour','#clubAccentHex','Accent');}});
   page.querySelector('#clubWebsiteUrl')?.addEventListener('input',e=>draft.website_url=e.target.value);
 
   page.querySelector('#swapBrandColours')?.addEventListener('click',()=>{
