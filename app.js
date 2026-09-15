@@ -5570,7 +5570,7 @@ function renderFeedbackRecent(data){
     const m=item.match,coach=latestCoachFeedback(m),alignment=developmentAlignment(m.player_reflection,coach);
     const waiting=coach&&!m.player_reflection;
     return `<article class="card feedback-recent-card"><div class="feedback-recent-head"><div><div class="section-label">MATCH · ${esc(matchMetaLine(m))}</div><h3>${esc(item.player.display_name||'Player')}</h3></div>${waiting?'<span class="alignment-badge discuss">PLAYER REFLECTION NEEDED</span>':alignment?`<span class="alignment-badge ${alignment.key}">${esc(alignment.label)}</span>`:''}</div><strong>${esc(m.dismissal_summary||'Innings feedback')}</strong><div class="feedback-recent-actions">${m.player_reflection&&!coach&&item.player.can_edit?`<button class="btn secondary" data-add-coach-view-player="${item.player.id}" data-add-coach-view-match="${m.id}">Add coach view</button>`:''}<button class="btn ghost" data-open-plan-from-feedback="${item.player.id}">Open Player Plan</button></div></article>`;
-  }).join(''):'<section class="card workspace-empty"><h2>No feedback recorded yet.</h2><p>Training observations, player reflections and match coaching feedback will appear here.</p></section>`}</div>`;
+  }).join(''):'<section class="card workspace-empty"><h2>No feedback recorded yet.</h2><p>Training observations, player reflections and match coaching feedback will appear here.</p></section>'}</div>`;
 }
 
 function renderFeedbackAdd(data){
