@@ -67,6 +67,10 @@ let feedbackWorkspaceEntryMode=null;
 let feedbackWorkspaceMatchId=null;
 let feedbackWorkspaceDiscussionKey=null;
 
+let clubBrandingDraftClubId=null;
+let clubBrandingDraft=null;
+let clubBrandingSuggestions=[];
+
 const FORMATS=[
   ['t20','T20'],
   ['limited_overs','Limited Overs'],
@@ -648,6 +652,115 @@ const val=id=>document.getElementById(id)?.value.trim()||'';
 const slug=s=>String(s||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const naturalList=a=>a.length===1?a[0]:a.length===2?`${a[0]} and ${a[1]}`:`${a.slice(0,-1).join(', ')}, and ${a[a.length-1]}`;
 
+const PLATFORM_PRIMARY='#202F78';
+const PLATFORM_ACCENT='#D8232A';
+function validHex(value){return /^#[0-9a-f]{6}$/i.test(String(value||''));}
+function normaliseHex(value,fallback){return validHex(value)?String(value).toUpperCase():fallback;}
+function hexRgb(hex){
+  const v=normaliseHex(hex,'#000000');
+  return [parseInt(v.slice(1,3),16),parseInt(v.slice(3,5),16),parseInt(v.slice(5,7),16)];
+}
+function rgbHex(r,g,b){
+  const c=n=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0');
+  return `#${c(r)}${c(g)}${c(b)}`.toUpperCase();
+}
+function mixHex(a,b,amount=.5){
+  const aa=hexRgb(a),bb=hexRgb(b),t=Math.max(0,Math.min(1,amount));
+  return rgbHex(...aa.map((v,i)=>v+(bb[i]-v)*t));
+}
+function contrastFor(hex){
+  const [r,g,b]=hexRgb(hex).map(v=>v/255).map(v=>v<=.03928?v/12.92:((v+.055)/1.055)**2.4);
+  const lum=.2126*r+.7152*g+.0722*b;
+  return lum>.48?'#111827':'#FFFFFF';
+}
+function applyClubTheme(primary=club?.primary_colour,accent=club?.accent_colour){
+  const p=normaliseHex(primary,PLATFORM_PRIMARY);
+  const a=normaliseHex(accent,PLATFORM_ACCENT);
+  const root=document.documentElement.style;
+  root.setProperty('--navy',p);
+  root.setProperty('--navy2',mixHex(p,'#000000',.34));
+  root.setProperty('--red',a);
+  root.setProperty('--navy-contrast',contrastFor(p));
+  root.setProperty('--accent-contrast',contrastFor(a));
+  root.setProperty('--club-soft',mixHex(p,'#FFFFFF',.92));
+  root.setProperty('--club-accent-soft',mixHex(a,'#FFFFFF',.91));
+}
+function normaliseWebsiteUrl(raw){
+  const v=String(raw||'').trim();
+  if(!v)return '';
+  try{return new URL(/^https?:\/\//i.test(v)?v:`https://${v}`).toString();}
+  catch{return v;}
+}
+function ensureBrandingDraft(){
+  if(clubBrandingDraftClubId!==club?.id || !clubBrandingDraft){
+    clubBrandingDraftClubId=club?.id||null;
+    clubBrandingDraft={
+      logo_data_url:club?.logo_data_url||'',
+      website_url:club?.website_url||'',
+      primary_colour:normaliseHex(club?.primary_colour,PLATFORM_PRIMARY),
+      accent_colour:normaliseHex(club?.accent_colour,PLATFORM_ACCENT)
+    };
+    clubBrandingSuggestions=[];
+  }
+  return clubBrandingDraft;
+}
+function colourDistance(a,b){
+  const x=hexRgb(a),y=hexRgb(b);
+  return Math.sqrt(x.reduce((sum,v,i)=>sum+(v-y[i])**2,0));
+}
+function saturationForRgb(r,g,b){
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);
+  return max===0?0:(max-min)/max;
+}
+function paletteFromCanvas(canvas){
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const {data}=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const bins=new Map();
+  for(let i=0;i<data.length;i+=16){
+    const a=data[i+3]; if(a<150)continue;
+    let r=data[i],g=data[i+1],b=data[i+2];
+    const lum=(.2126*r+.7152*g+.0722*b)/255;
+    if(lum>.96||lum<.035)continue;
+    r=Math.round(r/24)*24;g=Math.round(g/24)*24;b=Math.round(b/24)*24;
+    r=Math.min(r,255);g=Math.min(g,255);b=Math.min(b,255);
+    const key=rgbHex(r,g,b);
+    const sat=saturationForRgb(r,g,b);
+    bins.set(key,(bins.get(key)||0)+(sat<.08?.25:1));
+  }
+  const ranked=[...bins.entries()].sort((a,b)=>b[1]-a[1]).map(([k])=>k);
+  const out=[];
+  for(const hex of ranked){
+    if(out.every(c=>colourDistance(c,hex)>52))out.push(hex);
+    if(out.length===6)break;
+  }
+  return out;
+}
+async function processClubLogoFile(file){
+  if(!file || !['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('Use a PNG, JPEG or WebP image.');
+  if(file.size>8*1024*1024)throw new Error('That image is too large. Use an image under 8 MB.');
+  const objectUrl=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((resolve,reject)=>{const x=new Image();x.onload=()=>resolve(x);x.onerror=()=>reject(new Error('Could not read that image.'));x.src=objectUrl;});
+    const max=520;
+    const scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+    canvas.height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+    const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    let dataUrl=canvas.toDataURL('image/webp',.9);
+    if(!dataUrl.startsWith('data:image/webp'))dataUrl=canvas.toDataURL('image/png');
+    if(dataUrl.length>1150000)throw new Error('The logo is still too large after resizing. Try a tighter snip around the logo.');
+    const paletteCanvas=document.createElement('canvas');
+    const pScale=Math.min(1,120/Math.max(canvas.width,canvas.height));
+    paletteCanvas.width=Math.max(1,Math.round(canvas.width*pScale));
+    paletteCanvas.height=Math.max(1,Math.round(canvas.height*pScale));
+    paletteCanvas.getContext('2d').drawImage(canvas,0,0,paletteCanvas.width,paletteCanvas.height);
+    return {dataUrl,palette:paletteFromCanvas(paletteCanvas)};
+  }finally{URL.revokeObjectURL(objectUrl);}
+}
+
 async function boot(){
   const {data:{session:s}}=await supabase.auth.getSession();
   session=s;
@@ -726,7 +839,7 @@ async function loadContext(){
 
   const {data:memberships,error}=await supabase
     .from('club_memberships')
-    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,subscription_calendar,season_start,season_end)')
+    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,logo_data_url,website_url,branding_updated_at,subscription_calendar,season_start,season_end)')
     .eq('user_id',session.user.id);
 
   if(error){
@@ -953,8 +1066,7 @@ function contributionLocked(){
 
 
 function renderShell(){
-  document.documentElement.style.setProperty('--navy',club.primary_colour||'#202f78');
-  document.documentElement.style.setProperty('--red',club.accent_colour||'#d8232a');
+  applyClubTheme();
 
   const nav=[];
 
@@ -1004,10 +1116,13 @@ function renderShell(){
   app.innerHTML=`<div class="shell">
     <header class="hero">
       <div class="topline">
-        <div>
-          <div class="k">${esc(club.name)}</div>
-          <h1>Batting Development</h1>
-          <p>${isAdmin()?'Set the club up, build the philosophy, manage access, and guide players through their Player Plans.':'Your club philosophy becomes the framework for player development.'}</p>
+        <div class="shell-brand-lockup">
+          ${club.logo_data_url?`<div class="shell-club-logo"><img src="${esc(club.logo_data_url)}" alt="${esc(club.name)} logo"></div>`:''}
+          <div>
+            <div class="k">${esc(club.name)}</div>
+            <h1>Batting Development</h1>
+            <p>${isAdmin()?'Set the club up, build the philosophy, manage access, and guide players through their Player Plans.':'Your club philosophy becomes the framework for player development.'}</p>
+          </div>
         </div>
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch">${contextOptions}</select>`:''}
@@ -1376,6 +1491,51 @@ async function renderClubDashboard(){
       <div class="setup-player-callout"><strong>Players are not being shown the workshop.</strong><span>They receive the finished output — How We Bat, their own Player Plan and How We Train.</span></div>
     </section>
 
+    <section class="card club-branding-card" style="margin-top:16px">
+      <div class="club-branding-heading">
+        <div>
+          <div class="section-label">Club branding</div>
+          <h2>Make the player-facing system look like your club.</h2>
+          <p class="help">Paste a snip of the club logo, drag or choose an image, then use the club website to suggest a colour theme. Nothing changes for members until you click <strong>Save branding</strong>.</p>
+        </div>
+      </div>
+
+      <div class="club-branding-grid">
+        <div class="club-branding-logo-column">
+          <label class="branding-mini-label">Club logo</label>
+          <div id="clubLogoPasteZone" class="club-logo-paste-zone" tabindex="0">
+            <div id="clubLogoPreview" class="club-logo-preview"></div>
+            <div class="club-logo-paste-copy"><strong>Paste a snip here</strong><span>Ctrl+V after using Snipping Tool, or drag an image onto this box.</span></div>
+          </div>
+          <input id="clubLogoFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          <div class="btnrow compact branding-logo-actions">
+            <button class="btn ghost" id="chooseClubLogo">Choose image</button>
+            <button class="btn ghost" id="removeClubLogo">Remove logo</button>
+          </div>
+          <div id="clubLogoStatus" class="help branding-inline-status"></div>
+        </div>
+
+        <div>
+          <div class="field branding-website-field">
+            <label>Club website</label>
+            <div class="branding-url-row"><input id="clubWebsiteUrl" placeholder="https://yourclub.com.au"><button class="btn secondary" id="detectClubColours">Find club colours</button></div>
+            <div class="help">We look for the website's brand/theme colours. If the site does not expose them clearly, colours detected from the logo are a useful fallback.</div>
+          </div>
+
+          <div class="branding-colour-grid">
+            <label class="branding-colour-control"><span>Primary colour</span><div><input type="color" id="clubPrimaryPicker"><input id="clubPrimaryHex" maxlength="7"></div></label>
+            <label class="branding-colour-control"><span>Accent colour</span><div><input type="color" id="clubAccentPicker"><input id="clubAccentHex" maxlength="7"></div></label>
+          </div>
+          <div id="brandingDetectionStatus" class="branding-detection-status"></div>
+          <div id="brandingSuggestions" class="branding-suggestions"></div>
+          <button class="btn ghost branding-reset-colours" id="resetBrandColours">Reset colours to platform default</button>
+        </div>
+      </div>
+
+      <div id="clubBrandPreview" class="club-brand-preview"></div>
+      <div class="btnrow branding-save-row"><button class="btn secondary" id="saveClubBranding">Save branding</button><span id="clubBrandingSaveStatus" class="status"></span></div>
+    </section>
+
     <section class="card" style="margin-top:16px">
       <div class="section-label">Club workflow</div>
       <h2>From club beliefs to player development</h2>
@@ -1437,7 +1597,144 @@ async function renderClubDashboard(){
         :`Access ${entitlementActive?'is active':'has expired'}${entitlement?.active_until?` through ${new Date(entitlement.active_until+'T00:00:00').toLocaleDateString()}`:''}. Commercial terms are managed only in Platform Admin.`}</div>
     </section>`;
 
+  wireClubBrandingControls(page);
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
+}
+
+function wireClubBrandingControls(page){
+  const draft=ensureBrandingDraft();
+  const zone=page.querySelector('#clubLogoPasteZone');
+  const fileInput=page.querySelector('#clubLogoFile');
+  const logoStatus=page.querySelector('#clubLogoStatus');
+  const detectStatus=page.querySelector('#brandingDetectionStatus');
+  const saveStatus=page.querySelector('#clubBrandingSaveStatus');
+
+  const setStatus=(el,text,kind='')=>{if(!el)return;el.textContent=text||'';el.className=(el.id==='brandingDetectionStatus'?'branding-detection-status':'help branding-inline-status')+(kind?` ${kind}`:'');};
+
+  const draw=()=>{
+    const d=ensureBrandingDraft();
+    const logo=page.querySelector('#clubLogoPreview');
+    if(logo)logo.innerHTML=d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="Club logo preview">`:'<div class="club-logo-empty">LOGO</div>';
+    const remove=page.querySelector('#removeClubLogo'); if(remove)remove.disabled=!d.logo_data_url;
+    const website=page.querySelector('#clubWebsiteUrl'); if(website && document.activeElement!==website)website.value=d.website_url||'';
+    const pp=page.querySelector('#clubPrimaryPicker'),ph=page.querySelector('#clubPrimaryHex'),ap=page.querySelector('#clubAccentPicker'),ah=page.querySelector('#clubAccentHex');
+    if(pp)pp.value=normaliseHex(d.primary_colour,PLATFORM_PRIMARY).toLowerCase();
+    if(ph && document.activeElement!==ph)ph.value=normaliseHex(d.primary_colour,PLATFORM_PRIMARY);
+    if(ap)ap.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT).toLowerCase();
+    if(ah && document.activeElement!==ah)ah.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT);
+
+    const suggestions=page.querySelector('#brandingSuggestions');
+    if(suggestions){
+      suggestions.innerHTML=clubBrandingSuggestions.length?`<span>Detected colours</span>${clubBrandingSuggestions.slice(0,6).map(c=>`<button type="button" class="branding-swatch" data-brand-swatch="${c}" style="--swatch:${c}" title="${c} · click to use as primary"><i></i><b>${c}</b></button>`).join('')}`:'';
+      suggestions.querySelectorAll('[data-brand-swatch]').forEach((b,i)=>b.onclick=()=>{
+        const colour=b.dataset.brandSwatch;
+        if(i===0 || !validHex(d.primary_colour))d.primary_colour=colour;
+        else if(colourDistance(colour,d.primary_colour)>45)d.accent_colour=colour;
+        else d.primary_colour=colour;
+        draw();
+      });
+    }
+
+    const preview=page.querySelector('#clubBrandPreview');
+    if(preview){
+      const primary=normaliseHex(d.primary_colour,PLATFORM_PRIMARY),accent=normaliseHex(d.accent_colour,PLATFORM_ACCENT);
+      preview.style.setProperty('--preview-primary',primary);
+      preview.style.setProperty('--preview-primary-dark',mixHex(primary,'#000000',.34));
+      preview.style.setProperty('--preview-primary-contrast',contrastFor(primary));
+      preview.style.setProperty('--preview-accent',accent);
+      preview.style.setProperty('--preview-accent-contrast',contrastFor(accent));
+      preview.innerHTML=`<div class="club-brand-preview-head">${d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="">`:''}<div><span>${esc(club.name)}</span><strong>How We Bat</strong></div></div><div class="club-brand-preview-body"><span class="preview-brand-pill">Key Message</span><b>Player-facing preview</b><p>Your club colours and logo flow through the live system while the platform keeps the layout readable.</p><button type="button">Primary action</button><em>Accent</em></div>`;
+    }
+  };
+
+  const acceptLogo=async file=>{
+    try{
+      setStatus(logoStatus,'Reading image…');
+      const result=await processClubLogoFile(file);
+      draft.logo_data_url=result.dataUrl;
+      clubBrandingSuggestions=result.palette||[];
+      if(result.palette?.length){
+        draft.primary_colour=result.palette[0];
+        draft.accent_colour=result.palette.find(c=>colourDistance(c,result.palette[0])>65)||result.palette[1]||draft.accent_colour;
+        setStatus(logoStatus,'Logo ready. Colours have been suggested from the image.','good');
+      }else setStatus(logoStatus,'Logo ready. Choose colours manually or analyse the club website.','good');
+      draw();
+    }catch(err){setStatus(logoStatus,err?.message||String(err),'bad');}
+  };
+
+  zone?.addEventListener('paste',e=>{
+    const item=[...(e.clipboardData?.items||[])].find(x=>x.kind==='file'&&x.type.startsWith('image/'));
+    if(!item){setStatus(logoStatus,'Clipboard does not contain an image. Copy a Snipping Tool capture, then paste here.','bad');return;}
+    e.preventDefault();acceptLogo(item.getAsFile());
+  });
+  zone?.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('dragging');});
+  zone?.addEventListener('dragleave',()=>zone.classList.remove('dragging'));
+  zone?.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('dragging');const file=[...(e.dataTransfer?.files||[])].find(f=>f.type.startsWith('image/'));if(file)acceptLogo(file);});
+  zone?.addEventListener('click',()=>zone.focus());
+  page.querySelector('#chooseClubLogo')?.addEventListener('click',()=>fileInput?.click());
+  fileInput?.addEventListener('change',()=>{if(fileInput.files?.[0])acceptLogo(fileInput.files[0]);fileInput.value='';});
+  page.querySelector('#removeClubLogo')?.addEventListener('click',()=>{draft.logo_data_url='';clubBrandingSuggestions=[];setStatus(logoStatus,'Logo removed from this draft. Save branding to apply.');draw();});
+
+  const syncHex=(key,value)=>{
+    const v=String(value||'').toUpperCase();
+    if(validHex(v)){draft[key]=v;draw();}
+  };
+  page.querySelector('#clubPrimaryPicker')?.addEventListener('input',e=>syncHex('primary_colour',e.target.value));
+  page.querySelector('#clubAccentPicker')?.addEventListener('input',e=>syncHex('accent_colour',e.target.value));
+  page.querySelector('#clubPrimaryHex')?.addEventListener('change',e=>{if(validHex(e.target.value))syncHex('primary_colour',e.target.value);else{e.target.value=draft.primary_colour;setStatus(detectStatus,'Primary colour must look like #20347B.','bad');}});
+  page.querySelector('#clubAccentHex')?.addEventListener('change',e=>{if(validHex(e.target.value))syncHex('accent_colour',e.target.value);else{e.target.value=draft.accent_colour;setStatus(detectStatus,'Accent colour must look like #D8232A.','bad');}});
+  page.querySelector('#clubWebsiteUrl')?.addEventListener('input',e=>draft.website_url=e.target.value);
+
+  page.querySelector('#resetBrandColours')?.addEventListener('click',()=>{
+    draft.primary_colour=PLATFORM_PRIMARY;draft.accent_colour=PLATFORM_ACCENT;clubBrandingSuggestions=[];setStatus(detectStatus,'Platform colours restored in the preview. Save branding to apply.');draw();
+  });
+
+  page.querySelector('#detectClubColours')?.addEventListener('click',async()=>{
+    const button=page.querySelector('#detectClubColours');
+    const raw=page.querySelector('#clubWebsiteUrl')?.value||'';
+    const url=normaliseWebsiteUrl(raw);
+    if(!/^https?:\/\//i.test(url)){setStatus(detectStatus,'Enter a valid club website address.','bad');return;}
+    draft.website_url=url;
+    page.querySelector('#clubWebsiteUrl').value=url;
+    button.disabled=true;button.textContent='Checking…';
+    setStatus(detectStatus,'Looking for the website’s brand colours…');
+    try{
+      const {data,error}=await supabase.functions.invoke('detect-club-branding',{body:{club_id:club.id,url}});
+      if(error)throw error;
+      if(!data?.primary)throw new Error(data?.error||'No reliable colours were found.');
+      draft.primary_colour=normaliseHex(data.primary,draft.primary_colour);
+      draft.accent_colour=normaliseHex(data.accent,draft.accent_colour);
+      clubBrandingSuggestions=(data.candidates||[]).filter(validHex).map(x=>x.toUpperCase());
+      setStatus(detectStatus,`Colours suggested from ${new URL(data.analysed_url||url).hostname}. Review the preview, then save. `,'good');
+      draw();
+    }catch(err){
+      setStatus(detectStatus,'Could not reliably read colours from that website. You can still use the colours detected from the logo or choose them manually.','bad');
+      console.warn('Brand website detection failed',err);
+    }finally{button.disabled=false;button.textContent='Find club colours';}
+  });
+
+  page.querySelector('#saveClubBranding')?.addEventListener('click',async()=>{
+    const button=page.querySelector('#saveClubBranding');
+    draft.website_url=normaliseWebsiteUrl(page.querySelector('#clubWebsiteUrl')?.value||draft.website_url);
+    if(draft.website_url && !/^https?:\/\//i.test(draft.website_url)){saveStatus.textContent='Check the website address.';return;}
+    if(!validHex(draft.primary_colour)||!validHex(draft.accent_colour)){saveStatus.textContent='Check the two colour values.';return;}
+    button.disabled=true;button.textContent='Saving…';saveStatus.textContent='';
+    const {data,error}=await supabase.rpc('save_club_branding',{
+      p_club_id:club.id,
+      p_logo_data_url:draft.logo_data_url||null,
+      p_website_url:draft.website_url||null,
+      p_primary_colour:draft.primary_colour,
+      p_accent_colour:draft.accent_colour
+    });
+    if(error){button.disabled=false;button.textContent='Save branding';saveStatus.textContent=error.message;return;}
+    Object.assign(club,data||draft);
+    if(membership?.clubs)Object.assign(membership.clubs,data||draft);
+    clubBrandingDraft={...draft};clubBrandingDraftClubId=club.id;
+    applyClubTheme();
+    renderShell();
+  });
+
+  draw();
 }
 
 
