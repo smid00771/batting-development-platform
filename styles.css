@@ -2127,3 +2127,32 @@ details.hwb-public-banner[open] .key-message-close{display:inline}
 .branding-hex-row input{height:42px;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:12px;font-weight:850;text-transform:uppercase;color:var(--navy2);background:#fff;min-width:0}
 .branding-manual-actions{display:flex;justify-content:flex-start;margin-top:10px}
 @media(max-width:560px){.branding-hex-row{grid-template-columns:1fr}.branding-pick-colour{white-space:normal}}
+
+/* ---------- v0.7.5 compact Club Setup accordions ---------- */
+.setup-collapsible{padding:0;overflow:hidden}
+.setup-collapsible>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:18px;padding:16px 17px;background:#fff;transition:background .14s ease}
+.setup-collapsible>summary::-webkit-details-marker{display:none}
+.setup-collapsible>summary:hover{background:#fafbfe}
+.setup-collapsible[open]>summary{background:#fafbfe;border-bottom:1px solid var(--line)}
+.setup-collapsible-title{min-width:0;display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap}
+.setup-collapsible-title .section-label{width:100%;margin:0 0 -4px}
+.setup-collapsible-title>strong{font-size:14px;line-height:1.25;color:var(--navy2)}
+.setup-collapsible-title>span{display:inline-flex;align-items:center;border-radius:999px;background:#eef1f8;color:var(--navy2);font-size:8px;font-weight:950;letter-spacing:.045em;text-transform:uppercase;padding:5px 8px;white-space:nowrap}
+.setup-collapsible-toggle{flex:0 0 auto;color:var(--navy);font-size:9px;font-weight:950;letter-spacing:.04em;white-space:nowrap}
+.setup-collapsible-toggle::after{content:'Open ↓'}
+.setup-collapsible[open] .setup-collapsible-toggle::after{content:'Close ↑'}
+.setup-collapsible-body{padding:17px}
+.setup-collapsible-intro{margin-top:0}
+.setup-collapsible-body .club-workflow-list,.setup-collapsible-body .role-visibility-grid{margin-top:0}
+.setup-status-grid{gap:14px}
+.setup-inner-panel{border:1px solid var(--line);border-radius:13px;background:#fff;padding:15px;min-width:0}
+.setup-commercial .setup-collapsible-body{padding-top:14px}
+.setup-commercial .setup-collapsible-body .help{margin:0}
+
+@media(max-width:700px){
+  .setup-collapsible>summary{align-items:flex-start;gap:10px}
+  .setup-collapsible-title{gap:7px 9px}
+  .setup-collapsible-title>strong{font-size:13px}
+  .setup-collapsible-toggle{padding-top:3px}
+  .setup-collapsible-body{padding:14px}
+}
