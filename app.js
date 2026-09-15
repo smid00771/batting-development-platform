@@ -8,11 +8,12 @@ let session=null;
 let allMemberships=[];
 let platformRole=null;
 let canBootstrapPlatform=false;
-let platformView='home';
+let platformView='market';
 let platformSelectedProspectId=null;
 let platformSelectedOnboardingId=null;
 let platformOnboardingSeed=null;
 let platformDiscoveryResults=[];
+let platformMarketAssociationId='';
 let club=null;
 let membership=null;
 let userProfile=null;
@@ -8187,7 +8188,7 @@ async function renderPlatformConsole(){
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['home','Prospects'],['onboarding','Onboarding'],['clubs','Active Clubs'],['outbox','Email Queue'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['market','Market Discovery'],['home','Prospects'],['onboarding','Onboarding'],['clubs','Active Clubs'],['outbox','Email Queue'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
@@ -8203,11 +8204,181 @@ async function renderPlatformConsole(){
 
 async function renderPlatformView(){
   document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===platformView));
+  if(platformView==='market')return renderPlatformMarketDiscovery();
   if(platformView==='onboarding')return renderPlatformOnboarding();
   if(platformView==='clubs')return renderPlatformActiveClubs();
   if(platformView==='outbox')return renderPlatformOutbox();
   if(platformView==='settings')return renderPlatformSettings();
   return renderPlatformProspects();
+}
+
+async function renderPlatformMarketDiscovery(){
+  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading market discovery…</div>';
+  const regionCode='NSW',countryCode='AU';
+  const [assocRes,clubRes,linkRes,scanRes]=await Promise.all([
+    supabase.from('market_associations').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name'),
+    supabase.from('market_clubs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name'),
+    supabase.from('market_club_associations').select('*'),
+    supabase.from('market_scan_runs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('started_at',{ascending:false}).limit(30)
+  ]);
+  const firstError=assocRes.error||clubRes.error||linkRes.error||scanRes.error;
+  if(firstError){page.innerHTML=`<div class="notice"><strong>Market Discovery needs the v0.8.2 migration.</strong><br>${esc(firstError.message)}</div>`;return;}
+
+  const associations=assocRes.data||[],clubs=clubRes.data||[],links=linkRes.data||[],scans=scanRes.data||[];
+  const clubById=new Map(clubs.map(c=>[c.id,c]));
+  const linksByAssociation=new Map();
+  links.forEach(l=>{if(!linksByAssociation.has(l.association_id))linksByAssociation.set(l.association_id,[]);linksByAssociation.get(l.association_id).push(l.club_id);});
+  const associationForClub=new Map();
+  links.forEach(l=>{if(!associationForClub.has(l.club_id))associationForClub.set(l.club_id,[]);associationForClub.get(l.club_id).push(l.association_id);});
+  const contacts=clubs.filter(c=>c.contact_email).length;
+  const prospectCount=clubs.filter(c=>c.sales_prospect_id).length;
+  const latestRegionScan=scans.find(s=>s.scope_type==='region');
+  const niceScan=t=>t?new Date(t).toLocaleString():'Not scanned yet';
+
+  page.innerHTML=`
+    <section class="platform-flow-card market-hero">
+      <div class="section-label">Market Discovery</div>
+      <h2>Country → Region → Association → Club</h2>
+      <p>Build the cricket market once, keep it current, then choose which clubs become Prospects. <strong>Discovery never sends email.</strong></p>
+      <div class="pipeline-strip"><span>COUNTRY</span><b>→</b><span>REGION</span><b>→</b><span>ASSOCIATION</span><b>→</b><span>CLUB</span><b>→</b><span>PROSPECT</span></div>
+    </section>
+
+    <div class="platform-metrics market-metrics">
+      <div><strong>${associations.length}</strong><span>NSW associations / competitions</span></div>
+      <div><strong>${clubs.length}</strong><span>clubs mapped</span></div>
+      <div><strong>${contacts}</strong><span>public contacts found</span></div>
+      <div><strong>${prospectCount}</strong><span>chosen as prospects</span></div>
+    </div>
+
+    <section class="admin-card form-wide market-region-card">
+      <div class="admin-card-head"><div><div class="section-label">1 · Choose market</div><h2>Australia / New South Wales</h2></div><span class="market-live-pill">NSW adapter live</span></div>
+      <div class="form-grid market-region-grid">
+        <div class="field"><label>Country</label><select id="marketCountry"><option value="AU">Australia</option></select></div>
+        <div class="field"><label>Region / state</label><select id="marketRegion"><option value="NSW">New South Wales</option><option disabled>Victoria — next adapter</option><option disabled>Queensland — next adapter</option><option disabled>Western Australia — next adapter</option><option disabled>South Australia — next adapter</option><option disabled>Tasmania — next adapter</option><option disabled>ACT — next adapter</option><option disabled>Northern Territory — next adapter</option></select></div>
+      </div>
+      <div class="market-source-note"><strong>Primary NSW sources:</strong> Cricket NSW's official association/competition structure, supplemented by Country Cricket NSW and server-side search only where the official directories leave gaps.</div>
+      <div class="market-action-row"><button class="btn secondary" id="scanMarketRegion">${associations.length?'Refresh NSW association map':'Scan NSW association map'}</button><span id="marketRegionStatus" class="status">Last region scan: ${esc(niceScan(latestRegionScan?.finished_at||latestRegionScan?.started_at))}</span></div>
+    </section>
+
+    <section class="admin-card form-wide">
+      <div class="admin-card-head"><div><div class="section-label">2 · Associations</div><h2>Map clubs from the association layer</h2><p>The association is the authoritative index. Brave is used mainly to resolve official sites and fill gaps.</p></div><div class="market-bulk-actions"><button class="btn ghost" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map all associations</button><button class="btn ghost" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Find missing contacts</button></div></div>
+      <div id="marketBulkStatus" class="market-progress"></div>
+      <div class="market-association-list">${associations.length?associations.map(a=>{
+        const ids=linksByAssociation.get(a.id)||[];
+        const assocClubs=ids.map(id=>clubById.get(id)).filter(Boolean);
+        const assocContacts=assocClubs.filter(c=>c.contact_email).length;
+        const source=a.source_type==='official_directory'?'Official source':'Search supplement';
+        return `<article class="market-association-row ${platformMarketAssociationId===a.id?'selected':''}">
+          <button class="market-association-main" data-market-association-select="${a.id}">
+            <span><strong>${esc(a.name)}</strong><small>${esc(source)}${a.website_url?' · website resolved':''}</small></span>
+            <span class="market-association-count"><b>${assocClubs.length}</b> clubs · <b>${assocContacts}</b> contacts</span>
+          </button>
+          <div class="market-association-actions">
+            ${a.source_url?`<a class="btn ghost compact" href="${esc(a.source_url)}" target="_blank" rel="noopener">Source ↗</a>`:''}
+            ${a.website_url?`<a class="btn ghost compact" href="${esc(a.website_url)}" target="_blank" rel="noopener">Website ↗</a>`:''}
+            <button class="btn ghost compact" data-scan-association="${a.id}">Map clubs</button>
+            <button class="btn ghost compact" data-enrich-association="${a.id}" ${assocClubs.length?'':'disabled'}>Find contacts</button>
+          </div>
+        </article>`;
+      }).join(''):'<div class="notice">No NSW associations have been mapped yet. Use <strong>Scan NSW association map</strong> above.</div>'}</div>
+    </section>
+
+    <section class="admin-card form-wide">
+      <div class="admin-card-head"><div><div class="section-label">3 · Club inventory</div><h2>${platformMarketAssociationId?(associations.find(a=>a.id===platformMarketAssociationId)?.name||'Selected association'):'All mapped NSW clubs'}</h2></div><div class="prospect-filter-row"><input id="marketClubSearch" placeholder="Search clubs or contact email"><select id="marketContactFilter"><option value="all">All clubs</option><option value="contact">Contact found</option><option value="missing">Contact missing</option><option value="prospect">Already a prospect</option></select></div></div>
+      <div class="market-club-toolbar"><button class="btn ghost compact" id="showAllMarketClubs" ${platformMarketAssociationId?'':'disabled'}>Show all NSW clubs</button><span id="marketClubCount" class="help"></span></div>
+      <div id="marketClubList"></div>
+    </section>`;
+
+  const invokeDiscovery=async(body)=>{
+    const {data,error}=await supabase.functions.invoke('discover-clubs',{body});
+    if(error||data?.error)throw new Error(data?.error||error?.message||'Market discovery failed.');
+    return data;
+  };
+
+  document.getElementById('scanMarketRegion').onclick=async()=>{
+    const btn=document.getElementById('scanMarketRegion'),st=document.getElementById('marketRegionStatus');
+    btn.disabled=true;btn.textContent='Scanning NSW…';st.textContent='Reading official NSW cricket sources and filling association gaps…';
+    try{const data=await invokeDiscovery({action:'scan_region',country_code:'AU',region_code:'NSW'});st.textContent=`Mapped ${data.associations_discovered||0} association / competition records. Reloading…`;setTimeout(()=>renderPlatformMarketDiscovery(),500);}
+    catch(e){btn.disabled=false;btn.textContent=associations.length?'Refresh NSW association map':'Scan NSW association map';st.textContent=e.message;}
+  };
+
+  const scanOneAssociation=async(id,button=null)=>{
+    const a=associations.find(x=>x.id===id);if(!a)return null;
+    const old=button?.textContent;if(button){button.disabled=true;button.textContent='Mapping…';}
+    try{return await invokeDiscovery({action:'scan_association',association_id:id});}
+    finally{if(button){button.disabled=false;button.textContent=old||'Map clubs';}}
+  };
+  const enrichOneAssociation=async(id,button=null,maxBatches=8)=>{
+    const old=button?.textContent;if(button){button.disabled=true;button.textContent='Finding…';}
+    let total=0,remaining=1,batches=0;
+    try{
+      while(remaining>0&&batches<maxBatches){const data=await invokeDiscovery({action:'enrich_clubs',association_id:id,limit:6});total+=Number(data.contacts_found||0);remaining=Number(data.remaining||0);batches++;if(Number(data.processed||0)===0)break;}
+      return {total,remaining};
+    }finally{if(button){button.disabled=false;button.textContent=old||'Find contacts';}}
+  };
+
+  document.querySelectorAll('[data-market-association-select]').forEach(b=>b.onclick=()=>{platformMarketAssociationId=b.dataset.marketAssociationSelect;renderPlatformMarketDiscovery();});
+  document.querySelectorAll('[data-scan-association]').forEach(b=>b.onclick=async()=>{try{await scanOneAssociation(b.dataset.scanAssociation,b);await renderPlatformMarketDiscovery();}catch(e){alert(e.message);}});
+  document.querySelectorAll('[data-enrich-association]').forEach(b=>b.onclick=async()=>{try{await enrichOneAssociation(b.dataset.enrichAssociation,b);await renderPlatformMarketDiscovery();}catch(e){alert(e.message);}});
+
+  document.getElementById('scanAllAssociations').onclick=async()=>{
+    if(!confirm(`Map clubs for all ${associations.length} discovered NSW association / competition records? This runs server-side searches sequentially and can take several minutes.`))return;
+    const btn=document.getElementById('scanAllAssociations'),st=document.getElementById('marketBulkStatus');btn.disabled=true;
+    let ok=0,failed=0;
+    for(let i=0;i<associations.length;i++){
+      const a=associations[i];st.textContent=`Mapping association ${i+1} of ${associations.length}: ${a.name}`;
+      try{await scanOneAssociation(a.id);ok++;}catch{failed++;}
+    }
+    st.textContent=`Association mapping finished: ${ok} completed${failed?`, ${failed} need review`:''}.`;
+    setTimeout(()=>renderPlatformMarketDiscovery(),700);
+  };
+
+  document.getElementById('enrichAllContacts').onclick=async()=>{
+    const associationsWithClubs=associations.filter(a=>(linksByAssociation.get(a.id)||[]).length);
+    if(!confirm(`Search for missing public club contacts across ${associationsWithClubs.length} mapped associations? This can take several minutes and uses Brave only where a club website/contact is not already known.`))return;
+    const btn=document.getElementById('enrichAllContacts'),st=document.getElementById('marketBulkStatus');btn.disabled=true;
+    let found=0;
+    for(let i=0;i<associationsWithClubs.length;i++){
+      const a=associationsWithClubs[i];st.textContent=`Finding contacts ${i+1} of ${associationsWithClubs.length}: ${a.name}`;
+      try{const r=await enrichOneAssociation(a.id,null,10);found+=r.total;}catch{/* leave association for review */}
+    }
+    st.textContent=`Contact enrichment finished. ${found} new public contact${found===1?'':'s'} found in this run.`;
+    setTimeout(()=>renderPlatformMarketDiscovery(),700);
+  };
+
+  document.getElementById('showAllMarketClubs').onclick=()=>{platformMarketAssociationId='';renderPlatformMarketDiscovery();};
+
+  const renderClubList=()=>{
+    const q=(document.getElementById('marketClubSearch').value||'').trim().toLowerCase();
+    const filter=document.getElementById('marketContactFilter').value;
+    const selectedIds=platformMarketAssociationId?new Set(linksByAssociation.get(platformMarketAssociationId)||[]):null;
+    let shown=clubs.filter(c=>!selectedIds||selectedIds.has(c.id));
+    if(q)shown=shown.filter(c=>[c.name,c.contact_email,c.contact_role,c.locality,c.website_url].some(v=>String(v||'').toLowerCase().includes(q)));
+    if(filter==='contact')shown=shown.filter(c=>c.contact_email);
+    if(filter==='missing')shown=shown.filter(c=>!c.contact_email);
+    if(filter==='prospect')shown=shown.filter(c=>c.sales_prospect_id);
+    document.getElementById('marketClubCount').textContent=`${shown.length} club${shown.length===1?'':'s'} shown`;
+    const display=shown.slice(0,250);
+    document.getElementById('marketClubList').innerHTML=display.length?`<div class="market-club-list">${display.map(c=>{
+      const assocNames=(associationForClub.get(c.id)||[]).map(id=>associations.find(a=>a.id===id)?.name).filter(Boolean);
+      const readiness=c.contact_email?'Contact ready':c.website_url?'Website found':'Needs research';
+      return `<article class="market-club-row">
+        <div class="market-club-main"><strong>${esc(c.name)}</strong><small>${esc(assocNames.slice(0,2).join(' · ')||'Association link recorded')}</small></div>
+        <div class="market-club-contact"><span class="market-readiness ${c.contact_email?'ready':c.website_url?'partial':'missing'}">${esc(readiness)}</span>${c.contact_email?`<strong>${esc(c.contact_email)}</strong><small>${esc(c.contact_role||'Public club contact')}</small>`:'<small>No public email found yet</small>'}</div>
+        <div class="market-club-actions">${c.website_url?`<a class="btn ghost compact" href="${esc(c.website_url)}" target="_blank" rel="noopener">Website ↗</a>`:''}${c.contact_source_url?`<a class="btn ghost compact" href="${esc(c.contact_source_url)}" target="_blank" rel="noopener">Contact source ↗</a>`:''}<button class="btn ${c.sales_prospect_id?'ghost':'secondary'} compact" data-market-to-prospect="${c.id}" ${c.sales_prospect_id?'disabled':''}>${c.sales_prospect_id?'In Prospects':'Add to Prospects'}</button></div>
+      </article>`;
+    }).join('')}</div>${shown.length>250?`<div class="help">Showing the first 250 matches. Narrow the list with search or association selection.</div>`:''}`:'<div class="notice">No clubs match this view yet.</div>';
+    document.querySelectorAll('[data-market-to-prospect]').forEach(b=>b.onclick=async()=>{
+      b.disabled=true;b.textContent='Adding…';
+      const {data,error}=await supabase.rpc('platform_add_market_club_to_prospects',{p_market_club_id:b.dataset.marketToProspect,p_intended_route:'standard'});
+      if(error){b.disabled=false;b.textContent='Add to Prospects';alert(error.message);return;}
+      const club=clubs.find(c=>c.id===b.dataset.marketToProspect);if(club)club.sales_prospect_id=data;
+      b.textContent='In Prospects';renderClubList();
+    });
+  };
+  document.getElementById('marketClubSearch').oninput=renderClubList;
+  document.getElementById('marketContactFilter').onchange=renderClubList;
+  renderClubList();
 }
 
 async function renderPlatformProspects(){
@@ -8231,27 +8402,14 @@ async function renderPlatformProspects(){
 
   page.innerHTML=`
   <section class="platform-flow-card">
-    <div class="section-label">Club acquisition</div>
-    <h2>Find → Contact → Interested → Onboarding</h2>
-    <p>Prospects are clubs we are trying to win. A club only moves to <strong>Onboarding</strong> after it is interested or we deliberately start the process.</p>
-    <div class="pipeline-strip"><span>DISCOVER</span><b>→</b><span>CONTACT</span><b>→</b><span>INTERESTED</span><b>→</b><span>ONBOARD</span><b>→</b><span>ACTIVE</span></div>
+    <div class="section-label">Prospect pipeline</div>
+    <h2>Reviewed club → Contact → Interested → Onboarding</h2>
+    <p><strong>Market Discovery</strong> maps the cricket world. <strong>Prospects</strong> contains only clubs we deliberately choose to approach.</p>
+    <div class="pipeline-strip"><span>SELECT</span><b>→</b><span>CONTACT</span><b>→</b><span>INTERESTED</span><b>→</b><span>ONBOARD</span><b>→</b><span>ACTIVE</span></div>
+    <div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div>
   </section>
 
   <div class="platform-metrics"><div><strong>${counts.discovered}</strong><span>to research / contact</span></div><div><strong>${counts.contacted}</strong><span>awaiting response</span></div><div><strong>${counts.interested}</strong><span>ready to onboard</span></div><div><strong>${counts.onboarding}</strong><span>moved to onboarding</span></div></div>
-
-  <details class="admin-card platform-discovery" open>
-    <summary><div><div class="section-label">Server-side discovery · Brave Search</div><h2>Find clubs in a locale</h2><p>Search the public web, inspect likely club websites and bring back reviewable club/contact candidates.</p></div><span>⌄</span></summary>
-    <div class="collapsible-admin-body">
-      <div class="form-grid">
-        <div class="field"><label>Locality / city</label><input id="discoveryLocality" placeholder="e.g. Newcastle"></div>
-        <div class="field"><label>Region / state</label><input id="discoveryRegion" placeholder="e.g. NSW"></div>
-        <div class="field"><label>Country</label><input id="discoveryCountry" value="Australia"></div>
-      </div>
-      <div class="btnrow"><button class="btn secondary" id="launchDiscovery">Find cricket clubs</button><span id="discoveryStatus" class="status"></span></div>
-      <div class="help">The API key stays on the server. Results are returned for review first — nothing is added to Prospects and nobody is emailed until you choose it.</div>
-      <div id="discoveryResults"></div>
-    </div>
-  </details>
 
   <section class="admin-card">
     <div class="admin-card-head"><div><div class="section-label">Prospect pipeline</div><h2>Clubs</h2></div><div class="prospect-filter-row"><input id="salesProspectSearch" placeholder="Search club, place or email"><select id="salesProspectStatus"><option value="all">All active prospects</option><option value="interested">Interested</option><option value="contacted">Contacted</option><option value="ready_to_contact">Ready to contact</option><option value="discovered">Discovered</option><option value="maybe_later">Maybe later</option><option value="wrong_contact">Wrong contact</option><option value="declined">Declined</option><option value="onboarding">Onboarding</option></select></div></div>
@@ -8278,6 +8436,7 @@ async function renderPlatformProspects(){
     </div>
   </details>`;
 
+  document.getElementById('openMarketDiscovery').onclick=()=>{platformView='market';renderPlatformConsole();};
   const renderList=()=>{
     const q=(document.getElementById('salesProspectSearch').value||'').trim().toLowerCase();
     const filter=document.getElementById('salesProspectStatus').value;
@@ -8292,61 +8451,6 @@ async function renderPlatformProspects(){
   document.getElementById('salesProspectSearch').oninput=renderList;
   document.getElementById('salesProspectStatus').onchange=renderList;
   renderList();
-
-  const normalUrl=u=>{try{return new URL(u).origin.toLowerCase();}catch{return String(u||'').toLowerCase().replace(/\/$/,'');}};
-  const candidateExists=c=>rows.some(x=>
-    (c.contact_email&&x.contact_email&&String(x.contact_email).toLowerCase()===String(c.contact_email).toLowerCase()) ||
-    (c.website_url&&x.website_url&&normalUrl(x.website_url)===normalUrl(c.website_url)) ||
-    (String(x.club_name||'').trim().toLowerCase()===String(c.club_name||'').trim().toLowerCase() && String(c.club_name||'').trim())
-  );
-  const renderDiscoveryResults=()=>{
-    const box=document.getElementById('discoveryResults');
-    if(!box)return;
-    if(!platformDiscoveryResults.length){box.innerHTML='';return;}
-    box.innerHTML=`<div class="discovery-result-head"><strong>${platformDiscoveryResults.length} candidate club${platformDiscoveryResults.length===1?'':'s'}</strong><span>Review before adding</span></div><div class="discovery-result-grid">${platformDiscoveryResults.map((c,i)=>{
-      const exists=candidateExists(c);
-      const confidence=c.confidence==='high'?'High confidence':c.confidence==='medium'?'Useful lead':'Needs review';
-      return `<article class="discovery-result-card">
-        <div class="discovery-card-top"><div><strong>${esc(c.club_name||'Possible cricket club')}</strong><small>${esc(confidence)}</small></div><span class="discovery-confidence ${esc(c.confidence||'needs_review')}">${esc(confidence)}</span></div>
-        <div class="discovery-card-lines">
-          <div><span>Website</span>${c.website_url?`<a href="${esc(c.website_url)}" target="_blank" rel="noopener">Open website ↗</a>`:'<strong>Not found</strong>'}</div>
-          <div><span>Public contact</span><strong>${esc(c.contact_email||'No email found automatically')}</strong></div>
-          <div><span>Role</span><strong>${esc(c.contact_role||'—')}</strong></div>
-          <div><span>Evidence</span><strong>${esc(c.evidence||'Public web result')}</strong></div>
-        </div>
-        <div class="btnrow discovery-actions">${c.contact_source_url?`<a class="btn ghost" href="${esc(c.contact_source_url)}" target="_blank" rel="noopener">Review source</a>`:''}<button class="btn ${exists?'ghost':'secondary'}" data-add-discovered="${i}" ${exists?'disabled':''}>${exists?'Already in Prospects':'Add prospect'}</button></div>
-      </article>`;
-    }).join('')}</div>`;
-    document.querySelectorAll('[data-add-discovered]').forEach(b=>b.onclick=async()=>{
-      const c=platformDiscoveryResults[Number(b.dataset.addDiscovered)];
-      if(!c)return;
-      b.disabled=true;b.textContent='Adding…';
-      const email=String(c.contact_email||'').trim().toLowerCase();
-      const locality=val('discoveryLocality'),region=val('discoveryRegion'),country=val('discoveryCountry')||'Australia';
-      const {data,error}=await supabase.from('sales_prospects').insert({
-        club_name:c.club_name||'Possible cricket club',locality,region,country,website_url:c.website_url||'',contact_name:c.contact_name||'',
-        contact_role:c.contact_role||'Public club contact',contact_email:email,contact_source_url:c.contact_source_url||c.website_url||'',
-        source_type:'web_discovery',intended_route:'standard',status:email?'ready_to_contact':'discovered',
-        notes:`Discovered server-side via Brave Search. ${c.evidence||''}`.trim()
-      }).select('*').single();
-      if(error){b.disabled=false;b.textContent='Add prospect';alert(error.message);return;}
-      rows.unshift(data);b.textContent='Added ✓';renderList();renderDiscoveryResults();
-    });
-  };
-  renderDiscoveryResults();
-
-  document.getElementById('launchDiscovery').onclick=async()=>{
-    const locality=val('discoveryLocality'),region=val('discoveryRegion'),country=val('discoveryCountry')||'Australia';
-    const st=document.getElementById('discoveryStatus');const btn=document.getElementById('launchDiscovery');const box=document.getElementById('discoveryResults');
-    if(!locality&&!region){st.textContent='Enter a locality or region.';return;}
-    btn.disabled=true;btn.textContent='Searching…';st.textContent='Searching the web and checking likely club contact pages…';box.innerHTML='<div class="discovery-loading">This can take a few seconds because candidate club websites are checked server-side.</div>';
-    const {data,error}=await supabase.functions.invoke('discover-clubs',{body:{locality,region,country}});
-    btn.disabled=false;btn.textContent='Find cricket clubs';
-    if(error||data?.error){platformDiscoveryResults=[];box.innerHTML='';st.textContent=data?.error||error?.message||'Discovery failed.';return;}
-    platformDiscoveryResults=data?.candidates||[];
-    st.textContent=platformDiscoveryResults.length?`Found ${platformDiscoveryResults.length} candidate club${platformDiscoveryResults.length===1?'':'s'}.`:'No useful candidates were found. Try a broader locality or region.';
-    renderDiscoveryResults();
-  };
 
   document.getElementById('addSalesProspect').onclick=async()=>{
     const st=document.getElementById('addSalesStatus');st.textContent='Adding…';
@@ -8794,10 +8898,10 @@ async function renderPlatformSettings(){
     <div class="field"><label>Payment provider</label><select id="settingPaymentProvider" ${canCommercial?'':'disabled'}><option value="stripe" ${(s.payment_provider||'stripe')==='stripe'?'selected':''}>Stripe</option></select><small>Hosted Stripe Checkout / invoices. Card data never touches this app.</small></div>
   </div></section>
 
-  <section class="admin-card form-wide"><div class="section-label">Prospect discovery</div><h2>Server-side search provider</h2><div class="form-grid">
-    <div class="field"><label>Discovery provider</label><select id="settingDiscoveryProvider" ${canCommercial?'':'disabled'}><option value="brave" ${(s.discovery_provider||'brave')==='brave'?'selected':''}>Brave Search API</option></select><small>The API key is stored only in Supabase Edge Function Secrets as <strong>BRAVE_SEARCH_API_KEY</strong>.</small></div>
+  <section class="admin-card form-wide"><div class="section-label">Market discovery support</div><h2>Search fallback provider</h2><div class="form-grid">
+    <div class="field"><label>Discovery provider</label><select id="settingDiscoveryProvider" ${canCommercial?'':'disabled'}><option value="brave" ${(s.discovery_provider||'brave')==='brave'?'selected':''}>Brave Search API</option></select><small>Official cricket directories are primary. Brave resolves association/club websites and fills gaps. The key stays in Supabase Edge Function Secrets as <strong>BRAVE_SEARCH_API_KEY</strong>.</small></div>
     <div class="field"><label>Provider status</label><div class="provider-check-box" id="discoveryProviderCheck">Not checked</div><button class="btn ghost provider-check-btn" id="checkDiscoveryProvider">Check discovery provider</button></div>
-  </div><div class="notice"><strong>Human review stays in the loop.</strong><br>The server searches and inspects public club pages, but discovered clubs are not saved and are never emailed automatically. A Platform Admin reviews the source and chooses <strong>Add prospect</strong>.</div></section>
+  </div><div class="notice"><strong>Discovery and outreach stay separate.</strong><br>Market Discovery can persist association and club records automatically, but no discovered club is contacted until a Platform Admin deliberately adds it to <strong>Prospects</strong>.</div></section>
 
   <section class="admin-card form-wide"><div class="section-label">Email delivery</div><h2>Resend sender</h2><div class="form-grid">
     <div class="field"><label>Email mode</label><select id="settingEmailMode" ${canCommercial?'':'disabled'}><option value="prototype" ${(s.email_mode||'prototype')==='prototype'?'selected':''}>Prototype queue</option><option value="live" ${s.email_mode==='live'?'selected':''}>Live provider</option></select><small>Keep Prototype selected until the test email succeeds and your sending domain is verified.</small></div>
