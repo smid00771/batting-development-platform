@@ -12,6 +12,7 @@ let platformView='home';
 let platformSelectedProspectId=null;
 let platformSelectedOnboardingId=null;
 let platformOnboardingSeed=null;
+let platformDiscoveryResults=[];
 let club=null;
 let membership=null;
 let userProfile=null;
@@ -817,6 +818,19 @@ async function boot(){
 
 function redirectUrl(){
   return location.origin+location.pathname+location.search;
+}
+
+async function kickLiveEmailDelivery(){
+  // Normal club workflow emails are delivered by the Supabase Database Webhook
+  // on outbound_messages. Only Platform Admin pages manually flush the global queue.
+  if(!platformRole)return;
+  try{
+    await supabase.functions.invoke('dispatch-outbox',{
+      body:{action:'dispatch',limit:20,public_base_url:`${location.origin}${location.pathname}`}
+    });
+  }catch(err){
+    console.warn('Email dispatch could not be started',err);
+  }
 }
 
 async function loadPlatformContext(){
@@ -2598,6 +2612,7 @@ async function renderWorkshop(){
     const {error}=await supabase.rpc('resend_philosophy_contributor_invite',{p_invite_id:b.dataset.resendPhilosophyInvite});
     if(error){alert(error.message);b.textContent='Resend';return;}
     b.textContent='Queued ✓';
+    await kickLiveEmailDelivery();
   });
 
   document.querySelectorAll('[data-cancel-philosophy-invite]').forEach(b=>b.onclick=async()=>{
@@ -2817,6 +2832,7 @@ async function saveWorkshopSetup(existingRows,externalInvites=[]){
     }
 
     if(externalStatus)externalStatus.textContent=`${newPeople.length} invitation${newPeople.length===1?'':'s'} queued ✓`;
+    await kickLiveEmailDelivery();
   }
 
   if(mode==='solo'){
@@ -7753,6 +7769,7 @@ function renderSecretaryProspectRoute(token,p){
         });
         if(error){st.textContent=error.message;return;}
         st.innerHTML=`Admin invitation queued. <strong>You’re done for now.</strong>`;
+        await kickLiveEmailDelivery();
         setTimeout(()=>renderProspectRoute(token),500);
       };
     }
@@ -7795,6 +7812,7 @@ function renderSecretaryProspectRoute(token,p){
           p_token:token,p_payer_name:val('payerName'),p_payer_email:val('payerEmail')
         });
         if(e){pst.textContent=e.message;return;}
+        await kickLiveEmailDelivery();
         await renderProspectRoute(token);
       };
       return;
@@ -8222,15 +8240,16 @@ async function renderPlatformProspects(){
   <div class="platform-metrics"><div><strong>${counts.discovered}</strong><span>to research / contact</span></div><div><strong>${counts.contacted}</strong><span>awaiting response</span></div><div><strong>${counts.interested}</strong><span>ready to onboard</span></div><div><strong>${counts.onboarding}</strong><span>moved to onboarding</span></div></div>
 
   <details class="admin-card platform-discovery" open>
-    <summary><div><div class="section-label">Discovery</div><h2>Find clubs in a locale</h2><p>Build a targeted public-web search now. Automated discovery can plug into this same workspace later.</p></div><span>⌄</span></summary>
+    <summary><div><div class="section-label">Server-side discovery · Brave Search</div><h2>Find clubs in a locale</h2><p>Search the public web, inspect likely club websites and bring back reviewable club/contact candidates.</p></div><span>⌄</span></summary>
     <div class="collapsible-admin-body">
       <div class="form-grid">
         <div class="field"><label>Locality / city</label><input id="discoveryLocality" placeholder="e.g. Newcastle"></div>
         <div class="field"><label>Region / state</label><input id="discoveryRegion" placeholder="e.g. NSW"></div>
         <div class="field"><label>Country</label><input id="discoveryCountry" value="Australia"></div>
       </div>
-      <div class="btnrow"><button class="btn secondary" id="launchDiscovery">Search the public web</button></div>
-      <div class="help">This deliberately opens a targeted web search rather than scraping search engines from the browser. The next integration will return candidate clubs here automatically through a server-side discovery provider.</div>
+      <div class="btnrow"><button class="btn secondary" id="launchDiscovery">Find cricket clubs</button><span id="discoveryStatus" class="status"></span></div>
+      <div class="help">The API key stays on the server. Results are returned for review first — nothing is added to Prospects and nobody is emailed until you choose it.</div>
+      <div id="discoveryResults"></div>
     </div>
   </details>
 
@@ -8274,11 +8293,59 @@ async function renderPlatformProspects(){
   document.getElementById('salesProspectStatus').onchange=renderList;
   renderList();
 
-  document.getElementById('launchDiscovery').onclick=()=>{
-    const locality=val('discoveryLocality'),region=val('discoveryRegion'),country=val('discoveryCountry');
-    const where=[locality,region,country].filter(Boolean).join(' ');
-    const query=encodeURIComponent(`${where} cricket clubs secretary contact email club website`);
-    window.open(`https://www.google.com/search?q=${query}`,'_blank','noopener');
+  const normalUrl=u=>{try{return new URL(u).origin.toLowerCase();}catch{return String(u||'').toLowerCase().replace(/\/$/,'');}};
+  const candidateExists=c=>rows.some(x=>
+    (c.contact_email&&x.contact_email&&String(x.contact_email).toLowerCase()===String(c.contact_email).toLowerCase()) ||
+    (c.website_url&&x.website_url&&normalUrl(x.website_url)===normalUrl(c.website_url)) ||
+    (String(x.club_name||'').trim().toLowerCase()===String(c.club_name||'').trim().toLowerCase() && String(c.club_name||'').trim())
+  );
+  const renderDiscoveryResults=()=>{
+    const box=document.getElementById('discoveryResults');
+    if(!box)return;
+    if(!platformDiscoveryResults.length){box.innerHTML='';return;}
+    box.innerHTML=`<div class="discovery-result-head"><strong>${platformDiscoveryResults.length} candidate club${platformDiscoveryResults.length===1?'':'s'}</strong><span>Review before adding</span></div><div class="discovery-result-grid">${platformDiscoveryResults.map((c,i)=>{
+      const exists=candidateExists(c);
+      const confidence=c.confidence==='high'?'High confidence':c.confidence==='medium'?'Useful lead':'Needs review';
+      return `<article class="discovery-result-card">
+        <div class="discovery-card-top"><div><strong>${esc(c.club_name||'Possible cricket club')}</strong><small>${esc(confidence)}</small></div><span class="discovery-confidence ${esc(c.confidence||'needs_review')}">${esc(confidence)}</span></div>
+        <div class="discovery-card-lines">
+          <div><span>Website</span>${c.website_url?`<a href="${esc(c.website_url)}" target="_blank" rel="noopener">Open website ↗</a>`:'<strong>Not found</strong>'}</div>
+          <div><span>Public contact</span><strong>${esc(c.contact_email||'No email found automatically')}</strong></div>
+          <div><span>Role</span><strong>${esc(c.contact_role||'—')}</strong></div>
+          <div><span>Evidence</span><strong>${esc(c.evidence||'Public web result')}</strong></div>
+        </div>
+        <div class="btnrow discovery-actions">${c.contact_source_url?`<a class="btn ghost" href="${esc(c.contact_source_url)}" target="_blank" rel="noopener">Review source</a>`:''}<button class="btn ${exists?'ghost':'secondary'}" data-add-discovered="${i}" ${exists?'disabled':''}>${exists?'Already in Prospects':'Add prospect'}</button></div>
+      </article>`;
+    }).join('')}</div>`;
+    document.querySelectorAll('[data-add-discovered]').forEach(b=>b.onclick=async()=>{
+      const c=platformDiscoveryResults[Number(b.dataset.addDiscovered)];
+      if(!c)return;
+      b.disabled=true;b.textContent='Adding…';
+      const email=String(c.contact_email||'').trim().toLowerCase();
+      const locality=val('discoveryLocality'),region=val('discoveryRegion'),country=val('discoveryCountry')||'Australia';
+      const {data,error}=await supabase.from('sales_prospects').insert({
+        club_name:c.club_name||'Possible cricket club',locality,region,country,website_url:c.website_url||'',contact_name:c.contact_name||'',
+        contact_role:c.contact_role||'Public club contact',contact_email:email,contact_source_url:c.contact_source_url||c.website_url||'',
+        source_type:'web_discovery',intended_route:'standard',status:email?'ready_to_contact':'discovered',
+        notes:`Discovered server-side via Brave Search. ${c.evidence||''}`.trim()
+      }).select('*').single();
+      if(error){b.disabled=false;b.textContent='Add prospect';alert(error.message);return;}
+      rows.unshift(data);b.textContent='Added ✓';renderList();renderDiscoveryResults();
+    });
+  };
+  renderDiscoveryResults();
+
+  document.getElementById('launchDiscovery').onclick=async()=>{
+    const locality=val('discoveryLocality'),region=val('discoveryRegion'),country=val('discoveryCountry')||'Australia';
+    const st=document.getElementById('discoveryStatus');const btn=document.getElementById('launchDiscovery');const box=document.getElementById('discoveryResults');
+    if(!locality&&!region){st.textContent='Enter a locality or region.';return;}
+    btn.disabled=true;btn.textContent='Searching…';st.textContent='Searching the web and checking likely club contact pages…';box.innerHTML='<div class="discovery-loading">This can take a few seconds because candidate club websites are checked server-side.</div>';
+    const {data,error}=await supabase.functions.invoke('discover-clubs',{body:{locality,region,country}});
+    btn.disabled=false;btn.textContent='Find cricket clubs';
+    if(error||data?.error){platformDiscoveryResults=[];box.innerHTML='';st.textContent=data?.error||error?.message||'Discovery failed.';return;}
+    platformDiscoveryResults=data?.candidates||[];
+    st.textContent=platformDiscoveryResults.length?`Found ${platformDiscoveryResults.length} candidate club${platformDiscoveryResults.length===1?'':'s'}.`:'No useful candidates were found. Try a broader locality or region.';
+    renderDiscoveryResults();
   };
 
   document.getElementById('addSalesProspect').onclick=async()=>{
@@ -8346,7 +8413,7 @@ async function renderPlatformSalesProspectDetail(p){
   if(document.getElementById('queueSalesIntro'))document.getElementById('queueSalesIntro').onclick=async()=>{
     const st=document.getElementById('salesActionStatus');st.textContent='Queuing…';
     const {error}=await supabase.rpc('platform_queue_sales_intro',{p_sales_prospect_id:p.id});
-    if(error){st.textContent=error.message;return;}st.textContent='Introduction queued ✓';setTimeout(()=>renderPlatformProspects(),500);
+    if(error){st.textContent=error.message;return;}st.textContent='Introduction queued ✓';await kickLiveEmailDelivery();setTimeout(()=>renderPlatformProspects(),500);
   };
   document.querySelectorAll('[data-sales-status]').forEach(b=>b.onclick=async()=>{
     const {error}=await supabase.rpc('platform_set_sales_prospect_status',{p_sales_prospect_id:p.id,p_status:b.dataset.salesStatus});
@@ -8543,6 +8610,7 @@ async function renderPlatformOnboarding(){
     document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Formal invitation ready</strong><span>Amount: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The invitation is also in Email Queue.</small></div>`;
     document.getElementById('copyCreatedLink').onclick=async()=>{await navigator.clipboard.writeText(link);document.getElementById('copyCreatedLink').textContent='Copied ✓';};
     platformOnboardingSeed=null;
+    await kickLiveEmailDelivery();
   };
 }
 
@@ -8667,15 +8735,46 @@ async function renderPlatformOutbox(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading email queue…</div>';
   const [{data:msgs,error},{data:settings}]=await Promise.all([
     supabase.from('outbound_messages').select('*').order('created_at',{ascending:false}).limit(150),
-    supabase.from('platform_settings').select('email_mode,email_provider').eq('singleton',true).single()
+    supabase.from('platform_settings').select('email_mode,email_provider,email_from_name,email_from_address,email_reply_to,email_live_from').eq('singleton',true).single()
   ]);
   if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
   const live=settings?.email_mode==='live';
-  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Email delivery</div><h2>${live?'Live email delivery':'Prototype queue'}</h2><p>${live?`Queued messages are sent by the configured provider (${esc(settings?.email_provider||'provider')}).`:'Every workflow already creates the real message record. For Beta testing, copy the generated link and send it manually. When live delivery is connected, the queue stays the same and a server-side sender delivers it.'}</p></section>
+  const liveFrom=settings?.email_live_from?new Date(settings.email_live_from):null;
+  const isPrototypeOnly=m=>!!(liveFrom&&m.created_at&&new Date(m.created_at)<liveFrom&&!m.sent_at&&!m.failed_at);
+  const queued=(msgs||[]).filter(m=>!m.sent_at&&!m.failed_at&&!isPrototypeOnly(m)).length;
+  const failed=(msgs||[]).filter(m=>!!m.failed_at&&!m.sent_at).length;
+  const prototypeOnly=(msgs||[]).filter(isPrototypeOnly).length;
+  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Email delivery · Resend</div><h2>${live?'Live automatic email delivery':'Provider test / prototype queue'}</h2><p>${live?'Every new outbound message triggers the server-side dispatcher through a Supabase Database Webhook. Resend handles delivery; this page can also flush anything left in the queue.':'The provider can be tested while the platform remains in Prototype mode. Switch Email mode to Live only when the sender/domain is ready and the Database Webhook is connected.'}</p><div class="provider-mini-status"><span><strong>${queued}</strong> queued</span><span><strong>${failed}</strong> failed</span>${prototypeOnly?`<span><strong>${prototypeOnly}</strong> old prototype-only</span>`:''}<span><strong>${esc(settings?.email_from_address||'not configured')}</strong> sender</span></div></section>
+    <section class="admin-card email-provider-actions"><div class="admin-card-head"><div><div class="section-label">Provider controls</div><h2>Test and dispatch</h2></div></div>
+      <div class="form-grid"><div class="field"><label>Test recipient</label><input id="providerTestEmail" type="email" value="${esc(session?.user?.email||'')}"><small>With onboarding@resend.dev, Resend only allows testing to the email address on the Resend account.</small></div><div class="field"><label>Current sender</label><input value="${esc(`${settings?.email_from_name||'Batting Development Platform'} <${settings?.email_from_address||'onboarding@resend.dev'}>`)}" disabled><small>${/@resend\.dev$/i.test(settings?.email_from_address||'')?'Testing sender only. Verify your own domain before emailing clubs.':'Custom sender configured.'}</small></div></div>
+      <div class="btnrow"><button class="btn ghost" id="testEmailProvider">Send test email</button>${live?'<button class="btn secondary" id="flushEmailQueue">Send queued now</button>':''}<span id="emailProviderStatus" class="status"></span></div>
+    </section>
     <section class="admin-card"><div class="section-label">Queue</div><h2>Outbound messages</h2>
-      <div class="message-list">${(msgs||[]).map(m=>{const path=m.payload?.link_path;const link=path?`${location.origin}${location.pathname}${path}`:'';const delivery=m.sent_at?'sent':(m.failed_at?'failed':(m.status||'queued'));return `<div class="message-row"><div><strong>${esc(m.subject)}</strong><small>${esc(m.recipient_email)} · ${esc(m.template_key)} · ${esc(delivery)}</small>${m.last_error?`<small>${esc(m.last_error)}</small>`:''}</div>${link?`<button class="btn ghost" data-copy-message="${esc(link)}">Copy link</button>`:''}</div>`;}).join('')||'<div class="notice">No messages queued yet.</div>'}</div>
+      <div class="message-list">${(msgs||[]).map(m=>{const path=m.payload?.link_path;const link=path?`${location.origin}${location.pathname}${path}`:'';const delivery=m.sent_at?'sent':(m.failed_at?'failed':(isPrototypeOnly(m)?'prototype-only':(m.processing_at?'sending':'queued')));return `<div class="message-row"><div><strong>${esc(m.subject)}</strong><small>${esc(m.recipient_email)} · ${esc(m.template_key)} · ${esc(delivery)}${m.provider_name?` · ${esc(m.provider_name)}`:''}</small>${m.last_error?`<small class="email-error">${esc(m.last_error)}</small>`:''}</div><div class="message-row-actions">${link?`<button class="btn ghost" data-copy-message="${esc(link)}">Copy link</button>`:''}${m.failed_at&&!m.sent_at?`<button class="btn ghost" data-retry-message="${m.id}">Retry</button>`:''}</div></div>`;}).join('')||'<div class="notice">No messages queued yet.</div>'}</div>
     </section>`;
   page.querySelectorAll('[data-copy-message]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.copyMessage);b.textContent='Copied ✓';});
+  page.querySelectorAll('[data-retry-message]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;b.textContent='Re-queuing…';
+    const {error}=await supabase.rpc('platform_retry_outbound_message',{p_message_id:b.dataset.retryMessage});
+    if(error){alert(error.message);b.disabled=false;b.textContent='Retry';return;}
+    if(live)await kickLiveEmailDelivery();
+    await renderPlatformOutbox();
+  });
+  document.getElementById('testEmailProvider').onclick=async()=>{
+    const st=document.getElementById('emailProviderStatus');const b=document.getElementById('testEmailProvider');
+    b.disabled=true;b.textContent='Sending…';st.textContent='';
+    const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'test',to:val('providerTestEmail'),public_base_url:`${location.origin}${location.pathname}`}});
+    b.disabled=false;b.textContent='Send test email';
+    st.textContent=error?error.message:(data?.error||'Test email accepted by Resend ✓');
+  };
+  if(document.getElementById('flushEmailQueue'))document.getElementById('flushEmailQueue').onclick=async()=>{
+    const st=document.getElementById('emailProviderStatus');const b=document.getElementById('flushEmailQueue');
+    b.disabled=true;b.textContent='Sending…';st.textContent='';
+    const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'dispatch',limit:25,public_base_url:`${location.origin}${location.pathname}`}});
+    if(error||data?.error){st.textContent=data?.error||error?.message||'Dispatch failed.';b.disabled=false;b.textContent='Send queued now';return;}
+    st.textContent=`Sent ${data?.sent||0}${data?.failed?`, failed ${data.failed}`:''}${data?.deferred?`, deferred ${data.deferred}`:''}.`;
+    setTimeout(()=>renderPlatformOutbox(),600);
+  };
 }
 
 async function renderPlatformSettings(){
@@ -8692,22 +8791,70 @@ async function renderPlatformSettings(){
     <div class="field"><label>Payment grace period</label><input id="settingGrace" type="number" value="${s.payment_grace_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Payment mode</label><select id="settingMode" ${canCommercial?'':'disabled'}><option value="prototype" ${s.payment_mode==='prototype'?'selected':''}>Prototype — simulate payment</option><option value="live" ${s.payment_mode==='live'?'selected':''}>Live provider</option></select></div>
-    <div class="field"><label>Payment provider</label><select id="settingPaymentProvider" ${canCommercial?'':'disabled'}><option value="stripe" ${(s.payment_provider||'stripe')==='stripe'?'selected':''}>Stripe</option></select><small>Recommended production path: hosted Stripe Checkout / invoices. Card data never touches this app.</small></div>
-    <div class="field"><label>Email mode</label><select id="settingEmailMode" ${canCommercial?'':'disabled'}><option value="prototype" ${(s.email_mode||'prototype')==='prototype'?'selected':''}>Prototype queue</option><option value="live" ${s.email_mode==='live'?'selected':''}>Live provider</option></select></div>
-    <div class="field"><label>Email provider</label><select id="settingEmailProvider" ${canCommercial?'':'disabled'}><option value="resend" ${(s.email_provider||'resend')==='resend'?'selected':''}>Resend</option></select><small>Recommended production path: Supabase Edge Function → Resend. Authentication email should use a separate sending stream/domain.</small></div>
+    <div class="field"><label>Payment provider</label><select id="settingPaymentProvider" ${canCommercial?'':'disabled'}><option value="stripe" ${(s.payment_provider||'stripe')==='stripe'?'selected':''}>Stripe</option></select><small>Hosted Stripe Checkout / invoices. Card data never touches this app.</small></div>
+  </div></section>
+
+  <section class="admin-card form-wide"><div class="section-label">Prospect discovery</div><h2>Server-side search provider</h2><div class="form-grid">
+    <div class="field"><label>Discovery provider</label><select id="settingDiscoveryProvider" ${canCommercial?'':'disabled'}><option value="brave" ${(s.discovery_provider||'brave')==='brave'?'selected':''}>Brave Search API</option></select><small>The API key is stored only in Supabase Edge Function Secrets as <strong>BRAVE_SEARCH_API_KEY</strong>.</small></div>
+    <div class="field"><label>Provider status</label><div class="provider-check-box" id="discoveryProviderCheck">Not checked</div><button class="btn ghost provider-check-btn" id="checkDiscoveryProvider">Check discovery provider</button></div>
+  </div><div class="notice"><strong>Human review stays in the loop.</strong><br>The server searches and inspects public club pages, but discovered clubs are not saved and are never emailed automatically. A Platform Admin reviews the source and chooses <strong>Add prospect</strong>.</div></section>
+
+  <section class="admin-card form-wide"><div class="section-label">Email delivery</div><h2>Resend sender</h2><div class="form-grid">
+    <div class="field"><label>Email mode</label><select id="settingEmailMode" ${canCommercial?'':'disabled'}><option value="prototype" ${(s.email_mode||'prototype')==='prototype'?'selected':''}>Prototype queue</option><option value="live" ${s.email_mode==='live'?'selected':''}>Live provider</option></select><small>Keep Prototype selected until the test email succeeds and your sending domain is verified.</small></div>
+    <div class="field"><label>Email provider</label><select id="settingEmailProvider" ${canCommercial?'':'disabled'}><option value="resend" ${(s.email_provider||'resend')==='resend'?'selected':''}>Resend</option></select><small>The API key is stored only in Supabase Edge Function Secrets as <strong>RESEND_API_KEY</strong>.</small></div>
+    <div class="field"><label>From name</label><input id="settingEmailFromName" value="${esc(s.email_from_name||'Batting Development Platform')}" ${canCommercial?'':'disabled'}></div>
+    <div class="field"><label>From email</label><input id="settingEmailFromAddress" type="email" value="${esc(s.email_from_address||'onboarding@resend.dev')}" ${canCommercial?'':'disabled'}><small><strong>onboarding@resend.dev</strong> is testing-only. To email real clubs, verify a domain in Resend and use an address on that domain.</small></div>
+    <div class="field"><label>Reply-to email</label><input id="settingEmailReplyTo" type="email" value="${esc(s.email_reply_to||'')}" ${canCommercial?'':'disabled'}><small>Use an address you actually monitor so Club Secretaries can simply reply.</small></div>
+    <div class="field"><label>Provider status</label><div class="provider-check-box" id="emailProviderCheck">Not checked</div><button class="btn ghost provider-check-btn" id="checkEmailProvider">Check email provider</button></div>
+    <div class="field"><label>Send a test email</label><input id="settingEmailTestRecipient" type="email" value="${esc(session?.user?.email||'')}" placeholder="your@email.com"><small>While using <strong>onboarding@resend.dev</strong>, Resend normally only allows testing to the email address on your Resend account.</small><div class="provider-check-box" id="emailTestStatus">Not sent</div><button class="btn secondary provider-check-btn" id="sendTestEmail">Send test email</button></div>
   </div>
-  <div class="notice" style="margin-top:16px"><strong>Production architecture</strong><br>Email and payment are deliberately provider-backed rather than self-hosted. The database remains the source of truth; providers deliver the email or collect the money and report the result back by webhook.</div>
-  <div class="commercial-box" style="margin-top:16px">
-    <div class="section-label">Regional Club Years</div>
-    <p class="help">These universal renewal dates give clubs access before their playing season instead of trying to identify each club's exact season start and finish.</p>
-    <div class="calendar-list">${(calendars||[]).map(c=>`<div><strong>${esc(c.label)}</strong><span>Club Year renews ${esc(calendarStartLabel(c))}</span></div>`).join('')}</div>
-  </div>
-  ${canCommercial?'<button class="btn secondary" id="savePlatformSettings">Save settings</button>':''}<div id="settingsStatus" class="help"></div></section>`;
+  <div class="notice"><strong>Provider-backed, not self-hosted.</strong><br>Supabase owns the workflow and queue. Brave supplies search results; Resend delivers email. Their secret keys never appear in GitHub or the browser. A Database Webhook on <strong>outbound_messages → INSERT</strong> calls <strong>dispatch-outbox</strong>, so normal workflow emails send automatically without someone opening this page.<br><br><strong>Safe go-live:</strong> when Email mode is first changed to Live, the platform records that moment. Old messages created during Prototype testing are not suddenly emailed.</div></section>
+
+  <section class="admin-card form-wide"><div class="section-label">Regional Club Years</div><h2>Renewal calendars</h2><p class="help">These universal renewal dates give clubs access before their playing season instead of trying to identify each club's exact season start and finish.</p><div class="calendar-list">${(calendars||[]).map(c=>`<div><strong>${esc(c.label)}</strong><span>Club Year renews ${esc(calendarStartLabel(c))}</span></div>`).join('')}</div></section>
+  ${canCommercial?'<button class="btn secondary" id="savePlatformSettings">Save settings</button>':''}<div id="settingsStatus" class="help"></div>`;
+
+  document.getElementById('checkDiscoveryProvider').onclick=async()=>{
+    const box=document.getElementById('discoveryProviderCheck');box.textContent='Checking…';
+    const {data,error}=await supabase.functions.invoke('discover-clubs',{body:{action:'status'}});
+    box.textContent=error?'Function unavailable':(data?.configured?'Connected ✓':'Function deployed — API key missing');
+    box.classList.toggle('ok',!!data?.configured);box.classList.toggle('bad',!data?.configured);
+  };
+  document.getElementById('checkEmailProvider').onclick=async()=>{
+    const box=document.getElementById('emailProviderCheck');box.textContent='Checking…';
+    const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'status'}});
+    box.textContent=error?'Function unavailable':(data?.configured?`Connected ✓ · ${data.from_address}`:'Function deployed — API key missing');
+    box.classList.toggle('ok',!!data?.configured);box.classList.toggle('bad',!data?.configured);
+  };
+  document.getElementById('sendTestEmail').onclick=async()=>{
+    const btn=document.getElementById('sendTestEmail');
+    const box=document.getElementById('emailTestStatus');
+    const to=val('settingEmailTestRecipient').trim().toLowerCase();
+    if(!to || !to.includes('@')){
+      box.textContent='Enter a valid test recipient.';box.classList.remove('ok');box.classList.add('bad');return;
+    }
+    btn.disabled=true;btn.textContent='Sending…';box.textContent='Sending through Resend…';box.classList.remove('ok','bad');
+    const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'test',to}});
+    const message=error?.message||data?.error||'';
+    if(message){
+      box.textContent=`Test failed — ${message}`;box.classList.remove('ok');box.classList.add('bad');
+    }else{
+      box.textContent=`Sent ✓ · check ${to}`;box.classList.add('ok');box.classList.remove('bad');
+    }
+    btn.disabled=false;btn.textContent='Send test email';
+  };
+
   if(document.getElementById('savePlatformSettings'))document.getElementById('savePlatformSettings').onclick=async()=>{
     const st=document.getElementById('settingsStatus');st.textContent='Saving…';
+    const newEmailMode=document.getElementById('settingEmailMode').value;
+    const liveFrom=newEmailMode==='live'
+      ? ((s.email_mode==='live'&&s.email_live_from)?s.email_live_from:new Date().toISOString())
+      : s.email_live_from;
     const {error}=await supabase.from('platform_settings').update({
       standard_season_price_cents:Math.round(Number(val('settingPrice'))*100),minimum_prorata_days:Number(val('settingMinDays')),
-      payment_grace_days:Number(val('settingGrace')),commercial_adjustment_warning_days:Number(val('settingWarn')),payment_mode:document.getElementById('settingMode').value,payment_provider:document.getElementById('settingPaymentProvider').value,email_mode:document.getElementById('settingEmailMode').value,email_provider:document.getElementById('settingEmailProvider').value,updated_at:new Date().toISOString()
+      payment_grace_days:Number(val('settingGrace')),commercial_adjustment_warning_days:Number(val('settingWarn')),payment_mode:document.getElementById('settingMode').value,
+      payment_provider:document.getElementById('settingPaymentProvider').value,discovery_provider:document.getElementById('settingDiscoveryProvider').value,
+      email_mode:newEmailMode,email_provider:document.getElementById('settingEmailProvider').value,
+      email_from_name:val('settingEmailFromName'),email_from_address:val('settingEmailFromAddress').trim().toLowerCase(),email_reply_to:val('settingEmailReplyTo').trim().toLowerCase(),email_live_from:liveFrom,updated_at:new Date().toISOString()
     }).eq('singleton',true);
     st.textContent=error?error.message:'Saved';
   };
