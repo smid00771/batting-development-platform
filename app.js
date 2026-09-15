@@ -1487,6 +1487,7 @@ async function renderClubDashboard(){
   const howWeBatReady=howWeBatVersions.length>0;
   const structureReady=(structureVersions||[]).length>0;
   const systemLive=philosophyVersions.length>0 && howWeBatVersions.length>0 && structureReady;
+  const hasSavedBranding=!!club.branding_updated_at || !!club.logo_data_url || !!club.website_url;
 
   const setupChecks=[
     ['Subscription / entitlement active',entitlementActive],
@@ -1500,6 +1501,7 @@ async function renderClubDashboard(){
     ['Player Plan Structure published',structureReady],
     ['Club Batting System live',systemLive]
   ];
+  const setupCompleteCount=setupChecks.filter(([,done])=>done).length;
 
   const workflow=[
     {
@@ -1536,15 +1538,14 @@ async function renderClubDashboard(){
       <div class="setup-player-callout"><strong>Players are not being shown the workshop.</strong><span>They receive the finished output — How We Bat, their own Player Plan and How We Train.</span></div>
     </section>
 
-    <section class="card club-branding-card" style="margin-top:16px">
-      <div class="club-branding-heading">
-        <div>
-          <div class="section-label">Club branding</div>
-          <h2>Make the player-facing system look like your club.</h2>
-          <p class="help">Add the club logo and website. We can suggest a colour combination from either source, but <strong>you choose what to use</strong>. The preview begins with the club's currently saved colours (or the platform defaults for a new club). Adding a logo does not automatically change them. You can also ignore both suggestions and pick any colours manually. Nothing changes for members until you click <strong>Save branding</strong>.</p>
-          <div class="branding-steps"><span><b>1</b> Add logo</span><span><b>2</b> Find website colours</span><span><b>3</b> Use a suggestion or choose manually</span></div>
-        </div>
-      </div>
+    <details class="card setup-collapsible club-branding-card" style="margin-top:16px" ${hasSavedBranding?'':'open'}>
+      <summary class="setup-collapsible-summary">
+        <div class="setup-collapsible-title"><div class="section-label">Club branding</div><strong>Make the player-facing system look like your club.</strong><span>${hasSavedBranding?'Branding saved':'Set up branding'}</span></div>
+        <span class="setup-collapsible-toggle"></span>
+      </summary>
+      <div class="setup-collapsible-body">
+        <p class="help setup-collapsible-intro">Add the club logo and website. We can suggest a colour combination from either source, but <strong>you choose what to use</strong>. The preview begins with the club's currently saved colours (or the platform defaults for a new club). Adding a logo does not automatically change them. You can also ignore both suggestions and pick any colours manually. Nothing changes for members until you click <strong>Save branding</strong>.</p>
+        <div class="branding-steps"><span><b>1</b> Add logo</span><span><b>2</b> Find website colours</span><span><b>3</b> Use a suggestion or choose manually</span></div>
 
       <div class="club-branding-grid">
         <div class="club-branding-logo-column">
@@ -1595,68 +1596,89 @@ async function renderClubDashboard(){
 
       <div id="clubBrandPreview" class="club-brand-preview"></div>
       <div class="btnrow branding-save-row"><button class="btn secondary" id="saveClubBranding">Save branding</button><span id="clubBrandingSaveStatus" class="status"></span></div>
-    </section>
-
-    <section class="card" style="margin-top:16px">
-      <div class="section-label">Club workflow</div>
-      <h2>From club beliefs to player development</h2>
-      <div class="club-workflow-list">
-        ${workflow.map(s=>`<div class="club-workflow-step">
-          <div class="club-workflow-number">${s.n}</div>
-          <div><strong>${esc(s.title)}</strong><small>${esc(s.who)}</small><p>${esc(s.text)}</p></div>
-        </div>`).join('')}
       </div>
-    </section>
+    </details>
 
-    <section class="card" style="margin-top:16px">
-      <div class="section-label">Who sees what?</div>
-      <h2>Access follows role and permission.</h2>
-      <p class="help">A person's involvement in the philosophy process does not automatically give them access to player information. Player access is controlled separately.</p>
-      <div class="role-visibility-grid">
-        <div class="role-visibility-card player"><strong>Player</strong><span>After publication</span><p><b>How We Bat</b><br><b>My Player Plan</b><br><b>How We Train</b></p><small>Players see their own development tools — not the philosophy-building workspace.</small></div>
-        <div class="role-visibility-card coach"><strong>Coach / Captain / Head Coach</strong><span>According to permissions</span><p><b>Players</b><br><b>How We Bat</b><br><b>How We Train</b></p><small>The Players workspace only contains Playing Groups and players they have been authorised to access.</small></div>
-        <div class="role-visibility-card contributor"><strong>Philosophy Contributor</strong><span>During the build</span><p><b>Philosophy Workshop</b><br><b>Their own response sections</b></p><small>This role alone does not expose Player Plans, Training Plans or coaching feedback.</small></div>
-        <div class="role-visibility-card lead"><strong>Philosophy Lead</strong><span>Build + release</span><p><b>Workshop and final draft</b><br><b>How We Bat Builder</b><br><b>Player Plan Structure</b></p><small>Being Philosophy Lead does not automatically grant access to individual players. That requires separate coach/admin permission.</small></div>
-        <div class="role-visibility-card admin"><strong>Club Admin</strong><span>Club management</span><p><b>Setup + Playing Groups</b><br><b>Permissions + Players</b><br><b>Build and live system</b></p><small>Admins manage the club framework and have full club Player Plan access.</small></div>
+    <details class="card setup-collapsible" style="margin-top:16px">
+      <summary class="setup-collapsible-summary">
+        <div class="setup-collapsible-title"><div class="section-label">Club workflow</div><strong>From club beliefs to player development</strong><span>6-step build</span></div>
+        <span class="setup-collapsible-toggle"></span>
+      </summary>
+      <div class="setup-collapsible-body">
+        <div class="club-workflow-list">
+          ${workflow.map(s=>`<div class="club-workflow-step">
+            <div class="club-workflow-number">${s.n}</div>
+            <div><strong>${esc(s.title)}</strong><small>${esc(s.who)}</small><p>${esc(s.text)}</p></div>
+          </div>`).join('')}
+        </div>
       </div>
-    </section>
+    </details>
 
-    <div class="grid" style="margin-top:16px">
-      <section class="card">
-        <div class="section-label">Current setup</div>
-        <h2>${esc(club.name)}</h2>
-        <div class="setup-steps">${setupChecks.map(([label,done])=>`
-          <div class="setup-step ${done?'done':''}"><span>${done?'✓':'○'}</span><strong>${esc(label)}</strong></div>`).join('')}</div>
-        <div class="btnrow">
-          ${!hasLead?'<button class="btn secondary" data-go="workshop">Choose Philosophy Lead</button>':''}
-          ${hasLead&&!systemLive?'<button class="btn secondary" data-go="workshop">Continue club build</button>':''}
-          <button class="btn ghost" data-go="groups">Playing Groups</button>
-          <button class="btn ghost" data-go="permissions">Permissions</button>
+    <details class="card setup-collapsible" style="margin-top:16px">
+      <summary class="setup-collapsible-summary">
+        <div class="setup-collapsible-title"><div class="section-label">Who sees what?</div><strong>Access follows role and permission.</strong><span>Roles & permissions</span></div>
+        <span class="setup-collapsible-toggle"></span>
+      </summary>
+      <div class="setup-collapsible-body">
+        <p class="help setup-collapsible-intro">A person's involvement in the philosophy process does not automatically give them access to player information. Player access is controlled separately.</p>
+        <div class="role-visibility-grid">
+          <div class="role-visibility-card player"><strong>Player</strong><span>After publication</span><p><b>How We Bat</b><br><b>My Player Plan</b><br><b>How We Train</b></p><small>Players see their own development tools — not the philosophy-building workspace.</small></div>
+          <div class="role-visibility-card coach"><strong>Coach / Captain / Head Coach</strong><span>According to permissions</span><p><b>Players</b><br><b>How We Bat</b><br><b>How We Train</b></p><small>The Players workspace only contains Playing Groups and players they have been authorised to access.</small></div>
+          <div class="role-visibility-card contributor"><strong>Philosophy Contributor</strong><span>During the build</span><p><b>Philosophy Workshop</b><br><b>Their own response sections</b></p><small>This role alone does not expose Player Plans, Training Plans or coaching feedback.</small></div>
+          <div class="role-visibility-card lead"><strong>Philosophy Lead</strong><span>Build + release</span><p><b>Workshop and final draft</b><br><b>How We Bat Builder</b><br><b>Player Plan Structure</b></p><small>Being Philosophy Lead does not automatically grant access to individual players. That requires separate coach/admin permission.</small></div>
+          <div class="role-visibility-card admin"><strong>Club Admin</strong><span>Club management</span><p><b>Setup + Playing Groups</b><br><b>Permissions + Players</b><br><b>Build and live system</b></p><small>Admins manage the club framework and have full club Player Plan access.</small></div>
         </div>
-      </section>
+      </div>
+    </details>
 
-      <section class="card">
-        <div class="section-label">Live system</div>
-        <h2>${systemLive?'Club Batting System is live':'Player-facing system not fully released'}</h2>
-        <div class="gate-state ${systemLive?'open':'locked'}">${systemLive?'🔓':'🔒'}</div>
-        <p class="help">${systemLive
-          ?`The published club system is available. Players can build their own Player Plans and use targeted How We Train guidance.`
-          :'People can still be invited and assigned roles while the club build is underway. The finished player-facing system becomes available when the Club Batting System is published.'}</p>
-        <div class="dashboard-stats">
-          <div><strong>${submitted}/${total}</strong><span>${collaborative?'philosophy responses':'lead response'}</span></div>
-          <div><strong>${groups?.length||0}</strong><span>Playing Groups</span></div>
-          <div><strong>${players?.length||0}</strong><span>active players</span></div>
+    <details class="card setup-collapsible" style="margin-top:16px" ${systemLive?'':'open'}>
+      <summary class="setup-collapsible-summary">
+        <div class="setup-collapsible-title"><div class="section-label">Club status & setup</div><strong>${systemLive?'Club Batting System is live':'Finish setting up the club system'}</strong><span>${systemLive?'Live':`${setupCompleteCount}/${setupChecks.length} ready`}</span></div>
+        <span class="setup-collapsible-toggle"></span>
+      </summary>
+      <div class="setup-collapsible-body">
+        <div class="grid setup-status-grid">
+          <section class="setup-inner-panel">
+            <div class="section-label">Current setup</div>
+            <h2>${esc(club.name)}</h2>
+            <div class="setup-steps">${setupChecks.map(([label,done])=>`
+              <div class="setup-step ${done?'done':''}"><span>${done?'✓':'○'}</span><strong>${esc(label)}</strong></div>`).join('')}</div>
+            <div class="btnrow">
+              ${!hasLead?'<button class="btn secondary" data-go="workshop">Choose Philosophy Lead</button>':''}
+              ${hasLead&&!systemLive?'<button class="btn secondary" data-go="workshop">Continue club build</button>':''}
+              <button class="btn ghost" data-go="groups">Playing Groups</button>
+              <button class="btn ghost" data-go="permissions">Permissions</button>
+            </div>
+          </section>
+
+          <section class="setup-inner-panel">
+            <div class="section-label">Live system</div>
+            <h2>${systemLive?'Club Batting System is live':'Player-facing system not fully released'}</h2>
+            <div class="gate-state ${systemLive?'open':'locked'}">${systemLive?'🔓':'🔒'}</div>
+            <p class="help">${systemLive
+              ?`The published club system is available. Players can build their own Player Plans and use targeted How We Train guidance.`
+              :'People can still be invited and assigned roles while the club build is underway. The finished player-facing system becomes available when the Club Batting System is published.'}</p>
+            <div class="dashboard-stats">
+              <div><strong>${submitted}/${total}</strong><span>${collaborative?'philosophy responses':'lead response'}</span></div>
+              <div><strong>${groups?.length||0}</strong><span>Playing Groups</span></div>
+              <div><strong>${players?.length||0}</strong><span>active players</span></div>
+            </div>
+          </section>
         </div>
-      </section>
-    </div>
+      </div>
+    </details>
 
-    <section class="card setup-commercial" style="margin-top:16px">
-      <div class="section-label">Commercial status</div>
-      <h3>${entitlement?.status==='development_legacy'?'Development / legacy club':entitlementActive?'Active':'Needs attention'}</h3>
-      <div class="help">${entitlement?.status==='development_legacy'
-        ?'This club existed before the commercial onboarding system was added. Platform Admin can attach commercial terms later without changing any cricket data.'
-        :`Access ${entitlementActive?'is active':'has expired'}${entitlement?.active_until?` through ${new Date(entitlement.active_until+'T00:00:00').toLocaleDateString()}`:''}. Commercial terms are managed only in Platform Admin.`}</div>
-    </section>`;
+    <details class="card setup-collapsible setup-commercial" style="margin-top:16px">
+      <summary class="setup-collapsible-summary">
+        <div class="setup-collapsible-title"><div class="section-label">Commercial status</div><strong>${entitlement?.status==='development_legacy'?'Development / legacy club':entitlementActive?'Access is active':'Commercial access needs attention'}</strong><span>${entitlementActive?'Active':'Check access'}</span></div>
+        <span class="setup-collapsible-toggle"></span>
+      </summary>
+      <div class="setup-collapsible-body">
+        <div class="help">${entitlement?.status==='development_legacy'
+          ?'This club existed before the commercial onboarding system was added. Platform Admin can attach commercial terms later without changing any cricket data.'
+          :`Access ${entitlementActive?'is active':'has expired'}${entitlement?.active_until?` through ${new Date(entitlement.active_until+'T00:00:00').toLocaleDateString()}`:''}. Commercial terms are managed only in Platform Admin.`}</div>
+      </div>
+    </details>`;
 
   wireClubBrandingControls(page);
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
