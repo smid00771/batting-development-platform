@@ -5947,8 +5947,6 @@ function renderPlayersWorkspaceList(){
   })).join('');
 
   const discussionPlayers=signalPlayerIds.size;
-  const accessLabel=isAdmin()?'Full club access':`${players.length} player${players.length===1?'':'s'} within your permissions`;
-
   let emptyCopy='';
   if(!playersWorkspaceGroupFilter&&!query){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Select a Playing Group or search for a player.</strong><span>Only players and Playing Groups within your permissions are available here.</span></section>`;
@@ -5966,7 +5964,6 @@ function renderPlayersWorkspaceList(){
       <h2>Players</h2>
       <div class="help">Choose a Playing Group or search for a player. Open their Player Plan, Training Plan or add a quick observation from the same list.</div>
     </div>
-    <div class="workspace-access-inline">${esc(accessLabel)}</div>
   </section>
 
   <section class="card players-workspace-tools compact">
