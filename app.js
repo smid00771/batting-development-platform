@@ -1527,9 +1527,10 @@ async function renderClubDashboard(){
           </div>
           <div id="brandingDetectionStatus" class="branding-detection-status"></div>
           <div id="websiteColourSuggestion" class="branding-source-panel"></div>
+          <div id="combinedColourChoices" class="branding-source-panel"></div>
 
           <div class="branding-colour-heading">
-            <div><span class="branding-mini-label">Choose your colours</span><p>Primary is the dominant club colour. Accent is used for highlights. Click either colour square to choose any colour.</p></div>
+            <div><span class="branding-mini-label">Or choose any colour manually</span><p>Primary is the dominant club colour. Accent is used for highlights. The detected colours above are optional — these pickers let you choose anything.</p></div>
             <button class="btn ghost compact-btn" id="swapBrandColours" type="button">Swap primary ↔ accent</button>
           </div>
           <div class="branding-colour-grid">
@@ -1631,12 +1632,12 @@ function wireClubBrandingControls(page){
     if(ap)ap.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT).toLowerCase();
     if(ah && document.activeElement!==ah)ah.value=normaliseHex(d.accent_colour,PLATFORM_ACCENT);
 
-    const renderAssignableSwatches=colours=>colours.slice(0,6).map(c=>`<div class="branding-palette-choice" style="--swatch:${c}"><i></i><b>${c}</b><button type="button" data-set-primary="${c}">Primary</button><button type="button" data-set-accent="${c}">Accent</button></div>`).join('');
+    const renderSourceSwatches=colours=>colours.slice(0,8).map(c=>`<span class="branding-source-swatch" style="--swatch:${c}"><i></i><b>${c}</b></span>`).join('');
 
     const logoPanel=page.querySelector('#logoColourSuggestions');
     if(logoPanel){
       logoPanel.innerHTML=clubBrandingLogoSuggestions.length
-        ?`<div class="branding-source-title"><strong>Colours found in logo</strong><span>Suggestions only — the logo has not changed your theme.</span></div><div class="branding-palette-list">${renderAssignableSwatches(clubBrandingLogoSuggestions)}</div>`
+        ?`<div class="branding-source-title"><strong>Colours found in logo</strong><span>These are suggestions only. Choose from all detected colours on the right.</span></div><div class="branding-source-swatches">${renderSourceSwatches(clubBrandingLogoSuggestions)}</div>`
         :'';
     }
 
@@ -1644,12 +1645,27 @@ function wireClubBrandingControls(page){
     if(websitePanel){
       if(clubBrandingWebsiteSuggestion){
         const ws=clubBrandingWebsiteSuggestion;
-        websitePanel.innerHTML=`<div class="branding-source-title"><strong>Website suggestion</strong><span>${esc(ws.host||'Club website')} recommends this starting combination.</span></div><div class="branding-theme-pair"><div style="--swatch:${ws.primary}"><i></i><span>Primary</span><b>${ws.primary}</b></div><div style="--swatch:${ws.accent}"><i></i><span>Accent</span><b>${ws.accent}</b></div><button type="button" class="btn ghost" id="useWebsiteBrandTheme">Use website suggestion</button></div>${ws.candidates?.length?`<div class="branding-palette-list">${renderAssignableSwatches(ws.candidates)}</div>`:''}`;
+        websitePanel.innerHTML=`<div class="branding-source-title"><strong>Website suggestion</strong><span>${esc(ws.host||'Club website')} recommends this starting combination. You can accept it, or choose any detected colour yourself.</span></div><div class="branding-theme-pair"><div style="--swatch:${ws.primary}"><i></i><span>Primary</span><b>${ws.primary}</b></div><div style="--swatch:${ws.accent}"><i></i><span>Accent</span><b>${ws.accent}</b></div><button type="button" class="btn ghost" id="useWebsiteBrandTheme">Use website suggestion</button></div>`;
       }else websitePanel.innerHTML='';
     }
 
-    page.querySelectorAll('[data-set-primary]').forEach(b=>b.onclick=()=>{d.primary_colour=b.dataset.setPrimary;draw();});
-    page.querySelectorAll('[data-set-accent]').forEach(b=>b.onclick=()=>{d.accent_colour=b.dataset.setAccent;draw();});
+    const combinedPanel=page.querySelector('#combinedColourChoices');
+    if(combinedPanel){
+      const ws=clubBrandingWebsiteSuggestion;
+      const detected=[
+        ...(ws?[ws.primary,ws.accent,...(ws.candidates||[])]:[]),
+        ...clubBrandingLogoSuggestions
+      ].filter(validHex).map(c=>c.toUpperCase());
+      const unique=[...new Set(detected)];
+      const currentPrimary=normaliseHex(d.primary_colour,PLATFORM_PRIMARY).toUpperCase();
+      const currentAccent=normaliseHex(d.accent_colour,PLATFORM_ACCENT).toUpperCase();
+      combinedPanel.innerHTML=unique.length
+        ?`<div class="branding-source-title"><strong>Choose from detected club colours</strong><span>Any colour below can be your Primary or Accent colour. Or ignore these and use the manual colour pickers underneath.</span></div><div class="branding-detected-choice-grid">${unique.slice(0,10).map(c=>`<div class="branding-detected-choice ${c===currentPrimary?'is-primary':''} ${c===currentAccent?'is-accent':''}" style="--swatch:${c}"><i></i><b>${c}</b><div><button type="button" data-set-primary="${c}">${c===currentPrimary?'✓ Primary':'Set Primary'}</button><button type="button" data-set-accent="${c}">${c===currentAccent?'✓ Accent':'Set Accent'}</button></div></div>`).join('')}</div>`
+        :'';
+    }
+
+    page.querySelectorAll('[data-set-primary]').forEach(b=>b.onclick=()=>{d.primary_colour=b.dataset.setPrimary;setStatus(detectStatus,`${b.dataset.setPrimary} selected as Primary. Save branding when you are happy with it.`,'good');draw();});
+    page.querySelectorAll('[data-set-accent]').forEach(b=>b.onclick=()=>{d.accent_colour=b.dataset.setAccent;setStatus(detectStatus,`${b.dataset.setAccent} selected as Accent. Save branding when you are happy with it.`,'good');draw();});
     page.querySelector('#useWebsiteBrandTheme')?.addEventListener('click',()=>{
       const ws=clubBrandingWebsiteSuggestion;if(!ws)return;
       d.primary_colour=ws.primary;d.accent_colour=ws.accent;
