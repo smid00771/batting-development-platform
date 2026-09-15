@@ -8262,16 +8262,17 @@ async function renderPlatformMarketDiscovery(){
 
     <section class="admin-card form-wide">
       <div class="admin-card-head"><div><div class="section-label">2 · Associations</div><h2>Map clubs from the association layer</h2><p>The association is the authoritative index. Brave is used mainly to resolve official sites and fill gaps.</p></div><div class="market-bulk-actions"><button class="btn ghost" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map all associations</button><button class="btn ghost" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Find missing contacts</button></div></div>
+      <div class="prospect-filter-row"><input id="marketAssociationSearch" placeholder="Find an association (e.g. Newcastle)"></div>
       <div id="marketBulkStatus" class="market-progress"></div>
       <div class="market-association-list">${associations.length?associations.map(a=>{
         const ids=linksByAssociation.get(a.id)||[];
         const assocClubs=ids.map(id=>clubById.get(id)).filter(Boolean);
         const assocContacts=assocClubs.filter(c=>c.contact_email).length;
         const source=a.source_type==='official_directory'?'Official source':'Search supplement';
-        return `<article class="market-association-row ${platformMarketAssociationId===a.id?'selected':''}">
+        return `<article class="market-association-row ${platformMarketAssociationId===a.id?'selected':''}" data-association-name="${esc(a.name.toLowerCase())}">
           <button class="market-association-main" data-market-association-select="${a.id}">
             <span><strong>${esc(a.name)}</strong><small>${esc(source)}${a.website_url?' · website resolved':''}</small></span>
-            <span class="market-association-count"><b>${assocClubs.length}</b> clubs · <b>${assocContacts}</b> contacts</span>
+            <span class="market-association-count"><b>${assocClubs.length}</b> clubs · <b>${assocContacts}</b> contacts · View clubs ↓</span>
           </button>
           <div class="market-association-actions">
             ${a.source_url?`<a class="btn ghost compact" href="${esc(a.source_url)}" target="_blank" rel="noopener">Source ↗</a>`:''}
@@ -8283,8 +8284,8 @@ async function renderPlatformMarketDiscovery(){
       }).join(''):'<div class="notice">No NSW associations have been mapped yet. Use <strong>Scan NSW association map</strong> above.</div>'}</div>
     </section>
 
-    <section class="admin-card form-wide">
-      <div class="admin-card-head"><div><div class="section-label">3 · Club inventory</div><h2>${platformMarketAssociationId?(associations.find(a=>a.id===platformMarketAssociationId)?.name||'Selected association'):'All mapped NSW clubs'}</h2></div><div class="prospect-filter-row"><input id="marketClubSearch" placeholder="Search clubs or contact email"><select id="marketContactFilter"><option value="all">All clubs</option><option value="contact">Contact found</option><option value="missing">Contact missing</option><option value="prospect">Already a prospect</option></select></div></div>
+    <section class="admin-card form-wide" id="marketClubInventory">
+      <div class="admin-card-head"><div><div class="section-label">3 · Club inventory</div><h2>${platformMarketAssociationId?(associations.find(a=>a.id===platformMarketAssociationId)?.name||'Selected association'):'All mapped NSW clubs'}</h2><p>${platformMarketAssociationId?'Showing the clubs mapped to this association.':'Showing all mapped NSW clubs.'}</p></div><div class="prospect-filter-row"><input id="marketClubSearch" placeholder="Search clubs or contact email"><select id="marketContactFilter"><option value="all">All clubs</option><option value="contact">Contact found</option><option value="missing">Contact missing</option><option value="prospect">Already a prospect</option></select></div></div>
       <div class="market-club-toolbar"><button class="btn ghost compact" id="showAllMarketClubs" ${platformMarketAssociationId?'':'disabled'}>Show all NSW clubs</button><span id="marketClubCount" class="help"></span></div>
       <div id="marketClubList"></div>
     </section>`;
@@ -8317,9 +8318,14 @@ async function renderPlatformMarketDiscovery(){
     }finally{if(button){button.disabled=false;button.textContent=old||'Find contacts';}}
   };
 
-  document.querySelectorAll('[data-market-association-select]').forEach(b=>b.onclick=()=>{platformMarketAssociationId=b.dataset.marketAssociationSelect;renderPlatformMarketDiscovery();});
-  document.querySelectorAll('[data-scan-association]').forEach(b=>b.onclick=async()=>{try{await scanOneAssociation(b.dataset.scanAssociation,b);await renderPlatformMarketDiscovery();}catch(e){alert(e.message);}});
-  document.querySelectorAll('[data-enrich-association]').forEach(b=>b.onclick=async()=>{try{await enrichOneAssociation(b.dataset.enrichAssociation,b);await renderPlatformMarketDiscovery();}catch(e){alert(e.message);}});
+  const focusClubInventory=()=>setTimeout(()=>document.getElementById('marketClubInventory')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
+  document.getElementById('marketAssociationSearch').oninput=e=>{
+    const q=String(e.target.value||'').trim().toLowerCase();
+    document.querySelectorAll('.market-association-row').forEach(row=>{row.style.display=!q||String(row.dataset.associationName||'').includes(q)?'':'none';});
+  };
+  document.querySelectorAll('[data-market-association-select]').forEach(b=>b.onclick=async()=>{platformMarketAssociationId=b.dataset.marketAssociationSelect;await renderPlatformMarketDiscovery();focusClubInventory();});
+  document.querySelectorAll('[data-scan-association]').forEach(b=>b.onclick=async()=>{const id=b.dataset.scanAssociation;platformMarketAssociationId=id;try{await scanOneAssociation(id,b);await renderPlatformMarketDiscovery();focusClubInventory();}catch(e){alert(e.message);}});
+  document.querySelectorAll('[data-enrich-association]').forEach(b=>b.onclick=async()=>{const id=b.dataset.enrichAssociation;platformMarketAssociationId=id;try{await enrichOneAssociation(id,b);await renderPlatformMarketDiscovery();focusClubInventory();}catch(e){alert(e.message);}});
 
   document.getElementById('scanAllAssociations').onclick=async()=>{
     if(!confirm(`Map clubs for all ${associations.length} discovered NSW association / competition records? This runs server-side searches sequentially and can take several minutes.`))return;
@@ -8346,7 +8352,7 @@ async function renderPlatformMarketDiscovery(){
     setTimeout(()=>renderPlatformMarketDiscovery(),700);
   };
 
-  document.getElementById('showAllMarketClubs').onclick=()=>{platformMarketAssociationId='';renderPlatformMarketDiscovery();};
+  document.getElementById('showAllMarketClubs').onclick=async()=>{platformMarketAssociationId='';await renderPlatformMarketDiscovery();focusClubInventory();};
 
   const renderClubList=()=>{
     const q=(document.getElementById('marketClubSearch').value||'').trim().toLowerCase();
@@ -8929,6 +8935,10 @@ async function renderPlatformSettings(){
     box.textContent=error?'Function unavailable':(data?.configured?`Connected ✓ · ${data.from_address}`:'Function deployed — API key missing');
     box.classList.toggle('ok',!!data?.configured);box.classList.toggle('bad',!data?.configured);
   };
+
+  // Provider status is a live check, so refresh it automatically whenever Platform Settings opens.
+  document.getElementById('checkDiscoveryProvider').click();
+  document.getElementById('checkEmailProvider').click();
   document.getElementById('sendTestEmail').onclick=async()=>{
     const btn=document.getElementById('sendTestEmail');
     const box=document.getElementById('emailTestStatus');
