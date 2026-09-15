@@ -3240,16 +3240,39 @@ async function saveHowWeBatBuilder(status){
 }
 
 
-function renderKeyMessageReferenceCard(b,index,context='hwb'){
-  const points=Array.isArray(b.reference_points)&&b.reference_points.length
-    ?b.reference_points
+function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
+  const savedPoints=Array.isArray(b.reference_points)
+    ?b.reference_points.filter(Boolean)
     :[];
-  return `<details class="hwb-public-banner ${index===1?'feature':''} ${context==='plan'?'plan-reference':''}">
+
+  // Backwards compatibility for older published How We Bat versions that
+  // pre-date the richer reference layer. Use the platform reference content
+  // for the same Key Message and format without changing the stored snapshot.
+  const fallbackPoints=(!savedPoints.length && b.key && format)
+    ?generatedBannerReference(b.key,format)
+    :[];
+
+  const points=savedPoints.length?savedPoints:fallbackPoints;
+  const cardClass=`hwb-public-banner ${index===1?'feature':''} ${context==='plan'?'plan-reference':''}`;
+
+  // A genuinely custom Key Message may have no deeper reference material.
+  // In that case, render a normal card rather than an empty expandable panel.
+  if(!points.length){
+    return `<div class="${cardClass}">
+      <div class="hwb-static-message">
+        <span>Key message ${index+1}</span>
+        <h3>${esc(b.title||'')}</h3>
+        <p>${esc(b.message||'')}</p>
+      </div>
+    </div>`;
+  }
+
+  return `<details class="${cardClass}">
     <summary>
       <span>Key message ${index+1}</span>
       <h3>${esc(b.title||'')}</h3>
       <p>${esc(b.message||'')}</p>
-      <em>Open key message ↓</em>
+      <em><span class="key-message-open">Open key message ↓</span><span class="key-message-close">Close key message ↑</span></em>
     </summary>
     <div class="hwb-banner-expanded">
       <div class="section-label">What this means in your batting</div>
@@ -3271,7 +3294,7 @@ function renderHowWeBatLivePreview(draft,format,isBuilder=false){
     <div class="hwb-public-tabs"><button class="active">${esc(label)}</button></div>
     <div class="hwb-public-body">
       <p class="hwb-public-intro">${esc(f.intro||'')}</p>
-      <div class="hwb-public-banner-grid">${(f.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb')).join('')}</div>
+      <div class="hwb-public-banner-grid">${(f.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb',format)).join('')}</div>
       <div class="hwb-public-callout">${esc(f.callout||'')}</div>
     </div>
     ${draft.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(draft.closing_strapline)}</strong></div>`:''}
@@ -3301,7 +3324,7 @@ function renderPublishedHowWeBat(){
       <div class="hwb-public-body">
         <div class="section-label">${esc(formatLabel)}</div>
         <p class="hwb-public-intro">${esc(f?.intro||'')}</p>
-        <div class="hwb-public-banner-grid">${(f?.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb')).join('')}</div>
+        <div class="hwb-public-banner-grid">${(f?.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb',publishedHowWeBatFormat)).join('')}</div>
         <div class="hwb-public-callout">${esc(f?.callout||'')}</div>
       </div>
       ${snap.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(snap.closing_strapline)}</strong><span>Know your game. Then read the moment.</span></div>`:''}
@@ -4493,7 +4516,7 @@ async function renderMyPlan(){
           <h2>Your club’s key messages for this format</h2>
           <div class="help">These are reference points, not extra questions. Open any Key Message whenever you want to reconnect your Player Plan to the club philosophy.</div>
           <div class="hwb-public-banner-grid plan-key-message-grid">
-            ${refFormat.banners.map((b,i)=>renderKeyMessageReferenceCard(b,i,'plan')).join('')}
+            ${refFormat.banners.map((b,i)=>renderKeyMessageReferenceCard(b,i,'plan',builderSection)).join('')}
           </div>
         </section>`;
       })();
