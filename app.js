@@ -49,6 +49,12 @@ let playersWorkspaceLocalRaw=null;
 let playersWorkspaceAutosaveTimer=null;
 let playersWorkspaceSearch='';
 let playersWorkspaceGroupFilter='all';
+let playersWorkspaceDevelopmentMode=null;
+let playersWorkspaceDevelopmentMatchId=null;
+
+let howWeTrainSelectedFormats=new Set(['limited_overs']);
+let howWeTrainReflectionEditId=null;
+let myDevelopmentFeedback=null;
 
 const FORMATS=[
   ['t20','T20'],
@@ -378,6 +384,157 @@ const HOW_WE_BAT_REFERENCE={
 function generatedBannerReference(key,format){
   return [...(HOW_WE_BAT_REFERENCE[key]?.[format]||[])];
 }
+
+const HOW_WE_TRAIN_REFERENCE={
+  value_wicket:{
+    title:'Train the judgement that protects your wicket',
+    t20:[
+      'Use mixed-ball scenarios where some deliveries are genuine scoring balls and others are not. The batter must earn the aggressive option rather than premeditating it.',
+      'Create short pressure blocks after dot balls so the batter practises staying active without manufacturing risk.'
+    ],
+    limited_overs:[
+      'Run innings-building scenarios: defend the good ball, identify the safe single and punish the genuine scoring ball.',
+      'Change wickets in hand, score and overs remaining so risk choices are practised in context rather than as a fixed rule.'
+    ],
+    long_form:[
+      'Use long mixed spells that reward leaving, defending and waiting for the ball that enters the player’s scoring envelope.',
+      'Practise off-stump awareness and patience under realistic fields so occupying the crease remains active rather than passive.'
+    ]
+  },
+  keep_moving:{
+    title:'Train the single before you need it',
+    t20:[
+      'Put a realistic field out and ask the batter to identify the safest single before the ball is delivered.',
+      'Mix boundary balls with good balls so the batter practises moving the innings when the boundary option is not there.'
+    ],
+    limited_overs:[
+      'Use cones or fielders to create real get-off-strike zones against both pace and spin, then move the field regularly.',
+      'Score the drill so dots, singles and twos matter. Make the batter solve the field rather than simply hit the ball.'
+    ],
+    long_form:[
+      'Practise low-risk rotation without widening the scoring envelope: soft hands, clips, drops and controlled pushes.',
+      'Change strike within longer spells so both batters must repeatedly reset to a new bowler, field and problem.'
+    ]
+  },
+  scoring_game:{
+    title:'Train the ball that earns your shot',
+    t20:[
+      'Rehearse the player’s trusted scoring options with mixed line and length. The shot only counts when the correct ball activates it.',
+      'Add one deliberate scoring option at a time rather than turning range-hitting into a collection of low-percentage shots.'
+    ],
+    limited_overs:[
+      'Target the player’s strongest scoring areas and mix deliveries so recognition is trained alongside execution.',
+      'Use boundary targets plus single zones so the batter practises both punishing errors and keeping the innings moving.'
+    ],
+    long_form:[
+      'Narrow the scoring envelope and make the bowler come into the player’s strengths rather than searching for runs from good bowling.',
+      'Expand only after the batter has shown repeated control of the original scoring balls.'
+    ]
+  },
+  control_tempo:{
+    title:'Train changes of tempo deliberately',
+    t20:[
+      'Use short scenarios with different required rates, wickets in hand and overs remaining. The batter must state the intended tempo before starting.',
+      'Include recovery scenarios after a quiet over so acceleration comes from a plan, not frustration.'
+    ],
+    limited_overs:[
+      'Practise build → rotate → accelerate phases within the same net, changing the scoring target without changing the player’s core game.',
+      'Pause between blocks and ask what changed in the match situation before the batter changes gear.'
+    ],
+    long_form:[
+      'Use extended spells with deliberately quiet periods followed by opportunities to score, training patience and recognition of momentum shifts.',
+      'Practise changing tempo through strike rotation and control as well as boundary hitting.'
+    ]
+  },
+  pressure_bowler:{
+    title:'Train ways to keep changing the bowler’s problem',
+    t20:[
+      'Combine strike rotation, running, movement and trusted boundary options so the bowler cannot repeat one plan for six balls.',
+      'Change the field or bowling matchup mid-drill and make the batter identify the new safest scoring option.'
+    ],
+    limited_overs:[
+      'Train as a partnership: alternate strike and use the different strengths of the two batters to make the field keep changing.',
+      'Reward runs created by pressure, misfields and placement — not only boundaries.'
+    ],
+    long_form:[
+      'Practise quiet pressure: occupy the crease, change strike and score in trusted areas without widening risk.',
+      'Use longer partnership scenarios where the objective is to stop the bowler settling into one repeated plan.'
+    ]
+  },
+  read_game:{
+    title:'Train the problem before the shot',
+    t20:[
+      'Before each block, identify the bowler’s likely plan, the protected field area and the safest available scoring option.',
+      'Change pace, angle, field or phase during the drill so adaptation happens inside the player’s own game.'
+    ],
+    limited_overs:[
+      'Build scenarios around score, wickets, overs and partnership state. Ask the batter to explain what the game is asking before starting.',
+      'Move the field during the drill and make the batter update their scoring picture rather than repeating a preset shot.'
+    ],
+    long_form:[
+      'Change bowling plans and fields across a longer spell so the batter repeatedly reassesses what the bowler is trying to make them do.',
+      'Practise adapting access to runs while keeping the same core method and dismissal discipline.'
+    ]
+  },
+  use_phase:{
+    title:'Train the phase, not a generic net',
+    t20:[
+      'Run separate powerplay, middle-over and death-over blocks with realistic fields and scoring demands.',
+      'Require the batter to identify which options widen in each phase and which safe fallback remains available.'
+    ],
+    limited_overs:[
+      'Use field-restriction, middle-over and late-innings scenarios so scoring choices change with the phase rather than with emotion.',
+      'Practise the transition between phases, especially how the scoring envelope widens when wickets in hand and match need allow it.'
+    ],
+    long_form:[
+      'Recreate new-ball periods, pressure spells and more favourable periods so the player trains when to narrow and when to expand.',
+      'Change ball condition, field or bowler type between blocks to represent the shifting phases of a long innings.'
+    ]
+  }
+};
+
+const DIMENSION_TRAINING_CUES={
+  wicket_preservation:'Use mixed deliveries and realistic consequence. Practise choosing when not to expand the scoring game.',
+  leaving_defending:'Mark off stump and mix line and length so leaving and defending are decisions, not repetitive motions.',
+  strike_rotation:'Put a field out, identify the safest single before the ball and then practise the delivery that accesses it.',
+  boundary_access:'Mix lengths and lines so the boundary option only counts when the correct delivery earns it.',
+  running:'Train calls, first-run speed, turning and pressure on fielders as part of the batting drill.',
+  scoring_areas:'Use target zones and mixed deliveries so the player recognises when their strongest areas are genuinely available.',
+  tempo:'Change the score, wickets or phase between blocks and make the player state the intended tempo before starting.',
+  matchups:'Change bowler type, angle or field and practise how the player’s own strengths solve each matchup.',
+  spin_method:'Vary line, length, pace and field against spin so the player trains recognition as well as execution.',
+  pace_method:'Vary line, length and pace so trusted options are connected to the ball that actually earns them.',
+  risk_management:'Use scenario scoring and consequence so risk changes because the match changes, not because frustration does.',
+  reset_routines:'Deliberately create a pressure trigger, then rehearse the player’s reset cue before the next ball.',
+  dot_ball_management:'Start blocks with deliberate dots and train the next decision without allowing the previous balls to force it.',
+  powerplay:'Use a realistic powerplay field and practise the scoring options that field restrictions genuinely create.',
+  death_overs:'Use late-innings fields and targets. Practise high-intent options the player owns plus a safe fallback.',
+  innovation:'Only rehearse innovative options that are genuinely in the plan, with a clear ball and field that activates them.',
+  patience:'Use longer spells where success is measured by decision quality and control, not by how many shots are played.',
+  partnerships:'Train in pairs where strike changes, communication and the other batter’s strengths affect the next decision.'
+};
+
+const PLAN_ALIGNMENT_LABELS={yes:'Yes',mostly:'Mostly',no:'No'};
+const DISMISSAL_CLASSIFICATION_LABELS={
+  plan_execution:'Within plan · poor execution',
+  outside_plan:'Decision outside plan',
+  not_applicable:'Not really a Player Plan issue'
+};
+const DEVELOPMENT_ISSUE_LABELS={
+  execution:'Execution',
+  decision:'Decision',
+  pressure:'Pressure response',
+  strike_rotation:'Strike rotation',
+  other:'Other / not sure'
+};
+const TRAINING_OBSERVATION_LABELS={
+  right_shots_right_balls:'Right shots · right balls',
+  shot_without_decision:'Shot practice without decision practice',
+  good_strike_rotation:'Good strike-rotation work',
+  drifting_outside_plan:'Drifting outside the Player Plan',
+  good_pressure_reset:'Good pressure / reset work',
+  other:'Other observation'
+};
 
 const QUESTION_LIBRARY={
   core_strengths:{
@@ -813,6 +970,7 @@ function renderShell(){
   if(isAdmin())nav.push(['permissions','Permissions']);
   if(howWeBatVersions.length)nav.push(['howwebat','How We Bat']);
   if(isPlayerUser())nav.push(['myplan','My Player Plan']);
+  if(howWeBatVersions.length)nav.push(['howwetrain','How We Train']);
 
   if(!nav.some(([k])=>k===currentTab)){
     if(isAdmin())currentTab='dashboard';
@@ -1088,7 +1246,8 @@ function renderTab(){
     plan:renderPlanStructure,
     permissions:renderPermissions,
     howwebat:renderPublishedHowWeBat,
-    myplan:renderMyPlan
+    myplan:renderMyPlan,
+    howwetrain:renderHowWeTrain
   };
   try{
     const result=(map[currentTab]||renderMyPlan)();
@@ -4484,6 +4643,604 @@ async function saveMemberPermission(userId){
 }
 
 
+/* ---------------- HOW WE TRAIN + DEVELOPMENT FEEDBACK ---------------- */
+
+function formatLabel(format){
+  return FORMATS.find(([k])=>k===format)?.[1]||format;
+}
+
+function answerText(answer){
+  if(!answer)return '';
+  return [...(answer.choices||[]),String(answer.comment||'').trim()].filter(Boolean).join(' · ');
+}
+
+function formatDateShort(value){
+  if(!value)return 'Date not recorded';
+  const d=new Date(`${String(value).slice(0,10)}T00:00:00`);
+  return Number.isNaN(d.getTime())?String(value):d.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
+}
+
+function todayIso(){
+  const d=new Date();
+  const local=new Date(d.getTime()-d.getTimezoneOffset()*60000);
+  return local.toISOString().slice(0,10);
+}
+
+function radioChoiceHtml(name,options,selected=''){
+  return `<div class="quick-choice-grid">${options.map(([value,label,detail])=>`<label class="quick-choice ${selected===value?'selected':''}">
+    <input type="radio" name="${esc(name)}" value="${esc(value)}" ${selected===value?'checked':''}>
+    <span><strong>${esc(label)}</strong>${detail?`<small>${esc(detail)}</small>`:''}</span>
+  </label>`).join('')}</div>`;
+}
+
+function wireQuickChoices(root=document){
+  root.querySelectorAll('.quick-choice input').forEach(input=>input.onchange=()=>{
+    const name=input.name;
+    root.querySelectorAll(`.quick-choice input[name="${name}"]`).forEach(x=>x.closest('.quick-choice')?.classList.toggle('selected',x.checked));
+  });
+}
+
+function howWeTrainPracticeForBanner(banner,format){
+  const known=HOW_WE_TRAIN_REFERENCE[banner?.key];
+  if(known){
+    return {title:known.title,points:[...(known[format]||[])]};
+  }
+  const refs=(banner?.reference_points||[]).filter(Boolean).slice(0,2);
+  return {
+    title:`Train “${banner?.title||'this Key Message'}”`,
+    points:refs.length
+      ?refs.map(x=>`Create a realistic practice scenario that makes the player apply this decision: ${x}`)
+      :[
+        'Use a realistic field and mixed deliveries so the batter must make the decision described by this Key Message — not simply repeat a shot.',
+        'Change the bowling or match situation during the drill so the player has to recognise when the message applies.'
+      ]
+  };
+}
+
+function trainingCueForQuestion(question){
+  return DIMENSION_TRAINING_CUES[question?.source_dimension]
+    ||'Turn this answer into a realistic scenario. Mix the deliveries so the player must recognise when the option belongs in their plan.';
+}
+
+function coreTrainingCards(raw){
+  const core=raw?.core||{};
+  const strengths=answerText(core.core_strengths);
+  const danger=answerText(core.core_danger);
+  const reset=answerText(core.core_reset);
+  const focus=answerText(core.core_focus);
+  const cards=[];
+
+  if(strengths)cards.push({
+    label:'MY TRUSTED OPTIONS',
+    title:'Train the ball that earns your shot',
+    value:strengths,
+    cue:'Mix line and length. The shot only counts when the correct delivery activates one of these trusted options.'
+  });
+  if(danger)cards.push({
+    label:'MY DANGER',
+    title:'Recreate the pressure that pulls you away from your plan',
+    value:danger,
+    cue:reset
+      ?`Build the danger into the drill, then rehearse your reset: ${reset}.`
+      :'Build this danger into the drill, then deliberately reset before the next ball.'
+  });
+  if(focus)cards.push({
+    label:'CURRENT DEVELOPMENT',
+    title:'Keep the session specific',
+    value:focus,
+    cue:'Choose one or two of these priorities for the session rather than trying to train everything at once.'
+  });
+  return cards;
+}
+
+function formatTrainingCards(raw,format){
+  return playerPlanQuestionsFor(format).map(q=>{
+    const a=raw?.formats?.[format]?.[q.id];
+    const value=answerText(a);
+    if(!value)return null;
+    return {
+      label:q.label,
+      value,
+      cue:trainingCueForQuestion(q)
+    };
+  }).filter(Boolean).slice(0,6);
+}
+
+function developmentFocusItems(data,raw){
+  const items=[];
+  for(const o of data?.training_observations||[]){
+    if(!String(o.next_training_focus||'').trim())continue;
+    items.push({
+      text:o.next_training_focus.trim(),
+      source:`Training observation · ${o.observer_name||'Coach / Captain'}`,
+      date:o.observed_on||o.created_at||'',
+      type:'feedback'
+    });
+  }
+  for(const m of data?.matches||[]){
+    for(const f of m.coach_feedback||[]){
+      if(!String(f.next_training_focus||'').trim())continue;
+      items.push({
+        text:f.next_training_focus.trim(),
+        source:`Match feedback · ${f.author_name||'Coach / Captain'}`,
+        date:f.created_at||m.match_date||'',
+        type:'feedback'
+      });
+    }
+    if(String(m.player_reflection?.next_training_focus||'').trim()){
+      items.push({
+        text:m.player_reflection.next_training_focus.trim(),
+        source:'Your innings reflection',
+        date:m.player_reflection.updated_at||m.match_date||'',
+        type:'reflection'
+      });
+    }
+  }
+
+  items.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const unique=[];
+  const seen=new Set();
+  for(const item of items){
+    const key=item.text.toLowerCase();
+    if(seen.has(key))continue;
+    seen.add(key);
+    unique.push(item);
+    if(unique.length===3)break;
+  }
+  if(unique.length)return unique;
+
+  const coreFocus=raw?.core?.core_focus?.choices||[];
+  if(coreFocus.length){
+    return coreFocus.slice(0,3).map(x=>({text:x,source:'Your Player Plan',date:'',type:'plan'}));
+  }
+  const danger=raw?.core?.core_danger?.choices||[];
+  if(danger.length){
+    return [{text:`Recreate and control: ${danger[0]}`,source:'Your Player Plan · My Danger',date:'',type:'plan'}];
+  }
+  return [];
+}
+
+function developmentAlignment(reflection,coachFeedback){
+  if(!reflection||!coachFeedback)return null;
+  const samePlan=reflection.batting_to_plan===coachFeedback.batting_to_plan;
+  const sameDismissal=reflection.dismissal_classification===coachFeedback.dismissal_classification;
+  return samePlan&&sameDismissal
+    ?{key:'aligned',label:'PLAYER + COACH ALIGNED'}
+    :{key:'discuss',label:'WORTH DISCUSSING'};
+}
+
+function matchMetaLine(match){
+  const bits=[formatDateShort(match.match_date),formatLabel(match.format_key)];
+  if(match.opposition)bits.push(`v ${match.opposition}`);
+  if(match.score_text)bits.push(match.score_text);
+  return bits.filter(Boolean).join(' · ');
+}
+
+function developmentViewBlock(title,view,author=''){
+  if(!view)return `<div class="development-view empty"><strong>${esc(title)}</strong><span>No entry yet.</span></div>`;
+  return `<div class="development-view">
+    <div class="development-view-title"><strong>${esc(title)}</strong>${author?`<span>${esc(author)}</span>`:''}</div>
+    <div class="development-mini-grid">
+      <span><small>BATTED TO PLAN</small><strong>${esc(PLAN_ALIGNMENT_LABELS[view.batting_to_plan]||'—')}</strong></span>
+      <span><small>DISMISSAL</small><strong>${esc(DISMISSAL_CLASSIFICATION_LABELS[view.dismissal_classification]||'—')}</strong></span>
+      ${view.main_issue?`<span><small>MAIN ISSUE</small><strong>${esc(DEVELOPMENT_ISSUE_LABELS[view.main_issue]||view.main_issue)}</strong></span>`:''}
+    </div>
+    ${view.next_training_focus?`<div class="development-next"><small>TRAIN NEXT</small><strong>${esc(view.next_training_focus)}</strong></div>`:''}
+    ${view.note?`<p>${esc(view.note)}</p>`:''}
+  </div>`;
+}
+
+function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false}={}){
+  const coaches=Array.isArray(match.coach_feedback)?match.coach_feedback:[];
+  const latestCoach=coaches[0]||null;
+  const alignment=developmentAlignment(match.player_reflection,latestCoach);
+  return `<article class="development-match-card">
+    <div class="development-match-head">
+      <div>
+        <div class="section-label">${esc(matchMetaLine(match))}</div>
+        <h3>${esc(match.dismissal_summary||'Innings reflection')}</h3>
+      </div>
+      ${alignment?`<span class="alignment-badge ${alignment.key}">${esc(alignment.label)}</span>`:''}
+    </div>
+    <div class="development-compare-grid">
+      ${developmentViewBlock('PLAYER VIEW',match.player_reflection)}
+      ${coaches.length
+        ?coaches.slice(0,2).map(f=>developmentViewBlock('COACH VIEW',f,f.author_name||'Coach / Captain')).join('')
+        :developmentViewBlock('COACH VIEW',null)}
+    </div>
+    <div class="development-actions">
+      ${playerMode?`<button class="btn ghost" data-edit-my-reflection="${match.id}">${match.player_reflection?'Edit my reflection':'Add my reflection'}</button>`:''}
+      ${staffCanEdit?`<button class="btn ghost" data-add-coach-feedback="${match.id}">Add coaching feedback</button>`:''}
+    </div>
+  </article>`;
+}
+
+function renderTrainingObservationCard(o){
+  const formats=(o.format_keys||[]).map(formatLabel).join(' + ')||'General / Core';
+  return `<article class="training-observation-card">
+    <div class="training-observation-head">
+      <div><div class="section-label">${esc(formatDateShort(o.observed_on))} · ${esc(formats)}</div><h3>${esc(TRAINING_OBSERVATION_LABELS[o.observation_type]||'Training observation')}</h3></div>
+      <span class="observation-plan-badge ${esc(o.training_to_plan)}">${esc(PLAN_ALIGNMENT_LABELS[o.training_to_plan]||'—')} · training to plan</span>
+    </div>
+    <div class="help">${esc(o.observer_name||'Coach / Captain')}</div>
+    ${o.next_training_focus?`<div class="development-next"><small>TRAIN NEXT</small><strong>${esc(o.next_training_focus)}</strong></div>`:''}
+    ${o.note?`<p>${esc(o.note)}</p>`:''}
+  </article>`;
+}
+
+function renderMyReflectionForm(match=null){
+  const r=match?.player_reflection||{};
+  const format=match?.format_key||[...howWeTrainSelectedFormats][0]||publishedEnabledFormats()[0]?.[0]||'limited_overs';
+  return `<section class="card development-entry-form" id="myReflectionForm">
+    <div class="development-form-head">
+      <div><div class="section-label">Player reflection</div><h2>${match?'Update this innings':'Reflect on an innings'}</h2><div class="help">Keep it short. This is a useful check-in, not homework.</div></div>
+      <button class="btn ghost" id="cancelMyReflection">Cancel</button>
+    </div>
+    <div class="development-match-fields">
+      <div class="field"><label>Date</label><input id="reflectionDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
+      <div class="field"><label>Format</label><select id="reflectionFormat">${publishedEnabledFormats().map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+      <div class="field"><label>Opposition <span>optional</span></label><input id="reflectionOpposition" maxlength="160" value="${esc(match?.opposition||'')}" placeholder="e.g. Merewether"></div>
+      <div class="field"><label>Score <span>optional</span></label><input id="reflectionScore" maxlength="80" value="${esc(match?.score_text||'')}" placeholder="e.g. 34 or 34*"></div>
+    </div>
+    <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="reflectionDismissal" maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Caught cover driving on the up"></div>
+
+    <div class="development-question"><label>Did I bat to my Player Plan?</label>${radioChoiceHtml('myBattingToPlan',[["yes","Yes","My decisions stayed inside my plan"],["mostly","Mostly","A few moments drifted"],["no","No","I moved away from my plan"]],r.batting_to_plan||'mostly')}</div>
+    <div class="development-question"><label>How did the dismissal fit my plan?</label>${radioChoiceHtml('myDismissalClass',[["plan_execution","Within plan · poor execution","The shot and ball belonged in my plan"],["outside_plan","Decision outside plan","The option was outside what I had planned"],["not_applicable","Not really a Player Plan issue","Not dismissed / run out / other"]],r.dismissal_classification||'not_applicable')}</div>
+    <div class="development-question"><label>Main issue <span>optional</span></label>
+      <select id="reflectionMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${r.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>One thing to train next <span>optional</span></label><input id="reflectionNextFocus" maxlength="240" value="${esc(r.next_training_focus||'')}" placeholder="One useful focus is enough"></div>
+    <div class="field"><label>Anything else? <span>optional</span></label><textarea id="reflectionNote" maxlength="500" rows="3" placeholder="Short note only if it adds something useful">${esc(r.note||'')}</textarea></div>
+    <div class="btnrow"><button class="btn secondary" id="saveMyReflection">Save reflection</button><span class="status" id="myReflectionStatus"></span></div>
+  </section>`;
+}
+
+function renderHowWeTrainFormat(format,snapshot){
+  const label=formatLabel(format);
+  const formatData=snapshot?.formats?.[format];
+  const banners=formatData?.banners||[];
+  return `<section class="card train-format-section">
+    <div class="train-format-head">
+      <div><div class="section-label">${esc(label)} training</div><h2>Train the decisions this format demands.</h2><p>${esc(formatData?.intro||HOW_WE_BAT_FORMAT_COPY[format]?.intro||'')}</p></div>
+      ${formatData?.callout?`<div class="train-format-callout">${esc(formatData.callout)}</div>`:''}
+    </div>
+    <div class="train-message-grid">
+      ${banners.length?banners.map(b=>{
+        const practice=howWeTrainPracticeForBanner(b,format);
+        return `<article class="train-message-card">
+          <div class="section-label">FROM HOW WE BAT</div>
+          <h3>${esc(b.title||'Key Message')}</h3>
+          <p class="train-message-summary">${esc(b.message||'')}</p>
+          <div class="train-drill-title">${esc(practice.title)}</div>
+          <ul>${practice.points.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+        </article>`;
+      }).join(''):'<div class="notice">No How We Bat Key Messages are published for this format yet.</div>'}
+    </div>
+  </section>`;
+}
+
+function renderTrainMyPlan(raw,formats){
+  const coreCards=coreTrainingCards(raw);
+  const formatBlocks=formats.map(format=>{
+    const cards=formatTrainingCards(raw,format);
+    return `<div class="train-my-format">
+      <div class="train-my-format-head"><div><div class="section-label">${esc(formatLabel(format))}</div><h3>Train my ${esc(formatLabel(format))} plan</h3></div></div>
+      ${cards.length?`<div class="train-personal-grid">${cards.map(c=>`<article class="train-personal-card"><small>${esc(c.label)}</small><strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join('')}</div>`:`<div class="notice">There are no saved ${esc(formatLabel(format))} answers yet. Complete that part of My Player Plan and this section will become specific to you.</div>`}
+    </div>`;
+  }).join('');
+
+  return `<section class="card train-my-plan">
+    <div class="train-my-plan-head">
+      <div><div class="section-label">Train My Plan</div><h2>Practise the game you have actually chosen.</h2><div class="help">Your Player Plan becomes the brief for your training. Train the decision as well as the shot.</div></div>
+      <button class="btn ghost" data-go="myplan">Open My Player Plan</button>
+    </div>
+    ${coreCards.length?`<div class="train-personal-grid core">${coreCards.map(c=>`<article class="train-personal-card"><small>${esc(c.label)}</small><h3>${esc(c.title)}</h3><strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join('')}</div>`:`<div class="notice">Start My Player Plan to turn this page into your own training brief.</div>`}
+    ${formatBlocks}
+  </section>`;
+}
+
+async function loadDevelopmentFeedback(playerId){
+  if(!playerId)return {matches:[],training_observations:[]};
+  const {data,error}=await supabase.rpc('get_development_feedback_for_player',{p_player_id:playerId});
+  if(error)throw error;
+  return {
+    ...(data||{}),
+    matches:Array.isArray(data?.matches)?data.matches:[],
+    training_observations:Array.isArray(data?.training_observations)?data.training_observations:[]
+  };
+}
+
+async function renderHowWeTrain(){
+  const page=document.getElementById('page');
+  if(!howWeBatVersions.length){
+    page.innerHTML=`<section class="card player-gate"><div class="gate-state locked">🔒</div><div class="section-label">How We Train</div><h2>The Club Batting System is not live yet.</h2><p>How We Train becomes available when How We Bat has been published.</p></section>`;
+    return;
+  }
+
+  page.innerHTML='<div class="splash">Loading How We Train…</div>';
+  const enabled=publishedEnabledFormats();
+  const enabledKeys=enabled.map(([k])=>k);
+  howWeTrainSelectedFormats=new Set([...howWeTrainSelectedFormats].filter(k=>enabledKeys.includes(k)));
+  if(!howWeTrainSelectedFormats.size && enabledKeys.length)howWeTrainSelectedFormats.add(enabledKeys.includes('limited_overs')?'limited_overs':enabledKeys[0]);
+
+  let feedback={matches:[],training_observations:[]};
+  let feedbackError='';
+  if(myPlayer){
+    try{
+      feedback=await loadDevelopmentFeedback(myPlayer.id);
+      myDevelopmentFeedback=feedback;
+    }catch(e){
+      feedbackError=e?.message||String(e);
+      myDevelopmentFeedback=null;
+    }
+  }
+
+  const snapshot=howWeBatVersions?.[0]?.snapshot||null;
+  const selected=[...howWeTrainSelectedFormats];
+  const raw=rawAnswers();
+  const focusItems=myPlayer?developmentFocusItems(feedback,raw):[];
+  if(howWeTrainReflectionEditId && howWeTrainReflectionEditId!=='new' && !feedback.matches.some(m=>m.id===howWeTrainReflectionEditId)){
+    howWeTrainReflectionEditId=null;
+  }
+  const editMatch=howWeTrainReflectionEditId&&howWeTrainReflectionEditId!=='new'
+    ?feedback.matches.find(m=>m.id===howWeTrainReflectionEditId)||null
+    :null;
+
+  const focusHtml=myPlayer?`<section class="card current-training-focus">
+    <div class="current-training-focus-head">
+      <div><div class="section-label">Current training focus</div><h2>${focusItems.length?'What should I train next?':'Start with the Player Plan.'}</h2></div>
+      ${focusItems.some(x=>x.type!=='plan')?'<button class="btn ghost" id="jumpToDevelopmentFeedback">View feedback</button>':'<button class="btn ghost" data-go="myplan">Open My Player Plan</button>'}
+    </div>
+    ${focusItems.length?`<div class="training-focus-list">${focusItems.map((x,i)=>`<div class="training-focus-item"><span>${i+1}</span><div><strong>${esc(x.text)}</strong><small>${esc(x.source)}</small></div></div>`).join('')}</div>`:`<div class="notice">Complete a little of My Player Plan first. After matches and occasional coach observations, useful feedback will also appear here automatically.</div>`}
+  </section>`:'';
+
+  const playerFeedbackHtml=myPlayer?`<section class="card development-loop" id="trainingFeedbackLoop">
+    <div class="development-loop-head">
+      <div><div class="section-label">Play → reflect → train</div><h2>Use feedback to decide what happens next in training.</h2><div class="help">Player and coach views stay separate so you can compare them. A short useful note is enough.</div></div>
+      <button class="btn secondary" id="newMyReflection">Reflect on an innings</button>
+    </div>
+    ${feedbackError?`<div class="notice">Feedback could not load: ${esc(feedbackError)}</div>`:''}
+    ${howWeTrainReflectionEditId!==null?renderMyReflectionForm(editMatch):''}
+    <div class="development-history-grid">
+      <div>
+        <div class="development-history-title"><strong>Match reflections & coaching feedback</strong><span>${feedback.matches.length} recorded</span></div>
+        <div class="development-history-list">${feedback.matches.length?feedback.matches.slice(0,6).map(m=>renderDevelopmentMatchCard(m,{playerMode:true})).join(''):'<div class="notice">No innings reflections yet. Add one when there is something useful to learn — not because every innings needs paperwork.</div>'}</div>
+      </div>
+      <div>
+        <div class="development-history-title"><strong>Training observations</strong><span>${feedback.training_observations.length} recorded</span></div>
+        <div class="development-history-list compact">${feedback.training_observations.length?feedback.training_observations.slice(0,6).map(renderTrainingObservationCard).join(''):'<div class="notice">Training observations will appear here when a coach or captain notices something worth recording.</div>'}</div>
+      </div>
+    </div>
+  </section>`:'';
+
+  const staffPrompt=!myPlayer&&canUsePlayersWorkspace()?`<section class="card coach-train-prompt">
+    <div><div class="section-label">Coach / Captain</div><h2>See something useful at training?</h2><p>Open a player from the Players workspace and add a quick Training Observation. It is designed to take seconds, not become another coaching report.</p></div>
+    <button class="btn secondary" data-go="players">Open Players</button>
+  </section>`:'';
+
+  page.innerHTML=`<section class="card train-hero">
+    <div class="section-label">How We Train</div>
+    <h1>Train the game you want to take into the middle.</h1>
+    <p>Your Player Plan should shape your training. Nets are not just a place to groove shots — they are where you learn which ball to attack, which ball to score from, and which ball to respect.</p>
+    <div class="train-hero-callout">Practice should make match-day decisions <strong>simpler</strong>, not give you more things to think about.</div>
+  </section>
+
+  ${focusHtml}
+
+  <section class="card train-foundations">
+    <div class="section-label">Club training principles</div>
+    <h2>Train decisions, not just movements.</h2>
+    <div class="train-foundation-grid">
+      <article><span>01</span><h3>Practice the ball that earns the shot</h3><p>Rehearse trusted shots with mixed line and length. Recognition and execution belong together.</p></article>
+      <article><span>02</span><h3>Put a field out</h3><p>Train where the safe single is, what delivery accesses it and how that picture changes when the field moves.</p></article>
+      <article><span>03</span><h3>Recreate your Danger — then reset</h3><p>Good practice deliberately creates the pressure that can pull a player away from their plan, then rehearses the reset.</p></article>
+    </div>
+  </section>
+
+  <section class="card train-format-picker">
+    <div><div class="section-label">Training mix</div><h2>Which format(s) are you preparing for?</h2><div class="help">Select more than one when the same session needs to prepare you for different formats — for example, long form on Saturday and T20 on Sunday.</div></div>
+    <div class="train-format-toggles">${enabled.map(([k,l])=>`<button class="train-format-toggle ${howWeTrainSelectedFormats.has(k)?'active':''}" data-train-format="${k}"><span>${esc(l)}</span><small>${howWeTrainSelectedFormats.has(k)?'IN THIS SESSION':'ADD TO SESSION'}</small></button>`).join('')}</div>
+  </section>
+
+  ${selected.map(format=>renderHowWeTrainFormat(format,snapshot)).join('')}
+  ${myPlayer?renderTrainMyPlan(raw,selected):''}
+  ${staffPrompt}
+  ${playerFeedbackHtml}`;
+
+  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;renderTab();});
+
+  page.querySelectorAll('[data-train-format]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.trainFormat;
+    if(howWeTrainSelectedFormats.has(k)){
+      if(howWeTrainSelectedFormats.size===1)return;
+      howWeTrainSelectedFormats.delete(k);
+    }else howWeTrainSelectedFormats.add(k);
+    renderHowWeTrain();
+  });
+
+  if(document.getElementById('jumpToDevelopmentFeedback')){
+    document.getElementById('jumpToDevelopmentFeedback').onclick=()=>document.getElementById('trainingFeedbackLoop')?.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  if(document.getElementById('newMyReflection')){
+    document.getElementById('newMyReflection').onclick=()=>{howWeTrainReflectionEditId='new';renderHowWeTrain();};
+  }
+  page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=()=>{howWeTrainReflectionEditId=b.dataset.editMyReflection;renderHowWeTrain();});
+
+  if(document.getElementById('cancelMyReflection')){
+    document.getElementById('cancelMyReflection').onclick=()=>{howWeTrainReflectionEditId=null;renderHowWeTrain();};
+  }
+
+  wireQuickChoices(page);
+
+  if(document.getElementById('saveMyReflection')){
+    document.getElementById('saveMyReflection').onclick=async()=>{
+      const st=document.getElementById('myReflectionStatus');
+      const btn=document.getElementById('saveMyReflection');
+      const batting=document.querySelector('input[name="myBattingToPlan"]:checked')?.value;
+      const dismissal=document.querySelector('input[name="myDismissalClass"]:checked')?.value;
+      if(!batting||!dismissal){st.textContent='Choose the two quick reflection answers first.';return;}
+      btn.disabled=true;btn.textContent='Saving…';st.textContent='';
+      const {error}=await supabase.rpc('save_my_match_reflection',{
+        p_club_id:club.id,
+        p_match_id:howWeTrainReflectionEditId==='new'?null:howWeTrainReflectionEditId,
+        p_match_date:val('reflectionDate')||null,
+        p_opposition:val('reflectionOpposition'),
+        p_format_key:document.getElementById('reflectionFormat').value,
+        p_score_text:val('reflectionScore'),
+        p_dismissal_summary:val('reflectionDismissal'),
+        p_batting_to_plan:batting,
+        p_dismissal_classification:dismissal,
+        p_main_issue:document.getElementById('reflectionMainIssue').value||null,
+        p_next_training_focus:val('reflectionNextFocus'),
+        p_note:val('reflectionNote')
+      });
+      if(error){btn.disabled=false;btn.textContent='Save reflection';st.textContent=error.message;return;}
+      howWeTrainReflectionEditId=null;
+      await renderHowWeTrain();
+    };
+  }
+}
+
+function renderStaffTrainingObservationForm(player){
+  const enabled=publishedEnabledFormats();
+  return `<section class="card development-entry-form" id="staffDevelopmentForm">
+    <div class="development-form-head"><div><div class="section-label">Training observation</div><h2>Record what you noticed.</h2><div class="help">This should take seconds. Leave the format unticked if the observation was general/core practice.</div></div><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button></div>
+    <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${todayIso()}"></div>
+    <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}"><span>${esc(l)}</span></label>`).join('')}</div></div>
+    <div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],'mostly')}</div>
+    <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),'right_shots_right_balls')}</div>
+    <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffTrainingNextFocus" maxlength="240" placeholder="One useful focus is enough"></div>
+    <div class="field"><label>Short note <span>optional</span></label><textarea id="staffTrainingNote" maxlength="500" rows="3" placeholder="Only add detail if it helps the player"></textarea></div>
+    <div class="btnrow"><button class="btn secondary" id="saveTrainingObservation">Save observation</button><span class="status" id="staffDevelopmentStatus"></span></div>
+  </section>`;
+}
+
+function renderStaffMatchFeedbackForm(player,data){
+  const match=playersWorkspaceDevelopmentMatchId
+    ?data?.matches?.find(m=>m.id===playersWorkspaceDevelopmentMatchId)||null
+    :null;
+  const format=match?.format_key||publishedEnabledFormats()[0]?.[0]||'limited_overs';
+  return `<section class="card development-entry-form" id="staffDevelopmentForm">
+    <div class="development-form-head"><div><div class="section-label">Match coaching feedback</div><h2>${match?'Add your view to this innings':'Add feedback from an innings'}</h2><div class="help">Keep the coaching feedback short enough to be useful in the next training session.</div></div><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button></div>
+    <div class="development-match-fields">
+      <div class="field"><label>Date</label><input id="staffMatchDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
+      <div class="field"><label>Format</label><select id="staffMatchFormat">${publishedEnabledFormats().map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+      <div class="field"><label>Opposition <span>optional</span></label><input id="staffMatchOpposition" maxlength="160" value="${esc(match?.opposition||'')}"></div>
+      <div class="field"><label>Score <span>optional</span></label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}"></div>
+    </div>
+    <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Caught cover driving on the up"></div>
+    <div class="development-question"><label>Was the player batting to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Decisions stayed inside the plan"],["mostly","Mostly","A few moments drifted"],["no","No","Batting moved away from the plan"]],'mostly')}</div>
+    <div class="development-question"><label>How did the dismissal fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · poor execution","Right option / ball, execution failed"],["outside_plan","Decision outside plan","The option sat outside the Player Plan"],["not_applicable","Not really a Player Plan issue","Not dismissed / run out / other"]],'not_applicable')}</div>
+    <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select></div>
+    <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" maxlength="240" placeholder="One useful focus is enough"></div>
+    <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed"></textarea></div>
+    <div class="btnrow"><button class="btn secondary" id="saveStaffMatchFeedback">Save coaching feedback</button><span class="status" id="staffDevelopmentStatus"></span></div>
+  </section>`;
+}
+
+function renderStaffDevelopmentBody(player,canEdit,data){
+  return `<div class="staff-development-shell">
+    <section class="card development-overview">
+      <div class="development-loop-head">
+        <div><div class="section-label">Plan → train → play → learn</div><h2>Development feedback</h2><div class="help">Compare the player’s own reflection with coaching observations, then turn the useful part back into training.</div></div>
+        ${canEdit?`<div class="btnrow"><button class="btn secondary" id="addTrainingObservation">Add training observation</button><button class="btn ghost" id="addNewMatchFeedback">Add match feedback</button></div>`:'<span class="workspace-access-badge view">VIEW ONLY</span>'}
+      </div>
+    </section>
+    ${playersWorkspaceDevelopmentMode==='training'&&canEdit?renderStaffTrainingObservationForm(player):''}
+    ${playersWorkspaceDevelopmentMode==='match'&&canEdit?renderStaffMatchFeedbackForm(player,data):''}
+    <div class="development-history-grid">
+      <section>
+        <div class="development-history-title"><strong>Match reflections & coaching feedback</strong><span>${data.matches.length} recorded</span></div>
+        <div class="development-history-list">${data.matches.length?data.matches.slice(0,10).map(m=>renderDevelopmentMatchCard(m,{staffCanEdit:canEdit})).join(''):'<div class="card notice">No match feedback yet.</div>'}</div>
+      </section>
+      <section>
+        <div class="development-history-title"><strong>Training observations</strong><span>${data.training_observations.length} recorded</span></div>
+        <div class="development-history-list compact">${data.training_observations.length?data.training_observations.slice(0,10).map(renderTrainingObservationCard).join(''):'<div class="card notice">No training observations yet.</div>'}</div>
+      </section>
+    </div>
+  </div>`;
+}
+
+function wireStaffDevelopmentControls(player,canEdit,data){
+  const page=document.getElementById('page');
+  if(!page)return;
+  wireQuickChoices(page);
+  if(!canEdit)return;
+
+  if(document.getElementById('addTrainingObservation'))document.getElementById('addTrainingObservation').onclick=()=>{
+    playersWorkspaceDevelopmentMode='training';
+    playersWorkspaceDevelopmentMatchId=null;
+    renderPlayersWorkspacePlayer();
+  };
+  if(document.getElementById('addNewMatchFeedback'))document.getElementById('addNewMatchFeedback').onclick=()=>{
+    playersWorkspaceDevelopmentMode='match';
+    playersWorkspaceDevelopmentMatchId=null;
+    renderPlayersWorkspacePlayer();
+  };
+  page.querySelectorAll('[data-add-coach-feedback]').forEach(b=>b.onclick=()=>{
+    playersWorkspaceDevelopmentMode='match';
+    playersWorkspaceDevelopmentMatchId=b.dataset.addCoachFeedback;
+    renderPlayersWorkspacePlayer();
+  });
+  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=()=>{
+    playersWorkspaceDevelopmentMode=null;
+    playersWorkspaceDevelopmentMatchId=null;
+    renderPlayersWorkspacePlayer();
+  };
+
+  if(document.getElementById('saveTrainingObservation'))document.getElementById('saveTrainingObservation').onclick=async()=>{
+    const btn=document.getElementById('saveTrainingObservation');
+    const st=document.getElementById('staffDevelopmentStatus');
+    const toPlan=document.querySelector('input[name="staffTrainingToPlan"]:checked')?.value;
+    const type=document.querySelector('input[name="staffObservationType"]:checked')?.value;
+    const formatKeys=[...document.querySelectorAll('[data-training-format]:checked')].map(x=>x.value);
+    if(!toPlan||!type){st.textContent='Choose the two quick observation answers first.';return;}
+    btn.disabled=true;btn.textContent='Saving…';st.textContent='';
+    const {error}=await supabase.rpc('add_training_observation',{
+      p_player_id:player.id,
+      p_observed_on:val('trainingObservationDate')||null,
+      p_format_keys:formatKeys,
+      p_training_to_plan:toPlan,
+      p_observation_type:type,
+      p_next_training_focus:val('staffTrainingNextFocus'),
+      p_note:val('staffTrainingNote')
+    });
+    if(error){btn.disabled=false;btn.textContent='Save observation';st.textContent=error.message;return;}
+    playersWorkspaceDevelopmentMode=null;
+    playersWorkspaceDevelopmentMatchId=null;
+    await renderPlayersWorkspacePlayer();
+  };
+
+  if(document.getElementById('saveStaffMatchFeedback'))document.getElementById('saveStaffMatchFeedback').onclick=async()=>{
+    const btn=document.getElementById('saveStaffMatchFeedback');
+    const st=document.getElementById('staffDevelopmentStatus');
+    const batting=document.querySelector('input[name="staffBattingToPlan"]:checked')?.value;
+    const dismissal=document.querySelector('input[name="staffDismissalClass"]:checked')?.value;
+    if(!batting||!dismissal){st.textContent='Choose the two quick coaching answers first.';return;}
+    btn.disabled=true;btn.textContent='Saving…';st.textContent='';
+    const {error}=await supabase.rpc('add_staff_match_feedback',{
+      p_player_id:player.id,
+      p_match_id:playersWorkspaceDevelopmentMatchId||null,
+      p_match_date:val('staffMatchDate')||null,
+      p_opposition:val('staffMatchOpposition'),
+      p_format_key:document.getElementById('staffMatchFormat').value,
+      p_score_text:val('staffMatchScore'),
+      p_dismissal_summary:val('staffMatchDismissal'),
+      p_batting_to_plan:batting,
+      p_dismissal_classification:dismissal,
+      p_main_issue:document.getElementById('staffMatchMainIssue').value||null,
+      p_next_training_focus:val('staffMatchNextFocus'),
+      p_note:val('staffMatchNote')
+    });
+    if(error){btn.disabled=false;btn.textContent='Save coaching feedback';st.textContent=error.message;return;}
+    playersWorkspaceDevelopmentMode=null;
+    playersWorkspaceDevelopmentMatchId=null;
+    await renderPlayersWorkspacePlayer();
+  };
+}
+
+
 /* ---------------- PLAYERS WORKSPACE ---------------- */
 
 function permissionRoleLabel(role){
@@ -4574,6 +5331,8 @@ function resetPlayersWorkspaceForClub(){
   playersWorkspaceLocalRaw=null;
   playersWorkspaceSearch='';
   playersWorkspaceGroupFilter='all';
+  playersWorkspaceDevelopmentMode=null;
+  playersWorkspaceDevelopmentMatchId=null;
   if(playersWorkspaceAutosaveTimer){
     clearTimeout(playersWorkspaceAutosaveTimer);
     playersWorkspaceAutosaveTimer=null;
@@ -4626,7 +5385,7 @@ async function renderPlayersWorkspace(){
     playersWorkspaceLocalRaw=null;
   }
 
-  if(playersWorkspaceSelectedId)renderPlayersWorkspacePlayer();
+  if(playersWorkspaceSelectedId)await renderPlayersWorkspacePlayer();
   else renderPlayersWorkspaceList();
 }
 
@@ -4684,7 +5443,10 @@ function renderPlayersWorkspaceList(){
           <strong>${complete===total?'Required work complete ✓':`${complete}/${total} required sections complete`}</strong>
           <span>${esc(workspaceUpdatedLabel(player))}</span>
         </div>
-        <button class="btn secondary" data-open-workspace-player="${player.id}">Open Player Plan</button>
+        <div class="workspace-card-actions">
+          ${player.can_edit?`<button class="btn ghost" data-quick-training-observation="${player.id}">Training observation</button>`:''}
+          <button class="btn secondary" data-open-workspace-player="${player.id}">Open Player Plan</button>
+        </div>
       </div>
     </article>`;
   }).join('');
@@ -4743,6 +5505,17 @@ function renderPlayersWorkspaceList(){
   document.querySelectorAll('[data-open-workspace-player]').forEach(b=>b.onclick=()=>{
     playersWorkspaceSelectedId=b.dataset.openWorkspacePlayer;
     playersWorkspaceSection='summary';
+    playersWorkspaceDevelopmentMode=null;
+    playersWorkspaceDevelopmentMatchId=null;
+    playersWorkspaceLocalRaw=null;
+    renderPlayersWorkspacePlayer();
+  });
+
+  document.querySelectorAll('[data-quick-training-observation]').forEach(b=>b.onclick=()=>{
+    playersWorkspaceSelectedId=b.dataset.quickTrainingObservation;
+    playersWorkspaceSection='development';
+    playersWorkspaceDevelopmentMode='training';
+    playersWorkspaceDevelopmentMatchId=null;
     playersWorkspaceLocalRaw=null;
     renderPlayersWorkspacePlayer();
   });
@@ -4808,7 +5581,7 @@ function collectWorkspacePlayerAnswers(){
   if(!playersWorkspaceLocalRaw)playersWorkspaceLocalRaw=workspacePlayerRaw(player);
 
   const section=playersWorkspaceSection;
-  if(section==='summary')return;
+  if(section==='summary'||section==='development')return;
 
   if(section==='core'&&!playersWorkspaceLocalRaw.core)playersWorkspaceLocalRaw.core={};
   if(section!=='core'){
@@ -4846,6 +5619,7 @@ function updateWorkspaceSectionBadge(){
 async function saveWorkspacePlayerPlanSilently(){
   const player=workspaceSelectedPlayer();
   if(!player?.can_edit)return true;
+  if(playersWorkspaceSection==='summary'||playersWorkspaceSection==='development')return true;
 
   if(playersWorkspaceAutosaveTimer){
     clearTimeout(playersWorkspaceAutosaveTimer);
@@ -4890,7 +5664,7 @@ function queueWorkspacePlayerPlanAutosave(){
   playersWorkspaceAutosaveTimer=setTimeout(()=>saveWorkspacePlayerPlanSilently(),700);
 }
 
-function renderPlayersWorkspacePlayer(){
+async function renderPlayersWorkspacePlayer(){
   const page=document.getElementById('page');
   const player=workspaceSelectedPlayer();
   if(!player){
@@ -4899,7 +5673,7 @@ function renderPlayersWorkspacePlayer(){
     return;
   }
 
-  const sections=[['summary','Summary'],['core','Core'],...publishedEnabledFormats()];
+  const sections=[['summary','Summary'],['development','Development'],['core','Core'],...publishedEnabledFormats()];
   if(!sections.some(([k])=>k===playersWorkspaceSection))playersWorkspaceSection='summary';
 
   const raw=playersWorkspaceLocalRaw||workspacePlayerRaw(player);
@@ -4908,8 +5682,19 @@ function renderPlayersWorkspacePlayer(){
   const groups=(player.groups||[]).map(g=>`<span class="workspace-group-pill">${esc(g.name)}</span>`).join('');
   const canEdit=!!player.can_edit;
 
+  let developmentData={matches:[],training_observations:[]};
+  let developmentError='';
+  if(playersWorkspaceSection==='development'){
+    page.innerHTML='<div class="splash">Loading player development…</div>';
+    try{
+      developmentData=await loadDevelopmentFeedback(player.id);
+    }catch(e){
+      developmentError=e?.message||String(e);
+    }
+  }
+
   const sectionTabs=sections.map(([key,label])=>{
-    if(key==='summary'){
+    if(key==='summary'||key==='development'){
       return `<button data-workspace-section="${key}" class="${playersWorkspaceSection===key?'active':''}">${esc(label)}</button>`;
     }
     const state=workspaceSectionState(key,raw);
@@ -4945,6 +5730,10 @@ function renderPlayersWorkspacePlayer(){
         ${renderCuratedDraft(curated,player.display_name,'Player Plan')}
       </section>
     </div>`;
+  }else if(playersWorkspaceSection==='development'){
+    body=developmentError
+      ?`<section class="card"><div class="section-label">Development feedback</div><h2>This section could not load.</h2><div class="notice">${esc(developmentError)}</div><div class="help" style="margin-top:10px">If v0.7.0 has just been deployed, make sure its Supabase migration was run first.</div></section>`
+      :renderStaffDevelopmentBody(player,canEdit,developmentData);
   }else{
     const section=playersWorkspaceSection;
     const label=section==='core'?'Core':(FORMATS.find(([k])=>k===section)?.[1]||section);
@@ -5032,6 +5821,8 @@ function renderPlayersWorkspacePlayer(){
     await saveWorkspacePlayerPlanSilently();
     playersWorkspaceSelectedId=null;
     playersWorkspaceSection='summary';
+    playersWorkspaceDevelopmentMode=null;
+    playersWorkspaceDevelopmentMatchId=null;
     playersWorkspaceLocalRaw=null;
     renderPlayersWorkspaceList();
   };
@@ -5040,11 +5831,17 @@ function renderPlayersWorkspacePlayer(){
     if(b.dataset.workspaceSection===playersWorkspaceSection)return;
     await saveWorkspacePlayerPlanSilently();
     playersWorkspaceSection=b.dataset.workspaceSection;
+    playersWorkspaceDevelopmentMode=null;
+    playersWorkspaceDevelopmentMatchId=null;
     playersWorkspaceLocalRaw=null;
-    renderPlayersWorkspacePlayer();
+    await renderPlayersWorkspacePlayer();
   });
 
-  if(canEdit && playersWorkspaceSection!=='summary'){
+  if(playersWorkspaceSection==='development'&&!developmentError){
+    wireStaffDevelopmentControls(player,canEdit,developmentData);
+  }
+
+  if(canEdit && playersWorkspaceSection!=='summary' && playersWorkspaceSection!=='development'){
     document.querySelectorAll('[data-workspace-answer-key]').forEach(x=>x.onchange=()=>{
       collectWorkspacePlayerAnswers();
       updateWorkspaceSectionBadge();
@@ -5062,7 +5859,6 @@ function renderPlayersWorkspacePlayer(){
     });
   }
 }
-
 /* ---------------- GUIDED PLAYER PLAN ---------------- */
 
 function rawAnswers(){
@@ -5308,6 +6104,7 @@ async function renderMyPlan(){
       </button>
       ${formats.map(([k,l])=>formatCard(k,l)).join('')}
     </div>
+    <div class="plan-to-train-link"><div><strong>Plan decided? Train it.</strong><span>How We Train turns these answers into format-specific practice and brings useful feedback back into the next session.</span></div><button class="btn secondary" id="openHowWeTrainFromPlan">How We Train →</button></div>
   </section>
 
   ${formatReferenceHtml}
@@ -5351,6 +6148,12 @@ async function renderMyPlan(){
       <div id="draftPreview">${renderDraftPreview()}</div>
     </section>
   </div>`;
+
+  if(document.getElementById('openHowWeTrainFromPlan'))document.getElementById('openHowWeTrainFromPlan').onclick=async()=>{
+    await savePlayerPlanProgressSilently();
+    currentTab='howwetrain';
+    renderTab();
+  };
 
   document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=async()=>{
     await savePlayerPlanProgressSilently();
