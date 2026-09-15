@@ -2109,21 +2109,9 @@ details.hwb-public-banner[open] .key-message-close{display:inline}
 }
 
 
-/* ================================================================
-   v0.7.4.2 — explicit detected-colour assignment
-   ================================================================ */
-.branding-source-swatches{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.branding-source-swatch{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 9px;font-size:10px}
-.branding-source-swatch i{width:18px;height:18px;border-radius:50%;background:var(--swatch);border:1px solid rgba(0,0,0,.1);flex:0 0 auto}
-.branding-source-swatch b{font-size:10px;color:var(--muted)}
-.branding-detected-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:9px;margin-top:11px}
-.branding-detected-choice{display:grid;grid-template-columns:34px 1fr;gap:4px 10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:13px;background:#fff}
-.branding-detected-choice>i{grid-row:1 / span 2;width:34px;height:34px;border-radius:10px;background:var(--swatch);border:1px solid rgba(0,0,0,.12)}
-.branding-detected-choice>b{font-size:11px;color:var(--navy-dark)}
-.branding-detected-choice>div{display:flex;gap:5px;flex-wrap:wrap}
-.branding-detected-choice button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:5px 7px;font:inherit;font-size:9px;font-weight:900;color:var(--navy);cursor:pointer}
-.branding-detected-choice button:hover{border-color:var(--navy)}
-.branding-detected-choice.is-primary{box-shadow:inset 3px 0 0 var(--navy)}
-.branding-detected-choice.is-accent{box-shadow:inset -3px 0 0 var(--navy)}
-.branding-detected-choice.is-primary.is-accent{box-shadow:inset 3px 0 0 var(--navy), inset -3px 0 0 var(--navy)}
-@media(max-width:620px){.branding-detected-choice-grid{grid-template-columns:1fr}}
+/* v0.7.4.3 — clearer branding choice hierarchy */
+.branding-colour-heading{background:var(--club-soft);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px}
+.branding-colour-heading .branding-mini-label{font-size:10px}
+.branding-colour-heading p{font-size:10px;max-width:620px}
+.branding-source-title strong{font-size:10px}
+.branding-source-title span{font-size:9px}
