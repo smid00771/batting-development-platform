@@ -3365,7 +3365,9 @@ function openScenarioHowWeBatPreview(responses,pMap){
   if(!formats.length){alert('This combination does not currently produce a How We Bat preview.');return;}
 
   const names=safeSelected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
-  const title=`How We Bat — ${names.join(' + ')}`;
+  const shortNames=names.map(name=>(name||'Contributor').trim().split(/\s+/)[0]||'Contributor');
+  const scenarioLabel=shortNames.join(' + ');
+  const title=`How We Bat — ${scenarioLabel}`;
   const styleAssets=[...document.head.querySelectorAll('link[rel="stylesheet"],style')].map(n=>n.outerHTML).join('\n');
   const tabButtons=formats.map(([f,label],i)=>`<button type="button" data-clean-hwb-tab="${esc(f)}" class="${i===0?'active':''}">${esc(label)}</button>`).join('');
   const panels=formats.map(([f],i)=>`<div data-clean-hwb-panel="${esc(f)}" style="${i===0?'':'display:none'}">${renderHowWeBatLivePreview(draft,f,false)}</div>`).join('');
@@ -3378,13 +3380,16 @@ function openScenarioHowWeBatPreview(responses,pMap){
     html,body{margin:0;padding:0;background:#f7f8fb;}
     body{min-height:100vh;}
     .clean-hwb-shell{max-width:980px;margin:0 auto;padding:18px 16px 48px;}
-    .clean-hwb-format-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;position:sticky;top:0;z-index:20;padding:10px 0;background:#f7f8fb;}
+    .clean-hwb-preview-head{position:sticky;top:0;z-index:20;padding:10px 0 12px;background:#f7f8fb;}
+    .clean-hwb-scenario-label{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px;padding:6px 10px;border-radius:999px;background:#fff;border:1px solid #dfe4ef;color:#59627a;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;box-shadow:0 1px 2px rgba(20,32,80,.04);}
+    .clean-hwb-scenario-label strong{color:#18245f;letter-spacing:0;text-transform:none;font-size:13px;}
+    .clean-hwb-format-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0;}
     .clean-hwb-format-tabs button{border:0;border-radius:999px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer;background:#e9edf7;color:#18245f;}
     .clean-hwb-format-tabs button.active{background:#203588;color:#fff;}
     .clean-hwb-shell .hwb-publication-preview .hwb-public-tabs{display:none!important;}
     .clean-hwb-shell .hwb-publication-preview{margin:0;}
-    @media(max-width:700px){.clean-hwb-shell{padding:8px 8px 32px}.clean-hwb-format-tabs{padding-top:8px}}
-  </style></head><body><main class="clean-hwb-shell"><div class="clean-hwb-format-tabs">${tabButtons}</div>${panels}</main><script>
+    @media(max-width:700px){.clean-hwb-shell{padding:8px 8px 32px}.clean-hwb-preview-head{padding-top:8px}}
+  </style></head><body><main class="clean-hwb-shell"><div class="clean-hwb-preview-head"><div class="clean-hwb-scenario-label">Comparison preview <span>·</span> <strong>${esc(scenarioLabel)}</strong></div><div class="clean-hwb-format-tabs">${tabButtons}</div></div>${panels}</main><script>
     document.querySelectorAll('[data-clean-hwb-tab]').forEach(btn=>btn.addEventListener('click',()=>{
       const format=btn.dataset.cleanHwbTab;
       document.querySelectorAll('[data-clean-hwb-tab]').forEach(x=>x.classList.toggle('active',x===btn));
