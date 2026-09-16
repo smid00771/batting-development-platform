@@ -1192,8 +1192,8 @@ function renderShell(){
   // the club-build workflow itself. Club Setup explains the full sequence.
   if(isAdmin()){
     nav.push(['dashboard','Club Setup','manage']);
+    nav.push(['permissions','People & Sign-up','manage']);
     nav.push(['groups','Playing Groups','manage']);
-    nav.push(['permissions','Permissions','manage']);
   }
   if(canUsePlayersWorkspace()){
     nav.push(['players','Players','manage']);
@@ -1422,7 +1422,7 @@ async function renderJoinByCode(joinCode){
   app.innerHTML=`<div class="login" style="max-width:720px">
     <div class="section-label">Club invitation</div>
     <h1>Join your club.</h1>
-    <p>Your club invitation is ready. Confirm your name and how you are involved; the club controls any additional coaching/captain permissions separately.</p>
+    <p>Your club invitation is ready. Confirm your name and how you are involved; the club assigns any club role and player access separately.</p>
 
     <div class="invite-code-confirm">
       <span>Club code</span>
@@ -1564,6 +1564,7 @@ async function renderClubDashboard(){
 
   const setupChecks=[
     ['Subscription / entitlement active',entitlementActive],
+    ['At least one player registered',(players||[]).length>0],
     ['At least one Playing Group created',(groups||[]).length>0],
     ['Philosophy Lead chosen',hasLead],
     collaborative
@@ -1578,28 +1579,36 @@ async function renderClubDashboard(){
 
   const workflow=[
     {
-      n:'1',title:'Set the club up',who:'Club Admin',
-      text:'Create Playing Groups, assign permissions, choose the Philosophy Lead and decide whether the philosophy process is Solo or Collaborative.'
+      n:'1',title:'Set the club look',who:'Club Admin',
+      text:'Add the club logo, website and colours so the finished player-facing system looks like the club.'
     },
     {
-      n:'2',title:'Build the club philosophy',who:'Philosophy Lead + invited contributors',
-      text:'Contributors respond independently through Club Identity, What We Value and Format Emphasis. Their working answers are not player-facing.'
+      n:'2',title:'Get people into BDP',who:'Club Admin + club members',
+      text:'Open Player sign-up and get players registered first. Use the separate staff link only for genuinely non-playing coaches or staff, then assign club roles from People & Sign-up.'
     },
     {
-      n:'3',title:'Create How We Bat',who:'Philosophy Lead',
+      n:'3',title:'Organise Playing Groups',who:'Club Admin',
+      text:'Create the grades, teams or development groups the club needs, then assign registered players to them.'
+    },
+    {
+      n:'4',title:'Build the club philosophy',who:'Philosophy Lead + invited contributors',
+      text:'Contributors respond independently through Club Identity, What We Value and Format Emphasis. Philosophy contribution is separate from club roles and player access.'
+    },
+    {
+      n:'5',title:'Create How We Bat',who:'Philosophy Lead',
       text:'Turn the detailed philosophy into a small number of memorable, format-specific Key Messages that players can actually use.'
     },
     {
-      n:'4',title:'Set the Player Plan Structure',who:'Philosophy Lead',
+      n:'6',title:'Set the Player Plan Structure',who:'Philosophy Lead',
       text:'Decide what players will be asked about their own game, then confirm the final question structure.'
     },
     {
-      n:'5',title:'Publish the Club Batting System',who:'Philosophy Lead',
+      n:'7',title:'Publish the Club Batting System',who:'Philosophy Lead',
       text:'Release the matching Philosophy, How We Bat and Player Plan Structure together. This is the point where the finished system becomes live.'
     },
     {
-      n:'6',title:'Players use it. Coaches develop it.',who:'Players + authorised coaches/captains',
-      text:'Players build their Player Plan and train from it. Coaches and captains use the Players workspace only for the Playing Groups or players they have permission to access.'
+      n:'8',title:'Players use it. Coaches develop it.',who:'Players + authorised coaches/captains',
+      text:'Players build their Player Plan and train from it. Coaches and captains use the Players workspace only for the Playing Groups or players they have been given access to.'
     }
   ];
 
@@ -1674,7 +1683,7 @@ async function renderClubDashboard(){
 
     <details class="card setup-collapsible" style="margin-top:16px">
       <summary class="setup-collapsible-summary">
-        <div class="setup-collapsible-title"><div class="section-label">Club workflow</div><strong>From club beliefs to player development</strong><span>6-step build</span></div>
+        <div class="setup-collapsible-title"><div class="section-label">Club workflow</div><strong>From setup to player development</strong><span>8-step build</span></div>
         <span class="setup-collapsible-toggle"></span>
       </summary>
       <div class="setup-collapsible-body">
@@ -1689,17 +1698,17 @@ async function renderClubDashboard(){
 
     <details class="card setup-collapsible" style="margin-top:16px">
       <summary class="setup-collapsible-summary">
-        <div class="setup-collapsible-title"><div class="section-label">Who sees what?</div><strong>Access follows role and permission.</strong><span>Roles & permissions</span></div>
+        <div class="setup-collapsible-title"><div class="section-label">Who sees what?</div><strong>Access follows club role and assigned scope.</strong><span>Roles & access</span></div>
         <span class="setup-collapsible-toggle"></span>
       </summary>
       <div class="setup-collapsible-body">
         <p class="help setup-collapsible-intro">A person's involvement in the philosophy process does not automatically give them access to player information. Player access is controlled separately.</p>
         <div class="role-visibility-grid">
           <div class="role-visibility-card player"><strong>Player</strong><span>After publication</span><p><b>How We Bat</b><br><b>My Player Plan</b><br><b>How We Train</b></p><small>Players see their own development tools — not the philosophy-building workspace.</small></div>
-          <div class="role-visibility-card coach"><strong>Coach / Captain / Head Coach</strong><span>According to permissions</span><p><b>Players</b><br><b>How We Bat</b><br><b>How We Train</b></p><small>The Players workspace only contains Playing Groups and players they have been authorised to access.</small></div>
+          <div class="role-visibility-card coach"><strong>Coach / Captain / Head Coach</strong><span>According to assigned access</span><p><b>Players</b><br><b>How We Bat</b><br><b>How We Train</b></p><small>The Players workspace only contains Playing Groups and players they have been authorised to access.</small></div>
           <div class="role-visibility-card contributor"><strong>Philosophy Contributor</strong><span>During the build</span><p><b>Philosophy Workshop</b><br><b>Their own response sections</b></p><small>This role alone does not expose Player Plans, Training Plans or coaching feedback.</small></div>
           <div class="role-visibility-card lead"><strong>Philosophy Lead</strong><span>Build + release</span><p><b>Workshop and final draft</b><br><b>How We Bat Builder</b><br><b>Player Plan Structure</b></p><small>Being Philosophy Lead does not automatically grant access to individual players. That requires separate coach/admin permission.</small></div>
-          <div class="role-visibility-card admin"><strong>Club Admin</strong><span>Club management</span><p><b>Setup + Playing Groups</b><br><b>Permissions + Players</b><br><b>Build and live system</b></p><small>Admins manage the club framework and have full club Player Plan access.</small></div>
+          <div class="role-visibility-card admin"><strong>Club Admin</strong><span>Club management</span><p><b>Setup + People & Sign-up</b><br><b>Playing Groups + Players</b><br><b>Build and live system</b></p><small>Admins manage the club framework and have full club Player Plan access.</small></div>
         </div>
       </div>
     </details>
@@ -1719,8 +1728,8 @@ async function renderClubDashboard(){
             <div class="btnrow">
               ${!hasLead?'<button class="btn secondary" data-go="workshop">Choose Philosophy Lead</button>':''}
               ${hasLead&&!systemLive?'<button class="btn secondary" data-go="workshop">Continue club build</button>':''}
+              <button class="btn ghost" data-go="permissions">People & Sign-up</button>
               <button class="btn ghost" data-go="groups">Playing Groups</button>
-              <button class="btn ghost" data-go="permissions">Permissions</button>
             </div>
           </section>
 
@@ -5034,7 +5043,7 @@ async function submitPhilosophyResponse(){
 /* ---------------- PERMISSIONS ---------------- */
 
 async function renderPermissions(){
-  document.getElementById('page').innerHTML='<div class="splash">Loading club permissions…</div>';
+  document.getElementById('page').innerHTML='<div class="splash">Loading people & sign-up…</div>';
 
   const {data:members,error}=await supabase
     .from('club_memberships')
@@ -5063,8 +5072,10 @@ async function renderPermissions(){
   }
 
   const activeGroups=playingGroups||[];
-  const groupNameMap=new Map(activeGroups.map(g=>[g.id,g.name]));
-  const activePlayerCount=(players||[]).filter(p=>p.active!==false).length;
+  const activePlayers=(players||[]).filter(p=>p.active!==false);
+  const playerUserIds=new Set(activePlayers.map(p=>p.user_id).filter(Boolean));
+  const activePlayerCount=activePlayers.length;
+  const nonPlayingStaffCount=(members||[]).filter(m=>m.involvement==='coach_captain').length;
   const leadAdminId=club.lead_admin_user_id;
   const leadAdminName=pMap.get(leadAdminId)?.display_name||'Club Admin';
   const amLeadAdmin=leadAdminId===session.user.id;
@@ -5072,12 +5083,117 @@ async function renderPermissions(){
   const playerJoinLink=`${location.origin}${location.pathname}?player_join=${encodeURIComponent(club.player_join_token||'')}`;
   const staffJoinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}`;
   const signupOpen=club.player_signup_open!==false;
+  const clubRoleValues=new Set(['captain','coach','head_coach','admin']);
+  const roleMembers=(members||[]).filter(m=>m.user_id===leadAdminId || clubRoleValues.has(m.permission_role));
+  const roleMemberIds=new Set(roleMembers.map(m=>m.user_id));
+  const roleCandidates=(members||[]).filter(m=>!roleMemberIds.has(m.user_id));
+  const handoverCandidates=(members||[]).filter(m=>
+    m.user_id!==session.user.id &&
+    (playerUserIds.has(m.user_id) || m.involvement==='coach_captain' || m.involvement==='both' || clubRoleValues.has(m.permission_role))
+  );
 
-  document.getElementById('page').innerHTML=`<div class="grid permissions-top-grid">
+  const registrationLabel=m=>{
+    if(playerUserIds.has(m.user_id) || ['player','both'].includes(m.involvement))return 'Registered player';
+    if(m.involvement==='coach_captain')return 'Non-playing staff';
+    return 'Registered member';
+  };
+
+  const accessStateFor=userId=>{
+    const gs=grantMap.get(userId)||[];
+    let access='pending';
+    let selectedGroupIds=[];
+    if(gs.some(g=>g.scope==='whole_club'&&g.can_edit))access='whole_edit';
+    else if(gs.some(g=>g.scope==='whole_club'&&g.can_view))access='whole_view';
+    else if(gs.some(g=>g.scope==='playing_group'&&g.can_edit)){
+      access='groups_edit';
+      selectedGroupIds=gs.filter(g=>g.scope==='playing_group'&&g.can_edit).map(g=>g.playing_group_id).filter(Boolean);
+    }else if(gs.some(g=>g.scope==='playing_group'&&g.can_view)){
+      access='groups_view';
+      selectedGroupIds=gs.filter(g=>g.scope==='playing_group'&&g.can_view).map(g=>g.playing_group_id).filter(Boolean);
+    }
+    return {access,selectedGroupIds};
+  };
+
+  const roleMemberHtml=roleMembers.map(m=>{
+    const name=pMap.get(m.user_id)?.display_name||'Profile not completed';
+    const isLead=m.user_id===leadAdminId;
+    const selfAdmin=m.user_id===session.user.id && m.permission_role==='admin';
+    const {access,selectedGroupIds}=accessStateFor(m.user_id);
+
+    if(isLead){
+      return `<div class="member">
+        <div>
+          <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
+          <small>${esc(registrationLabel(m))}</small>
+        </div>
+        <div class="primary-admin-summary lead">
+          <strong>Lead Admin</strong>
+          <span>Full club access · formal handover required</span>
+        </div>
+      </div>`;
+    }
+
+    if(selfAdmin){
+      return `<div class="member">
+        <div>
+          <strong>${esc(name)} · You</strong>
+          <small>${esc(registrationLabel(m))}</small>
+        </div>
+        <div class="primary-admin-summary">
+          <strong>Club Admin</strong>
+          <span>Full club access</span>
+        </div>
+      </div>`;
+    }
+
+    return `<div class="member">
+      <div>
+        <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
+        <small>${esc(registrationLabel(m))}</small>
+        ${m.permission_role!=='admin'&&access==='pending'?'<span class="pending">PLAYER ACCESS NOT SET</span>':''}
+      </div>
+      <div class="member-controls">
+        <select data-role-user="${m.user_id}">
+          ${[
+            ['none','No club role'],
+            ['captain','Captain'],
+            ['coach','Coach'],
+            ['head_coach','Head Coach'],
+            ['admin','Admin']
+          ].map(([v,l])=>`<option value="${v}" ${m.permission_role===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        ${m.permission_role==='admin'
+          ?'<select disabled><option>Full club access</option></select>'
+          :`<select data-access-user="${m.user_id}">
+            <option value="pending" ${access==='pending'?'selected':''}>No assigned player access</option>
+            <option value="whole_view" ${access==='whole_view'?'selected':''}>Whole club · view</option>
+            <option value="whole_edit" ${access==='whole_edit'?'selected':''}>Whole club · view + edit</option>
+            <option value="groups_view" ${access==='groups_view'?'selected':''}>Selected Playing Groups · view</option>
+            <option value="groups_edit" ${access==='groups_edit'?'selected':''}>Selected Playing Groups · view + edit</option>
+          </select>`}
+        <div class="permission-group-picker" data-group-picker-user="${m.user_id}" style="display:${m.permission_role!=='admin'&&['groups_view','groups_edit'].includes(access)?'flex':'none'}">
+          ${activeGroups.length?activeGroups.map(g=>`<label>
+            <input type="checkbox" data-access-group-user="${m.user_id}" value="${g.id}" ${selectedGroupIds.includes(g.id)?'checked':''}>
+            <span>${esc(g.name)}</span>
+          </label>`).join(''):'<span class="help">No active Playing Groups yet.</span>'}
+        </div>
+        <button class="btn ghost" data-save-user="${m.user_id}" disabled>Saved ✓</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page').innerHTML=`
+  <section class="card">
+    <div class="section-label">People & sign-up</div>
+    <h2>Get people into BDP first. Give responsibilities second.</h2>
+    <div class="help">Players register as <strong>Players</strong>. Club roles such as Captain, Coach, Head Coach and Admin are assigned afterwards. Philosophy Workshop invitations are separate again — contributing to the philosophy does <strong>not</strong> make somebody a coach, captain or Admin.</div>
+  </section>
+
+  <div class="grid permissions-top-grid" style="margin-top:16px">
     <section class="card player-signup-card">
       <div class="section-label">Player sign-up</div>
-      <h2>One post. Players register themselves.</h2>
-      <div class="help">Post the WhatsApp message in the players chat, or use the QR code at training / on a noticeboard. Everyone coming through this route joins automatically as a <strong>Player</strong>.</div>
+      <h2>One normal route for everyone who plays.</h2>
+      <div class="help">Post the WhatsApp message in the players chat, or use the QR code at training / on a noticeboard. Everyone using this route joins as a <strong>Player</strong>. If they also captain or coach, assign that club role afterwards.</div>
 
       <div class="signup-status-row">
         <div>
@@ -5120,34 +5236,37 @@ async function renderPermissions(){
     </section>
 
     <section class="card">
-      <div class="section-label">Captain / Coach permissions</div>
-      <h2>Everyone who plays joins as a Player first.</h2>
-
-      <div class="notice">
-        <strong>Playing captain or coach?</strong><br>
-        Use the normal <strong>Player sign-up</strong> above. Once they appear in the club, the Admin adds their Captain/Coach role and chooses what they can view or edit.
-      </div>
-
-      <div class="help" style="margin-top:14px">
-        This means there is only <strong>one normal sign-up process for the playing group</strong>. Captains and player-coaches do not need a different link or a second account.
-      </div>
-
-      <div class="permission-explainer">
-        <strong>Rare exception: non-playing coach</strong>
-        <span>If someone coaches the club but does not play, they need a staff-only join link because they should not receive a Player Plan.</span>
-      </div>
-
-      <div class="btnrow">
-        <button class="btn ghost" id="copyStaffJoinLink">Copy non-playing coach sign-up link</button>
-      </div>
+      <div class="section-label">Non-playing staff</div>
+      <h2>Only use this when somebody does not play.</h2>
+      <div class="notice"><strong>Playing coach or captain?</strong><br>They still use the normal <strong>Player sign-up</strong>. Do not give them a second account.</div>
+      <div class="help" style="margin-top:14px">Use the staff route for a genuinely non-playing coach or other staff member who needs to be in BDP but should not receive a Player Plan.</div>
+      <div class="signup-count" style="margin-top:14px"><strong>${nonPlayingStaffCount}</strong> non-playing staff registered</div>
+      <div class="btnrow"><button class="btn secondary" id="copyStaffJoinLink">Copy non-playing staff sign-up link</button></div>
       <div id="staffJoinStatus" class="help"></div>
-
       <div class="permission-explainer">
-        <strong>Viewing follows Playing Groups.</strong>
-        <span>Give a captain or coach access to one or more Playing Groups. If a player is added to or removed from those groups, access follows automatically.</span>
+        <strong>Registration still does not grant player access.</strong>
+        <span>After they join, find them under Club roles below, assign their role, then choose the Playing Groups or whole-club access they need.</span>
       </div>
     </section>
   </div>
+
+  <section class="card" style="margin-top:16px">
+    <div class="section-label">Club roles</div>
+    <h2>Find a person, then give them a club responsibility.</h2>
+    <div class="help">This list is intentionally <strong>not</strong> every person in BDP. It contains only people who have been assigned a club role. A Philosophy Contributor stays out of this list unless you separately make them a Captain, Coach, Head Coach or Admin.</div>
+
+    <div class="field" style="margin-top:14px">
+      <label>Find a registered person</label>
+      <input id="clubPersonSearch" placeholder="Start typing a name…" autocomplete="off">
+      <small>Search players and other registered people. Choose a club role to add them below.</small>
+    </div>
+    <div id="clubPersonSearchResults" class="member-list"></div>
+
+    <div style="margin-top:18px">
+      <div class="section-label">People with club roles</div>
+      <div class="member-list">${roleMemberHtml||'<div class="notice">No Captain, Coach, Head Coach or additional Admin roles have been assigned yet.</div>'}</div>
+    </div>
+  </section>
 
   <section class="card admin-continuity-card" style="margin-top:16px">
     <div class="admin-continuity-head">
@@ -5185,7 +5304,7 @@ async function renderPermissions(){
           <label class="handover-option on">
             <input type="radio" name="handoverSuccessorType" value="existing" checked>
             <strong>Someone already in this club</strong>
-            <span>Choose any registered player, coach, captain or existing Admin.</span>
+            <span>Choose a registered player, staff member or existing Admin.</span>
           </label>
           <label class="handover-option">
             <input type="radio" name="handoverSuccessorType" value="external">
@@ -5199,9 +5318,9 @@ async function renderPermissions(){
             <label>Successor</label>
             <select id="handoverExistingUser">
               <option value="">Choose a person…</option>
-              ${(members||[]).filter(m=>m.user_id!==session.user.id).map(m=>{
+              ${handoverCandidates.map(m=>{
                 const nm=pMap.get(m.user_id)?.display_name||'Profile not completed';
-                return `<option value="${m.user_id}">${esc(nm)} · ${esc(labelInvolvement(m.involvement))}</option>`;
+                return `<option value="${m.user_id}">${esc(nm)} · ${esc(registrationLabel(m))}</option>`;
               }).join('')}
             </select>
           </div>
@@ -5225,95 +5344,11 @@ async function renderPermissions(){
         <div id="leadHandoverTestLink" class="test-link-box" style="display:none"></div>
       </div>
     `:`
-      <div class="notice"><strong>${esc(leadAdminName)} is responsible for the next formal handover.</strong><br>Other Club Admins still have full administration access, but the Lead Admin designation cannot be casually removed through the permission dropdowns.</div>
+      <div class="notice"><strong>${esc(leadAdminName)} is responsible for the next formal handover.</strong><br>Other Club Admins still have full administration access, but the Lead Admin designation cannot be casually removed through the role controls above.</div>
     `}
-  </section>
-
-  <section class="card" style="margin-top:16px">
-    <div class="section-label">Club people</div>
-    <h2>Roles & access</h2>
-    <div class="member-list">${(members||[]).map(m=>{
-      const prof=pMap.get(m.user_id);
-      const name=prof?.display_name||'Profile not completed';
-      const gs=grantMap.get(m.user_id)||[];
-      let access='pending';
-      let selectedGroupIds=[];
-      if(gs.some(g=>g.scope==='whole_club'&&g.can_edit))access='whole_edit';
-      else if(gs.some(g=>g.scope==='whole_club'&&g.can_view))access='whole_view';
-      else if(gs.some(g=>g.scope==='playing_group'&&g.can_edit)){
-        access='groups_edit';
-        selectedGroupIds=gs.filter(g=>g.scope==='playing_group'&&g.can_edit).map(g=>g.playing_group_id).filter(Boolean);
-      }
-      else if(gs.some(g=>g.scope==='playing_group'&&g.can_view)){
-        access='groups_view';
-        selectedGroupIds=gs.filter(g=>g.scope==='playing_group'&&g.can_view).map(g=>g.playing_group_id).filter(Boolean);
-      }
-
-      const isLead=m.user_id===leadAdminId;
-      const selfAdmin=m.user_id===session.user.id && m.permission_role==='admin';
-
-      if(isLead){
-        return `<div class="member">
-          <div>
-            <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
-            <small>${esc(labelInvolvement(m.involvement))}</small>
-          </div>
-          <div class="primary-admin-summary lead">
-            <strong>Lead Admin</strong>
-            <span>Full club access · formal handover required</span>
-          </div>
-        </div>`;
-      }
-
-      if(selfAdmin){
-        return `<div class="member">
-          <div>
-            <strong>${esc(name)} · You</strong>
-            <small>${esc(labelInvolvement(m.involvement))}</small>
-          </div>
-          <div class="primary-admin-summary">
-            <strong>Club Admin</strong>
-            <span>Full club access</span>
-          </div>
-        </div>`;
-      }
-
-      return `<div class="member">
-        <div>
-          <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
-          <small>${esc(labelInvolvement(m.involvement))}</small>
-          ${m.permission_role==='none'&&m.involvement!=='player'?'<span class="pending">ACCESS PENDING</span>':''}
-        </div>
-        <div class="member-controls">
-          <select data-role-user="${m.user_id}">
-            ${[
-              ['none','No special role'],
-              ['captain','Captain'],
-              ['coach','Coach'],
-              ['head_coach','Head Coach'],
-              ['admin','Admin']
-            ].map(([v,l])=>`<option value="${v}" ${m.permission_role===v?'selected':''}>${l}</option>`).join('')}
-          </select>
-          <select data-access-user="${m.user_id}">
-            <option value="pending" ${access==='pending'?'selected':''}>No assigned access</option>
-            <option value="whole_view" ${access==='whole_view'?'selected':''}>Whole club · view</option>
-            <option value="whole_edit" ${access==='whole_edit'?'selected':''}>Whole club · view + edit</option>
-            <option value="groups_view" ${access==='groups_view'?'selected':''}>Selected Playing Groups · view</option>
-            <option value="groups_edit" ${access==='groups_edit'?'selected':''}>Selected Playing Groups · view + edit</option>
-          </select>
-          <div class="permission-group-picker" data-group-picker-user="${m.user_id}" style="display:${['groups_view','groups_edit'].includes(access)?'flex':'none'}">
-            ${activeGroups.length?activeGroups.map(g=>`<label>
-              <input type="checkbox" data-access-group-user="${m.user_id}" value="${g.id}" ${selectedGroupIds.includes(g.id)?'checked':''}>
-              <span>${esc(g.name)}</span>
-            </label>`).join(''):'<span class="help">No active Playing Groups yet.</span>'}
-          </div>
-          <button class="btn ghost" data-save-user="${m.user_id}" disabled>Saved ✓</button>
-        </div>
-      </div>`;
-    }).join('')}</div>
   </section>`;
 
-  const playerWhatsAppMessage=`${club.name} players — our Batting Development system is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
+  const playerWhatsAppMessage=`${club.name} players — our Batting Development system is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If you are also a captain or coach, still use this Player link — the club will add that role afterwards. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
 
   const copyText=async(text,label,statusId)=>{
     const st=document.getElementById(statusId);
@@ -5332,7 +5367,7 @@ async function renderPermissions(){
     playerJoinLink,'Player sign-up link','playerShareStatus'
   );
   document.getElementById('copyStaffJoinLink').onclick=()=>copyText(
-    staffJoinLink,'Non-playing coach link','staffJoinStatus'
+    staffJoinLink,'Non-playing staff sign-up link','staffJoinStatus'
   );
 
   document.getElementById('togglePlayerSignup').onclick=async()=>{
@@ -5359,6 +5394,52 @@ async function renderPermissions(){
   };
 
   renderPlayerQRCode(playerJoinLink);
+
+  const renderPersonSearch=()=>{
+    const wrap=document.getElementById('clubPersonSearchResults');
+    const q=(document.getElementById('clubPersonSearch')?.value||'').trim().toLowerCase();
+    if(!wrap)return;
+    if(q.length<2){
+      wrap.innerHTML='<div class="help" style="padding:8px 0">Type at least two letters to find someone who does not already have a club role.</div>';
+      return;
+    }
+    const matches=roleCandidates
+      .filter(m=>(pMap.get(m.user_id)?.display_name||'').toLowerCase().includes(q))
+      .slice(0,12);
+    wrap.innerHTML=matches.length?matches.map(m=>{
+      const name=pMap.get(m.user_id)?.display_name||'Profile not completed';
+      return `<div class="member">
+        <div><strong>${esc(name)}</strong><small>${esc(registrationLabel(m))}</small></div>
+        <div class="member-controls">
+          <select data-new-club-role="${m.user_id}">
+            <option value="captain">Captain</option>
+            <option value="coach">Coach</option>
+            <option value="head_coach">Head Coach</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button class="btn secondary" data-assign-club-role="${m.user_id}">Assign role</button>
+        </div>
+      </div>`;
+    }).join(''):'<div class="notice">No matching registered person without a club role.</div>';
+
+    wrap.querySelectorAll('[data-assign-club-role]').forEach(b=>b.onclick=async()=>{
+      const userId=b.dataset.assignClubRole;
+      const role=wrap.querySelector(`[data-new-club-role="${userId}"]`)?.value;
+      if(!role)return;
+      b.disabled=true;
+      b.textContent='Assigning…';
+      const {error}=await supabase
+        .from('club_memberships')
+        .update({permission_role:role})
+        .eq('club_id',club.id)
+        .eq('user_id',userId);
+      if(error){alert(error.message);b.disabled=false;b.textContent='Assign role';return;}
+      await loadContext();
+    });
+  };
+
+  document.getElementById('clubPersonSearch').oninput=renderPersonSearch;
+  renderPersonSearch();
 
   if(document.getElementById('openLeadHandover')){
     document.getElementById('openLeadHandover').onclick=()=>{
@@ -5489,7 +5570,7 @@ function labelInvolvement(v){
 async function saveMemberPermission(userId){
   const button=document.querySelector(`[data-save-user="${userId}"]`);
   const role=document.querySelector(`[data-role-user="${userId}"]`).value;
-  const access=document.querySelector(`[data-access-user="${userId}"]`).value;
+  const access=role==='admin'?'whole_edit':(document.querySelector(`[data-access-user="${userId}"]`)?.value||'pending');
   const selectedGroupIds=[...document.querySelectorAll(`[data-access-group-user="${userId}"]:checked`)].map(x=>x.value);
 
   if(button){
