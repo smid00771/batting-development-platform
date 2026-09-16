@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.28 — saturated priority blues — graded Key Message hierarchy — compact How We Bat hero
+// Batting Development Platform v0.8.29 — same-hue Key Message blue scale — compact How We Bat hero
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -724,6 +724,29 @@ function toneHex(hex,targetLightness,minSaturation=.64){
   let rr=0,gg=0,bb=0;
   if(h<60){rr=c;gg=x;}else if(h<120){rr=x;gg=c;}else if(h<180){gg=c;bb=x;}
   else if(h<240){gg=x;bb=c;}else if(h<300){rr=x;bb=c;}else{rr=c;bb=x;}
+  return rgbHex((rr+m)*255,(gg+m)*255,(bb+m)*255);
+}
+// Lighten only the existing colour's HSL lightness. Hue and saturation are preserved,
+// so priority cards stay in exactly the same colour family as the club primary.
+function lightenSameHue(hex,amount=.35){
+  let [r,g,b]=hexRgb(hex).map(v=>v/255);
+  const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+  let h=0;
+  const l=(max+min)/2;
+  const sat=d===0?0:d/(1-Math.abs(2*l-1));
+  if(d!==0){
+    if(max===r)h=((g-b)/d)%6;
+    else if(max===g)h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h*=60;if(h<0)h+=360;
+  }
+  const light=l+(1-l)*Math.max(0,Math.min(1,amount));
+  const c=(1-Math.abs(2*light-1))*sat;
+  const x=c*(1-Math.abs((h/60)%2-1));
+  const m=light-c/2;
+  let rr=0,gg=0,bb=0;
+  if(h<60){rr=c;gg=x;}else if(h<120){rr=x;gg=c;}else if(h<180){gg=c;bb=x;}
+  else if(h<240){gg=x;bb=c;}else if(h<300){rr=x;bb=c;}else{rr=c;gg=x;}
   return rgbHex((rr+m)*255,(gg+m)*255,(bb+m)*255);
 }
 function contrastFor(hex){
@@ -4739,15 +4762,16 @@ function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
 
   const points=savedPoints.length?savedPoints:fallbackPoints;
 
-  // Key Messages are ordered by priority, so the visual treatment fades through
-  // increasingly lighter shades of the club colour — not greyed-out white mixes.
-  // 1 = full club colour, 2 = saturated mid tint, 3 = pale tint, 4+ = white.
+  // Key Messages are ordered by priority. Keep the exact same hue/saturation as
+  // the club primary and change only lightness: 1 = primary, 2 = lighter, 3 = lighter again.
+  // Message 2 keeps the strong-card text treatment; Message 3 returns to dark text.
   const primary=normaliseHex(club?.primary_colour,PLATFORM_PRIMARY);
-  const cardClass=`hwb-public-banner ${index===0?'feature':''} ${context==='plan'?'plan-reference':''}`;
+  const strongCard=index<=1;
+  const cardClass=`hwb-public-banner ${strongCard?'feature':''} ${context==='plan'?'plan-reference':''}`;
   const priorityStyle=index===1
-    ?`background:${toneHex(primary,.70,.68)};border-color:${toneHex(primary,.58,.68)};`
+    ?`background:${lightenSameHue(primary,.38)};border-color:${lightenSameHue(primary,.28)};`
     :index===2
-      ?`background:${toneHex(primary,.89,.66)};border-color:${toneHex(primary,.79,.66)};`
+      ?`background:${lightenSameHue(primary,.62)};border-color:${lightenSameHue(primary,.50)};`
       :'';
   const cardStyle=priorityStyle?` style="${priorityStyle}"`:'';
 
