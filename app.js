@@ -2616,8 +2616,8 @@ async function renderWorkshop(){
       <summary style="cursor:pointer;font-weight:700">Workshop settings</summary>
       <div class="help" style="margin-top:10px">Rare maintenance actions live here so they do not compete with the normal workshop flow.</div>
       <div style="display:grid;gap:10px;margin-top:12px">
-        ${isPhilosophyLead() && workshop?.final_draft_ready?`<div class="notice compact"><strong>Reset How We Bat draft</strong><br>Regenerate the editable How We Bat draft from the current working philosophy. Published versions stay live and unchanged. Any manual edits in the current How We Bat draft will be replaced.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="resetHowWeBatDraft">Reset How We Bat draft</button></div></div>`:''}
-        <div class="notice compact"><strong>Start a new philosophy round</strong><br>Use this when the people shaping the philosophy or the club direction has materially changed. The current round is archived, published versions stay live, and the selected contributors start again with fresh independent responses.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="startNewPhilosophyRound">Start new philosophy round</button></div></div>
+        ${isPhilosophyLead() && workshop?.final_draft_ready && howWeBatDraft?.status!=='ready'?`<div class="notice compact"><strong>Reset How We Bat draft</strong><br>Before How We Bat is locked, you can regenerate the editable draft from the current working philosophy. Any manual edits in the current draft will be replaced.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="resetHowWeBatDraft">Reset How We Bat draft</button></div></div>`:''}
+        <div class="notice compact"><strong>Major club change · start a new philosophy round</strong><br>This is the only route to replacing a locked How We Bat. Use it for a genuine change in leadership, personnel or club direction — not routine wording tweaks. The current round is archived and any published Club Batting System remains live until a replacement is deliberately published.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="startNewPhilosophyRound">Start new philosophy round</button></div></div>
       </div>
     </details>`;
   }
@@ -3299,7 +3299,7 @@ async function resetHowWeBatDraftFromCurrentPhilosophy(){
     p_identity_statement:fresh.identity_statement||'',
     p_closing_strapline:fresh.closing_strapline||'',
     p_formats:fresh.formats||{},
-    p_status:'ready'
+    p_status:'draft'
   });
   if(error){
     alert(error.message);
@@ -3324,7 +3324,7 @@ async function startNewPhilosophyRound(){
     `• clear the current editable Philosophy / How We Bat / Player Plan Structure drafts\n`+
     `• keep all published versions unchanged\n`+
     `• return the current contributor list to a fresh invited state so you can keep, remove or add people before they respond again\n\n`+
-    `Use this for a genuine new round — for example, when personnel or the club's direction changes.`
+    `Use this only for a genuine club-level change — for example, a major change in cricket leadership, personnel or direction. A locked How We Bat is intentionally not editable inside the existing round.`
   );
   if(!ok)return;
 
@@ -3452,6 +3452,7 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   const sameIds=ids=>ids.length===selectedIds.size&&ids.every(id=>selectedIds.has(id));
   const currentLabel=(presets.find(p=>sameIds(p.ids))?.label)||safeSelected.map(shortName).join(' + ');
   const baselineOnly=safeSelected.length===1;
+  const hwbLocked=howWeBatDraft?.status==='ready';
 
   return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
     <div class="section-label">2 · Synthesis · Scenario Explorer</div>
@@ -3462,12 +3463,12 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
       ${presets.map(p=>`<button class="btn ${sameIds(p.ids)?'secondary':'ghost'}" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
     </div>
 
-    ${meta?.snapshot?`<div class="help" style="margin-top:10px">A How We Bat draft already exists. Choosing another combination lets you preview or replace it.</div>`:''}
+    ${hwbLocked?`<div class="help" style="margin-top:10px">🔒 How We Bat is locked. These scenarios remain available for reference only.</div>`:(meta?.snapshot?`<div class="help" style="margin-top:10px">A working How We Bat exists. You can still preview or choose another combination until you lock it.</div>`:'')}
 
     <div class="btnrow" style="margin-top:18px">
       <button class="btn ghost" id="openScenarioHwbPreview">Open ${esc(currentLabel)} How We Bat ↗</button>
       ${!baselineOnly?`<button class="btn ghost" id="showScenarioChanges">What changed?</button>`:''}
-      ${isPhilosophyLead()?`<button class="btn secondary" id="useVoiceScenario">Use this to create How We Bat</button>`:''}
+      ${isPhilosophyLead()&&!hwbLocked?`<button class="btn secondary" id="useVoiceScenario">Use this to create How We Bat</button>`:''}
     </div>
 
     ${!baselineOnly?`<dialog id="scenarioChangesDialog" style="max-width:620px;width:calc(100% - 32px);border:0;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(20,32,80,.25)">
@@ -3498,8 +3499,13 @@ async function applySelectedVoiceScenario(responses,pMap){
   const names=selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
   const draft=buildScenarioDraft(selected);
   const hwb=generatedHowWeBatDraftFromPhilosophy(draft);
-  // First creation is deliberately one click. If a How We Bat draft already exists,
-  // confirm before replacing it because the Lead may have edited that draft manually.
+
+  if(howWeBatDraft?.status==='ready'){
+    alert('How We Bat is locked for this season. To replace it, start a new philosophy round from Workshop settings.');
+    return;
+  }
+
+  // Before the season lock, a different scenario can replace the current working draft.
   if(workshop?.final_draft_ready && howWeBatDraft){
     const ok=confirm(
       `Replace the current How We Bat draft using ${naturalList(names)}?\n\n`+
@@ -3544,7 +3550,7 @@ async function applySelectedVoiceScenario(responses,pMap){
     p_identity_statement:hwb.identity_statement||'',
     p_closing_strapline:hwb.closing_strapline||'',
     p_formats:hwb.formats||{},
-    p_status:'ready'
+    p_status:'draft'
   });
   if(hErr){alert(hErr.message);return;}
 
@@ -4445,6 +4451,11 @@ function howWeBatBannerEditorRows(format){
 
 function renderHowWeBatBuilder(){
   const draft=ensureHowWeBatWorkingDraft();
+  if(draft.status==='ready'){
+    currentTab='howwebat';
+    renderPublishedHowWeBat();
+    return;
+  }
   const formats=enabledFormats();
   if(!formats.some(([k])=>k===howWeBatBuilderFormat))howWeBatBuilderFormat=formats[0]?.[0]||'limited_overs';
   const formatLabel=FORMATS.find(([k])=>k===howWeBatBuilderFormat)?.[1]||'Format';
@@ -4511,10 +4522,8 @@ function renderHowWeBatBuilder(){
 
       <div class="btnrow hwb-builder-actions">
         <button class="btn ghost" id="backToHwbView">Back to How We Bat</button>
-        ${builderIsReady
-          ?'<button class="btn ghost" id="reopenHwbDraft">Reopen for editing</button><button class="btn secondary" id="continueFromReadyHwb">Continue to Player Plan Structure</button>'
-          :`<button class="btn secondary" id="saveHwbDraft">${builderSaved?'Draft saved ✓':'Save How We Bat draft'}</button><button class="btn secondary" id="readyHwbDraft">Mark How We Bat ready</button>`}
-        <span class="status" id="hwbStatus">${builderIsReady?'Ready ✓':''}</span>
+        <button class="btn secondary" id="saveHwbDraft">${builderSaved?'Draft saved ✓':'Save How We Bat draft'}</button><button class="btn secondary" id="readyHwbDraft">Confirm & lock How We Bat</button>
+        <span class="status" id="hwbStatus"></span>
       </div>
     </section>
 
@@ -4567,19 +4576,6 @@ function renderHowWeBatBuilder(){
   }
   if(document.getElementById('readyHwbDraft')){
     document.getElementById('readyHwbDraft').onclick=()=>saveHowWeBatBuilder('ready');
-  }
-  if(document.getElementById('reopenHwbDraft')){
-    document.getElementById('reopenHwbDraft').onclick=async()=>{
-      const ok=confirm('Reopen How We Bat for editing? Player Plan Structure will lock again until you mark How We Bat ready.');
-      if(!ok)return;
-      await saveHowWeBatBuilder('draft');
-    };
-  }
-  if(document.getElementById('continueFromReadyHwb')){
-    document.getElementById('continueFromReadyHwb').onclick=()=>{
-      currentTab='plan';
-      renderTab();
-    };
   }
 }
 
@@ -4659,9 +4655,10 @@ async function saveHowWeBatBuilder(status){
     if(!draft.identity_statement){st.textContent='Add the club-wide identity statement first.';return;}
 
     const ok=confirm(
-      `Mark How We Bat ready?\n\n`+
-      `This will save the current How We Bat content for all enabled formats and unlock Player Plan Structure.\n\n`+
-      `It does NOT publish the philosophy yet.`
+      `Lock How We Bat for the season?\n\n`+
+      `This confirms the club's How We Bat and unlocks Player Plan Structure. Once locked, the wording cannot be reopened for routine editing.\n\n`+
+      `Only a new Philosophy Workshop round can replace it, because changing How We Bat changes the foundation used for Player Plans.\n\n`+
+      `Lock How We Bat and continue?`
     );
     if(!ok)return;
   }
@@ -4749,6 +4746,52 @@ function renderHowWeBatLivePreview(draft,format,isBuilder=false){
   </section>`;
 }
 
+async function lockCurrentHowWeBat(){
+  if(!isPhilosophyLead() || !howWeBatDraft || howWeBatDraft.status==='ready')return;
+  const draft=howWeBatDraft;
+
+  for(const [format,label] of enabledFormats()){
+    const f=draft.formats?.[format];
+    if(!f || !f.intro || !f.callout || (f.banners||[]).length<2 || (f.banners||[]).length>4){
+      alert(`Review ${label}: it needs an opening, callout and 2–4 banners before How We Bat can be locked.`);
+      return;
+    }
+    if((f.banners||[]).some(x=>!x.title||!x.message)){
+      alert(`Review ${label}: every selected banner needs a title and message before How We Bat can be locked.`);
+      return;
+    }
+    if((f.banners||[]).some(x=>!Array.isArray(x.reference_points)||x.reference_points.length<2)){
+      alert(`Review ${label}: every Key Message needs at least two useful reference points before How We Bat can be locked.`);
+      return;
+    }
+  }
+  if(!draft.identity_statement){alert('Add the club-wide identity statement before How We Bat can be locked.');return;}
+
+  const ok=confirm(
+    `Lock How We Bat for the season?\n\n`+
+    `This confirms the club's position and unlocks Player Plan Structure. Once locked, How We Bat cannot be reopened for routine editing.\n\n`+
+    `That is deliberate: Player Plan prompts flow from How We Bat. A different How We Bat requires a new Philosophy Workshop round.\n\n`+
+    `Lock How We Bat and continue?`
+  );
+  if(!ok)return;
+
+  const btn=document.getElementById('lockHwbFromView');
+  if(btn){btn.disabled=true;btn.textContent='Locking…';}
+
+  const {error}=await supabase.rpc('save_how_we_bat_draft',{
+    p_club_id:club.id,
+    p_identity_statement:draft.identity_statement||'',
+    p_closing_strapline:draft.closing_strapline||'',
+    p_formats:draft.formats||{},
+    p_status:'ready'
+  });
+  if(error){alert(error.message);if(btn){btn.disabled=false;btn.textContent='Confirm & lock How We Bat';}return;}
+
+  await loadData();
+  currentTab='plan';
+  renderShell();
+}
+
 function renderPublishedHowWeBat(){
   const canSeeWorking=(isPhilosophyLead() || isAdmin()) && !!howWeBatDraft;
   const version=howWeBatVersions[0]||null;
@@ -4773,7 +4816,7 @@ function renderPublishedHowWeBat(){
   const workingReady=canSeeWorking && snap.status==='ready';
 
   document.getElementById('page').innerHTML=`<div class="hwb-published-shell">
-    ${canSeeWorking?`<div class="published-version-note">Working How We Bat · ${workingReady?'ready for Player Plan Structure':'manual edits in progress'}</div>`:''}
+    ${canSeeWorking?`<div class="published-version-note">Working How We Bat · ${workingReady?'🔒 locked for the season':'not locked yet'}</div>`:''}
     <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
       <div class="hwb-public-hero">
         <div class="k">${esc(club.name)}</div>
@@ -4789,7 +4832,9 @@ function renderPublishedHowWeBat(){
       </div>
       ${snap.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(snap.closing_strapline)}</strong>${canSeeWorking?'':'<span>Know your game. Then read the moment.</span>'}</div>`:''}
     </section>
-    ${canSeeWorking && isPhilosophyLead()?`<div class="btnrow" style="margin-top:14px"><button class="btn ghost" id="openExactHwbEditor">Edit exact wording</button></div>`:''}
+    ${canSeeWorking && isPhilosophyLead()?(workingReady
+      ?`<div class="notice compact" style="margin-top:14px"><strong>🔒 How We Bat is locked for the season.</strong><br>This is now the stable club position that Player Plan Structure is built from. It is deliberately no longer editable. If the club undergoes a major change that genuinely requires a different philosophy, start a new Philosophy Workshop round from Workshop settings.</div><div class="btnrow" style="margin-top:10px"><button class="btn secondary" id="continueLockedHwb">Continue to Player Plan Structure</button></div>`
+      :`<div class="notice compact" style="margin-top:14px"><strong>Finalise it, then leave it alone.</strong><br>How We Bat drives the Player Plan prompts. Check the visual version now and make any exact-wording changes you genuinely want before locking it. Once locked, routine editing is disabled for the season.</div><div class="btnrow" style="margin-top:10px"><button class="btn ghost" id="openExactHwbEditor">Edit exact wording</button><button class="btn secondary" id="lockHwbFromView">Confirm & lock How We Bat</button></div>`):''}
     ${!canSeeWorking && version?`<div class="published-version-note">Published with Club Philosophy v${esc(version.philosophy_version)} · ${new Date(version.published_at).toLocaleDateString()}</div>`:''}
   </div>`;
 
@@ -4798,7 +4843,16 @@ function renderPublishedHowWeBat(){
     renderPublishedHowWeBat();
   });
   if(document.getElementById('openExactHwbEditor')){
-    document.getElementById('openExactHwbEditor').onclick=()=>{currentTab='preview';renderTab();};
+    document.getElementById('openExactHwbEditor').onclick=()=>{
+      currentTab='preview';
+      renderTab();
+    };
+  }
+  if(document.getElementById('lockHwbFromView')){
+    document.getElementById('lockHwbFromView').onclick=lockCurrentHowWeBat;
+  }
+  if(document.getElementById('continueLockedHwb')){
+    document.getElementById('continueLockedHwb').onclick=()=>{currentTab='plan';renderTab();};
   }
 }
 
@@ -5071,16 +5125,16 @@ async function renderPlanStructure(){
 
   if(!planStructureReady){
     const lead=isPhilosophyLead();
-    const manuallyEditing=!!howWeBatDraft;
+    const hasHowWeBatDraft=!!howWeBatDraft;
     page.innerHTML=`<section class="card player-gate">
       <div class="gate-state locked">🔒</div>
       <div class="section-label">Player Plan Structure is not available yet</div>
-      <h2>Finish How We Bat first.</h2>
-      <p>The Player Plan questions flow from the club’s player-facing <strong>How We Bat</strong> messages, so How We Bat must be ready first.</p>
-      <div class="notice"><strong>What needs to happen next</strong><br>${lead?(manuallyEditing?'How We Bat is currently open for manual wording changes. Finish those changes and mark it ready.':'Choose the How We Bat you want from the Philosophy Workshop first.'):'The Philosophy Lead is still finalising How We Bat.'}</div>
-      ${lead?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">${manuallyEditing?'Return to manual wording controls':'Open Philosophy Workshop'}</button></div>`:''}
+      <h2>Lock How We Bat first.</h2>
+      <p>The Player Plan questions flow from the club’s player-facing <strong>How We Bat</strong> messages. The club must confirm and lock How We Bat before those prompts are built.</p>
+      <div class="notice"><strong>What needs to happen next</strong><br>${lead?(hasHowWeBatDraft?'Review How We Bat, make any final wording changes, then choose <strong>Confirm & lock How We Bat</strong>.':'Choose the How We Bat you want from the Philosophy Workshop first.'):'The Philosophy Lead is still finalising How We Bat.'}</div>
+      ${lead?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">${hasHowWeBatDraft?'Open How We Bat':'Open Philosophy Workshop'}</button></div>`:''}
     </section>`;
-    if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=manuallyEditing?'preview':'workshop';renderTab();};
+    if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=hasHowWeBatDraft?'howwebat':'workshop';renderTab();};
     return;
   }
 
