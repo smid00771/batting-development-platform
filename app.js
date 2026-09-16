@@ -16,6 +16,10 @@ let platformDiscoveryResults=[];
 let platformMarketAssociationId='';
 let platformMarketFitFilter='likely';
 let platformMarketSelectedClubIds=new Set();
+const PLATFORM_MARKET_SCROLL_KEY='bdp-platform-market-scroll-y';
+let platformMarketScrollY=Number(sessionStorage.getItem(PLATFORM_MARKET_SCROLL_KEY)||0);
+let platformMarketRestoreTimer=null;
+let platformMarketScrollSuppressed=false;
 let club=null;
 let membership=null;
 let userProfile=null;
@@ -812,6 +816,23 @@ async function paletteFromLogoDataUrl(dataUrl){
   return paletteFromCanvas(canvas);
 }
 
+function savePlatformMarketScroll(){
+  if(platformView!=='market' || platformMarketScrollSuppressed)return;
+  const y=Math.max(0,Math.round(window.scrollY||document.documentElement.scrollTop||0));
+  platformMarketScrollY=y;
+  try{sessionStorage.setItem(PLATFORM_MARKET_SCROLL_KEY,String(y));}catch{/* storage unavailable */}
+}
+
+function restorePlatformMarketScroll(){
+  if(platformView!=='market' || !document.getElementById('marketClubInventory'))return;
+  const y=Number(platformMarketScrollY||sessionStorage.getItem(PLATFORM_MARKET_SCROLL_KEY)||0);
+  if(!Number.isFinite(y) || y<=0)return;
+  if(platformMarketRestoreTimer)cancelAnimationFrame(platformMarketRestoreTimer);
+  platformMarketRestoreTimer=requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>window.scrollTo({top:y,left:0,behavior:'auto'}));
+  });
+}
+
 async function boot(){
   const {data:{session:s}}=await supabase.auth.getSession();
   session=s;
@@ -820,14 +841,32 @@ async function boot(){
     const nextUserId=s2?.user?.id||null;
     session=s2;
 
-    // Supabase refreshes access tokens while the app is open. A TOKEN_REFRESHED event does
-    // not mean the user changed context, so do not rebuild the whole UI and throw them back
-    // to the top of a long Platform Admin page merely because they returned from another tab.
+    // Supabase can emit SIGNED_IN again when an already-signed-in browser tab regains focus.
+    // Rebuilding the SPA for that same-user event destroys the user's scroll position. Only a
+    // genuine identity/session change should route the app again.
     const meaningfulAuthChange=
       previousUserId!==nextUserId ||
-      ['SIGNED_IN','SIGNED_OUT','USER_UPDATED','PASSWORD_RECOVERY'].includes(event);
+      ['SIGNED_OUT','USER_UPDATED','PASSWORD_RECOVERY'].includes(event);
     if(meaningfulAuthChange)setTimeout(()=>routeAuth(),0);
   });
+
+  // Preserve Market Discovery position when the user opens a club/source in another tab and
+  // comes back. This is independent of browser back/forward restoration and survives a redraw.
+  window.addEventListener('pagehide',savePlatformMarketScroll);
+  window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden')savePlatformMarketScroll();
+    else if(document.visibilityState==='visible')restorePlatformMarketScroll();
+  });
+  window.addEventListener('scroll',()=>{
+    if(platformView!=='market')return;
+    if(window.__bdpMarketScrollRaf)return;
+    window.__bdpMarketScrollRaf=requestAnimationFrame(()=>{
+      window.__bdpMarketScrollRaf=null;
+      savePlatformMarketScroll();
+    });
+  },{passive:true});
+
   await routeAuth();
 }
 
@@ -8212,7 +8251,7 @@ async function renderPlatformConsole(){
     if(e.target.value==='platform')return;
     localStorage.setItem('bdp-context','club');localStorage.setItem('bdp-club-id',e.target.value);await loadContext();
   };
-  document.querySelectorAll('[data-platform-view]').forEach(b=>b.onclick=()=>{platformView=b.dataset.platformView;platformSelectedProspectId=null;platformSelectedOnboardingId=null;if(platformView!=='onboarding')platformOnboardingSeed=null;renderPlatformView();});
+  document.querySelectorAll('[data-platform-view]').forEach(b=>b.onclick=()=>{if(platformView==='market')savePlatformMarketScroll();platformView=b.dataset.platformView;platformSelectedProspectId=null;platformSelectedOnboardingId=null;if(platformView!=='onboarding')platformOnboardingSeed=null;renderPlatformView();});
   await renderPlatformView();
 }
 
@@ -8227,6 +8266,8 @@ async function renderPlatformView(){
 }
 
 async function renderPlatformMarketDiscovery(){
+  savePlatformMarketScroll();
+  platformMarketScrollSuppressed=true;
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading market discovery…</div>';
   const regionCode='NSW',countryCode='AU';
   const [assocRes,clubRes,linkRes,scanRes]=await Promise.all([
@@ -8236,7 +8277,7 @@ async function renderPlatformMarketDiscovery(){
     supabase.from('market_scan_runs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('started_at',{ascending:false}).limit(30)
   ]);
   const firstError=assocRes.error||clubRes.error||linkRes.error||scanRes.error;
-  if(firstError){page.innerHTML=`<div class="notice"><strong>Market Discovery needs the v0.8.3 migration.</strong><br>${esc(firstError.message)}</div>`;return;}
+  if(firstError){platformMarketScrollSuppressed=false;page.innerHTML=`<div class="notice"><strong>Market Discovery needs the v0.8.3 migration.</strong><br>${esc(firstError.message)}</div>`;return;}
 
   const associations=assocRes.data||[],clubs=clubRes.data||[],links=linkRes.data||[],scans=scanRes.data||[];
   const clubById=new Map(clubs.map(c=>[c.id,c]));
@@ -8505,6 +8546,9 @@ async function renderPlatformMarketDiscovery(){
   document.getElementById('marketFitFilter').onchange=()=>{platformMarketSelectedClubIds.clear();renderClubList();};
 
   renderClubList();
+  page.querySelectorAll('a[target="_blank"]').forEach(a=>a.addEventListener('click',savePlatformMarketScroll));
+  platformMarketScrollSuppressed=false;
+  restorePlatformMarketScroll();
 }
 async function renderPlatformProspects(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading prospects…</div>';
