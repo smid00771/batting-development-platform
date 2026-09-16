@@ -2259,6 +2259,7 @@ async function renderPlayingGroups(){
 
 
 /* ---------------- PHILOSOPHY WORKSHOP ---------------- */
+/* v0.8.6: explicit final submission step + synthesis item-label repair carried forward from v0.8.5 */
 
 function workshopModeLabel(){
   return workshop?.mode==='collaborative'?'Collaborative':'Solo';
@@ -2507,12 +2508,12 @@ async function renderWorkshop(){
               ?'Your response was submitted after the final-draft snapshot. It is locked and the Philosophy Lead will decide whether to incorporate it.'
               :'Your independent response is locked. You can now review the synthesis when it is available.')
             :me.status==='in_progress'
-              ?'Continue through Club Identity → What We Value → Format Emphasis. Other contributors cannot see your answers while you work.'
+              ?'Your work is saved, but it is not submitted yet. Continue through Club Identity → What We Value → Format Emphasis, then use the final Submit response step.'
               :'You have been invited to contribute independently.'}</p>
       </div>
       <button class="btn secondary" id="myResponseAction">${isPhilosophyLead() && workshop?.final_draft_ready
         ?(me.status==='submitted'?'Review final draft':'Continue final draft')
-        :me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue my response':'Review my response'}</button>
+        :me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue & submit response':'Review my response'}</button>
     </div>`;
   }else if(!isAdmin()){
     html+=`<div class="notice">You have not been invited to contribute to this philosophy round.</div>`;
@@ -3645,7 +3646,7 @@ function renderFormats(){
     <div class="btnrow">
       ${locked
         ?'<button class="btn secondary" id="backWorkshop">Return to Philosophy Workshop</button>'
-        :'<button class="btn secondary" id="saveWeights">Save & generate How We Bat</button><span class="status" id="weightStatus"></span>'}
+        :'<button class="btn secondary" id="saveWeights">Save & review response</button><span class="status" id="weightStatus"></span>'}
     </div>
   </div>`;
 
@@ -4265,28 +4266,30 @@ function renderPreview(){
           <div class="emphasis-row"><strong>${esc(x.d.label)}</strong><span>${WEIGHT_LABELS[x.weight]}</span></div>`).join('')}</div>
       </div>
     </div></section>
-    <section class="card">
-      <div class="section-label">${workshop?.final_draft_ready && isPhilosophyLead()?'Final working draft':'Your independent response'}</div>
-      <h2>${locked?'Response submitted':'Ready to contribute your view?'}</h2>
+    <section class="card philosophy-submit-card ${locked?'submitted':''}">
+      <div class="section-label">${locked?'Response complete':'FINAL STEP'}</div>
+      <h2>${locked?'Response submitted':'Submit your response'}</h2>
+      ${locked
+        ?'<div class="philosophy-submit-state submitted"><strong>Submitted ✓</strong><span>Your independent response is locked and is available to the workshop synthesis.</span></div>'
+        :'<div class="philosophy-submit-state waiting"><strong>Saved — not submitted yet</strong><span>Your answers are stored, but they do not count in the Philosophy Workshop until you submit them.</span></div>'}
       <div class="help">${locked
-        ?'Your original response is now locked. Return to the Workshop to see the synthesis when available.'
-        :'Submitting locks this response before you see what everyone else has said. That keeps each contribution genuinely independent.'}</div>
+        ?'Return to the Workshop to see the synthesis when it is available.'
+        :'Review the response on the left. When you are happy with it, submit it below. Submission locks your response before you see what everyone else has said, keeping each contribution genuinely independent.'}</div>
       <div class="btnrow">
         ${locked
           ?'<button class="btn secondary" id="backWorkshop">Return to Philosophy Workshop</button>'
-          :'<button class="btn secondary" id="submitPhilosophy">Submit my philosophy response</button>'}
-        <button class="btn ghost" id="toPlan">See Player Plan structure</button>
+          :'<button class="btn secondary philosophy-submit-primary" id="submitPhilosophy">Submit response</button><button class="btn ghost" id="backToFormats">Back to Format Emphasis</button>'}
         <span class="status" id="submitPhilosophyStatus"></span>
       </div>
     </section>
   </div>`;
 
   document.querySelectorAll('[data-preview-format]').forEach(b=>b.onclick=()=>{previewFormat=b.dataset.previewFormat;renderPreview();});
-  document.getElementById('toPlan').onclick=()=>{currentTab='plan';renderTab();};
   if(locked){
     document.getElementById('backWorkshop').onclick=()=>{currentTab='workshop';renderTab();};
   }else{
     document.getElementById('submitPhilosophy').onclick=submitPhilosophyResponse;
+    document.getElementById('backToFormats').onclick=()=>{currentTab='formats';renderTab();};
   }
 }
 
@@ -4828,11 +4831,18 @@ async function savePlayerPlanStructure(status,triggerButton=null){
 
 async function submitPhilosophyResponse(){
   const s=document.getElementById('submitPhilosophyStatus');
+  const btn=document.getElementById('submitPhilosophy');
   if(s)s.textContent='Submitting…';
+  if(btn){btn.disabled=true;btn.textContent='Submitting…';}
 
   const {error}=await supabase.rpc('submit_my_philosophy_response',{p_club_id:club.id});
-  if(error){if(s)s.textContent=error.message;return;}
+  if(error){
+    if(s)s.textContent=error.message;
+    if(btn){btn.disabled=false;btn.textContent='Submit response';}
+    return;
+  }
 
+  if(s)s.textContent='Submitted ✓';
   await loadData();
   currentTab='workshop';
   renderShell();
