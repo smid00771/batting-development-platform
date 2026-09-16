@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.29 — same-hue Key Message blue scale — compact How We Bat hero
+// Batting Development Platform v0.8.31 — club-branded How We Bat feature card — same-hue Key Message blue scale — compact How We Bat hero
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -4762,18 +4762,14 @@ function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
 
   const points=savedPoints.length?savedPoints:fallbackPoints;
 
-  // Key Messages are ordered by priority. Keep the exact same hue/saturation as
-  // the club primary and change only lightness: 1 = primary, 2 = lighter, 3 = lighter again.
-  // Message 2 keeps the strong-card text treatment; Message 3 returns to dark text.
-  const primary=normaliseHex(club?.primary_colour,PLATFORM_PRIMARY);
-  const strongCard=index<=1;
-  const cardClass=`hwb-public-banner ${strongCard?'feature':''} ${context==='plan'?'plan-reference':''}`;
-  const priorityStyle=index===1
-    ?`background:${lightenSameHue(primary,.38)};border-color:${lightenSameHue(primary,.28)};`
-    :index===2
-      ?`background:${lightenSameHue(primary,.62)};border-color:${lightenSameHue(primary,.50)};`
-      :'';
-  const cardStyle=priorityStyle?` style="${priorityStyle}"`:'';
+  // Keep the player-facing palette disciplined: Key Message 1 uses THIS club's
+  // saved primary brand colour; subsequent messages stay clean and white.
+  // The CSS variables are populated by applyClubTheme(), so this is never tied to
+  // Newcastle City's navy (and --navy-contrast keeps the feature card readable).
+  const cardClass=`hwb-public-banner ${index===0?'feature':''} ${context==='plan'?'plan-reference':''}`;
+  const cardStyle=index===0
+    ?' style="background:var(--navy);border-color:var(--navy);color:var(--navy-contrast)"'
+    :'';
 
   // A genuinely custom Key Message may have no deeper reference material.
   // In that case, render a normal card rather than an empty expandable panel.
