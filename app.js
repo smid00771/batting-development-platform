@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.31 — club-branded How We Bat feature card — same-hue Key Message blue scale — compact How We Bat hero
+// Batting Development Platform v0.8.32 — quieter account controls in club/platform header — club-branded How We Bat feature card — same-hue Key Message blue scale — compact How We Bat hero
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -1250,6 +1250,38 @@ function contributionLocked(){
 }
 
 
+function accountMenuStyles(){
+  return `<style>
+    .account-menu{position:relative;display:inline-block}
+    .account-menu>summary{list-style:none;cursor:pointer;display:inline-flex!important;align-items:center;gap:7px;white-space:nowrap;user-select:none}
+    .account-menu>summary::-webkit-details-marker{display:none}
+    .account-menu>summary::marker{content:''}
+    .account-menu-chevron{font-size:11px;line-height:1;opacity:.8;transition:transform .15s ease}
+    .account-menu[open] .account-menu-chevron{transform:rotate(180deg)}
+    .account-menu-popover{position:absolute;right:0;top:calc(100% + 8px);z-index:250;min-width:245px;padding:10px;border:1px solid #dfe4ef;border-radius:14px;background:#fff;color:#101a4f;box-shadow:0 14px 34px rgba(16,26,79,.18)}
+    .account-menu-identity{padding:7px 8px 11px;border-bottom:1px solid #edf0f6;margin-bottom:6px;display:grid;gap:2px}
+    .account-menu-identity strong{font-size:13px;color:#101a4f}
+    .account-menu-identity span{font-size:11px;color:#667085;overflow-wrap:anywhere}
+    .account-menu-action{width:100%;border:0;background:transparent;color:#101a4f;text-align:left;padding:10px 9px;border-radius:9px;font:inherit;font-weight:700;cursor:pointer}
+    .account-menu-action:hover{background:#f3f5fa}
+    .account-menu-action.danger{color:#9f1d24}
+    @media(max-width:700px){.account-menu-popover{min-width:220px;max-width:min(280px,88vw)}}
+  </style>`;
+}
+
+function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother'}={}){
+  const email=session?.user?.email||'';
+  const name=userProfile?.display_name||session?.user?.user_metadata?.display_name||'Your account';
+  return `<details class="account-menu">
+    <summary class="btn ghost" aria-label="Account menu">Account <span class="account-menu-chevron" aria-hidden="true">⌄</span></summary>
+    <div class="account-menu-popover">
+      <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
+      ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
+      <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
+    </div>
+  </details>`;
+}
+
 function renderShell(){
   applyClubTheme();
 
@@ -1302,7 +1334,7 @@ function renderShell(){
 
   const contextOptions=[...allMemberships.map(m=>`<option value="club:${m.club_id}" ${m.club_id===club.id?'selected':''}>${esc(m.clubs?.name||'Club')}</option>`),platformRole?`<option value="platform">Platform Admin</option>`:''].join('');
 
-  app.innerHTML=`<div class="shell">
+  app.innerHTML=`${accountMenuStyles()}<div class="shell">
     <header class="hero">
       <div class="topline">
         <div class="shell-brand-lockup">
@@ -1314,10 +1346,9 @@ function renderShell(){
           </div>
         </div>
         <div class="header-actions">
-          ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch">${contextOptions}</select>`:''}
+          ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
-          <button class="btn ghost" id="joinAnother">Join another club</button>
-          <button class="btn ghost" id="out">Sign out</button>
+          ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother'})}
         </div>
       </div>
     </header>
@@ -9091,12 +9122,12 @@ async function renderPlatformConsole(){
   if(!platformRole){await loadContext();return;}
   localStorage.setItem('bdp-context','platform');
 
-  app.innerHTML=`<div class="platform-shell">
+  app.innerHTML=`${accountMenuStyles()}<div class="platform-shell">
     <header class="platform-header">
       <div><div class="section-label">Private Platform Administration</div><h1>Batting Development Platform</h1><p>Find clubs, manage outreach, onboard interested clubs and manage active subscriptions.</p></div>
       <div class="header-actions">
-        ${allMemberships.length?`<select id="platformContextSwitch" class="context-switch"><option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}</select>`:''}
-        <button class="btn ghost" id="platformOut">Sign out</button>
+        ${allMemberships.length?`<select id="platformContextSwitch" class="context-switch" aria-label="Switch club or platform"><option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}</select>`:''}
+        ${accountMenuHtml({allowJoin:false,outId:'platformOut'})}
       </div>
     </header>
     <nav class="platform-nav">
