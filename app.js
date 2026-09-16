@@ -14,6 +14,7 @@ let platformSelectedOnboardingId=null;
 let platformOnboardingSeed=null;
 let platformDiscoveryResults=[];
 let platformMarketAssociationId='';
+let platformMarketAssociationSearch='';
 let platformMarketFitFilter='likely';
 let platformMarketSelectedClubIds=new Set();
 const PLATFORM_MARKET_SCROLL_KEY='bdp-platform-market-scroll-y';
@@ -8265,7 +8266,9 @@ async function renderPlatformView(){
   return renderPlatformProspects();
 }
 
-async function renderPlatformMarketDiscovery(){
+async function renderPlatformMarketDiscovery(options={}){
+  const focusTarget=String(options?.focusTarget||'');
+  const shouldRestoreScroll=options?.restoreScroll!==false && !focusTarget;
   savePlatformMarketScroll();
   platformMarketScrollSuppressed=true;
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading market discovery…</div>';
@@ -8333,7 +8336,7 @@ async function renderPlatformMarketDiscovery(){
 
     <section class="admin-card form-wide">
       <div class="admin-card-head"><div><div class="section-label">2 · Associations</div><h2>Map clubs from official cricket structures</h2><p>${associations.length} association / competition records currently mapped. Club source sections are preserved so BDP can distinguish competitive senior, general senior and lower-fit participation without local guesswork.</p></div><div class="market-bulk-actions"><button class="btn ghost" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map all associations</button><button class="btn ghost" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Find missing contacts</button></div></div>
-      <div class="prospect-filter-row"><input id="marketAssociationSearch" placeholder="Find an association (e.g. Newcastle)"></div>
+      <div class="prospect-filter-row"><input id="marketAssociationSearch" value="${esc(platformMarketAssociationSearch)}" placeholder="Find an association (e.g. Newcastle)"></div>
       <div id="marketBulkStatus" class="market-progress"></div>
       <div class="market-association-list">${associations.length?associations.map(a=>{
         const ids=linksByAssociation.get(a.id)||[];
@@ -8411,14 +8414,34 @@ async function renderPlatformMarketDiscovery(){
     }finally{if(button){button.disabled=false;button.textContent=old||'Find contacts';}}
   };
 
-  const focusClubInventory=()=>setTimeout(()=>document.getElementById('marketClubInventory')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
-  document.getElementById('marketAssociationSearch').oninput=e=>{
-    const q=String(e.target.value||'').trim().toLowerCase();
+  const applyAssociationSearch=()=>{
+    const q=String(platformMarketAssociationSearch||'').trim().toLowerCase();
     document.querySelectorAll('.market-association-row').forEach(row=>{row.style.display=!q||String(row.dataset.associationName||'').includes(q)?'':'none';});
   };
-  document.querySelectorAll('[data-market-association-select]').forEach(b=>b.onclick=async()=>{platformMarketAssociationId=b.dataset.marketAssociationSelect;await renderPlatformMarketDiscovery();focusClubInventory();});
-  document.querySelectorAll('[data-scan-association]').forEach(b=>b.onclick=async()=>{const id=b.dataset.scanAssociation;platformMarketAssociationId=id;try{await scanOneAssociation(id,b);await renderPlatformMarketDiscovery();focusClubInventory();}catch(e){alert(e.message);}});
-  document.querySelectorAll('[data-enrich-association]').forEach(b=>b.onclick=async()=>{const id=b.dataset.enrichAssociation;platformMarketAssociationId=id;try{await enrichOneAssociation(id,b);await renderPlatformMarketDiscovery();focusClubInventory();}catch(e){alert(e.message);}});
+  const marketAssociationSearch=document.getElementById('marketAssociationSearch');
+  applyAssociationSearch();
+  marketAssociationSearch.oninput=e=>{
+    platformMarketAssociationSearch=String(e.target.value||'');
+    applyAssociationSearch();
+  };
+  document.querySelectorAll('[data-market-association-select]').forEach(b=>b.onclick=async()=>{
+    platformMarketAssociationId=b.dataset.marketAssociationSelect;
+    await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
+  });
+  document.querySelectorAll('[data-scan-association]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.scanAssociation;platformMarketAssociationId=id;
+    try{
+      await scanOneAssociation(id,b);
+      await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
+    }catch(e){alert(e.message);}
+  });
+  document.querySelectorAll('[data-enrich-association]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.enrichAssociation;platformMarketAssociationId=id;
+    try{
+      await enrichOneAssociation(id,b);
+      await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
+    }catch(e){alert(e.message);}
+  });
 
   document.getElementById('scanAllAssociations').onclick=async()=>{
     if(!confirm(`Map clubs for all ${associations.length} discovered NSW association / competition records? This can take several minutes.`))return;
@@ -8445,7 +8468,7 @@ async function renderPlatformMarketDiscovery(){
     setTimeout(()=>renderPlatformMarketDiscovery(),700);
   };
 
-  document.getElementById('showAllMarketClubs').onclick=async()=>{platformMarketAssociationId='';await renderPlatformMarketDiscovery();focusClubInventory();};
+  document.getElementById('showAllMarketClubs').onclick=async()=>{platformMarketAssociationId='';await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});};
 
   const renderClubList=()=>{
     const q=(document.getElementById('marketClubSearch').value||'').trim().toLowerCase();
@@ -8526,8 +8549,7 @@ async function renderPlatformMarketDiscovery(){
       if(error){st.textContent=error.message;syncSelectionUi();return;}
       platformMarketSelectedClubIds.clear();
       st.textContent=`Added ${Number(data?.added||ids.length)} club${ids.length===1?'':'s'} to Prospects.`;
-      await renderPlatformMarketDiscovery();
-      focusClubInventory();
+      await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
     };
 
     document.querySelectorAll('[data-market-to-prospect]').forEach(b=>b.onclick=async()=>{
@@ -8548,7 +8570,27 @@ async function renderPlatformMarketDiscovery(){
   renderClubList();
   page.querySelectorAll('a[target="_blank"]').forEach(a=>a.addEventListener('click',savePlatformMarketScroll));
   platformMarketScrollSuppressed=false;
-  restorePlatformMarketScroll();
+
+  // Intentional navigation (select/map/enrich/show-all) must beat passive scroll restoration.
+  // Otherwise the saved pre-render position can drag the user back to the association list
+  // just after we deliberately sent them to the selected association's Club Inventory.
+  if(focusTarget==='inventory'){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const target=document.getElementById('marketClubInventory');
+      if(!target)return;
+      target.scrollIntoView({behavior:'smooth',block:'start'});
+      setTimeout(savePlatformMarketScroll,450);
+    }));
+  }else if(focusTarget==='association'){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const row=document.querySelector(`.market-association-row.selected`);
+      if(!row)return;
+      row.scrollIntoView({behavior:'smooth',block:'center'});
+      setTimeout(savePlatformMarketScroll,450);
+    }));
+  }else if(shouldRestoreScroll){
+    restorePlatformMarketScroll();
+  }
 }
 async function renderPlatformProspects(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading prospects…</div>';
