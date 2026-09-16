@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.24 — persist legacy How We Bat wording upgrade
+// Batting Development Platform v0.8.25 — compact How We Bat hero
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -4747,10 +4747,10 @@ function renderHowWeBatLivePreview(draft,format,isBuilder=false){
   if(!f)return '';
   const label=FORMATS.find(([k])=>k===format)?.[1]||format;
   return `<section class="hwb-publication-preview ${isBuilder?'builder-preview':''}">
-    <div class="hwb-public-hero">
-      <div class="k">${esc(club.name)}</div>
-      <h2>How We Bat</h2>
-      <p>${esc(draft.identity_statement||'')}</p>
+    <div class="hwb-public-hero" style="padding:24px 38px 22px;min-height:0">
+      <div class="k" style="margin-bottom:6px">${esc(club.name)}</div>
+      <h2 style="margin:0 0 8px;font-size:clamp(32px,4vw,42px);line-height:1.02">How We Bat</h2>
+      <p style="margin:0;line-height:1.42;max-width:920px">${esc(draft.identity_statement||'')}</p>
     </div>
     <div class="hwb-public-tabs"><button class="active">${esc(label)}</button></div>
     <div class="hwb-public-body">
@@ -4834,10 +4834,10 @@ function renderPublishedHowWeBat(){
   document.getElementById('page').innerHTML=`<div class="hwb-published-shell">
     ${canSeeWorking?`<div class="published-version-note">Working How We Bat · ${workingReady?'🔒 locked for the season':'not locked yet'}</div>`:''}
     <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
-      <div class="hwb-public-hero">
-        <div class="k">${esc(club.name)}</div>
-        <h2>How We Bat</h2>
-        <p>${esc(snap.identity_statement||'')}</p>
+      <div class="hwb-public-hero" style="padding:24px 38px 22px;min-height:0">
+        <div class="k" style="margin-bottom:6px">${esc(club.name)}</div>
+        <h2 style="margin:0 0 8px;font-size:clamp(32px,4vw,42px);line-height:1.02">How We Bat</h2>
+        <p style="margin:0;line-height:1.42;max-width:920px">${esc(snap.identity_statement||'')}</p>
       </div>
       <div class="hwb-public-tabs">${formats.map(([k,l])=>`<button data-public-hwb-format="${k}" class="${k===publishedHowWeBatFormat?'active':''}">${esc(l)}</button>`).join('')}</div>
       <div class="hwb-public-body">
