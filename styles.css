@@ -2511,3 +2511,54 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
   .market-bulk-actions{justify-content:flex-start}
   .market-club-toolbar{align-items:flex-start;flex-direction:column}
 }
+
+/* ============================================================
+   v0.8.3 — SOURCE-AWARE MARKET QUALIFICATION
+   Preserve competition context; surface likely BDP prospects first.
+   ============================================================ */
+
+.market-inventory-filters{
+  display:grid;
+  grid-template-columns:minmax(220px,1.2fr) minmax(190px,.8fr) minmax(170px,.7fr);
+  gap:8px;
+  align-items:center;
+  margin:10px 0 6px;
+}
+.market-inventory-filters input,
+.market-inventory-filters select{
+  width:100%;
+  min-height:40px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#fff;
+  color:var(--ink);
+  padding:8px 10px;
+  font:inherit;
+  font-size:11px;
+}
+.market-club-tags{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:3px}
+.market-fit-pill,.market-type-pill,.market-registry-pill{
+  display:inline-flex;align-items:center;width:max-content;max-width:100%;
+  padding:4px 7px;border-radius:999px;font-size:8.5px;font-weight:950;
+  letter-spacing:.045em;text-transform:uppercase;line-height:1.2
+}
+.market-fit-pill.strong{background:#e7f6ec;color:#146b3a}
+.market-fit-pill.possible{background:#eef2fb;color:#304a8a}
+.market-fit-pill.low{background:#f4f4f5;color:#62656d}
+.market-fit-pill.review{background:#fff2df;color:#8a5700}
+.market-type-pill{background:#f7f8fb;color:#596273;border:1px solid #e5e8ef}
+.market-registry-pill{background:#eef8f7;color:#24685e;border:1px solid #d7ebe7;text-transform:none;letter-spacing:0}
+.market-qualification-reason{margin-top:2px;line-height:1.35}
+.market-club-row.market-fit-low{background:#fcfcfd}
+.market-club-row.market-fit-review{border-style:dashed}
+.market-club-row.market-fit-strong{border-left:4px solid #5aa373}
+.market-club-row.market-fit-possible{border-left:4px solid #7489c5}
+
+@media(max-width:900px){
+  .market-inventory-filters{grid-template-columns:1fr 1fr}
+  .market-inventory-filters input{grid-column:1/-1}
+}
+@media(max-width:620px){
+  .market-inventory-filters{grid-template-columns:1fr}
+  .market-inventory-filters input{grid-column:auto}
+}
