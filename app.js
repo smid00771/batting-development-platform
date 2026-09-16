@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.27 — graded Key Message hierarchy — compact How We Bat hero
+// Batting Development Platform v0.8.28 — saturated priority blues — graded Key Message hierarchy — compact How We Bat hero
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -701,6 +701,30 @@ function rgbHex(r,g,b){
 function mixHex(a,b,amount=.5){
   const aa=hexRgb(a),bb=hexRgb(b),t=Math.max(0,Math.min(1,amount));
   return rgbHex(...aa.map((v,i)=>v+(bb[i]-v)*t));
+}
+// Lighten a club colour while preserving its hue and enough saturation to read as
+// a genuine colour tint rather than drifting towards grey.
+function toneHex(hex,targetLightness,minSaturation=.64){
+  let [r,g,b]=hexRgb(hex).map(v=>v/255);
+  const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+  let h=0;
+  const l=(max+min)/2;
+  let sat=d===0?0:d/(1-Math.abs(2*l-1));
+  if(d!==0){
+    if(max===r)h=((g-b)/d)%6;
+    else if(max===g)h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h*=60;if(h<0)h+=360;
+  }
+  sat=Math.max(sat,minSaturation);
+  const light=Math.max(0,Math.min(1,targetLightness));
+  const c=(1-Math.abs(2*light-1))*sat;
+  const x=c*(1-Math.abs((h/60)%2-1));
+  const m=light-c/2;
+  let rr=0,gg=0,bb=0;
+  if(h<60){rr=c;gg=x;}else if(h<120){rr=x;gg=c;}else if(h<180){gg=c;bb=x;}
+  else if(h<240){gg=x;bb=c;}else if(h<300){rr=x;bb=c;}else{rr=c;bb=x;}
+  return rgbHex((rr+m)*255,(gg+m)*255,(bb+m)*255);
 }
 function contrastFor(hex){
   const [r,g,b]=hexRgb(hex).map(v=>v/255).map(v=>v<=.03928?v/12.92:((v+.055)/1.055)**2.4);
@@ -4715,14 +4739,15 @@ function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
 
   const points=savedPoints.length?savedPoints:fallbackPoints;
 
-  // Key Messages are ordered by priority, so the visual treatment should fade with them:
-  // 1 = full club colour, 2 = medium tint, 3 = pale tint, 4+ = white.
+  // Key Messages are ordered by priority, so the visual treatment fades through
+  // increasingly lighter shades of the club colour — not greyed-out white mixes.
+  // 1 = full club colour, 2 = saturated mid tint, 3 = pale tint, 4+ = white.
   const primary=normaliseHex(club?.primary_colour,PLATFORM_PRIMARY);
   const cardClass=`hwb-public-banner ${index===0?'feature':''} ${context==='plan'?'plan-reference':''}`;
   const priorityStyle=index===1
-    ?`background:${mixHex(primary,'#FFFFFF',.72)};border-color:${mixHex(primary,'#FFFFFF',.58)};`
+    ?`background:${toneHex(primary,.70,.68)};border-color:${toneHex(primary,.58,.68)};`
     :index===2
-      ?`background:${mixHex(primary,'#FFFFFF',.90)};border-color:${mixHex(primary,'#FFFFFF',.72)};`
+      ?`background:${toneHex(primary,.89,.66)};border-color:${toneHex(primary,.79,.66)};`
       :'';
   const cardStyle=priorityStyle?` style="${priorityStyle}"`:'';
 
