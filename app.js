@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.26 — compact How We Bat hero
+// Batting Development Platform v0.8.27 — graded Key Message hierarchy — compact How We Bat hero
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -4714,12 +4714,22 @@ function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
     :[];
 
   const points=savedPoints.length?savedPoints:fallbackPoints;
-  const cardClass=`hwb-public-banner ${index%2===0?'feature':''} ${context==='plan'?'plan-reference':''}`;
+
+  // Key Messages are ordered by priority, so the visual treatment should fade with them:
+  // 1 = full club colour, 2 = medium tint, 3 = pale tint, 4+ = white.
+  const primary=normaliseHex(club?.primary_colour,PLATFORM_PRIMARY);
+  const cardClass=`hwb-public-banner ${index===0?'feature':''} ${context==='plan'?'plan-reference':''}`;
+  const priorityStyle=index===1
+    ?`background:${mixHex(primary,'#FFFFFF',.72)};border-color:${mixHex(primary,'#FFFFFF',.58)};`
+    :index===2
+      ?`background:${mixHex(primary,'#FFFFFF',.90)};border-color:${mixHex(primary,'#FFFFFF',.72)};`
+      :'';
+  const cardStyle=priorityStyle?` style="${priorityStyle}"`:'';
 
   // A genuinely custom Key Message may have no deeper reference material.
   // In that case, render a normal card rather than an empty expandable panel.
   if(!points.length){
-    return `<div class="${cardClass}">
+    return `<div class="${cardClass}"${cardStyle}>
       <div class="hwb-static-message">
         <span>Key message ${index+1}</span>
         <h3>${esc(b.title||'')}</h3>
@@ -4728,7 +4738,7 @@ function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
     </div>`;
   }
 
-  return `<details class="${cardClass}">
+  return `<details class="${cardClass}"${cardStyle}>
     <summary>
       <span>Key message ${index+1}</span>
       <h3>${esc(b.title||'')}</h3>
