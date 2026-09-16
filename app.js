@@ -8407,10 +8407,11 @@ async function renderPlatformMarketDiscovery(options={}){
   };
   const enrichOneAssociation=async(id,button=null,maxBatches=10)=>{
     const old=button?.textContent;if(button){button.disabled=true;button.textContent='Syncing PlayCricket…';}
+    const syncToken=(globalThis.crypto?.randomUUID?.()||`sync-${Date.now()}-${Math.random().toString(36).slice(2,10)}`);
     let contacts=0,registry=0,remaining=1,unresolved=0,batches=0;
     try{
       while(remaining>0&&batches<maxBatches){
-        const data=await invokeDiscovery({action:'enrich_clubs',association_id:id,limit:6});
+        const data=await invokeDiscovery({action:'enrich_clubs',association_id:id,limit:6,sync_token:syncToken});
         contacts+=Number(data.contacts_found||0);registry+=Number(data.registry_found||0);remaining=Number(data.remaining||0);unresolved=Number(data.unresolved||0);batches++;
         if(Number(data.processed||0)===0)break;
       }
