@@ -2341,7 +2341,8 @@ async function renderWorkshop(){
   const invitedTotal=totalCount+pendingExternal.length;
   const outstandingCount=Math.max(invitedTotal-submittedCount,0);
   const me=(contribRows||[]).find(x=>x.user_id===session.user.id)||myContributor;
-  const canSeeSynthesis=!!me && (me.status==='submitted' || (isPhilosophyLead() && workshop?.status==='review'));
+  const postSubmissionStage=!!workshop?.final_draft_ready || ['review','published'].includes(workshop?.status);
+  const canSeeSynthesis=(!!me && me.status==='submitted') || ((isPhilosophyLead() || isAdmin()) && postSubmissionStage);
   const allSubmitted=invitedTotal>0 && submittedCount===invitedTotal;
   const collaborative=workshop?.mode==='collaborative';
   const snapshotResponses=Array.isArray(draftSnapshot?.responses)?draftSnapshot.responses:[];
@@ -2354,13 +2355,46 @@ async function renderWorkshop(){
   const workshopMismatchCount=Number(workshopStatus?.mismatch_count||0);
   const recordedSynthesisResponses=Number(workshopStatus?.synthesis_response_count||0);
 
-  let html=`${buildWorkspaceAudienceNotice()}<div class="workshop-grid">`;
+  // Resolve the response set once, before rendering the page. The same response set is then
+  // used for Contributions received, Synthesis and the Final Draft stage so the workflow reads
+  // from top to bottom without changing its definition of who has contributed.
+  let visibleResponses=[];
+  let synthesisMeta=null;
+  let synthesisLoadError=null;
+  if(canSeeSynthesis){
+    if(workshop?.final_draft_ready && snapshotResponses.length){
+      visibleResponses=snapshotResponses;
+      synthesisMeta={
+        snapshot:true,
+        responseCount:snapshotCount,
+        invitedCount:snapshotInvitedCount,
+        createdAt:draftSnapshot?.created_at||workshop?.final_draft_started_at,
+        mismatchCount:0
+      };
+    }else{
+      const {data:source,error:sourceErr}=await supabase.rpc('get_philosophy_synthesis_source',{p_club_id:club.id});
+      if(sourceErr){
+        synthesisLoadError=sourceErr;
+      }else{
+        visibleResponses=Array.isArray(source?.responses)?source.responses:[];
+        synthesisMeta={
+          snapshot:false,
+          responseCount:Number(source?.response_count||visibleResponses.length||0),
+          invitedCount:invitedTotal,
+          submittedContributorCount:Number(source?.submitted_contributor_count||submittedCount||0),
+          mismatchCount:Number(source?.mismatch_count||0)
+        };
+      }
+    }
+  }
+
+  let html=`${buildWorkspaceAudienceNotice()}<div class="workshop-flow-stack">`;
 
   if(isAdmin()){
-    html+=`<section class="card workshop-setup">
-      <div class="section-label">Admin setup</div>
-      <h2>How should the club build its philosophy?</h2>
-      <div class="help">Choose Solo, or let selected coaches/captains contribute independently before the Philosophy Lead makes the final call.</div>
+    html+=`<section class="card workshop-setup workshop-stage-card">
+      <div class="section-label">1 · Contributors</div>
+      <h2>Who is contributing?</h2>
+      <div class="help">Choose the Philosophy Lead and the people whose independent batting perspective should feed this workshop. You can add or invite contributors here without jumping ahead to the draft.</div>
 
       <div class="mode-choice">
         <label class="mode-card ${!collaborative?'on':''}">
@@ -2393,7 +2427,7 @@ async function renderWorkshop(){
       <div id="contributorPicker" class="collaborative-panel ${collaborative?'show':''}">
         <div class="collab-intro">
           <div>
-            <div class="section-label">Independent contributors</div>
+            <div class="section-label">Contributors</div>
             <h3>Who should have a say?</h3>
             <p>They answer privately first. They do not see everyone else's answers until they have submitted their own.</p>
           </div>
@@ -2479,53 +2513,54 @@ async function renderWorkshop(){
     </section>`;
   }
 
-  html+=`<section class="card">
-    <div class="section-label">Current workshop</div>
-    <h2>${esc(workshopModeLabel())} philosophy process</h2>
+  html+=`<section class="card workshop-stage-card">
+    <div class="section-label">2 · Contributions received</div>
+    <h2>What has come back?</h2>
+    <div class="help">Responses stay independent while people are completing them. Once submitted, they appear here before the group synthesis and before any final-draft work.</div>
     <div class="workshop-progress">
       ${workshop?.final_draft_ready && draftSnapshot
-        ?`<div><strong>${snapshotCount}</strong><span>included in final-draft snapshot</span></div>
-          <div><strong>${pendingLate.length}</strong><span>late response${pendingLate.length===1?'':'s'} awaiting decision</span></div>
-          <div><strong>${Math.max(snapshotInvitedCount-snapshotCount-pendingLate.length,0)}</strong><span>still outstanding from snapshot round</span></div>`
+        ?`<div><strong>${snapshotCount}</strong><span>included in current synthesis</span></div>
+          <div><strong>${pendingLate.length}</strong><span>new response${pendingLate.length===1?'':'s'} awaiting decision</span></div>
+          <div><strong>${Math.max(snapshotInvitedCount-snapshotCount-pendingLate.length,0)}</strong><span>still outstanding</span></div>`
         :`<div><strong>${submittedCount}</strong><span>submitted</span></div>
           <div><strong>${outstandingCount}</strong><span>still outstanding</span></div>
           <div><strong>${pendingExternal.length}</strong><span>email invitations pending</span></div>`}
     </div>`;
 
   if(me){
+    const leadDrafting=isPhilosophyLead() && workshop?.final_draft_ready;
+    const leadOriginalIncluded=leadDrafting && snapshotResponses.some(r=>r.user_id===session.user.id);
     html+=`<div class="my-response-card">
       <div>
-        <div class="section-label">${isPhilosophyLead() && workshop?.final_draft_ready?'Your final working draft':'Your contribution'}</div>
-        <strong>${esc(isPhilosophyLead() && workshop?.final_draft_ready
-          ?(me.status==='submitted'?'Final draft submitted':'Final draft in progress')
+        <div class="section-label">${leadDrafting?'Your original response':'Your contribution'}</div>
+        <strong>${esc(leadDrafting
+          ?(leadOriginalIncluded?'Included in current synthesis':'Original response preserved')
           :contributorStatusLabel(me.status))}</strong>
-        <p>${isPhilosophyLead() && workshop?.final_draft_ready
-          ?(me.status==='submitted'
-            ?'Your final philosophy draft is locked and ready for the remaining publication steps.'
-            :'Continue editing the working draft created from the frozen response snapshot.')
+        <p>${leadDrafting
+          ?'Your independent response is preserved in the response set below. Review the contributions and synthesis first; Final Draft controls are now at the end of the Workshop.'
           :me.status==='submitted'
             ?(myLateAction
               ?'Your response was submitted after the final-draft snapshot. It is locked and the Philosophy Lead will decide whether to incorporate it.'
-              :'Your independent response is locked. You can now review the synthesis when it is available.')
+              :'Your independent response is locked. You can now review the responses and synthesis when they are available.')
             :me.status==='in_progress'
               ?'Your work is saved, but it is not submitted yet. Continue through Club Identity → What We Value → Format Emphasis, then use the final Submit response step.'
               :'You have been invited to contribute independently.'}</p>
       </div>
-      <button class="btn secondary" id="myResponseAction">${isPhilosophyLead() && workshop?.final_draft_ready
-        ?(me.status==='submitted'?'Review final draft':'Continue final draft')
-        :me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue & submit response':'Review my response'}</button>
+      ${leadDrafting
+        ?''
+        :`<button class="btn secondary" id="myResponseAction">${me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue & submit response':'Review my response'}</button>`}
     </div>`;
   }else if(!isAdmin()){
     html+=`<div class="notice">You have not been invited to contribute to this philosophy round.</div>`;
   }
 
-  html+=`</section></div>`;
+  html+=`</section>`;
 
   if(isAdmin() || isPhilosophyLead()){
-    html+=`<section class="card" style="margin-top:16px">
-      <div class="section-label">Contribution progress</div>
-      <h2>Independent responses</h2>
-      <div class="help">This is the source-of-truth view for the current workshop round. A response only enters the synthesis after the contributor has actually submitted it.</div>
+    html+=`<section class="card response-status-card" style="margin-top:16px">
+      <div class="section-label">Response status</div>
+      <h2>Who has submitted?</h2>
+      <div class="help">This status list sits inside the Contributions stage. A saved response remains in progress; a submitted response then appears in full immediately below.</div>
       ${workshopMismatchCount?`<div class="notice workshop-data-warning"><strong>Workshop data needs attention.</strong><br>${workshopMismatchCount} contributor record${workshopMismatchCount===1?' is':'s are'} out of sync with the stored response. BDP will not silently include or exclude those responses.</div>`:''}
       <div class="member-list">
         ${(contribRows||[]).map(c=>{
@@ -2535,10 +2570,36 @@ async function renderWorkshop(){
           let responseState='';
           let responseClass='waiting';
 
-          if(c.user_id===workshop?.philosophy_lead_user_id && workshop?.final_draft_ready){
-            statusText=c.status==='submitted'?'Final draft submitted':'Final draft in progress';
-            responseState='Working from frozen synthesis snapshot';
-            responseClass='ready';
+          if(workshop?.final_draft_ready){
+            const included=snapshotResponses.some(r=>r.user_id===c.user_id);
+            const late=(lateActions||[]).find(a=>a.user_id===c.user_id);
+            if(included){
+              statusText='Submitted';
+              responseState=c.user_id===workshop?.philosophy_lead_user_id
+                ?'Original response included in current synthesis ✓'
+                :'Included in current synthesis ✓';
+              responseClass='ready';
+            }else if(late?.status==='pending'){
+              statusText='Submitted after draft started';
+              responseState='Awaiting Philosophy Lead decision';
+              responseClass='problem';
+            }else if(late?.status==='ignored'){
+              statusText='Submitted after draft started';
+              responseState='Reviewed · not incorporated';
+              responseClass='waiting';
+            }else if(c.status==='submitted'){
+              statusText='Submitted';
+              responseState='Submitted response is not in the current synthesis';
+              responseClass='problem';
+            }else if(c.status==='in_progress'){
+              statusText=c.user_id===workshop?.philosophy_lead_user_id?'Drafting final philosophy':'In progress';
+              responseState=c.user_id===workshop?.philosophy_lead_user_id?'Original response preserved in synthesis':'Saved response · not submitted yet';
+              responseClass=c.user_id===workshop?.philosophy_lead_user_id?'ready':'waiting';
+            }else{
+              statusText='Invited';
+              responseState='Not started / not submitted';
+              responseClass='waiting';
+            }
           }else if(c.status==='submitted'){
             statusText='Submitted';
             if(state?.response_ready){
@@ -2579,63 +2640,49 @@ async function renderWorkshop(){
   }
 
   if(canSeeSynthesis){
-    let responses=[];
-    let synthesisMeta=null;
-    let synthesisLoadError=null;
-
-    if(workshop?.final_draft_ready && snapshotResponses.length){
-      responses=snapshotResponses;
-      synthesisMeta={
-        snapshot:true,
-        responseCount:snapshotCount,
-        invitedCount:snapshotInvitedCount,
-        createdAt:draftSnapshot?.created_at||workshop?.final_draft_started_at,
-        mismatchCount:0
-      };
-    }else{
-      const {data:source,error:sourceErr}=await supabase.rpc('get_philosophy_synthesis_source',{p_club_id:club.id});
-      if(sourceErr){
-        synthesisLoadError=sourceErr;
-      }else{
-        responses=Array.isArray(source?.responses)?source.responses:[];
-        synthesisMeta={
-          snapshot:false,
-          responseCount:Number(source?.response_count||responses.length||0),
-          invitedCount:invitedTotal,
-          submittedContributorCount:Number(source?.submitted_contributor_count||submittedCount||0),
-          mismatchCount:Number(source?.mismatch_count||0)
-        };
-      }
-    }
-
     if(synthesisLoadError){
-      html+=`<section class="card" style="margin-top:16px"><div class="section-label">Synthesis</div><h2>The group picture could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
-    }else if(responses.length){
-      html+=renderSynthesis(responses,pMap,allSubmitted,synthesisMeta);
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>The submitted responses could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
+    }else if(visibleResponses.length){
+      html+=renderSubmittedContributionReview(visibleResponses,pMap);
     }else{
-      html+=`<section class="card" style="margin-top:16px"><div class="section-label">Synthesis</div><h2>No submitted responses are available yet.</h2><div class="help">A saved response does not enter the group synthesis until the contributor chooses <strong>Submit my philosophy response</strong>.</div></section>`;
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>No submitted responses are available yet.</h2><div class="help">Saved work appears in the status list above, but it only becomes a contribution after the contributor chooses <strong>Submit response</strong>.</div></section>`;
     }
 
+    // A response submitted after the final-draft snapshot belongs with the other contributions,
+    // before synthesis. The Lead decides here whether it should join the current response set.
     if(isPhilosophyLead() && workshop?.final_draft_ready && (lateActions||[]).length){
       html+=renderLatePhilosophyResponses(lateActions||[],pMap);
     }
+
+    if(synthesisLoadError){
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>The group picture could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
+    }else if(visibleResponses.length){
+      html+=renderSynthesis(visibleResponses,pMap,allSubmitted,synthesisMeta);
+    }else{
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>Waiting for a submitted response.</h2><div class="help">The synthesis begins once a contributor has completed the final Submit response step.</div></section>`;
+    }
+
+    if(isPhilosophyLead() && !synthesisLoadError && visibleResponses.length){
+      html+=renderFinalDraftStage(visibleResponses,pMap,allSubmitted,synthesisMeta);
+    }
   }else if(totalCount>1 && me){
-    html+=`<section class="card synthesis-locked" style="margin-top:16px">
-      <div class="section-label">Synthesis</div>
+    html+=`<section class="card synthesis-locked workshop-stage-card" style="margin-top:16px">
+      <div class="section-label">3 · Synthesis</div>
       <h2>Submit first, then see the group picture.</h2>
-      <div class="help">Responses stay independent while people are completing them. Once you submit, the system can show the areas of agreement and the areas worth discussing.</div>
+      <div class="help">Responses stay independent while people are completing them. Once you submit, the system can show the contributions, areas of agreement and the areas worth discussing.</div>
     </section>`;
   }
 
   if(philosophyVersions.length){
     html+=`<section class="card" style="margin-top:16px">
-      <div class="section-label">Published history</div>
+      <div class="section-label">5 · Published history</div>
       <h2>Club philosophy versions</h2>
       <div class="version-list">${philosophyVersions.map(v=>`
         <div class="version-row"><strong>Version ${v.version_number}</strong><span>${new Date(v.published_at).toLocaleDateString()}</span></div>`).join('')}</div>
     </section>`;
   }
 
+  html+=`</div>`;
   document.getElementById('page').innerHTML=html;
 
   const applyModeUI=()=>{
@@ -2793,7 +2840,7 @@ async function renderWorkshop(){
 
     const draft=buildConsensusDraft(expanded);
     const ok=confirm(
-      `Incorporate the late response from ${name}?\n\n`+
+      `Include the new response from ${name} in the current synthesis?\n\n`+
       `This will rebuild the current working draft from the revised ${expanded.length}-response synthesis. `+
       `Any edits you have already made to the unpublished final draft will be replaced. Nothing happens unless you confirm.`
     );
@@ -2815,7 +2862,7 @@ async function renderWorkshop(){
     if(error){
       alert(error.message);
       b.disabled=false;
-      b.textContent='Incorporate into draft';
+      b.textContent='Include in synthesis + rebuild draft';
       return;
     }
 
@@ -3038,23 +3085,167 @@ function buildConsensusDraft(responses){
   };
 }
 
-function renderSynthesis(responses,pMap,allSubmitted,meta=null){
+
+function philosophyIdentityLabel(key){
+  return IDENTITY_OPTIONS.find(([k])=>k===key)?.[1]||key;
+}
+
+function philosophyDimensionLabel(key){
+  return dimensions.find(d=>d.dimension_key===key)?.label||key;
+}
+
+function responseDifferenceRows(base,target,baseLabel='Philosophy Lead',targetLabel='Contributor'){
+  if(!base || !target)return [];
+  const rows=[];
+  const baseIdentity=new Set(base.identity_values||[]);
+  const targetIdentity=new Set(target.identity_values||[]);
+  const identityAdded=[...targetIdentity].filter(k=>!baseIdentity.has(k)).map(philosophyIdentityLabel);
+  const identityMissing=[...baseIdentity].filter(k=>!targetIdentity.has(k)).map(philosophyIdentityLabel);
+  if(identityAdded.length)rows.push(`${targetLabel} adds to Club Identity: ${naturalList(identityAdded)}.`);
+  if(identityMissing.length)rows.push(`${targetLabel} does not select: ${naturalList(identityMissing)}.`);
+
+  const baseFormats=new Set(FORMATS.filter(([f])=>base.formats_enabled?.[f]!==false).map(([f])=>f));
+  const targetFormats=new Set(FORMATS.filter(([f])=>target.formats_enabled?.[f]!==false).map(([f])=>f));
+  const formatsAdded=[...targetFormats].filter(f=>!baseFormats.has(f)).map(f=>FORMATS.find(([k])=>k===f)?.[1]||f);
+  const formatsMissing=[...baseFormats].filter(f=>!targetFormats.has(f)).map(f=>FORMATS.find(([k])=>k===f)?.[1]||f);
+  if(formatsAdded.length)rows.push(`${targetLabel} includes additional format${formatsAdded.length===1?'':'s'}: ${naturalList(formatsAdded)}.`);
+  if(formatsMissing.length)rows.push(`${targetLabel} does not include: ${naturalList(formatsMissing)}.`);
+
+  const baseDims=new Set(base.selected_dimensions||[]);
+  const targetDims=new Set(target.selected_dimensions||[]);
+  const dimsAdded=[...targetDims].filter(k=>!baseDims.has(k)).map(philosophyDimensionLabel);
+  const dimsMissing=[...baseDims].filter(k=>!targetDims.has(k)).map(philosophyDimensionLabel);
+  if(dimsAdded.length)rows.push(`${targetLabel} adds to the batting system: ${naturalList(dimsAdded)}.`);
+  if(dimsMissing.length)rows.push(`${targetLabel} does not select: ${naturalList(dimsMissing)}.`);
+
+  const baseIdentityNote=(base.identity_note||'').trim();
+  const targetIdentityNote=(target.identity_note||'').trim();
+  if(targetIdentityNote && targetIdentityNote!==baseIdentityNote)rows.push(`${targetLabel} adds a Club Identity comment.`);
+  const baseNotes=base.dimension_notes||{};
+  const targetNotes=target.dimension_notes||{};
+  for(const [k,note] of Object.entries(targetNotes)){
+    const text=(note||'').trim();
+    if(text && text!==(baseNotes?.[k]||'').trim())rows.push(`${targetLabel} adds a written note for ${philosophyDimensionLabel(k)}.`);
+  }
+
+  for(const d of dimensions){
+    if(!baseDims.has(d.dimension_key) || !targetDims.has(d.dimension_key))continue;
+    for(const [f,formatLabel] of FORMATS){
+      if(base.formats_enabled?.[f]===false || target.formats_enabled?.[f]===false)continue;
+      const a=Number(base.format_weights?.[`${d.dimension_key}:${f}`]);
+      const b=Number(target.format_weights?.[`${d.dimension_key}:${f}`]);
+      if(!Number.isFinite(a) || !Number.isFinite(b) || a===b)continue;
+      rows.push(`${d.label} · ${formatLabel}: ${baseLabel} ${WEIGHT_LABELS[a]||a} → ${targetLabel} ${WEIGHT_LABELS[b]||b}.`);
+    }
+  }
+  return rows;
+}
+
+function renderDifferenceSummary(rows,emptyText){
+  if(!rows.length)return `<div class="response-difference no-difference"><strong>No material selection or emphasis differences.</strong><span>${esc(emptyText||'The two responses line up on the structured choices.')}</span></div>`;
+  return `<div class="response-difference">
+    <strong>How this differs from the Philosophy Lead's original response</strong>
+    <ul>${rows.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+  </div>`;
+}
+
+function renderSubmittedContributionReview(responses,pMap){
+  const leadId=workshop?.philosophy_lead_user_id;
+  const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||null;
+  const ordered=[
+    ...(leadResponse?[leadResponse]:[]),
+    ...(responses||[]).filter(r=>r.user_id!==leadId)
+  ];
+
+  return `<section class="card submitted-contributions-card" style="margin-top:16px">
+    <div class="section-label">Submitted responses</div>
+    <h2>What did each person say?</h2>
+    <div class="help">These are the actual independent responses feeding the synthesis below. Differences from the Philosophy Lead's original response are shown before the final draft is considered.</div>
+    <div class="submitted-contribution-list">${ordered.map(r=>{
+      const name=r.display_name||pMap.get(r.user_id)?.display_name||'Contributor';
+      const isLead=r.user_id===leadId;
+      const when=r.submitted_at?new Date(r.submitted_at).toLocaleString():'';
+      const diffs=!isLead && leadResponse
+        ?responseDifferenceRows(leadResponse,r,isPhilosophyLead()?'Your original':"Philosophy Lead's original",name)
+        :[];
+      return `<article class="submitted-contribution-card ${isLead?'lead-source':''}">
+        <div class="submitted-contribution-head">
+          <div><strong>${esc(name)}${isLead?' · Philosophy Lead':''}</strong><span>${isLead?'Original response / comparison baseline':'Independent response'}${when?` · ${esc(when)}`:''}</span></div>
+          <span class="response-included-pill">Included</span>
+        </div>
+        ${isLead
+          ?'<div class="response-difference baseline"><strong>Comparison baseline</strong><span>Other contributors are compared with this original independent response — not with the editable final draft.</span></div>'
+          :renderDifferenceSummary(diffs,`${name}'s structured selections and emphasis match the Philosophy Lead's original response.`)}
+        <details class="submitted-response-detail">
+          <summary>View full response</summary>
+          ${renderLateResponseDetail(r)}
+        </details>
+      </article>`;
+    }).join('')}</div>
+  </section>`;
+}
+
+function currentWorkingPhilosophyResponse(){
+  return {
+    identity_values:clubProfile.identity_values||[],
+    identity_note:clubProfile.identity_note||'',
+    formats_enabled:clubProfile.formats_enabled||{},
+    selected_dimensions:[...selectedDims.keys()],
+    dimension_notes:Object.fromEntries([...selectedDims.entries()].map(([k,v])=>[k,v?.club_note||''])),
+    format_weights:Object.fromEntries(weights)
+  };
+}
+
+function renderFinalDraftStage(responses,pMap,allSubmitted,meta=null){
   const syn=buildSynthesis(responses);
-  const leadReady=isPhilosophyLead() && myContributor?.status==='submitted';
-  const hwbReady=howWeBatDraft?.status==='ready';
-  const canPublish=isPhilosophyLead() && workshop?.final_draft_ready && myContributor?.status==='submitted' && hwbReady;
+  const leadOriginal=(responses||[]).find(r=>r.user_id===workshop?.philosophy_lead_user_id)||null;
+  const draftReady=!!workshop?.final_draft_ready;
   const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
   const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>
     v.published_at && new Date(v.published_at)>=draftStartedAt
   );
+  const changes=draftReady && leadOriginal
+    ?responseDifferenceRows(leadOriginal,currentWorkingPhilosophyResponse(),'Your original','Working draft')
+    :[];
 
-  return `<section class="card synthesis" style="margin-top:16px">
-    <div class="section-label">Curated group picture</div>
+  return `<section class="card final-draft-stage workshop-stage-card" style="margin-top:16px">
+    <div class="section-label">4 · Final Draft</div>
+    <h2>${draftReady?'Turn the synthesis into the club position':'Ready to create the working draft?'}</h2>
+    <div class="help">This stage comes last: contributors first, their responses second, synthesis third, then the Philosophy Lead decides the final club position.</div>
+
+    ${draftReady
+      ?`<div class="final-draft-source"><strong>Current working draft</strong><span>Built from the current ${syn.n}-response synthesis${meta?.snapshot?' snapshot':''}. The source responses above remain unchanged.</span></div>
+        <div class="final-draft-change-summary">
+          <h3>What changed from your original response?</h3>
+          ${changes.length
+            ?`<ul>${changes.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
+            :'<div class="notice compact">The current working draft has no material structured differences from your original response.</div>'}
+        </div>
+        <div class="final-draft-status-row">
+          <span>${howWeBatDraft?.status==='ready'?'How We Bat ready':'How We Bat still in draft'}</span>
+          <span>${playerPlanStructureDraft?.status==='ready'?'Player Plan Structure ready':'Player Plan Structure not yet confirmed'}</span>
+        </div>
+        <div class="btnrow final-draft-actions">
+          <button class="btn secondary" id="myResponseAction2">${currentDraftPublished?'Review final draft':'Continue final draft'}</button>
+          ${!currentDraftPublished?'<button class="btn ghost" id="discardFinalDraft">Discard draft & restart synthesis</button>':''}
+        </div>`
+      :(myContributor?.status==='submitted'
+        ?`<div class="final-draft-source"><strong>${syn.n} submitted response${syn.n===1?'':'s'} ready</strong><span>${allSubmitted?'All invited responses are in.':'You can create the working draft now or wait for outstanding contributors.'}</span></div>
+          <div class="btnrow final-draft-actions"><button class="btn secondary" id="buildFinalDraft">${!allSubmitted?`Create final draft with ${syn.n} response${syn.n===1?'':'s'}`:`Create final draft from ${syn.n} response${syn.n===1?'':'s'}`}</button></div>`
+        :'<div class="notice">Submit your own independent response before creating the final draft.</div>')}
+  </section>`;
+}
+
+function renderSynthesis(responses,pMap,allSubmitted,meta=null){
+  const syn=buildSynthesis(responses);
+
+  return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
+    <div class="section-label">3 · Synthesis</div>
     <h2>What the contributors seem to be saying</h2>
     <div class="help">This synthesis keeps the actual batting beliefs visible, then shows how many contributors selected each one. Agreement labels only appear when at least two independent responses are available.</div>
 
     ${meta?.snapshot
-      ?`<div class="notice snapshot-notice"><strong>Final-draft snapshot:</strong> ${meta.responseCount} of ${meta.invitedCount} invited contributor${meta.invitedCount===1?'':'s'} were included when the draft was created.${meta.responseCount<meta.invitedCount?' Outstanding or late responses cannot change this synthesis automatically.':''}</div>`
+      ?`<div class="notice snapshot-notice"><strong>Current synthesis snapshot:</strong> ${meta.responseCount} of ${meta.invitedCount} invited contributor${meta.invitedCount===1?'':'s'} are included.${meta.responseCount<meta.invitedCount?' A later response only joins this synthesis when the Philosophy Lead explicitly incorporates it.':''}</div>`
       :!allSubmitted
         ?`<div class="notice"><strong>${meta?.responseCount||syn.n} of ${meta?.invitedCount||syn.n} contributors have submitted.</strong><br>${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)} response${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)===1?' is':'s are'} still outstanding. You can wait, or the Philosophy Lead can continue using the responses received so far.</div>`
         :''}
@@ -3098,31 +3289,6 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
 
     ${renderSourceComments(responses,pMap)}
 
-    ${isPhilosophyLead()?`<div class="lead-actions">
-      <div>
-        <div class="section-label">Philosophy Lead</div>
-        <strong>${workshop?.final_draft_ready?'Final draft stage':'Turn the synthesis into a working draft'}</strong>
-        <p>${workshop?.final_draft_ready
-          ?(howWeBatDraft?.status==='ready'
-            ?'The detailed philosophy and the player-facing How We Bat page are ready. Continue forward to Player Plan Structure — publishing now happens only at the end of that stage.'
-            :'Adjust the detailed philosophy, then use How We Bat Builder to compress it into a small number of memorable format-specific messages.')
-          :'Use the majority view and median format weightings as a starting point. Discussion flags are deliberately not “solved” for you — you make the final call.'}</p>
-      </div>
-      ${workshop?.final_draft_ready
-        ?`<div class="btnrow">
-            ${!hwbReady
-              ?'<button class="btn secondary" id="openHwbBuilder">Build How We Bat</button>'
-              :'<button class="btn secondary" id="continueToPlanStructure">Continue to Player Plan Structure</button>'}
-            ${!currentDraftPublished
-              ?'<button class="btn ghost" id="discardFinalDraft">Discard draft & restart synthesis</button>'
-              :''}
-          </div>`
-        :(leadReady
-          ?`<button class="btn secondary" id="buildFinalDraft">${!allSubmitted
-            ?`Create final draft with ${syn.n} response${syn.n===1?'':'s'}`
-            :`Create final draft from ${syn.n} response${syn.n===1?'':'s'}`}</button>`
-          :'<span class="help">Submit your own independent response before creating the final draft.</span>')}
-    </div>`:''}
   </section>`;
 }
 
@@ -3188,12 +3354,25 @@ function renderLatePhilosophyResponses(actions,pMap){
   const pending=(actions||[]).filter(a=>a.status==='pending');
   const actioned=(actions||[]).filter(a=>a.status!=='pending');
 
-  return `<section class="card late-contributions-card" style="margin-top:16px">
-    <div class="section-label">After the final-draft snapshot</div>
-    <h2>Late contributions</h2>
-    <div class="help">These responses arrived after the working draft was created. They cannot alter the draft unless you explicitly choose to incorporate them.</div>
+  if(!pending.length){
+    if(!actioned.length)return '';
+    return `<details class="card late-history-card" style="margin-top:16px">
+      <summary>Late-response history</summary>
+      <div class="late-contribution-list">${actioned.map(a=>{
+        const name=pMap.get(a.user_id)?.display_name||'Contributor';
+        return `<div class="late-contribution actioned">
+          <div><strong>${esc(name)}</strong><span>${a.status==='incorporated'?'Incorporated into the current synthesis and working draft':'Reviewed · not incorporated'} · ${new Date(a.submitted_at).toLocaleString()}</span></div>
+        </div>`;
+      }).join('')}</div>
+    </details>`;
+  }
 
-    ${pending.length?`<div class="late-contribution-list">${pending.map(a=>{
+  return `<section class="card late-contributions-card" style="margin-top:16px">
+    <div class="section-label">New contribution</div>
+    <h2>Response received after the draft started</h2>
+    <div class="help">Review it here, before the synthesis below. It does not alter the current synthesis or working draft unless you explicitly incorporate it.</div>
+
+    <div class="late-contribution-list">${pending.map(a=>{
       const name=pMap.get(a.user_id)?.display_name||'Contributor';
       return `<div class="late-contribution pending">
         <div class="late-contribution-head">
@@ -3201,28 +3380,25 @@ function renderLatePhilosophyResponses(actions,pMap){
             <strong>${esc(name)}</strong>
             <span>Submitted ${new Date(a.submitted_at).toLocaleString()}${a.reviewed_at?' · reviewed':''}</span>
           </div>
-          <span class="pending">LATE RESPONSE</span>
+          <span class="pending">NEW RESPONSE</span>
         </div>
         <div class="late-contribution-actions">
           <button class="btn ghost" data-review-late="${a.id}">Review contribution</button>
-          <button class="btn secondary" data-incorporate-late="${a.id}">Incorporate into draft</button>
-          <button class="btn ghost" data-ignore-late="${a.id}">Ignore</button>
+          <button class="btn secondary" data-incorporate-late="${a.id}">Include in synthesis + rebuild draft</button>
+          <button class="btn ghost" data-ignore-late="${a.id}">Do not incorporate</button>
         </div>
         <div class="late-response-detail" id="late-detail-${a.id}" style="display:none">
           ${renderLateResponseDetail(a.response_snapshot)}
         </div>
       </div>`;
-    }).join('')}</div>`:'<div class="notice">There are no late responses awaiting a decision.</div>'}
+    }).join('')}</div>
 
     ${actioned.length?`<details class="late-history">
       <summary>Previously actioned late responses</summary>
       <div class="late-contribution-list">${actioned.map(a=>{
         const name=pMap.get(a.user_id)?.display_name||'Contributor';
         return `<div class="late-contribution actioned">
-          <div>
-            <strong>${esc(name)}</strong>
-            <span>${a.status==='incorporated'?'Incorporated into the final-draft snapshot':'Ignored'} · ${new Date(a.submitted_at).toLocaleString()}</span>
-          </div>
+          <div><strong>${esc(name)}</strong><span>${a.status==='incorporated'?'Incorporated into the current synthesis and working draft':'Reviewed · not incorporated'} · ${new Date(a.submitted_at).toLocaleString()}</span></div>
         </div>`;
       }).join('')}</div>
     </details>`:''}
