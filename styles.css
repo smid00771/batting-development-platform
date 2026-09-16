@@ -2581,3 +2581,12 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 @media(max-width:720px){
   .market-selection-summary{justify-content:flex-start}
 }
+
+/* v0.8.5 — Philosophy Workshop response/source clarity */
+.consensus-item.single{background:#f7f8fb}
+.consensus-item.single>span,.consensus-badge.single{background:#edf0f5;color:#596273}
+.workshop-response-state{display:inline-block;margin-top:6px;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;line-height:1.2}
+.workshop-response-state.ready{background:#dff3e6;color:#147a45}
+.workshop-response-state.waiting{background:#eef1f6;color:#5d6677}
+.workshop-response-state.problem{background:#fff0cf;color:#95610b}
+.workshop-data-warning{margin-top:10px}
