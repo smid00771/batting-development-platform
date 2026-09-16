@@ -51,6 +51,9 @@ let playerPlanStructureVersions=[];
 let playerPlanStructureSection='core';
 let playerPlanStructureWorking=null;
 let playerPlanStructureDirty=false;
+let philosophyScenarioSelectedIds=new Set();
+let philosophyScenarioStateKey='';
+let philosophyScenarioFormat='limited_overs';
 
 let playersWorkspaceClubId=null;
 let playersWorkspaceData=null;
@@ -2197,7 +2200,7 @@ async function renderPlayingGroups(){
 
 
 /* ---------------- PHILOSOPHY WORKSHOP ---------------- */
-/* v0.8.6: explicit final submission step + synthesis item-label repair carried forward from v0.8.5 */
+/* v0.8.13: outcome-first Philosophy Scenario Explorer; detailed agreement data is secondary */
 
 function workshopModeLabel(){
   return workshop?.mode==='collaborative'?'Collaborative':'Solo';
@@ -2324,6 +2327,14 @@ async function renderWorkshop(){
         };
       }
     }
+  }
+
+  const scenarioResponses=scenarioResponsePool(visibleResponses,lateActions||[],pMap);
+  const defaultScenarioIds=workshop?.final_draft_ready && snapshotResponses.length
+    ?snapshotResponses.map(r=>r.user_id)
+    :visibleResponses.map(r=>r.user_id);
+  if(canSeeSynthesis && scenarioResponses.length){
+    ensurePhilosophyScenarioSelection(scenarioResponses,defaultScenarioIds);
   }
 
   let html=`${buildWorkspaceAudienceNotice()}<div class="workshop-flow-stack">`;
@@ -2458,7 +2469,7 @@ async function renderWorkshop(){
     <div class="workshop-progress">
       ${workshop?.final_draft_ready && draftSnapshot
         ?`<div><strong>${snapshotCount}</strong><span>included in current synthesis</span></div>
-          <div><strong>${pendingLate.length}</strong><span>new response${pendingLate.length===1?'':'s'} awaiting decision</span></div>
+          <div><strong>${pendingLate.length}</strong><span>new submitted voice${pendingLate.length===1?'':'s'} available to explore</span></div>
           <div><strong>${Math.max(snapshotInvitedCount-snapshotCount-pendingLate.length,0)}</strong><span>still outstanding</span></div>`
         :`<div><strong>${submittedCount}</strong><span>submitted</span></div>
           <div><strong>${outstandingCount}</strong><span>still outstanding</span></div>
@@ -2519,11 +2530,11 @@ async function renderWorkshop(){
               responseClass='ready';
             }else if(late?.status==='pending'){
               statusText='Submitted after draft started';
-              responseState='Awaiting Philosophy Lead decision';
+              responseState='Available in Scenario Explorer';
               responseClass='problem';
             }else if(late?.status==='ignored'){
               statusText='Submitted after draft started';
-              responseState='Reviewed · not incorporated';
+              responseState='Available in Scenario Explorer';
               responseClass='waiting';
             }else if(c.status==='submitted'){
               statusText='Submitted';
@@ -2581,27 +2592,22 @@ async function renderWorkshop(){
     if(synthesisLoadError){
       html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>The submitted responses could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
     }else if(visibleResponses.length){
-      html+=renderSubmittedContributionReview(visibleResponses,pMap);
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>Submitted voices are ready to explore.</h2><div class="help">The status list above is enough for the normal workflow. Full responses and the underlying agreement data remain available inside <strong>Show detailed response analysis</strong> in the Scenario Explorer.</div></section>`;
     }else{
       html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>No submitted responses are available yet.</h2><div class="help">Saved work appears in the status list above, but it only becomes a contribution after the contributor chooses <strong>Submit response</strong>.</div></section>`;
     }
 
-    // A response submitted after the final-draft snapshot belongs with the other contributions,
-    // before synthesis. The Lead decides here whether it should join the current response set.
-    if(isPhilosophyLead() && workshop?.final_draft_ready && (lateActions||[]).length){
-      html+=renderLatePhilosophyResponses(lateActions||[],pMap);
-    }
 
     if(synthesisLoadError){
       html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>The group picture could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
-    }else if(visibleResponses.length){
-      html+=renderSynthesis(visibleResponses,pMap,allSubmitted,synthesisMeta);
+    }else if(scenarioResponses.length){
+      html+=renderSynthesis(scenarioResponses,pMap,allSubmitted,synthesisMeta);
     }else{
       html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>Waiting for a submitted response.</h2><div class="help">The synthesis begins once a contributor has completed the final Submit response step.</div></section>`;
     }
 
-    if(isPhilosophyLead() && !synthesisLoadError && visibleResponses.length){
-      html+=renderFinalDraftStage(visibleResponses,pMap,allSubmitted,synthesisMeta);
+    if(isPhilosophyLead() && !synthesisLoadError && scenarioResponses.length){
+      html+=renderFinalDraftStage(selectedScenarioResponses(scenarioResponses),pMap,allSubmitted,synthesisMeta);
     }
   }else if(totalCount>1 && me){
     html+=`<section class="card synthesis-locked workshop-stage-card" style="margin-top:16px">
@@ -2739,6 +2745,29 @@ async function renderWorkshop(){
     await loadData();
     renderShell();
   });
+
+  document.querySelectorAll('[data-scenario-voice]').forEach(x=>x.onchange=()=>{
+    const id=x.dataset.scenarioVoice;
+    if(x.checked)philosophyScenarioSelectedIds.add(id);
+    else philosophyScenarioSelectedIds.delete(id);
+    if(workshop?.philosophy_lead_user_id)philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
+    renderWorkshop();
+  });
+
+  document.querySelectorAll('[data-scenario-preset]').forEach(b=>b.onclick=()=>{
+    philosophyScenarioSelectedIds=new Set((b.dataset.scenarioPreset||'').split(',').filter(Boolean));
+    if(workshop?.philosophy_lead_user_id)philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
+    renderWorkshop();
+  });
+
+  document.querySelectorAll('[data-scenario-format]').forEach(b=>b.onclick=()=>{
+    philosophyScenarioFormat=b.dataset.scenarioFormat;
+    renderWorkshop();
+  });
+
+  if(document.getElementById('useVoiceScenario')){
+    document.getElementById('useVoiceScenario').onclick=()=>applySelectedVoiceScenario(scenarioResponses,pMap);
+  }
 
   if(document.getElementById('buildFinalDraft')){
     document.getElementById('buildFinalDraft').onclick=()=>beginFinalDraftFromSynthesis();
@@ -2998,24 +3027,49 @@ function buildSynthesis(responses){
   return {n,identity,dims,weightRows,flags};
 }
 
-function buildConsensusDraft(responses){
-  const s=buildSynthesis(responses);
-  const identityValues=s.identity.filter(x=>x.ratio>.5).map(x=>x.key);
-  const selectedDimensions=s.dims.filter(x=>x.ratio>.5).map(x=>x.key);
+function buildScenarioDraft(responses){
+  const safeResponses=(responses||[]).filter(Boolean);
+  const n=Math.max(safeResponses.length,1);
+  const s=buildSynthesis(safeResponses);
+
+  // Ties are retained rather than discarded. A 1-of-2 idea is a legitimate
+  // signal, not a failed vote. Minority-only dimensions remain available but
+  // are softened by how broadly they are supported so the overall club "vibe"
+  // stays coherent rather than becoming a shopping list of every suggestion.
+  const identityValues=s.identity.filter(x=>x.ratio>=.5).map(x=>x.key);
 
   const formatsEnabled={};
   for(const [f] of FORMATS){
-    formatsEnabled[f]=responses.filter(r=>r.formats_enabled?.[f]!==false).length/responses.length>.5;
+    const enabled=safeResponses.filter(r=>r.formats_enabled?.[f]!==false).length;
+    formatsEnabled[f]=(enabled/n)>=.5;
   }
 
+  const selectedDimensions=[];
+  const dimensionNotes={};
   const formatWeights={};
-  for(const k of selectedDimensions){
+
+  for(const d of dimensions){
+    const supporters=safeResponses.filter(r=>(r.selected_dimensions||[]).includes(d.dimension_key));
+    if(!supporters.length)continue;
+
+    selectedDimensions.push(d.dimension_key);
+    const supportRatio=supporters.length/n;
+    const notes=[...new Set(supporters.map(r=>(r.dimension_notes?.[d.dimension_key]||'').trim()).filter(Boolean))];
+    if(notes.length)dimensionNotes[d.dimension_key]=notes.join(' / ');
+
     for(const [f] of FORMATS){
-      const vals=responses
-        .filter(r=>(r.selected_dimensions||[]).includes(k) && r.formats_enabled?.[f]!==false)
-        .map(r=>Number(r.format_weights?.[`${k}:${f}`]))
+      if(formatsEnabled[f]===false)continue;
+      const vals=supporters
+        .filter(r=>r.formats_enabled?.[f]!==false)
+        .map(r=>Number(r.format_weights?.[`${d.dimension_key}:${f}`]))
         .filter(v=>Number.isFinite(v));
-      formatWeights[`${k}:${f}`]=median(vals);
+      if(!vals.length)continue;
+
+      const raw=median(vals);
+      const supportFactor=.35+(.65*supportRatio);
+      let effective=Math.round(raw*supportFactor);
+      if(raw>0 && effective===0)effective=1;
+      formatWeights[`${d.dimension_key}:${f}`]=Math.max(0,Math.min(4,effective));
     }
   }
 
@@ -3024,9 +3078,13 @@ function buildConsensusDraft(responses){
     identity_note:'',
     formats_enabled:formatsEnabled,
     selected_dimensions:selectedDimensions,
-    dimension_notes:{},
+    dimension_notes:dimensionNotes,
     format_weights:formatWeights
   };
+}
+
+function buildConsensusDraft(responses){
+  return buildScenarioDraft(responses);
 }
 
 
@@ -3140,6 +3198,219 @@ function currentWorkingPhilosophyResponse(){
   };
 }
 
+
+function scenarioResponsePool(baseResponses,lateActions,pMap){
+  const byUser=new Map();
+  for(const r of baseResponses||[]){
+    if(r?.user_id)byUser.set(r.user_id,{...r,display_name:r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'});
+  }
+  const orderedLate=[...(lateActions||[])].sort((a,b)=>new Date(a.submitted_at||0)-new Date(b.submitted_at||0));
+  for(const a of orderedLate){
+    if(!a?.user_id || !a?.response_snapshot)continue;
+    byUser.set(a.user_id,{
+      ...a.response_snapshot,
+      user_id:a.user_id,
+      submitted_at:a.submitted_at||a.response_snapshot.submitted_at,
+      display_name:pMap.get(a.user_id)?.display_name||a.response_snapshot.display_name||'Contributor'
+    });
+  }
+  return [...byUser.values()];
+}
+
+function ensurePhilosophyScenarioSelection(responses,defaultIds=[]){
+  const validIds=(responses||[]).map(r=>r.user_id).filter(Boolean);
+  const leadId=workshop?.philosophy_lead_user_id;
+  const stateKey=`${club?.id||''}:${validIds.slice().sort().join(',')}:${workshop?.final_draft_started_at||'live'}`;
+  if(philosophyScenarioStateKey!==stateKey){
+    philosophyScenarioStateKey=stateKey;
+    let persisted=[];
+    if(workshop?.final_draft_ready){
+      try{persisted=JSON.parse(sessionStorage.getItem(`bdp-philosophy-working-voices:${club?.id||''}`)||'[]');}catch(e){persisted=[];}
+    }
+    const seed=(Array.isArray(persisted)&&persisted.length)?persisted:(defaultIds||[]);
+    philosophyScenarioSelectedIds=new Set(seed.filter(id=>validIds.includes(id)));
+    if(!philosophyScenarioSelectedIds.size && leadId && validIds.includes(leadId))philosophyScenarioSelectedIds.add(leadId);
+    if(!philosophyScenarioSelectedIds.size && validIds[0])philosophyScenarioSelectedIds.add(validIds[0]);
+  }
+  for(const id of [...philosophyScenarioSelectedIds])if(!validIds.includes(id))philosophyScenarioSelectedIds.delete(id);
+  if(leadId && validIds.includes(leadId))philosophyScenarioSelectedIds.add(leadId);
+}
+
+function selectedScenarioResponses(responses){
+  return (responses||[]).filter(r=>philosophyScenarioSelectedIds.has(r.user_id));
+}
+
+function scenarioHowWeBatChanges(baseDraft,scenarioDraft){
+  const rows=[];
+  if((baseDraft?.identity_statement||'')!==(scenarioDraft?.identity_statement||'')){
+    rows.push('The club-wide identity statement changes.');
+  }
+  for(const [format,label] of FORMATS){
+    const base=(baseDraft?.formats?.[format]?.banners||[]).map(x=>x.key);
+    const next=(scenarioDraft?.formats?.[format]?.banners||[]).map(x=>x.key);
+    if(!base.length && !next.length)continue;
+    if(base.join('|')===next.join('|'))continue;
+    const added=next.filter(k=>!base.includes(k)).map(k=>HOW_WE_BAT_BANNERS[k]?.title||k);
+    const removed=base.filter(k=>!next.includes(k)).map(k=>HOW_WE_BAT_BANNERS[k]?.title||k);
+    if(added.length && removed.length)rows.push(`${label}: ${naturalList(added)} replaces ${naturalList(removed)} in the Key Messages.`);
+    else if(added.length)rows.push(`${label}: ${naturalList(added)} enters the Key Messages.`);
+    else if(removed.length)rows.push(`${label}: ${naturalList(removed)} drops out of the Key Messages.`);
+    else rows.push(`${label}: the same Key Messages remain, but their order changes.`);
+  }
+  return rows;
+}
+
+function renderDetailedSynthesisBody(responses,pMap){
+  const syn=buildSynthesis(responses);
+  return `<div class="scenario-detail-body">
+    <div class="help">This is the underlying response analysis. It is here for anyone who wants to inspect the mechanics; it is not intended to be the main decision-making view.</div>
+    <h3>Club identity</h3>
+    <div class="consensus-grid">${syn.identity.filter(x=>x.ratio>=.35).map(x=>`
+      <div class="consensus-item ${x.cls}"><div><strong>${esc(x.itemLabel)}</strong><small>${x.count} of ${syn.n} selected this</small></div><span>${esc(x.consensusLabel)}</span></div>`).join('')}</div>
+    <h3>What belongs in the batting system</h3>
+    <div class="consensus-grid">${syn.dims.filter(x=>x.ratio>=.35).map(x=>`
+      <div class="consensus-item ${x.cls}"><div><strong>${esc(x.itemLabel)}</strong><small>${x.count} of ${syn.n} selected this</small></div><span>${esc(x.consensusLabel)}</span></div>`).join('')}</div>
+    <h3>Format emphasis</h3>
+    <div class="synthesis-table-wrap"><table class="synthesis-table"><thead><tr><th>Dimension</th><th>Format</th><th>Typical emphasis</th><th>Spread</th><th></th></tr></thead><tbody>${syn.weightRows.map(x=>`
+      <tr class="${x.cls}"><td>${esc(x.dimension)}</td><td>${esc(x.formatLabel)}</td><td>${esc(WEIGHT_LABELS[x.median])}</td><td>${esc(WEIGHT_LABELS[x.min])}${x.min!==x.max?` → ${esc(WEIGHT_LABELS[x.max])}`:''}</td><td><span class="consensus-badge ${x.cls}">${esc(x.consensusLabel)}</span></td></tr>`).join('')}</tbody></table></div>
+    ${syn.flags.length?`<h3>Discussion prompts</h3><div class="discussion-list">${syn.flags.map(x=>`<div class="discussion-flag">⚑ ${esc(x)}</div>`).join('')}</div>`:''}
+    ${renderSourceComments(responses,pMap)}
+  </div>`;
+}
+
+function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
+  const leadId=workshop?.philosophy_lead_user_id;
+  const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||(responses||[])[0]||null;
+  if(!leadResponse)return `<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>Waiting for the Philosophy Lead's submitted response.</h2></section>`;
+
+  const selected=selectedScenarioResponses(responses);
+  const safeSelected=selected.length?selected:[leadResponse];
+  const scenarioPhilosophy=buildScenarioDraft(safeSelected);
+  const baselinePhilosophy=buildScenarioDraft([leadResponse]);
+  const scenarioHwb=generatedHowWeBatDraftFromPhilosophy(scenarioPhilosophy);
+  const baselineHwb=generatedHowWeBatDraftFromPhilosophy(baselinePhilosophy);
+  const formats=FORMATS.filter(([f])=>scenarioHwb.formats?.[f]);
+  if(!formats.some(([f])=>f===philosophyScenarioFormat))philosophyScenarioFormat=formats[0]?.[0]||'limited_overs';
+  const changes=scenarioHowWeBatChanges(baselineHwb,scenarioHwb);
+  const selectedNames=safeSelected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
+  const otherResponses=(responses||[]).filter(r=>r.user_id!==leadResponse.user_id);
+
+  const presets=[
+    {label:`${leadResponse.display_name||pMap.get(leadResponse.user_id)?.display_name||'Lead'} only`,ids:[leadResponse.user_id]},
+    ...otherResponses.map(r=>({label:`Lead + ${r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'}`,ids:[leadResponse.user_id,r.user_id]})),
+    ...(otherResponses.length>1?[{label:'All submitted voices',ids:[leadResponse.user_id,...otherResponses.map(r=>r.user_id)]}]:[])
+  ];
+
+  return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
+    <div class="section-label">3 · Synthesis · Scenario Explorer</div>
+    <h2>See what each voice actually does to How We Bat.</h2>
+    <div class="help">Start with the Philosophy Lead's original response, then add or remove submitted voices. Nothing is accepted, rejected or altered here — you are simply testing what each combination produces.</div>
+
+    ${meta?.snapshot?`<div class="notice compact"><strong>Working synthesis exists.</strong> Voices already used in that draft start switched on. Any later submitted response can still be explored here before you decide whether to use a new combination.</div>`:''}
+
+    <div class="scenario-voice-list" style="display:grid;gap:8px;margin-top:14px">
+      ${(responses||[]).map(r=>{
+        const isLead=r.user_id===leadResponse.user_id;
+        const name=r.display_name||pMap.get(r.user_id)?.display_name||'Contributor';
+        const on=philosophyScenarioSelectedIds.has(r.user_id);
+        return `<label class="contributor-check ${on?'on':''} ${isLead?'lead-person':''}">
+          <input type="checkbox" data-scenario-voice="${esc(r.user_id)}" ${on?'checked':''} ${isLead?'disabled':''}>
+          <span><strong>${esc(name)}${isLead?' · Baseline':''}</strong><small>${isLead?'Philosophy Lead original response':'Submitted independent voice'}</small></span>
+        </label>`;
+      }).join('')}
+    </div>
+
+    <div class="btnrow" style="margin-top:10px">
+      ${presets.map((p,i)=>`<button class="btn ghost" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
+    </div>
+
+    <div class="scenario-result" style="margin-top:18px">
+      <div class="section-label">Current combination</div>
+      <h3>${esc(naturalList(selectedNames))}</h3>
+      <div class="help">The synthesis keeps minority signals available but softens ideas that are supported by fewer voices. Related signals still have to reinforce one another before they become a player-facing Key Message.</div>
+      <div class="scenario-change-summary" style="margin:12px 0">
+        <strong>Compared with the Philosophy Lead alone</strong>
+        ${safeSelected.length===1
+          ?'<div class="notice compact">This is the baseline How We Bat.</div>'
+          :changes.length
+            ?`<ul>${changes.slice(0,5).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
+            :'<div class="notice compact">How We Bat stays visually the same. These voices reinforce the existing message rather than redirecting it.</div>'}
+      </div>
+
+      <div class="format-tabs hwb-tabs">${formats.map(([f,label])=>`<button data-scenario-format="${f}" class="${f===philosophyScenarioFormat?'active':''}">${esc(label)}</button>`).join('')}</div>
+      ${renderHowWeBatLivePreview(scenarioHwb,philosophyScenarioFormat,false)}
+
+      ${isPhilosophyLead()?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="useVoiceScenario">${workshop?.final_draft_ready?'Use this combination as the working synthesis':'Use this combination to create the working synthesis'}</button></div>`:''}
+    </div>
+
+    <details class="source-responses" style="margin-top:16px">
+      <summary>Show detailed response analysis</summary>
+      ${renderDetailedSynthesisBody(safeSelected,pMap)}
+      ${renderSubmittedContributionReview(safeSelected,pMap)}
+    </details>
+  </section>`;
+}
+
+async function applySelectedVoiceScenario(responses,pMap){
+  const selected=selectedScenarioResponses(responses);
+  if(!selected.length){alert('Select at least the Philosophy Lead response.');return;}
+  const leadId=workshop?.philosophy_lead_user_id;
+  if(!selected.some(r=>r.user_id===leadId)){alert('The Philosophy Lead baseline must remain part of the scenario.');return;}
+
+  const names=selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
+  const draft=buildScenarioDraft(selected);
+  const hwb=generatedHowWeBatDraftFromPhilosophy(draft);
+  const ok=confirm(
+    `Use ${naturalList(names)} as the working synthesis?\n\n`+
+    `This does not change anyone's submitted response. It changes the Philosophy Lead's working draft and regenerates How We Bat from this combination.`
+  );
+  if(!ok)return;
+
+  if(!workshop?.final_draft_ready){
+    const {error}=await supabase.rpc('begin_final_philosophy_draft',{
+      p_club_id:club.id,
+      p_identity_values:draft.identity_values,
+      p_identity_note:draft.identity_note,
+      p_formats_enabled:draft.formats_enabled,
+      p_selected_dimensions:draft.selected_dimensions,
+      p_dimension_notes:draft.dimension_notes,
+      p_format_weights:draft.format_weights
+    });
+    if(error){alert(error.message);return;}
+  }else{
+    const {error}=await supabase
+      .from('philosophy_contributions')
+      .update({
+        identity_values:draft.identity_values,
+        identity_note:draft.identity_note,
+        formats_enabled:draft.formats_enabled,
+        selected_dimensions:draft.selected_dimensions,
+        dimension_notes:draft.dimension_notes,
+        format_weights:draft.format_weights,
+        submitted_at:null,
+        updated_at:new Date().toISOString()
+      })
+      .eq('club_id',club.id)
+      .eq('user_id',leadId);
+    if(error){alert(error.message);return;}
+  }
+
+  sessionStorage.setItem(`bdp-philosophy-working-voices:${club.id}`,JSON.stringify(selected.map(r=>r.user_id)));
+
+  const {error:hErr}=await supabase.rpc('save_how_we_bat_draft',{
+    p_club_id:club.id,
+    p_identity_statement:hwb.identity_statement||'',
+    p_closing_strapline:hwb.closing_strapline||'',
+    p_formats:hwb.formats||{},
+    p_status:'draft'
+  });
+  if(hErr){alert(hErr.message);return;}
+
+  await loadData();
+  currentTab='workshop';
+  renderShell();
+}
+
 function renderFinalDraftStage(responses,pMap,allSubmitted,meta=null){
   const syn=buildSynthesis(responses);
   const leadOriginal=(responses||[]).find(r=>r.user_id===workshop?.philosophy_lead_user_id)||null;
@@ -3155,7 +3426,7 @@ function renderFinalDraftStage(responses,pMap,allSubmitted,meta=null){
   return `<section class="card final-draft-stage workshop-stage-card" style="margin-top:16px">
     <div class="section-label">4 · Final Draft</div>
     <h2>${draftReady?'Turn the synthesis into the club position':'Ready to create the working draft?'}</h2>
-    <div class="help">This stage comes last: contributors first, their responses second, synthesis third, then the Philosophy Lead decides the final club position.</div>
+    <div class="help">Use the Scenario Explorer above to test the player-facing result first. Once the combination feels like the club, use it as the working synthesis and refine the final draft here.</div>
 
     ${draftReady
       ?`<div class="final-draft-source"><strong>Current working draft</strong><span>Built from the current ${syn.n}-response synthesis${meta?.snapshot?' snapshot':''}. The source responses above remain unchanged.</span></div>
@@ -3174,67 +3445,15 @@ function renderFinalDraftStage(responses,pMap,allSubmitted,meta=null){
           ${!currentDraftPublished?'<button class="btn ghost" id="discardFinalDraft">Discard draft & restart synthesis</button>':''}
         </div>`
       :(myContributor?.status==='submitted'
-        ?`<div class="final-draft-source"><strong>${syn.n} submitted response${syn.n===1?'':'s'} ready</strong><span>${allSubmitted?'All invited responses are in.':'You can create the working draft now or wait for outstanding contributors.'}</span></div>
-          <div class="btnrow final-draft-actions"><button class="btn secondary" id="buildFinalDraft">${!allSubmitted?`Create final draft with ${syn.n} response${syn.n===1?'':'s'}`:`Create final draft from ${syn.n} response${syn.n===1?'':'s'}`}</button></div>`
-        :'<div class="notice">Submit your own independent response before creating the final draft.</div>')}
+        ?`<div class="final-draft-source"><strong>Choose the working synthesis above</strong><span>Use the How We Bat preview to decide which combination of voices best captures the club. Then select <strong>Use this combination to create the working synthesis</strong>.</span></div>`
+        :'<div class="notice">Submit your own independent response before creating the working synthesis.</div>')}
   </section>`;
 }
 
 function renderSynthesis(responses,pMap,allSubmitted,meta=null){
-  const syn=buildSynthesis(responses);
-
-  return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
-    <div class="section-label">3 · Synthesis</div>
-    <h2>What the contributors seem to be saying</h2>
-    <div class="help">This synthesis keeps the actual batting beliefs visible, then shows how many contributors selected each one. Agreement labels only appear when at least two independent responses are available.</div>
-
-    ${meta?.snapshot
-      ?`<div class="notice snapshot-notice"><strong>Current synthesis snapshot:</strong> ${meta.responseCount} of ${meta.invitedCount} invited contributor${meta.invitedCount===1?'':'s'} are included.${meta.responseCount<meta.invitedCount?' A later response only joins this synthesis when the Philosophy Lead explicitly incorporates it.':''}</div>`
-      :!allSubmitted
-        ?`<div class="notice"><strong>${meta?.responseCount||syn.n} of ${meta?.invitedCount||syn.n} contributors have submitted.</strong><br>${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)} response${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)===1?' is':'s are'} still outstanding. You can wait, or the Philosophy Lead can continue using the responses received so far.</div>`
-        :''}
-
-    ${meta?.mismatchCount?`<div class="notice workshop-data-warning"><strong>Synthesis paused around inconsistent data.</strong><br>${meta.mismatchCount} contributor record${meta.mismatchCount===1?' does':'s do'} not agree with the stored submission state. The cards below use only responses that are unambiguously submitted.</div>`:''}
-    ${syn.n<2?'<div class="notice"><strong>One submitted response so far.</strong><br>This is an individual view, not group agreement. BDP will start identifying consensus and disagreement when a second independent response is submitted.</div>':''}
-
-    <h3>Club identity</h3>
-    <div class="consensus-grid">${syn.identity.filter(x=>x.ratio>=.35).map(x=>`
-      <div class="consensus-item ${x.cls}">
-        <div><strong>${esc(x.itemLabel)}</strong><small>${x.count} of ${syn.n} selected this</small></div>
-        <span>${esc(x.consensusLabel)}</span>
-      </div>`).join('')}</div>
-
-    <h3>What belongs in the batting system</h3>
-    <div class="consensus-grid">${syn.dims.filter(x=>x.ratio>=.35).map(x=>`
-      <div class="consensus-item ${x.cls}">
-        <div><strong>${esc(x.itemLabel)}</strong><small>${x.count} of ${syn.n} selected this</small></div>
-        <span>${esc(x.consensusLabel)}</span>
-      </div>`).join('')}</div>
-
-    <h3>Format emphasis</h3>
-    <div class="synthesis-table-wrap"><table class="synthesis-table">
-      <thead><tr><th>Dimension</th><th>Format</th><th>Typical emphasis</th><th>Spread</th><th></th></tr></thead>
-      <tbody>${syn.weightRows.map(x=>`
-        <tr class="${x.cls}">
-          <td>${esc(x.dimension)}</td>
-          <td>${esc(x.formatLabel)}</td>
-          <td>${esc(WEIGHT_LABELS[x.median])}</td>
-          <td>${esc(WEIGHT_LABELS[x.min])}${x.min!==x.max?` → ${esc(WEIGHT_LABELS[x.max])}`:''}</td>
-          <td><span class="consensus-badge ${x.cls}">${esc(x.consensusLabel)}</span></td>
-        </tr>`).join('')}</tbody>
-    </table></div>
-
-    <h3>Discussion prompts</h3>
-    ${syn.n<2
-      ?'<div class="notice">At least two submitted responses are needed before BDP can identify genuine agreement or disagreement.</div>'
-      :syn.flags.length
-        ?`<div class="discussion-list">${syn.flags.map(x=>`<div class="discussion-flag">⚑ ${esc(x)}</div>`).join('')}</div>`
-        :'<div class="notice">No major splits are showing in the submitted responses.</div>'}
-
-    ${renderSourceComments(responses,pMap)}
-
-  </section>`;
+  return renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta);
 }
+
 
 function renderSourceComments(responses,pMap){
   const items=[];
@@ -3959,6 +4178,117 @@ function generatedHowWeBatDraft(){
     status:'draft'
   };
 }
+
+function enabledFormatsForProfile(profile){
+  return FORMATS.filter(([k])=>profile?.formats_enabled?.[k]!==false);
+}
+
+function howWeBatBannerCandidatesFor(format,profile,dimsMap,weightMap){
+  const identityValues=new Set(profile?.identity_values||[]);
+  const rows=[];
+
+  for(const [key,spec] of Object.entries(HOW_WE_BAT_BANNERS)){
+    let score=0;
+    let highCount=0;
+    let veryHighCount=0;
+    const support=[];
+
+    for(const [dimKey,coefficient] of Object.entries(spec.dimensions||{})){
+      if(!dimsMap.has(dimKey))continue;
+      const weight=Number(weightMap.get(`${dimKey}:${format}`)??0);
+      if(weight<=0)continue;
+      score+=weight*coefficient;
+      if(coefficient>=.55 && weight>=3)highCount++;
+      if(coefficient>=.55 && weight===4)veryHighCount++;
+      if(weight>=2 && coefficient>=.3){
+        support.push({
+          key:dimKey,
+          label:dimensions.find(d=>d.dimension_key===dimKey)?.label||dimKey,
+          weight,
+          coefficient
+        });
+      }
+    }
+
+    for(const [identityKey,boost] of Object.entries(spec.identity||{})){
+      if(identityValues.has(identityKey))score+=boost;
+    }
+
+    if(highCount>=2)score+=(highCount-1)*1.65;
+    if(veryHighCount>=2)score+=(veryHighCount-1)*.8;
+    if(support.length===1)score*=.72;
+    if(key==='use_phase' && format==='long_form')score*=.72;
+    if(score<=0)continue;
+
+    support.sort((a,b)=>b.weight-a.weight||b.coefficient-a.coefficient||a.label.localeCompare(b.label));
+    rows.push({
+      key,title:spec.title,message:spec.messages?.[format]||'',
+      score:Number(score.toFixed(2)),highCount,veryHighCount,support
+    });
+  }
+
+  const remaining=rows.sort((a,b)=>b.score-a.score);
+  const ordered=[];
+  const alreadyUsed=new Set();
+  while(remaining.length){
+    let bestIndex=0;
+    let bestAdjusted=-Infinity;
+    for(let i=0;i<remaining.length;i++){
+      const row=remaining[i];
+      const overlap=row.support.filter(x=>x.coefficient>=.55 && alreadyUsed.has(x.key)).length;
+      const adjusted=row.score-(overlap*1.15);
+      if(adjusted>bestAdjusted){bestAdjusted=adjusted;bestIndex=i;}
+    }
+    const [chosen]=remaining.splice(bestIndex,1);
+    chosen.adjustedScore=Number(bestAdjusted.toFixed(2));
+    ordered.push(chosen);
+    chosen.support.filter(x=>x.coefficient>=.55).forEach(x=>alreadyUsed.add(x.key));
+  }
+  return ordered;
+}
+
+function generatedHowWeBatDraftFromPhilosophy(profileDraft){
+  const profile={
+    identity_values:profileDraft?.identity_values||[],
+    identity_note:profileDraft?.identity_note||'',
+    formats_enabled:profileDraft?.formats_enabled||{}
+  };
+  const dimsMap=new Map((profileDraft?.selected_dimensions||[]).map(k=>[k,{dimension_key:k}]));
+  const weightMap=new Map(Object.entries(profileDraft?.format_weights||{}));
+  const formats={};
+
+  for(const [format] of enabledFormatsForProfile(profile)){
+    const candidates=howWeBatBannerCandidatesFor(format,profile,dimsMap,weightMap);
+    const banners=candidates.slice(0,Math.min(3,candidates.length)).map(x=>({
+      key:x.key,
+      title:x.title,
+      message:x.message,
+      supporting_dimensions:x.support.map(y=>({key:y.key,label:y.label,weight:y.weight})),
+      reference_points:generatedBannerReference(x.key,format),
+      score:x.adjustedScore,
+      strength:howWeBatStrength(x)
+    }));
+    const copy=HOW_WE_BAT_FORMAT_COPY[format]||HOW_WE_BAT_FORMAT_COPY.limited_overs;
+    formats[format]={intro:copy.intro,callout:copy.callout,banners};
+  }
+
+  const identity=identitySummaryFor(profile)+(profile.identity_note?` ${profile.identity_note}`:'');
+  const aggregate={};
+  for(const [format] of enabledFormatsForProfile(profile)){
+    for(const row of howWeBatBannerCandidatesFor(format,profile,dimsMap,weightMap).slice(0,4)){
+      aggregate[row.key]=(aggregate[row.key]||0)+row.adjustedScore;
+    }
+  }
+  const strap=Object.entries(aggregate)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,3)
+    .map(([k])=>HOW_WE_BAT_BANNERS[k]?.title)
+    .filter(Boolean)
+    .join(' · ');
+
+  return {club_id:club.id,identity_statement:identity,closing_strapline:strap,formats,status:'draft'};
+}
+
 
 function ensureHowWeBatWorkingDraft(){
   if(!howWeBatDraft){
