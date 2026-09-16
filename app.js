@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.25 — compact How We Bat hero
+// Batting Development Platform v0.8.26 — compact How We Bat hero
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -4714,7 +4714,7 @@ function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
     :[];
 
   const points=savedPoints.length?savedPoints:fallbackPoints;
-  const cardClass=`hwb-public-banner ${index===1?'feature':''} ${context==='plan'?'plan-reference':''}`;
+  const cardClass=`hwb-public-banner ${index%2===0?'feature':''} ${context==='plan'?'plan-reference':''}`;
 
   // A genuinely custom Key Message may have no deeper reference material.
   // In that case, render a normal card rather than an empty expandable panel.
