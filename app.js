@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.32 — quieter account controls in club/platform header — club-branded How We Bat feature card — same-hue Key Message blue scale — compact How We Bat hero
+// Batting Development Platform v0.8.33 — generated-first How We Bat-aligned Player Plan Structure + season lock
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -68,6 +68,7 @@ let playerPlanStructureVersions=[];
 let playerPlanStructureSection='core';
 let playerPlanStructureWorking=null;
 let playerPlanStructureDirty=false;
+let playerPlanStructureManualEdit=false;
 let philosophyScenarioSelectedIds=new Set();
 let philosophyScenarioStateKey='';
 let philosophyScenarioFormat='limited_overs';
@@ -1182,6 +1183,7 @@ async function loadData(){
   playerPlanStructureVersions=planVersionsRes.data||[];
   playerPlanStructureWorking=null;
   playerPlanStructureDirty=false;
+  playerPlanStructureManualEdit=false;
   myContribution=null;
 
   if(myContributor){
@@ -5047,20 +5049,74 @@ function questionSpecFor(format,key){
 }
 
 
-function generatedPlayerPlanQuestion(section,key,weight=null,usePublished=false){
-  const spec=questionSpecFor(section==='core'?'core':section,key);
-  const dim=dimensions.find(d=>d.dimension_key===key);
-  const formatLabel=FORMATS.find(([k])=>k===section)?.[1]||section;
-  const guidance=section==='core'
-    ?(spec.why||'Choose what genuinely describes your game.')
-    :`${dim?.label||spec.label} is ${WEIGHT_LABELS[weight].toLowerCase()} in the club’s ${formatLabel} philosophy.`;
+function hwbPlanSource(usePublished=false){
+  if(!usePublished && howWeBatDraft?.formats)return howWeBatDraft;
+  const snap=howWeBatVersions?.[0]?.snapshot;
+  return snap||howWeBatDraft||null;
+}
+
+const HWB_PLAN_PROMPTS={
+  value_wicket:{
+    dimension:'wicket_preservation',
+    label:'What does valuing your wicket look like in your game?'
+  },
+  keep_moving:{
+    dimension:'strike_rotation'
+  },
+  scoring_game:{
+    dimension:'scoring_areas',
+    label:'Where do you score most reliably in this format?'
+  },
+  control_tempo:{
+    dimension:'tempo'
+  },
+  pressure_bowler:{
+    dimension:'matchups',
+    label:'How can you keep changing the bowler’s problem?',
+    options:['Change strike','Run hard and pressure the field','Use a favourable matchup','Use a trusted boundary option','Use the field that is being offered','Change depth or position at the crease','Use my partner’s different strengths','Make the bowler change line, length or plan']
+  },
+  read_game:{
+    dimension:'risk_management',
+    label:'What tells you that you need to adjust how you use your game?',
+    options:['The bowler changes line or length','The bowler changes pace or variation','The field changes','The required rate changes','A wicket changes the match situation','The partnership changes','Conditions change','The matchup changes','A safe scoring option opens up','The game is asking for less risk, not more']
+  },
+  use_phase:{
+    dimension:'risk_management',
+    label:'When is it time for you to expand your scoring game?',
+    options:['Field restrictions create access','I am established and reading the ball well','Wickets in hand allow more intent','The required rate demands it','A favourable matchup arrives','The field gives me a clear scoring option','The bowler is tiring or losing control','The innings has reached its late phase','Conditions have become easier','My trusted option is genuinely available']
+  }
+};
+
+function hwbPromptSpec(format,banner){
+  const map=HWB_PLAN_PROMPTS[banner?.key]||{};
+  const supporting=Array.isArray(banner?.supporting_dimensions)?banner.supporting_dimensions:[];
+  const fallbackKey=supporting.map(x=>x?.key).find(k=>QUESTION_LIBRARY[k]);
+  const dimension=map.dimension||fallbackKey||null;
+  const base=dimension?questionSpecFor(format,dimension):{label:'How will you apply this in your batting?',options:[]};
+  return {
+    dimension,
+    label:map.label||base.label,
+    options:[...(map.options||base.options||[])]
+  };
+}
+
+function generatedCorePlanQuestion(key){
+  const spec=QUESTION_LIBRARY[key]||{label:key,why:'',options:[]};
+  const wording={
+    core_strengths:'Which scoring options are genuinely yours?',
+    core_danger:'What most often pulls you away from your plan?',
+    core_reset:'What brings you back to your plan?'
+  };
   return {
     id:key,
-    source_type:section==='core'?'core':'generated',
-    source_dimension:section==='core'?null:key,
-    source_weight:section==='core'?null:Number(weight??0),
-    label:spec.label,
-    guidance,
+    source_type:'core',
+    source_dimension:null,
+    source_weight:null,
+    source_hwb_key:null,
+    source_hwb_title:'CLUB-WIDE FOUNDATION',
+    source_hwb_message:'Your format plans work better when you are clear about your own game first.',
+    label:wording[key]||spec.label,
+    guidance:spec.why||'Choose what genuinely describes your game.',
     response_type:'choices',
     options:[...(spec.options||[])],
     required:true,
@@ -5068,17 +5124,40 @@ function generatedPlayerPlanQuestion(section,key,weight=null,usePublished=false)
   };
 }
 
+function generatedHwbPlanQuestion(format,banner,index){
+  const spec=hwbPromptSpec(format,banner);
+  const title=String(banner?.title||HOW_WE_BAT_BANNERS[banner?.key]?.title||`Key Message ${index+1}`);
+  const message=String(banner?.message||HOW_WE_BAT_BANNERS[banner?.key]?.messages?.[format]||'');
+  return {
+    id:`hwb_${format}_${banner?.key||slug(title)||index+1}`,
+    source_type:'hwb',
+    source_dimension:spec.dimension,
+    source_weight:null,
+    source_hwb_key:banner?.key||null,
+    source_hwb_title:title,
+    source_hwb_message:message,
+    label:spec.label,
+    guidance:message?`This comes directly from ${title}: ${message}`:`This question supports ${title}.`,
+    response_type:'choices',
+    options:spec.options,
+    required:true,
+    active:true
+  };
+}
+
 function generatedPlayerPlanStructure(usePublished=false){
-  const coreKeys=['core_strengths','core_danger','core_reset','core_focus'];
+  const hwb=hwbPlanSource(usePublished);
+  const coreKeys=['core_strengths','core_danger','core_reset'];
   const structure={
-    core:coreKeys.map(k=>generatedPlayerPlanQuestion('core',k,null,usePublished)),
+    schema_version:2,
+    generated_from:'locked_how_we_bat',
+    core:coreKeys.map(generatedCorePlanQuestion),
     formats:{}
   };
   const formatList=usePublished?publishedEnabledFormats():enabledFormats();
   for(const [format] of formatList){
-    const rows=(usePublished?publishedTopEmphasis(format):topEmphasis(format))
-      .filter(x=>x.weight>=2 && QUESTION_LIBRARY[x.key]);
-    structure.formats[format]=rows.map(x=>generatedPlayerPlanQuestion(format,x.key,x.weight,usePublished));
+    const banners=(hwb?.formats?.[format]?.banners||[]).filter(Boolean).slice(0,4);
+    structure.formats[format]=banners.map((b,i)=>generatedHwbPlanQuestion(format,b,i));
   }
   return structure;
 }
@@ -5086,7 +5165,12 @@ function generatedPlayerPlanStructure(usePublished=false){
 function normalisePlayerPlanStructure(value,usePublished=false){
   const generated=generatedPlayerPlanStructure(usePublished);
   if(!value || typeof value!=='object')return generated;
-  const out={core:Array.isArray(value.core)?structuredClone(value.core):generated.core,formats:{}};
+  const out={
+    schema_version:Number(value.schema_version||0),
+    generated_from:value.generated_from||null,
+    core:Array.isArray(value.core)?structuredClone(value.core):generated.core,
+    formats:{}
+  };
   for(const [format] of (usePublished?publishedEnabledFormats():enabledFormats())){
     out.formats[format]=Array.isArray(value.formats?.[format])
       ?structuredClone(value.formats[format])
@@ -5097,6 +5181,9 @@ function normalisePlayerPlanStructure(value,usePublished=false){
     source_type:q?.source_type||'custom',
     source_dimension:q?.source_dimension||null,
     source_weight:q?.source_weight==null?null:Number(q.source_weight),
+    source_hwb_key:q?.source_hwb_key||null,
+    source_hwb_title:q?.source_hwb_title||null,
+    source_hwb_message:q?.source_hwb_message||null,
     label:String(q?.label||'Untitled question'),
     guidance:String(q?.guidance||''),
     response_type:q?.response_type==='text'?'text':'choices',
@@ -5128,7 +5215,7 @@ function planQuestionSpec(section,key){
 }
 
 function planStructureSectionLabel(section){
-  if(section==='core')return 'Core Player Plan';
+  if(section==='core')return 'Club-wide foundation';
   return FORMATS.find(([k])=>k===section)?.[1]||section;
 }
 
@@ -5153,13 +5240,13 @@ function markPlanStructureDirty(){
   playerPlanStructureDirty=true;
   const save=document.getElementById('savePlanStructure');
   const st=document.getElementById('planStructureStatus');
-  if(save){save.disabled=false;save.textContent='Save changes';}
+  if(save){save.disabled=false;save.textContent='Save exact edits';}
   if(st)st.textContent='Unsaved changes';
 }
 
 function validatePlanStructure(structure){
   const problems=[];
-  const sections=[['core','Core'],...enabledFormats()];
+  const sections=[['core','Club-wide foundation'],...enabledFormats()];
   for(const [section,label] of sections){
     const active=planStructureArray(structure,section).filter(q=>q.active!==false);
     if(!active.length){problems.push(`${label}: keep at least one question.`);continue;}
@@ -5185,16 +5272,13 @@ function requiredQuestionGaps(section,raw){
 }
 
 function renderPlanStructureQuestion(q,index,editable=true){
-  const dimLabel=q.source_dimension
-    ?(dimensions.find(d=>d.dimension_key===q.source_dimension)?.label||q.source_dimension)
-    :null;
-  const source=q.source_type==='custom'
-    ?'<span class="plan-source custom">CLUB-SPECIFIC</span>'
-    :q.source_type==='adapted'
-      ?`<span class="plan-source adapted">ADAPTED · ${esc(dimLabel||'generated question')}</span>`
-      :q.source_type==='core'
-        ?'<span class="plan-source core">CORE</span>'
-        :`<span class="plan-source generated">FROM ${esc(dimLabel||'PHILOSOPHY')} · ${esc(WEIGHT_LABELS[q.source_weight]||'')}</span>`;
+  const source=q.source_type==='hwb'
+    ?`<span class="plan-source generated">HOW WE BAT · ${esc(q.source_hwb_title||'KEY MESSAGE')}</span>`
+    :q.source_type==='custom'
+      ?'<span class="plan-source custom">CLUB-SPECIFIC</span>'
+      :q.source_type==='adapted'
+        ?'<span class="plan-source adapted">MANUALLY ADAPTED</span>'
+        :'<span class="plan-source core">CLUB-WIDE</span>';
   if(!q.active){
     return `<div class="plan-question-removed"><span>${esc(q.label)}</span>${editable?`<button class="btn ghost" data-plan-restore="${esc(q.id)}">Restore</button>`:''}</div>`;
   }
@@ -5204,358 +5288,188 @@ function renderPlanStructureQuestion(q,index,editable=true){
       ${editable?`<div class="plan-order-controls"><button class="mini-icon-btn" data-plan-move="${esc(q.id)}" data-direction="up">↑</button><button class="mini-icon-btn" data-plan-move="${esc(q.id)}" data-direction="down">↓</button></div>`:''}
     </div>
     <div class="field"><label>Question</label><input data-plan-label value="${esc(q.label)}" ${editable?'':'disabled'}></div>
-    <div class="field"><label>Why / guidance shown to the player</label><textarea data-plan-guidance rows="2" ${editable?'':'disabled'}>${esc(q.guidance||'')}</textarea></div>
+    <div class="field"><label>Guidance shown to the player</label><textarea data-plan-guidance rows="2" ${editable?'':'disabled'}>${esc(q.guidance||'')}</textarea></div>
     <div class="plan-question-settings">
       <div class="field"><label>Response style</label><select data-plan-response-type ${editable?'':'disabled'}><option value="choices" ${q.response_type!=='text'?'selected':''}>Choose from options</option><option value="text" ${q.response_type==='text'?'selected':''}>Written response</option></select></div>
       <label class="plan-required-toggle"><input type="checkbox" data-plan-required ${q.required?'checked':''} ${editable?'':'disabled'}><span>Required question</span></label>
     </div>
     <div class="field plan-options-field" style="display:${q.response_type==='text'?'none':'block'}"><label>Answer options · one per line</label><textarea data-plan-options rows="5" ${editable?'':'disabled'}>${esc((q.options||[]).join('\n'))}</textarea></div>
-    ${editable?`<div class="btnrow plan-question-actions"><button class="btn ghost" data-plan-duplicate="${esc(q.id)}">Split / duplicate</button><button class="btn ghost danger-lite" data-plan-remove="${esc(q.id)}">Remove from plan</button></div>`:''}
+    ${editable?`<div class="btnrow plan-question-actions"><button class="btn ghost" data-plan-duplicate="${esc(q.id)}">Duplicate</button><button class="btn ghost danger-lite" data-plan-remove="${esc(q.id)}">Remove from plan</button></div>`:''}
   </article>`;
 }
 
-function overlayModules(format){
-  return topEmphasis(format)
-    .filter(x=>x.weight>=2 && QUESTION_LIBRARY[x.key])
-    .map(x=>({key:x.key,label:questionSpecFor(format,x.key).label,weight:x.weight}));
+function renderPlanReviewQuestion(q,index,section){
+  const sourceTitle=q.source_hwb_title||(section==='core'?'CLUB-WIDE FOUNDATION':'HOW WE BAT');
+  const sourceMessage=q.source_hwb_message||'';
+  return `<article class="plan-review-question" style="border:1px solid var(--line);border-radius:14px;padding:15px 17px;background:#fff;margin-top:10px">
+    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-size:9px;font-weight:950;letter-spacing:.12em;color:var(--muted)">${String(index+1).padStart(2,'0')}</span><span style="font-size:9px;font-weight:950;letter-spacing:.08em;color:var(--navy)">${section==='core'?'CLUB-WIDE':`HOW WE BAT · ${esc(sourceTitle)}`}</span></div>
+    <h3 style="margin:7px 0 5px">${esc(q.label)}</h3>
+    ${sourceMessage?`<p class="help" style="margin:0"><strong>Why this is here:</strong> ${esc(sourceMessage)}</p>`:`<p class="help" style="margin:0">${esc(q.guidance||'')}</p>`}
+  </article>`;
+}
+
+function renderPlanReviewSection(section,label,questions){
+  const active=questions.filter(q=>q.active!==false);
+  return `<section class="card" style="margin-top:14px">
+    <div class="section-label">${section==='core'?'Start here':esc(label)}</div>
+    <h2 style="margin-bottom:4px">${section==='core'?'The player’s core game':`${esc(label)} prompts`}</h2>
+    <p class="help" style="margin-top:0">${section==='core'?'These three questions define the player before format-specific decisions are added.':`Each question exists because of a Key Message in the club’s locked ${esc(label)} How We Bat.`}</p>
+    ${active.map((q,i)=>renderPlanReviewQuestion(q,i,section)).join('')||'<div class="notice compact">No questions generated for this section.</div>'}
+  </section>`;
 }
 
 async function renderPlanStructure(){
   const formats=enabledFormats();
   const page=document.getElementById('page');
-  const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
+  const hwbLocked=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
 
-  if(!planStructureReady){
+  if(!hwbLocked){
     const lead=isPhilosophyLead();
     const hasHowWeBatDraft=!!howWeBatDraft;
     page.innerHTML=`<section class="card player-gate">
       <div class="gate-state locked">🔒</div>
-      <div class="section-label">Player Plan Structure is not available yet</div>
+      <div class="section-label">Player Plan Structure</div>
       <h2>Lock How We Bat first.</h2>
-      <p>The Player Plan questions flow from the club’s player-facing <strong>How We Bat</strong> messages. The club must confirm and lock How We Bat before those prompts are built.</p>
-      <div class="notice"><strong>What needs to happen next</strong><br>${lead?(hasHowWeBatDraft?'Review How We Bat, make any final wording changes, then choose <strong>Confirm & lock How We Bat</strong>.':'Choose the How We Bat you want from the Philosophy Workshop first.'):'The Philosophy Lead is still finalising How We Bat.'}</div>
+      <p>The Player Plan questions are generated from the club’s player-facing <strong>How We Bat</strong>. Finalise that first, then BDP can build the smallest useful set of prompts.</p>
       ${lead?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">${hasHowWeBatDraft?'Open How We Bat':'Open Philosophy Workshop'}</button></div>`:''}
     </section>`;
     if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=hasHowWeBatDraft?'howwebat':'workshop';renderTab();};
     return;
   }
 
-  page.innerHTML='<div class="splash">Loading Player Plan Structure…</div>';
+  const editable=isPhilosophyLead();
+  const locked=playerPlanStructureDraft?.status==='ready';
+  const legacyDraft=!!playerPlanStructureDraft && Number(playerPlanStructureDraft?.structure?.schema_version||0)<2;
 
-  let rolloutHtml='';
-  let groups=[];
-  let players=[];
-  let requirements=[];
-  let progressMap=new Map();
+  if(!playerPlanStructureWorking){
+    if(!playerPlanStructureDraft || (legacyDraft && !locked)){
+      playerPlanStructureWorking=generatedPlayerPlanStructure(false);
+      playerPlanStructureDirty=true;
+    }else{
+      playerPlanStructureWorking=normalisePlayerPlanStructure(playerPlanStructureDraft.structure,false);
+      playerPlanStructureDirty=false;
+    }
+  }
 
-  if(isAdmin()){
-    const [{data:g},{data:p},{data:r},{data:progress,error:progressErr}]=await Promise.all([
-      supabase.from('playing_groups').select('*').eq('club_id',club.id).eq('active',true).order('sort_order').order('name'),
-      supabase.from('players').select('id,display_name,active').eq('club_id',club.id).eq('active',true).order('display_name'),
-      supabase.from('player_plan_requirements').select('*').eq('club_id',club.id).eq('active',true).order('format_key').order('due_date',{ascending:true,nullsFirst:true}),
-      supabase.rpc('get_plan_rollout_progress',{p_club_id:club.id})
-    ]);
-    groups=g||[];players=p||[];requirements=r||[];
-    if(!progressErr)progressMap=new Map((progress||[]).map(x=>[x.requirement_id,x]));
-    const gMap=new Map(groups.map(x=>[x.id,x]));
-    const pMap=new Map(players.map(x=>[x.id,x]));
-    const planFormats=philosophyVersions.length?publishedEnabledFormats():formats;
-    const requirementRows=requirements.map(r=>{
-      const label=FORMATS.find(([k])=>k===r.format_key)?.[1]||r.format_key;
-      const target=r.target_type==='all'?'Everyone':r.target_type==='playing_group'?(gMap.get(r.playing_group_id)?.name||'Inactive Playing Group'):(pMap.get(r.player_id)?.display_name||'Player');
-      const prog=progressMap.get(r.id);
-      return `<div class="rollout-rule-row"><div><strong>${esc(label)}</strong><span>${esc(target)}</span></div><div><strong>${r.due_date?`Due ${esc(niceDate(r.due_date))}`:'Required now'}</strong><span>${prog?`${prog.completed_count}/${prog.eligible_count} complete`:'Progress unavailable'}</span></div><button class="btn ghost danger-lite" data-remove-plan-requirement="${r.id}">Remove</button></div>`;
-    }).join('');
-    rolloutHtml=`<section class="card plan-rollout-card" style="margin-top:16px">
-      <div class="section-label">Player Plan Rollout</div><h2>Set requirements — not locks.</h2>
-      <div class="help">Every enabled format remains available to every player from day one. Use this section only to say <strong>what is required, for whom, and by when</strong>. Players can always work ahead.</div>
-      <div class="rollout-builder">
-        <div class="field"><label>Format</label><select id="rolloutFormat">${planFormats.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select></div>
-        <div class="field"><label>Who is this required for?</label><select id="rolloutTargetType"><option value="all">Everyone</option><option value="playing_group">A Playing Group</option><option value="multiple_playing_groups">Multiple Playing Groups</option><option value="player">One player</option></select></div>
-        <div class="field" id="rolloutTargetBox" style="display:none"><label id="rolloutTargetLabel">Playing Group</label><select id="rolloutTarget"></select></div>
-        <div class="field"><label>Required by</label><input id="rolloutDueDate" type="date"><small>Optional. Leave blank for “Required now”.</small></div>
-        <div class="field rollout-multi-group-box" id="rolloutMultiGroupBox" style="display:none">
-          <div class="rollout-multi-group-head">
-            <div><label>Playing Groups</label><small>Select every group that should receive the same requirement.</small></div>
-            <div class="rollout-multi-group-actions"><button class="btn ghost tiny" id="selectAllRolloutGroups" type="button">Select all</button><button class="btn ghost tiny" id="clearRolloutGroups" type="button">Clear</button></div>
-          </div>
-          <div class="rollout-group-picker" id="rolloutGroupPicker"></div>
-          <div class="rollout-group-count" id="rolloutGroupCount">0 groups selected</div>
-        </div>
-        <div class="rollout-add-action"><button class="btn secondary" id="addPlanRequirement">Add requirement</button><span class="status" id="rolloutStatus"></span></div>
-      </div>
-      <div class="rollout-current"><h3>Current requirements</h3>${requirementRows||'<div class="notice compact">No deadlines have been set yet. Players can still complete any available format now.</div>'}</div>
+  const validSections=['core',...formats.map(([k])=>k)];
+  if(!validSections.includes(playerPlanStructureSection))playerPlanStructureSection='core';
+  const structureReady=locked && !playerPlanStructureDirty;
+  const latestVersion=philosophyVersions?.[0]?.version_number||null;
+  const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
+  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>v.published_at&&new Date(v.published_at)>=draftStartedAt);
+
+  const reviewSections=[renderPlanReviewSection('core','Club-wide',playerPlanStructureWorking.core)];
+  for(const [format,label] of formats){
+    reviewSections.push(renderPlanReviewSection(format,label,playerPlanStructureWorking.formats?.[format]||[]));
+  }
+
+  let manualHtml='';
+  if(playerPlanStructureManualEdit && editable && !structureReady){
+    const sectionArray=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
+    const activeQuestions=sectionArray.filter(q=>q.active!==false);
+    const removedQuestions=sectionArray.filter(q=>q.active===false);
+    const sectionTabs=[['core','Core'],...formats].map(([k,l])=>`<button class="${playerPlanStructureSection===k?'active':''}" data-plan-section="${k}">${esc(l)}</button>`).join('');
+    manualHtml=`<section class="card" style="margin-top:16px">
+      <div class="plan-structure-builder-head"><div><div class="section-label">Optional manual control</div><h2>Edit the exact questions</h2><div class="help">BDP’s generated structure is the normal path. Use this only when the club genuinely needs different wording, options or an additional prompt.</div></div></div>
+      <div class="plan-structure-tabs">${sectionTabs}</div>
+      <div class="plan-section-head"><div><div class="section-label">${esc(planStructureSectionLabel(playerPlanStructureSection))}</div><h3>${activeQuestions.length} question${activeQuestions.length===1?'':'s'}</h3></div><button class="btn ghost" id="addPlanQuestion">+ Add question</button></div>
+      <div class="plan-question-editor-list">${activeQuestions.map((q,i)=>renderPlanStructureQuestion(q,i,true)).join('')||'<div class="notice">No questions are currently included.</div>'}</div>
+      ${removedQuestions.length?`<details class="plan-removed-list"><summary>Removed (${removedQuestions.length})</summary>${removedQuestions.map(q=>renderPlanStructureQuestion(q,0,true)).join('')}</details>`:''}
+      <div class="btnrow plan-structure-actions"><button class="btn secondary" id="savePlanStructure">Save exact edits</button><button class="btn ghost" id="resetGeneratedPlan">Reset to generated questions</button><button class="btn ghost" id="closePlanEditor">Back to review</button><span class="status" id="planStructureStatus"></span></div>
     </section>`;
   }
 
-  const editable=isPhilosophyLead();
-  if(!playerPlanStructureWorking){
-    playerPlanStructureWorking=normalisePlayerPlanStructure(playerPlanStructureDraft?.structure||generatedPlayerPlanStructure(false),false);
-    playerPlanStructureDirty=!playerPlanStructureDraft;
-  }
-  const validSections=['core',...formats.map(([k])=>k)];
-  if(!validSections.includes(playerPlanStructureSection))playerPlanStructureSection='core';
-  const sectionArray=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
-  const activeQuestions=sectionArray.filter(q=>q.active!==false);
-  const removedQuestions=sectionArray.filter(q=>q.active===false);
-  const structureReady=playerPlanStructureDraft?.status==='ready' && !playerPlanStructureDirty;
-  const structureSaved=!!playerPlanStructureDraft && !playerPlanStructureDirty;
+  const statusHtml=structureReady
+    ?`<div class="notice success"><strong>🔒 Player Plan Structure locked for this season.</strong><br>These are now the prompts players will use. Routine editing is deliberately disabled so existing Player Plans stay aligned with How We Bat.</div>`
+    :`<div class="notice"><strong>Generated from locked How We Bat.</strong><br>BDP has kept this deliberately short: three club-wide questions, then one prompt for each How We Bat Key Message. The normal job here is simply to check that the questions make sense.</div>`;
 
-  const sectionTabs=[['core','Core'],...formats].map(([k,l])=>`<button class="${playerPlanStructureSection===k?'active':''}" data-plan-section="${k}">${esc(l)}</button>`).join('');
-  const questionsHtml=activeQuestions.map((q,i)=>renderPlanStructureQuestion(q,i,editable)).join('')||'<div class="notice">No questions are currently included in this section.</div>';
-  const removedHtml=removedQuestions.length?`<details class="plan-removed-list"><summary>Removed from this section (${removedQuestions.length})</summary>${removedQuestions.map(q=>renderPlanStructureQuestion(q,0,editable)).join('')}</details>`:'';
+  const actionHtml=!editable
+    ?'<div class="help">The Philosophy Lead controls the final Player Plan Structure.</div>'
+    :structureReady
+      ?(currentDraftPublished
+        ?`<div class="btnrow"><span class="status">Club Batting System v${esc(latestVersion||'')} published ✓</span></div>`
+        :`<div class="btnrow"><button class="btn secondary" id="publishClubSystem">Publish Club Batting System</button><span class="status" id="publishClubSystemStatus"></span></div>`)
+      :`<div class="btnrow"><button class="btn secondary" id="lockPlanStructure">Confirm & lock Player Plan Structure</button><button class="btn ghost" id="editExactPlanQuestions">Edit exact questions</button><span class="status" id="planStructureStatus"></span></div>`;
 
-  const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
-  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>v.published_at&&new Date(v.published_at)>=draftStartedAt);
-  const latestVersion=philosophyVersions?.[0]?.version_number||null;
-  const releaseHtml=currentDraftPublished
-    ?`<section class="card club-system-release published-release" style="margin-top:16px"><div class="section-label">Club Batting System</div><h2>Published ✓</h2><div class="notice"><strong>Club Batting System v${esc(latestVersion||'')}</strong><br>The Philosophy, How We Bat and Player Plan Structure for this release are live.</div></section>`
-    :isPhilosophyLead()
-      ?`<section class="card club-system-release" style="margin-top:16px"><div class="section-label">Final step</div><h2>Publish Club Batting System</h2><div class="release-checklist">
-          <div class="release-check done"><span>✓</span><div><strong>Final Philosophy</strong><small>Working draft created from the workshop synthesis.</small></div></div>
-          <div class="release-check done"><span>✓</span><div><strong>How We Bat</strong><small>Marked Ready across the club’s enabled formats.</small></div></div>
-          <div class="release-check ${structureReady?'done':'optional'}"><span>${structureReady?'✓':'○'}</span><div><strong>Player Plan Structure</strong><small>${structureReady?'Ready — reviewed and confirmed.':'Review the questions, then confirm this structure before publishing.'}</small></div></div>
-          <div class="release-check ${requirements.length?'done':'optional'}"><span>${requirements.length?'✓':'○'}</span><div><strong>Rollout requirements</strong><small>${requirements.length?`${requirements.length} active requirement${requirements.length===1?'':'s'} set.`:'Optional — players can still complete all enabled formats without deadlines.'}</small></div></div>
-        </div>
-        <div class="notice release-warning"><strong>When you publish</strong><br>Philosophy + How We Bat + this exact Player Plan Structure are versioned together. Player Plans then open to players.</div>
-        <div class="btnrow">${structureReady
-          ?'<button class="btn secondary" id="publishClubSystem">Publish Club Batting System</button>'
-          :'<button class="btn secondary" id="confirmPlanStructureRelease">Confirm Player Plan Structure</button>'}
-          <span class="status" id="publishClubSystemStatus"></span></div></section>`
-      :`<section class="card club-system-release" style="margin-top:16px"><div class="section-label">Final step</div><h2>Waiting for the Philosophy Lead.</h2><div class="help">The Philosophy Lead controls the final Player Plan Structure and publication.</div></section>`;
+  page.innerHTML=`<style>
+    .plan-review-shell{max-width:980px;margin:0 auto}.plan-review-hero{padding:20px 22px}.plan-review-hero h1{margin:4px 0 7px}.plan-review-count{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.plan-review-count span{padding:6px 9px;border-radius:999px;background:var(--club-soft);font-size:9px;font-weight:900;color:var(--navy)}
+  </style>
+  <div class="plan-review-shell">
+    <section class="card plan-review-hero">
+      <div class="section-label">Player Plan Structure</div>
+      <h1>The questions players will build their plans from.</h1>
+      <p class="help">How We Bat sets the club position. These prompts help each batter turn that position into <strong>their own game</strong>.</p>
+      <div class="plan-review-count"><span>${playerPlanStructureWorking.core.filter(q=>q.active!==false).length} club-wide</span>${formats.map(([f,l])=>`<span>${esc(l)} · ${(playerPlanStructureWorking.formats?.[f]||[]).filter(q=>q.active!==false).length}</span>`).join('')}</div>
+    </section>
+    ${statusHtml}
+    ${reviewSections.join('')}
+    ${manualHtml}
+    <section class="card" style="margin-top:16px">
+      <div class="section-label">${structureReady?'Season structure':'Decision'}</div>
+      <h2>${structureReady?'Set it and leave it.':'Do these ask the right things?'}</h2>
+      <p class="help">${structureReady?'A different structure requires a new Philosophy round so How We Bat and Player Plans can be rebuilt together.':'If yes, lock it. If a club genuinely needs different wording, use the optional exact-question editor first.'}</p>
+      ${actionHtml}
+    </section>
+  </div>`;
 
-  page.innerHTML=`<section class="card plan-structure-builder-card">
-    <div class="plan-structure-builder-head"><div><div class="section-label">Player Plan Structure Builder</div><h2>Decide what players actually need to think about.</h2><div class="help">The system has generated a structure from the philosophy. This is a <strong>draft</strong>. Keep, remove, reword, reorder or split questions — and add club-specific questions where the generated version is not quite right.</div></div>
-      <div class="plan-structure-state ${structureReady?'ready':'draft'}"><strong>${structureReady?'STRUCTURE READY':structureSaved?'DRAFT SAVED':'WORKING DRAFT'}</strong><span>${structureReady?'Ready for publication.':editable?'Nothing goes live until you publish.':'View only.'}</span></div>
-    </div>
-    <div class="notice plan-structure-rule"><strong>Philosophy tells us what matters. Player Plan Structure decides what players are asked.</strong><br>Removing a question does not remove that idea from How We Bat or the underlying philosophy.</div>
-    <div class="plan-structure-tabs">${sectionTabs}</div>
-    <div class="plan-section-head"><div><div class="section-label">${esc(planStructureSectionLabel(playerPlanStructureSection))}</div><h3>${activeQuestions.length} question${activeQuestions.length===1?'':'s'} included</h3></div>${editable?'<button class="btn ghost" id="addPlanQuestion">+ Add club-specific question</button>':''}</div>
-    <div class="plan-question-editor-list">${questionsHtml}</div>
-    ${removedHtml}
-    ${editable?`<div class="btnrow plan-structure-actions"><button class="btn secondary" id="savePlanStructure" ${structureSaved?'disabled':''}>${structureSaved?'Saved ✓':'Save Player Plan Structure'}</button>${structureReady?'<button class="btn ghost" id="reopenPlanStructure">Reopen for editing</button>':'<button class="btn secondary" id="readyPlanStructure">Confirm Player Plan Structure</button>'}<span class="status" id="planStructureStatus">${structureReady?'Ready ✓':''}</span></div>`:''}
-  </section>
-  ${rolloutHtml}
-  ${releaseHtml}`;
-
+  if(document.getElementById('editExactPlanQuestions'))document.getElementById('editExactPlanQuestions').onclick=()=>{playerPlanStructureManualEdit=true;renderPlanStructure();};
+  if(document.getElementById('closePlanEditor'))document.getElementById('closePlanEditor').onclick=()=>{collectPlanStructureEditor();playerPlanStructureManualEdit=false;renderPlanStructure();};
   document.querySelectorAll('[data-plan-section]').forEach(b=>b.onclick=()=>{collectPlanStructureEditor();playerPlanStructureSection=b.dataset.planSection;renderPlanStructure();});
 
-  if(editable){
+  if(playerPlanStructureManualEdit && editable && !structureReady){
     document.querySelectorAll('[data-plan-question] input,[data-plan-question] textarea,[data-plan-question] select').forEach(el=>{
       el.addEventListener('input',()=>{const row=el.closest('[data-plan-question]');if(el.matches('[data-plan-response-type]')){const f=row.querySelector('.plan-options-field');if(f)f.style.display=el.value==='text'?'none':'block';}markPlanStructureDirty();});
       el.addEventListener('change',markPlanStructureDirty);
     });
-
     document.getElementById('addPlanQuestion').onclick=()=>{
       collectPlanStructureEditor();
       const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
-      arr.push({id:`custom_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,source_type:'custom',source_dimension:null,source_weight:null,label:'New club-specific question',guidance:'What do you want the player to think about here?',response_type:'choices',options:['Option 1','Option 2'],required:false,active:true});
+      arr.push({id:`custom_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,source_type:'custom',source_dimension:null,source_weight:null,source_hwb_key:null,source_hwb_title:null,source_hwb_message:null,label:'New club-specific question',guidance:'What do you want the player to think about here?',response_type:'choices',options:['Option 1','Option 2'],required:false,active:true});
       playerPlanStructureDirty=true;renderPlanStructure();
     };
-
     document.querySelectorAll('[data-plan-duplicate]').forEach(b=>b.onclick=()=>{
       collectPlanStructureEditor();
       const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
       const i=arr.findIndex(q=>q.id===b.dataset.planDuplicate);if(i<0)return;
-      const q=arr[i];
-      const copy=structuredClone(q);
-      copy.id=`adapted_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-      copy.source_type=q.source_dimension?'adapted':'custom';
-      copy.label=`${q.label} — new question`;
-      arr.splice(i+1,0,copy);playerPlanStructureDirty=true;renderPlanStructure();
+      const copy=structuredClone(arr[i]);copy.id=`adapted_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;copy.source_type='adapted';copy.label=`${copy.label} — new question`;arr.splice(i+1,0,copy);playerPlanStructureDirty=true;renderPlanStructure();
     });
-
-    document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{
-      collectPlanStructureEditor();
-      const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
-      const q=arr.find(x=>x.id===b.dataset.planRemove);if(!q)return;
-      if(q.source_dimension && Number(q.source_weight)===4){
-        const other=arr.some(x=>x.active!==false&&x.id!==q.id&&x.source_dimension===q.source_dimension);
-        if(!other){
-          const dim=dimensions.find(d=>d.dimension_key===q.source_dimension)?.label||q.source_dimension;
-          const ok=confirm(`${dim} is a VERY HIGH part of this format philosophy.\n\nRemoving this question means players will no longer be directly asked to reflect on it in this section.\n\nRemove anyway?`);
-          if(!ok)return;
-        }
-      }
-      q.active=false;playerPlanStructureDirty=true;renderPlanStructure();
-    });
-
+    document.querySelectorAll('[data-plan-remove]').forEach(b=>b.onclick=()=>{collectPlanStructureEditor();const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);const q=arr.find(x=>x.id===b.dataset.planRemove);if(q){q.active=false;playerPlanStructureDirty=true;renderPlanStructure();}});
     document.querySelectorAll('[data-plan-restore]').forEach(b=>b.onclick=()=>{const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);const q=arr.find(x=>x.id===b.dataset.planRestore);if(q){q.active=true;playerPlanStructureDirty=true;renderPlanStructure();}});
-
     document.querySelectorAll('[data-plan-move]').forEach(b=>b.onclick=()=>{
-      collectPlanStructureEditor();
-      const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);
-      const activeIdx=arr.map((q,i)=>q.active!==false?i:null).filter(i=>i!==null);
-      const pos=activeIdx.findIndex(i=>arr[i].id===b.dataset.planMove);if(pos<0)return;
-      const otherPos=b.dataset.direction==='up'?pos-1:pos+1;if(otherPos<0||otherPos>=activeIdx.length)return;
-      const a=activeIdx[pos],c=activeIdx[otherPos];[arr[a],arr[c]]=[arr[c],arr[a]];playerPlanStructureDirty=true;renderPlanStructure();
+      collectPlanStructureEditor();const arr=planStructureArray(playerPlanStructureWorking,playerPlanStructureSection);const activeIdx=arr.map((q,i)=>q.active!==false?i:null).filter(i=>i!==null);const pos=activeIdx.findIndex(i=>arr[i].id===b.dataset.planMove);if(pos<0)return;const otherPos=b.dataset.direction==='up'?pos-1:pos+1;if(otherPos<0||otherPos>=activeIdx.length)return;const a=activeIdx[pos],c=activeIdx[otherPos];[arr[a],arr[c]]=[arr[c],arr[a]];playerPlanStructureDirty=true;renderPlanStructure();
     });
-
     document.getElementById('savePlanStructure').onclick=()=>savePlayerPlanStructure('draft');
-    if(document.getElementById('readyPlanStructure')){
-      document.getElementById('readyPlanStructure').onclick=()=>savePlayerPlanStructure('ready',document.getElementById('readyPlanStructure'));
-    }
-    if(document.getElementById('reopenPlanStructure'))document.getElementById('reopenPlanStructure').onclick=async()=>{const ok=confirm('Reopen the Player Plan Structure for editing? It will need to be marked Ready again before publishing.');if(ok)await savePlayerPlanStructure('draft');};
+    document.getElementById('resetGeneratedPlan').onclick=()=>{const ok=confirm('Reset the working Player Plan Structure to the questions generated from the locked How We Bat? Any manual edits in this working draft will be discarded.');if(!ok)return;playerPlanStructureWorking=generatedPlayerPlanStructure(false);playerPlanStructureDirty=true;playerPlanStructureSection='core';renderPlanStructure();};
   }
 
-  if(document.getElementById('confirmPlanStructureRelease')){
-    document.getElementById('confirmPlanStructureRelease').onclick=()=>savePlayerPlanStructure('ready',document.getElementById('confirmPlanStructureRelease'));
-  }
+  if(document.getElementById('lockPlanStructure'))document.getElementById('lockPlanStructure').onclick=()=>savePlayerPlanStructure('ready',document.getElementById('lockPlanStructure'));
   if(document.getElementById('publishClubSystem'))document.getElementById('publishClubSystem').onclick=publishPhilosophy;
-
-  if(isAdmin()){
-    const rolloutTargetType=document.getElementById('rolloutTargetType');
-    const rolloutTargetBox=document.getElementById('rolloutTargetBox');
-    const rolloutTarget=document.getElementById('rolloutTarget');
-    const rolloutTargetLabel=document.getElementById('rolloutTargetLabel');
-    const rolloutMultiGroupBox=document.getElementById('rolloutMultiGroupBox');
-    const rolloutGroupPicker=document.getElementById('rolloutGroupPicker');
-    const rolloutGroupCount=document.getElementById('rolloutGroupCount');
-    const addRequirementButton=document.getElementById('addPlanRequirement');
-
-    const selectedRolloutGroupIds=()=>[...document.querySelectorAll('[data-rollout-group]:checked')].map(x=>x.value);
-    const updateRolloutGroupCount=()=>{
-      if(!rolloutGroupCount)return;
-      const count=selectedRolloutGroupIds().length;
-      rolloutGroupCount.textContent=`${count} group${count===1?'':'s'} selected`;
-    };
-
-    const updateTargetPicker=()=>{
-      const type=rolloutTargetType.value;
-      rolloutTargetBox.style.display='none';
-      rolloutMultiGroupBox.style.display='none';
-      rolloutTarget.innerHTML='';
-      addRequirementButton.textContent=type==='multiple_playing_groups'?'Add requirements':'Add requirement';
-
-      if(type==='all')return;
-
-      if(type==='multiple_playing_groups'){
-        rolloutMultiGroupBox.style.display='block';
-        rolloutGroupPicker.innerHTML=groups.length
-          ?groups.map(g=>`<label class="rollout-group-option"><input type="checkbox" data-rollout-group value="${g.id}"><span>${esc(g.name)}</span></label>`).join('')
-          :'<div class="help">No active Playing Groups have been created yet.</div>';
-        document.querySelectorAll('[data-rollout-group]').forEach(x=>x.onchange=updateRolloutGroupCount);
-        updateRolloutGroupCount();
-        return;
-      }
-
-      rolloutTargetBox.style.display='block';
-      if(type==='playing_group'){
-        rolloutTargetLabel.textContent='Playing Group';
-        rolloutTarget.innerHTML=groups.length?groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join(''):'<option value="">No active Playing Groups</option>';
-      }else{
-        rolloutTargetLabel.textContent='Player';
-        rolloutTarget.innerHTML=players.length?players.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join(''):'<option value="">No active players</option>';
-      }
-    };
-
-    rolloutTargetType.onchange=updateTargetPicker;
-    updateTargetPicker();
-
-    document.getElementById('selectAllRolloutGroups').onclick=()=>{
-      document.querySelectorAll('[data-rollout-group]').forEach(x=>x.checked=true);
-      updateRolloutGroupCount();
-    };
-    document.getElementById('clearRolloutGroups').onclick=()=>{
-      document.querySelectorAll('[data-rollout-group]').forEach(x=>x.checked=false);
-      updateRolloutGroupCount();
-    };
-
-    addRequirementButton.onclick=async()=>{
-      const st=document.getElementById('rolloutStatus');
-      const type=rolloutTargetType.value;
-      const formatKey=document.getElementById('rolloutFormat').value;
-      const dueDate=document.getElementById('rolloutDueDate').value||null;
-
-      if(type==='multiple_playing_groups'){
-        const selectedIds=selectedRolloutGroupIds();
-        if(!selectedIds.length){st.textContent='Choose at least one Playing Group.';return;}
-
-        const existingIds=new Set(
-          requirements
-            .filter(r=>r.format_key===formatKey && r.target_type==='playing_group')
-            .map(r=>r.playing_group_id)
-        );
-        const toCreate=selectedIds.filter(id=>!existingIds.has(id));
-        const skipped=selectedIds.length-toCreate.length;
-
-        if(!toCreate.length){
-          st.textContent='Every selected Playing Group already has a requirement for this format.';
-          return;
-        }
-
-        addRequirementButton.disabled=true;
-        st.textContent=`Adding ${toCreate.length} requirement${toCreate.length===1?'':'s'}…`;
-        let created=0;
-        let failure=null;
-
-        for(const groupId of toCreate){
-          const {error}=await supabase.rpc('create_plan_requirement',{
-            p_club_id:club.id,
-            p_format_key:formatKey,
-            p_target_type:'playing_group',
-            p_playing_group_id:groupId,
-            p_player_id:null,
-            p_due_date:dueDate
-          });
-          if(error){failure=error;break;}
-          created+=1;
-        }
-
-        await renderPlanStructure();
-        const refreshedStatus=document.getElementById('rolloutStatus');
-        if(refreshedStatus){
-          if(failure){
-            refreshedStatus.textContent=`${created} added. ${failure.message}`;
-          }else if(skipped){
-            refreshedStatus.textContent=`${created} added · ${skipped} already existed and were left unchanged.`;
-          }else{
-            refreshedStatus.textContent=`${created} requirement${created===1?'':'s'} added ✓`;
-          }
-        }
-        return;
-      }
-
-      const target=type==='all'?null:rolloutTarget.value||null;
-      if(type!=='all'&&!target){
-        st.textContent=type==='playing_group'?'Create or choose a Playing Group first.':'Choose a player.';
-        return;
-      }
-
-      st.textContent='Adding…';
-      const {error}=await supabase.rpc('create_plan_requirement',{
-        p_club_id:club.id,
-        p_format_key:formatKey,
-        p_target_type:type,
-        p_playing_group_id:type==='playing_group'?target:null,
-        p_player_id:type==='player'?target:null,
-        p_due_date:dueDate
-      });
-      if(error){st.textContent=error.message;return;}
-      await renderPlanStructure();
-      const refreshedStatus=document.getElementById('rolloutStatus');
-      if(refreshedStatus)refreshedStatus.textContent='Requirement added ✓';
-    };
-    document.querySelectorAll('[data-remove-plan-requirement]').forEach(b=>b.onclick=async()=>{const ok=confirm('Remove this Player Plan requirement? Players keep any work they have already completed.');if(!ok)return;const {error}=await supabase.rpc('deactivate_plan_requirement',{p_requirement_id:b.dataset.removePlanRequirement});if(error){alert(error.message);return;}await renderPlanStructure();});
-  }
 }
 
 async function savePlayerPlanStructure(status,triggerButton=null){
-  collectPlanStructureEditor();
+  if(playerPlanStructureManualEdit)collectPlanStructureEditor();
   const st=document.getElementById('planStructureStatus');
-  const btn=triggerButton||(status==='ready'?document.getElementById('readyPlanStructure'):document.getElementById('savePlanStructure'));
+  const btn=triggerButton||(status==='ready'?document.getElementById('lockPlanStructure'):document.getElementById('savePlanStructure'));
   if(status==='ready'){
     const problems=validatePlanStructure(playerPlanStructureWorking);
     if(problems.length){alert(`Player Plan Structure still needs attention:\n\n${problems.slice(0,8).join('\n')}`);return;}
-    const ok=confirm('Confirm Player Plan Structure?\n\nThis confirms the current question structure as the version you intend to publish and enables Publish Club Batting System.\n\nIt does not publish anything yet.');
+    const ok=confirm(
+      `Lock Player Plan Structure for the season?\n\n`+
+      `These questions are generated from the locked How We Bat and will become the framework players use to build their plans.\n\n`+
+      `Once locked, routine editing is disabled. A different structure requires a new Philosophy round so How We Bat and Player Plans stay aligned.\n\n`+
+      `Lock this structure?`
+    );
     if(!ok)return;
   }
-  if(btn){btn.disabled=true;btn.textContent='Saving…';}
-  if(st)st.textContent='Saving…';
+  if(btn){btn.disabled=true;btn.textContent=status==='ready'?'Locking…':'Saving…';}
+  if(st)st.textContent=status==='ready'?'Locking…':'Saving…';
+  playerPlanStructureWorking.schema_version=2;
+  playerPlanStructureWorking.generated_from=playerPlanStructureWorking.generated_from||'locked_how_we_bat';
   const {error}=await supabase.rpc('save_player_plan_structure_draft',{p_club_id:club.id,p_structure:playerPlanStructureWorking,p_status:status});
-  if(error){if(st)st.textContent=error.message;if(btn){btn.disabled=false;btn.textContent=status==='ready'?'Confirm Player Plan Structure':'Save changes';}return;}
+  if(error){if(st)st.textContent=error.message;if(btn){btn.disabled=false;btn.textContent=status==='ready'?'Confirm & lock Player Plan Structure':'Save exact edits';}return;}
+  playerPlanStructureManualEdit=false;
   await loadData();
-  playerPlanStructureSection=playerPlanStructureSection||'core';
+  playerPlanStructureSection='core';
   await renderPlanStructure();
 }
 
