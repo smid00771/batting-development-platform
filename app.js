@@ -1205,27 +1205,26 @@ function renderShell(){
   if(isAdmin() || canContributePhilosophy() || isPhilosophyLead()){
     nav.push(['workshop','Philosophy Workshop','build']);
   }
-  // Club Identity / What We Value / Format Emphasis are response-workflow screens,
-  // not permanent destinations. Contributors enter them from the Philosophy Workshop
-  // and move through them with Save & continue. Only the resulting How We Bat Builder
-  // belongs in the main navigation, and only once the Lead has chosen a synthesis.
-  if(isPhilosophyLead() && workshop?.final_draft_ready){
-    nav.push(['preview','How We Bat Builder','build']);
-  }
+
+  // How We Bat is the player-facing outcome of the Philosophy Workshop, so it sits
+  // before Player Plan Structure. The manual Builder is intentionally NOT a menu item.
+  // Philosophy Leads can reach exact-wording controls from the How We Bat page itself.
   if(isPhilosophyLead() || isAdmin()){
+    nav.push(['howwebat','How We Bat','build']);
     const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
     const planLabel='Player Plan Structure';
     nav.push(['plan',planStructureReady?planLabel:`${planLabel} · Locked`,'build']);
+  }else if(howWeBatVersions.length){
+    nav.push(['howwebat','How We Bat','use']);
   }
 
-  if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','use']);
   if(isPlayerUser())nav.push(['myplan','My Player Plan','use']);
   if(howWeBatVersions.length)nav.push(['howwetrain','How We Train','use']);
 
-  // The questionnaire pages are intentionally hidden from the top menu, but they
-  // still need to remain valid while a contributor is actively moving through them.
-  const hiddenContributionTabs=canContributePhilosophy()
-    ?new Set(['identity','dimensions','formats',...(isPhilosophyLead()&&workshop?.final_draft_ready?[]:['preview'])])
+  // Questionnaire pages and the optional exact-wording editor are workflow screens,
+  // not permanent destinations in the top menu.
+  const hiddenContributionTabs=(canContributePhilosophy() || isPhilosophyLead())
+    ?new Set(['identity','dimensions','formats','preview'])
     :new Set();
   const currentIsHiddenContributionStep=hiddenContributionTabs.has(currentTab);
 
@@ -1586,7 +1585,7 @@ async function renderClubDashboard(){
       text:'Gather independent contributions, review the synthesis and let the Philosophy Lead decide the final club philosophy.'
     },
     {
-      n:'4',title:'Create How We Bat',who:'Philosophy Lead',state:howWeBatState,kind:howWeBatPublished?'done':howWeBatReady?'active':'build',go:howWeBatPublished?'howwebat':'workshop',actionLabel:howWeBatPublished?'View How We Bat':'Open build stage',
+      n:'4',title:'Create How We Bat',who:'Philosophy Lead',state:howWeBatState,kind:howWeBatPublished?'done':howWeBatReady?'active':'build',go:(howWeBatDraft||howWeBatPublished)?'howwebat':'workshop',actionLabel:(howWeBatDraft||howWeBatPublished)?'View How We Bat':'Open Philosophy Workshop',
       text:'Turn the detailed philosophy into a small number of memorable, format-specific Key Messages for players.'
     },
     {
@@ -3300,7 +3299,7 @@ async function resetHowWeBatDraftFromCurrentPhilosophy(){
     p_identity_statement:fresh.identity_statement||'',
     p_closing_strapline:fresh.closing_strapline||'',
     p_formats:fresh.formats||{},
-    p_status:'draft'
+    p_status:'ready'
   });
   if(error){
     alert(error.message);
@@ -3309,7 +3308,7 @@ async function resetHowWeBatDraftFromCurrentPhilosophy(){
   }
 
   await loadData();
-  currentTab='preview';
+  currentTab='howwebat';
   renderShell();
 }
 
@@ -3545,12 +3544,12 @@ async function applySelectedVoiceScenario(responses,pMap){
     p_identity_statement:hwb.identity_statement||'',
     p_closing_strapline:hwb.closing_strapline||'',
     p_formats:hwb.formats||{},
-    p_status:'draft'
+    p_status:'ready'
   });
   if(hErr){alert(hErr.message);return;}
 
   await loadData();
-  currentTab='preview';
+  currentTab='howwebat';
   renderShell();
 }
 
@@ -4458,8 +4457,8 @@ function renderHowWeBatBuilder(){
   document.getElementById('page').innerHTML=`<div class="hwb-builder-shell">
     <section class="card hwb-builder-intro">
       <div>
-        <div class="section-label">Communication layer</div>
-        <h2>Turn the philosophy into messages players can remember</h2>
+        <div class="section-label">Optional manual control</div>
+        <h2>Edit the exact How We Bat wording</h2>
         <div class="help">The detailed dimensions remain underneath the system and continue to drive Player Plans. <strong>How We Bat is deliberately compressed.</strong> Related High / Very High dimensions reinforce a shared banner rather than becoming separate rules.</div>
       </div>
       <div class="hwb-builder-state ${builderIsReady?'ready':'draft'}">
@@ -4511,6 +4510,7 @@ function renderHowWeBatBuilder(){
       <div class="notice hwb-rule-note"><strong>Priority rule:</strong> several related High / Very High dimensions strengthen the shared banner. One isolated Very High dimension does not automatically become a headline.</div>
 
       <div class="btnrow hwb-builder-actions">
+        <button class="btn ghost" id="backToHwbView">Back to How We Bat</button>
         ${builderIsReady
           ?'<button class="btn ghost" id="reopenHwbDraft">Reopen for editing</button><button class="btn secondary" id="continueFromReadyHwb">Continue to Player Plan Structure</button>'
           :`<button class="btn secondary" id="saveHwbDraft">${builderSaved?'Draft saved ✓':'Save How We Bat draft'}</button><button class="btn secondary" id="readyHwbDraft">Mark How We Bat ready</button>`}
@@ -4559,6 +4559,9 @@ function renderHowWeBatBuilder(){
   document.querySelectorAll('#hwbIdentity,#hwbStrap,#hwbFormatIntro,#hwbCallout,[data-hwb-title],[data-hwb-message],[data-hwb-reference]')
     .forEach(el=>el.addEventListener('input',markHwbDirty));
 
+  if(document.getElementById('backToHwbView')){
+    document.getElementById('backToHwbView').onclick=()=>{currentTab='howwebat';renderTab();};
+  }
   if(document.getElementById('saveHwbDraft')){
     document.getElementById('saveHwbDraft').onclick=()=>saveHowWeBatBuilder('draft');
   }
@@ -4747,19 +4750,31 @@ function renderHowWeBatLivePreview(draft,format,isBuilder=false){
 }
 
 function renderPublishedHowWeBat(){
-  const version=howWeBatVersions[0];
-  if(!version){
-    document.getElementById('page').innerHTML='<div class="card"><h2>How We Bat has not been published yet.</h2></div>';
+  const canSeeWorking=(isPhilosophyLead() || isAdmin()) && !!howWeBatDraft;
+  const version=howWeBatVersions[0]||null;
+  const snap=canSeeWorking ? howWeBatDraft : (version?.snapshot||null);
+
+  if(!snap){
+    const canBuild=isPhilosophyLead() || isAdmin();
+    document.getElementById('page').innerHTML=`<section class="card player-gate">
+      <div class="section-label">How We Bat</div>
+      <h2>No How We Bat has been created yet.</h2>
+      <p>${canBuild?'Choose the club philosophy in the Scenario Explorer first. Once a combination is selected, its player-facing How We Bat will appear here.':'The club has not published How We Bat yet.'}</p>
+      ${canBuild?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="openPhilosophyForHwb">Open Philosophy Workshop</button></div>':''}
+    </section>`;
+    if(document.getElementById('openPhilosophyForHwb'))document.getElementById('openPhilosophyForHwb').onclick=()=>{currentTab='workshop';renderTab();};
     return;
   }
-  const snap=version.snapshot||{};
+
   const formats=FORMATS.filter(([k])=>snap.formats?.[k]);
   if(!formats.some(([k])=>k===publishedHowWeBatFormat))publishedHowWeBatFormat=formats[0]?.[0]||'limited_overs';
   const f=snap.formats?.[publishedHowWeBatFormat];
   const formatLabel=FORMATS.find(([k])=>k===publishedHowWeBatFormat)?.[1]||'';
+  const workingReady=canSeeWorking && snap.status==='ready';
 
   document.getElementById('page').innerHTML=`<div class="hwb-published-shell">
-    <section class="hwb-publication-preview published">
+    ${canSeeWorking?`<div class="published-version-note">Working How We Bat · ${workingReady?'ready for Player Plan Structure':'manual edits in progress'}</div>`:''}
+    <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
       <div class="hwb-public-hero">
         <div class="k">${esc(club.name)}</div>
         <h2>How We Bat</h2>
@@ -4772,15 +4787,19 @@ function renderPublishedHowWeBat(){
         <div class="hwb-public-banner-grid">${(f?.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb',publishedHowWeBatFormat)).join('')}</div>
         <div class="hwb-public-callout">${esc(f?.callout||'')}</div>
       </div>
-      ${snap.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(snap.closing_strapline)}</strong><span>Know your game. Then read the moment.</span></div>`:''}
+      ${snap.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(snap.closing_strapline)}</strong>${canSeeWorking?'':'<span>Know your game. Then read the moment.</span>'}</div>`:''}
     </section>
-    <div class="published-version-note">Published with Club Philosophy v${esc(version.philosophy_version)} · ${new Date(version.published_at).toLocaleDateString()}</div>
+    ${canSeeWorking && isPhilosophyLead()?`<div class="btnrow" style="margin-top:14px"><button class="btn ghost" id="openExactHwbEditor">Edit exact wording</button></div>`:''}
+    ${!canSeeWorking && version?`<div class="published-version-note">Published with Club Philosophy v${esc(version.philosophy_version)} · ${new Date(version.published_at).toLocaleDateString()}</div>`:''}
   </div>`;
 
   document.querySelectorAll('[data-public-hwb-format]').forEach(b=>b.onclick=()=>{
     publishedHowWeBatFormat=b.dataset.publicHwbFormat;
     renderPublishedHowWeBat();
   });
+  if(document.getElementById('openExactHwbEditor')){
+    document.getElementById('openExactHwbEditor').onclick=()=>{currentTab='preview';renderTab();};
+  }
 }
 
 function formatNarrative(format){
@@ -5052,15 +5071,16 @@ async function renderPlanStructure(){
 
   if(!planStructureReady){
     const lead=isPhilosophyLead();
+    const manuallyEditing=!!howWeBatDraft;
     page.innerHTML=`<section class="card player-gate">
       <div class="gate-state locked">🔒</div>
       <div class="section-label">Player Plan Structure is not available yet</div>
       <h2>Finish How We Bat first.</h2>
-      <p>The Player Plan questions are built from the club’s final philosophy and its player-facing <strong>How We Bat</strong> messages. Until those messages are finalised, we would be building the Player Plan against a moving target.</p>
-      <div class="notice"><strong>What needs to happen next</strong><br>${lead?'Complete the How We Bat Builder and click <strong>Mark How We Bat ready</strong>. Player Plan Structure will then unlock automatically.':'The Philosophy Lead is still finalising How We Bat. Player Plan Structure will unlock automatically once they mark it ready.'}</div>
-      ${lead?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">Go to How We Bat Builder</button></div>':''}
+      <p>The Player Plan questions flow from the club’s player-facing <strong>How We Bat</strong> messages, so How We Bat must be ready first.</p>
+      <div class="notice"><strong>What needs to happen next</strong><br>${lead?(manuallyEditing?'How We Bat is currently open for manual wording changes. Finish those changes and mark it ready.':'Choose the How We Bat you want from the Philosophy Workshop first.'):'The Philosophy Lead is still finalising How We Bat.'}</div>
+      ${lead?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">${manuallyEditing?'Return to manual wording controls':'Open Philosophy Workshop'}</button></div>`:''}
     </section>`;
-    if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab='preview';renderTab();};
+    if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=manuallyEditing?'preview':'workshop';renderTab();};
     return;
   }
 
