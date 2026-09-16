@@ -2562,3 +2562,22 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
   .market-inventory-filters{grid-template-columns:1fr}
   .market-inventory-filters input{grid-column:auto}
 }
+
+/* ============================================================
+   v0.8.3.1 — BULK PROSPECT SELECTION + INVENTORY STABILITY
+   ============================================================ */
+.market-selection-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.market-selection-summary{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.market-club-row{grid-template-columns:28px minmax(220px,1.05fr) minmax(230px,.95fr) auto}
+.market-club-select{display:flex;align-items:flex-start;justify-content:center;align-self:stretch;padding-top:4px;cursor:pointer}
+.market-club-select input{width:17px;height:17px;accent-color:var(--navy);cursor:pointer}
+.market-club-select input:disabled{cursor:default;opacity:.35}
+.market-club-row.market-club-selected{box-shadow:0 0 0 2px rgba(42,66,132,.12);background:#f9faff}
+@media(max-width:980px){
+  .market-club-row{grid-template-columns:28px 1fr}
+  .market-club-main,.market-club-contact,.market-club-actions{grid-column:2}
+  .market-club-select{grid-column:1;grid-row:1/4}
+}
+@media(max-width:720px){
+  .market-selection-summary{justify-content:flex-start}
+}
