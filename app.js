@@ -8312,15 +8312,15 @@ async function renderPlatformMarketDiscovery(options={}){
   page.innerHTML=`
     <section class="platform-flow-card market-hero">
       <div class="section-label">Market Discovery</div>
-      <h2>Map the market. Qualify the club. Then choose the prospect.</h2>
-      <p>Official cricket sources establish that a club exists and where it sits in the game. BDP keeps lower-fit clubs in the market map, but surfaces competitive and general senior clubs first. <strong>Discovery never sends email.</strong></p>
-      <div class="pipeline-strip"><span>OFFICIAL SOURCE</span><b>→</b><span>CLUB</span><b>→</b><span>TYPE</span><b>→</b><span>CONTACT</span><b>→</b><span>PROSPECT</span></div>
+      <h2>Map the market. Pull the official contact. Then choose the prospect.</h2>
+      <p>Association and competition sources establish that a club exists and where it sits in the game. Cricket Australia PlayCricket is then used as the preferred public source for the club identity, senior-cricket signal and contact. <strong>Discovery never sends email.</strong></p>
+      <div class="pipeline-strip"><span>CRICKET STRUCTURE</span><b>→</b><span>PLAYCRICKET</span><b>→</b><span>CONTACT</span><b>→</b><span>FIT</span><b>→</b><span>PROSPECT</span></div>
     </section>
 
     <div class="platform-metrics market-metrics">
       <div><strong>${clubs.length}</strong><span>NSW clubs mapped</span></div>
       <div><strong>${likelyCount}</strong><span>likely BDP fits</span></div>
-      <div><strong>${contacts}</strong><span>public contacts found</span></div>
+      <div><strong>${contacts}</strong><span>contacts ready</span></div>
       <div><strong>${prospectCount}</strong><span>chosen as prospects</span></div>
     </div>
 
@@ -8330,12 +8330,12 @@ async function renderPlatformMarketDiscovery(options={}){
         <div class="field"><label>Country</label><select id="marketCountry"><option value="AU">Australia</option></select></div>
         <div class="field"><label>Region / state</label><select id="marketRegion"><option value="NSW">New South Wales</option><option disabled>Victoria — next adapter</option><option disabled>Queensland — next adapter</option><option disabled>Western Australia — next adapter</option><option disabled>South Australia — next adapter</option><option disabled>Tasmania — next adapter</option><option disabled>ACT — next adapter</option><option disabled>Northern Territory — next adapter</option></select></div>
       </div>
-      <div class="market-source-note"><strong>Discovery model:</strong> official association/competition sources establish membership and source section (for example Premier Grade or Suburban). PlayHQ / Cricket Australia registry evidence is stored when a club site exposes it. Brave is used to resolve missing identities, websites and contacts — not to decide affiliation.</div>
+      <div class="market-source-note"><strong>Registry-first model:</strong> association/competition sources are used to map membership and competition context. BDP then looks for the matching public Cricket Australia PlayCricket club record and imports the public club contact and senior-cricket signals. Club websites are not required.</div>
       <div class="market-action-row"><button class="btn secondary" id="scanMarketRegion">${associations.length?'Refresh NSW association map':'Scan NSW association map'}</button><span id="marketRegionStatus" class="status">Last region scan: ${esc(niceScan(latestRegionScan?.finished_at||latestRegionScan?.started_at))}</span></div>
     </section>
 
     <section class="admin-card form-wide">
-      <div class="admin-card-head"><div><div class="section-label">2 · Associations</div><h2>Map clubs from official cricket structures</h2><p>${associations.length} association / competition records currently mapped. Club source sections are preserved so BDP can distinguish competitive senior, general senior and lower-fit participation without local guesswork.</p></div><div class="market-bulk-actions"><button class="btn ghost" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map all associations</button><button class="btn ghost" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Find missing contacts</button></div></div>
+      <div class="admin-card-head"><div><div class="section-label">2 · Associations</div><h2>Map clubs, then sync official contacts</h2><p>${associations.length} association / competition records currently mapped. Mapping preserves competition context; contact sync uses public Cricket Australia PlayCricket records rather than club websites.</p></div><div class="market-bulk-actions"><button class="btn ghost" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map + sync all associations</button><button class="btn ghost" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Sync PlayCricket contacts</button></div></div>
       <div class="prospect-filter-row"><input id="marketAssociationSearch" value="${esc(platformMarketAssociationSearch)}" placeholder="Find an association (e.g. Newcastle)"></div>
       <div id="marketBulkStatus" class="market-progress"></div>
       <div class="market-association-list">${associations.length?associations.map(a=>{
@@ -8353,7 +8353,7 @@ async function renderPlatformMarketDiscovery(options={}){
             ${a.source_url?`<a class="btn ghost compact" href="${esc(a.source_url)}" target="_blank" rel="noopener">Source ↗</a>`:''}
             ${a.website_url?`<a class="btn ghost compact" href="${esc(a.website_url)}" target="_blank" rel="noopener">Website ↗</a>`:''}
             <button class="btn ghost compact" data-scan-association="${a.id}">Map clubs</button>
-            <button class="btn ghost compact" data-enrich-association="${a.id}" ${assocClubs.length?'':'disabled'}>Find contacts</button>
+            <button class="btn ghost compact" data-enrich-association="${a.id}" ${assocClubs.length?'':'disabled'}>Sync PlayCricket</button>
           </div>
         </article>`;
       }).join(''):'<div class="notice">No NSW associations have been mapped yet. Use <strong>Scan NSW association map</strong> above.</div>'}</div>
@@ -8405,13 +8405,28 @@ async function renderPlatformMarketDiscovery(options={}){
     try{return await invokeDiscovery({action:'scan_association',association_id:id});}
     finally{if(button){button.disabled=false;button.textContent=old||'Map clubs';}}
   };
-  const enrichOneAssociation=async(id,button=null,maxBatches=8)=>{
-    const old=button?.textContent;if(button){button.disabled=true;button.textContent='Finding…';}
-    let total=0,remaining=1,batches=0;
+  const enrichOneAssociation=async(id,button=null,maxBatches=10)=>{
+    const old=button?.textContent;if(button){button.disabled=true;button.textContent='Syncing PlayCricket…';}
+    let contacts=0,registry=0,remaining=1,unresolved=0,batches=0;
     try{
-      while(remaining>0&&batches<maxBatches){const data=await invokeDiscovery({action:'enrich_clubs',association_id:id,limit:6});total+=Number(data.contacts_found||0);remaining=Number(data.remaining||0);batches++;if(Number(data.processed||0)===0)break;}
-      return {total,remaining};
-    }finally{if(button){button.disabled=false;button.textContent=old||'Find contacts';}}
+      while(remaining>0&&batches<maxBatches){
+        const data=await invokeDiscovery({action:'enrich_clubs',association_id:id,limit:6});
+        contacts+=Number(data.contacts_found||0);registry+=Number(data.registry_found||0);remaining=Number(data.remaining||0);unresolved=Number(data.unresolved||0);batches++;
+        if(Number(data.processed||0)===0)break;
+      }
+      return {contacts,registry,remaining,unresolved};
+    }finally{if(button){button.disabled=false;button.textContent=old||'Sync PlayCricket';}}
+  };
+
+  const mapAndSyncAssociation=async(id,button=null)=>{
+    const old=button?.textContent;
+    try{
+      if(button){button.disabled=true;button.textContent='Mapping clubs…';}
+      const mapped=await scanOneAssociation(id,null);
+      if(button)button.textContent='Syncing PlayCricket…';
+      const synced=await enrichOneAssociation(id,null,10);
+      return {mapped,synced};
+    }finally{if(button){button.disabled=false;button.textContent=old||'Map clubs';}}
   };
 
   const applyAssociationSearch=()=>{
@@ -8431,7 +8446,7 @@ async function renderPlatformMarketDiscovery(options={}){
   document.querySelectorAll('[data-scan-association]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.scanAssociation;platformMarketAssociationId=id;
     try{
-      await scanOneAssociation(id,b);
+      await mapAndSyncAssociation(id,b);
       await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
     }catch(e){alert(e.message);}
   });
@@ -8444,27 +8459,27 @@ async function renderPlatformMarketDiscovery(options={}){
   });
 
   document.getElementById('scanAllAssociations').onclick=async()=>{
-    if(!confirm(`Map clubs for all ${associations.length} discovered NSW association / competition records? This can take several minutes.`))return;
+    if(!confirm(`Map clubs and sync public PlayCricket contacts for all ${associations.length} discovered NSW association / competition records? This can take several minutes.`))return;
     const btn=document.getElementById('scanAllAssociations'),st=document.getElementById('marketBulkStatus');btn.disabled=true;
-    let ok=0,failed=0;
+    let ok=0,failed=0,contactsFound=0,unresolved=0;
     for(let i=0;i<associations.length;i++){
-      const a=associations[i];st.textContent=`Mapping association ${i+1} of ${associations.length}: ${a.name}`;
-      try{await scanOneAssociation(a.id);ok++;}catch{failed++;}
+      const a=associations[i];st.textContent=`${i+1} of ${associations.length}: mapping ${a.name}, then syncing PlayCricket…`;
+      try{const r=await mapAndSyncAssociation(a.id);ok++;contactsFound+=Number(r?.synced?.contacts||0);unresolved+=Number(r?.synced?.unresolved||0);}catch{failed++;}
     }
-    st.textContent=`Association mapping finished: ${ok} completed${failed?`, ${failed} need review`:''}.`;
+    st.textContent=`Map + sync finished: ${ok} associations completed · ${contactsFound} new contacts${unresolved?` · ${unresolved} registry matches need research`:''}${failed?` · ${failed} failed`:''}.`;
     setTimeout(()=>renderPlatformMarketDiscovery(),700);
   };
 
   document.getElementById('enrichAllContacts').onclick=async()=>{
     const associationsWithClubs=associations.filter(a=>(linksByAssociation.get(a.id)||[]).length);
-    if(!confirm(`Search for missing public club contacts across ${associationsWithClubs.length} mapped associations? This can take several minutes and uses Brave only where a club website/contact is not already known.`))return;
+    if(!confirm(`Sync public Cricket Australia PlayCricket records for clubs across ${associationsWithClubs.length} mapped associations? Club websites are not required.`))return;
     const btn=document.getElementById('enrichAllContacts'),st=document.getElementById('marketBulkStatus');btn.disabled=true;
-    let found=0;
+    let found=0,registry=0,unresolved=0;
     for(let i=0;i<associationsWithClubs.length;i++){
-      const a=associationsWithClubs[i];st.textContent=`Finding contacts ${i+1} of ${associationsWithClubs.length}: ${a.name}`;
-      try{const r=await enrichOneAssociation(a.id,null,10);found+=r.total;}catch{/* leave association for review */}
+      const a=associationsWithClubs[i];st.textContent=`Syncing PlayCricket ${i+1} of ${associationsWithClubs.length}: ${a.name}`;
+      try{const r=await enrichOneAssociation(a.id,null,10);found+=r.contacts;registry+=r.registry;unresolved+=r.unresolved;}catch{/* leave association for review */}
     }
-    st.textContent=`Contact enrichment finished. ${found} new public contact${found===1?'':'s'} found in this run.`;
+    st.textContent=`PlayCricket sync finished: ${registry} official records matched · ${found} new contacts${unresolved?` · ${unresolved} need research`:''}.`;
     setTimeout(()=>renderPlatformMarketDiscovery(),700);
   };
 
@@ -8477,7 +8492,7 @@ async function renderPlatformMarketDiscovery(options={}){
     platformMarketFitFilter=fitFilter;
     const selectedIds=platformMarketAssociationId?new Set(linksByAssociation.get(platformMarketAssociationId)||[]):null;
     let shown=clubs.filter(c=>!selectedIds||selectedIds.has(c.id));
-    if(q)shown=shown.filter(c=>[c.name,c.contact_email,c.contact_role,c.locality,c.website_url,c.qualification_reason].some(v=>String(v||'').toLowerCase().includes(q)));
+    if(q)shown=shown.filter(c=>[c.name,c.contact_email,c.contact_role,c.locality,c.registry_url,c.qualification_reason,c.metadata?.registry_canonical_name].some(v=>String(v||'').toLowerCase().includes(q)));
     if(fitFilter==='likely')shown=shown.filter(c=>['strong','possible'].includes(c.outreach_fit));
     else if(fitFilter!=='all')shown=shown.filter(c=>c.outreach_fit===fitFilter);
     if(contactFilter==='contact')shown=shown.filter(c=>c.contact_email);
@@ -8496,8 +8511,8 @@ async function renderPlatformMarketDiscovery(options={}){
     document.getElementById('marketClubList').innerHTML=display.length?`<div class="market-club-list">${display.map(c=>{
       const assocNames=(associationForClub.get(c.id)||[]).map(id=>associations.find(a=>a.id===id)?.name).filter(Boolean);
       const sections=clubSections(c.id,platformMarketAssociationId);
-      const readiness=c.contact_email?'Contact ready':c.website_url?'Website found':'Needs research';
-      const registry=c.registry_provider?`<span class="market-registry-pill">Registry evidence · ${esc(c.registry_provider)}</span>`:'';
+      const readiness=c.contact_email?'Contact ready':c.registry_provider==='Cricket Australia PlayCricket'?'Registry found':'Needs registry match';
+      const registry=c.registry_provider==='Cricket Australia PlayCricket'?`<span class="market-registry-pill">Cricket Australia ✓</span>`:c.registry_provider?`<span class="market-registry-pill">Registry evidence · ${esc(c.registry_provider)}</span>`:'';
       const selected=platformMarketSelectedClubIds.has(c.id);
       return `<article class="market-club-row market-fit-${esc(c.outreach_fit||'review')} ${selected?'market-club-selected':''}">
         <label class="market-club-select" title="${c.sales_prospect_id?'Already in Prospects':'Select this club'}"><input type="checkbox" data-market-select="${c.id}" ${selected?'checked':''} ${c.sales_prospect_id?'disabled':''}></label>
@@ -8507,8 +8522,8 @@ async function renderPlatformMarketDiscovery(options={}){
           <div class="market-club-tags"><span class="market-fit-pill ${esc(c.outreach_fit||'review')}">${esc(fitLabel(c.outreach_fit))}</span><span class="market-type-pill">${esc(typeLabel(c.club_type))}</span>${registry}</div>
           ${c.qualification_reason?`<small class="market-qualification-reason">${esc(c.qualification_reason)}</small>`:''}
         </div>
-        <div class="market-club-contact"><span class="market-readiness ${c.contact_email?'ready':c.website_url?'partial':'missing'}">${esc(readiness)}</span>${c.contact_email?`<strong>${esc(c.contact_email)}</strong><small>${esc(c.contact_role||'Public club contact')}</small>`:'<small>No public email found yet</small>'}</div>
-        <div class="market-club-actions">${c.website_url?`<a class="btn ghost compact" href="${esc(c.website_url)}" target="_blank" rel="noopener">Website ↗</a>`:''}${c.registry_url?`<a class="btn ghost compact" href="${esc(c.registry_url)}" target="_blank" rel="noopener">Registry ↗</a>`:''}${c.contact_source_url?`<a class="btn ghost compact" href="${esc(c.contact_source_url)}" target="_blank" rel="noopener">Contact source ↗</a>`:''}<button class="btn ${c.sales_prospect_id?'ghost':'secondary'} compact" data-market-to-prospect="${c.id}" ${c.sales_prospect_id?'disabled':''}>${c.sales_prospect_id?'In Prospects':'Add to Prospects'}</button></div>
+        <div class="market-club-contact"><span class="market-readiness ${c.contact_email?'ready':c.registry_provider==='Cricket Australia PlayCricket'?'partial':'missing'}">${esc(readiness)}</span>${c.contact_email?`<strong>${esc(c.contact_email)}</strong><small>${esc(c.contact_role||'Public club contact')}</small>`:'<small>No public PlayCricket email found yet</small>'}</div>
+        <div class="market-club-actions">${c.registry_url?`<a class="btn ghost compact" href="${esc(c.registry_url)}" target="_blank" rel="noopener">PlayCricket ↗</a>`:''}<button class="btn ${c.sales_prospect_id?'ghost':'secondary'} compact" data-market-to-prospect="${c.id}" ${c.sales_prospect_id?'disabled':''}>${c.sales_prospect_id?'In Prospects':'Add to Prospects'}</button></div>
       </article>`;
     }).join('')}</div>${shown.length>250?`<div class="help">Showing the first 250 matches, but <strong>Select all filtered</strong> still selects all ${selectable.length} eligible clubs in the current filter.</div>`:''}`:'<div class="notice">No clubs match the current filters. Change <strong>Likely BDP prospects</strong> to <strong>All mapped clubs</strong> to inspect the full market inventory.</div>';
 
