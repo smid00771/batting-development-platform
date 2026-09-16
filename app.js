@@ -2283,7 +2283,8 @@ async function renderWorkshop(){
     {data:contribRows,error:cErr},
     {data:externalInvites,error:iErr},
     {data:draftSnapshot,error:snapErr},
-    {data:lateActions,error:lateErr}
+    {data:lateActions,error:lateErr},
+    {data:workshopStatus,error:statusErr}
   ]=await Promise.all([
     supabase.from('philosophy_contributors').select('*').eq('club_id',club.id),
     (isAdmin() || isPhilosophyLead())
@@ -2294,11 +2295,14 @@ async function renderWorkshop(){
       :Promise.resolve({data:null,error:null}),
     workshop?.final_draft_ready
       ?supabase.from('philosophy_late_response_actions').select('*').eq('club_id',club.id).order('submitted_at',{ascending:false})
-      :Promise.resolve({data:[],error:null})
+      :Promise.resolve({data:[],error:null}),
+    (isAdmin() || isPhilosophyLead())
+      ?supabase.rpc('get_philosophy_workshop_status',{p_club_id:club.id})
+      :Promise.resolve({data:null,error:null})
   ]);
 
-  if(cErr || iErr || snapErr || lateErr){
-    document.getElementById('page').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr).message)}</div>`;
+  if(cErr || iErr || snapErr || lateErr || statusErr){
+    document.getElementById('page').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr||statusErr).message)}</div>`;
     return;
   }
 
@@ -2310,17 +2314,18 @@ async function renderWorkshop(){
       .select('club_id,user_id,involvement,permission_role')
       .eq('club_id',club.id);
     members=m||[];
-    const ids=members.map(x=>x.user_id);
-    if(ids.length){
-      const {data:p}=await supabase.from('user_profiles').select('*').in('user_id',ids);
-      profiles=p||[];
-    }
-  }else{
-    const ids=(contribRows||[]).map(x=>x.user_id);
-    if(ids.length){
-      const {data:p}=await supabase.from('user_profiles').select('*').in('user_id',ids);
-      profiles=p||[];
-    }
+  }
+
+  // External Philosophy Contributors do not have to be ordinary club members. Always include
+  // contributor user IDs when resolving display names, otherwise accepted email invitees can
+  // appear as anonymous "Contributor" rows even though their response exists.
+  const profileIds=[...new Set([
+    ...(members||[]).map(x=>x.user_id),
+    ...(contribRows||[]).map(x=>x.user_id)
+  ].filter(Boolean))];
+  if(profileIds.length){
+    const {data:p}=await supabase.from('user_profiles').select('*').in('user_id',profileIds);
+    profiles=p||[];
   }
 
   const pMap=new Map(profiles.map(x=>[x.user_id,x]));
@@ -2343,6 +2348,10 @@ async function renderWorkshop(){
   const snapshotInvitedCount=Number(draftSnapshot?.source_invited_count||snapshotCount||0);
   const pendingLate=(lateActions||[]).filter(x=>x.status==='pending');
   const myLateAction=(lateActions||[]).find(x=>x.user_id===session.user.id && x.status==='pending')||null;
+  const workshopStateRows=Array.isArray(workshopStatus?.contributors)?workshopStatus.contributors:[];
+  const workshopStateByUser=new Map(workshopStateRows.map(x=>[x.user_id,x]));
+  const workshopMismatchCount=Number(workshopStatus?.mismatch_count||0);
+  const recordedSynthesisResponses=Number(workshopStatus?.synthesis_response_count||0);
 
   let html=`${buildWorkspaceAudienceNotice()}<div class="workshop-grid">`;
 
@@ -2515,29 +2524,63 @@ async function renderWorkshop(){
     html+=`<section class="card" style="margin-top:16px">
       <div class="section-label">Contribution progress</div>
       <h2>Independent responses</h2>
+      <div class="help">This is the source-of-truth view for the current workshop round. A response only enters the synthesis after the contributor has actually submitted it.</div>
+      ${workshopMismatchCount?`<div class="notice workshop-data-warning"><strong>Workshop data needs attention.</strong><br>${workshopMismatchCount} contributor record${workshopMismatchCount===1?' is':'s are'} out of sync with the stored response. BDP will not silently include or exclude those responses.</div>`:''}
       <div class="member-list">
         ${(contribRows||[]).map(c=>{
-          const name=pMap.get(c.user_id)?.display_name||'Contributor';
+          const state=workshopStateByUser.get(c.user_id)||null;
+          const name=state?.display_name||pMap.get(c.user_id)?.display_name||'Contributor';
+          let statusText='';
+          let responseState='';
+          let responseClass='waiting';
+
+          if(c.user_id===workshop?.philosophy_lead_user_id && workshop?.final_draft_ready){
+            statusText=c.status==='submitted'?'Final draft submitted':'Final draft in progress';
+            responseState='Working from frozen synthesis snapshot';
+            responseClass='ready';
+          }else if(c.status==='submitted'){
+            statusText='Submitted';
+            if(state?.response_ready){
+              const when=state.response_submitted_at?new Date(state.response_submitted_at).toLocaleString():'';
+              responseState=`Response recorded ✓${when?` · ${when}`:''}`;
+              responseClass='ready';
+            }else{
+              responseState='Submitted status, but response is not available to synthesis';
+              responseClass='problem';
+            }
+          }else if(c.status==='in_progress'){
+            statusText='In progress';
+            responseState=state?.response_exists?'Saved response · not submitted yet':'No submitted response yet';
+            responseClass='waiting';
+          }else{
+            statusText='Invited';
+            responseState='Not started / not submitted';
+            responseClass='waiting';
+          }
+
           return `<div class="member">
             <div><strong>${esc(name)}${c.user_id===workshop?.philosophy_lead_user_id?' · Philosophy Lead':''}</strong>
-            <small>${esc(c.user_id===workshop?.philosophy_lead_user_id && workshop?.final_draft_ready
-              ?(c.status==='submitted'?'Final draft submitted':'Final draft in progress')
-              :contributorStatusLabel(c.status))}</small></div>
+            <small>${esc(statusText)}</small>
+            <span class="workshop-response-state ${responseClass}">${esc(responseState)}</span></div>
             <div class="member-controls">
               ${c.status==='submitted' && isAdmin()?`<button class="btn ghost" data-reopen-contributor="${c.user_id}">Reopen</button>`:''}
             </div>
           </div>`;
         }).join('')||'<div class="notice">No accepted contributors selected yet.</div>'}
         ${pendingExternal.map(i=>`<div class="member">
-          <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>Invitation sent · waiting to accept</small></div>
+          <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>Invitation sent · waiting to accept</small><span class="workshop-response-state waiting">Not yet a contributor response</span></div>
         </div>`).join('')}
       </div>
+      ${!workshopMismatchCount && submittedCount!==recordedSynthesisResponses && !workshop?.final_draft_ready
+        ?`<div class="notice workshop-data-warning"><strong>Response count check:</strong> ${submittedCount} contributor${submittedCount===1?' is':'s are'} marked submitted, while ${recordedSynthesisResponses} response${recordedSynthesisResponses===1?' is':'s are'} currently available to synthesis.</div>`
+        :''}
     </section>`;
   }
 
   if(canSeeSynthesis){
     let responses=[];
     let synthesisMeta=null;
+    let synthesisLoadError=null;
 
     if(workshop?.final_draft_ready && snapshotResponses.length){
       responses=snapshotResponses;
@@ -2545,24 +2588,31 @@ async function renderWorkshop(){
         snapshot:true,
         responseCount:snapshotCount,
         invitedCount:snapshotInvitedCount,
-        createdAt:draftSnapshot?.created_at||workshop?.final_draft_started_at
+        createdAt:draftSnapshot?.created_at||workshop?.final_draft_started_at,
+        mismatchCount:0
       };
     }else{
-      const {data:liveResponses}=await supabase
-        .from('philosophy_contributions')
-        .select('*')
-        .eq('club_id',club.id)
-        .not('submitted_at','is',null);
-      responses=liveResponses||[];
-      synthesisMeta={
-        snapshot:false,
-        responseCount:responses.length,
-        invitedCount:invitedTotal
-      };
+      const {data:source,error:sourceErr}=await supabase.rpc('get_philosophy_synthesis_source',{p_club_id:club.id});
+      if(sourceErr){
+        synthesisLoadError=sourceErr;
+      }else{
+        responses=Array.isArray(source?.responses)?source.responses:[];
+        synthesisMeta={
+          snapshot:false,
+          responseCount:Number(source?.response_count||responses.length||0),
+          invitedCount:invitedTotal,
+          submittedContributorCount:Number(source?.submitted_contributor_count||submittedCount||0),
+          mismatchCount:Number(source?.mismatch_count||0)
+        };
+      }
     }
 
-    if(responses.length){
+    if(synthesisLoadError){
+      html+=`<section class="card" style="margin-top:16px"><div class="section-label">Synthesis</div><h2>The group picture could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
+    }else if(responses.length){
       html+=renderSynthesis(responses,pMap,allSubmitted,synthesisMeta);
+    }else{
+      html+=`<section class="card" style="margin-top:16px"><div class="section-label">Synthesis</div><h2>No submitted responses are available yet.</h2><div class="help">A saved response does not enter the group synthesis until the contributor chooses <strong>Submit my philosophy response</strong>.</div></section>`;
     }
 
     if(isPhilosophyLead() && workshop?.final_draft_ready && (lateActions||[]).length){
@@ -2901,10 +2951,11 @@ async function saveWorkshopSetup(existingRows,externalInvites=[]){
   setTimeout(()=>renderShell(),350);
 }
 
-function consensusClass(ratio){
-  if(ratio>=.8 || ratio<=.2)return {label:'Strong agreement',cls:'strong'};
-  if(ratio>=.65 || ratio<=.35)return {label:'General agreement',cls:'general'};
-  return {label:'Needs discussion',cls:'discuss'};
+function consensusClass(ratio,responseCount=2){
+  if(responseCount<2)return {consensusLabel:'One response',cls:'single'};
+  if(ratio>=.8 || ratio<=.2)return {consensusLabel:'Strong agreement',cls:'strong'};
+  if(ratio>=.65 || ratio<=.35)return {consensusLabel:'General agreement',cls:'general'};
+  return {consensusLabel:'Needs discussion',cls:'discussion'};
 }
 
 function median(nums){
@@ -2917,14 +2968,14 @@ function median(nums){
 function buildSynthesis(responses){
   const n=responses.length;
   const identity=[];
-  for(const [key,label] of IDENTITY_OPTIONS){
+  for(const [key,itemLabel] of IDENTITY_OPTIONS){
     const count=responses.filter(r=>(r.identity_values||[]).includes(key)).length;
-    identity.push({key,label,count,ratio:count/n,...consensusClass(count/n)});
+    identity.push({key,itemLabel,count,ratio:count/n,...consensusClass(count/n,n)});
   }
 
   const dims=dimensions.map(d=>{
     const count=responses.filter(r=>(r.selected_dimensions||[]).includes(d.dimension_key)).length;
-    return {key:d.dimension_key,label:d.label,count,ratio:count/n,...consensusClass(count/n)};
+    return {key:d.dimension_key,itemLabel:d.label,count,ratio:count/n,...consensusClass(count/n,n)};
   });
 
   const weightRows=[];
@@ -2936,19 +2987,20 @@ function buildSynthesis(responses){
         .filter(v=>Number.isFinite(v));
       if(!vals.length)continue;
       const min=Math.min(...vals),max=Math.max(...vals),spread=max-min;
+      const oneResponse=vals.length<2;
       weightRows.push({
         key:d.dimension_key,dimension:d.label,format:f,formatLabel:flabel,
         values:vals,median:median(vals),min,max,spread,
-        label:spread<=1?'Strong agreement':spread===2?'Some variation':'Needs discussion',
-        cls:spread<=1?'strong':spread===2?'general':'discuss'
+        consensusLabel:oneResponse?'One response':spread<=1?'Strong agreement':spread===2?'Some variation':'Needs discussion',
+        cls:oneResponse?'single':spread<=1?'strong':spread===2?'general':'discussion'
       });
     }
   }
 
-  const flags=[
-    ...identity.filter(x=>x.cls==='discuss').map(x=>`${x.label}: contributors are split on whether this belongs in the core identity.`),
-    ...dims.filter(x=>x.cls==='discuss').map(x=>`${x.label}: contributors are split on whether this belongs in the batting system.`),
-    ...weightRows.filter(x=>x.cls==='discuss').map(x=>`${x.dimension} · ${x.formatLabel}: emphasis ranges from ${WEIGHT_LABELS[x.min]} to ${WEIGHT_LABELS[x.max]}.`)
+  const flags=n<2?[]:[
+    ...identity.filter(x=>x.cls==='discussion').map(x=>`${x.itemLabel}: contributors are split on whether this belongs in the core identity.`),
+    ...dims.filter(x=>x.cls==='discussion').map(x=>`${x.itemLabel}: contributors are split on whether this belongs in the batting system.`),
+    ...weightRows.filter(x=>x.cls==='discussion').map(x=>`${x.dimension} · ${x.formatLabel}: emphasis ranges from ${WEIGHT_LABELS[x.min]} to ${WEIGHT_LABELS[x.max]}.`)
   ];
 
   return {n,identity,dims,weightRows,flags};
@@ -2998,7 +3050,7 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
   return `<section class="card synthesis" style="margin-top:16px">
     <div class="section-label">Curated group picture</div>
     <h2>What the contributors seem to be saying</h2>
-    <div class="help">This synthesis does not average disagreements away. It highlights consensus, variation and the places where a human conversation is worth having.</div>
+    <div class="help">This synthesis keeps the actual batting beliefs visible, then shows how many contributors selected each one. Agreement labels only appear when at least two independent responses are available.</div>
 
     ${meta?.snapshot
       ?`<div class="notice snapshot-notice"><strong>Final-draft snapshot:</strong> ${meta.responseCount} of ${meta.invitedCount} invited contributor${meta.invitedCount===1?'':'s'} were included when the draft was created.${meta.responseCount<meta.invitedCount?' Outstanding or late responses cannot change this synthesis automatically.':''}</div>`
@@ -3006,18 +3058,21 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
         ?`<div class="notice"><strong>${meta?.responseCount||syn.n} of ${meta?.invitedCount||syn.n} contributors have submitted.</strong><br>${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)} response${Math.max((meta?.invitedCount||syn.n)-(meta?.responseCount||syn.n),0)===1?' is':'s are'} still outstanding. You can wait, or the Philosophy Lead can continue using the responses received so far.</div>`
         :''}
 
+    ${meta?.mismatchCount?`<div class="notice workshop-data-warning"><strong>Synthesis paused around inconsistent data.</strong><br>${meta.mismatchCount} contributor record${meta.mismatchCount===1?' does':'s do'} not agree with the stored submission state. The cards below use only responses that are unambiguously submitted.</div>`:''}
+    ${syn.n<2?'<div class="notice"><strong>One submitted response so far.</strong><br>This is an individual view, not group agreement. BDP will start identifying consensus and disagreement when a second independent response is submitted.</div>':''}
+
     <h3>Club identity</h3>
     <div class="consensus-grid">${syn.identity.filter(x=>x.ratio>=.35).map(x=>`
       <div class="consensus-item ${x.cls}">
-        <div><strong>${esc(x.label)}</strong><small>${x.count} of ${syn.n} selected this</small></div>
-        <span>${x.label && esc(x.label) && esc(consensusClass(x.ratio).label)}</span>
+        <div><strong>${esc(x.itemLabel)}</strong><small>${x.count} of ${syn.n} selected this</small></div>
+        <span>${esc(x.consensusLabel)}</span>
       </div>`).join('')}</div>
 
     <h3>What belongs in the batting system</h3>
     <div class="consensus-grid">${syn.dims.filter(x=>x.ratio>=.35).map(x=>`
       <div class="consensus-item ${x.cls}">
-        <div><strong>${esc(x.label)}</strong><small>${x.count} of ${syn.n} selected this</small></div>
-        <span>${esc(consensusClass(x.ratio).label)}</span>
+        <div><strong>${esc(x.itemLabel)}</strong><small>${x.count} of ${syn.n} selected this</small></div>
+        <span>${esc(x.consensusLabel)}</span>
       </div>`).join('')}</div>
 
     <h3>Format emphasis</h3>
@@ -3029,14 +3084,16 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
           <td>${esc(x.formatLabel)}</td>
           <td>${esc(WEIGHT_LABELS[x.median])}</td>
           <td>${esc(WEIGHT_LABELS[x.min])}${x.min!==x.max?` → ${esc(WEIGHT_LABELS[x.max])}`:''}</td>
-          <td><span class="consensus-badge ${x.cls}">${esc(x.label)}</span></td>
+          <td><span class="consensus-badge ${x.cls}">${esc(x.consensusLabel)}</span></td>
         </tr>`).join('')}</tbody>
     </table></div>
 
     <h3>Discussion prompts</h3>
-    ${syn.flags.length
-      ?`<div class="discussion-list">${syn.flags.map(x=>`<div class="discussion-flag">⚑ ${esc(x)}</div>`).join('')}</div>`
-      :'<div class="notice">No major splits are showing in the submitted responses.</div>'}
+    ${syn.n<2
+      ?'<div class="notice">At least two submitted responses are needed before BDP can identify genuine agreement or disagreement.</div>'
+      :syn.flags.length
+        ?`<div class="discussion-list">${syn.flags.map(x=>`<div class="discussion-flag">⚑ ${esc(x)}</div>`).join('')}</div>`
+        :'<div class="notice">No major splits are showing in the submitted responses.</div>'}
 
     ${renderSourceComments(responses,pMap)}
 
@@ -3071,7 +3128,7 @@ function renderSynthesis(responses,pMap,allSubmitted,meta=null){
 function renderSourceComments(responses,pMap){
   const items=[];
   for(const r of responses){
-    const name=pMap.get(r.user_id)?.display_name||'Contributor';
+    const name=r.display_name||pMap.get(r.user_id)?.display_name||'Contributor';
     if(r.identity_note)items.push(`<div class="source-comment"><strong>${esc(name)} · Club Identity</strong><p>${esc(r.identity_note)}</p></div>`);
     const notes=r.dimension_notes||{};
     for(const [k,note] of Object.entries(notes)){
@@ -3213,14 +3270,25 @@ async function discardFinalDraftAndRestart(){
 }
 
 async function beginFinalDraftFromSynthesis(){
-  const {data:responses,error}=await supabase
-    .from('philosophy_contributions')
-    .select('*')
-    .eq('club_id',club.id)
-    .not('submitted_at','is',null);
+  // Use the same authoritative server-side response set that powers the visible synthesis.
+  // This avoids a final draft being built from a different set of rows because of client RLS.
+  const {data:source,error}=await supabase.rpc('get_philosophy_synthesis_source',{
+    p_club_id:club.id
+  });
 
   if(error){alert(error.message);return;}
-  if(!responses?.length){alert('No submitted responses yet.');return;}
+  const responses=Array.isArray(source?.responses)?source.responses:[];
+  const mismatchCount=Number(source?.mismatch_count||0);
+
+  if(mismatchCount>0){
+    alert(
+      `The workshop has ${mismatchCount} contributor record${mismatchCount===1?'':'s'} whose submission status does not match the stored response.\n\n`+
+      `BDP will not create a final draft until that inconsistency is resolved, because doing so could silently leave out a contributor.`
+    );
+    return;
+  }
+
+  if(!responses.length){alert('No submitted responses are available to the synthesis yet.');return;}
 
   const draft=buildConsensusDraft(responses);
   const ok=confirm(
