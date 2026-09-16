@@ -2597,27 +2597,18 @@ async function renderWorkshop(){
 
   if(canSeeSynthesis){
     if(synthesisLoadError){
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>The submitted responses could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
-    }else if(visibleResponses.length){
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>Submitted voices are ready to explore.</h2><div class="help">The status list above is enough for the normal workflow. Full responses and the underlying agreement data remain available inside <strong>Show detailed response analysis</strong> in the Scenario Explorer.</div></section>`;
-    }else{
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Contributions received</div><h2>No submitted responses are available yet.</h2><div class="help">Saved work appears in the status list above, but it only becomes a contribution after the contributor chooses <strong>Submit response</strong>.</div></section>`;
-    }
-
-
-    if(synthesisLoadError){
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>The group picture could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Synthesis</div><h2>The group picture could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
     }else if(scenarioResponses.length){
       html+=renderSynthesis(scenarioResponses,pMap,allSubmitted,synthesisMeta);
     }else{
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>Waiting for a submitted response.</h2><div class="help">The synthesis begins once a contributor has completed the final Submit response step.</div></section>`;
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Synthesis</div><h2>Waiting for a submitted response.</h2><div class="help">The Scenario Explorer appears once a response has been submitted.</div></section>`;
     }
 
   }else if(totalCount>1 && me){
     html+=`<section class="card synthesis-locked workshop-stage-card" style="margin-top:16px">
-      <div class="section-label">3 · Synthesis</div>
-      <h2>Submit first, then see the group picture.</h2>
-      <div class="help">Responses stay independent while people are completing them. Once you submit, the system can show the contributions, areas of agreement and the areas worth discussing.</div>
+      <div class="section-label">2 · Synthesis</div>
+      <h2>Submit first, then explore the options.</h2>
+      <div class="help">Responses stay independent while people are completing them.</div>
     </section>`;
   }
 
@@ -2761,14 +2752,6 @@ async function renderWorkshop(){
     renderShell();
   });
 
-  document.querySelectorAll('[data-scenario-voice]').forEach(x=>x.onchange=async()=>{
-    const id=x.dataset.scenarioVoice;
-    if(x.checked)philosophyScenarioSelectedIds.add(id);
-    else philosophyScenarioSelectedIds.delete(id);
-    if(workshop?.philosophy_lead_user_id)philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
-    await rerenderWorkshopKeepScroll();
-  });
-
   document.querySelectorAll('[data-scenario-preset]').forEach(b=>b.onclick=async()=>{
     philosophyScenarioSelectedIds=new Set((b.dataset.scenarioPreset||'').split(',').filter(Boolean));
     if(workshop?.philosophy_lead_user_id)philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
@@ -2777,6 +2760,17 @@ async function renderWorkshop(){
 
   if(document.getElementById('openScenarioHwbPreview')){
     document.getElementById('openScenarioHwbPreview').onclick=()=>openScenarioHowWeBatPreview(scenarioResponses,pMap);
+  }
+  if(document.getElementById('showScenarioChanges')){
+    document.getElementById('showScenarioChanges').onclick=()=>document.getElementById('scenarioChangesDialog')?.showModal();
+  }
+  if(document.getElementById('closeScenarioChanges')){
+    document.getElementById('closeScenarioChanges').onclick=()=>document.getElementById('scenarioChangesDialog')?.close();
+  }
+  if(document.getElementById('scenarioChangesDialog')){
+    document.getElementById('scenarioChangesDialog').onclick=e=>{
+      if(e.target===e.currentTarget)e.currentTarget.close();
+    };
   }
 
   if(document.getElementById('useVoiceScenario')){
@@ -3421,7 +3415,7 @@ function renderDetailedSynthesisBody(responses,pMap){
 function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   const leadId=workshop?.philosophy_lead_user_id;
   const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||(responses||[])[0]||null;
-  if(!leadResponse)return `<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>Waiting for the Philosophy Lead's submitted response.</h2></section>`;
+  if(!leadResponse)return `<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Synthesis</div><h2>Waiting for the Philosophy Lead's submitted response.</h2></section>`;
 
   const selected=selectedScenarioResponses(responses);
   const safeSelected=selected.length?selected:[leadResponse];
@@ -3429,63 +3423,67 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   const baselinePhilosophy=buildScenarioDraft([leadResponse]);
   const scenarioHwb=generatedHowWeBatDraftFromPhilosophy(scenarioPhilosophy);
   const baselineHwb=generatedHowWeBatDraftFromPhilosophy(baselinePhilosophy);
-  const formats=FORMATS.filter(([f])=>scenarioHwb.formats?.[f]);
-  if(!formats.some(([f])=>f===philosophyScenarioFormat))philosophyScenarioFormat=formats[0]?.[0]||'limited_overs';
   const changes=scenarioHowWeBatChanges(baselineHwb,scenarioHwb);
-  const selectedNames=safeSelected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
   const otherResponses=(responses||[]).filter(r=>r.user_id!==leadResponse.user_id);
+  const displayName=r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor';
+  const shortName=r=>(displayName(r)||'Contributor').trim().split(/\s+/)[0]||'Contributor';
+  const leadShort=shortName(leadResponse);
 
-  const presets=[
-    {label:`${leadResponse.display_name||pMap.get(leadResponse.user_id)?.display_name||'Lead'} only`,ids:[leadResponse.user_id]},
-    ...otherResponses.map(r=>({label:`Lead + ${r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'}`,ids:[leadResponse.user_id,r.user_id]})),
-    ...(otherResponses.length>1?[{label:'All submitted voices',ids:[leadResponse.user_id,...otherResponses.map(r=>r.user_id)]}]:[])
-  ];
+  // Scenario buttons replace the old duplicate checkbox + preset controls.
+  // With a small contributor group, show every combination so the Lead can
+  // visually compare David, David + Bryce, David + Mitch, David + Bryce + Mitch, etc.
+  const presets=[{label:`${leadShort} only`,ids:[leadResponse.user_id]}];
+  if(otherResponses.length<=3){
+    const count=1<<otherResponses.length;
+    for(let mask=1;mask<count;mask++){
+      const chosen=otherResponses.filter((_,i)=>mask&(1<<i));
+      presets.push({
+        label:[leadShort,...chosen.map(shortName)].join(' + '),
+        ids:[leadResponse.user_id,...chosen.map(r=>r.user_id)]
+      });
+    }
+  }else{
+    for(const r of otherResponses){
+      presets.push({label:`${leadShort} + ${shortName(r)}`,ids:[leadResponse.user_id,r.user_id]});
+    }
+    presets.push({label:`${leadShort} + all voices`,ids:[leadResponse.user_id,...otherResponses.map(r=>r.user_id)]});
+  }
+
+  const selectedIds=new Set(safeSelected.map(r=>r.user_id));
+  const sameIds=ids=>ids.length===selectedIds.size&&ids.every(id=>selectedIds.has(id));
+  const currentLabel=(presets.find(p=>sameIds(p.ids))?.label)||safeSelected.map(shortName).join(' + ');
+  const baselineOnly=safeSelected.length===1;
 
   return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
-    <div class="section-label">3 · Synthesis · Scenario Explorer</div>
-    <h2>See what each voice actually does to How We Bat.</h2>
-    <div class="help">Start with the Philosophy Lead's original response, then add or remove submitted voices. Nothing is accepted, rejected or altered here — you are simply testing what each combination produces.</div>
+    <div class="section-label">2 · Synthesis · Scenario Explorer</div>
+    <h2>Which How We Bat feels most like the club?</h2>
+    <div class="help">Choose a combination, then open its How We Bat. Compare the visuals and pick the version that feels right.</div>
 
-    ${meta?.snapshot?`<div class="notice compact"><strong>A How We Bat draft already exists.</strong> The voices used to create it start switched on. You can still explore another combination and create a revised How We Bat draft.</div>`:''}
-
-    <div class="scenario-voice-list" style="display:grid;gap:8px;margin-top:14px">
-      ${(responses||[]).map(r=>{
-        const isLead=r.user_id===leadResponse.user_id;
-        const name=r.display_name||pMap.get(r.user_id)?.display_name||'Contributor';
-        const on=philosophyScenarioSelectedIds.has(r.user_id);
-        return `<label class="contributor-check ${on?'on':''} ${isLead?'lead-person':''}">
-          <input type="checkbox" data-scenario-voice="${esc(r.user_id)}" ${on?'checked':''} ${isLead?'disabled':''}>
-          <span><strong>${esc(name)}${isLead?' · Baseline':''}</strong><small>${isLead?'Philosophy Lead original response':'Submitted independent voice'}</small></span>
-        </label>`;
-      }).join('')}
+    <div class="btnrow" style="margin-top:16px">
+      ${presets.map(p=>`<button class="btn ${sameIds(p.ids)?'secondary':'ghost'}" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
     </div>
 
-    <div class="btnrow" style="margin-top:10px">
-      ${presets.map((p,i)=>`<button class="btn ghost" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
+    ${meta?.snapshot?`<div class="help" style="margin-top:10px">A How We Bat draft already exists. Choosing another combination lets you preview or replace it.</div>`:''}
+
+    <div class="btnrow" style="margin-top:18px">
+      <button class="btn ghost" id="openScenarioHwbPreview">Open ${esc(currentLabel)} How We Bat ↗</button>
+      ${!baselineOnly?`<button class="btn ghost" id="showScenarioChanges">What changed?</button>`:''}
+      ${isPhilosophyLead()?`<button class="btn secondary" id="useVoiceScenario">Use this to create How We Bat</button>`:''}
     </div>
 
-    <div class="scenario-result" style="margin-top:18px">
-      <div class="section-label">Current combination</div>
-      <h3>${esc(naturalList(selectedNames))}</h3>
-      <div class="help">The synthesis keeps minority signals available but softens ideas that are supported by fewer voices. Related signals still have to reinforce one another before they become a player-facing Key Message.</div>
-      <div class="scenario-change-summary" style="margin:12px 0">
-        <strong>Compared with the Philosophy Lead alone</strong>
-        ${safeSelected.length===1
-          ?'<div class="notice compact">This is the baseline How We Bat.</div>'
-          :changes.length
-            ?`<ul>${changes.slice(0,5).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
-            :'<div class="notice compact">How We Bat stays visually the same. These voices reinforce the existing message rather than redirecting it.</div>'}
+    ${!baselineOnly?`<dialog id="scenarioChangesDialog" style="max-width:620px;width:calc(100% - 32px);border:0;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(20,32,80,.25)">
+      <div style="padding:22px 24px">
+        <div class="section-label">Optional detail</div>
+        <h2 style="margin:4px 0 10px">What changed from ${esc(leadShort)} only?</h2>
+        ${changes.length
+          ?`<ul style="margin:0;padding-left:22px">${changes.slice(0,6).map(x=>`<li style="margin:7px 0">${esc(x)}</li>`).join('')}</ul>`
+          :'<div class="help">The player-facing How We Bat stays visually the same. These voices reinforce the existing message rather than redirecting it.</div>'}
+        <div class="btnrow" style="margin-top:18px"><button class="btn secondary" id="closeScenarioChanges">Close</button></div>
       </div>
+    </dialog>`:''}
 
-      <div class="notice compact" style="margin-top:12px"><strong>Preview the outcome, not the machinery.</strong><br>Open this combination as a clean player-facing How We Bat page. Open different combinations in separate browser tabs if you want to compare them side by side.</div>
-      <div class="btnrow" style="margin-top:12px">
-        <button class="btn ghost" id="openScenarioHwbPreview">Open clean How We Bat ↗</button>
-        ${isPhilosophyLead()?`<button class="btn secondary" id="useVoiceScenario">Use this to create How We Bat</button>`:''}
-      </div>
-    </div>
-
-    <details class="source-responses" style="margin-top:16px">
-      <summary>Show detailed response analysis</summary>
+    <details class="source-responses" style="margin-top:18px">
+      <summary>Detailed response data</summary>
       ${renderDetailedSynthesisBody(safeSelected,pMap)}
       ${renderSubmittedContributionReview(safeSelected,pMap)}
     </details>
