@@ -1,9 +1,25 @@
-// Batting Development Platform v0.8.23 — Know When to Go wording
+// Batting Development Platform v0.8.24 — persist legacy How We Bat wording upgrade
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
+
+function upgradeLegacyHowWeBatWording(draft){
+  if(!draft || typeof draft!=='object')return draft;
+  const formats=draft.formats||{};
+  for(const f of Object.values(formats)){
+    if(!f || !Array.isArray(f.banners))continue;
+    for(const b of f.banners){
+      // Only upgrade the platform's old default. Genuine club-written wording is untouched.
+      if(b?.key==='use_phase' && b.title==='USE THE PHASE')b.title='KNOW WHEN TO GO';
+    }
+  }
+  if(typeof draft.closing_strapline==='string' && draft.closing_strapline.includes('USE THE PHASE')){
+    draft.closing_strapline=draft.closing_strapline.replaceAll('USE THE PHASE','KNOW WHEN TO GO');
+  }
+  return draft;
+}
 
 let session=null;
 let allMemberships=[];
@@ -1113,7 +1129,7 @@ async function loadData(){
   workshop=workshopRes.data||null;
   myContributor=myContributorRes.data||null;
   philosophyVersions=versionsRes.data||[];
-  howWeBatDraft=hwbDraftRes.data||null;
+  howWeBatDraft=upgradeLegacyHowWeBatWording(hwbDraftRes.data||null);
   howWeBatVersions=hwbVersionsRes.data||[];
   playerPlanStructureDraft=planDraftRes.data||null;
   playerPlanStructureVersions=planVersionsRes.data||[];
