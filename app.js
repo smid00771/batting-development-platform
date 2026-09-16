@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.15 — Scenario Explorer hands directly to How We Bat
+// Batting Development Platform v0.8.23 — Know When to Go wording
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -237,7 +237,7 @@ const HOW_WE_BAT_BANNERS={
     }
   },
   use_phase:{
-    title:'USE THE PHASE',
+    title:'KNOW WHEN TO GO',
     dimensions:{
       powerplay:1,
       death_overs:1,
@@ -403,7 +403,7 @@ const HOW_WE_BAT_REFERENCE={
       'Field restrictions can create opportunities, but they do not require every ball to be attacked.',
       'Middle overs are often where strong rotation and partnerships create the platform for later acceleration.',
       'As the innings moves toward its final phase, widen the scoring envelope according to wickets in hand and the match requirement.',
-      'Use the phase to choose between your existing options rather than inventing a completely new game.'
+      'Know when the game is giving you an opportunity to expand — and use the options you have already practised rather than inventing a completely new game.'
     ],
     long_form:[
       'Different periods of a long match create different levels of risk and opportunity.',
