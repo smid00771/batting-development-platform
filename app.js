@@ -2625,7 +2625,7 @@ async function renderWorkshop(){
             <small>${esc(statusText)}</small>
             <span class="workshop-response-state ${responseClass}">${esc(responseState)}</span></div>
             <div class="member-controls">
-              ${c.status==='submitted' && isAdmin()?`<button class="btn ghost" data-reopen-contributor="${c.user_id}">Reopen</button>`:''}
+              ${c.status==='submitted' && isAdmin() && !workshop?.final_draft_ready?`<button class="btn ghost" data-reopen-contributor="${c.user_id}">Allow changes</button>`:''}
             </div>
           </div>`;
         }).join('')||'<div class="notice">No accepted contributors selected yet.</div>'}
@@ -2787,6 +2787,12 @@ async function renderWorkshop(){
   }
 
   document.querySelectorAll('[data-reopen-contributor]').forEach(b=>b.onclick=async()=>{
+    if(workshop?.final_draft_ready){
+      alert('This response is already part of the current synthesis and can no longer be reopened.');
+      return;
+    }
+    const ok=confirm('Allow this contributor to change their submitted response? Their response will be removed from the live synthesis until they submit it again.');
+    if(!ok)return;
     const {error}=await supabase.rpc('reopen_philosophy_contributor',{
       p_club_id:club.id,
       p_user_id:b.dataset.reopenContributor
