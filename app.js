@@ -1610,11 +1610,7 @@ async function renderClubDashboard(){
     </section>
 
 
-    <details class="card setup-collapsible club-branding-card" style="margin-top:16px" ${hasSavedBranding?'':'open'}>
-      <summary class="setup-collapsible-summary">
-        <div class="setup-collapsible-title"><div class="section-label">Club branding</div><strong>Make the player-facing system look like your club.</strong><span>${hasSavedBranding?'Branding saved':'Set up branding'}</span></div>
-        <span class="setup-collapsible-toggle"></span>
-      </summary>
+    <section class="card club-branding-card" style="margin-top:16px" hidden>
       <div class="setup-collapsible-body">
         <p class="help setup-collapsible-intro">Add the club logo and website. We can suggest a colour combination from either source, but <strong>you choose what to use</strong>. The preview begins with the club's currently saved colours (or the platform defaults for a new club). Adding a logo does not automatically change them. You can also ignore both suggestions and pick any colours manually. Nothing changes for members until you click <strong>Save branding</strong>.</p>
         <div class="branding-steps"><span><b>1</b> Add logo</span><span><b>2</b> Find website colours</span><span><b>3</b> Use a suggestion or choose manually</span></div>
@@ -1669,7 +1665,7 @@ async function renderClubDashboard(){
       <div id="clubBrandPreview" class="club-brand-preview"></div>
       <div class="btnrow branding-save-row"><button class="btn secondary" id="saveClubBranding">Save branding</button><span id="clubBrandingSaveStatus" class="status"></span></div>
       </div>
-    </details>
+    </section>
 
 
 
@@ -1689,7 +1685,7 @@ async function renderClubDashboard(){
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
   page.querySelector('[data-open-branding]')?.addEventListener('click',()=>{
     const card=page.querySelector('.club-branding-card');
-    if(card){card.open=true;requestAnimationFrame(()=>card.scrollIntoView({behavior:'smooth',block:'start'}));}
+    if(card){card.hidden=false;requestAnimationFrame(()=>card.scrollIntoView({behavior:'smooth',block:'start'}));}
   });
 }
 
