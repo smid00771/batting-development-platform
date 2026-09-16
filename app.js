@@ -1,3 +1,4 @@
+// Batting Development Platform v0.8.15 — Scenario Explorer hands directly to How We Bat
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -1204,13 +1205,12 @@ function renderShell(){
   if(isAdmin() || canContributePhilosophy() || isPhilosophyLead()){
     nav.push(['workshop','Philosophy Workshop','build']);
   }
-  if(canContributePhilosophy()){
-    nav.push(
-      ['identity','Club Identity','build'],
-      ['dimensions','What We Value','build'],
-      ['formats','Format Emphasis','build'],
-      ['preview',workshop?.final_draft_ready&&isPhilosophyLead()?'How We Bat Builder':'How We Bat Draft','build']
-    );
+  // Club Identity / What We Value / Format Emphasis are response-workflow screens,
+  // not permanent destinations. Contributors enter them from the Philosophy Workshop
+  // and move through them with Save & continue. Only the resulting How We Bat Builder
+  // belongs in the main navigation, and only once the Lead has chosen a synthesis.
+  if(isPhilosophyLead() && workshop?.final_draft_ready){
+    nav.push(['preview','How We Bat Builder','build']);
   }
   if(isPhilosophyLead() || isAdmin()){
     const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
@@ -1222,7 +1222,14 @@ function renderShell(){
   if(isPlayerUser())nav.push(['myplan','My Player Plan','use']);
   if(howWeBatVersions.length)nav.push(['howwetrain','How We Train','use']);
 
-  if(!nav.some(([k])=>k===currentTab)){
+  // The questionnaire pages are intentionally hidden from the top menu, but they
+  // still need to remain valid while a contributor is actively moving through them.
+  const hiddenContributionTabs=canContributePhilosophy()
+    ?new Set(['identity','dimensions','formats',...(isPhilosophyLead()&&workshop?.final_draft_ready?[]:['preview'])])
+    :new Set();
+  const currentIsHiddenContributionStep=hiddenContributionTabs.has(currentTab);
+
+  if(!nav.some(([k])=>k===currentTab) && !currentIsHiddenContributionStep){
     if(isAdmin())currentTab='dashboard';
     else if(nav.some(([k])=>k==='workshop'))currentTab='workshop';
     else if(isPlayerUser())currentTab='myplan';
@@ -2297,7 +2304,7 @@ async function renderWorkshop(){
   const recordedSynthesisResponses=Number(workshopStatus?.synthesis_response_count||0);
 
   // Resolve the response set once, before rendering the page. The same response set is then
-  // used for Contributions received, Synthesis and the Final Draft stage so the workflow reads
+  // used for Contributions received and the Scenario Explorer so the workflow reads
   // from top to bottom without changing its definition of who has contributed.
   let visibleResponses=[];
   let synthesisMeta=null;
@@ -2465,7 +2472,7 @@ async function renderWorkshop(){
   html+=`<section class="card workshop-stage-card">
     <div class="section-label">2 · Contributions received</div>
     <h2>What has come back?</h2>
-    <div class="help">Responses stay independent while people are completing them. Once submitted, they appear here before the group synthesis and before any final-draft work.</div>
+    <div class="help">Responses stay independent while people are completing them. Once submitted, they appear here before you explore combinations and create How We Bat.</div>
     <div class="workshop-progress">
       ${workshop?.final_draft_ready && draftSnapshot
         ?`<div><strong>${snapshotCount}</strong><span>included in current synthesis</span></div>
@@ -2486,7 +2493,7 @@ async function renderWorkshop(){
           ?(leadOriginalIncluded?'Included in current synthesis':'Original response preserved')
           :contributorStatusLabel(me.status))}</strong>
         <p>${leadDrafting
-          ?'Your independent response is preserved in the response set below. Review the contributions and synthesis first; Final Draft controls are now at the end of the Workshop.'
+          ?'Your independent response is preserved in the response set below. Explore the submitted voices, choose the combination that feels right, then create How We Bat directly from it.'
           :me.status==='submitted'
             ?(myLateAction
               ?'Your response was submitted after the final-draft snapshot. It is locked and the Philosophy Lead will decide whether to incorporate it.'
@@ -2606,9 +2613,6 @@ async function renderWorkshop(){
       html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Synthesis</div><h2>Waiting for a submitted response.</h2><div class="help">The synthesis begins once a contributor has completed the final Submit response step.</div></section>`;
     }
 
-    if(isPhilosophyLead() && !synthesisLoadError && scenarioResponses.length){
-      html+=renderFinalDraftStage(selectedScenarioResponses(scenarioResponses),pMap,allSubmitted,synthesisMeta);
-    }
   }else if(totalCount>1 && me){
     html+=`<section class="card synthesis-locked workshop-stage-card" style="margin-top:16px">
       <div class="section-label">3 · Synthesis</div>
@@ -2617,9 +2621,20 @@ async function renderWorkshop(){
     </section>`;
   }
 
+  if(isAdmin() || isPhilosophyLead()){
+    html+=`<details class="card workshop-maintenance" style="margin-top:16px">
+      <summary style="cursor:pointer;font-weight:700">Workshop settings</summary>
+      <div class="help" style="margin-top:10px">Rare maintenance actions live here so they do not compete with the normal workshop flow.</div>
+      <div style="display:grid;gap:10px;margin-top:12px">
+        ${isPhilosophyLead() && workshop?.final_draft_ready?`<div class="notice compact"><strong>Reset How We Bat draft</strong><br>Regenerate the editable How We Bat draft from the current working philosophy. Published versions stay live and unchanged. Any manual edits in the current How We Bat draft will be replaced.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="resetHowWeBatDraft">Reset How We Bat draft</button></div></div>`:''}
+        <div class="notice compact"><strong>Start a new philosophy round</strong><br>Use this when the people shaping the philosophy or the club direction has materially changed. The current round is archived, published versions stay live, and the selected contributors start again with fresh independent responses.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="startNewPhilosophyRound">Start new philosophy round</button></div></div>
+      </div>
+    </details>`;
+  }
+
   if(philosophyVersions.length){
     html+=`<section class="card" style="margin-top:16px">
-      <div class="section-label">5 · Published history</div>
+      <div class="section-label">Published history</div>
       <h2>Club philosophy versions</h2>
       <div class="version-list">${philosophyVersions.map(v=>`
         <div class="version-row"><strong>Version ${v.version_number}</strong><span>${new Date(v.published_at).toLocaleDateString()}</span></div>`).join('')}</div>
@@ -2746,24 +2761,23 @@ async function renderWorkshop(){
     renderShell();
   });
 
-  document.querySelectorAll('[data-scenario-voice]').forEach(x=>x.onchange=()=>{
+  document.querySelectorAll('[data-scenario-voice]').forEach(x=>x.onchange=async()=>{
     const id=x.dataset.scenarioVoice;
     if(x.checked)philosophyScenarioSelectedIds.add(id);
     else philosophyScenarioSelectedIds.delete(id);
     if(workshop?.philosophy_lead_user_id)philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
-    renderWorkshop();
+    await rerenderWorkshopKeepScroll();
   });
 
-  document.querySelectorAll('[data-scenario-preset]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-scenario-preset]').forEach(b=>b.onclick=async()=>{
     philosophyScenarioSelectedIds=new Set((b.dataset.scenarioPreset||'').split(',').filter(Boolean));
     if(workshop?.philosophy_lead_user_id)philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
-    renderWorkshop();
+    await rerenderWorkshopKeepScroll();
   });
 
-  document.querySelectorAll('[data-scenario-format]').forEach(b=>b.onclick=()=>{
-    philosophyScenarioFormat=b.dataset.scenarioFormat;
-    renderWorkshop();
-  });
+  if(document.getElementById('openScenarioHwbPreview')){
+    document.getElementById('openScenarioHwbPreview').onclick=()=>openScenarioHowWeBatPreview(scenarioResponses,pMap);
+  }
 
   if(document.getElementById('useVoiceScenario')){
     document.getElementById('useVoiceScenario').onclick=()=>applySelectedVoiceScenario(scenarioResponses,pMap);
@@ -2771,6 +2785,13 @@ async function renderWorkshop(){
 
   if(document.getElementById('buildFinalDraft')){
     document.getElementById('buildFinalDraft').onclick=()=>beginFinalDraftFromSynthesis();
+  }
+
+  if(document.getElementById('resetHowWeBatDraft')){
+    document.getElementById('resetHowWeBatDraft').onclick=resetHowWeBatDraftFromCurrentPhilosophy;
+  }
+  if(document.getElementById('startNewPhilosophyRound')){
+    document.getElementById('startNewPhilosophyRound').onclick=startNewPhilosophyRound;
   }
 
   document.querySelectorAll('[data-review-late]').forEach(b=>b.onclick=async()=>{
@@ -2845,12 +2866,6 @@ async function renderWorkshop(){
 
   if(document.getElementById('openHwbBuilder')){
     document.getElementById('openHwbBuilder').onclick=()=>{currentTab='preview';renderTab();};
-  }
-  if(document.getElementById('discardFinalDraft')){
-    document.getElementById('discardFinalDraft').onclick=discardFinalDraftAndRestart;
-  }
-  if(document.getElementById('myResponseAction2')){
-    document.getElementById('myResponseAction2').onclick=()=>{currentTab='identity';renderTab();};
   }
   if(document.getElementById('continueToPlanStructure')){
     document.getElementById('continueToPlanStructure').onclick=()=>{
@@ -3162,7 +3177,7 @@ function renderSubmittedContributionReview(responses,pMap){
   return `<section class="card submitted-contributions-card" style="margin-top:16px">
     <div class="section-label">Submitted responses</div>
     <h2>What did each person say?</h2>
-    <div class="help">These are the actual independent responses feeding the synthesis below. Differences from the Philosophy Lead's original response are shown before the final draft is considered.</div>
+    <div class="help">These are the actual independent responses available to the Scenario Explorer. Open this only when you want to inspect exactly why a How We Bat option changed.</div>
     <div class="submitted-contribution-list">${ordered.map(r=>{
       const name=r.display_name||pMap.get(r.user_id)?.display_name||'Contributor';
       const isLead=r.user_id===leadId;
@@ -3260,6 +3275,126 @@ function scenarioHowWeBatChanges(baseDraft,scenarioDraft){
   return rows;
 }
 
+async function rerenderWorkshopKeepScroll(){
+  const y=window.scrollY;
+  await renderWorkshop();
+  requestAnimationFrame(()=>window.scrollTo(0,y));
+}
+
+async function resetHowWeBatDraftFromCurrentPhilosophy(){
+  if(!isPhilosophyLead() || !workshop?.final_draft_ready){
+    alert('A Philosophy Lead working philosophy is required before How We Bat can be reset.');
+    return;
+  }
+
+  const ok=confirm(
+    `Reset the editable How We Bat draft?\n\n`+
+    `This will regenerate How We Bat from the current working philosophy.\n\n`+
+    `• Published How We Bat versions stay live and unchanged.\n`+
+    `• Contributor responses and the selected synthesis stay unchanged.\n`+
+    `• Manual edits in the current How We Bat draft will be replaced.\n`+
+    `• Player Plan Structure will need review again.`
+  );
+  if(!ok)return;
+
+  const fresh=generatedHowWeBatDraftFromPhilosophy(currentWorkingPhilosophyResponse());
+  const btn=document.getElementById('resetHowWeBatDraft');
+  if(btn){btn.disabled=true;btn.textContent='Resetting…';}
+
+  const {error}=await supabase.rpc('save_how_we_bat_draft',{
+    p_club_id:club.id,
+    p_identity_statement:fresh.identity_statement||'',
+    p_closing_strapline:fresh.closing_strapline||'',
+    p_formats:fresh.formats||{},
+    p_status:'draft'
+  });
+  if(error){
+    alert(error.message);
+    if(btn){btn.disabled=false;btn.textContent='Reset How We Bat draft';}
+    return;
+  }
+
+  await loadData();
+  currentTab='preview';
+  renderShell();
+}
+
+async function startNewPhilosophyRound(){
+  const publishedNote=philosophyVersions.length
+    ?`The currently published Club Batting System will stay live until you deliberately publish a replacement.\n\n`
+    :'';
+  const ok=confirm(
+    `Start a completely new Philosophy Workshop round?\n\n`+
+    publishedNote+
+    `This will:\n`+
+    `• archive the current workshop responses and working state\n`+
+    `• clear the current editable Philosophy / How We Bat / Player Plan Structure drafts\n`+
+    `• keep all published versions unchanged\n`+
+    `• return the current contributor list to a fresh invited state so you can keep, remove or add people before they respond again\n\n`+
+    `Use this for a genuine new round — for example, when personnel or the club's direction changes.`
+  );
+  if(!ok)return;
+
+  const btn=document.getElementById('startNewPhilosophyRound');
+  if(btn){btn.disabled=true;btn.textContent='Starting new round…';}
+
+  const {error}=await supabase.rpc('start_new_philosophy_round',{p_club_id:club.id});
+  if(error){
+    alert(error.message);
+    if(btn){btn.disabled=false;btn.textContent='Start new philosophy round';}
+    return;
+  }
+
+  sessionStorage.removeItem(`bdp-philosophy-working-voices:${club.id}`);
+  philosophyScenarioSelectedIds=new Set();
+  philosophyScenarioStateKey='';
+  await loadData();
+  currentTab='workshop';
+  renderShell();
+}
+
+function openScenarioHowWeBatPreview(responses,pMap){
+  const selected=selectedScenarioResponses(responses);
+  const leadId=workshop?.philosophy_lead_user_id;
+  const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||(responses||[])[0]||null;
+  const safeSelected=selected.length?selected:(leadResponse?[leadResponse]:[]);
+  if(!safeSelected.length){alert('There is no submitted response available to preview yet.');return;}
+
+  const draft=generatedHowWeBatDraftFromPhilosophy(buildScenarioDraft(safeSelected));
+  const formats=FORMATS.filter(([f])=>draft.formats?.[f]);
+  if(!formats.length){alert('This combination does not currently produce a How We Bat preview.');return;}
+
+  const names=safeSelected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
+  const title=`How We Bat — ${names.join(' + ')}`;
+  const styleAssets=[...document.head.querySelectorAll('link[rel="stylesheet"],style')].map(n=>n.outerHTML).join('\n');
+  const tabButtons=formats.map(([f,label],i)=>`<button type="button" data-clean-hwb-tab="${esc(f)}" class="${i===0?'active':''}">${esc(label)}</button>`).join('');
+  const panels=formats.map(([f],i)=>`<div data-clean-hwb-panel="${esc(f)}" style="${i===0?'':'display:none'}">${renderHowWeBatLivePreview(draft,f,false)}</div>`).join('');
+
+  const win=window.open('','_blank');
+  if(!win){alert('Your browser blocked the preview tab. Allow pop-ups for this site, then try again.');return;}
+
+  win.document.open();
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${styleAssets}<style>
+    html,body{margin:0;padding:0;background:#f7f8fb;}
+    body{min-height:100vh;}
+    .clean-hwb-shell{max-width:980px;margin:0 auto;padding:18px 16px 48px;}
+    .clean-hwb-format-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;position:sticky;top:0;z-index:20;padding:10px 0;background:#f7f8fb;}
+    .clean-hwb-format-tabs button{border:0;border-radius:999px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer;background:#e9edf7;color:#18245f;}
+    .clean-hwb-format-tabs button.active{background:#203588;color:#fff;}
+    .clean-hwb-shell .hwb-publication-preview .hwb-public-tabs{display:none!important;}
+    .clean-hwb-shell .hwb-publication-preview{margin:0;}
+    @media(max-width:700px){.clean-hwb-shell{padding:8px 8px 32px}.clean-hwb-format-tabs{padding-top:8px}}
+  </style></head><body><main class="clean-hwb-shell"><div class="clean-hwb-format-tabs">${tabButtons}</div>${panels}</main><script>
+    document.querySelectorAll('[data-clean-hwb-tab]').forEach(btn=>btn.addEventListener('click',()=>{
+      const format=btn.dataset.cleanHwbTab;
+      document.querySelectorAll('[data-clean-hwb-tab]').forEach(x=>x.classList.toggle('active',x===btn));
+      document.querySelectorAll('[data-clean-hwb-panel]').forEach(panel=>panel.style.display=panel.dataset.cleanHwbPanel===format?'':'none');
+      window.scrollTo({top:0,left:0,behavior:'instant'});
+    }));
+  <\/script></body></html>`);
+  win.document.close();
+}
+
 function renderDetailedSynthesisBody(responses,pMap){
   const syn=buildSynthesis(responses);
   return `<div class="scenario-detail-body">
@@ -3306,7 +3441,7 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
     <h2>See what each voice actually does to How We Bat.</h2>
     <div class="help">Start with the Philosophy Lead's original response, then add or remove submitted voices. Nothing is accepted, rejected or altered here — you are simply testing what each combination produces.</div>
 
-    ${meta?.snapshot?`<div class="notice compact"><strong>Working synthesis exists.</strong> Voices already used in that draft start switched on. Any later submitted response can still be explored here before you decide whether to use a new combination.</div>`:''}
+    ${meta?.snapshot?`<div class="notice compact"><strong>A How We Bat draft already exists.</strong> The voices used to create it start switched on. You can still explore another combination and create a revised How We Bat draft.</div>`:''}
 
     <div class="scenario-voice-list" style="display:grid;gap:8px;margin-top:14px">
       ${(responses||[]).map(r=>{
@@ -3337,10 +3472,11 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
             :'<div class="notice compact">How We Bat stays visually the same. These voices reinforce the existing message rather than redirecting it.</div>'}
       </div>
 
-      <div class="format-tabs hwb-tabs">${formats.map(([f,label])=>`<button data-scenario-format="${f}" class="${f===philosophyScenarioFormat?'active':''}">${esc(label)}</button>`).join('')}</div>
-      ${renderHowWeBatLivePreview(scenarioHwb,philosophyScenarioFormat,false)}
-
-      ${isPhilosophyLead()?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="useVoiceScenario">${workshop?.final_draft_ready?'Use this combination as the working synthesis':'Use this combination to create the working synthesis'}</button></div>`:''}
+      <div class="notice compact" style="margin-top:12px"><strong>Preview the outcome, not the machinery.</strong><br>Open this combination as a clean player-facing How We Bat page. Open different combinations in separate browser tabs if you want to compare them side by side.</div>
+      <div class="btnrow" style="margin-top:12px">
+        <button class="btn ghost" id="openScenarioHwbPreview">Open clean How We Bat ↗</button>
+        ${isPhilosophyLead()?`<button class="btn secondary" id="useVoiceScenario">Use this to create How We Bat</button>`:''}
+      </div>
     </div>
 
     <details class="source-responses" style="margin-top:16px">
@@ -3360,11 +3496,15 @@ async function applySelectedVoiceScenario(responses,pMap){
   const names=selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
   const draft=buildScenarioDraft(selected);
   const hwb=generatedHowWeBatDraftFromPhilosophy(draft);
-  const ok=confirm(
-    `Use ${naturalList(names)} as the working synthesis?\n\n`+
-    `This does not change anyone's submitted response. It changes the Philosophy Lead's working draft and regenerates How We Bat from this combination.`
-  );
-  if(!ok)return;
+  // First creation is deliberately one click. If a How We Bat draft already exists,
+  // confirm before replacing it because the Lead may have edited that draft manually.
+  if(workshop?.final_draft_ready && howWeBatDraft){
+    const ok=confirm(
+      `Replace the current How We Bat draft using ${naturalList(names)}?\n\n`+
+      `This keeps every submitted response unchanged, but it will regenerate the editable How We Bat draft from this combination of voices.`
+    );
+    if(!ok)return;
+  }
 
   if(!workshop?.final_draft_ready){
     const {error}=await supabase.rpc('begin_final_philosophy_draft',{
@@ -3407,47 +3547,8 @@ async function applySelectedVoiceScenario(responses,pMap){
   if(hErr){alert(hErr.message);return;}
 
   await loadData();
-  currentTab='workshop';
+  currentTab='preview';
   renderShell();
-}
-
-function renderFinalDraftStage(responses,pMap,allSubmitted,meta=null){
-  const syn=buildSynthesis(responses);
-  const leadOriginal=(responses||[]).find(r=>r.user_id===workshop?.philosophy_lead_user_id)||null;
-  const draftReady=!!workshop?.final_draft_ready;
-  const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
-  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>
-    v.published_at && new Date(v.published_at)>=draftStartedAt
-  );
-  const changes=draftReady && leadOriginal
-    ?responseDifferenceRows(leadOriginal,currentWorkingPhilosophyResponse(),'Your original','Working draft')
-    :[];
-
-  return `<section class="card final-draft-stage workshop-stage-card" style="margin-top:16px">
-    <div class="section-label">4 · Final Draft</div>
-    <h2>${draftReady?'Turn the synthesis into the club position':'Ready to create the working draft?'}</h2>
-    <div class="help">Use the Scenario Explorer above to test the player-facing result first. Once the combination feels like the club, use it as the working synthesis and refine the final draft here.</div>
-
-    ${draftReady
-      ?`<div class="final-draft-source"><strong>Current working draft</strong><span>Built from the current ${syn.n}-response synthesis${meta?.snapshot?' snapshot':''}. The source responses above remain unchanged.</span></div>
-        <div class="final-draft-change-summary">
-          <h3>What changed from your original response?</h3>
-          ${changes.length
-            ?`<ul>${changes.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
-            :'<div class="notice compact">The current working draft has no material structured differences from your original response.</div>'}
-        </div>
-        <div class="final-draft-status-row">
-          <span>${howWeBatDraft?.status==='ready'?'How We Bat ready':'How We Bat still in draft'}</span>
-          <span>${playerPlanStructureDraft?.status==='ready'?'Player Plan Structure ready':'Player Plan Structure not yet confirmed'}</span>
-        </div>
-        <div class="btnrow final-draft-actions">
-          <button class="btn secondary" id="myResponseAction2">${currentDraftPublished?'Review final draft':'Continue final draft'}</button>
-          ${!currentDraftPublished?'<button class="btn ghost" id="discardFinalDraft">Discard draft & restart synthesis</button>':''}
-        </div>`
-      :(myContributor?.status==='submitted'
-        ?`<div class="final-draft-source"><strong>Choose the working synthesis above</strong><span>Use the How We Bat preview to decide which combination of voices best captures the club. Then select <strong>Use this combination to create the working synthesis</strong>.</span></div>`
-        :'<div class="notice">Submit your own independent response before creating the working synthesis.</div>')}
-  </section>`;
 }
 
 function renderSynthesis(responses,pMap,allSubmitted,meta=null){
