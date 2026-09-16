@@ -1528,97 +1528,81 @@ function renderTab(){
 }
 
 
+/* v0.8.10: linear Club Setup flow */
 async function renderClubDashboard(){
   const page=document.getElementById('page');
   page.innerHTML='<div class="splash">Loading club setup…</div>';
 
   const [
     {data:entitlement},
-    {data:contributors},
-    {data:pendingInvites},
     {data:players},
     {data:groups},
     {data:structureVersions}
   ]=await Promise.all([
     supabase.rpc('get_club_entitlement',{p_club_id:club.id}),
-    supabase.from('philosophy_contributors').select('user_id,status').eq('club_id',club.id),
-    supabase.from('philosophy_contributor_invites').select('id,status').eq('club_id',club.id).eq('status','pending'),
     supabase.from('players').select('id,active').eq('club_id',club.id).eq('active',true),
     supabase.from('playing_groups').select('id,active').eq('club_id',club.id).eq('active',true),
     supabase.from('player_plan_structure_versions').select('id,version_number').eq('club_id',club.id).order('version_number',{ascending:false}).limit(1)
   ]);
 
-  const submitted=(contributors||[]).filter(x=>x.status==='submitted').length;
-  const total=(contributors||[]).length;
-  const hasLead=!!workshop?.philosophy_lead_user_id;
   const entitlementActive=entitlement?.active!==false;
-  const collaborative=workshop?.mode==='collaborative';
-  const additionalContributors=(contributors||[]).filter(
-    x=>x.user_id!==workshop?.philosophy_lead_user_id
-  ).length + (pendingInvites||[]).length;
   const philosophyReady=!!workshop?.final_draft_ready || philosophyVersions.length>0;
   const howWeBatReady=howWeBatVersions.length>0;
   const structureReady=(structureVersions||[]).length>0;
   const systemLive=philosophyVersions.length>0 && howWeBatVersions.length>0 && structureReady;
   const hasSavedBranding=!!club.branding_updated_at || !!club.logo_data_url || !!club.website_url;
 
-  const setupChecks=[
-    ['Subscription / entitlement active',entitlementActive],
-    ['At least one player registered',(players||[]).length>0],
-    ['At least one Playing Group created',(groups||[]).length>0],
-    ['Philosophy Lead chosen',hasLead],
-    collaborative
-      ?['Philosophy contributors selected',additionalContributors>0]
-      :['Solo Philosophy Workshop ready',hasLead],
-    ['Final philosophy prepared',philosophyReady],
-    ['How We Bat published',howWeBatReady],
-    ['Player Plan Structure published',structureReady],
-    ['Club Batting System live',systemLive]
-  ];
-  const setupCompleteCount=setupChecks.filter(([,done])=>done).length;
-
   const workflow=[
     {
-      n:'1',title:'Set the club look',who:'Club Admin',
+      n:'1',title:'Set the club look',who:'Club Admin',done:hasSavedBranding,
       text:'Add the club logo, website and colours so the finished player-facing system looks like the club.'
     },
     {
-      n:'2',title:'Get people into BDP',who:'Club Admin + club members',
+      n:'2',title:'Get people into BDP',who:'Club Admin + club members',done:(players||[]).length>0,
       text:'Open Player sign-up and get players registered first. Use the separate staff link only for genuinely non-playing coaches or staff, then assign club roles from People & Sign-up.'
     },
     {
-      n:'3',title:'Organise Playing Groups',who:'Club Admin',
+      n:'3',title:'Organise Playing Groups',who:'Club Admin',done:(groups||[]).length>0,
       text:'Create the grades, teams or development groups the club needs, then assign registered players to them.'
     },
     {
-      n:'4',title:'Build the club philosophy',who:'Philosophy Lead + invited contributors',
+      n:'4',title:'Build the club philosophy',who:'Philosophy Lead + invited contributors',done:philosophyReady,
       text:'Contributors respond independently through Club Identity, What We Value and Format Emphasis. Philosophy contribution is separate from club roles and player access.'
     },
     {
-      n:'5',title:'Create How We Bat',who:'Philosophy Lead',
+      n:'5',title:'Create How We Bat',who:'Philosophy Lead',done:howWeBatReady,
       text:'Turn the detailed philosophy into a small number of memorable, format-specific Key Messages that players can actually use.'
     },
     {
-      n:'6',title:'Set the Player Plan Structure',who:'Philosophy Lead',
+      n:'6',title:'Set the Player Plan Structure',who:'Philosophy Lead',done:structureReady,
       text:'Decide what players will be asked about their own game, then confirm the final question structure.'
     },
     {
-      n:'7',title:'Publish the Club Batting System',who:'Philosophy Lead',
+      n:'7',title:'Publish the Club Batting System',who:'Philosophy Lead',done:systemLive,
       text:'Release the matching Philosophy, How We Bat and Player Plan Structure together. This is the point where the finished system becomes live.'
     },
     {
-      n:'8',title:'Players use it. Coaches develop it.',who:'Players + authorised coaches/captains',
+      n:'8',title:'Players use it. Coaches develop it.',who:'Players + authorised coaches/captains',done:systemLive,
       text:'Players build their Player Plan and train from it. Coaches and captains use the Players workspace only for the Playing Groups or players they have been given access to.'
     }
   ];
+  const firstIncompleteWorkflowIndex=workflow.findIndex(step=>!step.done);
 
   page.innerHTML=`
-    <section class="card setup-workflow-hero">
-      <div class="section-label">How the platform works</div>
-      <h2>Build it here. Players get the usable system.</h2>
-      <p class="setup-workflow-lead">The setup and philosophy pages are <strong>working areas for the people building the club system</strong>. Ordinary players do not see those screens. Once the Club Batting System is published, players see the simple tools they need to bat, plan, train and reflect.</p>
-      <div class="setup-player-callout"><strong>Players are not being shown the workshop.</strong><span>They receive the finished output — How We Bat, their own Player Plan and How We Train.</span></div>
+    <section class="card setup-collapsible">
+      <div class="setup-collapsible-body">
+        <div class="section-label">Club workflow</div>
+        <h2>From setup to player development</h2>
+        <div class="help" style="margin-bottom:14px">Follow the sequence. Each stage hands naturally to the next; later stages stay visible here as the roadmap rather than competing as setup shortcuts.</div>
+        <div class="club-workflow-list">
+          ${workflow.map((s,i)=>`<div class="club-workflow-step ${s.done?'done':i===firstIncompleteWorkflowIndex?'current':''}">
+            <div class="club-workflow-number">${s.done?'✓':s.n}</div>
+            <div><strong>${esc(s.title)}</strong><small>${esc(s.who)} · ${s.done?'Complete':i===firstIncompleteWorkflowIndex?'Next in sequence':'Later'}</small><p>${esc(s.text)}</p></div>
+          </div>`).join('')}
+        </div>
+      </div>
     </section>
+
 
     <details class="card setup-collapsible club-branding-card" style="margin-top:16px" ${hasSavedBranding?'':'open'}>
       <summary class="setup-collapsible-summary">
@@ -1681,74 +1665,16 @@ async function renderClubDashboard(){
       </div>
     </details>
 
-    <details class="card setup-collapsible" style="margin-top:16px">
-      <summary class="setup-collapsible-summary">
-        <div class="setup-collapsible-title"><div class="section-label">Club workflow</div><strong>From setup to player development</strong><span>8-step build</span></div>
-        <span class="setup-collapsible-toggle"></span>
-      </summary>
-      <div class="setup-collapsible-body">
-        <div class="club-workflow-list">
-          ${workflow.map(s=>`<div class="club-workflow-step">
-            <div class="club-workflow-number">${s.n}</div>
-            <div><strong>${esc(s.title)}</strong><small>${esc(s.who)}</small><p>${esc(s.text)}</p></div>
-          </div>`).join('')}
-        </div>
-      </div>
-    </details>
 
-    <details class="card setup-collapsible" style="margin-top:16px">
-      <summary class="setup-collapsible-summary">
-        <div class="setup-collapsible-title"><div class="section-label">Who sees what?</div><strong>Access follows club role and assigned scope.</strong><span>Roles & access</span></div>
-        <span class="setup-collapsible-toggle"></span>
-      </summary>
-      <div class="setup-collapsible-body">
-        <p class="help setup-collapsible-intro">A person's involvement in the philosophy process does not automatically give them access to player information. Player access is controlled separately.</p>
-        <div class="role-visibility-grid">
-          <div class="role-visibility-card player"><strong>Player</strong><span>After publication</span><p><b>How We Bat</b><br><b>My Player Plan</b><br><b>How We Train</b></p><small>Players see their own development tools — not the philosophy-building workspace.</small></div>
-          <div class="role-visibility-card coach"><strong>Coach / Captain / Head Coach</strong><span>According to assigned access</span><p><b>Players</b><br><b>How We Bat</b><br><b>How We Train</b></p><small>The Players workspace only contains Playing Groups and players they have been authorised to access.</small></div>
-          <div class="role-visibility-card contributor"><strong>Philosophy Contributor</strong><span>During the build</span><p><b>Philosophy Workshop</b><br><b>Their own response sections</b></p><small>This role alone does not expose Player Plans, Training Plans or coaching feedback.</small></div>
-          <div class="role-visibility-card lead"><strong>Philosophy Lead</strong><span>Build + release</span><p><b>Workshop and final draft</b><br><b>How We Bat Builder</b><br><b>Player Plan Structure</b></p><small>Being Philosophy Lead does not automatically grant access to individual players. That requires separate coach/admin permission.</small></div>
-          <div class="role-visibility-card admin"><strong>Club Admin</strong><span>Club management</span><p><b>Setup + People & Sign-up</b><br><b>Playing Groups + Players</b><br><b>Build and live system</b></p><small>Admins manage the club framework and have full club Player Plan access.</small></div>
-        </div>
-      </div>
-    </details>
+    ${hasSavedBranding?`<section class="card" style="margin-top:16px">
+      <div class="section-label">Continue setup · Step 2 of 8</div>
+      <h2>People & Sign-up</h2>
+      <div class="help">Branding is saved. Next, get the club's people into BDP and assign any Captain, Coach, Head Coach or Admin responsibilities. Playing Groups comes after that.</div>
+      <div class="btnrow"><button class="btn secondary" id="continueSetupPeople">Continue to People & Sign-up</button></div>
+    </section>`:''}
 
-    <details class="card setup-collapsible" style="margin-top:16px" ${systemLive?'':'open'}>
-      <summary class="setup-collapsible-summary">
-        <div class="setup-collapsible-title"><div class="section-label">Club status & setup</div><strong>${systemLive?'Club Batting System is live':'Finish setting up the club system'}</strong><span>${systemLive?'Live':`${setupCompleteCount}/${setupChecks.length} ready`}</span></div>
-        <span class="setup-collapsible-toggle"></span>
-      </summary>
-      <div class="setup-collapsible-body">
-        <div class="grid setup-status-grid">
-          <section class="setup-inner-panel">
-            <div class="section-label">Current setup</div>
-            <h2>${esc(club.name)}</h2>
-            <div class="setup-steps">${setupChecks.map(([label,done])=>`
-              <div class="setup-step ${done?'done':''}"><span>${done?'✓':'○'}</span><strong>${esc(label)}</strong></div>`).join('')}</div>
-            <div class="btnrow">
-              ${!hasLead?'<button class="btn secondary" data-go="workshop">Choose Philosophy Lead</button>':''}
-              ${hasLead&&!systemLive?'<button class="btn secondary" data-go="workshop">Continue club build</button>':''}
-              <button class="btn ghost" data-go="permissions">People & Sign-up</button>
-              <button class="btn ghost" data-go="groups">Playing Groups</button>
-            </div>
-          </section>
 
-          <section class="setup-inner-panel">
-            <div class="section-label">Live system</div>
-            <h2>${systemLive?'Club Batting System is live':'Player-facing system not fully released'}</h2>
-            <div class="gate-state ${systemLive?'open':'locked'}">${systemLive?'🔓':'🔒'}</div>
-            <p class="help">${systemLive
-              ?`The published club system is available. Players can build their own Player Plans and use targeted How We Train guidance.`
-              :'People can still be invited and assigned roles while the club build is underway. The finished player-facing system becomes available when the Club Batting System is published.'}</p>
-            <div class="dashboard-stats">
-              <div><strong>${submitted}/${total}</strong><span>${collaborative?'philosophy responses':'lead response'}</span></div>
-              <div><strong>${groups?.length||0}</strong><span>Playing Groups</span></div>
-              <div><strong>${players?.length||0}</strong><span>active players</span></div>
-            </div>
-          </section>
-        </div>
-      </div>
-    </details>
+
 
     <details class="card setup-collapsible setup-commercial" style="margin-top:16px">
       <summary class="setup-collapsible-summary">
@@ -1763,6 +1689,8 @@ async function renderClubDashboard(){
     </details>`;
 
   wireClubBrandingControls(page);
+  const continueSetupPeople=document.getElementById('continueSetupPeople');
+  if(continueSetupPeople)continueSetupPeople.onclick=()=>{currentTab='permissions';localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();};
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
 }
 
@@ -2034,8 +1962,9 @@ async function renderPlayingGroups(){
 
   page.innerHTML=`<div class="grid playing-groups-top">
     <section class="card">
-      <div class="section-label">Club Setup · Playing Groups</div>
-      <h2>Use the groups your club actually uses.</h2>
+      <div class="section-label">Club Setup · Step 3 of 8</div>
+      <h2>Playing Groups</h2>
+      <div class="help"><strong>Use the groups your club actually uses.</strong></div>
       <div class="help">Playing Groups can be grades, junior sides, XI teams, development pools or competition eligibility groups. A player can belong to more than one.</div>
 
       <div class="notice" style="margin-top:14px">
@@ -2146,6 +2075,13 @@ async function renderPlayingGroups(){
         </div>`;
       }).join('')||'<div class="notice">No active players have registered yet.</div>'}
     </div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <div class="section-label">Next · Step 4 of 8</div>
+    <h2>Build the club philosophy</h2>
+    <div class="help">Once the club's Playing Groups are in place, move into the Philosophy Workshop. Contributors can then work independently before the Philosophy Lead creates the synthesis and final version.</div>
+    <div class="btnrow"><button class="btn secondary" id="continueToPhilosophy" ${activeGroups.length?'':'disabled'}>${activeGroups.length?'Continue to Philosophy Workshop':'Create a Playing Group first'}</button></div>
   </section>`;
 
   document.getElementById('addPlayingGroup').onclick=async()=>{
@@ -2257,6 +2193,9 @@ async function renderPlayingGroups(){
     if(error){alert(error.message);return;}
     await renderPlayingGroups();
   });
+
+  const continueToPhilosophy=document.getElementById('continueToPhilosophy');
+  if(continueToPhilosophy && activeGroups.length)continueToPhilosophy.onclick=()=>{currentTab='workshop';localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();};
 
   document.getElementById('groupPlayerSearch').oninput=e=>{
     const q=e.target.value.trim().toLowerCase();
@@ -5184,8 +5123,9 @@ async function renderPermissions(){
 
   document.getElementById('page').innerHTML=`
   <section class="card">
-    <div class="section-label">People & sign-up</div>
-    <h2>Get people into BDP first. Give responsibilities second.</h2>
+    <div class="section-label">Club Setup · Step 2 of 8</div>
+    <h2>People & Sign-up</h2>
+    <div class="help"><strong>Get people into BDP first. Give responsibilities second.</strong></div>
     <div class="help">Players register as <strong>Players</strong>. Club roles such as Captain, Coach, Head Coach and Admin are assigned afterwards. Philosophy Workshop invitations are separate again — contributing to the philosophy does <strong>not</strong> make somebody a coach, captain or Admin.</div>
   </section>
 
@@ -5346,6 +5286,13 @@ async function renderPermissions(){
     `:`
       <div class="notice"><strong>${esc(leadAdminName)} is responsible for the next formal handover.</strong><br>Other Club Admins still have full administration access, but the Lead Admin designation cannot be casually removed through the role controls above.</div>
     `}
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <div class="section-label">Next · Step 3 of 8</div>
+    <h2>Organise Playing Groups</h2>
+    <div class="help">When the people you need are in BDP and club roles are assigned, organise the stable grades, teams or development groups the club actually uses.</div>
+    <div class="btnrow"><button class="btn secondary" id="continueToPlayingGroups">Continue to Playing Groups</button></div>
   </section>`;
 
   const playerWhatsAppMessage=`${club.name} players — our Batting Development system is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If you are also a captain or coach, still use this Player link — the club will add that role afterwards. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
@@ -5392,6 +5339,9 @@ async function renderPermissions(){
     if(error){alert(error.message);button.disabled=false;button.textContent='Regenerate link & QR';return;}
     await loadContext();
   };
+
+  const continueToPlayingGroups=document.getElementById('continueToPlayingGroups');
+  if(continueToPlayingGroups)continueToPlayingGroups.onclick=()=>{currentTab='groups';localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();};
 
   renderPlayerQRCode(playerJoinLink);
 
