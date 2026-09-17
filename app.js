@@ -1,4 +1,4 @@
-// Club Batting v0.8.38 — product rebrand + sender identity
+// Club Batting v0.8.39 — deeper How We Train + player-added answer feedback
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -5326,6 +5326,57 @@ function renderPlanReviewSection(section,label,questions){
   </section>`;
 }
 
+let playerPlanIdeaPlayersCache={clubId:null,players:null,error:''};
+
+async function loadPlayerPlanIdeaPlayers(){
+  if(!isAdmin())return {players:[],error:''};
+  if(playerPlanIdeaPlayersCache.clubId===club?.id && Array.isArray(playerPlanIdeaPlayersCache.players))return playerPlanIdeaPlayersCache;
+  const {data,error}=await supabase.rpc('get_players_workspace',{p_club_id:club.id});
+  playerPlanIdeaPlayersCache={clubId:club.id,players:Array.isArray(data?.players)?data.players:[],error:error?.message||''};
+  return playerPlanIdeaPlayersCache;
+}
+
+function playerPlanAddedIdeas(players,structure){
+  const groups=[];
+  const sections=[['core','Club-wide',structure?.core||[]],...enabledFormats().map(([format,label])=>[format,label,structure?.formats?.[format]||[]])];
+  for(const [section,label,questions] of sections){
+    for(const q of questions.filter(x=>x.active!==false&&x.response_type!=='text')){
+      const counts=new Map();
+      for(const player of players||[]){
+        const raw=workspacePlayerRaw(player);
+        const a=section==='core'?raw?.core?.[q.id]:raw?.formats?.[section]?.[q.id];
+        const text=String(a?.comment||'').trim();
+        if(!text)continue;
+        const optionMatch=(q.options||[]).some(o=>String(o).trim().toLowerCase()===text.toLowerCase());
+        if(optionMatch)continue;
+        const norm=text.toLowerCase().replace(/\s+/g,' ').trim();
+        const prev=counts.get(norm)||{text,count:0};
+        prev.count+=1;
+        counts.set(norm,prev);
+      }
+      const ideas=[...counts.values()].sort((a,b)=>b.count-a.count||a.text.localeCompare(b.text)).slice(0,8);
+      if(ideas.length)groups.push({section,label,question:q.label,ideas});
+    }
+  }
+  return groups;
+}
+
+function renderPlayerPlanAddedIdeas(groups,error=''){
+  if(!isAdmin())return '';
+  const count=groups.reduce((n,g)=>n+g.ideas.length,0);
+  return `<details class="card plan-player-ideas" ${count?'':'open'}>
+    <summary>
+      <div><div class="section-label">Player-added answers</div><strong>${count?`${count} answer${count===1?'':'s'} outside the current option lists`:'Nothing new yet'}</strong><span>These come from the “Can’t see your answer?” fields. Player names are deliberately not shown.</span></div>
+      <em>${count?'Review ↓':'No additions yet'}</em>
+    </summary>
+    <div class="plan-player-ideas-body">
+      ${error?`<div class="notice compact">Player-added answers could not be loaded: ${esc(error)}</div>`:''}
+      ${count?`<div class="notice compact"><strong>Use this as prompt feedback, not an automatic edit.</strong><br>Repeated or especially useful answers are evidence that a future option list may be missing something. The locked Player Plan Structure is not changed automatically.</div>`:'<p class="help">When players add something that is not in the listed choices, it will appear here for Club Admin review.</p>'}
+      ${groups.map(g=>`<article class="plan-player-idea-group"><div class="section-label">${esc(g.label)}</div><h3>${esc(g.question)}</h3><div class="plan-player-idea-list">${g.ideas.map(x=>`<span><b>${esc(x.text)}</b>${x.count>1?`<em>${x.count} players</em>`:''}</span>`).join('')}</div></article>`).join('')}
+    </div>
+  </details>`;
+}
+
 async function renderPlanStructure(){
   const formats=enabledFormats();
   const page=document.getElementById('page');
@@ -5365,6 +5416,11 @@ async function renderPlanStructure(){
   const latestVersion=philosophyVersions?.[0]?.version_number||null;
   const latestPublishedStructure=playerPlanStructureVersions?.[0]?.snapshot||null;
   const currentDraftPublished=!!(locked && latestPublishedStructure && playerPlanStructureDraft?.structure && JSON.stringify(latestPublishedStructure)===JSON.stringify(playerPlanStructureDraft.structure));
+  let playerAddedIdeasHtml='';
+  if(isAdmin()){
+    const ideaData=await loadPlayerPlanIdeaPlayers();
+    playerAddedIdeasHtml=renderPlayerPlanAddedIdeas(playerPlanAddedIdeas(ideaData.players,playerPlanStructureWorking),ideaData.error);
+  }
 
   const reviewSections=[renderPlanReviewSection('core','Club-wide',playerPlanStructureWorking.core)];
   for(const [format,label] of formats){
@@ -5411,6 +5467,7 @@ async function renderPlanStructure(){
     </section>
     ${statusHtml}
     ${reviewSections.join('')}
+    ${playerAddedIdeasHtml}
     ${manualHtml}
     <section class="card" style="margin-top:16px">
       <div class="section-label">${structureReady?'Season structure':'Decision'}</div>
@@ -6165,12 +6222,14 @@ function coreTrainingCards(raw){
   const cards=[];
 
   if(strengths)cards.push({
+    kind:'core_strengths',
     label:'MY TRUSTED OPTIONS',
     title:'Train the ball that earns your shot',
     value:strengths,
     cue:'Mix line and length. The shot only counts when the correct delivery activates one of these trusted options.'
   });
   if(danger)cards.push({
+    kind:'core_danger',
     label:'MY DANGER',
     title:'Recreate the pressure that pulls you away from your plan',
     value:danger,
@@ -6179,6 +6238,7 @@ function coreTrainingCards(raw){
       :'Build this danger into the drill, then deliberately reset before the next ball.'
   });
   if(focus)cards.push({
+    kind:'core_focus',
     label:'CURRENT DEVELOPMENT',
     title:'Keep the session specific',
     value:focus,
@@ -6193,11 +6253,86 @@ function formatTrainingCards(raw,format){
     const value=answerText(a);
     if(!value)return null;
     return {
+      kind:'format',
       label:q.label,
       value,
-      cue:trainingCueForQuestion(q)
+      cue:trainingCueForQuestion(q),
+      dimension:q.source_dimension||null,
+      hwbKey:q.source_hwb_key||null,
+      hwbTitle:q.source_hwb_title||null
     };
   }).filter(Boolean).slice(0,6);
+}
+
+const TRAINING_SUCCESS_CHECKS={
+  wicket_preservation:'Judge the decision before the outcome. A good ball respected is a successful rep, even when it scores nothing.',
+  leaving_defending:'Track whether the batter identifies off stump and chooses the right response early rather than making a late survival decision.',
+  strike_rotation:'Count how often the batter sees the single before the ball and accesses it without forcing a low-percentage shot.',
+  boundary_access:'Reward boundaries only when the delivery genuinely earns the option. A correct leave, defend or single still counts as a good decision.',
+  running:'Measure clear calls, first-run speed, turns and pressure created on the field — not just completed runs.',
+  scoring_areas:'Look for repeated scoring in the player’s strongest areas without reaching for balls that sit outside the plan.',
+  tempo:'The batter should be able to explain why the tempo changed. The match situation changes the intent; frustration does not.',
+  matchups:'Look for the player to identify the matchup and choose an option they actually own, rather than inventing a new game.',
+  spin_method:'Watch whether the player recognises length and field early enough to use feet, depth, sweep or rotation deliberately.',
+  pace_method:'The player should connect line and length to a trusted response rather than deciding the shot before the ball.',
+  risk_management:'Track whether risk changes for a cricket reason — score, wickets, field, phase or matchup — rather than emotion.',
+  reset_routines:'The reset should be visible, repeatable and quick enough to use after a dot, mistake, appeal or pressure moment.',
+  dot_ball_management:'The next ball should be played on its own merits. Success is avoiding the forced response that often follows several dots.',
+  powerplay:'Look for deliberate use of field restrictions without turning every delivery into an attacking option.',
+  death_overs:'The batter should recognise the high-intent option early and still retain a safe fallback when the ideal ball does not arrive.',
+  innovation:'Only count the option when the right ball and field are present. Innovation should widen a plan, not replace one.',
+  patience:'Measure decision quality across a longer block. The batter should stay mentally active even when scoring opportunities are scarce.',
+  partnerships:'Look for strike changes, communication and choices that use both batters’ strengths rather than two isolated individual plans.'
+};
+
+function trainingDepthForCard(card,format){
+  if(card.kind==='core_strengths')return {
+    ideas:[
+      'Build a mixed-ball block around your trusted scoring options. Include enough good balls that you have to wait for the delivery that genuinely earns the shot.',
+      'Add a realistic field and scoring zones. A boundary is useful, but a safe single or disciplined no-shot should also be rewarded when that is the right answer.'
+    ],
+    success:'Your strongest options appear naturally from the right balls. You are not searching for them or forcing them when the delivery does not fit.'
+  };
+  if(card.kind==='core_danger')return {
+    ideas:[
+      'Deliberately recreate the trigger: dots, a bowler tying you down, a field closing a favourite area, a previous mistake or a required-rate squeeze.',
+      'Pause the drill when the trigger appears, use your reset, then restart with a mixed next ball so the reset has to lead back to a good decision.'
+    ],
+    success:'The danger can still appear, but it no longer automatically changes your next decision. Your reset gets you back to your plan.'
+  };
+  if(card.kind==='core_focus')return {
+    ideas:[
+      'Pick one development priority for a block of 12–18 balls. Give it a clear scoring or decision target rather than simply doing extra repetitions.',
+      'Progress it once it is stable: change the field, bowler type, pace, angle or match situation so the skill has to survive a more realistic problem.'
+    ],
+    success:'You can describe exactly what improved during the block and what still breaks down when the practice becomes more match-like.'
+  };
+  const reference=card.hwbKey?HOW_WE_TRAIN_REFERENCE[card.hwbKey]:null;
+  const ideas=reference?.[format]?.slice(0,2)||[
+    card.cue,
+    'Progress the drill by changing the field, bowler, score or match situation so the same decision has to be made under a different problem.'
+  ];
+  return {
+    ideas,
+    success:TRAINING_SUCCESS_CHECKS[card.dimension]||'Judge the quality of the decision first, then the execution. The drill is working when the player recognises the right option without being told.'
+  };
+}
+
+function renderTrainingPlanCard(card,format){
+  const depth=trainingDepthForCard(card,format);
+  return `<article class="train-plan-card">
+    <small>${esc(card.label)}</small>
+    ${card.title?`<h3>${esc(card.title)}</h3>`:''}
+    <strong>${esc(card.value)}</strong>
+    <p class="train-card-cue">${esc(card.cue)}</p>
+    <details class="train-card-depth">
+      <summary><span>Go deeper</span><em>More training ideas ↓</em></summary>
+      <div class="train-card-depth-body">
+        <div class="train-depth-block"><b>BUILD THE PRACTICE</b>${depth.ideas.map(x=>`<p>${esc(x)}</p>`).join('')}</div>
+        <div class="train-depth-block success"><b>WHAT GOOD LOOKS LIKE</b><p>${esc(depth.success)}</p></div>
+      </div>
+    </details>
+  </article>`;
 }
 
 function developmentFocusItems(data,raw){
@@ -6487,7 +6622,7 @@ function renderPlayerTrainingFormatAccordion(format,raw,feedback){
     <div class="train-simple-body">
       ${ready?`
         <div class="train-plan-lines">
-          ${cards.length?cards.map(c=>`<article><small>${esc(c.label)}</small>${c.title?`<h3>${esc(c.title)}</h3>`:''}<strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join(''):'<div class="notice">Your Player Plan is complete, but there are no specific training cues to show yet.</div>'}
+          ${cards.length?cards.map(c=>renderTrainingPlanCard(c,format)).join(''):'<div class="notice">Your Player Plan is complete, but there are no specific training cues to show yet.</div>'}
         </div>
         ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
       `:`<div class="train-format-empty"><strong>No targeted ${esc(label)} plan yet.</strong><span>Complete your Core Player Plan and ${esc(label)} Player Plan. This section will then build itself from the game you have actually chosen.</span></div>`}
@@ -6506,7 +6641,7 @@ function renderClubTrainingFormatAccordion(format,snapshot){
     <div class="train-simple-body">
       ${banners.length?`<div class="train-plan-lines">${banners.map(b=>{
         const p=howWeTrainPracticeForBanner(b,format);
-        return `<article><small>${esc(b.title||'KEY MESSAGE')}</small><strong>${esc(p.title)}</strong><p>${esc(p.points.join(' '))}</p></article>`;
+        return `<article class="train-plan-card club-training-card"><small>${esc(b.title||'KEY MESSAGE')}</small><strong>${esc(p.title)}</strong><p class="train-card-cue">${esc(p.points[0]||'')}</p>${p.points.length>1?`<details class="train-card-depth"><summary><span>Go deeper</span><em>More training ideas ↓</em></summary><div class="train-card-depth-body"><div class="train-depth-block"><b>BUILD THE PRACTICE</b>${p.points.map(x=>`<p>${esc(x)}</p>`).join('')}</div></div></details>`:''}</article>`;
       }).join('')}</div>`:'<div class="notice">No format-specific training guidance is published yet.</div>'}
     </div>
   </details>`;
@@ -7753,8 +7888,9 @@ function renderWorkspaceQuestion(section,spec,raw,editable){
         <span>${esc(o)}</span>
       </label>`;
     }).join('')}</div>
-    <div class="optional-comment">
-      <textarea data-workspace-comment-key="${esc(spec.id)}" data-workspace-comment-section="${section}" placeholder="Anything else? Optional.">${esc(a.comment||'')}</textarea>
+    <div class="optional-comment player-own-answer staff-entry">
+      <div class="player-own-answer-copy"><strong>Player-specific answer</strong><span>Add something that is genuinely part of this player’s plan but is missing from the listed choices.</span></div>
+      <textarea data-workspace-comment-key="${esc(spec.id)}" data-workspace-comment-section="${section}" placeholder="Add their own answer…">${esc(a.comment||'')}</textarea>
     </div>
   </div>`;
 }
@@ -8524,7 +8660,7 @@ function renderQuestion(section,key,spec){
   if(spec.response_type==='text'){
     return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Write the response that best describes your game.')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Your response…">${esc(a.comment||'')}</textarea></div></div>`;
   }
-  return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${(spec.options||[]).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Anything else? Optional.">${esc(a.comment||'')}</textarea></div></div>`;
+  return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${(spec.options||[]).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment player-own-answer"><div class="player-own-answer-copy"><strong>Can’t see your answer?</strong><span>Add your own option or useful detail. It is saved with your Player Plan, and de-identified player-added answers help the club see where these choices could be better.</span></div><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Add your own answer…">${esc(a.comment||'')}</textarea></div></div>`;
 }
 
 let localRaw=null;
