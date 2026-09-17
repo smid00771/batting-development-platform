@@ -1,4 +1,4 @@
-// Club Batting v0.8.40 — How We Train hierarchy + non-repeating club principles
+// Club Batting v0.8.46 — safe Full-flow Beta re-onboarding
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -1027,7 +1027,7 @@ async function loadContext(){
 
   const {data:memberships,error}=await supabase
     .from('club_memberships')
-    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,logo_data_url,website_url,branding_updated_at,subscription_calendar,season_start,season_end)')
+    .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,logo_data_url,website_url,branding_updated_at,subscription_calendar,season_start,season_end,archived_at)')
     .eq('user_id',session.user.id);
 
   if(error){
@@ -1035,7 +1035,7 @@ async function loadContext(){
     return;
   }
 
-  allMemberships=memberships||[];
+  allMemberships=(memberships||[]).filter(m=>!m.clubs?.archived_at);
 
   if(platformRole && localStorage.getItem('bdp-context')==='platform'){
     renderPlatformConsole();
@@ -2529,7 +2529,7 @@ async function renderWorkshop(){
 
           <button class="btn ghost add-person-btn" id="addContributorRow" type="button">+ Add another person</button>
           <div id="externalInviteStatus" class="help"></div>
-          <div class="help">Prototype note: new invitations are added to the Email Queue with secure links. Once live email delivery is connected, they will send automatically.</div>
+          <div class="help">New invitations appear in Email Delivery with secure links. In Live mode they send automatically.</div>
         </div>
 
         <div class="notice compact"><strong>No committee meeting required.</strong><br>Invite people now; they complete their response independently when it suits them.</div>
@@ -10315,36 +10315,107 @@ async function renderPlatformOnboarding(){
     }
     st.textContent='Created';
     const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
-    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Formal invitation ready</strong><span>Amount: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The invitation is also in Email Queue.</small></div>`;
+    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Formal invitation ready</strong><span>Amount: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The invitation also appears in Email Delivery.</small></div>`;
     document.getElementById('copyCreatedLink').onclick=async()=>{await navigator.clipboard.writeText(link);document.getElementById('copyCreatedLink').textContent='Copied ✓';};
     platformOnboardingSeed=null;
     await kickLiveEmailDelivery();
   };
 }
 
+async function openBetaReonboardDialog(targetClub){
+  if(platformRole!=='owner')return;
+  document.getElementById('betaReonboardDialog')?.remove();
+  const dialog=document.createElement('dialog');
+  dialog.id='betaReonboardDialog';
+  dialog.style.cssText='max-width:720px;width:calc(100% - 32px);border:0;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(20,32,80,.28)';
+  document.body.appendChild(dialog);
+
+  const name=targetClub?.name||'this club';
+  dialog.innerHTML=`<div style="padding:24px 26px">
+    <div class="section-label">Full-flow Beta reset</div>
+    <h2 style="margin:4px 0 8px">Re-onboard ${esc(name)} as Beta</h2>
+    <div class="notice" style="margin-top:14px"><strong>This is a destructive Beta-testing action, not a normal club workflow.</strong><br><br>The current pilot club will be moved out of the live product and retained as a Platform Admin archive. Its existing cricket data is <strong>not hard-deleted</strong>. Normal club access, player sign-up links, active players, Playing Groups and rollout requirements are retired so nobody keeps using the pilot by accident.<br><br>Club Batting will then create a brand-new <strong>Full-flow Beta</strong> invitation using the real Club Contact → Club Admin handoff. When that invitation is completed, a fresh club with a new club ID is created.</div>
+    <div class="form-grid" style="margin-top:18px">
+      <div class="field"><label>Club Contact name</label><input id="betaReonboardContactName" placeholder="e.g. Club Secretary"></div>
+      <div class="field"><label>Club Contact email</label><input id="betaReonboardContactEmail" type="email" placeholder="name@club.com.au"></div>
+    </div>
+    <div class="field"><label>Internal note (optional)</label><textarea id="betaReonboardNote" placeholder="e.g. Newcastle City full end-to-end Beta test"></textarea></div>
+    <div class="field" style="margin-top:16px"><label>Type <strong>${esc(name)}</strong> to confirm</label><input id="betaReonboardConfirm" autocomplete="off"></div>
+    <div class="help">The old pilot remains retained in the database for recovery/audit and disappears from normal club switching. There is no one-click restore because the replacement club will be a separate, genuinely clean club.</div>
+    <div class="btnrow" style="margin-top:18px"><button class="btn secondary" id="startBetaReonboard" disabled>Archive pilot & start Beta</button><button class="btn ghost" id="cancelBetaReonboard">Cancel</button><span class="status" id="betaReonboardStatus"></span></div>
+    <div id="betaReonboardResult"></div>
+  </div>`;
+
+  const confirmInput=dialog.querySelector('#betaReonboardConfirm');
+  const startButton=dialog.querySelector('#startBetaReonboard');
+  const status=dialog.querySelector('#betaReonboardStatus');
+  const updateReady=()=>{startButton.disabled=confirmInput.value!==name;};
+  confirmInput.addEventListener('input',updateReady);
+  dialog.querySelector('#cancelBetaReonboard').onclick=()=>dialog.close();
+  dialog.onclick=e=>{if(e.target===dialog)dialog.close();};
+
+  startButton.onclick=async()=>{
+    const contactEmail=dialog.querySelector('#betaReonboardContactEmail').value.trim();
+    const contactName=dialog.querySelector('#betaReonboardContactName').value.trim();
+    if(!contactEmail || !contactEmail.includes('@')){status.textContent='Enter the Club Contact email.';return;}
+    if(confirmInput.value!==name){status.textContent='Type the club name exactly to confirm.';return;}
+    const finalCheck=confirm(`Archive the current ${name} pilot and start a completely fresh Full-flow Beta?\n\nThe pilot data will remain archived, but normal users will lose access to that old club.`);
+    if(!finalCheck)return;
+
+    startButton.disabled=true;startButton.textContent='Archiving pilot…';status.textContent='';
+    const {data,error}=await supabase.rpc('platform_reonboard_club_as_beta',{
+      p_club_id:targetClub.id,
+      p_contact_name:contactName,
+      p_contact_email:contactEmail,
+      p_confirmation:name,
+      p_internal_note:dialog.querySelector('#betaReonboardNote').value.trim()
+    });
+    if(error){startButton.disabled=false;startButton.textContent='Archive pilot & start Beta';status.textContent=error.message;return;}
+
+    allMemberships=allMemberships.filter(m=>m.club_id!==targetClub.id);
+    localStorage.setItem('bdp-context','platform');
+    if(localStorage.getItem('bdp-club-id')===targetClub.id)localStorage.removeItem('bdp-club-id');
+    await kickLiveEmailDelivery();
+
+    const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
+    status.textContent='Beta onboarding created ✓';
+    dialog.querySelector('#betaReonboardResult').innerHTML=`<div class="created-offer" style="margin-top:16px"><strong>Pilot archived. Full-flow Beta invitation ready.</strong><span>Sent / queued for: ${esc(contactEmail)}</span><span>The replacement club will be created only when the real onboarding flow is completed.</span><input id="betaReonboardLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyBetaReonboardLink">Copy invitation link</button><small>The old club remains available only as a Platform Admin Beta archive.</small></div>`;
+    dialog.querySelector('#copyBetaReonboardLink').onclick=async()=>{await navigator.clipboard.writeText(link);dialog.querySelector('#copyBetaReonboardLink').textContent='Copied ✓';};
+    startButton.style.display='none';
+    dialog.querySelector('#cancelBetaReonboard').textContent='Close';
+  };
+
+  dialog.addEventListener('close',()=>{dialog.remove();renderPlatformActiveClubs();},{once:true});
+  dialog.showModal();
+}
+
 async function renderPlatformActiveClubs(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading active clubs…</div>';
-  const [{data:subs,error:subsError},{data:clubs,error:clubsError},{data:calendars,error:calendarError},{data:settings,error:settingsError}]=await Promise.all([
-    supabase.from('club_subscriptions').select('*,clubs(id,name)').in('status',['active','grace']).order('active_until'),
-    supabase.from('clubs').select('id,name,subscription_calendar,season_start,season_end').order('name'),
+  const [{data:subs,error:subsError},{data:clubs,error:clubsError},{data:calendars,error:calendarError},{data:settings,error:settingsError},{data:betaArchives,error:archiveError}]=await Promise.all([
+    supabase.from('club_subscriptions').select('*,clubs(id,name,archived_at)').in('status',['active','grace']).order('active_until'),
+    supabase.from('clubs').select('id,name,subscription_calendar,season_start,season_end,archived_at').order('name'),
     loadSubscriptionCalendars(),
-    supabase.from('platform_settings').select('*').eq('singleton',true).single()
+    supabase.from('platform_settings').select('*').eq('singleton',true).single(),
+    supabase.from('club_beta_reonboarding_archives').select('*').order('started_at',{ascending:false}).limit(30)
   ]);
 
-  const loadError=subsError||clubsError||calendarError||settingsError;
+  const loadError=subsError||clubsError||calendarError||settingsError||archiveError;
   if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
 
+  const visibleSubs=(subs||[]).filter(s=>!s.clubs?.archived_at);
+  const liveClubs=(clubs||[]).filter(c=>!c.archived_at);
   const calendarMap=new Map((calendars||[]).map(c=>[c.code,c]));
-  const activeIds=new Set((subs||[]).map(s=>s.club_id));
-  const unactivated=(clubs||[]).filter(c=>!activeIds.has(c.id));
+  const activeIds=new Set(visibleSubs.map(s=>s.club_id));
+  const unactivated=liveClubs.filter(c=>!activeIds.has(c.id));
   const canCommercial=['owner','commercial_admin'].includes(platformRole);
+  const canReonboard=platformRole==='owner';
   const today=new Date().toISOString().slice(0,10);
   const defaultCalendar=(calendars||[]).some(c=>c.code==='australia')?'australia':(calendars?.[0]?.code||'');
 
   page.innerHTML=`<section class="admin-card">
     <div class="section-label">Private commercial management</div><h2>Active clubs</h2>
     <div class="help">Annual access is based on the club's regional <strong>Club Year</strong>, not its playing season. Clubs do not see the private rate-reduction percentage.</div>
-    <div class="active-club-list">${(subs||[]).map(s=>{
+    <div class="active-club-list">${visibleSubs.map(s=>{
       const cal=calendarMap.get(s.subscription_calendar);
       const renewal=nextDayIso(s.season_end);
       return `<div class="active-club-row">
@@ -10355,10 +10426,13 @@ async function renderPlatformActiveClubs(){
           <label>Current access to<input data-sub-active="${s.club_id}" type="date" value="${esc(String(s.active_until).slice(0,10))}"></label>
           <label>At expiry<select data-sub-expiry="${s.club_id}"><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return standard</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End</option></select></label>
           ${canCommercial?`<button class="btn ghost" data-save-sub="${s.club_id}">Save</button>`:''}
+          ${canReonboard?`<button class="btn ghost danger-lite" data-reonboard-beta="${s.club_id}">Re-onboard as Beta</button>`:''}
         </div>
       </div>`;
     }).join('')||'<div class="notice">No commercially activated clubs yet.</div>'}</div>
   </section>
+
+  ${betaArchives?.length?`<details class="admin-card" style="margin-top:16px"><summary><strong>Beta archives</strong> · ${betaArchives.length}</summary><div class="help" style="margin-top:12px">These are retired pilot clubs retained for audit/reference. They are hidden from normal club switching and are not part of the live Beta.</div><div class="message-list" style="margin-top:12px">${betaArchives.map(a=>`<div class="message-row"><div><strong>${esc(a.original_name)}</strong><small>Archived ${esc(niceDate(a.started_at))} · invitation ${esc(a.contact_email)} · ${a.replacement_club_id?'replacement club activated':'onboarding in progress'}</small></div><div><span class="status-pill">${a.replacement_club_id?'Completed':'Beta onboarding'}</span></div></div>`).join('')}</div></details>`:''}
 
   ${unactivated.length?`<section class="admin-card form-wide" style="margin-top:16px">
     <div class="section-label">Existing club migration</div><h2>Attach commercial terms to an existing club</h2>
@@ -10377,6 +10451,12 @@ async function renderPlatformActiveClubs(){
       <div class="btnrow"><button class="btn secondary" id="activateExistingClub">Activate existing club</button><span class="status" id="legacyActivateStatus"></span></div>
     `:'<div class="help">Only Platform Owner / Commercial Admin can attach commercial terms.</div>'}
   </section>`:''}`;
+
+  page.querySelectorAll('[data-reonboard-beta]').forEach(b=>b.onclick=()=>{
+    const s=visibleSubs.find(x=>String(x.club_id)===String(b.dataset.reonboardBeta));
+    if(!s)return;
+    openBetaReonboardDialog({id:s.club_id,name:s.clubs?.name||'Club'});
+  });
 
   page.querySelectorAll('[data-save-sub]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.saveSub;
