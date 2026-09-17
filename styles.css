@@ -2906,3 +2906,29 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
   .train-principle-lines p{padding:9px 0}
   .train-principle-lines p+p{border-left:0;border-top:1px solid var(--line)}
 }
+
+/* Club Batting v0.8.44 — clean stacked Club Training Principles */
+.train-principles-accordion .train-principle-lines{
+  display:block;
+  border-top:1px solid var(--line);
+  padding-top:8px;
+}
+.train-principles-accordion .train-principle-lines p{
+  margin:0;
+  padding:9px 0;
+  border:0 !important;
+  background:transparent;
+  color:#4b566b;
+  font-size:11.2px;
+  line-height:1.55;
+}
+.train-principles-accordion .train-principle-lines p+p{
+  border-top:1px solid var(--line) !important;
+}
+.train-principles-accordion .train-principle-lines strong{
+  display:block;
+  margin:0 0 2px;
+  color:var(--navy2);
+  font-size:11.8px;
+  font-weight:800;
+}
