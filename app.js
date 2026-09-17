@@ -1,4 +1,4 @@
-// Club Batting v0.8.39 — deeper How We Train + player-added answer feedback
+// Club Batting v0.8.40 — How We Train hierarchy + non-repeating club principles
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -6320,10 +6320,12 @@ function trainingDepthForCard(card,format){
 
 function renderTrainingPlanCard(card,format){
   const depth=trainingDepthForCard(card,format);
-  return `<article class="train-plan-card">
-    <small>${esc(card.label)}</small>
-    ${card.title?`<h3>${esc(card.title)}</h3>`:''}
-    <strong>${esc(card.value)}</strong>
+  const heading=card.kind==='format'
+    ? `<h3 class="train-card-question">${esc(card.label)}</h3>`
+    : `<small class="train-card-kicker">${esc(card.label)}</small>${card.title?`<h3>${esc(card.title)}</h3>`:''}`;
+  return `<article class="train-plan-card ${card.kind==='format'?'format-question-card':'core-training-card'}">
+    ${heading}
+    <strong class="train-card-answer">${esc(card.value)}</strong>
     <p class="train-card-cue">${esc(card.cue)}</p>
     <details class="train-card-depth">
       <summary><span>Go deeper</span><em>More training ideas ↓</em></summary>
@@ -6598,9 +6600,9 @@ function renderClubTrainingPrinciples(){
     </summary>
     <div class="train-simple-body">
       <div class="train-principle-lines">
-        <p><strong>Practise the ball that earns the shot.</strong> Mix line and length so recognition and execution stay together.</p>
-        <p><strong>Put a field out.</strong> Train the safe single, the delivery that accesses it and how the answer changes when the field moves.</p>
-        <p><strong>Recreate your Danger — then reset.</strong> Deliberately create the pressure that can pull you away from your plan, then rehearse the reset.</p>
+        <p><strong>Recognition before repetition.</strong> Avoid knowing the ball or shot in advance. Make the batter read the delivery and choose.</p>
+        <p><strong>Add the match context.</strong> Use a field, score, wickets, phase or matchup so the same skill has a cricket reason behind it.</p>
+        <p><strong>Measure the decision, not just the outcome.</strong> A boundary from the wrong ball is not automatically a good rep; reward choices that match the plan.</p>
       </div>
     </div>
   </details>`;
