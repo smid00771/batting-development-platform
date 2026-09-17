@@ -6320,15 +6320,15 @@ function trainingDepthForCard(card,format){
 
 function renderTrainingPlanCard(card,format){
   const depth=trainingDepthForCard(card,format);
+  const danger=card.kind==='core_danger';
   const heading=card.kind==='format'
-    ? `<h3 class="train-card-question">${esc(card.label)}</h3>`
-    : `<small class="train-card-kicker">${esc(card.label)}</small>${card.title?`<h3>${esc(card.title)}</h3>`:''}`;
-  return `<article class="train-plan-card ${card.kind==='format'?'format-question-card':'core-training-card'}">
+    ? `<div class="train-card-label">${esc(card.label)}</div><h3 class="train-card-player-choice">${esc(card.value)}</h3>`
+    : `<div class="train-card-label ${danger?'danger':''}">${esc(card.label)}</div>${card.title?`<h3>${esc(card.title)}</h3>`:''}<div class="train-card-answer">${esc(card.value)}</div>`;
+  return `<article class="train-plan-card ${card.kind==='format'?'format-question-card':'core-training-card'} ${danger?'danger-card':''}">
     ${heading}
-    <strong class="train-card-answer">${esc(card.value)}</strong>
     <p class="train-card-cue">${esc(card.cue)}</p>
     <details class="train-card-depth">
-      <summary><span>Go deeper</span><em>More training ideas ↓</em></summary>
+      <summary><span>Go deeper →</span><em>More detail</em></summary>
       <div class="train-card-depth-body">
         <div class="train-depth-block"><b>BUILD THE PRACTICE</b>${depth.ideas.map(x=>`<p>${esc(x)}</p>`).join('')}</div>
         <div class="train-depth-block success"><b>WHAT GOOD LOOKS LIKE</b><p>${esc(depth.success)}</p></div>
