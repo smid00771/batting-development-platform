@@ -9487,7 +9487,7 @@ async function renderPlatformConsole(){
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['market','Market Discovery'],['home','Prospects'],['onboarding','Onboarding'],['clubs','Active Clubs'],['outbox','Email Queue'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['market','Market Discovery'],['home','Prospects'],['onboarding','Onboarding'],['clubs','Active Clubs'],['outbox','Email Delivery'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
@@ -10308,26 +10308,34 @@ async function renderPlatformActiveClubs(){
 }
 
 async function renderPlatformOutbox(){
-  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading email queue…</div>';
+  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading email delivery…</div>';
   const [{data:msgs,error},{data:settings}]=await Promise.all([
-    supabase.from('outbound_messages').select('*').order('created_at',{ascending:false}).limit(150),
+    supabase.from('outbound_messages').select('*').eq('hidden_from_platform_queue',false).order('created_at',{ascending:false}).limit(150),
     supabase.from('platform_settings').select('email_mode,email_provider,email_from_name,email_from_address,email_reply_to,email_live_from').eq('singleton',true).single()
   ]);
   if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
   const live=settings?.email_mode==='live';
   const liveFrom=settings?.email_live_from?new Date(settings.email_live_from):null;
   const isPrototypeOnly=m=>!!(liveFrom&&m.created_at&&new Date(m.created_at)<liveFrom&&!m.sent_at&&!m.failed_at);
-  const queued=(msgs||[]).filter(m=>!m.sent_at&&!m.failed_at&&!isPrototypeOnly(m)).length;
-  const failed=(msgs||[]).filter(m=>!!m.failed_at&&!m.sent_at).length;
-  const prototypeOnly=(msgs||[]).filter(isPrototypeOnly).length;
-  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Email delivery · Resend</div><h2>${live?'Live automatic email delivery':'Provider test / prototype queue'}</h2><p>${live?'Every new outbound message triggers the server-side dispatcher through a Supabase Database Webhook. Resend handles delivery; this page can also flush anything left in the queue.':'The provider can be tested while the platform remains in Prototype mode. Switch Email mode to Live only when the sender/domain is ready and the Database Webhook is connected.'}</p><div class="provider-mini-status"><span><strong>${queued}</strong> queued</span><span><strong>${failed}</strong> failed</span>${prototypeOnly?`<span><strong>${prototypeOnly}</strong> old prototype-only</span>`:''}<span><strong>${esc(settings?.email_from_address||'not configured')}</strong> sender</span></div></section>
+  const deliveryState=m=>m.sent_at?'sent':(m.failed_at?'failed':(isPrototypeOnly(m)?'prototype-only':(m.processing_at?'sending':'queued')));
+  const queued=(msgs||[]).filter(m=>deliveryState(m)==='queued').length;
+  const sending=(msgs||[]).filter(m=>deliveryState(m)==='sending').length;
+  const failed=(msgs||[]).filter(m=>deliveryState(m)==='failed').length;
+  const delivered=(msgs||[]).filter(m=>deliveryState(m)==='sent').length;
+  const prototypeOnly=(msgs||[]).filter(m=>deliveryState(m)==='prototype-only').length;
+  const activeMessages=(msgs||[]).filter(m=>['queued','sending','failed'].includes(deliveryState(m)));
+  const historyMessages=(msgs||[]).filter(m=>['sent','prototype-only'].includes(deliveryState(m)));
+  const clearableCount=(msgs||[]).filter(m=>['sent','failed','prototype-only'].includes(deliveryState(m))).length;
+  const messageRow=m=>{const path=m.payload?.link_path;const link=path?`${location.origin}${location.pathname}${path}`:'';const delivery=deliveryState(m);return `<div class="message-row"><div><strong>${esc(m.subject)}</strong><small>${esc(m.recipient_email)} · ${esc(m.template_key)} · ${esc(delivery)}${m.provider_name?` · ${esc(m.provider_name)}`:''}</small>${m.last_error?`<small class="email-error">${esc(m.last_error)}</small>`:''}</div><div class="message-row-actions">${link?`<button class="btn ghost" data-copy-message="${esc(link)}">Copy link</button>`:''}${m.failed_at&&!m.sent_at?`<button class="btn ghost" data-retry-message="${m.id}">Retry</button>`:''}</div></div>`;};
+  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Email delivery · Resend</div><h2>${live?'Live automatic email delivery':'Provider test / prototype queue'}</h2><p>${live?'Email is automatic now. This page is mainly here to spot anything stuck or failed, retry a failed send, run a test, or manually flush the queue if the webhook ever needs help.':'The provider can be tested while the platform remains in Prototype mode. Switch Email mode to Live only when the sender/domain is ready and the Database Webhook is connected.'}</p><div class="provider-mini-status"><span><strong>${queued+sending}</strong> waiting</span><span><strong>${failed}</strong> failed</span><span><strong>${delivered}</strong> delivered</span>${prototypeOnly?`<span><strong>${prototypeOnly}</strong> old prototype-only</span>`:''}<span><strong>${esc(settings?.email_from_address||'not configured')}</strong> sender</span></div></section>
     <section class="admin-card email-provider-actions"><div class="admin-card-head"><div><div class="section-label">Provider controls</div><h2>Test and dispatch</h2></div></div>
-      <div class="form-grid"><div class="field"><label>Test recipient</label><input id="providerTestEmail" type="email" value="${esc(session?.user?.email||'')}"><small>With onboarding@resend.dev, Resend only allows testing to the email address on the Resend account.</small></div><div class="field"><label>Current sender</label><input value="${esc(`${settings?.email_from_name||'Club Batting'} <${settings?.email_from_address||'onboarding@resend.dev'}>`)}" disabled><small>${/@resend\.dev$/i.test(settings?.email_from_address||'')?'Testing sender only. Verify your own domain before emailing clubs.':'Custom sender configured.'}</small></div></div>
-      <div class="btnrow"><button class="btn ghost" id="testEmailProvider">Send test email</button>${live?'<button class="btn secondary" id="flushEmailQueue">Send queued now</button>':''}<span id="emailProviderStatus" class="status"></span></div>
+      <div class="form-grid"><div class="field"><label>Test recipient</label><input id="providerTestEmail" type="email" value="${esc(session?.user?.email||'')}"><small>Send a real Club Batting test email to any address.</small></div><div class="field"><label>Current sender</label><input value="${esc(`${settings?.email_from_name||'Club Batting'} <${settings?.email_from_address||'notifications@clubbatting.com'}>`)}" disabled><small>${/@resend\.dev$/i.test(settings?.email_from_address||'')?'Testing sender only. Verify your own domain before emailing clubs.':'Verified custom sender configured.'}</small></div></div>
+      <div class="btnrow"><button class="btn ghost" id="testEmailProvider">Send test email</button>${live?'<button class="btn secondary" id="flushEmailQueue">Send queued now</button>':''}${clearableCount?'<button class="btn ghost" id="clearEmailHistory">Clear completed history</button>':''}<span id="emailProviderStatus" class="status"></span></div>
     </section>
-    <section class="admin-card"><div class="section-label">Queue</div><h2>Outbound messages</h2>
-      <div class="message-list">${(msgs||[]).map(m=>{const path=m.payload?.link_path;const link=path?`${location.origin}${location.pathname}${path}`:'';const delivery=m.sent_at?'sent':(m.failed_at?'failed':(isPrototypeOnly(m)?'prototype-only':(m.processing_at?'sending':'queued')));return `<div class="message-row"><div><strong>${esc(m.subject)}</strong><small>${esc(m.recipient_email)} · ${esc(m.template_key)} · ${esc(delivery)}${m.provider_name?` · ${esc(m.provider_name)}`:''}</small>${m.last_error?`<small class="email-error">${esc(m.last_error)}</small>`:''}</div><div class="message-row-actions">${link?`<button class="btn ghost" data-copy-message="${esc(link)}">Copy link</button>`:''}${m.failed_at&&!m.sent_at?`<button class="btn ghost" data-retry-message="${m.id}">Retry</button>`:''}</div></div>`;}).join('')||'<div class="notice">No messages queued yet.</div>'}</div>
-    </section>`;
+    <section class="admin-card"><div class="section-label">Needs attention</div><h2>Waiting or failed</h2>
+      <div class="message-list">${activeMessages.map(messageRow).join('')||'<div class="notice compact">Nothing waiting or failed. Email delivery is healthy.</div>'}</div>
+    </section>
+    ${historyMessages.length?`<details class="admin-card"><summary><strong>Recent delivery history</strong> · ${historyMessages.length} message${historyMessages.length===1?'':'s'}</summary><div class="message-list" style="margin-top:14px">${historyMessages.map(messageRow).join('')}</div></details>`:''}`;
   page.querySelectorAll('[data-copy-message]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.copyMessage);b.textContent='Copied ✓';});
   page.querySelectorAll('[data-retry-message]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;b.textContent='Re-queuing…';
@@ -10350,6 +10358,16 @@ async function renderPlatformOutbox(){
     if(error||data?.error){st.textContent=data?.error||error?.message||'Dispatch failed.';b.disabled=false;b.textContent='Send queued now';return;}
     st.textContent=`Sent ${data?.sent||0}${data?.failed?`, failed ${data.failed}`:''}${data?.deferred?`, deferred ${data.deferred}`:''}.`;
     setTimeout(()=>renderPlatformOutbox(),600);
+  };
+  if(document.getElementById('clearEmailHistory'))document.getElementById('clearEmailHistory').onclick=async()=>{
+    const ok=confirm('Clear completed, failed and old Prototype email history from this page? Active queued emails will not be touched. Reminder history is retained in the database for cooldowns and auditing.');
+    if(!ok)return;
+    const b=document.getElementById('clearEmailHistory');const st=document.getElementById('emailProviderStatus');
+    b.disabled=true;b.textContent='Clearing…';st.textContent='';
+    const {data,error}=await supabase.rpc('platform_clear_email_history');
+    if(error){st.textContent=error.message;b.disabled=false;b.textContent='Clear completed history';return;}
+    st.textContent=`Cleared ${Number(data?.hidden||0)} old message${Number(data?.hidden||0)===1?'':'s'} from this page.`;
+    setTimeout(()=>renderPlatformOutbox(),500);
   };
 }
 
