@@ -8103,7 +8103,7 @@ async function savePlayerPlanProgressSilently(){
   };
 
   const st=document.getElementById('builderStatus');
-  if(st)st.textContent='Saving…';
+  if(st)st.textContent='Saving automatically…';
 
   const {data,error}=await supabase
     .from('player_plan_workflows')
@@ -8118,13 +8118,13 @@ async function savePlayerPlanProgressSilently(){
 
   workflow=data;
   localRaw=null;
-  if(st)st.textContent='Saved ✓';
+  if(st)st.textContent='Saved automatically ✓';
   return true;
 }
 
 function queuePlayerPlanAutosave(){
   const st=document.getElementById('builderStatus');
-  if(st)st.textContent='Unsaved changes';
+  if(st)st.textContent='Saving automatically…';
 
   if(playerPlanAutosaveTimer)clearTimeout(playerPlanAutosaveTimer);
   playerPlanAutosaveTimer=setTimeout(()=>{
@@ -8193,6 +8193,7 @@ async function renderMyPlan(){
         </section>`;
       })();
 
+  const coreProgress=sectionProgress('core',rawForProgress);
   const formatCard=(key,label)=>{
     const req=requirementMap.get(key)||{required:false,due_date:null,sources:[]};
     const progress=sectionProgress(key,rawForProgress);
@@ -8204,26 +8205,56 @@ async function renderMyPlan(){
       ?`${progress.answeredRequired} of ${progress.requiredCount} required questions answered`
       :progress.answeredAny
         ?`${progress.answeredAny} question${progress.answeredAny===1?'':'s'} answered`
-        :'You can work ahead whenever you like.';
+        :'Not started';
+    const trainingReady=coreProgress.complete&&progress.complete;
+    let detail='';
+    if(progress.complete){
+      detail=trainingReady
+        ?`How We Train ready${req.required&&req.due_date?` · due ${niceDate(req.due_date)}`:''}`
+        :'Complete Core to create How We Train';
+    }else if(req.required){
+      detail=`${progressText}${source?` · ${source}`:''} · How We Train unlocks when complete`;
+    }else{
+      detail=`${progressText} · Complete when useful to create How We Train`;
+    }
 
     return `<div style="position:relative;min-width:0">
       <button class="plan-format-card ${builderSection===key?'active':''} ${progress.complete?'complete':''} ${req.required?'required':''}" data-builder-section="${key}" style="width:100%;height:100%">
         <span class="plan-format-name">${esc(label)}</span>
-        <strong>${progress.complete?'✓ Complete':esc(due)}</strong>
-        <small>${progress.complete
-          ?esc(req.required?due:'Completed')
-          :esc(req.required&&source?`${progressText} · ${source}`:progressText)}</small>
+        <strong>${progress.complete?'✓ Player Plan complete':esc(due)}</strong>
+        <small>${esc(detail)}</small>
       </button>
       ${isAdmin()?`<button type="button" class="workspace-text-link" data-plan-date-format="${key}" style="position:absolute;top:11px;right:12px;z-index:2;font-size:10px">Set due date</button>`:''}
     </div>`;
   };
 
+  const currentRequirement=builderSection==='core'
+    ?null
+    :(requirementMap.get(builderSection)||{required:false,due_date:null,sources:[]});
+  const currentTrainingReady=builderSection!=='core'&&coreProgress.complete&&currentComplete;
+  const currentDueText=currentRequirement?.required
+    ?(currentRequirement.due_date?` Your coaches have set ${niceDate(currentRequirement.due_date)} as the due date.`:' Your coaches have marked this format as required now.')
+    :'';
+  const sectionStepTitle=builderSection==='core'
+    ?(currentComplete?'Core complete ✓':'Start with Core')
+    :(currentComplete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`);
+  const sectionStepCopy=builderSection==='core'
+    ?(currentComplete
+      ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
+      :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.')
+    :(currentTrainingReady
+      ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
+      :`Your answers save automatically. How We Train for ${currentLabel} is created only when Core and this format are complete.${currentDueText}`);
+  const coreNextFormatLinks=builderSection==='core'
+    ?`<div class="btnrow compact" style="margin-top:10px">${formats.map(([k,l])=>`<button type="button" class="btn ghost" data-builder-section="${k}">${esc(l)} →</button>`).join('')}</div>`
+    :'';
+
   document.getElementById('page').innerHTML=`<section class="card plan-rollout-player">
     <div class="builder-head">
       <div>
         <div class="section-label">Your Player Plan</div>
-        <h2>Complete the formats when they matter — or work ahead.</h2>
-        <div class="help">Every format your club uses is available now. The club may require particular sections by different dates depending on your Playing Groups, but nothing is locked.</div>
+        <h2>Start with Core. Then build the formats you play.</h2>
+        <div class="help">Core is your foundation. After that, each format can be completed when it becomes relevant. Coaches may set due dates for particular Playing Groups. Your How We Train for a format is created only after Core and that format are complete.</div>
       </div>
       <span class="workflow-status ${completedRequiredSections===requiredSections.length?'approved':''}">
         ${completedRequiredSections===requiredSections.length
@@ -8240,12 +8271,12 @@ async function renderMyPlan(){
     </div>
 
     <div class="plan-format-cards">
-      <button class="plan-format-card core ${builderSection==='core'?'active':''} ${sectionProgress('core',rawForProgress).complete?'complete':''}" data-builder-section="core">
+      <button class="plan-format-card core ${builderSection==='core'?'active':''} ${coreProgress.complete?'complete':''}" data-builder-section="core">
         <span class="plan-format-name">Core</span>
-        <strong>${sectionProgress('core',rawForProgress).complete?'✓ Complete':'Build your batting identity'}</strong>
-        <small>${sectionProgress('core',rawForProgress).complete
-          ?'Required Core questions complete.'
-          :`${sectionProgress('core',rawForProgress).answeredRequired} of ${sectionProgress('core',rawForProgress).requiredCount} required questions answered`}</small>
+        <strong>${coreProgress.complete?'✓ Core complete':'Start here'}</strong>
+        <small>${coreProgress.complete
+          ?'Choose a format next.'
+          :`${coreProgress.answeredRequired} of ${coreProgress.requiredCount} required questions answered`}</small>
       </button>
       ${formats.map(([k,l])=>formatCard(k,l)).join('')}
     </div>
@@ -8274,14 +8305,12 @@ async function renderMyPlan(){
 
       <div class="player-plan-simple-status">
         <div>
-          <strong>${currentComplete?'Section complete ✓':'Keep going'}</strong>
-          <span>${currentComplete
-            ?'You can still change any answer later.'
-            :currentProgress.requiredCount
-              ?`Answer the remaining required question${currentProgress.requiredCount-currentProgress.answeredRequired===1?'':'s'} and this section will complete automatically.`
-              :'This section is optional. Answer as much or as little as is useful.'}</span>
+          <strong id="playerPlanStepTitle">${esc(sectionStepTitle)}</strong>
+          <span id="playerPlanStepCopy">${esc(sectionStepCopy)}</span>
+          ${coreNextFormatLinks}
+          ${builderSection!=='core'?`<div class="btnrow compact" style="margin-top:10px"><button class="btn secondary" id="openHowWeTrainFromPlan" ${currentTrainingReady?'':'disabled'}>${currentTrainingReady?'Open How We Train →':'How We Train locked'}</button></div>`:''}
         </div>
-        <span class="status" id="builderStatus">Saved ✓</span>
+        <span class="status" id="builderStatus">Saved automatically ✓</span>
       </div>
     </section>
 
@@ -8291,8 +8320,7 @@ async function renderMyPlan(){
       <div class="help">The format sections are overlays on one batting identity. Completing one now does not stop you adding or refining another later.</div>
       <div id="draftPreview">${renderDraftPreview()}</div>
     </section>
-  </div>
-  <div class="plan-to-train-link"><div><strong>Plan decided? Train it.</strong><span>How We Train turns these answers into format-specific practice and brings useful feedback back into the next session.</span></div><button class="btn secondary" id="openHowWeTrainFromPlan">How We Train →</button></div>`;
+  </div>`;
 
   if(document.getElementById('openHowWeTrainFromPlan'))document.getElementById('openHowWeTrainFromPlan').onclick=async()=>{
     await savePlayerPlanProgressSilently();
@@ -8323,6 +8351,22 @@ async function renderMyPlan(){
           ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
           :'OPTIONAL SECTION';
     }
+    const stepTitle=document.getElementById('playerPlanStepTitle');
+    const stepCopy=document.getElementById('playerPlanStepCopy');
+    const trainBtn=document.getElementById('openHowWeTrainFromPlan');
+    if(builderSection==='core'){
+      if(stepTitle)stepTitle.textContent=progress.complete?'Core complete ✓':'Start with Core';
+      if(stepCopy)stepCopy.textContent=progress.complete
+        ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
+        :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.';
+    }else{
+      const ready=sectionProgress('core',raw).complete&&progress.complete;
+      if(stepTitle)stepTitle.textContent=progress.complete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`;
+      if(stepCopy)stepCopy.textContent=ready
+        ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
+        :`Your answers save automatically. How We Train for ${currentLabel} is created only when Core and this format are complete.${currentDueText}`;
+      if(trainBtn){trainBtn.disabled=!ready;trainBtn.textContent=ready?'Open How We Train →':'How We Train locked';}
+    }
 
     queuePlayerPlanAutosave();
   });
@@ -8341,6 +8385,22 @@ async function renderMyPlan(){
         :progress.requiredCount
           ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
           :'OPTIONAL SECTION';
+    }
+    const stepTitle=document.getElementById('playerPlanStepTitle');
+    const stepCopy=document.getElementById('playerPlanStepCopy');
+    const trainBtn=document.getElementById('openHowWeTrainFromPlan');
+    if(builderSection==='core'){
+      if(stepTitle)stepTitle.textContent=progress.complete?'Core complete ✓':'Start with Core';
+      if(stepCopy)stepCopy.textContent=progress.complete
+        ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
+        :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.';
+    }else{
+      const ready=sectionProgress('core',raw).complete&&progress.complete;
+      if(stepTitle)stepTitle.textContent=progress.complete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`;
+      if(stepCopy)stepCopy.textContent=ready
+        ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
+        :`Your answers save automatically. How We Train for ${currentLabel} is created only when Core and this format are complete.${currentDueText}`;
+      if(trainBtn){trainBtn.disabled=!ready;trainBtn.textContent=ready?'Open How We Train →':'How We Train locked';}
     }
 
     queuePlayerPlanAutosave();
