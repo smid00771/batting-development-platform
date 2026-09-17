@@ -5260,15 +5260,18 @@ function validatePlanStructure(structure){
   return problems;
 }
 
-function requiredQuestionGaps(section,raw){
+function requiredQuestionGapSpecs(section,raw){
   return playerPlanQuestionsFor(section)
     .filter(q=>q.required)
     .filter(q=>{
       const a=section==='core'?raw.core?.[q.id]:raw.formats?.[section]?.[q.id];
       if(!a)return true;
       return !((a.choices||[]).length || String(a.comment||'').trim());
-    })
-    .map(q=>q.label);
+    });
+}
+
+function requiredQuestionGaps(section,raw){
+  return requiredQuestionGapSpecs(section,raw).map(q=>q.label);
 }
 
 function renderPlanStructureQuestion(q,index,editable=true){
@@ -8119,6 +8122,7 @@ async function savePlayerPlanProgressSilently(){
   workflow=data;
   localRaw=null;
   if(st)st.textContent='Saved automatically ✓';
+  document.dispatchEvent(new CustomEvent('bdp-player-plan-saved'));
   return true;
 }
 
@@ -8308,6 +8312,7 @@ async function renderMyPlan(){
           <strong id="playerPlanStepTitle">${esc(sectionStepTitle)}</strong>
           <span id="playerPlanStepCopy">${esc(sectionStepCopy)}</span>
           ${coreNextFormatLinks}
+          <div id="playerPlanRemainingAction" class="btnrow compact" style="margin-top:10px;${currentComplete?'display:none':''}"><button type="button" class="btn ghost" id="jumpToNextUnanswered">Next unanswered question ↓</button><span class="status" id="playerPlanRemainingCount">${currentProgress.requiredCount?`${currentProgress.answeredRequired}/${currentProgress.requiredCount} required answered`:''}</span></div>
           ${builderSection!=='core'?`<div class="btnrow compact" style="margin-top:10px"><button class="btn secondary" id="openHowWeTrainFromPlan" ${currentTrainingReady?'':'disabled'}>${currentTrainingReady?'Open How We Train →':'How We Train locked'}</button></div>`:''}
         </div>
         <span class="status" id="builderStatus">Saved automatically ✓</span>
@@ -8321,6 +8326,61 @@ async function renderMyPlan(){
       <div id="draftPreview">${renderDraftPreview()}</div>
     </section>
   </div>`;
+
+  const refreshCurrentPlayerPlanState=()=>{
+    const raw=localRaw||rawAnswers();
+    const progress=sectionProgress(builderSection,raw);
+    const coreNow=sectionProgress('core',raw);
+    const gaps=requiredQuestionGapSpecs(builderSection,raw);
+    const badge=document.querySelector('.section-completion');
+    const stepTitle=document.getElementById('playerPlanStepTitle');
+    const stepCopy=document.getElementById('playerPlanStepCopy');
+    const trainBtn=document.getElementById('openHowWeTrainFromPlan');
+    const remainRow=document.getElementById('playerPlanRemainingAction');
+    const remainCount=document.getElementById('playerPlanRemainingCount');
+
+    if(badge){
+      badge.classList.toggle('done',progress.complete);
+      badge.textContent=progress.complete
+        ?'✓ SECTION COMPLETE'
+        :progress.requiredCount
+          ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
+          :'OPTIONAL SECTION';
+    }
+
+    if(remainRow)remainRow.style.display=progress.complete?'none':'flex';
+    if(remainCount)remainCount.textContent=progress.requiredCount?`${progress.answeredRequired}/${progress.requiredCount} required answered`:'';
+
+    if(builderSection==='core'){
+      if(stepTitle)stepTitle.textContent=progress.complete?'Core complete ✓':'Start with Core';
+      if(stepCopy)stepCopy.textContent=progress.complete
+        ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
+        :gaps.length===1
+          ?'One required Core answer remains. Your answers save automatically.'
+          :`${gaps.length} required Core answers remain. Your answers save automatically.`;
+    }else{
+      const ready=coreNow.complete&&progress.complete;
+      if(stepTitle)stepTitle.textContent=progress.complete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`;
+      if(stepCopy)stepCopy.textContent=ready
+        ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
+        :progress.complete&&!coreNow.complete
+          ?`Your ${currentLabel} answers are complete. Finish Core to create your ${currentLabel} How We Train.${currentDueText}`
+          :`${gaps.length===1?'One required answer remains':`${gaps.length} required answers remain`} in ${currentLabel}. How We Train unlocks as soon as Core and this format are complete.${currentDueText}`;
+      if(trainBtn){trainBtn.disabled=!ready;trainBtn.textContent=ready?'Open How We Train →':'How We Train locked';}
+    }
+  };
+
+  const jumpToNextUnanswered=()=>{
+    const raw=localRaw||rawAnswers();
+    const gap=requiredQuestionGapSpecs(builderSection,raw)[0];
+    if(!gap)return;
+    const row=[...document.querySelectorAll('[data-player-question-key]')].find(el=>el.dataset.playerQuestionKey===String(gap.id));
+    if(!row)return;
+    row.scrollIntoView({behavior:'smooth',block:'center'});
+    row.animate([{boxShadow:'0 0 0 0 rgba(32,47,120,0)'},{boxShadow:'0 0 0 4px rgba(32,47,120,.18)'},{boxShadow:'0 0 0 0 rgba(32,47,120,0)'}],{duration:1200});
+  };
+  document.getElementById('jumpToNextUnanswered')?.addEventListener('click',jumpToNextUnanswered);
+  document.addEventListener('bdp-player-plan-saved',refreshCurrentPlayerPlanState,{once:true});
 
   if(document.getElementById('openHowWeTrainFromPlan'))document.getElementById('openHowWeTrainFromPlan').onclick=async()=>{
     await savePlayerPlanProgressSilently();
@@ -8340,34 +8400,7 @@ async function renderMyPlan(){
     collectBuilderAnswers();
     document.getElementById('draftPreview').innerHTML=renderDraftPreviewFromLocal();
 
-    const raw=localRaw||rawAnswers();
-    const progress=sectionProgress(builderSection,raw);
-    const badge=document.querySelector('.section-completion');
-    if(badge){
-      badge.classList.toggle('done',progress.complete);
-      badge.textContent=progress.complete
-        ?'✓ SECTION COMPLETE'
-        :progress.requiredCount
-          ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
-          :'OPTIONAL SECTION';
-    }
-    const stepTitle=document.getElementById('playerPlanStepTitle');
-    const stepCopy=document.getElementById('playerPlanStepCopy');
-    const trainBtn=document.getElementById('openHowWeTrainFromPlan');
-    if(builderSection==='core'){
-      if(stepTitle)stepTitle.textContent=progress.complete?'Core complete ✓':'Start with Core';
-      if(stepCopy)stepCopy.textContent=progress.complete
-        ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
-        :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.';
-    }else{
-      const ready=sectionProgress('core',raw).complete&&progress.complete;
-      if(stepTitle)stepTitle.textContent=progress.complete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`;
-      if(stepCopy)stepCopy.textContent=ready
-        ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
-        :`Your answers save automatically. How We Train for ${currentLabel} is created only when Core and this format are complete.${currentDueText}`;
-      if(trainBtn){trainBtn.disabled=!ready;trainBtn.textContent=ready?'Open How We Train →':'How We Train locked';}
-    }
-
+    refreshCurrentPlayerPlanState();
     queuePlayerPlanAutosave();
   });
 
@@ -8375,34 +8408,7 @@ async function renderMyPlan(){
     collectBuilderAnswers();
     document.getElementById('draftPreview').innerHTML=renderDraftPreviewFromLocal();
 
-    const raw=localRaw||rawAnswers();
-    const progress=sectionProgress(builderSection,raw);
-    const badge=document.querySelector('.section-completion');
-    if(badge){
-      badge.classList.toggle('done',progress.complete);
-      badge.textContent=progress.complete
-        ?'✓ SECTION COMPLETE'
-        :progress.requiredCount
-          ?`${progress.answeredRequired}/${progress.requiredCount} REQUIRED QUESTIONS`
-          :'OPTIONAL SECTION';
-    }
-    const stepTitle=document.getElementById('playerPlanStepTitle');
-    const stepCopy=document.getElementById('playerPlanStepCopy');
-    const trainBtn=document.getElementById('openHowWeTrainFromPlan');
-    if(builderSection==='core'){
-      if(stepTitle)stepTitle.textContent=progress.complete?'Core complete ✓':'Start with Core';
-      if(stepCopy)stepCopy.textContent=progress.complete
-        ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
-        :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.';
-    }else{
-      const ready=sectionProgress('core',raw).complete&&progress.complete;
-      if(stepTitle)stepTitle.textContent=progress.complete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`;
-      if(stepCopy)stepCopy.textContent=ready
-        ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
-        :`Your answers save automatically. How We Train for ${currentLabel} is created only when Core and this format are complete.${currentDueText}`;
-      if(trainBtn){trainBtn.disabled=!ready;trainBtn.textContent=ready?'Open How We Train →':'How We Train locked';}
-    }
-
+    refreshCurrentPlayerPlanState();
     queuePlayerPlanAutosave();
   });
 }
@@ -8417,9 +8423,9 @@ function renderQuestion(section,key,spec){
   const a=answerFor(section,key);
   const badge=spec.required?'<span class="question-requirement required">REQUIRED</span>':'<span class="question-requirement optional">OPTIONAL</span>';
   if(spec.response_type==='text'){
-    return `<div class="question"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Write the response that best describes your game.')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Your response…">${esc(a.comment||'')}</textarea></div></div>`;
+    return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Write the response that best describes your game.')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Your response…">${esc(a.comment||'')}</textarea></div></div>`;
   }
-  return `<div class="question"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${(spec.options||[]).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Anything else? Optional.">${esc(a.comment||'')}</textarea></div></div>`;
+  return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${(spec.options||[]).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Anything else? Optional.">${esc(a.comment||'')}</textarea></div></div>`;
 }
 
 let localRaw=null;
