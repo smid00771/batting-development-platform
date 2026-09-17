@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.33 — generated-first How We Bat-aligned Player Plan Structure + season lock
+// Batting Development Platform v0.8.34 — Player Plan deadlines, progress visibility + reminder workflow
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -5355,8 +5355,8 @@ async function renderPlanStructure(){
   if(!validSections.includes(playerPlanStructureSection))playerPlanStructureSection='core';
   const structureReady=locked && !playerPlanStructureDirty;
   const latestVersion=philosophyVersions?.[0]?.version_number||null;
-  const draftStartedAt=workshop?.final_draft_started_at?new Date(workshop.final_draft_started_at):null;
-  const currentDraftPublished=!!draftStartedAt && (philosophyVersions||[]).some(v=>v.published_at&&new Date(v.published_at)>=draftStartedAt);
+  const latestPublishedStructure=playerPlanStructureVersions?.[0]?.snapshot||null;
+  const currentDraftPublished=!!(locked && latestPublishedStructure && playerPlanStructureDraft?.structure && JSON.stringify(latestPublishedStructure)===JSON.stringify(playerPlanStructureDraft.structure));
 
   const reviewSections=[renderPlanReviewSection('core','Club-wide',playerPlanStructureWorking.core)];
   for(const [format,label] of formats){
@@ -7177,6 +7177,109 @@ function workspaceUpdatedLabel(player){
     :`Last saved ${d.toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}`;
 }
 
+
+function playerPlanDeadlineState(player){
+  const raw=workspacePlayerRaw(player);
+  const requirements=workspaceRequirements(player);
+  const requiredSections=['core',...requirements.keys()];
+  const completeCount=requiredSections.filter(section=>sectionProgress(section,raw).complete).length;
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  const incomplete=[...requirements.values()]
+    .filter(req=>!sectionProgress(req.format_key,raw).complete)
+    .map(req=>{
+      const due=req.due_date?new Date(String(req.due_date).slice(0,10)+'T00:00:00'):null;
+      const overdue=!!(due && due<today);
+      return {...req,due,overdue,label:formatLabel(req.format_key)};
+    })
+    .sort((a,b)=>String(a.due_date||'9999-12-31').localeCompare(String(b.due_date||'9999-12-31')));
+  const overdue=incomplete.filter(x=>x.overdue);
+  return {
+    raw,requirements,requiredSections,completeCount,totalCount:requiredSections.length,
+    allComplete:completeCount===requiredSections.length,
+    incomplete,overdue,
+    nextIncomplete:incomplete[0]||null,
+    firstOverdue:overdue[0]||null
+  };
+}
+
+async function refreshPlanDeadlineViews(){
+  await loadData();
+  if(currentTab==='myplan')await renderMyPlan();
+  else if(currentTab==='players')await renderPlayersWorkspace();
+}
+
+async function openPlanDueDateDialog(defaultFormat=null){
+  if(!isAdmin())return;
+  const formats=publishedEnabledFormats();
+  if(!formats.length){alert('Publish the Club Batting System before setting Player Plan dates.');return;}
+
+  const [{data:groups,error:gErr},{data:reqs,error:rErr}]=await Promise.all([
+    supabase.from('playing_groups').select('id,name,sort_order').eq('club_id',club.id).eq('active',true).order('sort_order').order('name'),
+    supabase.from('player_plan_requirements').select('id,format_key,playing_group_id,due_date,target_type,active').eq('club_id',club.id).eq('active',true).eq('target_type','playing_group')
+  ]);
+  if(gErr||rErr){alert((gErr||rErr).message);return;}
+  if(!(groups||[]).length){alert('Create a Playing Group first.');return;}
+
+  document.getElementById('planDueDateDialog')?.remove();
+  const dialog=document.createElement('dialog');
+  dialog.id='planDueDateDialog';
+  dialog.style.cssText='max-width:680px;width:calc(100% - 32px);border:0;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(20,32,80,.25)';
+  document.body.appendChild(dialog);
+
+  const initial=formats.some(([k])=>k===defaultFormat)?defaultFormat:formats[0][0];
+  const renderBody=(formatKey)=>{
+    const formatLabelText=FORMATS.find(([k])=>k===formatKey)?.[1]||formatKey;
+    const existing=new Map((reqs||[]).filter(r=>r.format_key===formatKey&&r.playing_group_id).map(r=>[r.playing_group_id,r]));
+    dialog.innerHTML=`<div style="padding:22px 24px">
+      <div class="section-label">Player Plan dates</div>
+      <h2 style="margin:4px 0 8px">Set a ${esc(formatLabelText)} due date</h2>
+      <div class="help">Choose one or more Playing Groups. This makes the format required for those players by the date you set; it does not lock any other format.</div>
+      <div class="field" style="margin-top:16px"><label>Format</label><select id="planDateFormat">${formats.map(([k,l])=>`<option value="${k}" ${k===formatKey?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+      <div style="display:grid;gap:7px;margin-top:14px;max-height:290px;overflow:auto">
+        ${(groups||[]).map(g=>{const r=existing.get(g.id);return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff"><input type="checkbox" data-plan-date-group value="${g.id}"><span style="flex:1"><strong>${esc(g.name)}</strong>${r?`<small style="display:block;margin-top:2px;color:var(--muted)">${r.due_date?`Currently due ${esc(niceDate(r.due_date))}`:'Currently required now'}</small>`:'<small style="display:block;margin-top:2px;color:var(--muted)">No due date set</small>'}</span></label>`}).join('')}
+      </div>
+      <div class="field" style="margin-top:14px"><label>Required by</label><input id="planDateValue" type="date"></div>
+      <div class="btnrow" style="margin-top:16px"><button class="btn secondary" id="savePlanDates">Set / update date</button><button class="btn ghost" id="removePlanDates">Remove selected requirement</button><button class="btn ghost" id="closePlanDates">Close</button><span class="status" id="planDateStatus"></span></div>
+    </div>`;
+
+    dialog.querySelector('#planDateFormat').onchange=e=>renderBody(e.target.value);
+    dialog.querySelector('#closePlanDates').onclick=()=>dialog.close();
+    dialog.querySelector('#savePlanDates').onclick=async()=>{
+      const selected=[...dialog.querySelectorAll('[data-plan-date-group]:checked')].map(x=>x.value);
+      const due=dialog.querySelector('#planDateValue').value||null;
+      const st=dialog.querySelector('#planDateStatus');
+      if(!selected.length){st.textContent='Choose at least one Playing Group.';return;}
+      if(!due){st.textContent='Choose a due date.';return;}
+      st.textContent='Saving…';
+      const {error}=await supabase.rpc('set_group_plan_due_date',{p_club_id:club.id,p_format_key:formatKey,p_playing_group_ids:selected,p_due_date:due});
+      if(error){st.textContent=error.message;return;}
+      dialog.close();dialog.remove();
+      await refreshPlanDeadlineViews();
+    };
+    dialog.querySelector('#removePlanDates').onclick=async()=>{
+      const selected=[...dialog.querySelectorAll('[data-plan-date-group]:checked')].map(x=>x.value);
+      const st=dialog.querySelector('#planDateStatus');
+      if(!selected.length){st.textContent='Choose at least one Playing Group.';return;}
+      const matching=(reqs||[]).filter(r=>r.format_key===formatKey&&selected.includes(r.playing_group_id));
+      if(!matching.length){st.textContent='None of those groups has a requirement to remove.';return;}
+      const ok=confirm(`Remove the ${formatLabelText} requirement for ${matching.length} selected Playing Group${matching.length===1?'':'s'}?`);
+      if(!ok)return;
+      st.textContent='Removing…';
+      for(const r of matching){
+        const {error}=await supabase.rpc('deactivate_plan_requirement',{p_requirement_id:r.id});
+        if(error){st.textContent=error.message;return;}
+      }
+      dialog.close();dialog.remove();
+      await refreshPlanDeadlineViews();
+    };
+  };
+
+  renderBody(initial);
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  dialog.showModal();
+}
+
 function resetPlayersWorkspaceForClub(){
   if(playersWorkspaceClubId===club.id)return;
   playersWorkspaceClubId=club.id;
@@ -7317,7 +7420,20 @@ function renderWorkspaceRosterDiscussion(player,signals){
 function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
   const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
   const feedbackCount=workspaceFeedbackCount(player.id);
-  return `<article class="workspace-roster-row">
+  const planState=playerPlanDeadlineState(player);
+  const overdue=planState.firstOverdue;
+  const next=planState.nextIncomplete;
+  const planHeadline=planState.allComplete
+    ?'Player Plan up to date ✓'
+    :`${planState.completeCount}/${planState.totalCount} required sections complete`;
+  const planDetail=overdue
+    ?`${overdue.label} was due ${niceDate(overdue.due_date)}`
+    :next?.due_date
+      ?`${next.label} due ${niceDate(next.due_date)}`
+      :next
+        ?`${next.label} still to complete`
+        :'Core still to complete';
+  return `<article class="workspace-roster-row" ${overdue?'style="border-left:4px solid var(--accent,#D8232A)"':''}>
     <div class="workspace-roster-person">
       <div>
         <h3>${esc(player.display_name||'Player')}</h3>
@@ -7326,6 +7442,10 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
     ${discussionMode?renderWorkspaceRosterDiscussion(player,signals):''}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
+      <div><strong style="font-size:12px;color:${overdue?'var(--accent,#D8232A)':'var(--navy2)'}">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span></div>
+      ${isAdmin()&&overdue?`<button class="workspace-text-link strong" data-send-plan-reminder="${player.id}" data-reminder-format="${overdue.format_key}">Send reminder</button>`:''}
+    </div>
     <div class="workspace-roster-actions">
       <button class="workspace-text-link" data-open-workspace-player="${player.id}">Player Plan</button>
       <button class="workspace-text-link" data-open-training-plan="${player.id}">Training Plan</button>
@@ -7382,6 +7502,9 @@ function renderPlayersWorkspaceList(){
   })).join('');
 
   const discussionPlayers=signalPlayerIds.size;
+  const filteredPlanStates=filtered.map(player=>playerPlanDeadlineState(player));
+  const planCompleteCount=filteredPlanStates.filter(x=>x.allComplete).length;
+  const planOverdueCount=filteredPlanStates.filter(x=>x.overdue.length).length;
   let emptyCopy='';
   if(!playersWorkspaceGroupFilter&&!query){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Select a Playing Group or search for a player.</strong><span>Only players and Playing Groups within your permissions are available here.</span></section>`;
@@ -7399,7 +7522,7 @@ function renderPlayersWorkspaceList(){
       <h2>Players</h2>
       <div class="help">Choose a Playing Group or search for a player. Open their Player Plan, Training Plan or add a quick observation from the same list.</div>
     </div>
-    ${isAdmin()?`<div class="btnrow compact"><button class="btn ghost" id="managePlayingGroupsFromPlayers">Manage Playing Groups</button></div>`:''}
+    ${isAdmin()?`<div class="btnrow compact"><button class="btn ghost" id="managePlanDatesFromPlayers">Plan dates</button><button class="btn ghost" id="managePlayingGroupsFromPlayers">Manage Playing Groups</button></div>`:''}
   </section>
 
   <section class="card players-workspace-tools compact">
@@ -7418,10 +7541,13 @@ function renderPlayersWorkspaceList(){
     ${(playersWorkspaceGroupFilter||query)?`<div class="workspace-filter-count compact"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
   </section>
 
+  ${playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> up to date</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}</div>`:''}
+
   ${playersWorkspaceFeedbackData?.error?`<div class="notice compact">Coaching feedback could not be loaded, so discussion flags are temporarily unavailable: ${esc(playersWorkspaceFeedbackData.error)}</div>`:''}
 
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
+  document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
   document.getElementById('managePlayingGroupsFromPlayers')?.addEventListener('click',()=>{currentTab='groups';renderTab();});
 
   const search=document.getElementById('workspacePlayerSearch');
@@ -7446,6 +7572,13 @@ function renderPlayersWorkspaceList(){
   document.querySelectorAll('[data-open-player-feedback]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openPlayerFeedback,'development'));
   document.querySelectorAll('[data-quick-match-observation]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.quickMatchObservation,'development','match'));
   document.querySelectorAll('[data-quick-training-observation]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.quickTrainingObservation,'development','training'));
+  document.querySelectorAll('[data-send-plan-reminder]').forEach(b=>b.onclick=async()=>{
+    const original=b.textContent;
+    b.disabled=true;b.textContent='Sending…';
+    const {error}=await supabase.rpc('send_player_plan_reminder',{p_player_id:b.dataset.sendPlanReminder,p_format_key:b.dataset.reminderFormat||null});
+    if(error){alert(error.message);b.disabled=false;b.textContent=original;return;}
+    b.textContent='Reminder sent ✓';
+  });
 
   document.querySelectorAll('[data-toggle-roster-discussion]').forEach(b=>b.onclick=()=>{
     playersWorkspaceDiscussionKey=playersWorkspaceDiscussionKey===b.dataset.toggleRosterDiscussion?null:b.dataset.toggleRosterDiscussion;
@@ -8073,13 +8206,16 @@ async function renderMyPlan(){
         ?`${progress.answeredAny} question${progress.answeredAny===1?'':'s'} answered`
         :'You can work ahead whenever you like.';
 
-    return `<button class="plan-format-card ${builderSection===key?'active':''} ${progress.complete?'complete':''} ${req.required?'required':''}" data-builder-section="${key}">
-      <span class="plan-format-name">${esc(label)}</span>
-      <strong>${progress.complete?'✓ Complete':esc(due)}</strong>
-      <small>${progress.complete
-        ?esc(req.required?due:'Completed')
-        :esc(req.required&&source?`${progressText} · ${source}`:progressText)}</small>
-    </button>`;
+    return `<div style="position:relative;min-width:0">
+      <button class="plan-format-card ${builderSection===key?'active':''} ${progress.complete?'complete':''} ${req.required?'required':''}" data-builder-section="${key}" style="width:100%;height:100%">
+        <span class="plan-format-name">${esc(label)}</span>
+        <strong>${progress.complete?'✓ Complete':esc(due)}</strong>
+        <small>${progress.complete
+          ?esc(req.required?due:'Completed')
+          :esc(req.required&&source?`${progressText} · ${source}`:progressText)}</small>
+      </button>
+      ${isAdmin()?`<button type="button" class="workspace-text-link" data-plan-date-format="${key}" style="position:absolute;top:11px;right:12px;z-index:2;font-size:10px">Set due date</button>`:''}
+    </div>`;
   };
 
   document.getElementById('page').innerHTML=`<section class="card plan-rollout-player">
@@ -8113,7 +8249,6 @@ async function renderMyPlan(){
       </button>
       ${formats.map(([k,l])=>formatCard(k,l)).join('')}
     </div>
-    <div class="plan-to-train-link"><div><strong>Plan decided? Train it.</strong><span>How We Train turns these answers into format-specific practice and brings useful feedback back into the next session.</span></div><button class="btn secondary" id="openHowWeTrainFromPlan">How We Train →</button></div>
   </section>
 
   ${formatReferenceHtml}
@@ -8156,13 +8291,16 @@ async function renderMyPlan(){
       <div class="help">The format sections are overlays on one batting identity. Completing one now does not stop you adding or refining another later.</div>
       <div id="draftPreview">${renderDraftPreview()}</div>
     </section>
-  </div>`;
+  </div>
+  <div class="plan-to-train-link"><div><strong>Plan decided? Train it.</strong><span>How We Train turns these answers into format-specific practice and brings useful feedback back into the next session.</span></div><button class="btn secondary" id="openHowWeTrainFromPlan">How We Train →</button></div>`;
 
   if(document.getElementById('openHowWeTrainFromPlan'))document.getElementById('openHowWeTrainFromPlan').onclick=async()=>{
     await savePlayerPlanProgressSilently();
     currentTab='howwetrain';
     renderTab();
   };
+
+  document.querySelectorAll('[data-plan-date-format]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openPlanDueDateDialog(b.dataset.planDateFormat);});
 
   document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=async()=>{
     await savePlayerPlanProgressSilently();
