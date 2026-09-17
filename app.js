@@ -1,4 +1,4 @@
-// Batting Development Platform v0.8.34 — Player Plan deadlines, progress visibility + reminder workflow
+// Club Batting v0.8.38 — product rebrand + sender identity
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -904,6 +904,7 @@ function restorePlatformMarketScroll(){
 }
 
 async function boot(){
+  document.title='Club Batting';
   const {data:{session:s}}=await supabase.auth.getSession();
   session=s;
   supabase.auth.onAuthStateChange((event,s2)=>{
@@ -1003,8 +1004,8 @@ async function routeAuth(){
 
 function renderLogin(msg=''){
   app.innerHTML=`<div class="login">
-    <div style="font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase;color:#202f78">Batting Development Platform</div>
-    <h1>Club coaching, made explicit.</h1>
+    <div style="font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase;color:#202f78">Club Batting</div>
+    <h1>How your club bats. How each player trains.</h1>
     <p>Sign in by email. We’ll send a secure magic link — no password required.</p>
     ${msg?`<div class="notice">${esc(msg)}</div>`:''}
     <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@club.com.au"></div>
@@ -1287,6 +1288,7 @@ function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother',showPl
 }
 
 function renderShell(){
+  document.title=club?.name?`${club.name} · Club Batting`:'Club Batting';
   applyClubTheme();
 
   const nav=[];
@@ -1345,8 +1347,8 @@ function renderShell(){
           ${club.logo_data_url?`<div class="shell-club-logo"><img src="${esc(club.logo_data_url)}" alt="${esc(club.name)} logo"></div>`:''}
           <div>
             <div class="k">${esc(club.name)}</div>
-            <h1>Batting Development</h1>
-            <p>${isAdmin()?'Set the club up, build the philosophy, manage access, and guide players through their Player Plans.':'Your club philosophy becomes the framework for player development.'}</p>
+            <h1>Club Batting</h1>
+            <p>${isAdmin()?'Build how your club bats, turn it into Player Plans, and connect those plans to training.':'Your club’s How We Bat becomes the framework for your Player Plan and How We Train.'}</p>
           </div>
         </div>
         <div class="header-actions">
@@ -2615,7 +2617,7 @@ async function renderWorkshop(){
       <div class="section-label">Response status</div>
       <h2>Who has submitted?</h2>
       <div class="help">This status list sits inside the Contributions stage. A saved response remains in progress; a submitted response then appears in full immediately below.</div>
-      ${workshopMismatchCount?`<div class="notice workshop-data-warning"><strong>Workshop data needs attention.</strong><br>${workshopMismatchCount} contributor record${workshopMismatchCount===1?' is':'s are'} out of sync with the stored response. BDP will not silently include or exclude those responses.</div>`:''}
+      ${workshopMismatchCount?`<div class="notice workshop-data-warning"><strong>Workshop data needs attention.</strong><br>${workshopMismatchCount} contributor record${workshopMismatchCount===1?' is':'s are'} out of sync with the stored response. Club Batting will not silently include or exclude those responses.</div>`:''}
       <div class="member-list">
         ${(contribRows||[]).map(c=>{
           const state=workshopStateByUser.get(c.user_id)||null;
@@ -3831,7 +3833,7 @@ async function beginFinalDraftFromSynthesis(){
   if(mismatchCount>0){
     alert(
       `The workshop has ${mismatchCount} contributor record${mismatchCount===1?'':'s'} whose submission status does not match the stored response.\n\n`+
-      `BDP will not create a final draft until that inconsistency is resolved, because doing so could silently leave out a contributor.`
+      `Club Batting will not create a final draft until that inconsistency is resolved, because doing so could silently leave out a contributor.`
     );
     return;
   }
@@ -5336,7 +5338,7 @@ async function renderPlanStructure(){
       <div class="gate-state locked">🔒</div>
       <div class="section-label">Player Plan Structure</div>
       <h2>Lock How We Bat first.</h2>
-      <p>The Player Plan questions are generated from the club’s player-facing <strong>How We Bat</strong>. Finalise that first, then BDP can build the smallest useful set of prompts.</p>
+      <p>The Player Plan questions are generated from the club’s player-facing <strong>How We Bat</strong>. Finalise that first, then Club Batting can build the smallest useful set of prompts.</p>
       ${lead?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">${hasHowWeBatDraft?'Open How We Bat':'Open Philosophy Workshop'}</button></div>`:''}
     </section>`;
     if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=hasHowWeBatDraft?'howwebat':'workshop';renderTab();};
@@ -5376,7 +5378,7 @@ async function renderPlanStructure(){
     const removedQuestions=sectionArray.filter(q=>q.active===false);
     const sectionTabs=[['core','Core'],...formats].map(([k,l])=>`<button class="${playerPlanStructureSection===k?'active':''}" data-plan-section="${k}">${esc(l)}</button>`).join('');
     manualHtml=`<section class="card" style="margin-top:16px">
-      <div class="plan-structure-builder-head"><div><div class="section-label">Optional manual control</div><h2>Edit the exact questions</h2><div class="help">BDP’s generated structure is the normal path. Use this only when the club genuinely needs different wording, options or an additional prompt.</div></div></div>
+      <div class="plan-structure-builder-head"><div><div class="section-label">Optional manual control</div><h2>Edit the exact questions</h2><div class="help">Club Batting’s generated structure is the normal path. Use this only when the club genuinely needs different wording, options or an additional prompt.</div></div></div>
       <div class="plan-structure-tabs">${sectionTabs}</div>
       <div class="plan-section-head"><div><div class="section-label">${esc(planStructureSectionLabel(playerPlanStructureSection))}</div><h3>${activeQuestions.length} question${activeQuestions.length===1?'':'s'}</h3></div><button class="btn ghost" id="addPlanQuestion">+ Add question</button></div>
       <div class="plan-question-editor-list">${activeQuestions.map((q,i)=>renderPlanStructureQuestion(q,i,true)).join('')||'<div class="notice">No questions are currently included.</div>'}</div>
@@ -5387,7 +5389,7 @@ async function renderPlanStructure(){
 
   const statusHtml=structureReady
     ?`<div class="notice success"><strong>🔒 Player Plan Structure locked for this season.</strong><br>These are now the prompts players will use. Routine editing is deliberately disabled so existing Player Plans stay aligned with How We Bat.</div>`
-    :`<div class="notice"><strong>Generated from locked How We Bat.</strong><br>BDP has kept this deliberately short: three club-wide questions, then one prompt for each How We Bat Key Message. The normal job here is simply to check that the questions make sense.</div>`;
+    :`<div class="notice"><strong>Generated from locked How We Bat.</strong><br>Club Batting has kept this deliberately short: three club-wide questions, then one prompt for each How We Bat Key Message. The normal job here is simply to check that the questions make sense.</div>`;
 
   const actionHtml=!editable
     ?'<div class="help">The Philosophy Lead controls the final Player Plan Structure.</div>'
@@ -5645,7 +5647,7 @@ async function renderPermissions(){
   <section class="card">
     <div class="section-label">Club Setup · Step 2 of 8</div>
     <h2>People & Sign-up</h2>
-    <div class="help"><strong>Get people into BDP first. Give responsibilities second.</strong></div>
+    <div class="help"><strong>Get people into Club Batting first. Give responsibilities second.</strong></div>
     <div class="help">Players register as <strong>Players</strong>. Club roles such as Captain, Coach, Head Coach and Admin are assigned afterwards. Philosophy Workshop invitations are separate again — contributing to the philosophy does <strong>not</strong> make somebody a coach, captain or Admin.</div>
   </section>
 
@@ -5699,7 +5701,7 @@ async function renderPermissions(){
       <div class="section-label">Non-playing staff</div>
       <h2>Only use this when somebody does not play.</h2>
       <div class="notice"><strong>Playing coach or captain?</strong><br>They still use the normal <strong>Player sign-up</strong>. Do not give them a second account.</div>
-      <div class="help" style="margin-top:14px">Use the staff route for a genuinely non-playing coach or other staff member who needs to be in BDP but should not receive a Player Plan.</div>
+      <div class="help" style="margin-top:14px">Use the staff route for a genuinely non-playing coach or other staff member who needs to be in Club Batting but should not receive a Player Plan.</div>
       <div class="signup-count" style="margin-top:14px"><strong>${nonPlayingStaffCount}</strong> non-playing staff registered</div>
       <div class="btnrow"><button class="btn secondary" id="copyStaffJoinLink">Copy non-playing staff sign-up link</button></div>
       <div id="staffJoinStatus" class="help"></div>
@@ -5713,7 +5715,7 @@ async function renderPermissions(){
   <section class="card" style="margin-top:16px">
     <div class="section-label">Club roles</div>
     <h2>Find a person, then give them a club responsibility.</h2>
-    <div class="help">This list is intentionally <strong>not</strong> every person in BDP. It contains only people who have been assigned a club role. A Philosophy Contributor stays out of this list unless you separately make them a Captain, Coach, Head Coach or Admin.</div>
+    <div class="help">This list is intentionally <strong>not</strong> every person in Club Batting. It contains only people who have been assigned a club role. A Philosophy Contributor stays out of this list unless you separately make them a Captain, Coach, Head Coach or Admin.</div>
 
     <div class="field" style="margin-top:14px">
       <label>Find a registered person</label>
@@ -5809,7 +5811,7 @@ async function renderPermissions(){
   </section>
 `;
 
-  const playerWhatsAppMessage=`${club.name} players — our Batting Development system is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If you are also a captain or coach, still use this Player link — the club will add that role afterwards. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
+  const playerWhatsAppMessage=`${club.name} players — Club Batting is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If you are also a captain or coach, still use this Player link — the club will add that role afterwards. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
 
   const copyText=async(text,label,statusId)=>{
     const st=document.getElementById(statusId);
@@ -7619,7 +7621,7 @@ function renderPlayersWorkspaceList(){
 
   ${playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> up to date</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
-  ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave BDP until Platform Admin switches email delivery to Live.</div>`:''}
+  ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
   ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
   ${playersWorkspaceFeedbackData?.error?`<div class="notice compact">Coaching feedback could not be loaded, so discussion flags are temporarily unavailable: ${esc(playersWorkspaceFeedbackData.error)}</div>`:''}
 
@@ -8711,10 +8713,10 @@ async function renderSalesProspectRoute(token){
   const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
   app.innerHTML=`<div class="prospect-shell sales-response-shell">
     <section class="prospect-hero">
-      <div class="section-label">Batting Development Platform</div>
+      <div class="section-label">Club Batting</div>
       <h1>${esc(p.club_name)}</h1>
       ${place?`<p class="help">${esc(place)}</p>`:''}
-      <p>We’re building a club-wide batting development system that connects <strong>how the club wants to bat</strong> with each player’s <strong>Player Plan, targeted training and simple coaching feedback</strong>.</p>
+      <p><strong>Club Batting</strong> connects <strong>how the club wants to bat</strong> with each player’s <strong>Player Plan, targeted training and simple coaching feedback</strong>.</p>
     </section>
     <section class="card prospect-card">
       <h2>Is this worth exploring for your club?</h2>
@@ -8778,7 +8780,7 @@ function renderDirectBetaRoute(token,p){
       <section class="prospect-hero">
         <div class="section-label">Complimentary Beta Invitation</div>
         <h1>${esc(p.club_name)}</h1>
-        <p>You’ve been invited to trial the Batting Development Platform directly with your club. The commercial Secretary → payer workflow has been deliberately skipped for this Beta.</p>
+        <p>You’ve been invited to trial Club Batting directly with your club. The commercial Secretary → payer workflow has been deliberately skipped for this Beta.</p>
       </section>
       <section class="card prospect-card">
         <h2>Activate the trial</h2>
@@ -9332,6 +9334,7 @@ async function renderAdminInviteRoute(token){
 /* ---------------- PLATFORM ADMIN CONSOLE ---------------- */
 
 async function renderPlatformConsole(){
+  document.title='Club Batting · Platform Admin';
   if(!session){renderLogin();return;}
   await loadPlatformContext();
   if(!platformRole){await loadContext();return;}
@@ -9339,7 +9342,7 @@ async function renderPlatformConsole(){
 
   app.innerHTML=`${accountMenuStyles()}<div class="platform-shell">
     <header class="platform-header">
-      <div><div class="section-label">Private Platform Administration</div><h1>Batting Development Platform</h1><p>Find clubs, manage outreach, onboard interested clubs and manage active subscriptions.</p></div>
+      <div><div class="section-label">Private Platform Administration</div><h1>Club Batting</h1><p>Find clubs, manage outreach, onboard interested clubs and manage active subscriptions.</p></div>
       <div class="header-actions">
         ${allMemberships.length?`<select id="platformContextSwitch" class="context-switch" aria-label="Switch club or platform"><option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}</select>`:''}
         ${accountMenuHtml({allowJoin:false,outId:'platformOut'})}
@@ -9423,7 +9426,7 @@ async function renderPlatformMarketDiscovery(options={}){
 
     <div class="platform-metrics market-metrics">
       <div><strong>${clubs.length}</strong><span>NSW clubs mapped</span></div>
-      <div><strong>${likelyCount}</strong><span>likely BDP fits</span></div>
+      <div><strong>${likelyCount}</strong><span>likely fits</span></div>
       <div><strong>${contacts}</strong><span>contacts ready</span></div>
       <div><strong>${prospectCount}</strong><span>chosen as prospects</span></div>
     </div>
@@ -9434,7 +9437,7 @@ async function renderPlatformMarketDiscovery(options={}){
         <div class="field"><label>Country</label><select id="marketCountry"><option value="AU">Australia</option></select></div>
         <div class="field"><label>Region / state</label><select id="marketRegion"><option value="NSW">New South Wales</option><option disabled>Victoria — next adapter</option><option disabled>Queensland — next adapter</option><option disabled>Western Australia — next adapter</option><option disabled>South Australia — next adapter</option><option disabled>Tasmania — next adapter</option><option disabled>ACT — next adapter</option><option disabled>Northern Territory — next adapter</option></select></div>
       </div>
-      <div class="market-source-note"><strong>Registry-first model:</strong> association/competition sources are used to map membership and competition context. BDP then looks for the matching public Cricket Australia PlayCricket club record and imports the public club contact and senior-cricket signals. Club websites are not required.</div>
+      <div class="market-source-note"><strong>Registry-first model:</strong> association/competition sources are used to map membership and competition context. Club Batting then looks for the matching public Cricket Australia PlayCricket club record and imports the public club contact and senior-cricket signals. Club websites are not required.</div>
       <div class="market-action-row"><button class="btn secondary" id="scanMarketRegion">${associations.length?'Refresh NSW association map':'Scan NSW association map'}</button><span id="marketRegionStatus" class="status">Last region scan: ${esc(niceScan(latestRegionScan?.finished_at||latestRegionScan?.started_at))}</span></div>
     </section>
 
@@ -9464,11 +9467,11 @@ async function renderPlatformMarketDiscovery(options={}){
     </section>
 
     <section class="admin-card form-wide" id="marketClubInventory">
-      <div class="admin-card-head"><div><div class="section-label">3 · Club inventory</div><h2>${platformMarketAssociationId?(associations.find(a=>a.id===platformMarketAssociationId)?.name||'Selected association'):'NSW club inventory'}</h2><p>${platformMarketAssociationId?'Showing mapped clubs from this association.':'Showing the statewide club inventory.'} Lower-fit clubs remain recorded; the default view shows the clubs most relevant to BDP.</p></div></div>
+      <div class="admin-card-head"><div><div class="section-label">3 · Club inventory</div><h2>${platformMarketAssociationId?(associations.find(a=>a.id===platformMarketAssociationId)?.name||'Selected association'):'NSW club inventory'}</h2><p>${platformMarketAssociationId?'Showing mapped clubs from this association.':'Showing the statewide club inventory.'} Lower-fit clubs remain recorded; the default view shows the clubs most relevant to Club Batting.</p></div></div>
       <div class="market-inventory-filters">
         <input id="marketClubSearch" placeholder="Search clubs or contact email">
         <select id="marketFitFilter">
-          <option value="likely" ${platformMarketFitFilter==='likely'?'selected':''}>Likely BDP prospects</option>
+          <option value="likely" ${platformMarketFitFilter==='likely'?'selected':''}>Likely Club Batting prospects</option>
           <option value="strong" ${platformMarketFitFilter==='strong'?'selected':''}>Strong fit only</option>
           <option value="possible" ${platformMarketFitFilter==='possible'?'selected':''}>Possible fit only</option>
           <option value="review" ${platformMarketFitFilter==='review'?'selected':''}>Needs review</option>
@@ -9630,7 +9633,7 @@ async function renderPlatformMarketDiscovery(options={}){
         <div class="market-club-contact"><span class="market-readiness ${c.contact_email?'ready':c.registry_provider==='Cricket Australia PlayCricket'?'partial':'missing'}">${esc(readiness)}</span>${c.contact_email?`<strong>${esc(c.contact_email)}</strong><small>${esc(c.contact_role||'Public club contact')}</small>`:'<small>No public PlayCricket email found yet</small>'}</div>
         <div class="market-club-actions">${c.registry_url?`<a class="btn ghost compact" href="${esc(c.registry_url)}" target="_blank" rel="noopener">PlayCricket ↗</a>`:''}<button class="btn ${c.sales_prospect_id?'ghost':'secondary'} compact" data-market-to-prospect="${c.id}" ${c.sales_prospect_id?'disabled':''}>${c.sales_prospect_id?'In Prospects':'Add to Prospects'}</button></div>
       </article>`;
-    }).join('')}</div>${shown.length>250?`<div class="help">Showing the first 250 matches, but <strong>Select all filtered</strong> still selects all ${selectable.length} eligible clubs in the current filter.</div>`:''}`:'<div class="notice">No clubs match the current filters. Change <strong>Likely BDP prospects</strong> to <strong>All mapped clubs</strong> to inspect the full market inventory.</div>';
+    }).join('')}</div>${shown.length>250?`<div class="help">Showing the first 250 matches, but <strong>Select all filtered</strong> still selects all ${selectable.length} eligible clubs in the current filter.</div>`:''}`:'<div class="notice">No clubs match the current filters. Change <strong>Likely Club Batting prospects</strong> to <strong>All mapped clubs</strong> to inspect the full market inventory.</div>';
 
     const syncSelectionUi=()=>{
       document.querySelectorAll('[data-market-select]').forEach(cb=>{
@@ -10181,7 +10184,7 @@ async function renderPlatformOutbox(){
   const prototypeOnly=(msgs||[]).filter(isPrototypeOnly).length;
   page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Email delivery · Resend</div><h2>${live?'Live automatic email delivery':'Provider test / prototype queue'}</h2><p>${live?'Every new outbound message triggers the server-side dispatcher through a Supabase Database Webhook. Resend handles delivery; this page can also flush anything left in the queue.':'The provider can be tested while the platform remains in Prototype mode. Switch Email mode to Live only when the sender/domain is ready and the Database Webhook is connected.'}</p><div class="provider-mini-status"><span><strong>${queued}</strong> queued</span><span><strong>${failed}</strong> failed</span>${prototypeOnly?`<span><strong>${prototypeOnly}</strong> old prototype-only</span>`:''}<span><strong>${esc(settings?.email_from_address||'not configured')}</strong> sender</span></div></section>
     <section class="admin-card email-provider-actions"><div class="admin-card-head"><div><div class="section-label">Provider controls</div><h2>Test and dispatch</h2></div></div>
-      <div class="form-grid"><div class="field"><label>Test recipient</label><input id="providerTestEmail" type="email" value="${esc(session?.user?.email||'')}"><small>With onboarding@resend.dev, Resend only allows testing to the email address on the Resend account.</small></div><div class="field"><label>Current sender</label><input value="${esc(`${settings?.email_from_name||'Batting Development Platform'} <${settings?.email_from_address||'onboarding@resend.dev'}>`)}" disabled><small>${/@resend\.dev$/i.test(settings?.email_from_address||'')?'Testing sender only. Verify your own domain before emailing clubs.':'Custom sender configured.'}</small></div></div>
+      <div class="form-grid"><div class="field"><label>Test recipient</label><input id="providerTestEmail" type="email" value="${esc(session?.user?.email||'')}"><small>With onboarding@resend.dev, Resend only allows testing to the email address on the Resend account.</small></div><div class="field"><label>Current sender</label><input value="${esc(`${settings?.email_from_name||'Club Batting'} <${settings?.email_from_address||'onboarding@resend.dev'}>`)}" disabled><small>${/@resend\.dev$/i.test(settings?.email_from_address||'')?'Testing sender only. Verify your own domain before emailing clubs.':'Custom sender configured.'}</small></div></div>
       <div class="btnrow"><button class="btn ghost" id="testEmailProvider">Send test email</button>${live?'<button class="btn secondary" id="flushEmailQueue">Send queued now</button>':''}<span id="emailProviderStatus" class="status"></span></div>
     </section>
     <section class="admin-card"><div class="section-label">Queue</div><h2>Outbound messages</h2>
@@ -10237,8 +10240,8 @@ async function renderPlatformSettings(){
   <section class="admin-card form-wide"><div class="section-label">Email delivery</div><h2>Resend sender</h2><div class="form-grid">
     <div class="field"><label>Email mode</label><select id="settingEmailMode" ${canCommercial?'':'disabled'}><option value="prototype" ${(s.email_mode||'prototype')==='prototype'?'selected':''}>Prototype queue</option><option value="live" ${s.email_mode==='live'?'selected':''}>Live provider</option></select><small>Keep Prototype selected until the test email succeeds and your sending domain is verified.</small></div>
     <div class="field"><label>Email provider</label><select id="settingEmailProvider" ${canCommercial?'':'disabled'}><option value="resend" ${(s.email_provider||'resend')==='resend'?'selected':''}>Resend</option></select><small>The API key is stored only in Supabase Edge Function Secrets as <strong>RESEND_API_KEY</strong>.</small></div>
-    <div class="field"><label>From name</label><input id="settingEmailFromName" value="${esc(s.email_from_name||'Batting Development Platform')}" ${canCommercial?'':'disabled'}></div>
-    <div class="field"><label>From email</label><input id="settingEmailFromAddress" type="email" value="${esc(s.email_from_address||'onboarding@resend.dev')}" ${canCommercial?'':'disabled'}><small><strong>onboarding@resend.dev</strong> is testing-only. To email real clubs, verify a domain in Resend and use an address on that domain.</small></div>
+    <div class="field"><label>From name</label><input id="settingEmailFromName" value="${esc(s.email_from_name||'Club Batting')}" ${canCommercial?'':'disabled'}></div>
+    <div class="field"><label>From email</label><input id="settingEmailFromAddress" type="email" value="${esc(s.email_from_address||'onboarding@resend.dev')}" ${canCommercial?'':'disabled'}><small><strong>onboarding@resend.dev</strong> is testing-only. Once <strong>clubbatting.com</strong> is verified in Resend, use <strong>notifications@clubbatting.com</strong>.</small></div>
     <div class="field"><label>Reply-to email</label><input id="settingEmailReplyTo" type="email" value="${esc(s.email_reply_to||'')}" ${canCommercial?'':'disabled'}><small>Use an address you actually monitor so Club Secretaries can simply reply.</small></div>
     <div class="field"><label>Provider status</label><div class="provider-check-box" id="emailProviderCheck">Not checked</div><button class="btn ghost provider-check-btn" id="checkEmailProvider">Check email provider</button></div>
     <div class="field"><label>Send a test email</label><input id="settingEmailTestRecipient" type="email" value="${esc(session?.user?.email||'')}" placeholder="your@email.com"><small>While using <strong>onboarding@resend.dev</strong>, Resend normally only allows testing to the email address on your Resend account.</small><div class="provider-check-box" id="emailTestStatus">Not sent</div><button class="btn secondary provider-check-btn" id="sendTestEmail">Send test email</button></div>
