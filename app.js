@@ -6348,6 +6348,15 @@ function developmentFocusItems(data,raw){
       type:'feedback'
     });
   }
+  for(const e of data?.external_training_evidence||[]){
+    if(!String(e.next_training_focus||'').trim())continue;
+    items.push({
+      text:e.next_training_focus.trim(),
+      source:`External evidence · ${e.source_label||e.source_key||'connected source'}`,
+      date:e.recorded_at||e.created_at||'',
+      type:'external'
+    });
+  }
   for(const m of data?.matches||[]){
     for(const f of m.coach_feedback||[]){
       if(!String(f.next_training_focus||'').trim())continue;
@@ -6547,14 +6556,124 @@ function renderTrainMyPlan(raw,formats){
 }
 
 async function loadDevelopmentFeedback(playerId){
-  if(!playerId)return {matches:[],training_observations:[]};
+  if(!playerId)return {matches:[],training_observations:[],external_training_evidence:[]};
   const {data,error}=await supabase.rpc('get_development_feedback_for_player',{p_player_id:playerId});
   if(error)throw error;
   return {
     ...(data||{}),
     matches:Array.isArray(data?.matches)?data.matches:[],
-    training_observations:Array.isArray(data?.training_observations)?data.training_observations:[]
+    training_observations:Array.isArray(data?.training_observations)?data.training_observations:[],
+    external_training_evidence:Array.isArray(data?.external_training_evidence)?data.external_training_evidence:[]
   };
+}
+
+const EXTERNAL_EVIDENCE_METRIC_ALIASES={
+  swing_speed:'swing_speed',
+  bulk_bat_speed:'swing_speed',
+  whole_swing_speed:'swing_speed',
+  contact_window_speed:'contact_window_speed',
+  timing_bat_speed:'contact_window_speed',
+  impact_window_speed:'contact_window_speed',
+  hotspot_contact_rate:'hotspot_contact_rate',
+  hot_spot_contact_rate:'hotspot_contact_rate',
+  sweet_spot_contact_rate:'hotspot_contact_rate',
+  ball_speed:'ball_speed',
+  exit_speed:'ball_speed',
+  sample_size:'sample_size',
+  rep_count:'sample_size'
+};
+const EXTERNAL_EVIDENCE_METRIC_LABELS={
+  swing_speed:'Whole-swing speed',
+  contact_window_speed:'Contact-window speed',
+  hotspot_contact_rate:'Hot-spot contact',
+  ball_speed:'Ball speed',
+  sample_size:'Reps'
+};
+const EXTERNAL_EVIDENCE_METRIC_ORDER=['swing_speed','contact_window_speed','hotspot_contact_rate','ball_speed','sample_size'];
+
+function externalEvidenceFormatApplies(evidence,format){
+  const keys=Array.isArray(evidence?.format_keys)?evidence.format_keys:[];
+  return !keys.length||keys.includes(format);
+}
+
+function evidenceMetricLabel(key){
+  if(EXTERNAL_EVIDENCE_METRIC_LABELS[key])return EXTERNAL_EVIDENCE_METRIC_LABELS[key];
+  return String(key||'').replace(/[_-]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+
+function evidenceMetricDisplay(raw){
+  if(raw===null||raw===undefined||raw==='')return null;
+  if(typeof raw==='number')return {value:Number.isInteger(raw)?String(raw):String(Math.round(raw*10)/10),unit:''};
+  if(typeof raw==='string')return {value:raw,unit:''};
+  if(Array.isArray(raw))return null;
+  if(typeof raw==='object'){
+    const candidate=raw.value??raw.mean??raw.average??raw.avg??null;
+    if(candidate===null||candidate===undefined||candidate==='')return null;
+    const value=typeof candidate==='number'
+      ?(Number.isInteger(candidate)?String(candidate):String(Math.round(candidate*10)/10))
+      :String(candidate);
+    return {value,unit:String(raw.unit||'').trim()};
+  }
+  return null;
+}
+
+function externalEvidenceMetricEntries(evidence){
+  const metrics=evidence?.metrics&&typeof evidence.metrics==='object'&&!Array.isArray(evidence.metrics)?evidence.metrics:{};
+  const canonical=new Map();
+  Object.entries(metrics).forEach(([rawKey,rawValue])=>{
+    const key=EXTERNAL_EVIDENCE_METRIC_ALIASES[rawKey]||rawKey;
+    if(canonical.has(key))return;
+    const display=evidenceMetricDisplay(rawValue);
+    if(display)canonical.set(key,{key,label:evidenceMetricLabel(key),...display});
+  });
+  return [...canonical.values()].sort((a,b)=>{
+    const ai=EXTERNAL_EVIDENCE_METRIC_ORDER.indexOf(a.key);
+    const bi=EXTERNAL_EVIDENCE_METRIC_ORDER.indexOf(b.key);
+    return (ai<0?999:ai)-(bi<0?999:bi);
+  }).slice(0,6);
+}
+
+function safeEvidenceMediaUrl(value){
+  const raw=String(value||'').trim();
+  if(!raw)return '';
+  try{
+    const u=new URL(raw);
+    return ['http:','https:'].includes(u.protocol)?u.toString():'';
+  }catch(e){return '';}
+}
+
+function renderExternalTrainingEvidenceCard(evidence){
+  const formats=(evidence?.format_keys||[]).map(formatLabel).join(' + ')||'General / Core';
+  const source=evidence?.source_label||evidence?.source_key||'External source';
+  const meta=[formatDateShort(evidence?.recorded_at||evidence?.created_at),formats,evidence?.shot_type||''].filter(Boolean).join(' · ');
+  const metrics=externalEvidenceMetricEntries(evidence);
+  const metricKeys=new Set(metrics.map(x=>x.key));
+  const separatesSpeed=metricKeys.has('swing_speed')&&metricKeys.has('contact_window_speed');
+  const mediaUrl=safeEvidenceMediaUrl(evidence?.media_url);
+  return `<article class="external-evidence-card">
+    <div class="external-evidence-head">
+      <div><div class="section-label">${esc(source)}</div><h3>${esc(evidence?.training_intent||evidence?.summary||'Training evidence')}</h3><span>${esc(meta)}</span></div>
+      ${evidence?.evidence_level?`<b>${esc(String(evidence.evidence_level).replace(/_/g,' ').toUpperCase())}</b>`:''}
+    </div>
+    ${metrics.length?`<div class="external-evidence-metrics">${metrics.map(m=>`<div><span>${esc(m.label)}</span><strong>${esc(m.value)}${m.unit?` <small>${esc(m.unit)}</small>`:''}</strong></div>`).join('')}</div>`:''}
+    ${separatesSpeed?'<div class="external-evidence-speed-note">Whole-swing speed and contact-window speed are kept separate. A compact, well-timed stroke is not treated as an inferior swing.</div>':''}
+    ${evidence?.summary&&evidence?.training_intent?`<p class="external-evidence-summary">${esc(evidence.summary)}</p>`:''}
+    ${evidence?.coaching_question?`<div class="external-evidence-question"><span>QUESTION TO EXPLORE</span><strong>${esc(evidence.coaching_question)}</strong></div>`:''}
+    ${evidence?.next_training_focus?`<div class="development-next"><small>TRAIN NEXT</small><strong>${esc(evidence.next_training_focus)}</strong></div>`:''}
+    ${mediaUrl?`<a class="external-evidence-link" href="${esc(mediaUrl)}" target="_blank" rel="noopener noreferrer">Open source evidence ↗</a>`:''}
+  </article>`;
+}
+
+function renderExternalTrainingEvidenceSection(evidence,{showEmpty=false}={}){
+  const rows=Array.isArray(evidence)?evidence:[];
+  if(!rows.length&&!showEmpty)return '';
+  return `<section class="external-evidence-section">
+    <div class="external-evidence-title">
+      <div><div class="section-label">External Training Evidence</div><h3>Measure the player against their intention — not a universal technique.</h3><p>Connected bat, video or sensor data sits beside player and coaching feedback. It can raise a useful question, but it should not overwrite a player’s effective method.</p></div>
+      <span>${rows.length?`${rows.length} evidence record${rows.length===1?'':'s'}`:'No source connected yet'}</span>
+    </div>
+    ${rows.length?`<div class="external-evidence-list">${rows.slice(0,8).map(renderExternalTrainingEvidenceCard).join('')}</div>`:`<div class="external-evidence-empty"><strong>Ready for a future data source.</strong><span>Club Batting can store vendor-neutral training evidence when a bat-tracking, video or sensor provider is connected. Whole-swing speed, contact-window speed and contact quality remain distinct measures.</span></div>`}
+  </section>`;
 }
 
 function trainingFocusForFormat(feedback,format){
@@ -6567,6 +6686,15 @@ function trainingFocusForFormat(feedback,format){
       text:o.next_training_focus.trim(),
       source:`Training observation · ${o.observer_name||'Coach / Captain'}`,
       date:o.observed_on||o.created_at||''
+    });
+  }
+  for(const e of feedback?.external_training_evidence||[]){
+    if(!externalEvidenceFormatApplies(e,format))continue;
+    if(!String(e.next_training_focus||'').trim())continue;
+    items.push({
+      text:e.next_training_focus.trim(),
+      source:`External evidence · ${e.source_label||e.source_key||'connected source'}`,
+      date:e.recorded_at||e.created_at||''
     });
   }
   for(const m of feedback?.matches||[]){
@@ -6665,7 +6793,7 @@ async function renderHowWeTrain(){
   const raw=rawAnswers();
   const snapshot=howWeBatVersions?.[0]?.snapshot||null;
 
-  let feedback={matches:[],training_observations:[]};
+  let feedback={matches:[],training_observations:[],external_training_evidence:[]};
   let feedbackError='';
   if(myPlayer){
     try{
@@ -6707,7 +6835,7 @@ async function renderHowWeTrain(){
 
     formatAccordions=enabled.map(([format])=>renderPlayerTrainingFormatAccordion(format,raw,feedback)).join('');
     const reflectionNeeded=playerReflectionNeededMatches(feedback);
-    const historyCount=(feedback.matches?.length||0)+(feedback.training_observations?.length||0);
+    const historyCount=(feedback.matches?.length||0)+(feedback.training_observations?.length||0)+(feedback.external_training_evidence?.length||0);
     feedbackAccordion=`<details class="card train-simple-accordion feedback-reflection-accordion" id="trainingFeedbackLoop" ${howWeTrainReflectionEditId!==null?'open':''}>
       <summary>
         <div><div class="section-label">Feedback & Reflections</div><strong>Play → reflect → train again.</strong><span>${reflectionNeeded.length?`${reflectionNeeded.length} innings reflection${reflectionNeeded.length===1?'':'s'} waiting for you.`:historyCount?`${historyCount} recent development note${historyCount===1?'':'s'} available.`:'Add a short reflection when there is something useful to learn.'}</span></div>
@@ -6728,6 +6856,7 @@ async function renderHowWeTrain(){
             <div class="development-history-list compact">${feedback.training_observations.length?feedback.training_observations.slice(0,8).map(renderTrainingObservationCard).join(''):'<div class="notice">Coach or captain training observations will appear here when there is something worth recording.</div>'}</div>
           </section>
         </div>
+        ${renderExternalTrainingEvidenceSection(feedback.external_training_evidence)}
       </div>
     </details>`;
   }else{
@@ -6852,6 +6981,7 @@ function renderStaffDevelopmentBody(player,canEdit,data){
         <div class="development-history-list compact">${data.training_observations.length?data.training_observations.slice(0,10).map(renderTrainingObservationCard).join(''):'<div class="card notice">No training observations yet.</div>'}</div>
       </section>
     </div>
+    ${renderExternalTrainingEvidenceSection(data.external_training_evidence,{showEmpty:true})}
   </div>`;
 }
 
@@ -8069,10 +8199,12 @@ async function renderPlayersWorkspacePlayer(){
   const groups=(player.groups||[]).map(g=>`<span class="workspace-group-pill">${esc(g.name)}</span>`).join('');
   const canEdit=!!player.can_edit;
 
-  let developmentData=workspaceFeedbackPlayer(player.id)||{matches:[],training_observations:[],discussions:[]};
+  let developmentData=workspaceFeedbackPlayer(player.id)||{matches:[],training_observations:[],external_training_evidence:[],discussions:[]};
   let developmentError='';
-  if((playersWorkspaceSection==='development'||playersWorkspaceSection==='training')&&!workspaceFeedbackPlayer(player.id)){
+  if(playersWorkspaceSection==='development'||playersWorkspaceSection==='training'){
     try{
+      // Load the selected player directly so newer feedback sources — including
+      // External Training Evidence — do not depend on the bulk workspace cache.
       developmentData=await loadDevelopmentFeedback(player.id);
     }catch(e){
       developmentError=e?.message||String(e);
