@@ -84,6 +84,7 @@ let playersWorkspaceGroupFilter='';
 let playersWorkspaceDevelopmentMode=null;
 let playersWorkspaceDevelopmentMatchId=null;
 let playersWorkspaceFeedbackData=null;
+let playersWorkspaceReminderData=null;
 let playersWorkspaceDiscussionKey=null;
 
 let howWeTrainSelectedFormats=new Set(['limited_overs']);
@@ -1271,13 +1272,14 @@ function accountMenuStyles(){
   </style>`;
 }
 
-function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother'}={}){
+function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
   const email=session?.user?.email||'';
   const name=userProfile?.display_name||session?.user?.user_metadata?.display_name||'Your account';
   return `<details class="account-menu">
     <summary class="btn ghost" aria-label="Account menu">Account <span class="account-menu-chevron" aria-hidden="true">⌄</span></summary>
     <div class="account-menu-popover">
       <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
+      ${showPlatform?`<button class="account-menu-action" id="${platformId}" type="button">Platform Admin</button>`:''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
     </div>
@@ -1350,7 +1352,7 @@ function renderShell(){
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
-          ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother'})}
+          ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother',showPlatform:!!platformRole,platformId:'accountPlatform'})}
         </div>
       </div>
     </header>
@@ -1360,6 +1362,7 @@ function renderShell(){
 
   document.getElementById('out').onclick=()=>supabase.auth.signOut();
   document.getElementById('joinAnother').onclick=renderJoinAnotherClub;
+  document.getElementById('accountPlatform')?.addEventListener('click',()=>{localStorage.setItem('bdp-context','platform');renderPlatformConsole();});
 
   if(document.getElementById('contextSwitch')){
     document.getElementById('contextSwitch').onchange=async e=>{
@@ -7295,6 +7298,7 @@ function resetPlayersWorkspaceForClub(){
   playersWorkspaceDevelopmentMode=null;
   playersWorkspaceDevelopmentMatchId=null;
   playersWorkspaceFeedbackData=null;
+  playersWorkspaceReminderData=null;
   playersWorkspaceDiscussionKey=null;
   if(playersWorkspaceAutosaveTimer){
     clearTimeout(playersWorkspaceAutosaveTimer);
@@ -7331,9 +7335,13 @@ async function renderPlayersWorkspace(){
 
   page.innerHTML='<div class="splash">Loading players…</div>';
 
-  const [playersRes,feedbackRes]=await Promise.all([
+  const reminderPromise=isAdmin()
+    ?supabase.rpc('get_player_plan_reminder_overview',{p_club_id:club.id})
+    :Promise.resolve({data:{reminders:[],cooldown_hours:48,email_mode:'unknown'},error:null});
+  const [playersRes,feedbackRes,reminderRes]=await Promise.all([
     supabase.rpc('get_players_workspace',{p_club_id:club.id}),
-    supabase.rpc('get_feedback_workspace',{p_club_id:club.id})
+    supabase.rpc('get_feedback_workspace',{p_club_id:club.id}),
+    reminderPromise
   ]);
 
   if(playersRes.error){
@@ -7355,6 +7363,11 @@ async function renderPlayersWorkspace(){
     playersWorkspaceFeedbackData=feedbackRes.data||{role:membership.permission_role,players:[]};
     playersWorkspaceFeedbackData.players=Array.isArray(playersWorkspaceFeedbackData.players)?playersWorkspaceFeedbackData.players:[];
   }
+
+  playersWorkspaceReminderData=reminderRes?.error
+    ?{reminders:[],cooldown_hours:48,email_mode:'unknown',error:reminderRes.error.message}
+    :(reminderRes?.data||{reminders:[],cooldown_hours:48,email_mode:'unknown'});
+  playersWorkspaceReminderData.reminders=Array.isArray(playersWorkspaceReminderData.reminders)?playersWorkspaceReminderData.reminders:[];
 
   if(playersWorkspaceSelectedId && !playersWorkspaceData.players.some(p=>p.id===playersWorkspaceSelectedId)){
     playersWorkspaceSelectedId=null;
@@ -7420,12 +7433,53 @@ function renderWorkspaceRosterDiscussion(player,signals){
   </div>`;
 }
 
+function workspaceReminderHistory(playerId,formatKey=''){
+  const all=playersWorkspaceReminderData?.reminders||[];
+  return all
+    .filter(r=>String(r.player_id||'')===String(playerId||'')&&String(r.format_key||'')===String(formatKey||''))
+    .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+}
+
+function workspaceReminderState(playerId,formatKey=''){
+  const history=workspaceReminderHistory(playerId,formatKey);
+  const latest=history[0]||null;
+  const cooldownHours=Number(playersWorkspaceReminderData?.cooldown_hours||48);
+  const created=latest?.created_at?new Date(latest.created_at):null;
+  const nextAllowed=created&&!Number.isNaN(created.getTime())?new Date(created.getTime()+cooldownHours*60*60*1000):null;
+  const inCooldown=!!(nextAllowed&&nextAllowed.getTime()>Date.now());
+  let delivery='';
+  if(latest){
+    if(latest.sent_at)delivery='sent';
+    else if(latest.failed_at)delivery='failed';
+    else if(latest.processing_at)delivery='sending';
+    else delivery='queued';
+  }
+  return {history,latest,count:history.length,nextAllowed,inCooldown,delivery};
+}
+
+function reminderTimestamp(value){
+  if(!value)return '';
+  const d=new Date(value);
+  if(Number.isNaN(d.getTime()))return '';
+  return d.toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+}
+
+async function refreshPlayersWorkspaceReminders(){
+  if(!isAdmin())return;
+  const {data,error}=await supabase.rpc('get_player_plan_reminder_overview',{p_club_id:club.id});
+  playersWorkspaceReminderData=error
+    ?{reminders:[],cooldown_hours:48,email_mode:'unknown',error:error.message}
+    :(data||{reminders:[],cooldown_hours:48,email_mode:'unknown'});
+  playersWorkspaceReminderData.reminders=Array.isArray(playersWorkspaceReminderData.reminders)?playersWorkspaceReminderData.reminders:[];
+}
+
 function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
   const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
   const feedbackCount=workspaceFeedbackCount(player.id);
   const planState=playerPlanDeadlineState(player);
   const overdue=planState.firstOverdue;
   const next=planState.nextIncomplete;
+  const reminder=overdue?workspaceReminderState(player.id,overdue.format_key):{history:[],count:0,inCooldown:false,latest:null,delivery:''};
   const planHeadline=planState.allComplete
     ?'Player Plan up to date ✓'
     :`${planState.completeCount}/${planState.totalCount} required sections complete`;
@@ -7436,6 +7490,25 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
       :next
         ?`${next.label} still to complete`
         :'Core still to complete';
+
+  let reminderMeta='';
+  let reminderAction='';
+  if(isAdmin()&&overdue){
+    if(reminder.latest){
+      const stateLabel=reminder.delivery==='sent'?'sent':reminder.delivery==='failed'?'failed':reminder.delivery==='sending'?'sending':'queued';
+      const at=reminderTimestamp(reminder.latest.sent_at||reminder.latest.failed_at||reminder.latest.created_at);
+      const countLabel=`${reminder.count} reminder${reminder.count===1?'':'s'}`;
+      const failure=reminder.delivery==='failed'&&reminder.latest.last_error?` · ${reminder.latest.last_error}`:'';
+      const cooldown=reminder.inCooldown&&reminder.nextAllowed?` · next available ${reminderTimestamp(reminder.nextAllowed)}`:'';
+      reminderMeta=`<span style="display:block;margin-top:3px;font-size:10.5px;color:var(--muted)">${esc(countLabel)} · ${esc(stateLabel)}${at?` ${esc(at)}`:''}${esc(failure)}${esc(cooldown)}</span>`;
+    }
+    if(reminder.inCooldown){
+      reminderAction=`<button class="workspace-text-link strong" disabled title="A new reminder becomes available after the 48-hour cooldown.">${reminder.delivery==='sent'?'Reminder sent':'Reminder queued'}</button>`;
+    }else{
+      reminderAction=`<button class="workspace-text-link strong" data-send-plan-reminder="${player.id}" data-reminder-format="${overdue.format_key}">${reminder.count?'Send another reminder':'Send reminder'}</button>`;
+    }
+  }
+
   return `<article class="workspace-roster-row" ${overdue?'style="border-left:4px solid var(--accent,#D8232A)"':''}>
     <div class="workspace-roster-person">
       <div>
@@ -7446,8 +7519,8 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
     </div>
     ${discussionMode?renderWorkspaceRosterDiscussion(player,signals):''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
-      <div><strong style="font-size:12px;color:${overdue?'var(--accent,#D8232A)':'var(--navy2)'}">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span></div>
-      ${isAdmin()&&overdue?`<button class="workspace-text-link strong" data-send-plan-reminder="${player.id}" data-reminder-format="${overdue.format_key}">Send reminder</button>`:''}
+      <div><strong style="font-size:12px;color:${overdue?'var(--accent,#D8232A)':'var(--navy2)'}">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${reminderMeta}</div>
+      ${reminderAction}
     </div>
     <div class="workspace-roster-actions">
       <button class="workspace-text-link" data-open-workspace-player="${player.id}">Player Plan</button>
@@ -7544,14 +7617,35 @@ function renderPlayersWorkspaceList(){
     ${(playersWorkspaceGroupFilter||query)?`<div class="workspace-filter-count compact"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
   </section>
 
-  ${playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> up to date</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}</div>`:''}
+  ${playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> up to date</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
+  ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave BDP until Platform Admin switches email delivery to Live.</div>`:''}
+  ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
   ${playersWorkspaceFeedbackData?.error?`<div class="notice compact">Coaching feedback could not be loaded, so discussion flags are temporarily unavailable: ${esc(playersWorkspaceFeedbackData.error)}</div>`:''}
 
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
   document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
   document.getElementById('managePlayingGroupsFromPlayers')?.addEventListener('click',()=>{currentTab='groups';renderTab();});
+
+  document.getElementById('remindOverduePlayers')?.addEventListener('click',async()=>{
+    if(!playersWorkspaceGroupFilter||playersWorkspaceGroupFilter==='__discussion__')return;
+    const ok=confirm(`Queue one Player Plan reminder for each overdue player in this Playing Group? Players still inside the 48-hour cooldown will be skipped.`);
+    if(!ok)return;
+    const btn=document.getElementById('remindOverduePlayers');
+    if(btn){btn.disabled=true;btn.textContent='Queuing reminders…';}
+    const {data:result,error}=await supabase.rpc('send_overdue_player_plan_reminders',{p_club_id:club.id,p_playing_group_id:playersWorkspaceGroupFilter});
+    if(error){alert(error.message);if(btn){btn.disabled=false;btn.textContent='Remind overdue players';}return;}
+    if(platformRole)await kickLiveEmailDelivery();
+    await new Promise(r=>setTimeout(r,500));
+    await refreshPlayersWorkspaceReminders();
+    renderPlayersWorkspaceList();
+    const queued=Number(result?.queued||0);
+    const cooldown=Number(result?.skipped_cooldown||0);
+    const noEmail=Number(result?.skipped_no_email||0);
+    const failed=Number(result?.failed||0);
+    alert(`${queued} reminder${queued===1?'':'s'} queued${cooldown?` · ${cooldown} skipped inside cooldown`:''}${noEmail?` · ${noEmail} without an email-linked account`:''}${failed?` · ${failed} failed`:''}.`);
+  });
 
   const search=document.getElementById('workspacePlayerSearch');
   if(search)search.oninput=()=>{
@@ -7577,10 +7671,13 @@ function renderPlayersWorkspaceList(){
   document.querySelectorAll('[data-quick-training-observation]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.quickTrainingObservation,'development','training'));
   document.querySelectorAll('[data-send-plan-reminder]').forEach(b=>b.onclick=async()=>{
     const original=b.textContent;
-    b.disabled=true;b.textContent='Sending…';
+    b.disabled=true;b.textContent='Queuing…';
     const {error}=await supabase.rpc('send_player_plan_reminder',{p_player_id:b.dataset.sendPlanReminder,p_format_key:b.dataset.reminderFormat||null});
     if(error){alert(error.message);b.disabled=false;b.textContent=original;return;}
-    b.textContent='Reminder sent ✓';
+    if(platformRole)await kickLiveEmailDelivery();
+    await new Promise(r=>setTimeout(r,500));
+    await refreshPlayersWorkspaceReminders();
+    renderPlayersWorkspaceList();
   });
 
   document.querySelectorAll('[data-toggle-roster-discussion]').forEach(b=>b.onclick=()=>{
