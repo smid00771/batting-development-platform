@@ -3105,6 +3105,14 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 @media(max-width:900px){.guide-layout{grid-template-columns:1fr}.guide-topic-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.guide-chat-card{grid-column:1}.sales-product-journey{grid-template-columns:repeat(2,1fr)}.sales-guide-grid{grid-template-columns:1fr}}@media(max-width:620px){.guide-hero,.guide-intervention-card,.club-dashboard-trial{align-items:stretch;flex-direction:column}.guide-intervention-actions{justify-content:flex-start}.guide-topic-list{grid-template-columns:1fr}.guide-chat-compose{grid-template-columns:1fr}.guide-chat-compose .btn{width:100%}.guide-chat-message{max-width:94%}.sales-product-journey{grid-template-columns:1fr}.sales-product-journey article{min-height:0}.setup-guide-head{align-items:flex-start;flex-direction:column}}
 
 /* v0.8.48 contextual Guide hooks */
+.guide-chat-messages{min-height:0}
+.guide-chat-messages.is-empty{max-height:none;overflow:visible;padding:0;border:0;background:transparent}
+.guide-chat-empty{padding:7px 0 2px;line-height:1.45}
+.guide-chat-message.pending{opacity:.72}
+.guide-chat-feedback{display:none;margin-top:10px;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.45}
+.guide-chat-feedback.error{display:block;background:#fef3f2;border:1px solid #fecdca;color:#b42318}
+.guide-chat-feedback.ok{display:block;background:#ecfdf3;border:1px solid #abefc6;color:#067647}
+.provider-name-box{background:#f8f9fc;color:var(--text);font-weight:700}
 .guide-context-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 16px;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:#f8f9fc}
 .guide-context-bar span{color:var(--muted);font-size:10px;line-height:1.45}.guide-context-bar strong{color:var(--navy2)}
 @media(max-width:680px){.guide-context-bar{align-items:flex-start;flex-direction:column}.guide-context-bar .btn{width:100%}}
