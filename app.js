@@ -10420,6 +10420,12 @@ async function renderPlatformSalesProspectDetail(p){
   const canFollowUp=p.status==='contacted'&&daysSinceContact>=7&&!hasFollowUp&&!p.do_not_contact;
   const handoff=(guideThreads||[]).find(t=>t.status==='handoff_requested');
   const trialDays=trial?.ends_on&&trial?.starts_on?Math.max(1,Math.round((new Date(`${trial.ends_on}T12:00:00`)-new Date(`${trial.starts_on}T12:00:00`))/86400000)+1):null;
+  const hasContactEmail=String(p.contact_email||'').includes('@');
+  const adminStatusActions=[
+    p.status!=='interested'?['interested','Record interest manually']:null,
+    p.status!=='maybe_later'?['maybe_later','Move to maybe later']:null,
+    p.status!=='declined'?['declined','Close as not interested']:null
+  ].filter(Boolean);
 
   page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backSalesProspects">← Prospects</button></div>
     ${handoff?`<section class="admin-card guide-handoff-alert"><div><div class="section-label">Human handoff requested</div><h2>${esc(p.club_name)} would like to speak to someone.</h2><p>${esc(handoff.human_handoff_reason||'No reason supplied. Review the Guide conversation before contacting the club.')}</p></div></section>`:''}
@@ -10443,17 +10449,14 @@ async function renderPlatformSalesProspectDetail(p){
         ${canFollowUp?'<button class="btn ghost" id="queueSalesFollowUp">Queue one follow-up</button>':''}
         ${p.status==='contacted'&&!canFollowUp&&!hasFollowUp&&daysSinceContact!==null&&daysSinceContact<7?`<div class="help">One follow-up becomes available after 7 days. ${7-daysSinceContact} day${7-daysSinceContact===1?'':'s'} to go.</div>`:''}
         ${hasFollowUp?'<div class="help">The single follow-up has already been used. No drip sequence will follow.</div>':''}
-        ${!p.contact_email?'<div class="notice">Add a public club contact email before outreach can be queued.</div>':''}
+        ${!hasContactEmail&&!['interested','onboarding'].includes(p.status)&&!trial?'<div class="notice">Add a public club contact email before outreach can be queued.</div>':''}
+        ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id&&!hasContactEmail?'<div class="notice"><strong>Add a valid Club Contact email before starting the Club Trial.</strong></div>':''}
         ${p.do_not_contact||['declined','do_not_contact'].includes(p.status)?'<div class="notice"><strong>Do not contact.</strong> This email is suppressed from prospecting.</div>':''}
         <div class="field"><label>Public overview / Guide link</label><input id="salesResponseLink" value="${esc(publicLink)}" readonly></div>
         <button class="btn ghost" id="copySalesLink">Copy response link</button>
-        <div class="quick-status-actions">
-          <button class="btn ghost" data-sales-status="interested">Mark interested</button>
-          <button class="btn ghost" data-sales-status="maybe_later">Maybe later</button>
-          <button class="btn ghost" data-sales-status="declined">Not interested</button>
-        </div>
-        ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id?'<button class="btn secondary fullwidth" id="startSalesTrial">Start 60-day Club Trial →</button><button class="guide-inline-link" id="startCustomOnboarding">Use custom onboarding instead</button>':''}
+        ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id&&hasContactEmail?'<button class="btn secondary fullwidth" id="startSalesTrial">Start 60-day Club Trial →</button><button class="guide-inline-link" id="startCustomOnboarding">Use custom onboarding instead</button>':''}
         ${p.onboarding_prospect_id&&!trial?'<div class="notice success"><strong>Moved to Onboarding.</strong></div>':''}
+        ${!trial&&adminStatusActions.length?`<details style="margin-top:18px"><summary style="cursor:pointer;font-weight:800">Admin: change prospect status</summary><div class="quick-status-actions" style="margin-top:10px">${adminStatusActions.map(([status,label])=>`<button class="btn ghost" data-sales-status="${status}">${label}</button>`).join('')}</div></details>`:''}
         <div id="salesActionStatus" class="help"></div>
       </section>
     </div>
