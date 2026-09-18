@@ -1,4 +1,4 @@
-// Club Batting v0.8.49 — automatic Club Trial onboarding
+// Club Batting v0.8.49.1 — automatic Club Trial onboarding
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -10433,7 +10433,6 @@ async function renderPlatformSalesProspectDetail(p){
     supabase.from('club_trials').select('*').eq('sales_prospect_id',p.id).maybeSingle(),
     supabase.from('club_batting_guide_threads').select('id,status,human_handoff_reason,updated_at').eq('sales_prospect_id',p.id).order('updated_at',{ascending:false}).limit(5)
   ]);
-  const publicLink=`${location.origin}${location.pathname}?lead=${p.public_token}`;
   const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
   const canFirstContact=!!p.contact_email&&!p.do_not_contact&&!['contacted','interested','declined','do_not_contact','onboarding'].includes(p.status);
   const daysSinceContact=p.last_contacted_at?Math.floor((Date.now()-new Date(p.last_contacted_at).getTime())/86400000):null;
@@ -10473,8 +10472,6 @@ async function renderPlatformSalesProspectDetail(p){
         ${!hasContactEmail&&!['interested','onboarding'].includes(p.status)&&!trial?'<div class="notice">Add a public club contact email before outreach can be queued.</div>':''}
         ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id&&!hasContactEmail?'<div class="notice"><strong>Only one admin action is needed:</strong> add the Club Contact email and press Save details. The rest is automatic.</div>':''}
         ${p.do_not_contact||['declined','do_not_contact'].includes(p.status)?'<div class="notice"><strong>Do not contact.</strong> This email is suppressed from prospecting.</div>':''}
-        <div class="field"><label>Public overview / Guide link</label><input id="salesResponseLink" value="${esc(publicLink)}" readonly></div>
-        <button class="btn ghost" id="copySalesLink">Copy response link</button>
         ${p.onboarding_prospect_id&&!trial?'<div class="notice success"><strong>Moved to Onboarding.</strong></div>':''}
         ${!trial&&adminStatusActions.length?`<details style="margin-top:18px"><summary style="cursor:pointer;font-weight:800">Admin: change prospect status</summary><div class="quick-status-actions" style="margin-top:10px">${adminStatusActions.map(([status,label])=>`<button class="btn ghost" data-sales-status="${status}">${label}</button>`).join('')}</div></details>`:''}
         <div id="salesActionStatus" class="help"></div>
@@ -10483,7 +10480,6 @@ async function renderPlatformSalesProspectDetail(p){
     <section class="admin-card" style="margin-top:16px"><div class="section-label">History</div><h2>Prospect activity</h2><div class="prospect-event-list">${(events||[]).map(e=>`<div><strong>${esc(String(e.event_type).replaceAll('_',' '))}</strong><span>${esc(new Date(e.created_at).toLocaleString())}</span></div>`).join('')||'<div class="help">No activity yet.</div>'}</div></section>`;
 
   document.getElementById('backSalesProspects').onclick=()=>{platformSelectedProspectId=null;renderPlatformProspects();};
-  document.getElementById('copySalesLink').onclick=async()=>{await navigator.clipboard.writeText(publicLink);document.getElementById('copySalesLink').textContent='Copied ✓';};
   document.getElementById('saveSalesProspect').onclick=async()=>{
     const nextEmail=val('editSalesContactEmail').trim().toLowerCase();
     const contactChanged=!!nextEmail&&nextEmail!==String(p.contact_email||'').trim().toLowerCase();
