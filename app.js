@@ -9263,7 +9263,7 @@ async function renderSalesProspectRoute(token){
   app.innerHTML=`<div class="prospect-shell sales-response-shell sales-guide-shell">
     <section class="prospect-hero sales-prospect-hero">
       <div class="section-label">Club Batting</div>
-      <h1>A different way to develop batting across ${esc(p.club_name)}</h1>
+      <h1>A shared batting approach for ${esc(p.club_name)}</h1>
       ${place?`<p class="prospect-location">${esc(place)}</p>`:''}
       <p>Most clubs already have good coaches, good ideas and individual conversations. The difficult part is making the batting thinking <strong>consistent across the club</strong> without making every batter play the same way.</p>
       <p><strong>Club Batting gives the club a shared framework while protecting what makes each batter effective.</strong></p>
@@ -9271,16 +9271,16 @@ async function renderSalesProspectRoute(token){
 
     <section class="sales-product-journey">
       <article><b>1</b><span>HOW WE BAT</span><strong>Make the club’s batting thinking explicit.</strong></article>
-      <article><b>2</b><span>MY PLAYER PLAN</span><strong>Each batter translates it into their own game.</strong></article>
+      <article><b>2</b><span>PLAYER PLAN</span><strong>Each batter translates it into their own game.</strong></article>
       <article><b>3</b><span>HOW WE TRAIN</span><strong>Train the decisions and skills that matter to that player.</strong></article>
-      <article><b>4</b><span>MATCH + TRAINING FEEDBACK</span><strong>Use what happens to shape what comes next.</strong></article>
+      <article><b>4</b><span>COACH CONVERSATIONS</span><strong>Use reflection and observation to shape what comes next.</strong></article>
     </section>
 
     <div class="sales-guide-grid">
       <section class="card prospect-card sales-guide-card">
         <div class="section-label">Ask Club Batting</div>
         <h2>How would this work at our club?</h2>
-        <p class="help">Ask naturally. The Guide can explain the product, the setup process, Player Plans, coaching feedback, Club Trials and what happens next.</p>
+        <p class="help">Ask naturally. The Guide can explain the product, the setup process, Player Plans, Coach Conversations, Club Trials and what happens next.</p>
         <div id="salesGuideMessages" class="guide-chat-messages is-empty"><div class="guide-chat-empty">e.g. “We already have batting coaches. What does this add?”</div></div>
         <div class="guide-chat-compose"><textarea id="salesGuideQuestion" rows="3" placeholder="Ask a question about Club Batting…"></textarea><button class="btn secondary" id="salesGuideAsk">Ask Guide</button></div>
         <div id="salesGuideStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
