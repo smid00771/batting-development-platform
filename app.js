@@ -1840,8 +1840,14 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       const card=document.querySelector('.guide-tutorial-card');
       if(!card)return;
       const rect=card.getBoundingClientRect();
-      const comfortablyVisible=rect.top>=0&&rect.top<=Math.max(240,window.innerHeight*.55);
-      if(!comfortablyVisible)card.scrollIntoView({behavior:'smooth',block:'start'});
+      const nav=document.querySelector('.nav');
+      const navRect=nav?.getBoundingClientRect();
+      const topOffset=navRect&&navRect.top<=1?navRect.height+14:14;
+      const comfortablyVisible=rect.top>=topOffset&&rect.top<=Math.max(topOffset+220,window.innerHeight*.55);
+      if(!comfortablyVisible){
+        const targetTop=Math.max(0,window.scrollY+rect.top-topOffset);
+        window.scrollTo({top:targetTop,left:0,behavior:'smooth'});
+      }
     });
   }
 
