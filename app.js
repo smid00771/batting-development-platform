@@ -1684,6 +1684,30 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
+function guideCapabilityForCurrentProduct(capability){
+  const item={...capability};
+  const tutorial=Array.isArray(item.tutorial)?item.tutorial.map(step=>({...step})):[];
+  if(item.capability_key==='whole_process'){
+    item.tutorial=tutorial.map(step=>step.title==='Set Player Plan dates'
+      ? {...step,body:'Set due dates for the formats each Playing Group is expected to complete. Leave other formats undated and optional.'}
+      : step);
+  }else if(item.capability_key==='plan_dates'){
+    item.short_explanation='Every player keeps the T20, Limited Overs and Long Form tabs. Set a due date when a Playing Group is expected to complete a format; leave the date unset when it is optional.';
+    item.tutorial=[
+      {title:'Choose the Playing Group',body:'Set expectations for players in that group.'},
+      {title:'Review each format',body:'T20, Limited Overs and Long Form remain available to every player.'},
+      {title:'Set dates for expected plans',body:'A due date tells the Playing Group which format plans they are expected to complete and powers incomplete and overdue views.'},
+      {title:'Leave other formats undated',body:'If the Playing Group does not play a format, do not set a due date. Players may still complete that plan if they choose.'},
+      {title:'Use reminders selectively',body:'Club Batting can remind overdue players. The built-in cooldown stops repeated messages becoming noise.'}
+    ];
+  }else if(item.capability_key==='player_plan'){
+    item.tutorial=tutorial.map(step=>step.title==='Add the relevant format'
+      ? {...step,title:'Use the relevant format',body:'Every player can see T20, Limited Overs and Long Form. Due dates show which format plans their Playing Group is expected to complete; undated formats remain optional.'}
+      : step);
+  }
+  return item;
+}
+
 function guideMessagesHtml(messages=[],emptyText='Ask anything about how Club Batting works at your club.'){
   const visible=guideVisibleMessages(messages);
   if(!visible.length)return `<div class="guide-chat-empty">${esc(emptyText)}</div>`;
@@ -1695,7 +1719,16 @@ function setGuideMessages(container,messages=[],emptyText){
   const visible=guideVisibleMessages(messages);
   container.innerHTML=guideMessagesHtml(visible,emptyText);
   container.classList.toggle('is-empty',!visible.length);
-  if(visible.length)container.scrollTop=container.scrollHeight;
+  if(visible.length){
+    const questions=container.querySelectorAll('.guide-chat-message.user');
+    const latestQuestion=questions[questions.length-1];
+    if(latestQuestion){
+      const top=latestQuestion.getBoundingClientRect().top-container.getBoundingClientRect().top+container.scrollTop;
+      container.scrollTop=Math.max(0,top-8);
+    }else{
+      container.scrollTop=container.scrollHeight;
+    }
+  }
 }
 
 async function edgeFunctionErrorMessage(error,data,fallback='The service could not respond just now.'){
@@ -1760,7 +1793,7 @@ async function renderClubBattingGuide(){
   ]);
   if(capErr||progErr){page.innerHTML=`<section class="card"><div class="notice">${esc((capErr||progErr).message)}</div></section>`;return;}
 
-  const all=(capabilities||[]).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process');
+  const all=(capabilities||[]).map(guideCapabilityForCurrentProduct).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process');
   if(!all.length){page.innerHTML='<section class="card"><h2>Club Batting Guide</h2><p class="help">No Guide topics are available for this role yet.</p></section>';return;}
   if(!all.some(c=>c.capability_key===guideSelectedCapabilityKey))guideSelectedCapabilityKey='whole_process';
   const selected=all.find(c=>c.capability_key===guideSelectedCapabilityKey)||all[0];
