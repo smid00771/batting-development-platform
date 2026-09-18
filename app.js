@@ -1680,9 +1680,38 @@ function guideGoToTarget(tab,focus=''){
   renderTab();
 }
 
-function guideMessagesHtml(messages=[]){
-  if(!messages.length)return '<div class="guide-chat-empty">Ask anything about how Club Batting works at your club.</div>';
-  return messages.filter(m=>['user','assistant'].includes(m.role)).map(m=>`<div class="guide-chat-message ${m.role}"><span>${m.role==='assistant'?'Club Batting Guide':'You'}</span><p>${esc(m.content||'')}</p></div>`).join('');
+function guideVisibleMessages(messages=[]){
+  return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
+}
+
+function guideMessagesHtml(messages=[],emptyText='Ask anything about how Club Batting works at your club.'){
+  const visible=guideVisibleMessages(messages);
+  if(!visible.length)return `<div class="guide-chat-empty">${esc(emptyText)}</div>`;
+  return visible.map(m=>`<div class="guide-chat-message ${m.role}"><span>${m.role==='assistant'?'Club Batting Guide':'You'}</span><p>${esc(m.content||'')}</p></div>`).join('');
+}
+
+function setGuideMessages(container,messages=[],emptyText){
+  if(!container)return;
+  const visible=guideVisibleMessages(messages);
+  container.innerHTML=guideMessagesHtml(visible,emptyText);
+  container.classList.toggle('is-empty',!visible.length);
+  if(visible.length)container.scrollTop=container.scrollHeight;
+}
+
+async function edgeFunctionErrorMessage(error,data,fallback='The service could not respond just now.'){
+  if(data?.error)return String(data.error);
+  const response=error?.context;
+  if(response&&typeof response.clone==='function'){
+    try{
+      const payload=await response.clone().json();
+      if(payload?.error)return String(payload.error);
+    }catch(_ignored){}
+    try{
+      const detail=(await response.clone().text()).trim();
+      if(detail&&!/^\s*\{/.test(detail))return detail.slice(0,500);
+    }catch(_ignored){}
+  }
+  return error?.message||fallback;
 }
 
 async function loadClubGuideHistory(){
@@ -1697,7 +1726,7 @@ async function askClubBattingGuide(question){
   guideChatBusy=true;
   try{
     const {data,error}=await supabase.functions.invoke('club-batting-guide',{body:{action:'ask',club_id:club.id,question:q,capability_key:guideSelectedCapabilityKey}});
-    if(error||data?.error)throw new Error(data?.error||error?.message||'The Guide could not answer just now.');
+    if(error||data?.error)throw new Error(await edgeFunctionErrorMessage(error,data,'The Guide could not answer just now.'));
     return data;
   }finally{
     guideChatBusy=false;
@@ -1761,9 +1790,9 @@ async function renderClubBattingGuide(){
     </section>
     <section class="card guide-chat-card">
       <div class="section-label">Ask the Guide</div><h2>How does this work at our club?</h2>
-      <div id="guideChatMessages" class="guide-chat-messages">${guideMessagesHtml(messages)}</div>
+      <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
       <div class="guide-chat-compose"><textarea id="guideQuestion" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
-      <div id="guideChatStatus" class="help"></div>
+      <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
       <div class="guide-human-handoff"><button class="guide-inline-link" id="guideHumanHandoff">I’d rather speak to someone</button><div id="guideHandoffBox" hidden><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
     </section>
   </div>`;
@@ -1779,14 +1808,24 @@ async function renderClubBattingGuide(){
     const input=document.getElementById('guideQuestion');
     const st=document.getElementById('guideChatStatus');
     const q=input.value.trim();if(!q)return;
-    const btn=document.getElementById('guideAsk');btn.disabled=true;btn.textContent='Thinking…';st.textContent='';
+    const btn=document.getElementById('guideAsk');
+    const messageBox=document.getElementById('guideChatMessages');
+    btn.disabled=true;btn.textContent='Thinking…';st.textContent='';st.classList.remove('error','ok');
+    messageBox.classList.remove('is-empty');
+    if(messageBox.querySelector('.guide-chat-empty'))messageBox.innerHTML='';
+    messageBox.insertAdjacentHTML('beforeend',`<div class="guide-chat-message user pending"><span>You</span><p>${esc(q)}</p></div>`);
+    messageBox.scrollTop=messageBox.scrollHeight;
     try{
       const result=await askClubBattingGuide(q);input.value='';
       const history=result?.messages||await loadClubGuideHistory();
-      document.getElementById('guideChatMessages').innerHTML=guideMessagesHtml(history);
-      document.getElementById('guideChatMessages').scrollTop=document.getElementById('guideChatMessages').scrollHeight;
-    }catch(e){st.textContent=e?.message||'The Guide could not answer just now.';}
-    btn.disabled=false;btn.textContent='Ask Guide';
+      setGuideMessages(messageBox,history);
+    }catch(e){
+      messageBox.querySelector('.pending:last-of-type')?.classList.remove('pending');
+      st.textContent=e?.message||'The Guide could not answer just now.';
+      st.classList.add('error');
+    }finally{
+      btn.disabled=false;btn.textContent='Ask Guide';
+    }
   };
   document.getElementById('guideAsk').onclick=submitQuestion;
   document.getElementById('guideQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();submitQuestion();}});
@@ -9195,9 +9234,9 @@ async function renderSalesProspectRoute(token){
         <div class="section-label">Ask Club Batting</div>
         <h2>How would this work at our club?</h2>
         <p class="help">Ask naturally. The Guide can explain the product, the setup process, Player Plans, coaching feedback, Club Trials and what happens next.</p>
-        <div id="salesGuideMessages" class="guide-chat-messages"><div class="guide-chat-empty">e.g. “We already have batting coaches. What does this add?”</div></div>
+        <div id="salesGuideMessages" class="guide-chat-messages is-empty"><div class="guide-chat-empty">e.g. “We already have batting coaches. What does this add?”</div></div>
         <div class="guide-chat-compose"><textarea id="salesGuideQuestion" rows="3" placeholder="Ask a question about Club Batting…"></textarea><button class="btn secondary" id="salesGuideAsk">Ask Guide</button></div>
-        <div id="salesGuideStatus" class="help"></div>
+        <div id="salesGuideStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
         <div class="guide-human-handoff"><button class="guide-inline-link" id="salesHumanHandoff">I’d rather speak to someone</button><div id="salesHandoffBox" hidden><textarea id="salesHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="salesSendHandoff">Request a conversation</button><button class="btn ghost" id="salesCancelHandoff">Cancel</button></div></div></div>
       </section>
 
@@ -9225,19 +9264,30 @@ async function renderSalesProspectRoute(token){
   const refreshGuideHistory=async()=>{
     const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'history',lead_token:token}});
     if(e||data?.error)return;
-    document.getElementById('salesGuideMessages').innerHTML=guideMessagesHtml(data?.messages||[]);
-    document.getElementById('salesGuideMessages').scrollTop=document.getElementById('salesGuideMessages').scrollHeight;
+    setGuideMessages(document.getElementById('salesGuideMessages'),data?.messages||[],'e.g. “We already have batting coaches. What does this add?”');
   };
   await refreshGuideHistory();
 
   const askGuide=async()=>{
     const q=val('salesGuideQuestion').trim();if(!q)return;
-    const btn=document.getElementById('salesGuideAsk'),st=document.getElementById('salesGuideStatus');
-    btn.disabled=true;btn.textContent='Thinking…';st.textContent='';
-    const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'ask',lead_token:token,question:q}});
-    if(e||data?.error){st.textContent=data?.error||e?.message||'The Guide could not answer just now.';}
-    else{document.getElementById('salesGuideQuestion').value='';document.getElementById('salesGuideMessages').innerHTML=guideMessagesHtml(data?.messages||[]);document.getElementById('salesGuideMessages').scrollTop=document.getElementById('salesGuideMessages').scrollHeight;}
-    btn.disabled=false;btn.textContent='Ask Guide';
+    const btn=document.getElementById('salesGuideAsk'),st=document.getElementById('salesGuideStatus'),messageBox=document.getElementById('salesGuideMessages');
+    btn.disabled=true;btn.textContent='Thinking…';st.textContent='';st.classList.remove('error','ok');
+    messageBox.classList.remove('is-empty');
+    if(messageBox.querySelector('.guide-chat-empty'))messageBox.innerHTML='';
+    messageBox.insertAdjacentHTML('beforeend',`<div class="guide-chat-message user pending"><span>You</span><p>${esc(q)}</p></div>`);
+    messageBox.scrollTop=messageBox.scrollHeight;
+    try{
+      const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'ask',lead_token:token,question:q}});
+      if(e||data?.error)throw new Error(await edgeFunctionErrorMessage(e,data,'The Guide could not answer just now.'));
+      document.getElementById('salesGuideQuestion').value='';
+      setGuideMessages(messageBox,data?.messages||[],'e.g. “We already have batting coaches. What does this add?”');
+    }catch(e){
+      messageBox.querySelector('.pending:last-of-type')?.classList.remove('pending');
+      st.textContent=e?.message||'The Guide could not answer just now.';
+      st.classList.add('error');
+    }finally{
+      btn.disabled=false;btn.textContent='Ask Guide';
+    }
   };
   document.getElementById('salesGuideAsk').onclick=askGuide;
   document.getElementById('salesGuideQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();askGuide();}});
@@ -10870,6 +10920,11 @@ async function renderPlatformSettings(){
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Payment mode</label><select id="settingMode" ${canCommercial?'':'disabled'}><option value="prototype" ${s.payment_mode==='prototype'?'selected':''}>Prototype — simulate payment</option><option value="live" ${s.payment_mode==='live'?'selected':''}>Live provider</option></select></div>
     <div class="field"><label>Payment provider</label><select id="settingPaymentProvider" ${canCommercial?'':'disabled'}><option value="stripe" ${(s.payment_provider||'stripe')==='stripe'?'selected':''}>Stripe</option></select><small>Hosted Stripe Checkout / invoices. Card data never touches this app.</small></div>
+  </div></section>
+
+  <section class="admin-card form-wide"><div class="section-label">Club Batting Guide</div><h2>OpenAI provider</h2><div class="form-grid">
+    <div class="field"><label>Guide provider</label><div class="provider-check-box provider-name-box">OpenAI Responses API</div><small>The provider key and model are stored only in Supabase Edge Function Secrets.</small></div>
+    <div class="field"><label>Provider status</label><div class="provider-check-box" id="guideProviderCheck">Not checked</div><button class="btn ghost provider-check-btn" id="checkGuideProvider">Check Guide provider</button></div>
   </div><div class="notice"><strong>Club Batting Guide policy:</strong> tutorials are available on demand and in context. Proactive guidance only appears when a meaningful adoption gap is detected. Guide email escalation remains disabled in v0.8.48.</div></section>
 
   <section class="admin-card form-wide"><div class="section-label">Market discovery support</div><h2>Search fallback provider</h2><div class="form-grid">
@@ -10903,8 +10958,31 @@ async function renderPlatformSettings(){
     box.textContent=error?'Function unavailable':(data?.configured?`Connected ✓ · ${data.from_address}`:'Function deployed — API key missing');
     box.classList.toggle('ok',!!data?.configured);box.classList.toggle('bad',!data?.configured);
   };
+  document.getElementById('checkGuideProvider').onclick=async()=>{
+    const box=document.getElementById('guideProviderCheck');box.textContent='Checking…';box.classList.remove('ok','bad');
+    try{
+      const {data,error}=await supabase.functions.invoke('club-batting-guide',{body:{action:'status'}});
+      if(error||data?.error){
+        box.textContent=`Function unavailable — ${await edgeFunctionErrorMessage(error,data,'could not connect')}`;
+        box.classList.add('bad');return;
+      }
+      if(data?.configured){
+        box.textContent=`Connected ✓ · ${data.provider||'OpenAI'}${data.model?` · ${data.model}`:''}`;
+        box.classList.add('ok');return;
+      }
+      const missing=[];
+      if(!data?.api_key_configured)missing.push('OpenAI API key');
+      if(!data?.model_configured)missing.push('Guide model');
+      box.textContent=`Function deployed — ${missing.length?`${missing.join(' and ')} missing`:'provider not configured'}`;
+      box.classList.add('bad');
+    }catch(error){
+      box.textContent=`Function unavailable — ${error?.message||'could not connect'}`;
+      box.classList.add('bad');
+    }
+  };
 
   // Provider status is a live check, so refresh it automatically whenever Platform Settings opens.
+  document.getElementById('checkGuideProvider').click();
   document.getElementById('checkDiscoveryProvider').click();
   document.getElementById('checkEmailProvider').click();
   document.getElementById('sendTestEmail').onclick=async()=>{
