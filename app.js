@@ -1806,7 +1806,6 @@ async function renderClubBattingGuide(){
 
   page.innerHTML=`<section class="card guide-hero">
     <div><div class="section-label">Club Batting Guide</div><h1>Learn it when you need it.</h1><p>Run through the complete Club Batting process, open a focused tutorial, or ask how something works at <strong>${esc(club.name)}</strong>.</p></div>
-    <button class="btn secondary" id="guideWholeProcess">Show me the whole process</button>
   </section>
   ${trial?`<section class="guide-trial-strip"><strong>${trial.status==='conversion_requested'?'Continuation requested':`Club Trial · ${Math.max(0,daysLeft||0)} day${daysLeft===1?'':'s'} remaining`}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · ${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year if the club chooses to continue</span></section>`:''}
   <div id="guideInterventionSlot"></div>
@@ -1831,7 +1830,6 @@ async function renderClubBattingGuide(){
   </div>`;
 
   await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
-  document.getElementById('guideWholeProcess').onclick=()=>{guideSelectedCapabilityKey='whole_process';renderClubBattingGuide();};
   document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;renderClubBattingGuide();});
   document.querySelectorAll('[data-guide-target]').forEach(b=>b.onclick=()=>guideGoToTarget(b.dataset.guideTarget,b.dataset.guideFocus||''));
   document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,''));
