@@ -1781,7 +1781,7 @@ async function renderGuideInterventionInto(slot){
   slot.querySelector('[data-guide-dismiss]').onclick=async()=>{await supabase.rpc('set_guide_intervention_state',{p_intervention_id:item.id,p_action:'dismissed'});slot.innerHTML='';};
 }
 
-async function renderClubBattingGuide(){
+async function renderClubBattingGuide({revealTutorial=false}={}){
   const page=document.getElementById('page');
   page.innerHTML='<div class="splash">Loading Club Batting Guide…</div>';
   const role=guideAudienceKey();
@@ -1830,10 +1830,20 @@ async function renderClubBattingGuide(){
   </div>`;
 
   await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
-  document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;renderClubBattingGuide();});
+  document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;renderClubBattingGuide({revealTutorial:true});});
   document.querySelectorAll('[data-guide-target]').forEach(b=>b.onclick=()=>guideGoToTarget(b.dataset.guideTarget,b.dataset.guideFocus||''));
   document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,''));
   document.getElementById('guideMarkComplete').onclick=async()=>{await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'completed'});renderClubBattingGuide();};
+
+  if(revealTutorial){
+    requestAnimationFrame(()=>{
+      const card=document.querySelector('.guide-tutorial-card');
+      if(!card)return;
+      const rect=card.getBoundingClientRect();
+      const comfortablyVisible=rect.top>=0&&rect.top<=Math.max(240,window.innerHeight*.55);
+      if(!comfortablyVisible)card.scrollIntoView({behavior:'smooth',block:'start'});
+    });
+  }
 
   const submitQuestion=async()=>{
     const input=document.getElementById('guideQuestion');
