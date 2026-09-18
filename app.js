@@ -1,4 +1,4 @@
-// Club Batting v0.8.46 — safe Full-flow Beta re-onboarding
+// Club Batting v0.8.48 — Club Trial + Club Batting Guide
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -99,6 +99,9 @@ let feedbackWorkspaceSelectedPlayerId=null;
 let feedbackWorkspaceEntryMode=null;
 let feedbackWorkspaceMatchId=null;
 let feedbackWorkspaceDiscussionKey=null;
+
+let guideSelectedCapabilityKey='whole_process';
+let guideChatBusy=false;
 
 let clubBrandingDraftClubId=null;
 let clubBrandingDraft=null;
@@ -1322,6 +1325,10 @@ function renderShell(){
   if(isPlayerUser())nav.push(['myplan','My Player Plan','use']);
   if(howWeBatVersions.length)nav.push(['howwetrain','How We Train','use']);
 
+  // The Guide is a permanent help layer: full walkthrough on demand, contextual help
+  // when a feature is encountered, and restrained intervention only for genuine gaps.
+  nav.push(['guide','Learn Club Batting','help']);
+
   // Questionnaire pages and the optional exact-wording editor are workflow screens,
   // not permanent destinations in the top menu.
   const hiddenContributionTabs=(canContributePhilosophy() || isPhilosophyLead())
@@ -1618,7 +1625,8 @@ function renderTab(){
     permissions:renderPermissions,
     howwebat:renderPublishedHowWeBat,
     myplan:renderMyPlan,
-    howwetrain:renderHowWeTrain
+    howwetrain:renderHowWeTrain,
+    guide:renderClubBattingGuide
   };
   try{
     const result=(map[currentTab]||renderMyPlan)();
@@ -1637,6 +1645,160 @@ function renderTab(){
 }
 
 
+
+/* ---------------- CLUB BATTING GUIDE ---------------- */
+
+function guideAudienceKey(){
+  const role=membership?.permission_role||'';
+  if(['admin','head_coach','coach','captain'].includes(role))return role;
+  return isPlayerUser()?'player':'member';
+}
+
+function openClubBattingGuideTopic(capabilityKey='whole_process'){
+  guideSelectedCapabilityKey=capabilityKey||'whole_process';
+  currentTab='guide';
+  localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+  renderTab();
+}
+
+function guideTargetLabel(tab){
+  return ({dashboard:'Club Setup',permissions:'People & Sign-up',workshop:'Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',myplan:'My Player Plan',howwetrain:'How We Train'}[tab]||'Open area');
+}
+
+function guideGoToTarget(tab,focus=''){
+  if(!tab||tab==='guide')return;
+  if(focus==='plan_dates'){
+    currentTab='players';
+    localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+    renderTab();
+    setTimeout(()=>openPlanDueDateDialog(),120);
+    return;
+  }
+  if(focus==='coach_conversations')playersWorkspaceGroupFilter='__discussion__';
+  currentTab=tab;
+  localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+  renderTab();
+}
+
+function guideMessagesHtml(messages=[]){
+  if(!messages.length)return '<div class="guide-chat-empty">Ask anything about how Club Batting works at your club.</div>';
+  return messages.filter(m=>['user','assistant'].includes(m.role)).map(m=>`<div class="guide-chat-message ${m.role}"><span>${m.role==='assistant'?'Club Batting Guide':'You'}</span><p>${esc(m.content||'')}</p></div>`).join('');
+}
+
+async function loadClubGuideHistory(){
+  const {data,error}=await supabase.functions.invoke('club-batting-guide',{body:{action:'history',club_id:club.id}});
+  if(error||data?.error)return [];
+  return data?.messages||[];
+}
+
+async function askClubBattingGuide(question){
+  const q=String(question||'').trim();
+  if(!q||guideChatBusy)return null;
+  guideChatBusy=true;
+  try{
+    const {data,error}=await supabase.functions.invoke('club-batting-guide',{body:{action:'ask',club_id:club.id,question:q,capability_key:guideSelectedCapabilityKey}});
+    if(error||data?.error)throw new Error(data?.error||error?.message||'The Guide could not answer just now.');
+    return data;
+  }finally{
+    guideChatBusy=false;
+  }
+}
+
+async function renderGuideInterventionInto(slot){
+  if(!slot||!canUsePlayersWorkspace())return;
+  const {data,error}=await supabase.rpc('refresh_club_guide_interventions',{p_club_id:club.id});
+  if(error||!Array.isArray(data)||!data.length){slot.innerHTML='';return;}
+  const item=data[0];
+  slot.innerHTML=`<section class="guide-intervention-card">
+    <div><div class="section-label">Club Batting Guide</div><strong>${esc(item.title)}</strong><p>${esc(item.message)}</p></div>
+    <div class="guide-intervention-actions"><button class="btn secondary compact-btn" data-guide-review>Review this →</button><button class="btn ghost compact-btn" data-guide-snooze>Not now</button><button class="btn ghost compact-btn" data-guide-dismiss>Not relevant</button></div>
+  </section>`;
+  await supabase.rpc('set_guide_intervention_state',{p_intervention_id:item.id,p_action:'shown'});
+  slot.querySelector('[data-guide-review]').onclick=()=>openClubBattingGuideTopic(item.capability_key||'whole_process');
+  slot.querySelector('[data-guide-snooze]').onclick=async()=>{await supabase.rpc('set_guide_intervention_state',{p_intervention_id:item.id,p_action:'snoozed'});slot.innerHTML='';};
+  slot.querySelector('[data-guide-dismiss]').onclick=async()=>{await supabase.rpc('set_guide_intervention_state',{p_intervention_id:item.id,p_action:'dismissed'});slot.innerHTML='';};
+}
+
+async function renderClubBattingGuide(){
+  const page=document.getElementById('page');
+  page.innerHTML='<div class="splash">Loading Club Batting Guide…</div>';
+  const role=guideAudienceKey();
+  const [{data:capabilities,error:capErr},{data:progress,error:progErr},{data:snapshot,error:snapshotErr},messages]=await Promise.all([
+    supabase.from('club_batting_guide_capabilities').select('*').eq('active',true).order('sort_order'),
+    supabase.from('club_batting_guide_progress').select('*').eq('club_id',club.id).eq('user_id',session.user.id),
+    supabase.rpc('get_club_guide_snapshot',{p_club_id:club.id}),
+    loadClubGuideHistory()
+  ]);
+  if(capErr||progErr){page.innerHTML=`<section class="card"><div class="notice">${esc((capErr||progErr).message)}</div></section>`;return;}
+
+  const all=(capabilities||[]).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process');
+  if(!all.length){page.innerHTML='<section class="card"><h2>Club Batting Guide</h2><p class="help">No Guide topics are available for this role yet.</p></section>';return;}
+  if(!all.some(c=>c.capability_key===guideSelectedCapabilityKey))guideSelectedCapabilityKey='whole_process';
+  const selected=all.find(c=>c.capability_key===guideSelectedCapabilityKey)||all[0];
+  const tutorial=Array.isArray(selected.tutorial)?selected.tutorial:[];
+  const progressMap=new Map((progress||[]).map(x=>[x.capability_key,x]));
+  const trial=snapshot?.trial||null;
+  const daysLeft=trial?.ends_on?Math.ceil((new Date(`${trial.ends_on}T23:59:59`).getTime()-Date.now())/86400000):null;
+
+  await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'seen'});
+
+  page.innerHTML=`<section class="card guide-hero">
+    <div><div class="section-label">Club Batting Guide</div><h1>Learn it when you need it.</h1><p>Run through the complete Club Batting process, open a focused tutorial, or ask how something works at <strong>${esc(club.name)}</strong>.</p></div>
+    <button class="btn secondary" id="guideWholeProcess">Show me the whole process</button>
+  </section>
+  ${trial?`<section class="guide-trial-strip"><strong>${trial.status==='conversion_requested'?'Continuation requested':`Club Trial · ${Math.max(0,daysLeft||0)} day${daysLeft===1?'':'s'} remaining`}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · ${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year if the club chooses to continue</span></section>`:''}
+  <div id="guideInterventionSlot"></div>
+  <div class="guide-layout">
+    <aside class="guide-topic-list">
+      ${all.map(c=>`<button data-guide-topic="${esc(c.capability_key)}" class="${c.capability_key===selected.capability_key?'active':''}"><strong>${esc(c.title)}</strong><span>${progressMap.get(c.capability_key)?.state==='completed'?'Complete ✓':esc(c.short_explanation)}</span></button>`).join('')}
+    </aside>
+    <section class="card guide-tutorial-card">
+      <div class="section-label">${esc(selected.title)}</div>
+      <h2>${esc(selected.purpose)}</h2>
+      <p class="help guide-topic-explanation">${esc(selected.short_explanation)}</p>
+      <div class="guide-steps">${tutorial.map((step,i)=>`<article><b>${i+1}</b><div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p>${step.target_tab?`<button class="guide-inline-link" data-guide-target="${esc(step.target_tab)}" data-guide-focus="${esc(step.focus||'')}">${esc(guideTargetLabel(step.target_tab))} →</button>`:''}</div></article>`).join('')}</div>
+      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}</div>
+    </section>
+    <section class="card guide-chat-card">
+      <div class="section-label">Ask the Guide</div><h2>How does this work at our club?</h2>
+      <div id="guideChatMessages" class="guide-chat-messages">${guideMessagesHtml(messages)}</div>
+      <div class="guide-chat-compose"><textarea id="guideQuestion" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
+      <div id="guideChatStatus" class="help"></div>
+      <div class="guide-human-handoff"><button class="guide-inline-link" id="guideHumanHandoff">I’d rather speak to someone</button><div id="guideHandoffBox" hidden><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
+    </section>
+  </div>`;
+
+  await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
+  document.getElementById('guideWholeProcess').onclick=()=>{guideSelectedCapabilityKey='whole_process';renderClubBattingGuide();};
+  document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;renderClubBattingGuide();});
+  document.querySelectorAll('[data-guide-target]').forEach(b=>b.onclick=()=>guideGoToTarget(b.dataset.guideTarget,b.dataset.guideFocus||''));
+  document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,''));
+  document.getElementById('guideMarkComplete').onclick=async()=>{await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'completed'});renderClubBattingGuide();};
+
+  const submitQuestion=async()=>{
+    const input=document.getElementById('guideQuestion');
+    const st=document.getElementById('guideChatStatus');
+    const q=input.value.trim();if(!q)return;
+    const btn=document.getElementById('guideAsk');btn.disabled=true;btn.textContent='Thinking…';st.textContent='';
+    try{
+      const result=await askClubBattingGuide(q);input.value='';
+      const history=result?.messages||await loadClubGuideHistory();
+      document.getElementById('guideChatMessages').innerHTML=guideMessagesHtml(history);
+      document.getElementById('guideChatMessages').scrollTop=document.getElementById('guideChatMessages').scrollHeight;
+    }catch(e){st.textContent=e?.message||'The Guide could not answer just now.';}
+    btn.disabled=false;btn.textContent='Ask Guide';
+  };
+  document.getElementById('guideAsk').onclick=submitQuestion;
+  document.getElementById('guideQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();submitQuestion();}});
+  document.getElementById('guideHumanHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=false;document.getElementById('guideHumanHandoff').hidden=true;};
+  document.getElementById('guideCancelHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=true;document.getElementById('guideHumanHandoff').hidden=false;};
+  document.getElementById('guideSendHandoff').onclick=async()=>{
+    const reason=val('guideHandoffReason');
+    const {error}=await supabase.rpc('request_club_batting_guide_handoff',{p_club_id:club.id,p_reason:reason});
+    document.getElementById('guideHandoffBox').innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:'<div class="notice success compact"><strong>Request recorded.</strong><br>A person can pick up the conversation with the context already here.</div>';
+  };
+}
+
 /* v0.8.11: truthful Club Setup roadmap.
    Branding and People & Sign-up are ongoing setup tools; Playing Groups is roster
    administration and now lives under Players rather than the batting-system build. */
@@ -1648,12 +1810,14 @@ async function renderClubDashboard(){
     {data:entitlement},
     {data:players},
     {data:groups},
-    {data:structureVersions}
+    {data:structureVersions},
+    {data:trial}
   ]=await Promise.all([
     supabase.rpc('get_club_entitlement',{p_club_id:club.id}),
     supabase.from('players').select('id,active').eq('club_id',club.id).eq('active',true),
     supabase.from('playing_groups').select('id,active').eq('club_id',club.id).eq('active',true),
-    supabase.from('player_plan_structure_versions').select('id,version_number').eq('club_id',club.id).order('version_number',{ascending:false}).limit(1)
+    supabase.from('player_plan_structure_versions').select('id,version_number').eq('club_id',club.id).order('version_number',{ascending:false}).limit(1),
+    supabase.rpc('get_club_trial',{p_club_id:club.id})
   ]);
 
   const entitlementActive=entitlement?.active!==false;
@@ -1666,6 +1830,7 @@ async function renderClubDashboard(){
   const systemLive=philosophyPublished && howWeBatPublished && structurePublished;
   const hasSavedBranding=!!club.branding_updated_at || !!club.logo_data_url || !!club.website_url;
   const registeredPlayerCount=(players||[]).length;
+  const trialDaysLeft=trial?.ends_on?Math.max(0,Math.ceil((new Date(`${trial.ends_on}T23:59:59`).getTime()-Date.now())/86400000)):null;
 
   const philosophyState=philosophyPublished?'Published':philosophyDraft?'Final draft in progress':workshop?.status==='review'?'Reviewing contributions':workshop?.status==='collecting'?'Contributions open':'Ready to start';
   const howWeBatState=howWeBatPublished?'Published':howWeBatReady?'Ready for publication':howWeBatDraft?'In progress':philosophyDraft?'Ready to build':'After philosophy';
@@ -1704,10 +1869,11 @@ async function renderClubDashboard(){
   ];
 
   page.innerHTML=`
+    ${trial?`<section class="guide-trial-strip club-dashboard-trial"><div><strong>${trial.status==='conversion_requested'?'Club Trial · continuation requested':`Club Trial · ${trialDaysLeft} day${trialDaysLeft===1?'':'s'} remaining`}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · ${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year if the club chooses to continue</span></div>${isAdmin()&&trial.status==='active'?`<div class="btnrow"><button class="btn secondary compact-btn" id="continueClubTrial">Continue after trial</button><button class="btn ghost compact-btn" id="endClubTrial">End after trial</button></div>`:''}</section>`:''}
     <section class="card setup-collapsible">
       <div class="setup-collapsible-body">
         <div class="section-label">Club workflow</div>
-        <h2>Build the club system</h2>
+        <div class="setup-guide-head"><h2>Build the club system</h2><button class="btn ghost compact-btn" id="dashboardLearnClubBatting">Learn the whole process →</button></div>
         <div class="help" style="margin-bottom:14px"><strong>This is a suggested journey, not a checklist that locks the Admin in.</strong> Branding and People & Sign-up stay available at any time. The cricket build then runs naturally from Philosophy → How We Bat → Player Plan Structure → Publish.</div>
         <div class="club-workflow-list">
           ${workflow.map(s=>`<div class="club-workflow-step ${s.kind==='done'?'done':s.kind==='active'?'current':''}">
@@ -1778,6 +1944,7 @@ async function renderClubDashboard(){
     </section>
 
 
+    <div id="dashboardGuideInterventionSlot"></div>
 
     <details class="card setup-collapsible setup-commercial" style="margin-top:16px">
       <summary class="setup-collapsible-summary">
@@ -1791,7 +1958,20 @@ async function renderClubDashboard(){
       </div>
     </details>`;
 
+  document.getElementById('continueClubTrial')?.addEventListener('click',async()=>{
+    const btn=document.getElementById('continueClubTrial');btn.disabled=true;btn.textContent='Recording…';
+    const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:club.id,p_decision:'continue'});
+    if(error){btn.disabled=false;btn.textContent='Continue after trial';alert(error.message);return;}
+    await renderClubDashboard();
+  });
+  document.getElementById('endClubTrial')?.addEventListener('click',async()=>{
+    if(!confirm('End Club Batting when this Club Trial finishes? No payment will be taken.'))return;
+    const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:club.id,p_decision:'end'});
+    if(error){alert(error.message);return;}await renderClubDashboard();
+  });
   wireClubBrandingControls(page);
+  document.getElementById('dashboardLearnClubBatting')?.addEventListener('click',()=>openClubBattingGuideTopic('whole_process'));
+  renderGuideInterventionInto(document.getElementById('dashboardGuideInterventionSlot'));
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
   page.querySelector('[data-open-branding]')?.addEventListener('click',()=>{
     const card=page.querySelector('.club-branding-card');
@@ -2444,7 +2624,7 @@ async function renderWorkshop(){
     ensurePhilosophyScenarioSelection(scenarioResponses,defaultScenarioIds);
   }
 
-  let html=`${buildWorkspaceAudienceNotice()}<div class="workshop-flow-stack">`;
+  let html=`${buildWorkspaceAudienceNotice()}<div class="guide-context-bar"><span><strong>Philosophy Workshop</strong> · Independent responses first, then the Philosophy Lead brings the club position together.</span><button type="button" class="btn ghost compact-btn" id="workshopGuideLink">Show me how</button></div><div class="workshop-flow-stack">`;
 
   if(isAdmin()){
     html+=`<section class="card workshop-setup workshop-stage-card">
@@ -2734,6 +2914,7 @@ async function renderWorkshop(){
 
   html+=`</div>`;
   document.getElementById('page').innerHTML=html;
+  if(document.getElementById('workshopGuideLink'))document.getElementById('workshopGuideLink').onclick=()=>openClubBattingGuideTopic('philosophy_workshop');
 
   const applyModeUI=()=>{
     const mode=document.querySelector('input[name="workshopMode"]:checked')?.value||'solo';
@@ -4912,9 +5093,10 @@ function renderPublishedHowWeBat(){
       <div class="section-label">How We Bat</div>
       <h2>No How We Bat has been created yet.</h2>
       <p>${canBuild?'Choose the club philosophy in the Scenario Explorer first. Once a combination is selected, its player-facing How We Bat will appear here.':'The club has not published How We Bat yet.'}</p>
-      ${canBuild?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="openPhilosophyForHwb">Open Philosophy Workshop</button></div>':''}
+      ${canBuild?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="openPhilosophyForHwb">Open Philosophy Workshop</button><button class="btn ghost" id="emptyHowWeBatGuide">Show me how</button></div>':'<div class="btnrow" style="margin-top:14px"><button class="btn ghost" id="emptyHowWeBatGuide">What is How We Bat?</button></div>'}
     </section>`;
     if(document.getElementById('openPhilosophyForHwb'))document.getElementById('openPhilosophyForHwb').onclick=()=>{currentTab='workshop';renderTab();};
+    if(document.getElementById('emptyHowWeBatGuide'))document.getElementById('emptyHowWeBatGuide').onclick=()=>openClubBattingGuideTopic('how_we_bat');
     return;
   }
 
@@ -4925,6 +5107,7 @@ function renderPublishedHowWeBat(){
   const workingReady=canSeeWorking && snap.status==='ready';
 
   document.getElementById('page').innerHTML=`<div class="hwb-published-shell">
+    <div class="guide-context-bar"><span><strong>How We Bat</strong> · The club framework players can actually use.</span><button type="button" class="btn ghost compact-btn" id="howWeBatGuideLink">${canSeeWorking?'Show me how':'How this fits together'}</button></div>
     ${canSeeWorking?`<div class="published-version-note">Working How We Bat · ${workingReady?'🔒 locked for the season':'not locked yet'}</div>`:''}
     <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
       <div class="hwb-public-hero" style="padding:24px 38px 22px;min-height:0">
@@ -4947,6 +5130,7 @@ function renderPublishedHowWeBat(){
     ${!canSeeWorking && version?`<div class="published-version-note">Published with Club Philosophy v${esc(version.philosophy_version)} · ${new Date(version.published_at).toLocaleDateString()}</div>`:''}
   </div>`;
 
+  if(document.getElementById('howWeBatGuideLink'))document.getElementById('howWeBatGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_bat');
   document.querySelectorAll('[data-public-hwb-format]').forEach(b=>b.onclick=()=>{
     publishedHowWeBatFormat=b.dataset.publicHwbFormat;
     renderPublishedHowWeBat();
@@ -5390,9 +5574,10 @@ async function renderPlanStructure(){
       <div class="section-label">Player Plan Structure</div>
       <h2>Lock How We Bat first.</h2>
       <p>The Player Plan questions are generated from the club’s player-facing <strong>How We Bat</strong>. Finalise that first, then Club Batting can build the smallest useful set of prompts.</p>
-      ${lead?`<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="backToHowWeBat">${hasHowWeBatDraft?'Open How We Bat':'Open Philosophy Workshop'}</button></div>`:''}
+      <div class="btnrow" style="margin-top:14px">${lead?`<button class="btn secondary" id="backToHowWeBat">${hasHowWeBatDraft?'Open How We Bat':'Open Philosophy Workshop'}</button>`:''}<button class="btn ghost" id="lockedPlanStructureGuide">Show me how</button></div>
     </section>`;
     if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=hasHowWeBatDraft?'howwebat':'workshop';renderTab();};
+    if(document.getElementById('lockedPlanStructureGuide'))document.getElementById('lockedPlanStructureGuide').onclick=()=>openClubBattingGuideTopic('player_plan_structure');
     return;
   }
 
@@ -5459,6 +5644,7 @@ async function renderPlanStructure(){
     .plan-review-shell{max-width:980px;margin:0 auto}.plan-review-hero{padding:20px 22px}.plan-review-hero h1{margin:4px 0 7px}.plan-review-count{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.plan-review-count span{padding:6px 9px;border-radius:999px;background:var(--club-soft);font-size:9px;font-weight:900;color:var(--navy)}
   </style>
   <div class="plan-review-shell">
+    <div class="guide-context-bar"><span><strong>Player Plan Structure</strong> · Turn How We Bat into the questions each player answers about their own game.</span><button type="button" class="btn ghost compact-btn" id="planStructureGuideLink">Show me how</button></div>
     <section class="card plan-review-hero">
       <div class="section-label">Player Plan Structure</div>
       <h1>The questions players will build their plans from.</h1>
@@ -5477,6 +5663,7 @@ async function renderPlanStructure(){
     </section>
   </div>`;
 
+  if(document.getElementById('planStructureGuideLink'))document.getElementById('planStructureGuideLink').onclick=()=>openClubBattingGuideTopic('player_plan_structure');
   if(document.getElementById('editExactPlanQuestions'))document.getElementById('editExactPlanQuestions').onclick=()=>{playerPlanStructureManualEdit=true;renderPlanStructure();};
   if(document.getElementById('closePlanEditor'))document.getElementById('closePlanEditor').onclick=()=>{collectPlanStructureEditor();playerPlanStructureManualEdit=false;renderPlanStructure();};
   document.querySelectorAll('[data-plan-section]').forEach(b=>b.onclick=()=>{collectPlanStructureEditor();playerPlanStructureSection=b.dataset.planSection;renderPlanStructure();});
@@ -6864,7 +7051,8 @@ async function renderHowWeTrain(){
     formatAccordions=enabled.map(([format])=>renderClubTrainingFormatAccordion(format,snapshot)).join('');
   }
 
-  page.innerHTML=`<section class="card train-hero simple">
+  page.innerHTML=`<div class="guide-context-bar"><span><strong>How We Train</strong> · Turn the Player Plan into deliberate practice, then let match and training feedback shape what comes next.</span><button type="button" class="btn ghost compact-btn" id="howWeTrainGuideLink">Show me how</button></div>
+  <section class="card train-hero simple">
     <div class="section-label">How We Train</div>
     <h1>Train the game you want to take into the middle.</h1>
     <p>Your Player Plan should shape your training. Practice should make match-day decisions simpler, not give you more things to think about.</p>
@@ -6875,6 +7063,7 @@ async function renderHowWeTrain(){
   <div class="train-format-accordion-list">${formatAccordions}</div>
   ${feedbackAccordion}`;
 
+  if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;renderTab();});
 
   const rerenderHowWeTrainAt=async(targetId)=>{
@@ -7324,8 +7513,9 @@ async function renderFeedbackWorkspace(){
   if(feedbackWorkspaceSection==='recent')body=renderFeedbackRecent(data);
   if(feedbackWorkspaceSection==='add')body=renderFeedbackAdd(data);
 
-  page.innerHTML=`<section class="card feedback-hero"><div><div class="section-label">Feedback</div><h1>See what is worth talking about.</h1><p>Short player reflections and coach observations are compiled into useful conversations — then fed back into training.</p></div><div class="feedback-hero-count"><strong>${discussionPlayerCount}</strong><span>PLAYER${discussionPlayerCount===1?'':'S'} TO SPEAK TO</span></div></section><div class="feedback-tabs">${tabs.map(([k,l])=>`<button data-feedback-section="${k}" class="${feedbackWorkspaceSection===k?'active':''}">${esc(l)}</button>`).join('')}</div>${body}`;
+  page.innerHTML=`<section class="card feedback-hero"><div><div class="section-label">Feedback</div><h1>See what is worth talking about.</h1><p>Short player reflections and coach observations are compiled into useful conversations — then fed back into training.</p><button class="guide-inline-link" id="feedbackGuideLink">How Coach Conversations work →</button></div><div class="feedback-hero-count"><strong>${discussionPlayerCount}</strong><span>PLAYER${discussionPlayerCount===1?'':'S'} TO SPEAK TO</span></div></section><div class="feedback-tabs">${tabs.map(([k,l])=>`<button data-feedback-section="${k}" class="${feedbackWorkspaceSection===k?'active':''}">${esc(l)}</button>`).join('')}</div>${body}`;
 
+  document.getElementById('feedbackGuideLink')?.addEventListener('click',()=>openClubBattingGuideTopic('coach_conversations'));
   document.querySelectorAll('[data-feedback-section]').forEach(b=>b.onclick=()=>{feedbackWorkspaceSection=b.dataset.feedbackSection;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;feedbackWorkspaceDiscussionKey=null;renderFeedbackWorkspace();});
   document.querySelectorAll('[data-open-plan-from-feedback]').forEach(b=>b.onclick=()=>openPlayerPlanFromFeedback(b.dataset.openPlanFromFeedback));
   document.querySelectorAll('[data-view-feedback-player]').forEach(b=>b.onclick=()=>{feedbackWorkspacePlayerFilter=b.dataset.viewFeedbackPlayer;feedbackWorkspaceSection='recent';feedbackWorkspaceDiscussionKey=null;renderFeedbackWorkspace();});
@@ -7515,10 +7705,11 @@ async function openPlanDueDateDialog(defaultFormat=null){
         ${(groups||[]).map(g=>{const r=existing.get(g.id);return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff"><input type="checkbox" data-plan-date-group value="${g.id}"><span style="flex:1"><strong>${esc(g.name)}</strong>${r?`<small style="display:block;margin-top:2px;color:var(--muted)">${r.due_date?`Currently due ${esc(niceDate(r.due_date))}`:'Currently required now'}</small>`:'<small style="display:block;margin-top:2px;color:var(--muted)">No due date set</small>'}</span></label>`}).join('')}
       </div>
       <div class="field" style="margin-top:14px"><label>Required by</label><input id="planDateValue" type="date"></div>
-      <div class="btnrow" style="margin-top:16px"><button class="btn secondary" id="savePlanDates">Set / update date</button><button class="btn ghost" id="removePlanDates">Remove selected requirement</button><button class="btn ghost" id="closePlanDates">Close</button><span class="status" id="planDateStatus"></span></div>
+      <div class="btnrow" style="margin-top:16px"><button class="btn secondary" id="savePlanDates">Set / update date</button><button class="btn ghost" id="removePlanDates">Remove selected requirement</button><button class="btn ghost" id="planDatesGuide">Show me how</button><button class="btn ghost" id="closePlanDates">Close</button><span class="status" id="planDateStatus"></span></div>
     </div>`;
 
     dialog.querySelector('#planDateFormat').onchange=e=>renderBody(e.target.value);
+    dialog.querySelector('#planDatesGuide').onclick=()=>{dialog.close();openClubBattingGuideTopic('plan_dates');};
     dialog.querySelector('#closePlanDates').onclick=()=>dialog.close();
     dialog.querySelector('#savePlanDates').onclick=async()=>{
       const selected=[...dialog.querySelectorAll('[data-plan-date-group]:checked')].map(x=>x.value);
@@ -8628,6 +8819,7 @@ async function renderMyPlan(){
         <div class="section-label">Your Player Plan</div>
         <h2>Start with Core. Then build the formats you play.</h2>
         <div class="help">Core is your foundation. After that, each format can be completed when it becomes relevant. Coaches may set due dates for particular Playing Groups. Your How We Train for a format is created only after Core and that format are complete.</div>
+        <div class="btnrow compact" style="margin-top:10px"><button type="button" class="btn ghost compact-btn" id="myPlanGuideLink">Show me how</button></div>
       </div>
       <span class="workflow-status ${completedRequiredSections===requiredSections.length?'approved':''}">
         ${completedRequiredSections===requiredSections.length
@@ -8759,6 +8951,7 @@ async function renderMyPlan(){
 
   document.querySelectorAll('[data-plan-date-format]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openPlanDueDateDialog(b.dataset.planDateFormat);});
 
+  if(document.getElementById('myPlanGuideLink'))document.getElementById('myPlanGuideLink').onclick=()=>openClubBattingGuideTopic('player_plan');
   document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=async()=>{
     await savePlayerPlanProgressSilently();
     builderSection=b.dataset.builderSection;
@@ -8967,9 +9160,8 @@ async function renderSalesProspectRoute(token){
     return;
   }
 
-  if(['interested','maybe_later','wrong_contact','declined','do_not_contact'].includes(p.status)){
+  if(['maybe_later','wrong_contact','declined','do_not_contact'].includes(p.status)){
     const messages={
-      interested:['Thanks — we’d like to keep talking.','Your response has been recorded. We’ll follow up with the club about the next step.'],
       maybe_later:['Thanks — we’ll leave it there for now.','We’ve recorded that the timing is not right.'],
       wrong_contact:['Thanks for pointing us in the right direction.','We won’t keep prospecting this address.'],
       declined:['Thanks for letting us know.','We won’t send further prospecting emails to this address.'],
@@ -8981,52 +9173,98 @@ async function renderSalesProspectRoute(token){
   }
 
   const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
-  app.innerHTML=`<div class="prospect-shell sales-response-shell">
-    <section class="prospect-hero">
+  const interested=p.status==='interested'||p.status==='onboarding';
+  app.innerHTML=`<div class="prospect-shell sales-response-shell sales-guide-shell">
+    <section class="prospect-hero sales-prospect-hero">
       <div class="section-label">Club Batting</div>
-      <h1>${esc(p.club_name)}</h1>
-      ${place?`<p class="help">${esc(place)}</p>`:''}
-      <p><strong>Club Batting</strong> connects <strong>how the club wants to bat</strong> with each player’s <strong>Player Plan, targeted training and simple coaching feedback</strong>.</p>
+      <h1>A different way to develop batting across ${esc(p.club_name)}</h1>
+      ${place?`<p class="prospect-location">${esc(place)}</p>`:''}
+      <p>Most clubs already have good coaches, good ideas and individual conversations. The difficult part is making the batting thinking <strong>consistent across the club</strong> without making every batter play the same way.</p>
+      <p><strong>Club Batting gives the club a shared framework while protecting what makes each batter effective.</strong></p>
     </section>
-    <section class="card prospect-card">
-      <h2>Is this worth exploring for your club?</h2>
-      <p class="help">This is not a sign-up or payment screen. It simply tells us whether to keep the conversation going.</p>
-      <div class="prospect-response-actions">
-        <button class="btn secondary" data-sales-response="interested">Yes — I’m interested</button>
-        <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
-        <button class="btn ghost" id="wrongContactBtn">I’m not the right person</button>
-        <button class="btn ghost" data-sales-response="declined">Not interested</button>
-      </div>
-      <div id="wrongContactBox" class="handoff-box" style="display:none;margin-top:16px">
-        <div class="section-label">Right club contact</div>
-        <p class="help">If you know who looks after cricket/coaching decisions, you can point us in the right direction. This is optional.</p>
-        <div class="field"><label>Name</label><input id="salesReferralName"></div>
-        <div class="field"><label>Email</label><input id="salesReferralEmail" type="email"></div>
-        <div class="btnrow"><button class="btn secondary" id="sendSalesReferral">Send referral</button><button class="btn ghost" id="cancelSalesReferral">Cancel</button></div>
-      </div>
-      <div id="salesResponseStatus" class="help"></div>
+
+    <section class="sales-product-journey">
+      <article><b>1</b><span>HOW WE BAT</span><strong>Make the club’s batting thinking explicit.</strong></article>
+      <article><b>2</b><span>MY PLAYER PLAN</span><strong>Each batter translates it into their own game.</strong></article>
+      <article><b>3</b><span>HOW WE TRAIN</span><strong>Train the decisions and skills that matter to that player.</strong></article>
+      <article><b>4</b><span>MATCH + TRAINING FEEDBACK</span><strong>Use what happens to shape what comes next.</strong></article>
     </section>
+
+    <div class="sales-guide-grid">
+      <section class="card prospect-card sales-guide-card">
+        <div class="section-label">Ask Club Batting</div>
+        <h2>How would this work at our club?</h2>
+        <p class="help">Ask naturally. The Guide can explain the product, the setup process, Player Plans, coaching feedback, Club Trials and what happens next.</p>
+        <div id="salesGuideMessages" class="guide-chat-messages"><div class="guide-chat-empty">e.g. “We already have batting coaches. What does this add?”</div></div>
+        <div class="guide-chat-compose"><textarea id="salesGuideQuestion" rows="3" placeholder="Ask a question about Club Batting…"></textarea><button class="btn secondary" id="salesGuideAsk">Ask Guide</button></div>
+        <div id="salesGuideStatus" class="help"></div>
+        <div class="guide-human-handoff"><button class="guide-inline-link" id="salesHumanHandoff">I’d rather speak to someone</button><div id="salesHandoffBox" hidden><textarea id="salesHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="salesSendHandoff">Request a conversation</button><button class="btn ghost" id="salesCancelHandoff">Cancel</button></div></div></div>
+      </section>
+
+      <section class="card prospect-card sales-response-card">
+        ${interested?`<div class="notice success"><strong>Thanks — ${esc(p.club_name)} is marked interested.</strong><br>You can keep asking the Guide questions here. If a person is needed, use the handoff option and the conversation context stays attached to the club.</div>`:`<h2>Is this worth exploring for your club?</h2><p class="help">This is not a sign-up or payment screen. It simply tells us whether to keep the conversation going.</p>
+        <div class="prospect-response-actions">
+          <button class="btn secondary" data-sales-response="interested">Yes — I’m interested</button>
+          <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
+          <button class="btn ghost" id="wrongContactBtn">I’m not the right person</button>
+          <button class="btn ghost" data-sales-response="declined">Not interested</button>
+        </div>
+        <div id="wrongContactBox" class="handoff-box" style="display:none;margin-top:16px">
+          <div class="section-label">Right club contact</div>
+          <p class="help">If you know who looks after cricket/coaching decisions, you can point us in the right direction. This is optional.</p>
+          <div class="field"><label>Name</label><input id="salesReferralName"></div>
+          <div class="field"><label>Email</label><input id="salesReferralEmail" type="email"></div>
+          <div class="btnrow"><button class="btn secondary" id="sendSalesReferral">Send referral</button><button class="btn ghost" id="cancelSalesReferral">Cancel</button></div>
+        </div>`}
+        <div id="salesResponseStatus" class="help"></div>
+        <div class="sales-trial-note"><strong>When a club decides to try it:</strong><span>The normal offer is a full 60-day Club Trial. The club uses the real product before deciding whether to continue. Nothing is automatically charged at the end.</span></div>
+      </section>
+    </div>
   </div>`;
+
+  const refreshGuideHistory=async()=>{
+    const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'history',lead_token:token}});
+    if(e||data?.error)return;
+    document.getElementById('salesGuideMessages').innerHTML=guideMessagesHtml(data?.messages||[]);
+    document.getElementById('salesGuideMessages').scrollTop=document.getElementById('salesGuideMessages').scrollHeight;
+  };
+  await refreshGuideHistory();
+
+  const askGuide=async()=>{
+    const q=val('salesGuideQuestion').trim();if(!q)return;
+    const btn=document.getElementById('salesGuideAsk'),st=document.getElementById('salesGuideStatus');
+    btn.disabled=true;btn.textContent='Thinking…';st.textContent='';
+    const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'ask',lead_token:token,question:q}});
+    if(e||data?.error){st.textContent=data?.error||e?.message||'The Guide could not answer just now.';}
+    else{document.getElementById('salesGuideQuestion').value='';document.getElementById('salesGuideMessages').innerHTML=guideMessagesHtml(data?.messages||[]);document.getElementById('salesGuideMessages').scrollTop=document.getElementById('salesGuideMessages').scrollHeight;}
+    btn.disabled=false;btn.textContent='Ask Guide';
+  };
+  document.getElementById('salesGuideAsk').onclick=askGuide;
+  document.getElementById('salesGuideQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();askGuide();}});
+  document.getElementById('salesHumanHandoff').onclick=()=>{document.getElementById('salesHandoffBox').hidden=false;document.getElementById('salesHumanHandoff').hidden=true;};
+  document.getElementById('salesCancelHandoff').onclick=()=>{document.getElementById('salesHandoffBox').hidden=true;document.getElementById('salesHumanHandoff').hidden=false;};
+  document.getElementById('salesSendHandoff').onclick=async()=>{
+    const box=document.getElementById('salesHandoffBox');
+    const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'handoff',lead_token:token,reason:val('salesHandoffReason')}});
+    box.innerHTML=e||data?.error?`<div class="notice compact">${esc(data?.error||e?.message||'Could not record the request.')}</div>`:'<div class="notice success compact"><strong>Request recorded.</strong><br>A person can pick this up with the conversation context already attached.</div>';
+  };
 
   const respond=async(response,referralName='',referralEmail='')=>{
     const st=document.getElementById('salesResponseStatus');st.textContent='Saving…';
-    const {data,error:e}=await supabase.rpc('respond_sales_prospect',{
-      p_token:token,p_response:response,p_referral_name:referralName,p_referral_email:referralEmail
-    });
+    const {error:e}=await supabase.rpc('respond_sales_prospect',{p_token:token,p_response:response,p_referral_name:referralName,p_referral_email:referralEmail});
     if(e){st.textContent=e.message;return;}
-    const copy=response==='interested'
-      ?['Thanks — we’d like to keep talking.','Your response has been recorded. We’ll follow up with the club about the next step.']
-      :response==='maybe_later'
-        ?['Thanks — we’ll leave it there for now.','We’ve recorded that the timing is not right.']
-        :response==='wrong_contact'
-          ?[referralEmail?'Thanks — that helps.':'Thanks for letting us know.',referralEmail?'We’ll contact the person you nominated instead.':'We won’t keep prospecting this address.']
-          :['Thanks for letting us know.','We won’t send further prospecting emails to this address.'];
+    if(response==='interested'){await renderSalesProspectRoute(token);return;}
+    const copy=response==='maybe_later'
+      ?['Thanks — we’ll leave it there for now.','We’ve recorded that the timing is not right.']
+      :response==='wrong_contact'
+        ?[referralEmail?'Thanks — that helps.':'Thanks for letting us know.',referralEmail?'We’ll contact the person you nominated instead.':'We won’t keep prospecting this address.']
+        :['Thanks for letting us know.','We won’t send further prospecting emails to this address.'];
     app.innerHTML=`<div class="login" style="max-width:700px"><div class="success-mark">✓</div><h1>${esc(copy[0])}</h1><p>${esc(copy[1])}</p></div>`;
   };
   document.querySelectorAll('[data-sales-response]').forEach(b=>b.onclick=()=>respond(b.dataset.salesResponse));
-  document.getElementById('wrongContactBtn').onclick=()=>{document.getElementById('wrongContactBox').style.display='block';document.getElementById('wrongContactBtn').style.display='none';};
-  document.getElementById('cancelSalesReferral').onclick=()=>{document.getElementById('wrongContactBox').style.display='none';document.getElementById('wrongContactBtn').style.display='';};
-  document.getElementById('sendSalesReferral').onclick=()=>respond('wrong_contact',val('salesReferralName'),val('salesReferralEmail'));
+  document.getElementById('wrongContactBtn')?.addEventListener('click',()=>{document.getElementById('wrongContactBox').style.display='block';document.getElementById('wrongContactBtn').style.display='none';});
+  document.getElementById('cancelSalesReferral')?.addEventListener('click',()=>{document.getElementById('wrongContactBox').style.display='none';document.getElementById('wrongContactBtn').style.display='';});
+  document.getElementById('sendSalesReferral')?.addEventListener('click',()=>respond('wrong_contact',val('salesReferralName'),val('salesReferralEmail')));
 }
 
 async function renderProspectRoute(token){
@@ -10007,9 +10245,9 @@ async function renderPlatformProspects(){
   page.innerHTML=`
   <section class="platform-flow-card">
     <div class="section-label">Prospect pipeline</div>
-    <h2>Reviewed club → Contact → Interested → Onboarding</h2>
+    <h2>Reviewed club → Contact → Interested → Club Trial</h2>
     <p><strong>Market Discovery</strong> maps the cricket world. <strong>Prospects</strong> contains only clubs we deliberately choose to approach.</p>
-    <div class="pipeline-strip"><span>SELECT</span><b>→</b><span>CONTACT</span><b>→</b><span>INTERESTED</span><b>→</b><span>ONBOARD</span><b>→</b><span>ACTIVE</span></div>
+    <div class="pipeline-strip"><span>SELECT</span><b>→</b><span>CONTACT</span><b>→</b><span>INTERESTED</span><b>→</b><span>60-DAY TRIAL</span><b>→</b><span>PAID</span></div>
     <div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div>
   </section>
 
@@ -10072,15 +10310,26 @@ async function renderPlatformProspects(){
 
 async function renderPlatformSalesProspectDetail(p){
   const page=document.getElementById('platformPage');
-  const {data:events}=await supabase.from('sales_prospect_events').select('*').eq('sales_prospect_id',p.id).order('created_at',{ascending:false}).limit(20);
+  const [{data:events},{data:trial},{data:guideThreads}]=await Promise.all([
+    supabase.from('sales_prospect_events').select('*').eq('sales_prospect_id',p.id).order('created_at',{ascending:false}).limit(30),
+    supabase.from('club_trials').select('*').eq('sales_prospect_id',p.id).maybeSingle(),
+    supabase.from('club_batting_guide_threads').select('id,status,human_handoff_reason,updated_at').eq('sales_prospect_id',p.id).order('updated_at',{ascending:false}).limit(5)
+  ]);
   const publicLink=`${location.origin}${location.pathname}?lead=${p.public_token}`;
   const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
-  const canContact=!!p.contact_email&&!p.do_not_contact&&!['declined','do_not_contact','onboarding'].includes(p.status);
+  const canFirstContact=!!p.contact_email&&!p.do_not_contact&&!['contacted','interested','declined','do_not_contact','onboarding'].includes(p.status);
+  const daysSinceContact=p.last_contacted_at?Math.floor((Date.now()-new Date(p.last_contacted_at).getTime())/86400000):null;
+  const hasFollowUp=(events||[]).some(e=>e.event_type==='single_follow_up_queued');
+  const canFollowUp=p.status==='contacted'&&daysSinceContact>=7&&!hasFollowUp&&!p.do_not_contact;
+  const handoff=(guideThreads||[]).find(t=>t.status==='handoff_requested');
+  const trialDays=trial?.ends_on&&trial?.starts_on?Math.max(1,Math.round((new Date(`${trial.ends_on}T12:00:00`)-new Date(`${trial.starts_on}T12:00:00`))/86400000)+1):null;
+
   page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backSalesProspects">← Prospects</button></div>
+    ${handoff?`<section class="admin-card guide-handoff-alert"><div><div class="section-label">Human handoff requested</div><h2>${esc(p.club_name)} would like to speak to someone.</h2><p>${esc(handoff.human_handoff_reason||'No reason supplied. Review the Guide conversation before contacting the club.')}</p></div></section>`:''}
     <div class="grid sales-detail-grid">
       <section class="admin-card">
         <div class="section-label">Prospect</div><h2>${esc(p.club_name)}</h2>
-        <div class="detail-grid"><div><span>Status</span><strong>${esc(String(p.status||'').replaceAll('_',' '))}</strong></div><div><span>Location</span><strong>${esc(place||'—')}</strong></div><div><span>Likely route</span><strong>${esc(String(p.intended_route||'standard').replaceAll('_',' '))}</strong></div><div><span>Last contacted</span><strong>${esc(p.last_contacted_at?niceDate(p.last_contacted_at):'Not yet')}</strong></div></div>
+        <div class="detail-grid"><div><span>Status</span><strong>${esc(String(p.status||'').replaceAll('_',' '))}</strong></div><div><span>Location</span><strong>${esc(place||'—')}</strong></div><div><span>Commercial path</span><strong>${trial?'Club Trial':esc(String(p.intended_route||'standard').replaceAll('_',' '))}</strong></div><div><span>Last contacted</span><strong>${esc(p.last_contacted_at?niceDate(p.last_contacted_at):'Not yet')}</strong></div></div>
         ${p.website_url?`<p><a href="${esc(p.website_url)}" target="_blank" rel="noopener">Open club website ↗</a></p>`:''}
         ${p.contact_source_url?`<p class="help">Contact source: <a href="${esc(p.contact_source_url)}" target="_blank" rel="noopener">public source ↗</a></p>`:''}
         <div class="field"><label>Contact name</label><input id="editSalesContactName" value="${esc(p.contact_name||'')}"></div>
@@ -10090,19 +10339,24 @@ async function renderPlatformSalesProspectDetail(p){
         <div class="btnrow"><button class="btn ghost" id="saveSalesProspect">Save details</button></div>
       </section>
       <section class="admin-card">
-        <div class="section-label">Next action</div><h2>${p.status==='interested'?'Ready for onboarding':'Prospect outreach'}</h2>
-        ${p.status==='interested'?'<div class="notice success"><strong>The club has indicated interest.</strong><br>Start formal onboarding and choose the actual Beta / subscription terms.</div>':''}
-        ${canContact?`<button class="btn secondary" id="queueSalesIntro">${p.status==='contacted'?'Queue another introduction':'Queue introduction'}</button>`:''}
+        <div class="section-label">Next action</div><h2>${trial?'Club Trial':p.status==='interested'?'Ready for a Club Trial':'Prospect outreach'}</h2>
+        ${p.status==='interested'&&!trial?'<div class="notice success"><strong>The club has indicated interest.</strong><br>The normal next step is the full 60-day Club Trial — not another Beta.</div>':''}
+        ${trial?`<div class="trial-admin-card"><span class="status-pill">${esc(String(trial.status).replaceAll('_',' '))}</span><strong>${trialDays||60}-day Club Trial</strong><p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}</p><p>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year only if the club explicitly chooses to continue.</p></div>`:''}
+        ${canFirstContact?'<button class="btn secondary" id="queueSalesIntro">Queue introduction</button>':''}
+        ${canFollowUp?'<button class="btn ghost" id="queueSalesFollowUp">Queue one follow-up</button>':''}
+        ${p.status==='contacted'&&!canFollowUp&&!hasFollowUp&&daysSinceContact!==null&&daysSinceContact<7?`<div class="help">One follow-up becomes available after 7 days. ${7-daysSinceContact} day${7-daysSinceContact===1?'':'s'} to go.</div>`:''}
+        ${hasFollowUp?'<div class="help">The single follow-up has already been used. No drip sequence will follow.</div>':''}
         ${!p.contact_email?'<div class="notice">Add a public club contact email before outreach can be queued.</div>':''}
         ${p.do_not_contact||['declined','do_not_contact'].includes(p.status)?'<div class="notice"><strong>Do not contact.</strong> This email is suppressed from prospecting.</div>':''}
-        <div class="field"><label>Response link</label><input id="salesResponseLink" value="${esc(publicLink)}" readonly></div>
+        <div class="field"><label>Public overview / Guide link</label><input id="salesResponseLink" value="${esc(publicLink)}" readonly></div>
         <button class="btn ghost" id="copySalesLink">Copy response link</button>
         <div class="quick-status-actions">
           <button class="btn ghost" data-sales-status="interested">Mark interested</button>
           <button class="btn ghost" data-sales-status="maybe_later">Maybe later</button>
           <button class="btn ghost" data-sales-status="declined">Not interested</button>
         </div>
-        ${!p.onboarding_prospect_id?'<button class="btn secondary fullwidth" id="startSalesOnboarding">Start onboarding →</button>':'<div class="notice success"><strong>Moved to Onboarding.</strong></div>'}
+        ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id?'<button class="btn secondary fullwidth" id="startSalesTrial">Start 60-day Club Trial →</button><button class="guide-inline-link" id="startCustomOnboarding">Use custom onboarding instead</button>':''}
+        ${p.onboarding_prospect_id&&!trial?'<div class="notice success"><strong>Moved to Onboarding.</strong></div>':''}
         <div id="salesActionStatus" class="help"></div>
       </section>
     </div>
@@ -10118,18 +10372,30 @@ async function renderPlatformSalesProspectDetail(p){
     const {error}=await supabase.from('sales_prospects').update(patch).eq('id',p.id);
     if(error){alert(error.message);return;}renderPlatformProspects();
   };
-  if(document.getElementById('queueSalesIntro'))document.getElementById('queueSalesIntro').onclick=async()=>{
+  document.getElementById('queueSalesIntro')?.addEventListener('click',async()=>{
     const st=document.getElementById('salesActionStatus');st.textContent='Queuing…';
     const {error}=await supabase.rpc('platform_queue_sales_intro',{p_sales_prospect_id:p.id});
     if(error){st.textContent=error.message;return;}st.textContent='Introduction queued ✓';await kickLiveEmailDelivery();setTimeout(()=>renderPlatformProspects(),500);
-  };
+  });
+  document.getElementById('queueSalesFollowUp')?.addEventListener('click',async()=>{
+    const st=document.getElementById('salesActionStatus');st.textContent='Queuing follow-up…';
+    const {error}=await supabase.rpc('platform_queue_sales_follow_up',{p_sales_prospect_id:p.id});
+    if(error){st.textContent=error.message;return;}st.textContent='Single follow-up queued ✓';await kickLiveEmailDelivery();setTimeout(()=>renderPlatformProspects(),500);
+  });
   document.querySelectorAll('[data-sales-status]').forEach(b=>b.onclick=async()=>{
     const {error}=await supabase.rpc('platform_set_sales_prospect_status',{p_sales_prospect_id:p.id,p_status:b.dataset.salesStatus});
     if(error){alert(error.message);return;}renderPlatformProspects();
   });
-  if(document.getElementById('startSalesOnboarding'))document.getElementById('startSalesOnboarding').onclick=()=>{
-    platformOnboardingSeed=p;platformSelectedProspectId=null;platformView='onboarding';renderPlatformConsole();
-  };
+  document.getElementById('startSalesTrial')?.addEventListener('click',async()=>{
+    const st=document.getElementById('salesActionStatus'),btn=document.getElementById('startSalesTrial');
+    btn.disabled=true;btn.textContent='Creating Club Trial…';st.textContent='';
+    const {data,error}=await supabase.rpc('platform_start_sales_trial',{p_sales_prospect_id:p.id,p_subscription_calendar:'australia'});
+    if(error){btn.disabled=false;btn.textContent='Start 60-day Club Trial →';st.textContent=error.message;return;}
+    const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
+    st.innerHTML=`Club Trial created ✓ · ${esc(niceDate(data.starts_on))} – ${esc(niceDate(data.ends_on))}<br><input value="${esc(link)}" readonly style="margin-top:8px">`;
+    await kickLiveEmailDelivery();setTimeout(()=>renderPlatformProspects(),700);
+  });
+  document.getElementById('startCustomOnboarding')?.addEventListener('click',()=>{platformOnboardingSeed=p;platformSelectedProspectId=null;platformView='onboarding';renderPlatformConsole();});
 }
 
 async function loadSubscriptionCalendars(){
@@ -10391,15 +10657,16 @@ async function openBetaReonboardDialog(targetClub){
 
 async function renderPlatformActiveClubs(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading active clubs…</div>';
-  const [{data:subs,error:subsError},{data:clubs,error:clubsError},{data:calendars,error:calendarError},{data:settings,error:settingsError},{data:betaArchives,error:archiveError}]=await Promise.all([
+  const [{data:subs,error:subsError},{data:clubs,error:clubsError},{data:calendars,error:calendarError},{data:settings,error:settingsError},{data:betaArchives,error:archiveError},{data:trials,error:trialError}]=await Promise.all([
     supabase.from('club_subscriptions').select('*,clubs(id,name,archived_at)').in('status',['active','grace']).order('active_until'),
     supabase.from('clubs').select('id,name,subscription_calendar,season_start,season_end,archived_at').order('name'),
     loadSubscriptionCalendars(),
     supabase.from('platform_settings').select('*').eq('singleton',true).single(),
-    supabase.from('club_beta_reonboarding_archives').select('*').order('started_at',{ascending:false}).limit(30)
+    supabase.from('club_beta_reonboarding_archives').select('*').order('started_at',{ascending:false}).limit(30),
+    supabase.from('club_trials').select('*').order('ends_on',{ascending:true})
   ]);
 
-  const loadError=subsError||clubsError||calendarError||settingsError||archiveError;
+  const loadError=subsError||clubsError||calendarError||settingsError||archiveError||trialError;
   if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
 
   const visibleSubs=(subs||[]).filter(s=>!s.clubs?.archived_at);
@@ -10407,6 +10674,8 @@ async function renderPlatformActiveClubs(){
   const calendarMap=new Map((calendars||[]).map(c=>[c.code,c]));
   const activeIds=new Set(visibleSubs.map(s=>s.club_id));
   const unactivated=liveClubs.filter(c=>!activeIds.has(c.id));
+  const trialMap=new Map((trials||[]).filter(t=>t.club_id).map(t=>[t.club_id,t]));
+  const activeTrials=(trials||[]).filter(t=>['offered','active','conversion_requested'].includes(t.status));
   const canCommercial=['owner','commercial_admin'].includes(platformRole);
   const canReonboard=platformRole==='owner';
   const today=new Date().toISOString().slice(0,10);
@@ -10419,7 +10688,7 @@ async function renderPlatformActiveClubs(){
       const cal=calendarMap.get(s.subscription_calendar);
       const renewal=nextDayIso(s.season_end);
       return `<div class="active-club-row">
-        <div><strong>${esc(s.clubs?.name||'Club')}</strong><small>${esc(cal?.label||s.subscription_calendar||'Club Year')} · Club Year ${esc(niceDate(s.season_start))} – ${esc(niceDate(s.season_end))} · annual renewal ${esc(niceDate(renewal))}</small></div>
+        <div><strong>${esc(s.clubs?.name||'Club')}</strong><small>${esc(cal?.label||s.subscription_calendar||'Club Year')} · Club Year ${esc(niceDate(s.season_start))} – ${esc(niceDate(s.season_end))} · annual renewal ${esc(niceDate(renewal))}</small>${trialMap.get(s.club_id)?`<small class="trial-inline-status"><b>Club Trial · ${esc(String(trialMap.get(s.club_id).status).replaceAll('_',' '))}</b> · ${esc(niceDate(trialMap.get(s.club_id).starts_on))} – ${esc(niceDate(trialMap.get(s.club_id).ends_on))}</small>`:''}</div>
         <div class="active-club-controls">
           <label>Rate reduction %<input data-sub-adjust="${s.club_id}" type="number" min="0" max="100" value="${esc(s.adjustment_percent)}"><small>0 = full price · 100 = free</small></label>
           <label>Special rate ends<input data-sub-adjend="${s.club_id}" type="date" value="${esc(s.adjustment_end?String(s.adjustment_end).slice(0,10):'')}"></label>
@@ -10431,6 +10700,8 @@ async function renderPlatformActiveClubs(){
       </div>`;
     }).join('')||'<div class="notice">No commercially activated clubs yet.</div>'}</div>
   </section>
+
+  ${activeTrials.length?`<section class="admin-card" style="margin-top:16px"><div class="section-label">Club Trials</div><h2>${activeTrials.length} current trial${activeTrials.length===1?'':'s'}</h2><div class="message-list">${activeTrials.map(t=>`<div class="message-row"><div><strong>${esc((liveClubs.find(c=>c.id===t.club_id)?.name)||'Trial club')}</strong><small>${esc(niceDate(t.starts_on))} – ${esc(niceDate(t.ends_on))} · ${esc(money(t.annual_price_cents,t.currency||'AUD'))}/year if continued</small></div><div><span class="status-pill">${esc(String(t.status).replaceAll('_',' '))}</span></div></div>`).join('')}</div></section>`:''}
 
   ${betaArchives?.length?`<details class="admin-card" style="margin-top:16px"><summary><strong>Beta archives</strong> · ${betaArchives.length}</summary><div class="help" style="margin-top:12px">These are retired pilot clubs retained for audit/reference. They are hidden from normal club switching and are not part of the live Beta.</div><div class="message-list" style="margin-top:12px">${betaArchives.map(a=>`<div class="message-row"><div><strong>${esc(a.original_name)}</strong><small>Archived ${esc(niceDate(a.started_at))} · invitation ${esc(a.contact_email)} · ${a.replacement_club_id?'replacement club activated':'onboarding in progress'}</small></div><div><span class="status-pill">${a.replacement_club_id?'Completed':'Beta onboarding'}</span></div></div>`).join('')}</div></details>`:''}
 
@@ -10593,12 +10864,13 @@ async function renderPlatformSettings(){
   const canCommercial=['owner','commercial_admin'].includes(platformRole);
   page.innerHTML=`<section class="admin-card form-wide"><div class="section-label">Platform defaults</div><h2>Commercial settings</h2><div class="form-grid">
     <div class="field"><label>Standard annual club price (${esc(s.currency)})</label><input id="settingPrice" type="number" step="0.01" value="${(s.standard_season_price_cents/100).toFixed(2)}" ${canCommercial?'':'disabled'}><small>This is the full 12-month Club Year price before any private rate reduction.</small></div>
+    <div class="field"><label>Full Club Trial length (days)</label><input id="settingTrialDays" type="number" min="1" max="180" value="${Number(s.club_trial_days||60)}" ${canCommercial?'':'disabled'}><small>Default launch model: full product, no payment upfront, explicit decision at the end.</small></div>
     <div class="field"><label>Minimum days before renewal for a pro-rata term</label><input id="settingMinDays" type="number" value="${s.minimum_prorata_days}" ${canCommercial?'':'disabled'}><small>If fewer days remain, those days are included and the club is charged for the next full Club Year instead.</small></div>
     <div class="field"><label>Payment grace period</label><input id="settingGrace" type="number" value="${s.payment_grace_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Payment mode</label><select id="settingMode" ${canCommercial?'':'disabled'}><option value="prototype" ${s.payment_mode==='prototype'?'selected':''}>Prototype — simulate payment</option><option value="live" ${s.payment_mode==='live'?'selected':''}>Live provider</option></select></div>
     <div class="field"><label>Payment provider</label><select id="settingPaymentProvider" ${canCommercial?'':'disabled'}><option value="stripe" ${(s.payment_provider||'stripe')==='stripe'?'selected':''}>Stripe</option></select><small>Hosted Stripe Checkout / invoices. Card data never touches this app.</small></div>
-  </div></section>
+  </div><div class="notice"><strong>Club Batting Guide policy:</strong> tutorials are available on demand and in context. Proactive guidance only appears when a meaningful adoption gap is detected. Guide email escalation remains disabled in v0.8.48.</div></section>
 
   <section class="admin-card form-wide"><div class="section-label">Market discovery support</div><h2>Search fallback provider</h2><div class="form-grid">
     <div class="field"><label>Discovery provider</label><select id="settingDiscoveryProvider" ${canCommercial?'':'disabled'}><option value="brave" ${(s.discovery_provider||'brave')==='brave'?'selected':''}>Brave Search API</option></select><small>Official cricket directories are primary. Brave resolves association/club websites and fills gaps. The key stays in Supabase Edge Function Secrets as <strong>BRAVE_SEARCH_API_KEY</strong>.</small></div>
@@ -10660,7 +10932,7 @@ async function renderPlatformSettings(){
       ? ((s.email_mode==='live'&&s.email_live_from)?s.email_live_from:new Date().toISOString())
       : s.email_live_from;
     const {error}=await supabase.from('platform_settings').update({
-      standard_season_price_cents:Math.round(Number(val('settingPrice'))*100),minimum_prorata_days:Number(val('settingMinDays')),
+      standard_season_price_cents:Math.round(Number(val('settingPrice'))*100),club_trial_days:Number(val('settingTrialDays')||60),minimum_prorata_days:Number(val('settingMinDays')),
       payment_grace_days:Number(val('settingGrace')),commercial_adjustment_warning_days:Number(val('settingWarn')),payment_mode:document.getElementById('settingMode').value,
       payment_provider:document.getElementById('settingPaymentProvider').value,discovery_provider:document.getElementById('settingDiscoveryProvider').value,
       email_mode:newEmailMode,email_provider:document.getElementById('settingEmailProvider').value,
