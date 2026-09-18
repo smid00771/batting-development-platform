@@ -1,4 +1,4 @@
-// Club Batting v0.8.48 — Club Trial + Club Batting Guide
+// Club Batting v0.8.49 — automatic Club Trial onboarding
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -9260,6 +9260,8 @@ async function renderSalesProspectRoute(token){
 
   const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
   const interested=p.status==='interested'||p.status==='onboarding';
+  const trialInvitationQueued=p.status==='onboarding';
+  const trialActive=!!p.trial_status&&p.trial_status!=='offered';
   app.innerHTML=`<div class="prospect-shell sales-response-shell sales-guide-shell">
     <section class="prospect-hero sales-prospect-hero">
       <div class="section-label">Club Batting</div>
@@ -9288,7 +9290,7 @@ async function renderSalesProspectRoute(token){
       </section>
 
       <section class="card prospect-card sales-response-card">
-        ${interested?`<div class="notice success"><strong>Thanks — ${esc(p.club_name)} is marked interested.</strong><br>You can keep asking the Guide questions here. If a person is needed, use the handoff option and the conversation context stays attached to the club.</div>`:`<h2>Is this worth exploring for your club?</h2><p class="help">This is not a sign-up or payment screen. It simply tells us whether to keep the conversation going.</p>
+        ${interested?`<div class="notice success"><strong>${trialActive?'Your Club Trial is active.':trialInvitationQueued?'Your Club Trial invitation is on its way.':`Thanks — ${esc(p.club_name)} is marked interested.`}</strong><br>${trialActive?'The club now has the complete Club Batting product for its full trial period. Nothing is automatically charged.':trialInvitationQueued?'A secure activation invitation has been queued for the Club Contact. The full 60 days begin when the trial is activated. Nothing is automatically charged.':'A valid Club Contact email is needed before the secure trial invitation can be sent.'}</div>`:`<h2>Is this worth exploring for your club?</h2><p class="help">Choose Interested to begin the full 60-day Club Trial. No payment is taken and nothing is automatically charged.</p>
         <div class="prospect-response-actions">
           <button class="btn secondary" data-sales-response="interested">Yes — I’m interested</button>
           <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
@@ -9303,7 +9305,7 @@ async function renderSalesProspectRoute(token){
           <div class="btnrow"><button class="btn secondary" id="sendSalesReferral">Send referral</button><button class="btn ghost" id="cancelSalesReferral">Cancel</button></div>
         </div>`}
         <div id="salesResponseStatus" class="help"></div>
-        <div class="sales-trial-note"><strong>When a club decides to try it:</strong><span>The normal offer is a full 60-day Club Trial. The club uses the real product before deciding whether to continue. Nothing is automatically charged at the end.</span></div>
+        <div class="sales-trial-note"><strong>What happens next:</strong><span>Club Batting automatically prepares the secure invitation. The full 60 days begin when the Club Contact activates the trial.</span></div>
       </section>
     </div>
   </div>`;
@@ -9445,6 +9447,8 @@ function prospectIntro(p){
 function renderSecretaryProspectRoute(token,p){
   const amount=money(p.amount_due_cents,p.currency||'AUD');
   const free=p.amount_due_cents===0;
+  const isClubTrial=!!p.is_club_trial;
+  const trialDays=Number(p.trial_days||60);
   const alreadyPaid=['awaiting_admin_handoff','admin_invited','active'].includes(p.status);
 
   if(!session && ['awaiting_payment','awaiting_admin_handoff','admin_invited','active'].includes(p.status)){
@@ -9464,16 +9468,16 @@ function renderSecretaryProspectRoute(token,p){
       ${prospectIntro(p)}
       <section class="card prospect-card">
         <div class="section-label">Club offer</div>
-        <h2>${free?'Complimentary club access':`${amount} for this access period`}</h2>
-        <p class="help">Access under this offer runs through <strong>${esc(niceDate(p.offer_end))}</strong>. ${free?'No payment is required.':''}</p>
-        <div class="committee-summary">
+        <h2>${isClubTrial?`${trialDays}-day Club Trial`:free?'Complimentary club access':`${amount} for this access period`}</h2>
+        <p class="help">${isClubTrial?`Your full ${trialDays} days begin when the Club Contact securely activates the trial. No payment is required and nothing is automatically charged.`:`Access under this offer runs through <strong>${esc(niceDate(p.offer_end))}</strong>. ${free?'No payment is required.':''}`}</p>
+        ${isClubTrial?`<div class="notice compact"><strong>Next step:</strong> verify the Club Contact email, then activate the trial.</div>`:`<div class="committee-summary">
           <strong>For the committee</strong>
           <p>The Secretary remains the organisational contact, but does not need to run the coaching system. After activation, the Secretary nominates the Club Admin and can step out of day-to-day involvement.</p>
           <button class="btn ghost" id="printSummary">Print / save committee summary</button>
-        </div>
-        <button class="btn secondary" id="committeeApproved">Our committee has approved — continue</button>
+        </div>`}
+        ${isClubTrial?'':`<button class="btn secondary" id="committeeApproved">Our committee has approved — continue</button>`}
         <button class="btn ghost" id="wrongContact">I’m not the right club contact</button>
-        <div id="verifyBox" style="display:none;margin-top:12px">
+        <div id="verifyBox" style="display:${isClubTrial?'block':'none'};margin-top:12px">
           <div class="field"><label>Club Contact email</label><input id="routeEmail" type="email" placeholder="secretary@club.com.au"></div>
           <button class="btn secondary" id="verifySecretary">Send secure sign-in link</button>
           <div id="routeStatus" class="help"></div>
@@ -9487,8 +9491,8 @@ function renderSecretaryProspectRoute(token,p){
         </div>
       </section>
     </div>`;
-    document.getElementById('printSummary').onclick=()=>window.print();
-    document.getElementById('committeeApproved').onclick=()=>document.getElementById('verifyBox').style.display='block';
+    if(document.getElementById('printSummary'))document.getElementById('printSummary').onclick=()=>window.print();
+    if(document.getElementById('committeeApproved'))document.getElementById('committeeApproved').onclick=()=>document.getElementById('verifyBox').style.display='block';
     document.getElementById('wrongContact').onclick=()=>document.getElementById('wrongContactBox').style.display='block';
     document.getElementById('verifySecretary').onclick=async()=>{
       const st=document.getElementById('routeStatus');st.textContent='Sending…';
@@ -9550,11 +9554,11 @@ function renderSecretaryProspectRoute(token,p){
   app.innerHTML=`<div class="prospect-shell">
     ${prospectIntro(p)}
     <section class="card prospect-card">
-      <div class="section-label">Committee approved</div>
-      <h2>${free?'No payment is required.':`${amount} is due.`}</h2>
-      <p class="help">Signed in as ${esc(session.user.email||'')}. We verify the Club Contact before any subscription action.</p>
+      <div class="section-label">${isClubTrial?'Club Trial':'Committee approved'}</div>
+      <h2>${isClubTrial?`Start the ${trialDays}-day Club Trial`:free?'No payment is required.':`${amount} is due.`}</h2>
+      <p class="help">Signed in as ${esc(session.user.email||'')}. ${isClubTrial?'The trial dates will be set from today when you start it.':'We verify the Club Contact before any subscription action.'}</p>
       <div class="field"><label>Your name</label><input id="secretaryName" placeholder="Club Secretary / Club Contact"></div>
-      <button class="btn secondary" id="acceptOffer">Confirm & continue</button>
+      <button class="btn secondary" id="acceptOffer">${isClubTrial?'Start Club Trial':'Confirm & continue'}</button>
       <div id="acceptStatus" class="help"></div>
     </section>
   </div>`;
@@ -10348,7 +10352,7 @@ async function renderPlatformProspects(){
     <div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div>
   </section>
 
-  <div class="platform-metrics"><div><strong>${counts.discovered}</strong><span>to research / contact</span></div><div><strong>${counts.contacted}</strong><span>awaiting response</span></div><div><strong>${counts.interested}</strong><span>ready to onboard</span></div><div><strong>${counts.onboarding}</strong><span>moved to onboarding</span></div></div>
+  <div class="platform-metrics"><div><strong>${counts.discovered}</strong><span>to research / contact</span></div><div><strong>${counts.contacted}</strong><span>awaiting response</span></div><div><strong>${counts.interested}</strong><span>need contact details</span></div><div><strong>${counts.onboarding}</strong><span>trial invitations sent</span></div></div>
 
   <section class="admin-card">
     <div class="admin-card-head"><div><div class="section-label">Prospect pipeline</div><h2>Clubs</h2></div><div class="prospect-filter-row"><input id="salesProspectSearch" placeholder="Search club, place or email"><select id="salesProspectStatus"><option value="all">All active prospects</option><option value="interested">Interested</option><option value="contacted">Contacted</option><option value="ready_to_contact">Ready to contact</option><option value="discovered">Discovered</option><option value="maybe_later">Maybe later</option><option value="wrong_contact">Wrong contact</option><option value="declined">Declined</option><option value="onboarding">Onboarding</option></select></div></div>
@@ -10405,6 +10409,23 @@ async function renderPlatformProspects(){
   };
 }
 
+function onboardingProgressLabel(p,trial){
+  if(!trial)return String(p?.status||'').replaceAll('_',' ');
+  if(p?.status==='promo_sent')return 'Invitation sent · awaiting activation';
+  if(p?.status==='awaiting_admin_handoff')return 'Trial active · awaiting Club Admin nomination';
+  if(p?.status==='admin_invited')return 'Trial active · Club Admin invited';
+  if(p?.status==='active')return 'Setup complete';
+  return String(p?.status||trial.status||'').replaceAll('_',' ');
+}
+
+function trialTimingLabel(trial){
+  if(!trial)return '—';
+  const days=Number(trial.duration_days||60);
+  return trial.status==='offered'
+    ?`${days} days · begins on activation`
+    :`${niceDate(trial.starts_on)} – ${niceDate(trial.ends_on)}`;
+}
+
 async function renderPlatformSalesProspectDetail(p){
   const page=document.getElementById('platformPage');
   const [{data:events},{data:trial},{data:guideThreads}]=await Promise.all([
@@ -10422,7 +10443,7 @@ async function renderPlatformSalesProspectDetail(p){
   const trialDays=trial?.ends_on&&trial?.starts_on?Math.max(1,Math.round((new Date(`${trial.ends_on}T12:00:00`)-new Date(`${trial.starts_on}T12:00:00`))/86400000)+1):null;
   const hasContactEmail=String(p.contact_email||'').includes('@');
   const adminStatusActions=[
-    p.status!=='interested'?['interested','Record interest manually']:null,
+    !['interested','onboarding'].includes(p.status)?['interested','Record interest — start Club Trial']:null,
     p.status!=='maybe_later'?['maybe_later','Move to maybe later']:null,
     p.status!=='declined'?['declined','Close as not interested']:null
   ].filter(Boolean);
@@ -10442,19 +10463,18 @@ async function renderPlatformSalesProspectDetail(p){
         <div class="btnrow"><button class="btn ghost" id="saveSalesProspect">Save details</button></div>
       </section>
       <section class="admin-card">
-        <div class="section-label">Next action</div><h2>${trial?'Club Trial':p.status==='interested'?'Ready for a Club Trial':'Prospect outreach'}</h2>
-        ${p.status==='interested'&&!trial?'<div class="notice success"><strong>The club has indicated interest.</strong><br>The normal next step is the full 60-day Club Trial — not another Beta.</div>':''}
-        ${trial?`<div class="trial-admin-card"><span class="status-pill">${esc(String(trial.status).replaceAll('_',' '))}</span><strong>${trialDays||60}-day Club Trial</strong><p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}</p><p>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year only if the club explicitly chooses to continue.</p></div>`:''}
+        <div class="section-label">Next action</div><h2>${trial?'Club Trial progress':p.status==='interested'?'Trial setup needs contact details':'Prospect outreach'}</h2>
+        ${p.status==='interested'&&!trial?`<div class="notice"><strong>The club has indicated interest.</strong><br>${hasContactEmail?'Automatic trial setup is pending. No separate onboarding step is required.':'Add and save a valid Club Contact email. Club Batting will then create the trial and queue the invitation automatically.'}</div>`:''}
+        ${trial?`<div class="trial-admin-card"><span class="status-pill">${esc(String(trial.status).replaceAll('_',' '))}</span><strong>${Number(trial.duration_days||trialDays||60)}-day Club Trial</strong><p>${esc(trialTimingLabel(trial))}</p><p>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year only if the club explicitly chooses to continue.</p></div>`:''}
         ${canFirstContact?'<button class="btn secondary" id="queueSalesIntro">Queue introduction</button>':''}
         ${canFollowUp?'<button class="btn ghost" id="queueSalesFollowUp">Queue one follow-up</button>':''}
         ${p.status==='contacted'&&!canFollowUp&&!hasFollowUp&&daysSinceContact!==null&&daysSinceContact<7?`<div class="help">One follow-up becomes available after 7 days. ${7-daysSinceContact} day${7-daysSinceContact===1?'':'s'} to go.</div>`:''}
         ${hasFollowUp?'<div class="help">The single follow-up has already been used. No drip sequence will follow.</div>':''}
         ${!hasContactEmail&&!['interested','onboarding'].includes(p.status)&&!trial?'<div class="notice">Add a public club contact email before outreach can be queued.</div>':''}
-        ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id&&!hasContactEmail?'<div class="notice"><strong>Add a valid Club Contact email before starting the Club Trial.</strong></div>':''}
+        ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id&&!hasContactEmail?'<div class="notice"><strong>Only one admin action is needed:</strong> add the Club Contact email and press Save details. The rest is automatic.</div>':''}
         ${p.do_not_contact||['declined','do_not_contact'].includes(p.status)?'<div class="notice"><strong>Do not contact.</strong> This email is suppressed from prospecting.</div>':''}
         <div class="field"><label>Public overview / Guide link</label><input id="salesResponseLink" value="${esc(publicLink)}" readonly></div>
         <button class="btn ghost" id="copySalesLink">Copy response link</button>
-        ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id&&hasContactEmail?'<button class="btn secondary fullwidth" id="startSalesTrial">Start 60-day Club Trial →</button><button class="guide-inline-link" id="startCustomOnboarding">Use custom onboarding instead</button>':''}
         ${p.onboarding_prospect_id&&!trial?'<div class="notice success"><strong>Moved to Onboarding.</strong></div>':''}
         ${!trial&&adminStatusActions.length?`<details style="margin-top:18px"><summary style="cursor:pointer;font-weight:800">Admin: change prospect status</summary><div class="quick-status-actions" style="margin-top:10px">${adminStatusActions.map(([status,label])=>`<button class="btn ghost" data-sales-status="${status}">${label}</button>`).join('')}</div></details>`:''}
         <div id="salesActionStatus" class="help"></div>
@@ -10486,16 +10506,6 @@ async function renderPlatformSalesProspectDetail(p){
     const {error}=await supabase.rpc('platform_set_sales_prospect_status',{p_sales_prospect_id:p.id,p_status:b.dataset.salesStatus});
     if(error){alert(error.message);return;}renderPlatformProspects();
   });
-  document.getElementById('startSalesTrial')?.addEventListener('click',async()=>{
-    const st=document.getElementById('salesActionStatus'),btn=document.getElementById('startSalesTrial');
-    btn.disabled=true;btn.textContent='Creating Club Trial…';st.textContent='';
-    const {data,error}=await supabase.rpc('platform_start_sales_trial',{p_sales_prospect_id:p.id,p_subscription_calendar:'australia'});
-    if(error){btn.disabled=false;btn.textContent='Start 60-day Club Trial →';st.textContent=error.message;return;}
-    const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
-    st.innerHTML=`Club Trial created ✓ · ${esc(niceDate(data.starts_on))} – ${esc(niceDate(data.ends_on))}<br><input value="${esc(link)}" readonly style="margin-top:8px">`;
-    await kickLiveEmailDelivery();setTimeout(()=>renderPlatformProspects(),700);
-  });
-  document.getElementById('startCustomOnboarding')?.addEventListener('click',()=>{platformOnboardingSeed=p;platformSelectedProspectId=null;platformView='onboarding';renderPlatformConsole();});
 }
 
 async function loadSubscriptionCalendars(){
@@ -10547,8 +10557,33 @@ async function getCommercialPreview(calendar,accessStart,reduction=0,adjustmentE
 
 async function renderPlatformOnboardingDetail(p){
   const page=document.getElementById('platformPage');
-  const {data:calendars}=await loadSubscriptionCalendars();
+  const [{data:calendars},{data:trial}]=await Promise.all([
+    loadSubscriptionCalendars(),
+    supabase.from('club_trials').select('*').eq('onboarding_prospect_id',p.id).maybeSingle()
+  ]);
   const publicLink=`${location.origin}${location.pathname}?prospect=${p.public_token}`;
+  if(trial){
+    page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backOnboarding">← Back to onboarding</button></div>
+    <div class="grid">
+      <section class="admin-card">
+        <div class="section-label">Club Trial onboarding</div><h2>${esc(p.club_name)}</h2>
+        <div class="detail-grid"><div><span>Progress</span><strong>${esc(onboardingProgressLabel(p,trial))}</strong></div><div><span>Club Contact</span><strong>${esc(p.primary_contact_email)}</strong></div><div><span>Trial</span><strong>${esc(trialTimingLabel(trial))}</strong></div><div><span>If continued</span><strong>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year</strong></div></div>
+        <div class="field"><label>Secure club invitation</label><input id="prospectLink" value="${esc(publicLink)}" readonly></div>
+        <button class="btn ghost" id="copyProspectLink">Copy invitation link</button>
+      </section>
+      <section class="admin-card">
+        <div class="section-label">Automatic progress</div><h2>${Number(trial.duration_days||60)}-day Club Trial</h2>
+        ${trial.status==='offered'
+          ?'<div class="notice success"><strong>Invitation queued.</strong><br>The full trial begins when the Club Contact securely activates it. No admin action is required.</div>'
+          :`<div class="trial-admin-card"><span class="status-pill">${esc(String(trial.status).replaceAll('_',' '))}</span><strong>Trial dates</strong><p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}</p></div>`}
+        <p class="help">Nothing is automatically charged at the end. The club must explicitly choose whether to continue.</p>
+      </section>
+    </div>`;
+    document.getElementById('backOnboarding').onclick=()=>{platformSelectedOnboardingId=null;renderPlatformOnboarding();};
+    document.getElementById('copyProspectLink').onclick=async()=>{await navigator.clipboard.writeText(publicLink);document.getElementById('copyProspectLink').textContent='Copied ✓';};
+    return;
+  }
+
   page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backOnboarding">← Back to onboarding</button></div>
   <div class="grid">
     <section class="admin-card">
@@ -10563,7 +10598,7 @@ async function renderPlatformOnboardingDetail(p){
       <div class="field"><label>Subscription calendar</label><select id="editCalendar">${calendarOptions(calendars,p.subscription_calendar||'australia')}</select></div>
       <div class="field"><label>Access starts</label><input id="editChargeFrom" type="date" value="${esc(String(p.charge_from).slice(0,10))}"></div>
       <div class="field"><label>Private rate reduction from standard price</label><input id="editAdjustment" type="number" min="0" max="100" step="1" value="${esc(p.adjustment_percent)}"><small>0% = standard price · 100% = complimentary</small></div>
-      <div class="field"><label>Special rate ends (optional)</label><input id="editAdjEnd" type="date" value="${esc(p.adjustment_end?String(p.adjustment_end).slice(0,10):'')}"></div>
+      <div class="field"><label>Custom rate end date (optional)</label><input id="editAdjEnd" type="date" value="${esc(p.adjustment_end?String(p.adjustment_end).slice(0,10):'')}"><small>Only used for a temporary custom rate.</small></div>
       <div class="field"><label>At expiry</label><select id="editExpiry"><option value="renewal_approval" ${p.expiry_action==='renewal_approval'?'selected':''}>Require renewal approval</option><option value="return_standard" ${p.expiry_action==='return_standard'?'selected':''}>Return to standard rate</option><option value="end_subscription" ${p.expiry_action==='end_subscription'?'selected':''}>End subscription</option></select></div>
       ${p.entry_route!=='standard'?'<div class="notice compact"><strong>Beta route:</strong> it bypasses charging, so the rate reduction must remain at 100%.</div>':''}
       ${['owner','commercial_admin'].includes(platformRole)&&!['payment_received','awaiting_admin_handoff','admin_invited','active'].includes(p.status)?'<button class="btn secondary" id="saveProspectTerms">Recalculate & save terms</button>':'<div class="notice">Activated clubs are managed under Active Clubs rather than changing the original offer.</div>'}
@@ -10593,13 +10628,14 @@ async function renderPlatformOnboardingDetail(p){
 async function renderPlatformOnboarding(){
   const page=document.getElementById('platformPage');
   page.innerHTML='<div class="splash">Loading onboarding…</div>';
-  const [{data:settings,error:settingsError},{data:calendars,error:calendarError},{data:onboarding,error:onboardingError},{data:interested,error:interestedError}]=await Promise.all([
+  const [{data:settings,error:settingsError},{data:calendars,error:calendarError},{data:onboarding,error:onboardingError},{data:interested,error:interestedError},{data:trials,error:trialsError}]=await Promise.all([
     supabase.from('platform_settings').select('*').eq('singleton',true).single(),
     loadSubscriptionCalendars(),
     supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
-    supabase.from('sales_prospects').select('*').eq('status','interested').order('updated_at',{ascending:false})
+    supabase.from('sales_prospects').select('*').eq('status','interested').order('updated_at',{ascending:false}),
+    supabase.from('club_trials').select('*').order('created_at',{ascending:false})
   ]);
-  const loadError=settingsError||calendarError||onboardingError||interestedError;
+  const loadError=settingsError||calendarError||onboardingError||interestedError||trialsError;
   if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
 
   const records=onboarding||[];
@@ -10613,13 +10649,14 @@ async function renderPlatformOnboarding(){
   const seed=platformOnboardingSeed;
   const waiting=records.filter(x=>!['active'].includes(x.status));
   const ready=interested||[];
+  const trialMap=new Map((trials||[]).map(t=>[t.onboarding_prospect_id,t]));
 
-  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Formal onboarding</div><h2>Interested club → offer → activation → Club Admin handoff</h2><p>This is where a willing club becomes a real platform club. Prospecting belongs on the Prospects tab; commercial/Beta terms belong here.</p></section>
-    ${ready.length&&!seed?`<section class="admin-card"><div class="admin-card-head"><div><div class="section-label">Ready to onboard</div><h2>${ready.length} interested club${ready.length===1?'':'s'}</h2></div></div><div class="ready-onboarding-list">${ready.map(x=>`<button class="sales-prospect-row" data-start-onboarding="${x.id}"><span class="sales-prospect-main"><strong>${esc(x.club_name)}</strong><small>${esc([x.locality,x.region,x.country].filter(Boolean).join(', '))} · ${esc(x.contact_email||'No email')}</small></span><span class="sales-status interested">Start onboarding</span><span class="sales-arrow">›</span></button>`).join('')}</div></section>`:''}
-    <section class="admin-card"><div class="section-label">Current onboarding</div><h2>Offers & handoffs</h2><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Club</th><th>Route</th><th>Status</th><th>Amount</th><th>Contact</th><th></th></tr></thead><tbody>${records.map(x=>`<tr><td><strong>${esc(x.club_name)}</strong><small>${esc(niceDate(x.offer_end))}</small></td><td>${esc(x.entry_route.replaceAll('_',' '))}</td><td><span class="status-pill">${esc(x.status.replaceAll('_',' '))}</span></td><td>${esc(money(x.amount_due_cents))}</td><td>${esc(x.primary_contact_email)}</td><td><button class="btn ghost" data-manage-onboarding="${x.id}">Manage</button></td></tr>`).join('')||'<tr><td colspan="6">No formal onboarding records yet.</td></tr>'}</tbody></table></div></section>
+  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Club Trial progress</div><h2>Interested → invitation sent → trial activated → Club Admin handoff</h2><p>Normal Club Trial onboarding is automatic. Platform Admin only needs to step in when contact details are missing or a club asks for help.</p></section>
+    ${ready.length&&!seed?`<section class="admin-card"><div class="admin-card-head"><div><div class="section-label">Needs attention</div><h2>${ready.length} club${ready.length===1?'':'s'}</h2></div></div><div class="ready-onboarding-list">${ready.map(x=>`<button class="sales-prospect-row" data-open-interested-prospect="${x.id}"><span class="sales-prospect-main"><strong>${esc(x.club_name)}</strong><small>${esc(x.contact_email||'A Club Contact email is required')}</small></span><span class="sales-status interested">${x.contact_email?'Check setup':'Add email'}</span><span class="sales-arrow">›</span></button>`).join('')}</div></section>`:''}
+    <section class="admin-card"><div class="section-label">Onboarding progress</div><h2>Club Trials & handoffs</h2><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Club</th><th>Progress</th><th>Trial</th><th>Contact</th><th></th></tr></thead><tbody>${records.map(x=>{const t=trialMap.get(x.id);return `<tr><td><strong>${esc(x.club_name)}</strong><small>${esc(t?'Club Trial':x.entry_route.replaceAll('_',' '))}</small></td><td><span class="status-pill">${esc(onboardingProgressLabel(x,t))}</span></td><td>${esc(t?trialTimingLabel(t):niceDate(x.offer_end))}</td><td>${esc(x.primary_contact_email)}</td><td><button class="btn ghost" data-manage-onboarding="${x.id}">View</button></td></tr>`;}).join('')||'<tr><td colspan="5">No onboarding records yet.</td></tr>'}</tbody></table></div></section>
 
     <details class="admin-card form-wide onboarding-create" ${seed?'open':''}>
-      <summary><div><div class="section-label">${seed?'Interested prospect':'Manual onboarding'}</div><h2>${seed?`Onboard ${esc(seed.club_name)}`:'Create an onboarding record manually'}</h2><p>${seed?'Prospect details are pre-filled. Confirm the actual route and commercial terms before sending the formal invitation.':'Use this only when a club reaches you outside the Prospects pipeline.'}</p></div><span>⌄</span></summary>
+      <summary><div><div class="section-label">Admin exception</div><h2>${seed?`Custom onboarding for ${esc(seed.club_name)}`:'Create custom onboarding manually'}</h2><p>Normal interested clubs do not use this form. Open it only for a special manual or Beta arrangement.</p></div><span>⌄</span></summary>
       <div class="collapsible-admin-body">
         <div class="field"><label>Entry route</label><select id="entryRoute"><option value="standard" ${(seed?.intended_route||'standard')==='standard'?'selected':''}>Standard subscription — Club Contact first</option><option value="direct_beta" ${seed?.intended_route==='direct_beta'?'selected':''}>Direct Beta — trial lead becomes initial Admin</option><option value="full_flow_beta" ${seed?.intended_route==='full_flow_beta'?'selected':''}>Full-flow Beta — Club Contact handoff, $0 test flow</option></select></div>
         <div id="entryRouteHelp" class="notice compact"></div>
@@ -10632,17 +10669,17 @@ async function renderPlatformOnboarding(){
         </div>
         <div class="commercial-box">
           <div class="section-label">Private commercial terms</div><p class="help">These controls never appear to normal clubs. <strong>0% reduction = full standard price. 100% reduction = complimentary.</strong></p>
-          <div class="form-grid"><div class="field"><label>Private rate reduction</label><input id="adjustmentPct" type="number" min="0" max="100" value="${seed?.intended_route&&seed.intended_route!=='standard'?'100':'0'}"></div><div class="field"><label>Special rate ends (optional)</label><input id="adjustmentEnd" type="date"></div><div class="field"><label>At expiry</label><select id="expiryAction"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div></div>
+          <div class="form-grid"><div class="field"><label>Private rate reduction</label><input id="adjustmentPct" type="number" min="0" max="100" value="${seed?.intended_route&&seed.intended_route!=='standard'?'100':'0'}"></div><div class="field"><label>Custom rate end date (optional)</label><input id="adjustmentEnd" type="date"><small>Only used for a temporary custom rate.</small></div><div class="field"><label>At expiry</label><select id="expiryAction"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div></div>
           <div class="field"><label>Internal note</label><textarea id="internalNote">${esc(seed?`Started from prospect pipeline${seed.notes?` — ${seed.notes}`:''}`:'')}</textarea></div>
         </div>
         <div class="commercial-calculation"><div class="section-label">Calculated offer</div><div id="newClubOfferPreview"><div class="help">Calculating…</div></div></div>
-        <div class="btnrow"><button class="btn secondary" id="createProspect">Create onboarding & queue invitation</button>${seed?'<button class="btn ghost" id="cancelOnboardingSeed">Cancel</button>':''}<span class="status" id="createProspectStatus"></span></div>
+        <div class="btnrow"><button class="btn secondary" id="createProspect">Create custom onboarding</button>${seed?'<button class="btn ghost" id="cancelOnboardingSeed">Cancel</button>':''}<span class="status" id="createProspectStatus"></span></div>
         <div id="createdProspectResult"></div>
       </div>
     </details>`;
 
   page.querySelectorAll('[data-manage-onboarding]').forEach(b=>b.onclick=()=>{platformSelectedOnboardingId=b.dataset.manageOnboarding;renderPlatformOnboarding();});
-  page.querySelectorAll('[data-start-onboarding]').forEach(b=>b.onclick=()=>{platformOnboardingSeed=ready.find(x=>x.id===b.dataset.startOnboarding)||null;renderPlatformOnboarding();});
+  page.querySelectorAll('[data-open-interested-prospect]').forEach(b=>b.onclick=()=>{platformSelectedProspectId=b.dataset.openInterestedProspect;platformView='home';renderPlatformConsole();});
   if(document.getElementById('cancelOnboardingSeed'))document.getElementById('cancelOnboardingSeed').onclick=()=>{platformOnboardingSeed=null;renderPlatformOnboarding();};
 
   const route=document.getElementById('entryRoute');
