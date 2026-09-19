@@ -1,4 +1,4 @@
-// Club Batting v0.8.53 — guided club setup, accessible Players and clearer trial offers
+// Club Batting v0.8.53.1 — account access, consistent roles and revisiting the club approach
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -24,6 +24,7 @@ function upgradeLegacyHowWeBatWording(draft){
 let session=null;
 let allMemberships=[];
 let platformRole=null;
+let platformAccessError=false;
 let canBootstrapPlatform=false;
 let platformView='market';
 let platformSelectedProspectId=null;
@@ -1048,13 +1049,16 @@ function outboundTemplateLabel(templateKey){
 }
 
 async function loadPlatformContext(){
-  if(!session){platformRole=null;canBootstrapPlatform=false;return;}
-  const [{data:role},{data:canBoot}]=await Promise.all([
+  if(!session){platformRole=null;platformAccessError=false;canBootstrapPlatform=false;return;}
+  const userId=session.user.id;
+  const [roleResult,bootstrapResult]=await Promise.allSettled([
     supabase.rpc('get_my_platform_role'),
     supabase.rpc('can_bootstrap_platform_owner')
   ]);
-  platformRole=role||null;
-  canBootstrapPlatform=!!canBoot;
+  if(session?.user?.id!==userId)return;
+  platformAccessError=roleResult.status==='rejected'||!!roleResult.value?.error;
+  platformRole=platformAccessError?null:roleResult.value?.data||null;
+  canBootstrapPlatform=!platformAccessError&&bootstrapResult.status==='fulfilled'&&!bootstrapResult.value?.error&&!!bootstrapResult.value?.data;
 }
 
 async function routeAuth(){
@@ -1404,7 +1408,7 @@ function clubSetupProgress(state={club,workshop,howWeBatDraft,playerPlanStructur
   const howWeBatReady=workshopReady&&(published||hwbDraft?.status==='ready');
   const structureReady=howWeBatReady&&(published||planDraft?.status==='ready');
   const steps=[
-    {key:'details',title:'Club details',shortTitle:'Club details',tab:'dashboard',complete:detailsReady,owner:'Club organiser',action:'Set up club details',description:'Add your club logo and colours, or continue with the current look. You can change these later.'},
+    {key:'details',title:'Club details',shortTitle:'Club details',tab:'dashboard',complete:detailsReady,owner:'Club Admin',action:'Set up club details',description:'Add your club logo and colours, or continue with the current look. You can change these later.'},
     {key:'workshop',title:'Batting Philosophy Workshop',shortTitle:'Workshop',tab:'workshop',complete:workshopReady,owner:'Philosophy Lead and contributors',action:'Continue Batting Philosophy Workshop',description:'Choose a Philosophy Lead, gather the contributions you want and agree the approach your club will use.'},
     {key:'howwebat',title:'How We Bat',shortTitle:'How We Bat',tab:'howwebat',complete:howWeBatReady,owner:'Philosophy Lead',action:'Review How We Bat',description:'Review the club’s batting approach, check each format and confirm it for the season.'},
     {key:'structure',title:'Player Plan Structure',shortTitle:'Plan questions',tab:'plan',complete:structureReady,owner:'Philosophy Lead',action:'Review Player Plan questions',description:'Review the questions generated from How We Bat and confirm what players will complete.'},
@@ -1421,7 +1425,7 @@ function canUseClubHome(){
 function clubSetupUnavailableReason(tab){
   const p=clubSetupProgress();
   const workshopTabs=['workshop','identity','dimensions','formats','preview'];
-  if(workshopTabs.includes(tab)&&!p.detailsReady)return 'Complete Club details first. Your club organiser can do this from Club Home.';
+  if(workshopTabs.includes(tab)&&!p.detailsReady)return 'Complete Club details first. Your Club Admin can do this from Club Home.';
   // Published reading remains available while a replacement round is prepared.
   if(tab==='howwebat'&&howWeBatVersions.length)return '';
   if(['howwebat','plan'].includes(tab)&&!p.workshopReady)return 'Complete Batting Philosophy Workshop first. The Philosophy Lead chooses the approach used to create How We Bat.';
@@ -1500,6 +1504,11 @@ function contributionLocked(){
 
 function accountMenuStyles(){
   return `<style>
+    .account-controls{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+    .platform-admin-link{display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;padding:4px 3px;font:inherit;font-size:12px;font-weight:700;line-height:1.4;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+    .platform-admin-link:hover{text-decoration-thickness:2px}
+    .platform-admin-link:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:4px}
+    .account-access-status{padding:8px 9px;font-size:12px;line-height:1.5;color:#667085}
     .account-menu{position:relative;display:inline-block}
     .account-menu>summary{list-style:none;cursor:pointer;display:inline-flex!important;align-items:center;gap:7px;white-space:nowrap;user-select:none}
     .account-menu>summary::-webkit-details-marker{display:none}
@@ -1520,15 +1529,15 @@ function accountMenuStyles(){
 function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
   const email=session?.user?.email||'';
   const name=userProfile?.display_name||session?.user?.user_metadata?.display_name||'Your account';
-  return `<details class="account-menu">
+  return `<div class="account-controls"><details class="account-menu">
     <summary class="btn ghost" aria-label="Account menu">Account <span class="account-menu-chevron" aria-hidden="true">⌄</span></summary>
     <div class="account-menu-popover">
       <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
-      ${showPlatform?`<button class="account-menu-action" id="${platformId}" type="button">Platform Admin</button>`:''}
+      ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
     </div>
-  </details>`;
+  </details>${showPlatform&&platformRole?`<button class="platform-admin-link" id="${platformId}" type="button">Platform Admin</button>`:''}</div>`;
 }
 
 function renderShell(){
@@ -1574,7 +1583,7 @@ function renderShell(){
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <button class="btn ghost" id="openClubHelp" type="button" aria-label="Open Help and tutorials">Help</button>
-          ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother',showPlatform:!!platformRole,platformId:'accountPlatform'})}
+          ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
     </header>
@@ -1585,7 +1594,12 @@ function renderShell(){
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
   document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process');
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
-  document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;localStorage.setItem('bdp-context','platform');renderPlatformConsole();});
+  document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;await renderPlatformConsole();});
+  document.getElementById('retryAccountAccess')?.addEventListener('click',async()=>{
+    if(!await saveClubEditsBeforeNavigation())return;
+    await loadPlatformContext();
+    renderShell();
+  });
 
   if(document.getElementById('contextSwitch')){
     document.getElementById('contextSwitch').onchange=async e=>{
@@ -2162,6 +2176,7 @@ async function renderClubDashboard(){
   if(club.id!==targetClubId||currentTab!=='dashboard')return;
   const progress=clubSetupProgress();
   const step=progress.steps[progress.currentIndex]||null;
+  const showRoundReview=(isAdmin()||isPhilosophyLead())&&progress.detailsReady&&!!(workshop||howWeBatDraft||playerPlanStructureDraft||progress.systemLive);
   const showBranding=false;
   const contributorWaiting=step?.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
   const canAct=!!step&&canActOnClubSetupStep(step)&&!contributorWaiting;
@@ -2173,9 +2188,9 @@ async function renderClubDashboard(){
   const waitingCopy=contributorWaiting
     ?'Your contribution is submitted. Your Philosophy Lead will review the contributions and choose the club’s approach. You can come back here to check progress.'
     :step?.key==='details'
-      ?'Your club organiser needs to save the club details before the workshop opens. There is nothing you need to complete here yet.'
+      ?'Your Club Admin needs to save the club details before the workshop opens. There is nothing you need to complete here yet.'
       :step?.key==='workshop'
-        ?(!workshop?.philosophy_lead_user_id?'Your club organiser needs to choose a Philosophy Lead before the club’s approach can be developed. You can check progress here.':'Your Philosophy Lead and invited contributors are preparing the club’s approach. This page will show the next stage when it is ready.')
+        ?(!workshop?.philosophy_lead_user_id?'Your Club Admin needs to choose a Philosophy Lead before the club’s approach can be developed. You can check progress here.':'Your Philosophy Lead and invited contributors are preparing the club’s approach. This page will show the next stage when it is ready.')
         :'Your Philosophy Lead needs to complete this step. You can check progress here; players will receive an email when the system is published.';
 
   page.innerHTML=`${clubSetupStyles()}
@@ -2267,6 +2282,19 @@ async function renderClubDashboard(){
       </div>
     </details>
 
+    ${showRoundReview?`<details class="card setup-collapsible club-round-review" style="margin-top:22px">
+      <summary class="setup-collapsible-summary"><div class="setup-collapsible-title"><strong>Review or restart the club’s approach</strong></div><span class="setup-collapsible-toggle"></span></summary>
+      <div class="setup-collapsible-body">
+        <p>Revisit your club’s approach whenever you need to—for a new season, a change of leadership or a different direction. Review the workshop, or start a new philosophy round.</p>
+        <p class="help">Starting a new round archives the current workshop responses and clears the working drafts. Any published How We Bat and Player Plans stay available while you build a replacement. Your club details, players and Playing Groups do not need to be set up again.</p>
+        <div class="btnrow">
+          <button class="btn ghost" type="button" data-home-go="workshop">Review Batting Philosophy Workshop</button>
+          <button class="btn ghost" type="button" id="startNewPhilosophyRound">Start a new philosophy round</button>
+        </div>
+        <p class="help">Club Admin or Philosophy Lead · You’ll confirm before anything is reset.</p>
+      </div>
+    </details>`:''}
+
     ${isAdmin()?`<details class="card setup-collapsible setup-commercial" style="margin-top:22px">
       <summary class="setup-collapsible-summary"><div class="setup-collapsible-title"><strong>${trial?esc(clubTrialStatusLabel(trial,trialDaysLeft)):'Club access'}</strong></div><span class="setup-collapsible-toggle"></span></summary>
       <div class="setup-collapsible-body">
@@ -2276,6 +2304,7 @@ async function renderClubDashboard(){
     </details>`:''}`;
 
   document.getElementById('continueClubTrial')?.addEventListener('click',()=>openClubTrialContinuationDialog(trial));
+  document.getElementById('startNewPhilosophyRound')?.addEventListener('click',startNewPhilosophyRound);
   document.getElementById('endClubTrial')?.addEventListener('click',async()=>{
     if(!confirm('End Club Batting when this Club Trial finishes? No payment will be taken.'))return;
     const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:club.id,p_decision:'end'});
@@ -3286,7 +3315,7 @@ async function renderWorkshop(){
       <div class="help" style="margin-top:10px">Rare maintenance actions live here so they do not compete with the normal workshop flow.</div>
       <div style="display:grid;gap:10px;margin-top:12px">
         ${isPhilosophyLead() && workshop?.final_draft_ready && howWeBatDraft?.status!=='ready'?`<div class="notice compact"><strong>Reset How We Bat draft</strong><br>Before How We Bat is locked, you can regenerate the editable draft from the current working philosophy. Any manual edits in the current draft will be replaced.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="resetHowWeBatDraft">Reset How We Bat draft</button></div></div>`:''}
-        <div class="notice compact"><strong>Major club change · start a new philosophy round</strong><br>This is the only route to replacing a locked How We Bat. Use it for a genuine change in leadership, personnel or club direction — not routine wording tweaks. The current round is archived and any published Club Batting System remains live until a replacement is deliberately published.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="startNewPhilosophyRound">Start new philosophy round</button></div></div>
+        <div class="notice compact"><strong>Start a new philosophy round</strong><br>Revisit your club’s approach for a new season, a change of leadership or whenever you want to change direction. The current round is archived and any published How We Bat and Player Plans stay available until a replacement is published.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="startNewPhilosophyRound">Start a new philosophy round</button></div></div>
       </div>
     </details>`;
   }
@@ -3992,6 +4021,12 @@ async function resetHowWeBatDraftFromCurrentPhilosophy(){
 }
 
 async function startNewPhilosophyRound(){
+  if(!isAdmin()&&!isPhilosophyLead())return;
+  const targetClubId=club.id;
+  if(!await saveClubEditsBeforeNavigation())return;
+  if(club?.id!==targetClubId||(!isAdmin()&&!isPhilosophyLead()))return;
+  const btn=document.getElementById('startNewPhilosophyRound');
+  if(btn?.disabled)return;
   const publishedNote=philosophyVersions.length
     ?`The currently published Club Batting System will stay live until you deliberately publish a replacement.\n\n`
     :'';
@@ -4003,26 +4038,38 @@ async function startNewPhilosophyRound(){
     `• clear the current editable Philosophy / How We Bat / Player Plan Structure drafts\n`+
     `• keep all published versions unchanged\n`+
     `• return the current contributor list to a fresh invited state so you can keep, remove or add people before they respond again\n\n`+
-    `Use this only for a genuine club-level change — for example, a major change in cricket leadership, personnel or direction. A locked How We Bat is intentionally not editable inside the existing round.`
+    `Your club details, players and Playing Groups stay in place. You can choose a new Philosophy Lead and contributors, then work through How We Bat and Player Plan Structure in order before publishing the replacement.`
   );
   if(!ok)return;
 
-  const btn=document.getElementById('startNewPhilosophyRound');
   if(btn){btn.disabled=true;btn.textContent='Starting new round…';}
 
-  const {error}=await supabase.rpc('start_new_philosophy_round',{p_club_id:club.id});
-  if(error){
-    alert(error.message);
-    if(btn){btn.disabled=false;btn.textContent='Start new philosophy round';}
-    return;
+  let newRoundStarted=false;
+  let resetResponseReceived=false;
+  try{
+    const {error}=await supabase.rpc('start_new_philosophy_round',{p_club_id:targetClubId});
+    resetResponseReceived=true;
+    if(error)throw error;
+    newRoundStarted=true;
+    sessionStorage.removeItem(`bdp-philosophy-working-voices:${targetClubId}`);
+    if(club?.id!==targetClubId)return;
+    philosophyScenarioSelectedIds=new Set();
+    philosophyScenarioStateKey='';
+    await loadData();
+    currentTab='workshop';
+    renderShell();
+  }catch(error){
+    if(!resetResponseReceived){
+      if(btn)btn.textContent='Refresh to check the workshop';
+      alert('We couldn’t confirm whether the new round started. Refresh the page to check the workshop before trying again.');
+    }else if(newRoundStarted){
+      if(btn)btn.textContent='New round started — refresh to continue';
+      alert('Your new philosophy round was started, but its details could not be loaded. Refresh the page to continue; you do not need to start another round.');
+    }else{
+      alert(error.message||'The new philosophy round could not be started. Please try again.');
+      if(btn){btn.disabled=false;btn.textContent='Start a new philosophy round';}
+    }
   }
-
-  sessionStorage.removeItem(`bdp-philosophy-working-voices:${club.id}`);
-  philosophyScenarioSelectedIds=new Set();
-  philosophyScenarioStateKey='';
-  await loadData();
-  currentTab='workshop';
-  renderShell();
 }
 
 function openScenarioHowWeBatPreview(responses,pMap){
@@ -8618,7 +8665,7 @@ function renderPlayersWorkspaceList(){
   const planOverdueCount=filteredPlanStates.filter(x=>x.overdue.length).length;
   let emptyCopy='';
   if(!playersWorkspaceGroupFilter&&!query){
-    emptyCopy=`<section class="card workspace-roster-empty"><strong>${isAdmin()?'Your player list is ready for sign-ups.':'There are no players in your access yet.'}</strong><span>${isAdmin()?'Use People & Sign-up to invite players, and Manage Playing Groups to prepare your groups.':'Your club organiser can assign the players and Playing Groups you work with.'}</span></section>`;
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>${isAdmin()?'Your player list is ready for sign-ups.':'There are no players in your access yet.'}</strong><span>${isAdmin()?'Use People & Sign-up to invite players, and Manage Playing Groups to prepare your groups.':'Your Club Admin can assign the players and Playing Groups you work with.'}</span></section>`;
   }else if(query&&!filtered.length){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Try another name or clear your search.</strong><span>Your search found no players in this view. Only players you have permission to access are included.</span><div class="btnrow"><button class="btn ghost" id="clearPlayerSearch">Clear search</button></div></section>`;
   }else if(discussionMode){
