@@ -1,4 +1,4 @@
-// Club Batting v0.8.50 — combined Club Pipeline + automatic Revisit later re-contact
+// Club Batting v0.8.50.1 — compact Club Pipeline onboarding view
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -10349,16 +10349,9 @@ async function renderPlatformProspects(){
     if(p){await renderPlatformSalesProspectDetail(p);return;}
     platformSelectedProspectId=null;
   }
-  if(platformSelectedOnboardingId){
-    const p=onboarding.find(x=>x.id===platformSelectedOnboardingId);
-    if(p){await renderPlatformOnboardingDetail(p);return;}
-    platformSelectedOnboardingId=null;
-  }
-
   const validEmail=p=>String(p?.contact_email||'').trim().includes('@');
   const suppressedEmail=p=>suppressedEmails.has(String(p?.contact_email||'').trim().toLowerCase());
   const statusLabel=s=>({discovered:'Discovered',ready_to_contact:'Ready to contact',contacted:'Awaiting response',interested:'Interested',maybe_later:'Revisit later',wrong_contact:'Wrong contact',declined:'Not interested',onboarding:'Onboarding',do_not_contact:'Do not contact'}[s]||String(s||'').replaceAll('_',' '));
-  const trialMap=new Map(trials.map(t=>[t.onboarding_prospect_id,t]));
   const currentOnboarding=onboarding.filter(x=>x.status!=='active');
   const revisit=rows.filter(x=>x.status==='maybe_later').sort((a,b)=>String(a.follow_up_after||'9999').localeCompare(String(b.follow_up_after||'9999')));
   const today=new Date().toISOString().slice(0,10);
@@ -10400,7 +10393,7 @@ async function renderPlatformProspects(){
 
   page.innerHTML=`
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Normal outreach responses and valid Interested responses move automatically. This page keeps the exceptions and live onboarding work visible.</p><p class="help"><strong>${needsAttention.length}</strong> need attention · <strong>${revisit.length}</strong> revisit later · <strong>${currentOnboarding.length}</strong> currently onboarding</p></div><div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
+    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Normal outreach responses and valid Interested responses move automatically. This page keeps the exceptions and live onboarding work visible.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
   </section>
 
   <section class="admin-card" style="margin-bottom:16px">
@@ -10415,12 +10408,6 @@ async function renderPlatformProspects(){
     ${revisit.length?`<div class="ready-onboarding-list">${revisit.map(p=>prospectRow(p,'Revisit later',revisitDetail(p))).join('')}</div>`:'<div class="notice">No automatic re-contacts are currently scheduled.</div>'}
   </section>
 
-  <section class="admin-card" style="margin-bottom:16px">
-    <div class="section-label">Currently onboarding</div><h2>${currentOnboarding.length?`${currentOnboarding.length} club${currentOnboarding.length===1?' is':'s are'} currently onboarding`:'No clubs currently onboarding'}</h2>
-    <p class="help">Completed setup moves to Active Clubs and no longer appears here.</p>
-    ${currentOnboarding.length?`<div class="ready-onboarding-list">${currentOnboarding.map(p=>{const t=trialMap.get(p.id);const detail=[onboardingProgressLabel(p,t),t?trialTimingLabel(t):niceDate(p.offer_end),p.primary_contact_email].filter(Boolean).join(' · ');return `<button class="sales-prospect-row" data-manage-onboarding="${p.id}"><span class="sales-prospect-main"><strong>${esc(p.club_name)}</strong><small>${esc(detail)}</small></span><span class="sales-status onboarding">Onboarding</span><span class="sales-arrow">›</span></button>`;}).join('')}</div>`:'<div class="notice">There are no current Club Trial or handoff records.</div>'}
-  </section>
-
   <details class="admin-card" style="margin-bottom:16px">
     <summary><div><div class="section-label">Search and history</div><h2>All Club Pipeline records</h2><p>Open this only when you need to find a club or review background activity.</p></div><span>⌄</span></summary>
     <div class="collapsible-admin-body">
@@ -10430,7 +10417,7 @@ async function renderPlatformProspects(){
   </details>
 
   <details class="admin-card manual-prospect-card" style="margin-bottom:16px">
-    <summary><div><div class="section-label">Manual / referral</div><h2>Add a prospect manually</h2><p>Use this for referrals, known clubs and Beta clubs you already have a relationship with.</p></div><span>⌄</span></summary>
+    <summary><div><div class="section-label">Manual entry</div><h2>Add a club manually</h2><p>Use this for a referral or a known club that did not come through Market Discovery.</p></div><span>⌄</span></summary>
     <div class="collapsible-admin-body">
       <div class="form-grid">
         <div class="field"><label>Club name</label><input id="salesClubName"></div>
@@ -10442,16 +10429,11 @@ async function renderPlatformProspects(){
         <div class="field"><label>Contact name</label><input id="salesContactName"></div>
         <div class="field"><label>Contact role</label><input id="salesContactRole" value="Club Secretary / contact"></div>
         <div class="field"><label>Public contact email</label><input id="salesContactEmail" type="email"></div>
-        <div class="field"><label>Likely route</label><select id="salesIntendedRoute"><option value="standard">Standard subscription</option><option value="full_flow_beta">Full-flow Beta</option><option value="direct_beta">Direct Beta</option></select></div>
       </div>
       <div class="field"><label>Internal note</label><textarea id="salesNotes"></textarea></div>
-      <div class="btnrow"><button class="btn secondary" id="addSalesProspect">Add prospect</button><span id="addSalesStatus" class="status"></span></div>
+      <div class="btnrow"><button class="btn secondary" id="addSalesProspect">Add club</button><span id="addSalesStatus" class="status"></span></div>
     </div>
-  </details>
-
-  <section class="admin-card">
-    <div class="admin-card-head"><div><div class="section-label">Admin exception</div><h2>Create custom onboarding manually</h2><p class="help">Normal Interested responses do not use this. Open it only for a special manual or Beta arrangement.</p></div><button class="btn ghost" id="openCustomOnboardingSetup">Open custom setup</button></div>
-  </section>`;
+  </details>`;
 
   document.getElementById('openMarketDiscovery').onclick=()=>{platformView='market';renderPlatformConsole();};
   const renderList=()=>{
@@ -10472,8 +10454,7 @@ async function renderPlatformProspects(){
   document.getElementById('salesProspectStatus').onchange=renderList;
   renderList();
 
-  page.querySelectorAll('[data-manage-onboarding]').forEach(b=>b.onclick=()=>{platformSelectedOnboardingId=b.dataset.manageOnboarding;renderPlatformProspects();});
-  document.getElementById('openCustomOnboardingSetup').onclick=()=>{platformOnboardingSeed=null;renderPlatformOnboarding(true);};
+  document.getElementById('openOnboardingList')?.addEventListener('click',()=>renderPlatformOnboardingList(onboarding,trials));
 
   document.getElementById('addSalesProspect').onclick=async()=>{
     const st=document.getElementById('addSalesStatus');st.textContent='Adding…';
@@ -10482,7 +10463,7 @@ async function renderPlatformProspects(){
     const {data,error}=await supabase.from('sales_prospects').insert({
       club_name:val('salesClubName'),locality:val('salesLocality'),region:val('salesRegion'),country:val('salesCountry')||'Australia',website_url:val('salesWebsite'),
       contact_name:val('salesContactName'),contact_role:val('salesContactRole')||'Club Secretary / contact',contact_email:email,contact_source_url:val('salesSourceUrl'),
-      source_type:'manual',intended_route:document.getElementById('salesIntendedRoute').value,status,notes:val('salesNotes')
+      source_type:'manual',intended_route:'standard',status,notes:val('salesNotes')
     }).select('id').single();
     if(error){st.textContent=error.message;return;}
     st.textContent='Added ✓';platformSelectedProspectId=data.id;setTimeout(()=>renderPlatformProspects(),300);
@@ -10504,6 +10485,48 @@ function trialTimingLabel(trial){
   return trial.status==='offered'
     ?`${days} days · begins on activation`
     :`${niceDate(trial.starts_on)} – ${niceDate(trial.ends_on)}`;
+}
+
+async function renderPlatformOnboardingList(onboardingRows=null,trialRows=null){
+  const page=document.getElementById('platformPage');
+  page.innerHTML='<div class="splash">Loading onboarding list…</div>';
+
+  let records=onboardingRows;
+  let trials=trialRows;
+  if(!Array.isArray(records)||!Array.isArray(trials)){
+    const [onboardingRes,trialRes]=await Promise.all([
+      supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
+      supabase.from('club_trials').select('*').order('created_at',{ascending:false})
+    ]);
+    const loadError=onboardingRes.error||trialRes.error;
+    if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
+    records=onboardingRes.data||[];
+    trials=trialRes.data||[];
+  }
+
+  const current=records.filter(x=>x.status!=='active');
+  const trialMap=new Map(trials.map(t=>[t.onboarding_prospect_id,t]));
+
+  page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backFromOnboardingList">← Club Pipeline</button></div>
+    <section class="admin-card">
+      <div class="admin-card-head"><div><div class="section-label">Currently onboarding</div><h2>${current.length} club${current.length===1?'':'s'}</h2><p class="help">One line per club. Completed setup moves to Active Clubs automatically.</p></div><div class="prospect-filter-row"><input id="onboardingListSearch" placeholder="Search club or contact email"></div></div>
+      <div class="admin-table-wrap" style="margin-top:12px"><table class="admin-table"><thead><tr><th>Club</th><th>Progress</th><th>Club Contact</th><th>Trial</th><th>If continued</th></tr></thead><tbody id="onboardingListBody"></tbody></table></div>
+    </section>`;
+
+  const renderRows=()=>{
+    const q=String(document.getElementById('onboardingListSearch').value||'').trim().toLowerCase();
+    const shown=q?current.filter(p=>[p.club_name,p.primary_contact_name,p.primary_contact_email].some(v=>String(v||'').toLowerCase().includes(q))):current;
+    document.getElementById('onboardingListBody').innerHTML=shown.length?shown.map(p=>{
+      const t=trialMap.get(p.id);
+      const annualCents=t?.annual_price_cents??p.standard_price_cents;
+      const currency=t?.currency||'AUD';
+      return `<tr><td><strong>${esc(p.club_name)}</strong></td><td><span class="status-pill">${esc(onboardingProgressLabel(p,t))}</span></td><td>${esc(p.primary_contact_email||'—')}</td><td>${esc(t?trialTimingLabel(t):niceDate(p.offer_end))}</td><td>${annualCents!=null?`${esc(money(annualCents,currency))}/year`:'—'}</td></tr>`;
+    }).join(''):'<tr><td colspan="5">No onboarding clubs match this search.</td></tr>';
+  };
+
+  document.getElementById('backFromOnboardingList').onclick=()=>renderPlatformProspects();
+  document.getElementById('onboardingListSearch').oninput=renderRows;
+  renderRows();
 }
 
 async function renderPlatformSalesProspectDetail(p){
@@ -10638,15 +10661,12 @@ async function renderPlatformOnboardingDetail(p){
     loadSubscriptionCalendars(),
     supabase.from('club_trials').select('*').eq('onboarding_prospect_id',p.id).maybeSingle()
   ]);
-  const publicLink=`${location.origin}${location.pathname}?prospect=${p.public_token}`;
   if(trial){
     page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backOnboarding">← Club Pipeline</button></div>
     <div class="grid">
       <section class="admin-card">
         <div class="section-label">Club Trial onboarding</div><h2>${esc(p.club_name)}</h2>
         <div class="detail-grid"><div><span>Progress</span><strong>${esc(onboardingProgressLabel(p,trial))}</strong></div><div><span>Club Contact</span><strong>${esc(p.primary_contact_email)}</strong></div><div><span>Trial</span><strong>${esc(trialTimingLabel(trial))}</strong></div><div><span>If continued</span><strong>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year</strong></div></div>
-        <div class="field"><label>Secure club invitation</label><input id="prospectLink" value="${esc(publicLink)}" readonly></div>
-        <button class="btn ghost" id="copyProspectLink">Copy invitation link</button>
       </section>
       <section class="admin-card">
         <div class="section-label">Automatic progress</div><h2>${Number(trial.duration_days||60)}-day Club Trial</h2>
@@ -10657,7 +10677,6 @@ async function renderPlatformOnboardingDetail(p){
       </section>
     </div>`;
     document.getElementById('backOnboarding').onclick=()=>{platformSelectedOnboardingId=null;renderPlatformProspects();};
-    document.getElementById('copyProspectLink').onclick=async()=>{await navigator.clipboard.writeText(publicLink);document.getElementById('copyProspectLink').textContent='Copied ✓';};
     return;
   }
 
@@ -10666,8 +10685,6 @@ async function renderPlatformOnboardingDetail(p){
     <section class="admin-card">
       <div class="section-label">Prospect</div><h2>${esc(p.club_name)}</h2>
       <div class="detail-grid"><div><span>Route</span><strong>${esc(p.entry_route.replaceAll('_',' '))}</strong></div><div><span>Status</span><strong>${esc(p.status.replaceAll('_',' '))}</strong></div><div><span>Club Contact</span><strong>${esc(p.primary_contact_email)}</strong></div><div><span>Current amount</span><strong>${esc(money(p.amount_due_cents))}</strong></div></div>
-      <div class="field"><label>Prospect / Beta link</label><input id="prospectLink" value="${esc(publicLink)}" readonly></div>
-      <button class="btn ghost" id="copyProspectLink">Copy link</button>
     </section>
     <section class="admin-card">
       <div class="section-label">Private commercial terms</div><h2>Club price & annual calendar</h2>
@@ -10683,7 +10700,6 @@ async function renderPlatformOnboardingDetail(p){
     </section>
   </div>`;
   document.getElementById('backOnboarding').onclick=()=>{platformSelectedOnboardingId=null;renderPlatformProspects();};
-  document.getElementById('copyProspectLink').onclick=async()=>{await navigator.clipboard.writeText(publicLink);document.getElementById('copyProspectLink').textContent='Copied ✓';};
   if(document.getElementById('saveProspectTerms'))document.getElementById('saveProspectTerms').onclick=async()=>{
     const st=document.getElementById('prospectTermsStatus');st.textContent='Saving…';
     const reduction=Number(val('editAdjustment')||0);
