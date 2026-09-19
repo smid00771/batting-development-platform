@@ -1,4 +1,4 @@
-// Club Batting v0.8.53.1 — account access, consistent roles and revisiting the club approach
+// Club Batting v0.8.54 — journey review: reliable saves, clearer onboarding and accurate feedback
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -1493,12 +1493,120 @@ function clubSetupProgressHtml(progress){
 
 
 async function saveClubEditsBeforeNavigation(){
+  if(!await savePhilosophyResponseBeforeNavigation())return false;
   if(!await saveClubPlanBeforeNavigation())return false;
   if(!await savePlayerPlanStructureBeforeNavigation())return false;
-  return await saveHowWeBatBeforeNavigation();
+  if(!await saveHowWeBatBeforeNavigation())return false;
+  if(!confirmLeaveWorkshopSetup())return false;
+  return confirmLeaveFeedbackEntry();
 }
 function contributionLocked(){
   return myContributor?.status==='submitted';
+}
+
+let philosophyResponseNavigationSaving=false;
+let workshopSetupSavedSnapshot=null;
+
+function workshopSetupSnapshotOnPage(){
+  if(!document.getElementById('saveWorkshopSetup')||!document.getElementById('leadUser'))return null;
+  return JSON.stringify({
+    mode:document.querySelector('input[name="workshopMode"]:checked')?.value||'solo',
+    lead:document.getElementById('leadUser').value,
+    contributors:[...document.querySelectorAll('[data-contributor-user]:checked')].map(input=>input.dataset.contributorUser).sort(),
+    invitees:[...document.querySelectorAll('[data-new-contributor-row]')].map(row=>({
+      name:row.querySelector('[data-new-name]')?.value.trim()||'',
+      email:row.querySelector('[data-new-email]')?.value.trim()||''
+    })).filter(person=>person.name||person.email)
+  });
+}
+
+function rememberWorkshopSetupSnapshot(snapshot=workshopSetupSnapshotOnPage()){
+  workshopSetupSavedSnapshot={clubId:club.id,snapshot};
+}
+
+function confirmLeaveWorkshopSetup(){
+  if(currentTab!=='workshop'||workshopSetupSavedSnapshot?.clubId!==club?.id)return true;
+  const current=workshopSetupSnapshotOnPage();
+  if(current===null||current===workshopSetupSavedSnapshot.snapshot)return true;
+  return confirm('You have unsaved changes to the workshop setup. Leave this page and discard those changes? Choose Cancel to keep editing or save your selections first.');
+}
+
+function philosophyResponseFieldsOnPage(){
+  if(currentTab==='identity'&&document.getElementById('identityNote')){
+    return {
+      identity_values:[...document.querySelectorAll('[data-identity]:checked')].map(x=>x.dataset.identity),
+      identity_note:val('identityNote'),
+      formats_enabled:Object.fromEntries(FORMATS.map(([key])=>[key,!!document.querySelector(`[data-format="${key}"]`)?.checked]))
+    };
+  }
+  if(currentTab==='dimensions'&&document.getElementById('dimensionNotes')){
+    const keys=[...document.querySelectorAll('[data-dim]:checked')].map(x=>x.dataset.dim);
+    const formatWeights=new Map(weights);
+    for(const key of keys)for(const [format] of FORMATS){
+      const weightKey=`${key}:${format}`;
+      if(!formatWeights.has(weightKey))formatWeights.set(weightKey,DEFAULT_WEIGHTS[key]?.[format]??2);
+    }
+    return {
+      selected_dimensions:keys,
+      dimension_notes:Object.fromEntries(keys.map(key=>[key,document.querySelector(`[data-dim-note="${key}"]`)?.value.trim()||''])),
+      format_weights:Object.fromEntries(formatWeights)
+    };
+  }
+  if(currentTab==='formats'&&document.getElementById('saveWeights')){
+    const formatWeights=new Map(weights);
+    document.querySelectorAll('[data-weight-key]').forEach(x=>formatWeights.set(x.dataset.weightKey,Number(x.value)));
+    return {format_weights:Object.fromEntries(formatWeights)};
+  }
+  return null;
+}
+
+function samePhilosophyResponseFields(fields,response){
+  // JSONB does not retain object-key order. Compare content rather than the
+  // original serialisation so merely opening Help never creates another save.
+  const ordered=value=>Array.isArray(value)?value.map(ordered):value&&typeof value==='object'
+    ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,ordered(value[key])])):value;
+  return !!fields&&Object.keys(fields).every(key=>JSON.stringify(ordered(fields[key]))===JSON.stringify(ordered(response?.[key])));
+}
+
+async function savePhilosophyResponseBeforeNavigation(){
+  if(philosophyResponseNavigationSaving)return false;
+  if(!['identity','dimensions','formats'].includes(currentTab)||!myContribution||contributionLocked())return true;
+  const fields=philosophyResponseFieldsOnPage();
+  if(!fields||samePhilosophyResponseFields(fields,myContribution))return true;
+  const targetClubId=club.id;
+  const targetUserId=session.user.id;
+  const targetTab=currentTab;
+  const statusId=({identity:'identityStatus',dimensions:'dimStatus',formats:'weightStatus'})[targetTab];
+  const status=document.getElementById(statusId);
+  if(status)status.textContent='Saving your response…';
+  philosophyResponseNavigationSaving=true;
+  try{
+    const {data,error}=await supabase.from('philosophy_contributions')
+      .update({...fields,updated_at:new Date().toISOString()})
+      .eq('club_id',targetClubId).eq('user_id',targetUserId).select('*').single();
+    if(error)throw error;
+    if(club?.id!==targetClubId||session?.user?.id!==targetUserId||currentTab!==targetTab)return false;
+    myContribution=data||{...myContribution,...fields};
+    if(targetTab==='identity')clubProfile={...clubProfile,...fields};
+    if(targetTab==='dimensions')selectedDims=new Map(fields.selected_dimensions.map(key=>[key,{club_id:targetClubId,dimension_key:key,enabled:true,club_note:fields.dimension_notes[key]||''}]));
+    if(fields.format_weights)weights=new Map(Object.entries(fields.format_weights).map(([key,value])=>[key,Number(value)]));
+    if(workshop?.final_draft_ready&&isPhilosophyLead()&&howWeBatDraft)howWeBatDraft.status='draft';
+    if(!samePhilosophyResponseFields(philosophyResponseFieldsOnPage(),fields)){
+      if(status)status.textContent='Earlier edits saved. Your latest changes are still here; save again before leaving.';
+      return false;
+    }
+    if(status)status.textContent='Saved ✓';
+    return true;
+  }catch(error){
+    const message=`Couldn’t save your response. Your changes are still here. ${error?.message||'Please try again.'}`;
+    if(club?.id===targetClubId&&currentTab===targetTab){
+      if(status)status.textContent=message;
+      else alert(message);
+    }
+    return false;
+  }finally{
+    philosophyResponseNavigationSaving=false;
+  }
 }
 
 
@@ -2910,8 +3018,14 @@ function buildWorkspaceAudienceNotice(){
   </div>`;
 }
 
+let workshopRenderSequence=0;
 async function renderWorkshop(){
-  document.getElementById('page').innerHTML='<div class="splash">Loading Batting Philosophy Workshop…</div>';
+  const page=document.getElementById('page');
+  const targetClubId=club.id;
+  const targetTab=currentTab;
+  const renderSequence=++workshopRenderSequence;
+  const stillCurrent=()=>renderSequence===workshopRenderSequence&&club?.id===targetClubId&&currentTab===targetTab&&document.getElementById('page')===page;
+  page.innerHTML='<div class="splash">Loading Batting Philosophy Workshop…</div>';
 
   const [
     {data:contribRows,error:cErr},
@@ -2935,6 +3049,7 @@ async function renderWorkshop(){
       :Promise.resolve({data:null,error:null})
   ]);
 
+  if(!stillCurrent())return;
   if(cErr || iErr || snapErr || lateErr || statusErr){
     document.getElementById('page').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr||statusErr).message)}</div>`;
     return;
@@ -2949,6 +3064,7 @@ async function renderWorkshop(){
       .eq('club_id',club.id);
     members=m||[];
   }
+  if(!stillCurrent())return;
 
   // External Philosophy Contributors do not have to be ordinary club members. Always include
   // contributor user IDs when resolving display names, otherwise accepted email invitees can
@@ -2961,6 +3077,7 @@ async function renderWorkshop(){
     const {data:p}=await supabase.from('user_profiles').select('*').in('user_id',profileIds);
     profiles=p||[];
   }
+  if(!stillCurrent())return;
 
   const pMap=new Map(profiles.map(x=>[x.user_id,x]));
   const elevatedCricketRoles=new Set(['captain','coach','head_coach','admin']);
@@ -3021,6 +3138,7 @@ async function renderWorkshop(){
     }
   }
 
+  if(!stillCurrent())return;
   const scenarioResponses=scenarioResponsePool(visibleResponses,lateActions||[],pMap);
   const defaultScenarioIds=workshop?.final_draft_ready && snapshotResponses.length
     ?snapshotResponses.map(r=>r.user_id)
@@ -3417,6 +3535,7 @@ async function renderWorkshop(){
   });
 
   document.querySelectorAll('[data-cancel-philosophy-invite]').forEach(b=>b.onclick=async()=>{
+    if(!confirmLeaveWorkshopSetup())return;
     const {error}=await supabase.rpc('cancel_philosophy_contributor_invite',{p_invite_id:b.dataset.cancelPhilosophyInvite});
     if(error){alert(error.message);return;}
     await renderWorkshop();
@@ -3424,6 +3543,7 @@ async function renderWorkshop(){
 
   if(document.getElementById('myResponseAction')){
     document.getElementById('myResponseAction').onclick=async()=>{
+      if(!confirmLeaveWorkshopSetup())return;
       if(me.status==='submitted'){
         renderMySubmittedPhilosophyResponse(myContribution);
         return;
@@ -3439,6 +3559,7 @@ async function renderWorkshop(){
   }
 
   document.querySelectorAll('[data-reopen-contributor]').forEach(b=>b.onclick=async()=>{
+    if(!confirmLeaveWorkshopSetup())return;
     if(workshop?.final_draft_ready || howWeBatDraft || workshop?.status==='published'){
       alert('This response is already part of the current synthesis and can no longer be reopened.');
       return;
@@ -3455,6 +3576,7 @@ async function renderWorkshop(){
   });
 
   document.querySelectorAll('[data-scenario-preset]').forEach(b=>b.onclick=async()=>{
+    if(!confirmLeaveWorkshopSetup())return;
     philosophyScenarioSelectedIds=new Set((b.dataset.scenarioPreset||'').split(',').filter(Boolean));
     if(workshop?.philosophy_lead_user_id)philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
     await rerenderWorkshopKeepScroll();
@@ -3569,6 +3691,7 @@ async function renderWorkshop(){
       renderTab();
     };
   }
+  rememberWorkshopSetupSnapshot();
 }
 
 async function saveWorkshopSetup(existingRows,externalInvites=[]){
@@ -3606,6 +3729,7 @@ async function saveWorkshopSetup(existingRows,externalInvites=[]){
   s.textContent='Saving…';
   btn.disabled=true;
 
+  const savedSetupSnapshot=workshopSetupSnapshotOnPage();
   const mode=document.querySelector('input[name="workshopMode"]:checked')?.value||'solo';
   const lead=document.getElementById('leadUser').value;
   let selected=mode==='solo'
@@ -3684,7 +3808,13 @@ async function saveWorkshopSetup(existingRows,externalInvites=[]){
   }
 
   s.textContent=mode==='collaborative'?'Saved — new invitations queued ✓':'Solo workshop saved ✓';
+  rememberWorkshopSetupSnapshot(savedSetupSnapshot);
   await loadData();
+  if(workshopSetupSnapshotOnPage()!==savedSetupSnapshot){
+    s.textContent='Earlier selections saved. Your latest changes are still here; save them before leaving.';
+    btn.disabled=false;
+    return;
+  }
   setTimeout(()=>renderShell(),350);
 }
 
@@ -4217,6 +4347,7 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
 }
 
 async function applySelectedVoiceScenario(responses,pMap){
+  if(!confirmLeaveWorkshopSetup())return;
   const selected=selectedScenarioResponses(responses);
   if(!selected.length){alert('Select at least the Philosophy Lead response.');return;}
   const leadId=workshop?.philosophy_lead_user_id;
@@ -5749,6 +5880,14 @@ function hwbPlanSource(usePublished=false){
   return snap||howWeBatDraft||null;
 }
 
+function planStructureFormats(usePublished=false){
+  const source=hwbPlanSource(usePublished);
+  if(source?.formats&&Object.keys(source.formats).length){
+    return FORMATS.filter(([key])=>!!source.formats[key]);
+  }
+  return usePublished?publishedEnabledFormats():enabledFormats();
+}
+
 const HWB_PLAN_PROMPTS={
   value_wicket:{
     dimension:'wicket_preservation',
@@ -5848,7 +5987,7 @@ function generatedPlayerPlanStructure(usePublished=false){
     core:coreKeys.map(generatedCorePlanQuestion),
     formats:{}
   };
-  const formatList=usePublished?publishedEnabledFormats():enabledFormats();
+  const formatList=planStructureFormats(usePublished);
   for(const [format] of formatList){
     const banners=(hwb?.formats?.[format]?.banners||[]).filter(Boolean).slice(0,4);
     structure.formats[format]=banners.map((b,i)=>generatedHwbPlanQuestion(format,b,i));
@@ -5865,7 +6004,7 @@ function normalisePlayerPlanStructure(value,usePublished=false){
     core:Array.isArray(value.core)?structuredClone(value.core):generated.core,
     formats:{}
   };
-  for(const [format] of (usePublished?publishedEnabledFormats():enabledFormats())){
+  for(const [format] of planStructureFormats(usePublished)){
     out.formats[format]=Array.isArray(value.formats?.[format])
       ?structuredClone(value.formats[format])
       :(generated.formats[format]||[]);
@@ -5940,7 +6079,7 @@ function markPlanStructureDirty(){
 
 function validatePlanStructure(structure){
   const problems=[];
-  const sections=[['core','Club-wide foundation'],...enabledFormats()];
+  const sections=[['core','Club-wide foundation'],...planStructureFormats()];
   for(const [section,label] of sections){
     const active=planStructureArray(structure,section).filter(q=>q.active!==false);
     if(!active.length){problems.push(`${label}: keep at least one question.`);continue;}
@@ -6020,14 +6159,16 @@ let playerPlanIdeaPlayersCache={clubId:null,players:null,error:''};
 async function loadPlayerPlanIdeaPlayers(){
   if(!isAdmin())return {players:[],error:''};
   if(playerPlanIdeaPlayersCache.clubId===club?.id && Array.isArray(playerPlanIdeaPlayersCache.players))return playerPlanIdeaPlayersCache;
-  const {data,error}=await supabase.rpc('get_players_workspace',{p_club_id:club.id});
-  playerPlanIdeaPlayersCache={clubId:club.id,players:Array.isArray(data?.players)?data.players:[],error:error?.message||''};
-  return playerPlanIdeaPlayersCache;
+  const targetClubId=club.id;
+  const {data,error}=await supabase.rpc('get_players_workspace',{p_club_id:targetClubId});
+  const result={clubId:targetClubId,players:Array.isArray(data?.players)?data.players:[],error:error?.message||''};
+  if(club?.id===targetClubId)playerPlanIdeaPlayersCache=result;
+  return result;
 }
 
 function playerPlanAddedIdeas(players,structure){
   const groups=[];
-  const sections=[['core','Club-wide',structure?.core||[]],...enabledFormats().map(([format,label])=>[format,label,structure?.formats?.[format]||[]])];
+  const sections=[['core','Club-wide',structure?.core||[]],...planStructureFormats().map(([format,label])=>[format,label,structure?.formats?.[format]||[]])];
   for(const [section,label,questions] of sections){
     for(const q of questions.filter(x=>x.active!==false&&x.response_type!=='text')){
       const counts=new Map();
@@ -6089,13 +6230,17 @@ function renderClubPublicationGate(title,description){
   };
 }
 
+let planStructureRenderSequence=0;
 async function renderPlanStructure(){
   if(!isAdmin()&&!isPhilosophyLead()){
     currentTab='myplan';
     return renderMyPlan();
   }
-  const formats=enabledFormats();
+  const formats=planStructureFormats();
   const page=document.getElementById('page');
+  const targetClubId=club.id;
+  const targetTab=currentTab;
+  const renderSequence=++planStructureRenderSequence;
   const hwbLocked=hasLockedHowWeBatForCurrentRound();
 
   if(!hwbLocked){
@@ -6142,6 +6287,7 @@ async function renderPlanStructure(){
   let playerAddedIdeasHtml='';
   if(isAdmin()){
     const ideaData=await loadPlayerPlanIdeaPlayers();
+    if(renderSequence!==planStructureRenderSequence||club?.id!==targetClubId||currentTab!==targetTab||document.getElementById('page')!==page)return;
     playerAddedIdeasHtml=renderPlayerPlanAddedIdeas(playerPlanAddedIdeas(ideaData.players,playerPlanStructureWorking),ideaData.error);
   }
 
@@ -7279,6 +7425,29 @@ function renderTrainingObservationCard(o){
   </article>`;
 }
 
+// Capture the actual rendered values (including selected options and existing
+// reflections). These entries require an explicit Save; never autosave a
+// partially completed observation when the user tries to leave.
+const feedbackEntryBaselines=new WeakMap();
+function feedbackEntryValues(form){
+  return JSON.stringify([...form.querySelectorAll('input,textarea,select')].map(field=>[
+    field.tagName,field.id||'',field.name||'',field.value,!!field.checked
+  ]));
+}
+function captureFeedbackEntryBaseline(){
+  for(const id of ['myReflectionForm','staffDevelopmentForm']){
+    const form=document.getElementById(id);
+    if(form&&!feedbackEntryBaselines.has(form))feedbackEntryBaselines.set(form,feedbackEntryValues(form));
+  }
+}
+function confirmLeaveFeedbackEntry(){
+  const dirty=['myReflectionForm','staffDevelopmentForm'].some(id=>{
+    const form=document.getElementById(id);
+    return form&&feedbackEntryBaselines.has(form)&&feedbackEntryBaselines.get(form)!==feedbackEntryValues(form);
+  });
+  return !dirty||confirm('You have an unsaved reflection or observation. Leave without saving it? Choose Cancel to keep editing.');
+}
+
 function renderMyReflectionForm(match=null){
   const r=match?.player_reflection||{};
   const format=match?.format_key||publishedEnabledFormats()[0]?.[0]||'limited_overs';
@@ -7294,8 +7463,8 @@ function renderMyReflectionForm(match=null){
     </div>
     <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="reflectionDismissal" maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Caught cover driving on the up"></div>
 
-    <div class="development-question"><label>Did I bat to my Player Plan?</label>${radioChoiceHtml('myBattingToPlan',[["yes","Yes","My decisions stayed inside my plan"],["mostly","Mostly","A few moments drifted"],["no","No","I moved away from my plan"]],r.batting_to_plan||'mostly')}</div>
-    <div class="development-question"><label>How did the dismissal fit my plan?</label>${radioChoiceHtml('myDismissalClass',[["plan_execution","Within plan · poor execution","The shot and ball belonged in my plan"],["outside_plan","Decision outside plan","The option was outside what I had planned"],["not_applicable","Not really a Player Plan issue","Not dismissed / run out / other"]],r.dismissal_classification||'not_applicable')}</div>
+    <div class="development-question"><label>Did I bat to my Player Plan?</label>${radioChoiceHtml('myBattingToPlan',[["yes","Yes","My decisions stayed inside my plan"],["mostly","Mostly","A few moments drifted"],["no","No","I moved away from my plan"]],r.batting_to_plan||'')}</div>
+    <div class="development-question"><label>How did the dismissal fit my plan?</label>${radioChoiceHtml('myDismissalClass',[["plan_execution","Within plan · poor execution","The shot and ball belonged in my plan"],["outside_plan","Decision outside plan","The option was outside what I had planned"],["not_applicable","Not really a Player Plan issue","Not dismissed / run out / other"]],r.dismissal_classification||'')}</div>
     <div class="development-question"><label>Main issue <span>optional</span></label>
       <select id="reflectionMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${r.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select>
     </div>
@@ -7478,7 +7647,7 @@ function renderExternalTrainingEvidenceSection(evidence,{showEmpty=false}={}){
   </section>`;
 }
 
-function trainingFocusForFormat(feedback,format){
+function trainingFocusForFormat(feedback,format,playerMode=true){
   const items=[];
   for(const o of feedback?.training_observations||[]){
     const keys=Array.isArray(o.format_keys)?o.format_keys:[];
@@ -7501,7 +7670,9 @@ function trainingFocusForFormat(feedback,format){
   }
   for(const m of feedback?.matches||[]){
     if(m.format_key!==format)continue;
-    const coach=(m.coach_feedback||[])[0];
+    // Players record their own view before any part of a coach's match
+    // feedback shapes their training. Staff can see the focus immediately.
+    const coach=(!playerMode||m.player_reflection)?(m.coach_feedback||[])[0]:null;
     if(String(coach?.next_training_focus||'').trim())items.push({
       text:coach.next_training_focus.trim(),
       source:`Match feedback · ${coach.author_name||'Coach / Captain'}`,
@@ -7686,8 +7857,9 @@ async function renderHowWeTrain(){
   <div class="train-format-accordion-list">${formatAccordions}</div>
   ${feedbackAccordion}`;
 
+  captureFeedbackEntryBaseline();
   if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
-  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(b.dataset.planSection)builderSection=b.dataset.planSection;currentTab=b.dataset.go;renderTab();});
+  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;if(b.dataset.planSection)builderSection=b.dataset.planSection;currentTab=b.dataset.go;renderTab();});
 
   const rerenderHowWeTrainAt=async(targetId)=>{
     await renderHowWeTrain();
@@ -7695,14 +7867,17 @@ async function renderHowWeTrain(){
   };
 
   if(document.getElementById('newMyReflection'))document.getElementById('newMyReflection').onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
     howWeTrainReflectionEditId='new';
     await rerenderHowWeTrainAt('myReflectionForm');
   };
   page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
     howWeTrainReflectionEditId=b.dataset.editMyReflection;
     await rerenderHowWeTrainAt('myReflectionForm');
   });
   if(document.getElementById('cancelMyReflection'))document.getElementById('cancelMyReflection').onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
     howWeTrainReflectionEditId=null;
     await rerenderHowWeTrainAt('trainingFeedbackLoop');
   };
@@ -7801,6 +7976,7 @@ function wireStaffDevelopmentControls(player,canEdit,data){
   const page=document.getElementById('page');
   if(!page)return;
   wireQuickChoices(page);
+  captureFeedbackEntryBaseline();
   if(!canEdit)return;
 
   const rerenderStaffDevelopmentAt=async(targetId)=>{
@@ -7809,21 +7985,25 @@ function wireStaffDevelopmentControls(player,canEdit,data){
   };
 
   if(document.getElementById('addTrainingObservation'))document.getElementById('addTrainingObservation').onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
     playersWorkspaceDevelopmentMode='training';
     playersWorkspaceDevelopmentMatchId=null;
     await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   };
   if(document.getElementById('addNewMatchFeedback'))document.getElementById('addNewMatchFeedback').onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
     playersWorkspaceDevelopmentMode='match';
     playersWorkspaceDevelopmentMatchId=null;
     await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   };
   page.querySelectorAll('[data-add-coach-feedback]').forEach(b=>b.onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
     playersWorkspaceDevelopmentMode='match';
     playersWorkspaceDevelopmentMatchId=b.dataset.addCoachFeedback;
     await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   });
   if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
     await refreshPlayersWorkspaceFeedback();
@@ -7878,6 +8058,7 @@ function wireStaffDevelopmentControls(player,canEdit,data){
     if(error){btn.disabled=false;btn.textContent='Save coaching feedback';st.textContent=error.message;return;}
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
+    await refreshPlayersWorkspaceFeedback();
     await rerenderStaffDevelopmentAt('developmentOverview');
   };
 }
@@ -7923,6 +8104,10 @@ function signalWasDiscussed(player,signal){
   const row=(player.discussions||[]).find(d=>d.signal_key===signal.key);
   if(!row)return false;
   return String(row.source_at||'')>=String(signal.sourceAt||'');
+}
+
+function discussionSignalIdentity(playerId,signalKey){
+  return `${playerId}::${signalKey}`;
 }
 
 function feedbackDiscussionSignals(data){
@@ -8036,7 +8221,7 @@ function openPlayerPlanFromFeedback(playerId){
 }
 
 function renderDiscussionSignalCard(signal){
-  const isOpen=feedbackWorkspaceDiscussionKey===signal.key;
+  const isOpen=feedbackWorkspaceDiscussionKey===discussionSignalIdentity(signal.player.id,signal.key);
   const canEdit=!!signal.player.can_edit;
   return `<article class="feedback-signal-card ${signal.tone}">
     <div class="feedback-signal-main">
@@ -8048,15 +8233,16 @@ function renderDiscussionSignalCard(signal){
     <div class="feedback-signal-actions">
       <button class="btn ghost" data-view-feedback-player="${signal.player.id}">View evidence</button>
       <button class="btn ghost" data-open-plan-from-feedback="${signal.player.id}">Open Player Plan</button>
-      ${canEdit?`<button class="btn secondary" data-toggle-discussion="${esc(signal.key)}">Mark discussed</button>`:''}
+      ${canEdit?`<button class="btn secondary" data-toggle-discussion="${esc(signal.key)}" data-discussion-player="${esc(signal.player.id)}">Mark discussed</button>`:''}
     </div>
     ${isOpen&&canEdit?`<div class="discussion-outcome-picker">
       <span>What came from the conversation?</span>
+      <p class="help">Records what you agreed. Update the Player Plan or add a training observation separately.</p>
       <div>
-        <button data-discussion-outcome="keep_plan" data-signal-key="${esc(signal.key)}">Keep plan</button>
-        <button data-discussion-outcome="adjust_training" data-signal-key="${esc(signal.key)}">Adjust training</button>
-        <button data-discussion-outcome="review_plan" data-signal-key="${esc(signal.key)}">Review Player Plan</button>
-        <button data-discussion-outcome="no_action" data-signal-key="${esc(signal.key)}">No action needed</button>
+        <button data-discussion-outcome="keep_plan" data-signal-key="${esc(signal.key)}" data-discussion-player="${esc(signal.player.id)}">Plan stays as it is</button>
+        <button data-discussion-outcome="adjust_training" data-signal-key="${esc(signal.key)}" data-discussion-player="${esc(signal.player.id)}">Training change agreed</button>
+        <button data-discussion-outcome="review_plan" data-signal-key="${esc(signal.key)}" data-discussion-player="${esc(signal.player.id)}">Plan review agreed</button>
+        <button data-discussion-outcome="no_action" data-signal-key="${esc(signal.key)}" data-discussion-player="${esc(signal.player.id)}">No action needed</button>
       </div>
     </div>`:''}
   </article>`;
@@ -8139,12 +8325,12 @@ async function renderFeedbackWorkspace(){
   page.innerHTML=`<section class="card feedback-hero"><div><div class="section-label">Feedback</div><h1>See what is worth talking about.</h1><p>Short player reflections and coach observations are compiled into useful conversations — then fed back into training.</p><button class="guide-inline-link" id="feedbackGuideLink">How Coach Conversations work →</button></div><div class="feedback-hero-count"><strong>${discussionPlayerCount}</strong><span>PLAYER${discussionPlayerCount===1?'':'S'} TO SPEAK TO</span></div></section><div class="feedback-tabs">${tabs.map(([k,l])=>`<button data-feedback-section="${k}" class="${feedbackWorkspaceSection===k?'active':''}">${esc(l)}</button>`).join('')}</div>${body}`;
 
   document.getElementById('feedbackGuideLink')?.addEventListener('click',()=>openClubBattingGuideTopic('coach_conversations'));
-  document.querySelectorAll('[data-feedback-section]').forEach(b=>b.onclick=()=>{feedbackWorkspaceSection=b.dataset.feedbackSection;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;feedbackWorkspaceDiscussionKey=null;renderFeedbackWorkspace();});
+  document.querySelectorAll('[data-feedback-section]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceSection=b.dataset.feedbackSection;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;feedbackWorkspaceDiscussionKey=null;renderFeedbackWorkspace();});
   document.querySelectorAll('[data-open-plan-from-feedback]').forEach(b=>b.onclick=()=>openPlayerPlanFromFeedback(b.dataset.openPlanFromFeedback));
   document.querySelectorAll('[data-view-feedback-player]').forEach(b=>b.onclick=()=>{feedbackWorkspacePlayerFilter=b.dataset.viewFeedbackPlayer;feedbackWorkspaceSection='recent';feedbackWorkspaceDiscussionKey=null;renderFeedbackWorkspace();});
-  document.querySelectorAll('[data-toggle-discussion]').forEach(b=>b.onclick=()=>{feedbackWorkspaceDiscussionKey=feedbackWorkspaceDiscussionKey===b.dataset.toggleDiscussion?null:b.dataset.toggleDiscussion;renderFeedbackWorkspace();});
+  document.querySelectorAll('[data-toggle-discussion]').forEach(b=>b.onclick=()=>{const identity=discussionSignalIdentity(b.dataset.discussionPlayer,b.dataset.toggleDiscussion);feedbackWorkspaceDiscussionKey=feedbackWorkspaceDiscussionKey===identity?null:identity;renderFeedbackWorkspace();});
   document.querySelectorAll('[data-discussion-outcome]').forEach(b=>b.onclick=async()=>{
-    const signal=signals.find(s=>s.key===b.dataset.signalKey);if(!signal)return;
+    const signal=signals.find(s=>s.key===b.dataset.signalKey&&s.player.id===b.dataset.discussionPlayer);if(!signal||!signal.player.can_edit)return;
     b.disabled=true;
     const {error}=await supabase.rpc('mark_development_discussion',{p_player_id:signal.player.id,p_signal_key:signal.key,p_source_at:signal.sourceAt,p_outcome:b.dataset.discussionOutcome,p_note:''});
     if(error){alert(error.message);b.disabled=false;return;}
@@ -8154,13 +8340,14 @@ async function renderFeedbackWorkspace(){
   const filter=document.getElementById('feedbackPlayerFilter');if(filter)filter.onchange=()=>{feedbackWorkspacePlayerFilter=filter.value;renderFeedbackWorkspace();};
   document.querySelectorAll('[data-add-coach-view-player]').forEach(b=>b.onclick=()=>{feedbackWorkspaceSelectedPlayerId=b.dataset.addCoachViewPlayer;feedbackWorkspaceMatchId=b.dataset.addCoachViewMatch;feedbackWorkspaceEntryMode='match';feedbackWorkspaceSection='add';renderFeedbackWorkspace();});
 
-  const addPlayer=document.getElementById('feedbackAddPlayer');if(addPlayer)addPlayer.onchange=()=>{feedbackWorkspaceSelectedPlayerId=addPlayer.value||null;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;renderFeedbackWorkspace();};
-  const addTraining=document.getElementById('feedbackAddTraining');if(addTraining)addTraining.onclick=()=>{feedbackWorkspaceEntryMode='training';feedbackWorkspaceMatchId=null;renderFeedbackWorkspace().then(()=>requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'})));};
-  const addMatch=document.getElementById('feedbackAddMatch');if(addMatch)addMatch.onclick=()=>{feedbackWorkspaceEntryMode='match';feedbackWorkspaceMatchId=null;renderFeedbackWorkspace().then(()=>requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'})));};
+  const addPlayer=document.getElementById('feedbackAddPlayer');if(addPlayer)addPlayer.onchange=()=>{if(!confirmLeaveFeedbackEntry()){addPlayer.value=feedbackWorkspaceSelectedPlayerId||'';return;}feedbackWorkspaceSelectedPlayerId=addPlayer.value||null;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;renderFeedbackWorkspace();};
+  const addTraining=document.getElementById('feedbackAddTraining');if(addTraining)addTraining.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceEntryMode='training';feedbackWorkspaceMatchId=null;renderFeedbackWorkspace().then(()=>requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'})));};
+  const addMatch=document.getElementById('feedbackAddMatch');if(addMatch)addMatch.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceEntryMode='match';feedbackWorkspaceMatchId=null;renderFeedbackWorkspace().then(()=>requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'})));};
 
   wireQuickChoices(page);
+  captureFeedbackEntryBaseline();
   const selected=(data.players||[]).find(p=>p.id===feedbackWorkspaceSelectedPlayerId)||null;
-  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=()=>{feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;renderFeedbackWorkspace();};
+  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;renderFeedbackWorkspace();};
   if(selected&&document.getElementById('saveTrainingObservation'))document.getElementById('saveTrainingObservation').onclick=async()=>{
     const btn=document.getElementById('saveTrainingObservation'),st=document.getElementById('staffDevelopmentStatus');
     const toPlan=document.querySelector('input[name="staffTrainingToPlan"]:checked')?.value;
@@ -8485,21 +8672,22 @@ function workspaceFeedbackCount(playerId){
 function renderWorkspaceRosterDiscussion(player,signals){
   if(!signals.length)return '';
   const primary=signals[0];
-  const isOpen=playersWorkspaceDiscussionKey===primary.key;
+  const isOpen=playersWorkspaceDiscussionKey===discussionSignalIdentity(player.id,primary.key);
   return `<div class="workspace-roster-discussion ${primary.tone}">
     <div class="workspace-roster-discussion-copy">
       <span class="workspace-discussion-badge">NEEDS DISCUSSION${signals.length>1?` · ${signals.length} ITEMS`:''}</span>
       <strong>${esc(primary.title)}</strong>
       <small>${esc(primary.summary)}</small>
     </div>
-    ${player.can_edit?`<button class="workspace-text-link strong" data-toggle-roster-discussion="${esc(primary.key)}">${isOpen?'Close':'Mark discussed'}</button>`:''}
+    ${player.can_edit?`<button class="workspace-text-link strong" data-toggle-roster-discussion="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">${isOpen?'Close':'Mark discussed'}</button>`:''}
     ${isOpen&&player.can_edit?`<div class="workspace-discussion-outcomes">
       <span>${esc(primary.suggestion)}</span>
+      <p class="help">Records what you agreed. Update the Player Plan or add a training observation separately.</p>
       <div>
-        <button data-roster-discussion-outcome="keep_plan" data-signal-key="${esc(primary.key)}">Keep plan</button>
-        <button data-roster-discussion-outcome="adjust_training" data-signal-key="${esc(primary.key)}">Adjust training</button>
-        <button data-roster-discussion-outcome="review_plan" data-signal-key="${esc(primary.key)}">Review Player Plan</button>
-        <button data-roster-discussion-outcome="no_action" data-signal-key="${esc(primary.key)}">No action needed</button>
+        <button data-roster-discussion-outcome="keep_plan" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">Plan stays as it is</button>
+        <button data-roster-discussion-outcome="adjust_training" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">Training change agreed</button>
+        <button data-roster-discussion-outcome="review_plan" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">Plan review agreed</button>
+        <button data-roster-discussion-outcome="no_action" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">No action needed</button>
       </div>
     </div>`:''}
   </div>`;
@@ -8765,13 +8953,14 @@ function renderPlayersWorkspaceList(){
   });
 
   document.querySelectorAll('[data-toggle-roster-discussion]').forEach(b=>b.onclick=()=>{
-    playersWorkspaceDiscussionKey=playersWorkspaceDiscussionKey===b.dataset.toggleRosterDiscussion?null:b.dataset.toggleRosterDiscussion;
+    const identity=discussionSignalIdentity(b.dataset.discussionPlayer,b.dataset.toggleRosterDiscussion);
+    playersWorkspaceDiscussionKey=playersWorkspaceDiscussionKey===identity?null:identity;
     renderPlayersWorkspaceList();
   });
 
   document.querySelectorAll('[data-roster-discussion-outcome]').forEach(b=>b.onclick=async()=>{
-    const signal=allSignals.find(s=>s.key===b.dataset.signalKey);
-    if(!signal)return;
+    const signal=allSignals.find(s=>s.key===b.dataset.signalKey&&s.player.id===b.dataset.discussionPlayer);
+    if(!signal||!signal.player.can_edit)return;
     b.disabled=true;
     const {error}=await supabase.rpc('mark_development_discussion',{
       p_player_id:signal.player.id,
@@ -8994,6 +9183,7 @@ function renderWorkspacePlayerDiscussionPanel(player){
 
 async function returnToPlayersWorkspaceList(){
   if(await saveWorkspacePlayerPlanSilently()===false)return;
+  if(!confirmLeaveFeedbackEntry())return;
   playersWorkspaceSelectedId=null;
   playersWorkspaceSection='summary';
   playersWorkspaceDevelopmentMode=null;
@@ -9180,6 +9370,7 @@ async function renderPlayersWorkspacePlayer(){
   document.querySelectorAll('[data-workspace-section]').forEach(b=>b.onclick=async()=>{
     if(b.dataset.workspaceSection===playersWorkspaceSection)return;
     if(await saveWorkspacePlayerPlanSilently()===false)return;
+    if(!confirmLeaveFeedbackEntry())return;
     playersWorkspaceSection=b.dataset.workspaceSection;
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
@@ -9225,6 +9416,8 @@ function answerFor(section,key){
 
 
 let playerPlanAutosaveTimer=null;
+let playerPlanSaveQueue=Promise.resolve();
+let playerPlanSaveRevision=0;
 
 async function saveClubPlanBeforeNavigation(){
   if(currentTab==='myplan' && myPlayer && (localRaw||playerPlanAutosaveTimer)){
@@ -9306,12 +9499,17 @@ async function savePlayerPlanProgressSilently(){
   }
 
   collectBuilderAnswers();
-  const raw=localRaw||rawAnswers();
+  // Capture this save before waiting for earlier requests. Later edits must
+  // neither change its payload nor be cleared by its response.
+  const raw=structuredClone(localRaw||rawAnswers());
+  const playerId=myPlayer.id;
+  const clubId=club?.id;
+  const revision=++playerPlanSaveRevision;
   const curated=curate(raw);
   const sectionStatus=automaticSectionStatus(raw);
 
   const payload={
-    player_id:myPlayer.id,
+    player_id:playerId,
     raw_answers:raw,
     curated_draft:curated,
     section_status:sectionStatus,
@@ -9320,25 +9518,42 @@ async function savePlayerPlanProgressSilently(){
     updated_at:new Date().toISOString()
   };
 
-  const st=document.getElementById('builderStatus');
-  if(st)st.textContent='Saving automatically…';
+  const isCurrentPlayer=()=>myPlayer?.id===playerId&&club?.id===clubId;
+  const status=()=>isCurrentPlayer()?document.getElementById('builderStatus'):null;
+  if(status())status().textContent='Saving automatically…';
 
-  const {data,error}=await supabase
-    .from('player_plan_workflows')
-    .upsert(payload,{onConflict:'player_id'})
-    .select()
-    .single();
+  // Serialize writes, not just responses: the database must finish with the
+  // latest answers even if the connection is slow while the player keeps typing.
+  const save=playerPlanSaveQueue.then(async()=>{
+    try{
+      const {data,error}=await supabase
+        .from('player_plan_workflows')
+        .upsert(payload,{onConflict:'player_id'})
+        .select()
+        .single();
+      if(error)throw error;
 
-  if(error){
-    if(st)st.textContent=`Save problem: ${error.message}`;
-    return false;
-  }
-
-  workflow=data;
-  localRaw=null;
-  if(st)st.textContent='Saved automatically ✓';
-  document.dispatchEvent(new CustomEvent('bdp-player-plan-saved'));
-  return true;
+      if(isCurrentPlayer()){
+        workflow=data;
+        const latest=revision===playerPlanSaveRevision;
+        const sameAnswers=!localRaw||JSON.stringify(localRaw)===JSON.stringify(raw);
+        if(latest&&sameAnswers){
+          localRaw=null;
+          if(status())status().textContent='Saved automatically ✓';
+          document.dispatchEvent(new CustomEvent('bdp-player-plan-saved'));
+        }
+      }
+      return true;
+    }catch(error){
+      if(isCurrentPlayer()&&revision===playerPlanSaveRevision){
+        if(!localRaw)localRaw=structuredClone(raw);
+        if(status())status().textContent=`Save problem: ${error?.message||'Please try again.'}`;
+      }
+      return false;
+    }
+  });
+  playerPlanSaveQueue=save.then(()=>undefined,()=>undefined);
+  return await save;
 }
 
 function queuePlayerPlanAutosave(){
@@ -9827,16 +10042,22 @@ async function renderSalesProspectRoute(token){
   }
 
   const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
-  const interested=p.status==='interested'||p.status==='onboarding';
+  const trialStatusCopy={
+    active:['Your club’s trial is active.','Sign in to Club Batting to continue setting up or using your club’s system. Nothing is automatically charged at the end of the trial.'],
+    conversion_requested:['Your club has requested paid continuation.','Your Club Admin can sign in to review the next steps. Requesting continuation does not take payment.'],
+    converted:['Your club has moved to paid access.','Sign in to Club Batting to continue using your club’s system.'],
+    declined:['Your club has chosen to finish after the trial.','Your Club Admin can sign in to check the remaining trial access. Nothing is automatically charged.'],
+    ended:['Your club’s trial has ended.','Your Club Admin can sign in to review the club’s access. Nothing was automatically charged at the end of the trial.']
+  }[p.trial_status];
+  const interested=p.status==='interested'||p.status==='onboarding'||!!trialStatusCopy;
   const trialLinkQueued=p.status==='onboarding';
-  const trialActive=!!p.trial_status&&p.trial_status!=='offered';
   app.innerHTML=`<div class="prospect-shell sales-response-shell sales-guide-shell">
     <section class="prospect-hero sales-prospect-hero">
       <div class="section-label">Club Batting</div>
-      <h1>A shared batting approach for ${esc(p.club_name)}</h1>
+      <h1>Good starts should become innings that matter.</h1>
       ${place?`<p class="prospect-location">${esc(place)}</p>`:''}
-      <p>Most clubs already have good coaches, good ideas and individual conversations. The difficult part is making the batting thinking <strong>consistent across the club</strong> without making every batter play the same way.</p>
-      <p><strong>Club Batting gives the club a shared framework while protecting what makes each batter effective.</strong></p>
+      <p>Help ${esc(p.club_name)} turn the same batting conversations into better decisions, individual plans and purposeful practice.</p>
+      <p><strong>One shared direction. A practical plan for each batter.</strong></p>
     </section>
 
     <section class="sales-product-journey">
@@ -9858,7 +10079,7 @@ async function renderSalesProspectRoute(token){
       </section>
 
       <section class="card prospect-card sales-response-card">
-        ${interested?`<div class="notice success"><strong>${trialActive?'Your club has activated its trial.':trialLinkQueued?'Your trial link has been requested.':`Thanks for your interest in Club Batting.`}</strong><br>${trialActive?'Your club can review its trial status after signing in. Nothing is automatically charged at the end of the trial.':trialLinkQueued?'An email with your secure activation link has been queued for the Club Contact. Your full trial begins only when you activate it.':'A valid Club Contact email is needed before we can email your secure trial link.'}</div>`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Request a link to try the complete Club Batting platform with your club. The trial starts when you activate it, with no payment upfront. Paid continuation is a separate choice afterwards.</p>
+        ${interested?`<div class="notice success"><strong>${trialStatusCopy?esc(trialStatusCopy[0]):trialLinkQueued?'Your trial link has been requested.':`Thanks for your interest in Club Batting.`}</strong><br>${trialStatusCopy?esc(trialStatusCopy[1]):trialLinkQueued?'An email with your secure activation link has been queued for the Club Contact. Your full trial begins only when you activate it.':'A valid Club Contact email is needed before we can email your secure trial link.'}</div>${trialStatusCopy?'<div class="btnrow"><button class="btn secondary" id="salesOpenClubBatting">Open Club Batting</button></div>':''}`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Request a link to try the complete Club Batting platform with your club. The trial starts when you activate it, with no payment upfront. Paid continuation is a separate choice afterwards.</p>
         <div class="prospect-response-actions">
           <button class="btn secondary" data-sales-response="interested">Send me the trial link</button>
           <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
@@ -9873,20 +10094,24 @@ async function renderSalesProspectRoute(token){
           <div class="btnrow"><button class="btn secondary" id="sendSalesReferral">Send referral</button><button class="btn ghost" id="cancelSalesReferral">Cancel</button></div>
         </div>`}
         <div id="salesResponseStatus" class="help"></div>
-        ${trialActive?'':`<div class="sales-trial-note"><strong>What happens next:</strong><span>Open the trial link in your email, verify your Club Contact email and activate your trial when you’re ready. Nothing is automatically charged.</span></div>`}
+        ${trialStatusCopy?'':`<div class="sales-trial-note"><strong>What happens next:</strong><span>Open the trial link in your email, verify your Club Contact email and activate your trial when you’re ready. Nothing is automatically charged.</span></div>`}
       </section>
     </div>
   </div>`;
 
+  const initialGuideBox=document.getElementById('salesGuideMessages');
+  let guideInteracted=false;
   const refreshGuideHistory=async()=>{
-    const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'history',lead_token:token}});
-    if(e||data?.error)return;
-    setGuideMessages(document.getElementById('salesGuideMessages'),data?.messages||[],'e.g. “We already have batting coaches. What does this add?”');
+    try{
+      const {data,error:e}=await supabase.functions.invoke('club-batting-guide',{body:{action:'history',lead_token:token}});
+      if(e||data?.error||guideInteracted||document.getElementById('salesGuideMessages')!==initialGuideBox)return;
+      setGuideMessages(initialGuideBox,data?.messages||[],'e.g. “We already have batting coaches. What does this add?”');
+    }catch{/* Optional history must never block a club's response. */}
   };
-  await refreshGuideHistory();
 
   const askGuide=async()=>{
     const q=val('salesGuideQuestion').trim();if(!q)return;
+    guideInteracted=true;
     const btn=document.getElementById('salesGuideAsk'),st=document.getElementById('salesGuideStatus'),messageBox=document.getElementById('salesGuideMessages');
     btn.disabled=true;btn.textContent='Thinking…';st.textContent='';st.classList.remove('error','ok');
     messageBox.classList.remove('is-empty');
@@ -9932,6 +10157,13 @@ async function renderSalesProspectRoute(token){
   document.getElementById('wrongContactBtn')?.addEventListener('click',()=>{document.getElementById('wrongContactBox').style.display='block';document.getElementById('wrongContactBtn').style.display='none';});
   document.getElementById('cancelSalesReferral')?.addEventListener('click',()=>{document.getElementById('wrongContactBox').style.display='none';document.getElementById('wrongContactBtn').style.display='';});
   document.getElementById('sendSalesReferral')?.addEventListener('click',()=>respond('wrong_contact',val('salesReferralName'),val('salesReferralEmail')));
+  document.getElementById('salesOpenClubBatting')?.addEventListener('click',()=>{
+    localStorage.setItem('bdp-context','club');
+    history.replaceState({},'',location.pathname);
+    routeAuth();
+  });
+  // The Guide is optional; every response action is ready before history loads.
+  void refreshGuideHistory();
 }
 
 async function renderProspectRoute(token){
@@ -10026,6 +10258,64 @@ function prospectIntro(p){
   </section>`;
 }
 
+function wireProspectAccountSwitch(buttonId,statusId){
+  const button=document.getElementById(buttonId);
+  if(!button)return;
+  button.onclick=async()=>{
+    if(button.disabled)return;
+    const status=document.getElementById(statusId);
+    button.disabled=true;
+    if(status)status.textContent='Signing out of this account…';
+    try{
+      const {error}=await supabase.auth.signOut({scope:'local'});
+      if(error)throw error;
+      // The auth listener returns to this exact invitation with no session.
+      // Keeping the URL preserves the token for the next email sign-in link.
+    }catch(error){
+      if(status)status.textContent=error?.message||'Could not switch accounts. Please try again.';
+      button.disabled=false;
+    }
+  };
+}
+
+async function prepareProspectClubAccess(clubId){
+  const button=document.getElementById('prospectOpenClub');
+  const status=document.getElementById('prospectClubAccessStatus');
+  const userId=session?.user?.id;
+  if(!button||!status||!userId||!clubId)return;
+  const stillCurrent=()=>session?.user?.id===userId&&document.getElementById('prospectOpenClub')===button;
+  button.hidden=true;button.disabled=true;
+  status.textContent='Checking your club access…';
+  try{
+    const {data,error}=await supabase.from('club_memberships')
+      .select('club_id,clubs(archived_at)').eq('club_id',clubId).eq('user_id',userId).maybeSingle();
+    if(!stillCurrent())return;
+    if(error)throw error;
+    if(!data||!data.clubs||data.clubs.archived_at){
+      status.textContent='The nominated Club Admin can sign in to continue. This account does not have access to the club.';
+      return;
+    }
+    status.textContent='You have access to the club. Open Club Batting to continue.';
+    button.textContent='Open Club Batting';button.hidden=false;button.disabled=false;
+    button.onclick=async()=>{
+      if(button.disabled||session?.user?.id!==userId)return;
+      button.disabled=true;
+      localStorage.setItem('bdp-context','club');
+      localStorage.setItem('bdp-club-id',clubId);
+      const nextUrl=new URL(location.href||`${location.origin}${location.pathname}${location.search}`);
+      nextUrl.search='';nextUrl.hash='';nextUrl.searchParams.set('club',clubId);
+      history.replaceState({},'',nextUrl.pathname+nextUrl.search);
+      // Normal launch routing independently reloads membership and permissions.
+      await routeAuth();
+    };
+  }catch(error){
+    if(!stillCurrent())return;
+    status.textContent='We couldn’t check your club access. Try again.';
+    button.textContent='Check club access again';button.hidden=false;button.disabled=false;
+    button.onclick=()=>prepareProspectClubAccess(clubId);
+  }
+}
+
 function renderSecretaryProspectRoute(token,p){
   const amount=money(p.amount_due_cents,p.currency||'AUD');
   const free=p.amount_due_cents===0;
@@ -10092,7 +10382,9 @@ function renderSecretaryProspectRoute(token,p){
   }
 
   if(p.status==='active'){
-    app.innerHTML=`<div class="prospect-shell">${prospectIntro(p)}<section class="card prospect-card"><div class="success-mark">✓</div><h2>Setup handoff complete.</h2><p>The Club Admin has taken over the platform. As Club Contact, you’re finished with day-to-day setup.</p><div class="notice">You’ll only receive important organisational messages such as renewal or account-contact notices.</div></section></div>`;
+    app.innerHTML=`<div class="prospect-shell">${prospectIntro(p)}<section class="card prospect-card"><div class="success-mark">✓</div><h2>Setup handoff complete.</h2><p>The Club Admin can now coordinate your club’s setup. If that’s you, continue into Club Batting below. If someone else is coordinating setup, your handoff is complete.</p><p class="help">Signed in as ${esc(session.user.email||'')}.</p><div class="btnrow"><button class="btn secondary" id="prospectOpenClub" hidden disabled>Open Club Batting</button><button class="btn ghost" id="prospectUseDifferentEmail">Use a different email</button></div><div id="prospectClubAccessStatus" class="help" role="status" aria-live="polite"></div></section></div>`;
+    wireProspectAccountSwitch('prospectUseDifferentEmail','prospectClubAccessStatus');
+    void prepareProspectClubAccess(p.club_id);
     return;
   }
 
@@ -10140,11 +10432,12 @@ function renderSecretaryProspectRoute(token,p){
       <h2>${isClubTrial?`Ready to put Club Batting to work for ${esc(p.club_name)}?`:free?'No payment is required.':`${amount} is due.`}</h2>
       <p class="help">Signed in as ${esc(session.user.email||'')}. ${isClubTrial?`Start your full ${trialDays}-day trial today, then choose who will coordinate your club’s setup. No payment is required upfront and nothing is automatically charged. At the end, you can review the price and choose paid continuation.`:'We verify the Club Contact before any subscription action.'}</p>
       <div class="field"><label>Your name</label><input id="secretaryName" placeholder="Club Secretary / Club Contact"></div>
-      <button class="btn secondary" id="acceptOffer">${isClubTrial?`Start our ${trialDays}-day trial`:'Confirm & continue'}</button>
-      <div id="acceptStatus" class="help"></div>
+      <div class="btnrow"><button class="btn secondary" id="acceptOffer">${isClubTrial?`Start our ${trialDays}-day trial`:'Confirm & continue'}</button><button class="btn ghost" id="prospectUseDifferentEmail">Use a different email</button></div>
+      <div id="acceptStatus" class="help" role="status" aria-live="polite"></div>
     </section>
   </div>`;
 
+  wireProspectAccountSwitch('prospectUseDifferentEmail','acceptStatus');
   document.getElementById('acceptOffer').onclick=async()=>{
     const st=document.getElementById('acceptStatus');st.textContent='Confirming…';
     const {data,error}=await supabase.rpc('accept_prospect_offer',{p_token:token,p_contact_name:val('secretaryName')});
@@ -10509,7 +10802,8 @@ async function renderAdminInviteRoute(token){
     return;
   }
 
-  app.innerHTML=`<div class="login" style="max-width:640px"><div class="section-label">Take over club setup</div><h1>${esc(i.club_name)}</h1><p>As Club Admin you’ll manage people and permissions. You can then nominate the Philosophy Lead — that does not have to be you.</p><div class="field"><label>Your name</label><input id="adminAcceptName" value="${esc(i.invited_name||'')}"></div><button class="btn secondary" id="acceptAdminInvite">Accept Club Admin role</button><div id="adminAcceptStatus" class="help"></div></div>`;
+  app.innerHTML=`<div class="login" style="max-width:640px"><div class="section-label">Take over club setup</div><h1>${esc(i.club_name)}</h1><p>As Club Admin you’ll manage people and permissions. You can then nominate the Philosophy Lead — that does not have to be you.</p><p class="help">Signed in as ${esc(session.user.email||'')}. Use the email address that received this invitation.</p><div class="field"><label>Your name</label><input id="adminAcceptName" value="${esc(i.invited_name||'')}"></div><div class="btnrow"><button class="btn secondary" id="acceptAdminInvite">Accept Club Admin role</button><button class="btn ghost" id="adminUseDifferentEmail">Use a different email</button></div><div id="adminAcceptStatus" class="help" role="status" aria-live="polite"></div></div>`;
+  wireProspectAccountSwitch('adminUseDifferentEmail','adminAcceptStatus');
   document.getElementById('acceptAdminInvite').onclick=async()=>{
     const st=document.getElementById('adminAcceptStatus');st.textContent='Accepting…';
     const {data,error}=await supabase.rpc('accept_club_admin_invite',{p_token:token,p_display_name:val('adminAcceptName')});
