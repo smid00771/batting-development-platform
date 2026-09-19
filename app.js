@@ -1,4 +1,4 @@
-// Club Batting v0.8.51 — prospect review list + pipeline email exceptions
+// Club Batting v0.8.53 — guided club setup, accessible Players and clearer trial offers
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -66,6 +66,8 @@ let builderSection='core';
 let howWeBatDraft=null;
 let howWeBatVersions=[];
 let howWeBatBuilderFormat='limited_overs';
+let howWeBatBuilderDirty=false;
+let howWeBatBuilderSaving=false;
 let publishedHowWeBatFormat='limited_overs';
 let playerPlanStructureDraft=null;
 let playerPlanStructureVersions=[];
@@ -1124,7 +1126,21 @@ async function loadContext(){
 
   allMemberships=(memberships||[]).filter(m=>!m.clubs?.archived_at);
 
-  if(platformRole && localStorage.getItem('bdp-context')==='platform'){
+  const launchParams=new URLSearchParams(location.search);
+  const routeClub=launchParams.get('club');
+  const routeTab=launchParams.get('tab');
+  if(routeClub && !allMemberships.some(m=>m.club_id===routeClub)){
+    app.innerHTML=`<div class="login"><div class="section-label">Club Batting</div><h1>This club link is for a different account.</h1><p>Sign in with the email address that received the invitation. If you already use that address, ask your club to check your registration.</p><div class="btnrow"><button class="btn secondary" id="launchSignOut">Sign out</button><button class="btn ghost" id="launchMyClubs">Open my clubs</button></div></div>`;
+    document.getElementById('launchSignOut').onclick=()=>supabase.auth.signOut();
+    document.getElementById('launchMyClubs').onclick=()=>{
+      clearClubLaunchRoute();
+      localStorage.setItem('bdp-context','club');
+      loadContext();
+    };
+    return;
+  }
+
+  if(!routeClub && platformRole && localStorage.getItem('bdp-context')==='platform'){
     renderPlatformConsole();
     return;
   }
@@ -1135,7 +1151,6 @@ async function loadContext(){
     return;
   }
 
-  const routeClub=new URLSearchParams(location.search).get('club');
   const savedClub=routeClub||localStorage.getItem('bdp-club-id');
   membership=allMemberships.find(m=>m.club_id===savedClub)||allMemberships[0];
   club=membership.clubs;
@@ -1158,15 +1173,37 @@ async function loadContext(){
     return;
   }
 
-  await loadData();
+  try{await loadData();}
+  catch(error){
+    app.innerHTML=`<div class="login"><h1>Your club’s plans could not be loaded.</h1><p>${esc(error.message||'Check your connection and try again.')}</p><button class="btn secondary" id="retryClubLoad">Try again</button></div>`;
+    document.getElementById('retryClubLoad').onclick=loadContext;
+    return;
+  }
+  // Club staff enter through their guided home. An explicit player email link
+  // still takes priority; ordinary players can resume their own saved area.
+  currentTab=canUseClubHome()?'dashboard':savedTab||(isPlayerUser()?'myplan':'howwetrain');
+  if(routeClub===club.id){
+    if(['myplan','howwebat','howwetrain','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
+      currentTab=routeTab;
+      if(routeTab==='myplan')builderSection='core';
+    }
+    clearClubLaunchRoute();
+  }
   renderShell();
+}
+
+function clearClubLaunchRoute(){
+  const url=new URL(location.href||`${location.origin}${location.pathname}${location.search}`);
+  url.searchParams.delete('club');
+  url.searchParams.delete('tab');
+  history.replaceState({},'',url.pathname+url.search+url.hash);
 }
 
 function roleCards(prefix,selected=''){
   const roles=[
     ['player','Player','I want to build and use my own Player Plan.'],
-    ['coach_captain','Coach / Captain','I do not need a Player Plan. An Admin will assign the players I can view or coach.'],
-    ['both','Both','I am a player and also coach / captain. I need my own plan plus assigned coaching access.']
+    ['coach_captain','Non-playing staff','I do not need a Player Plan. The Club Admin will assign my role and any access to players.'],
+    ['both','Player who also coaches or captains','I need my own Player Plan. The Club Admin will assign my club role and any access to other players.']
   ];
   return `<div class="role-grid">${roles.map(([k,t,d])=>`
     <label class="role-card ${selected===k?'on':''}">
@@ -1256,6 +1293,11 @@ async function loadData(){
     supabase.from('player_plan_structure_versions').select('*').eq('club_id',club.id).order('philosophy_version',{ascending:false})
   ]);
 
+  // A failed read is not an empty draft. Keep the current work intact so the
+  // interface cannot replace saved wording with generated defaults on a retry.
+  const draftLoadError=workshopRes.error||versionsRes.error||hwbDraftRes.error||hwbVersionsRes.error||planDraftRes.error||planVersionsRes.error;
+  if(draftLoadError)throw new Error(`The club’s saved plans could not be loaded. ${draftLoadError.message}`);
+
   publishedProfile=pRes.data||{};
   publishedProfile.identity_values=Array.isArray(publishedProfile.identity_values)?publishedProfile.identity_values:[];
   publishedProfile.formats_enabled=publishedProfile.formats_enabled||{t20:true,limited_overs:true,long_form:true};
@@ -1267,6 +1309,7 @@ async function loadData(){
   myContributor=myContributorRes.data||null;
   philosophyVersions=versionsRes.data||[];
   howWeBatDraft=upgradeLegacyHowWeBatWording(hwbDraftRes.data||null);
+  howWeBatBuilderDirty=false;
   howWeBatVersions=hwbVersionsRes.data||[];
   playerPlanStructureDraft=planDraftRes.data||null;
   playerPlanStructureVersions=planVersionsRes.data||[];
@@ -1336,6 +1379,120 @@ function isPhilosophyLead(){
 function canContributePhilosophy(){
   return !!myContributor;
 }
+function hasLockedHowWeBatForCurrentRound(){
+  if(howWeBatDraft)return howWeBatDraft.status==='ready';
+  if(workshop && workshop.status!=='published')return false;
+  return howWeBatVersions.length>0;
+}
+// One persisted-state model drives the landing page, overview and route guards.
+// A new workshop never borrows completion from the system players are still using.
+function clubSetupProgress(state={club,workshop,howWeBatDraft,playerPlanStructureDraft,philosophyVersions,howWeBatVersions,playerPlanStructureVersions}){
+  const c=state.club||{};
+  const round=state.workshop||null;
+  const hwbDraft=state.howWeBatDraft||null;
+  const planDraft=state.playerPlanStructureDraft||null;
+  const hasPhilosophy=(state.philosophyVersions||[]).length>0;
+  const hasHowWeBat=(state.howWeBatVersions||[]).length>0;
+  const hasStructure=(state.playerPlanStructureVersions||[]).length>0;
+  const systemLive=hasPhilosophy&&hasHowWeBat&&hasStructure;
+  const published=systemLive&&(!round||round.status==='published');
+  const hasSavedWork=!!round?.final_draft_ready||!!hwbDraft||!!planDraft||hasPhilosophy||hasHowWeBat||hasStructure;
+  const detailsReady=!!(c.branding_updated_at||c.logo_data_url||c.website_url||hasSavedWork);
+  // Older clubs can have a saved draft without a workshop row. An unfinished
+  // current workshop cannot inherit a leftover draft from an earlier round.
+  const workshopReady=detailsReady&&(published||!!round?.final_draft_ready||(!round&&!!hwbDraft));
+  const howWeBatReady=workshopReady&&(published||hwbDraft?.status==='ready');
+  const structureReady=howWeBatReady&&(published||planDraft?.status==='ready');
+  const steps=[
+    {key:'details',title:'Club details',shortTitle:'Club details',tab:'dashboard',complete:detailsReady,owner:'Club organiser',action:'Set up club details',description:'Add your club logo and colours, or continue with the current look. You can change these later.'},
+    {key:'workshop',title:'Batting Philosophy Workshop',shortTitle:'Workshop',tab:'workshop',complete:workshopReady,owner:'Philosophy Lead and contributors',action:'Continue Batting Philosophy Workshop',description:'Choose a Philosophy Lead, gather the contributions you want and agree the approach your club will use.'},
+    {key:'howwebat',title:'How We Bat',shortTitle:'How We Bat',tab:'howwebat',complete:howWeBatReady,owner:'Philosophy Lead',action:'Review How We Bat',description:'Review the club’s batting approach, check each format and confirm it for the season.'},
+    {key:'structure',title:'Player Plan Structure',shortTitle:'Plan questions',tab:'plan',complete:structureReady,owner:'Philosophy Lead',action:'Review Player Plan questions',description:'Review the questions generated from How We Bat and confirm what players will complete.'},
+    {key:'publish',title:'Publish & notify players',shortTitle:'Publish',tab:'plan',complete:published,owner:'Philosophy Lead',action:'Review & publish',description:'Make How We Bat and Player Plans available together. Registered players receive an email explaining how to get started.'}
+  ];
+  const firstIncomplete=steps.findIndex(step=>!step.complete);
+  return {detailsReady,workshopReady,howWeBatReady,structureReady,published,systemLive,currentIndex:firstIncomplete<0?steps.length:firstIncomplete,steps};
+}
+
+function canUseClubHome(){
+  return isAdmin()||isPhilosophyLead()||canContributePhilosophy()||canUsePlayersWorkspace();
+}
+
+function clubSetupUnavailableReason(tab){
+  const p=clubSetupProgress();
+  const workshopTabs=['workshop','identity','dimensions','formats','preview'];
+  if(workshopTabs.includes(tab)&&!p.detailsReady)return 'Complete Club details first. Your club organiser can do this from Club Home.';
+  // Published reading remains available while a replacement round is prepared.
+  if(tab==='howwebat'&&howWeBatVersions.length)return '';
+  if(['howwebat','plan'].includes(tab)&&!p.workshopReady)return 'Complete Batting Philosophy Workshop first. The Philosophy Lead chooses the approach used to create How We Bat.';
+  if(tab==='plan'&&!p.howWeBatReady)return 'Confirm How We Bat first. The Player Plan questions are built from that approach.';
+  return '';
+}
+
+function canOpenClubTab(tab){
+  if(tab==='dashboard')return canUseClubHome();
+  if(['permissions','groups'].includes(tab))return isAdmin();
+  if(['players','feedback'].includes(tab))return canUsePlayersWorkspace();
+  if(tab==='workshop')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()||canContributePhilosophy());
+  if(['identity','dimensions','formats','preview'].includes(tab))return !clubSetupUnavailableReason(tab)&&(isPhilosophyLead()||canContributePhilosophy());
+  if(tab==='plan')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead());
+  if(tab==='howwebat')return howWeBatVersions.length>0||(!clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()));
+  if(tab==='myplan')return isPlayerUser();
+  if(tab==='howwetrain')return true;
+  return tab==='guide';
+}
+
+function canActOnClubSetupStep(step){
+  if(!step)return false;
+  if(step.key==='details')return isAdmin();
+  if(step.key==='workshop')return isAdmin()||isPhilosophyLead()||canContributePhilosophy();
+  return isPhilosophyLead();
+}
+
+function clubSetupStyles(){
+  return `<style>
+    .club-home-intro{margin:0 0 22px;max-width:760px;line-height:1.6;color:#56627a}
+    .club-setup-progress{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;list-style:none;padding:0;margin:0 0 24px}
+    .club-setup-progress li{display:flex;align-items:flex-start;gap:9px;padding:12px 8px;border-top:3px solid #e5e8ef;min-width:0;color:#667085}
+    .club-setup-progress li.is-complete{border-color:#bddbd3;color:#285d50}
+    .club-setup-progress li.is-current{border-color:var(--navy,#242e72);color:var(--navy,#242e72);background:#f3f5fc;border-radius:0 0 10px 10px}
+    .club-setup-marker{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:#edf0f5;font-size:12px;font-weight:800}
+    .is-current .club-setup-marker{background:var(--navy,#242e72);color:var(--navy-contrast,#fff)}
+    .is-complete .club-setup-marker{background:#dceee8}
+    .club-setup-progress strong{display:block;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+    .club-setup-progress small{display:block;font-size:10px;margin-top:4px}
+    .club-home-next{padding:clamp(22px,4vw,36px);border-left:4px solid var(--navy,#242e72)}
+    .club-home-next h2{font-size:clamp(23px,3vw,31px);line-height:1.2;margin:9px 0 12px;max-width:740px}
+    .club-home-next p{max-width:740px;line-height:1.6}
+    .club-home-owner{font-size:12px;color:#59657c;margin-top:18px}
+    .club-home-overview{margin-top:20px}
+    .club-home-overview>summary{color:var(--navy,#242e72);font-size:13px;font-weight:700;cursor:pointer;width:fit-content;padding:9px 0}
+    .club-home-overview ol{list-style:none;padding:0;margin:8px 0}
+    .club-home-overview li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;padding:16px 0;border-bottom:1px solid #e8ebf2;align-items:start}
+    .club-home-overview li p{margin:6px 0;max-width:720px;font-size:12px;line-height:1.55;color:#58647b}
+    .club-home-overview small{font-size:11px;color:#59657c}
+    .club-home-overview .setup-step-state{display:block;font-size:11px;margin-top:5px}
+    .club-home-link{border:0;background:transparent;padding:7px 0;color:var(--navy,#242e72);font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+    .club-home-secondary{display:flex;flex-wrap:wrap;gap:20px;margin-top:14px}
+    .club-home-round-note{margin:0 0 16px}
+    @media(max-width:650px){.club-setup-progress{grid-template-columns:1fr;gap:0;margin-bottom:18px}.club-setup-progress li{padding:9px 12px;border-top:0;border-left:3px solid #e5e8ef;align-items:center}.club-setup-progress li.is-current{border-left-color:var(--navy,#242e72);border-radius:0 9px 9px 0}.club-setup-progress li.is-complete{border-left-color:#bddbd3}.club-setup-progress li>div:last-child{display:flex;gap:10px;align-items:center;justify-content:space-between;flex:1}.club-setup-progress small{margin:0;white-space:nowrap}.club-home-overview li{grid-template-columns:25px minmax(0,1fr)}.club-home-overview li>button{grid-column:2;justify-self:start}}
+  </style>`;
+}
+
+function clubSetupProgressHtml(progress){
+  return `<ol class="club-setup-progress" aria-label="Club setup progress">${progress.steps.map((step,index)=>{
+    const current=index===progress.currentIndex;
+    const state=step.complete?'Complete':current?'Current step':'Locked';
+    return `<li class="${step.complete?'is-complete':current?'is-current':'is-future'}" ${current?'aria-current="step"':''}><span class="club-setup-marker" aria-hidden="true">${step.complete?'✓':index+1}</span><div><strong>${esc(step.shortTitle)}</strong><small>${state}</small></div></li>`;
+  }).join('')}</ol>`;
+}
+
+
+async function saveClubEditsBeforeNavigation(){
+  if(!await saveClubPlanBeforeNavigation())return false;
+  if(!await savePlayerPlanStructureBeforeNavigation())return false;
+  return await saveHowWeBatBeforeNavigation();
+}
 function contributionLocked(){
   return myContributor?.status==='submitted';
 }
@@ -1379,52 +1536,23 @@ function renderShell(){
   applyClubTheme();
 
   const nav=[];
+  if(canUseClubHome())nav.push(['dashboard','Club Home','club']);
+  if(canUsePlayersWorkspace())nav.push(['players','Players','club']);
 
-  // The horizontal menu is organised by purpose rather than trying to carry
-  // the club-build workflow itself. Club Setup explains the full sequence.
-  if(isAdmin()){
-    nav.push(['dashboard','Club Setup','manage']);
-    nav.push(['permissions','People & Sign-up','manage']);
-  }
-  if(canUsePlayersWorkspace()){
-    nav.push(['players','Players','manage']);
-  }
-
-  if(isAdmin() || canContributePhilosophy() || isPhilosophyLead()){
-    nav.push(['workshop','Philosophy Workshop','build']);
+  // Keep daily player tools easy to reach, including for playing club staff.
+  if(isPlayerUser()){
+    if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','player']);
+    nav.push(['myplan','My Player Plan','player']);
+    nav.push(['howwetrain','How We Train','player']);
+  }else if(!canUseClubHome()){
+    if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','player']);
+    nav.push(['howwetrain','How We Train','player']);
   }
 
-  // How We Bat is the player-facing outcome of the Philosophy Workshop, so it sits
-  // before Player Plan Structure. The manual Builder is intentionally NOT a menu item.
-  // Philosophy Leads can reach exact-wording controls from the How We Bat page itself.
-  if(isPhilosophyLead() || isAdmin()){
-    nav.push(['howwebat','How We Bat','build']);
-    const planStructureReady=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
-    const planLabel='Player Plan Structure';
-    nav.push(['plan',planStructureReady?planLabel:`${planLabel} · Locked`,'build']);
-  }else if(howWeBatVersions.length){
-    nav.push(['howwebat','How We Bat','use']);
-  }
-
-  if(isPlayerUser())nav.push(['myplan','My Player Plan','use']);
-  if(howWeBatVersions.length)nav.push(['howwetrain','How We Train','use']);
-
-  // The Guide is a permanent help layer: full walkthrough on demand, contextual help
-  // when a feature is encountered, and restrained intervention only for genuine gaps.
-  nav.push(['guide','Learn Club Batting','help']);
-
-  // Questionnaire pages and the optional exact-wording editor are workflow screens,
-  // not permanent destinations in the top menu.
-  const hiddenContributionTabs=(canContributePhilosophy() || isPhilosophyLead())
-    ?new Set(['identity','dimensions','formats','preview'])
-    :new Set();
-  const currentIsHiddenContributionStep=hiddenContributionTabs.has(currentTab);
-
-  if(!nav.some(([k])=>k===currentTab) && !currentIsHiddenContributionStep){
-    if(isAdmin())currentTab='dashboard';
-    else if(nav.some(([k])=>k==='workshop'))currentTab='workshop';
-    else if(isPlayerUser())currentTab='myplan';
-    else currentTab=nav[0]?.[0]||'myplan';
+  // Workflow screens stay available internally when their prerequisites and
+  // permissions are met. They do not each become another menu choice.
+  if(!canOpenClubTab(currentTab)){
+    currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'myplan':nav[0]?.[0]||'howwetrain';
   }
 
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
@@ -1445,6 +1573,7 @@ function renderShell(){
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
+          <button class="btn ghost" id="openClubHelp" type="button" aria-label="Open Help and tutorials">Help</button>
           ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother',showPlatform:!!platformRole,platformId:'accountPlatform'})}
         </div>
       </div>
@@ -1453,12 +1582,14 @@ function renderShell(){
     <main class="page" id="page"></main>
   </div>`;
 
-  document.getElementById('out').onclick=()=>supabase.auth.signOut();
-  document.getElementById('joinAnother').onclick=renderJoinAnotherClub;
-  document.getElementById('accountPlatform')?.addEventListener('click',()=>{localStorage.setItem('bdp-context','platform');renderPlatformConsole();});
+  document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
+  document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process');
+  document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
+  document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;localStorage.setItem('bdp-context','platform');renderPlatformConsole();});
 
   if(document.getElementById('contextSwitch')){
     document.getElementById('contextSwitch').onchange=async e=>{
+      if(!await saveClubEditsBeforeNavigation()){e.target.value=`club:${club.id}`;return;}
       if(e.target.value==='platform'){
         localStorage.setItem('bdp-context','platform');
         renderPlatformConsole();
@@ -1482,6 +1613,8 @@ function renderShell(){
 
   document.querySelectorAll('.nav button').forEach(b=>b.onclick=async()=>{
     const nextTab=b.dataset.tab;
+    if(!canOpenClubTab(nextTab))return;
+    if(!await saveClubEditsBeforeNavigation())return;
 
     // If a player is open inside the Players workspace, clicking the main
     // Players navigation button should behave like the on-page ← Players
@@ -1611,6 +1744,9 @@ async function renderPlayerQRCode(link){
 }
 
 async function renderJoinByCode(joinCode){
+  // The dedicated non-playing staff link selects the matching registration type.
+  // This affects whether a Player Plan is needed; it never grants club permissions.
+  const staffRoute=new URLSearchParams(location.search).get('involvement')==='coach_captain';
   const {data:profileData}=await supabase
     .from('user_profiles')
     .select('*')
@@ -1620,7 +1756,7 @@ async function renderJoinByCode(joinCode){
   userProfile=profileData||null;
 
   app.innerHTML=`<div class="login" style="max-width:720px">
-    <div class="section-label">Club invitation</div>
+    <div class="section-label">${staffRoute?'Non-playing staff sign-up':'Club invitation'}</div>
     <h1>Join your club.</h1>
     <p>Your club invitation is ready. Confirm your name and how you are involved; the club assigns any club role and player access separately.</p>
 
@@ -1632,7 +1768,7 @@ async function renderJoinByCode(joinCode){
     <div class="field"><label>Your name</label><input id="joinName" value="${esc(userProfile?.display_name||'')}" placeholder="Full name"></div>
 
     <div class="section-label">How are you involved?</div>
-    ${roleCards('joinRole','player')}
+    ${roleCards('joinRole',staffRoute?'coach_captain':'player')}
 
     <div class="btnrow">
       <button class="btn secondary" id="joinClub">Join club</button>
@@ -1694,6 +1830,10 @@ function renderJoinAnotherClub(){
 }
 
 function renderTab(){
+  if(!canOpenClubTab(currentTab)){
+    currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'myplan':'howwetrain';
+    localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+  }
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
   const map={
     dashboard:renderClubDashboard,
@@ -1738,7 +1878,8 @@ function guideAudienceKey(){
   return isPlayerUser()?'player':'member';
 }
 
-function openClubBattingGuideTopic(capabilityKey='whole_process'){
+async function openClubBattingGuideTopic(capabilityKey='whole_process'){
+  if(!await saveClubEditsBeforeNavigation())return;
   guideSelectedCapabilityKey=capabilityKey||'whole_process';
   currentTab='guide';
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
@@ -1746,11 +1887,33 @@ function openClubBattingGuideTopic(capabilityKey='whole_process'){
 }
 
 function guideTargetLabel(tab){
-  return ({dashboard:'Club Setup',permissions:'People & Sign-up',workshop:'Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',myplan:'My Player Plan',howwetrain:'How We Train'}[tab]||'Open area');
+  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',myplan:'My Player Plan',howwetrain:'How We Train'}[tab]||'Open area');
 }
 
-function guideGoToTarget(tab,focus=''){
+function guideTargetUnavailableReason(tab,focus=''){
+  if(focus==='plan_dates'&&!isAdmin())return 'The Club Admin sets Player Plan dates.';
+  if(focus==='plan_dates'&&!philosophyVersions.length)return 'Player Plan dates become available after the Philosophy Lead publishes the Club Batting System.';
+  if(canOpenClubTab(tab))return '';
+  const prerequisite=clubSetupUnavailableReason(tab);
+  if(prerequisite)return prerequisite;
+  if(['dashboard','permissions','groups'].includes(tab))return 'The Club Admin manages this step.';
+  if(tab==='workshop')return 'The Philosophy Lead and invited contributors work on this step.';
+  if(tab==='plan')return 'The Philosophy Lead finalises the Player Plan Structure.';
+  if(tab==='players'||tab==='feedback')return 'This workspace is for club staff with assigned player access.';
+  if(tab==='myplan')return 'This step is for registered players.';
+  if(tab==='howwebat'||tab==='howwetrain')return 'This becomes available when the Philosophy Lead publishes the Club Batting System.';
+  return 'This area is not available for your club role.';
+}
+
+async function guideGoToTarget(tab,focus=''){
   if(!tab||tab==='guide')return;
+  const unavailable=guideTargetUnavailableReason(tab,focus);
+  if(unavailable){alert(unavailable);return;}
+  if(!await saveClubEditsBeforeNavigation())return;
+  if(tab==='players'){
+    playersWorkspaceSelectedId=null;
+    playersWorkspaceSection='summary';
+  }
   if(focus==='plan_dates'){
     currentTab='players';
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
@@ -1772,9 +1935,18 @@ function guideCapabilityForCurrentProduct(capability){
   const item={...capability};
   const tutorial=Array.isArray(item.tutorial)?item.tutorial.map(step=>({...step})):[];
   if(item.capability_key==='whole_process'){
-    item.tutorial=tutorial.map(step=>step.title==='Set Player Plan dates'
-      ? {...step,body:'Set due dates for the formats each Playing Group is expected to complete. Leave other formats undated and optional.'}
-      : step);
+    item.tutorial=tutorial.map(step=>{
+      if(step.title==='Set the club up')return {...step,body:'Start at Club Home. Save the club details, then follow the highlighted next step through the Batting Philosophy Workshop, How We Bat, Player Plan questions and publication. Later stages open when their prerequisites are complete. People & Sign-up and Playing Groups are managed from Players.'};
+      if(step.title==='Set Player Plan dates')return {...step,body:'The Club Admin sets due dates for the formats each Playing Group should complete. Other formats can remain optional.'};
+      if(step.title==='Reflect and observe')return {...step,body:canUsePlayersWorkspace()?'Open Players, choose a player and add a training observation or match feedback. Players record their own reflections in How We Train.':'Record your match reflection in How We Train. Coaches and captains with assigned access add their own observations.',target_tab:canUsePlayersWorkspace()?'players':'howwetrain'};
+      return step;
+    });
+    // Publication is a separate action after locking the questions; players cannot
+    // start their plans until the Philosophy Lead completes it.
+    if(!item.tutorial.some(step=>step.title==='Publish the Club Batting System')){
+      const at=item.tutorial.findIndex(step=>step.title==='Set Player Plan dates');
+      item.tutorial.splice(at<0?4:at,0,{title:'Publish the Club Batting System',body:'The Philosophy Lead selects “Publish & notify players” on Player Plan Structure. This opens How We Bat and Player Plans and emails registered players.',target_tab:'plan'});
+    }
   }else if(item.capability_key==='plan_dates'){
     item.short_explanation='Every player keeps the T20, Limited Overs and Long Form tabs. Set a due date when a Playing Group is expected to complete a format; leave the date unset when it is optional.';
     item.tutorial=[
@@ -1785,10 +1957,17 @@ function guideCapabilityForCurrentProduct(capability){
       {title:'Use reminders selectively',body:'Club Batting can remind overdue players. The built-in cooldown stops repeated messages becoming noise.'}
     ];
   }else if(item.capability_key==='player_plan'){
+    if(!isPlayerUser()&&canUsePlayersWorkspace())item.target_tab='players';
     item.tutorial=tutorial.map(step=>step.title==='Add the relevant format'
       ? {...step,title:'Use the relevant format',body:'Every player can see T20, Limited Overs and Long Form. Due dates show which format plans their Playing Group is expected to complete; undated formats remain optional.'}
       : step);
   }
+  if(item.capability_key==='feedback_loop'&&!canUsePlayersWorkspace()&&isPlayerUser())item.target_tab='howwetrain';
+  if(item.capability_key==='how_we_bat'&&!isPhilosophyLead()&&!isAdmin())item.title='Understand How We Bat';
+  // Present the current labels even before the refreshed catalogue SQL is applied.
+  const workshopLabel=value=>typeof value==='string'?value.replace(/\b(?:Batting )?Philosophy Workshop\b/g,'Batting Philosophy Workshop'):value;
+  for(const field of ['title','purpose','short_explanation'])item[field]=workshopLabel(item[field]);
+  if(Array.isArray(item.tutorial))item.tutorial=item.tutorial.map(step=>({...step,title:workshopLabel(step.title),body:workshopLabel(step.body)}));
   return item;
 }
 
@@ -1877,7 +2056,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   ]);
   if(capErr||progErr){page.innerHTML=`<section class="card"><div class="notice">${esc((capErr||progErr).message)}</div></section>`;return;}
 
-  const all=(capabilities||[]).map(guideCapabilityForCurrentProduct).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process');
+  const all=(capabilities||[]).map(guideCapabilityForCurrentProduct).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process'||(isPhilosophyLead()&&['philosophy_workshop','how_we_bat','player_plan_structure'].includes(c.capability_key)));
   if(!all.length){page.innerHTML='<section class="card"><h2>Club Batting Guide</h2><p class="help">No Guide topics are available for this role yet.</p></section>';return;}
   if(!all.some(c=>c.capability_key===guideSelectedCapabilityKey))guideSelectedCapabilityKey='whole_process';
   const selected=all.find(c=>c.capability_key===guideSelectedCapabilityKey)||all[0];
@@ -1889,9 +2068,9 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'seen'});
 
   page.innerHTML=`<section class="card guide-hero">
-    <div><div class="section-label">Club Batting Guide</div><h1>Learn it when you need it.</h1><p>Run through the complete Club Batting process, open a focused tutorial, or ask how something works at <strong>${esc(club.name)}</strong>.</p></div>
+    <div><div class="section-label">Help & tutorials</div><h1>How can we help?</h1><p>Choose a step-by-step guide or ask the Club Batting Guide how something works at <strong>${esc(club.name)}</strong>.</p></div>
   </section>
-  ${trial?`<section class="guide-trial-strip"><strong>${trial.status==='conversion_requested'?'Continuation requested':`Club Trial · ${Math.max(0,daysLeft||0)} day${daysLeft===1?'':'s'} remaining`}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · ${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year if the club chooses to continue</span></section>`:''}
+  ${trial?`<section class="guide-trial-strip"><strong>${esc(clubTrialStatusLabel(trial,daysLeft))}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · Nothing is automatically charged.</span></section>`:''}
   <div id="guideInterventionSlot"></div>
   <div class="guide-layout">
     <aside class="guide-topic-list">
@@ -1901,11 +2080,12 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <div class="section-label">${esc(selected.title)}</div>
       <h2>${esc(selected.purpose)}</h2>
       <p class="help guide-topic-explanation">${esc(selected.short_explanation)}</p>
-      <div class="guide-steps">${tutorial.map((step,i)=>`<article><b>${i+1}</b><div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p>${step.target_tab?`<button class="guide-inline-link" data-guide-target="${esc(step.target_tab)}" data-guide-focus="${esc(step.focus||'')}">${esc(guideTargetLabel(step.target_tab))} →</button>`:''}</div></article>`).join('')}</div>
-      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}</div>
+      <div class="guide-steps">${tutorial.map((step,i)=>{const unavailable=step.target_tab?guideTargetUnavailableReason(step.target_tab,step.focus||''):'';return `<article><b>${i+1}</b><div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p>${step.target_tab?(unavailable?`<small class="help">${esc(unavailable)}</small>`:`<button class="guide-inline-link" data-guide-target="${esc(step.target_tab)}" data-guide-focus="${esc(step.focus||'')}">${esc(guideTargetLabel(step.target_tab))} →</button>`):''}</div></article>`;}).join('')}</div>
+      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}</div>
+      ${selected.target_tab&&selected.target_tab!=='guide'&&guideTargetUnavailableReason(selected.target_tab)?`<p class="help">${esc(guideTargetUnavailableReason(selected.target_tab))}</p>`:''}
     </section>
     <section class="card guide-chat-card">
-      <div class="section-label">Ask the Guide</div><h2>How does this work at our club?</h2>
+      <div class="section-label">Ask the Club Batting Guide</div><h2>How does this work at our club?</h2>
       <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
       <div class="guide-chat-compose"><textarea id="guideQuestion" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
       <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
@@ -1969,96 +2149,54 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   };
 }
 
-/* v0.8.11: truthful Club Setup roadmap.
-   Branding and People & Sign-up are ongoing setup tools; Playing Groups is roster
-   administration and now lives under Players rather than the batting-system build. */
+/* Club Home: one next step, with the full setup available on demand. */
 async function renderClubDashboard(){
   const page=document.getElementById('page');
-  page.innerHTML='<div class="splash">Loading club setup…</div>';
-
-  const [
-    {data:entitlement},
-    {data:players},
-    {data:groups},
-    {data:structureVersions},
-    {data:trial}
-  ]=await Promise.all([
-    supabase.rpc('get_club_entitlement',{p_club_id:club.id}),
-    supabase.from('players').select('id,active').eq('club_id',club.id).eq('active',true),
-    supabase.from('playing_groups').select('id,active').eq('club_id',club.id).eq('active',true),
-    supabase.from('player_plan_structure_versions').select('id,version_number').eq('club_id',club.id).order('version_number',{ascending:false}).limit(1),
-    supabase.rpc('get_club_trial',{p_club_id:club.id})
+  const targetClubId=club.id;
+  page.innerHTML='<div class="splash">Loading Club Home…</div>';
+  const [{data:entitlement},{data:players},{data:trial}]=await Promise.all([
+    isAdmin()?supabase.rpc('get_club_entitlement',{p_club_id:targetClubId}):Promise.resolve({data:null}),
+    canUsePlayersWorkspace()?supabase.from('players').select('id,active').eq('club_id',targetClubId).eq('active',true):Promise.resolve({data:[]}),
+    isAdmin()?supabase.rpc('get_club_trial',{p_club_id:targetClubId}):Promise.resolve({data:null})
   ]);
-
-  const entitlementActive=entitlement?.active!==false;
-  const philosophyPublished=philosophyVersions.length>0;
-  const philosophyDraft=!!workshop?.final_draft_ready;
-  const howWeBatPublished=howWeBatVersions.length>0;
-  const howWeBatReady=howWeBatDraft?.status==='ready';
-  const structurePublished=(structureVersions||[]).length>0;
-  const structureReady=playerPlanStructureDraft?.status==='ready';
-  const systemLive=philosophyPublished && howWeBatPublished && structurePublished;
-  const hasSavedBranding=!!club.branding_updated_at || !!club.logo_data_url || !!club.website_url;
+  if(club.id!==targetClubId||currentTab!=='dashboard')return;
+  const progress=clubSetupProgress();
+  const step=progress.steps[progress.currentIndex]||null;
+  const showBranding=false;
+  const contributorWaiting=step?.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
+  const canAct=!!step&&canActOnClubSetupStep(step)&&!contributorWaiting;
   const registeredPlayerCount=(players||[]).length;
+  const entitlementActive=entitlement?.active!==false;
   const trialDaysLeft=trial?.ends_on?Math.max(0,Math.ceil((new Date(`${trial.ends_on}T23:59:59`).getTime()-Date.now())/86400000)):null;
+  const liveAction=canUsePlayersWorkspace()?{tab:'players',label:'Open Players'}:isPlayerUser()?{tab:'myplan',label:'Complete your Player Plan'}:{tab:'howwebat',label:'Read How We Bat'};
+  const nextLabel=step?.key==='workshop'&&!workshop?.philosophy_lead_user_id&&isAdmin()?'Choose a Philosophy Lead':step?.action;
+  const waitingCopy=contributorWaiting
+    ?'Your contribution is submitted. Your Philosophy Lead will review the contributions and choose the club’s approach. You can come back here to check progress.'
+    :step?.key==='details'
+      ?'Your club organiser needs to save the club details before the workshop opens. There is nothing you need to complete here yet.'
+      :step?.key==='workshop'
+        ?(!workshop?.philosophy_lead_user_id?'Your club organiser needs to choose a Philosophy Lead before the club’s approach can be developed. You can check progress here.':'Your Philosophy Lead and invited contributors are preparing the club’s approach. This page will show the next stage when it is ready.')
+        :'Your Philosophy Lead needs to complete this step. You can check progress here; players will receive an email when the system is published.';
 
-  const philosophyState=philosophyPublished?'Published':philosophyDraft?'Final draft in progress':workshop?.status==='review'?'Reviewing contributions':workshop?.status==='collecting'?'Contributions open':'Ready to start';
-  const howWeBatState=howWeBatPublished?'Published':howWeBatReady?'Ready for publication':howWeBatDraft?'In progress':philosophyDraft?'Ready to build':'After philosophy';
-  const structureState=structurePublished?'Published':structureReady?'Ready for publication':playerPlanStructureDraft?'In progress':howWeBatReady||howWeBatPublished?'Ready to build':'After How We Bat';
-  const publishState=systemLive?'Live':(philosophyDraft&&howWeBatReady&&structureReady)?'Ready to publish':'Build stages first';
-
-  const workflow=[
-    {
-      n:'1',title:'Set the club look',who:'Club Admin',state:hasSavedBranding?'Branding saved':'Set up branding',kind:'setup',action:'branding',actionLabel:hasSavedBranding?'Edit branding':'Set up branding',
-      text:'Add the club logo, website and colours. This can be changed later without restarting the batting system.'
-    },
-    {
-      n:'2',title:'People & Sign-up',who:'Club Admin + club members',state:`${registeredPlayerCount} player${registeredPlayerCount===1?'':'s'} registered · ongoing`,kind:'ongoing',go:'permissions',actionLabel:'Open People & Sign-up',
-      text:'Keep registration open as needed. Players and non-playing staff can be added at any time; club roles are assigned separately.'
-    },
-    {
-      n:'3',title:'Build the club philosophy',who:'Philosophy Lead + invited contributors',state:philosophyState,kind:philosophyPublished?'done':philosophyDraft?'active':'build',go:'workshop',actionLabel:'Open Philosophy Workshop',
-      text:'Gather independent contributions, review the synthesis and let the Philosophy Lead decide the final club philosophy.'
-    },
-    {
-      n:'4',title:'Create How We Bat',who:'Philosophy Lead',state:howWeBatState,kind:howWeBatPublished?'done':howWeBatReady?'active':'build',go:(howWeBatDraft||howWeBatPublished)?'howwebat':'workshop',actionLabel:(howWeBatDraft||howWeBatPublished)?'View How We Bat':'Open Philosophy Workshop',
-      text:'Turn the detailed philosophy into a small number of memorable, format-specific Key Messages for players.'
-    },
-    {
-      n:'5',title:'Set the Player Plan Structure',who:'Philosophy Lead',state:structureState,kind:structurePublished?'done':structureReady?'active':'build',go:'plan',actionLabel:'Open Player Plan Structure',
-      text:'Decide the questions players will use to build their own plan. The page can be opened early; prerequisites remain clearly locked where necessary.'
-    },
-    {
-      n:'6',title:'Publish the Club Batting System',who:'Philosophy Lead',state:publishState,kind:systemLive?'done':'build',go:'plan',actionLabel:systemLive?'Review published structure':'Open publishing stage',
-      text:'Publish the matching Philosophy, How We Bat and Player Plan Structure together when all three are ready.'
-    },
-    {
-      n:'7',title:'Players use it. Coaches develop it.',who:'Players + authorised coaches/captains',state:systemLive?'Live':'After publication',kind:systemLive?'done':'later',go:'players',actionLabel:'Open Players',
-      text:'Players build and use their plans. Coaches and captains work with the players and Playing Groups they have access to.'
-    }
-  ];
-
-  page.innerHTML=`
-    ${trial?`<section class="guide-trial-strip club-dashboard-trial"><div><strong>${trial.status==='conversion_requested'?'Club Trial · continuation requested':`Club Trial · ${trialDaysLeft} day${trialDaysLeft===1?'':'s'} remaining`}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · ${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year if the club chooses to continue</span></div>${isAdmin()&&trial.status==='active'?`<div class="btnrow"><button class="btn secondary compact-btn" id="continueClubTrial">Continue after trial</button><button class="btn ghost compact-btn" id="endClubTrial">End after trial</button></div>`:''}</section>`:''}
-    <section class="card setup-collapsible">
-      <div class="setup-collapsible-body">
-        <div class="section-label">Club workflow</div>
-        <div class="setup-guide-head"><h2>Build the club system</h2><button class="btn ghost compact-btn" id="dashboardLearnClubBatting">Learn the whole process →</button></div>
-        <div class="help" style="margin-bottom:14px"><strong>This is a suggested journey, not a checklist that locks the Admin in.</strong> Branding and People & Sign-up stay available at any time. The cricket build then runs naturally from Philosophy → How We Bat → Player Plan Structure → Publish.</div>
-        <div class="club-workflow-list">
-          ${workflow.map(s=>`<div class="club-workflow-step ${s.kind==='done'?'done':s.kind==='active'?'current':''}">
-            <div class="club-workflow-number">${s.n}</div>
-            <div style="min-width:0"><strong>${esc(s.title)}</strong><small>${esc(s.who)} · ${esc(s.state)}</small><p>${esc(s.text)}</p><div class="btnrow compact" style="margin-top:8px"><button class="btn ghost compact-btn" type="button" ${s.action==='branding'?'data-open-branding':''} ${s.go?`data-go="${s.go}"`:''}>${esc(s.actionLabel)}</button></div></div>
-          </div>`).join('')}
-        </div>
-        <div class="notice compact" style="margin-top:12px"><strong>Playing Groups are managed from Players.</strong><br>They are roster administration, not a stage in building the batting philosophy. Create and maintain them once players begin registering.</div>
-      </div>
+  page.innerHTML=`${clubSetupStyles()}
+    <div class="section-label">Club Home</div>
+    <p class="club-home-intro">Build a shared batting approach, turn it into a plan for each player and connect those plans to practice. We’ll guide you through one step at a time.</p>
+    ${clubSetupProgressHtml(progress)}
+    ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">You are preparing a new philosophy round. Players can keep using the published How We Bat and Player Plans while you work through these steps.</div>':''}
+    <section class="card club-home-next" aria-labelledby="clubHomeNextTitle">
+      <div class="section-label">${progress.published?'Ready for players':`Step ${progress.currentIndex+1} of ${progress.steps.length}${canAct?' · Your next step':' · Club’s next step'}`}</div>
+      <h2 id="clubHomeNextTitle">${progress.published?'Put your club’s plans into practice.':step?.key==='details'?'Make this your club’s space.':esc(step?.title||'Club setup')}</h2>
+      <p>${progress.published
+        ?'How We Bat and Player Plans are available. Players can complete their plans and use How We Train to shape their practice. Coaches and captains can follow up through Players.'
+        :canAct?esc(step.description):esc(waitingCopy)}</p>
+      ${progress.published
+        ?`<div class="btnrow"><button class="btn secondary" type="button" data-home-go="${liveAction.tab}">${liveAction.label}</button></div>${canUsePlayersWorkspace()?`<div class="club-home-owner">${registeredPlayerCount} registered player${registeredPlayerCount===1?'':'s'} · Manage sign-up, roles and playing groups from Players.</div>`:''}`
+        :`<div class="btnrow"><button class="btn secondary" type="button" ${canAct?(step.key==='details'?'data-open-branding':`data-home-go="${step.tab}"`):'disabled aria-disabled="true"'}>${esc(nextLabel)}</button></div><div class="club-home-owner">${canAct?'Led by':'Waiting for'} ${esc(step.owner)}${contributorWaiting?' · Your response is complete':''}</div>`}
     </section>
 
-
-    <section class="card club-branding-card" style="margin-top:16px" hidden>
+    ${isAdmin()?`<section class="card club-branding-card" style="margin-top:16px" ${showBranding?'':'hidden'}>
       <div class="setup-collapsible-body">
-        <p class="help setup-collapsible-intro">Add the club logo and website. We can suggest a colour combination from either source, but <strong>you choose what to use</strong>. The preview begins with the club's currently saved colours (or the platform defaults for a new club). Adding a logo does not automatically change them. You can also ignore both suggestions and pick any colours manually. Nothing changes for members until you click <strong>Save branding</strong>.</p>
+        <h3>Club logo and colours</h3><p class="help setup-collapsible-intro">These details are optional. Add your club’s look now, or keep the current colours and select <strong>${progress.detailsReady?'Save club details':'Save club details & continue'}</strong>. You can update them later.</p>
         <div class="branding-steps"><span><b>1</b> Add logo</span><span><b>2</b> Find website colours</span><span><b>3</b> Use a suggestion or choose manually</span></div>
 
       <div class="club-branding-grid">
@@ -2109,44 +2247,110 @@ async function renderClubDashboard(){
       </div>
 
       <div id="clubBrandPreview" class="club-brand-preview"></div>
-      <div class="btnrow branding-save-row"><button class="btn secondary" id="saveClubBranding">Save branding</button><span id="clubBrandingSaveStatus" class="status"></span></div>
+      <div class="btnrow branding-save-row"><button class="btn secondary" id="saveClubBranding">${progress.detailsReady?'Save club details':'Save club details & continue'}</button><span id="clubBrandingSaveStatus" class="status"></span></div>
       </div>
-    </section>
+    </section>`:''}
 
+    <details class="club-home-overview" id="clubSystemOverview">
+      <summary>View the whole Club Batting system</summary>
+      <ol>${progress.steps.map((item,index)=>{
+        const current=index===progress.currentIndex;
+        const available=(item.complete||current)&&canOpenClubTab(item.tab)&&(item.key!=='details'||isAdmin());
+        const state=item.complete?'Complete':current?'Current step':'Locked until the previous step is complete';
+        return `<li><span class="club-setup-marker" aria-hidden="true">${item.complete?'✓':index+1}</span><div><strong>${esc(item.title)}</strong><span class="setup-step-state">${state}</span><p>${esc(item.description)}</p><small>${esc(item.owner)}</small></div>${available?`<button class="club-home-link" type="button" ${item.key==='details'?'data-open-branding':`data-home-go="${item.tab}"`}>${item.complete?'Review':'Open current step'}</button>`:''}</li>`;
+      }).join('')}</ol>
+      <p class="help">After publication: players complete their plans, practise with How We Train and review their progress with coaches and captains. Sign-up and player management stay available throughout setup.</p>
+      <div class="club-home-secondary">
+        ${isAdmin()?'<button class="club-home-link" type="button" data-home-go="permissions">People & Sign-up</button>':''}
+        ${progress.systemLive?'<button class="club-home-link" type="button" data-home-go="howwebat">Read How We Bat</button>':''}
+        <button class="club-home-link" type="button" id="dashboardLearnClubBatting">Help with the whole process</button>
+      </div>
+    </details>
 
-    <div id="dashboardGuideInterventionSlot"></div>
-
-    <details class="card setup-collapsible setup-commercial" style="margin-top:16px">
-      <summary class="setup-collapsible-summary">
-        <div class="setup-collapsible-title"><div class="section-label">Commercial status</div><strong>${entitlement?.status==='development_legacy'?'Development / legacy club':entitlementActive?'Access is active':'Commercial access needs attention'}</strong><span>${entitlementActive?'Active':'Check access'}</span></div>
-        <span class="setup-collapsible-toggle"></span>
-      </summary>
+    ${isAdmin()?`<details class="card setup-collapsible setup-commercial" style="margin-top:22px">
+      <summary class="setup-collapsible-summary"><div class="setup-collapsible-title"><strong>${trial?esc(clubTrialStatusLabel(trial,trialDaysLeft)):'Club access'}</strong></div><span class="setup-collapsible-toggle"></span></summary>
       <div class="setup-collapsible-body">
-        <div class="help">${entitlement?.status==='development_legacy'
-          ?'This club existed before the commercial onboarding system was added. Platform Admin can attach commercial terms later without changing any cricket data.'
-          :`Access ${entitlementActive?'is active':'has expired'}${entitlement?.active_until?` through ${new Date(entitlement.active_until+'T00:00:00').toLocaleDateString()}`:''}. Commercial terms are managed only in Platform Admin.`}</div>
+        ${trial?`<p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}. Paid continuation is your club’s choice. Nothing is automatically charged.</p>${trial.status==='active'?'<div class="btnrow"><button class="btn ghost compact-btn" id="continueClubTrial">Review continuation options</button><button class="btn ghost compact-btn" id="endClubTrial">End after trial</button></div>':''}`
+          :`<div class="help">${entitlement?entitlementActive?'Your club’s access is active.':'Your club’s access needs attention. Contact Club Batting for help.':'Access details are unavailable right now.'}</div>`}
       </div>
-    </details>`;
+    </details>`:''}`;
 
-  document.getElementById('continueClubTrial')?.addEventListener('click',async()=>{
-    const btn=document.getElementById('continueClubTrial');btn.disabled=true;btn.textContent='Recording…';
-    const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:club.id,p_decision:'continue'});
-    if(error){btn.disabled=false;btn.textContent='Continue after trial';alert(error.message);return;}
-    await renderClubDashboard();
-  });
+  document.getElementById('continueClubTrial')?.addEventListener('click',()=>openClubTrialContinuationDialog(trial));
   document.getElementById('endClubTrial')?.addEventListener('click',async()=>{
     if(!confirm('End Club Batting when this Club Trial finishes? No payment will be taken.'))return;
     const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:club.id,p_decision:'end'});
     if(error){alert(error.message);return;}await renderClubDashboard();
   });
-  wireClubBrandingControls(page);
+  if(isAdmin())wireClubBrandingControls(page);
   document.getElementById('dashboardLearnClubBatting')?.addEventListener('click',()=>openClubBattingGuideTopic('whole_process'));
-  renderGuideInterventionInto(document.getElementById('dashboardGuideInterventionSlot'));
-  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
-  page.querySelector('[data-open-branding]')?.addEventListener('click',()=>{
+  page.querySelectorAll('[data-home-go]').forEach(b=>b.onclick=async()=>{
+    const tab=b.dataset.homeGo;
+    if(!canOpenClubTab(tab)||!await saveClubEditsBeforeNavigation())return;
+    if(tab==='players')playersWorkspaceSelectedId=null;
+    currentTab=tab;
+    localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+    renderTab();
+  });
+  page.querySelectorAll('[data-open-branding]').forEach(b=>b.addEventListener('click',()=>{
     const card=page.querySelector('.club-branding-card');
     if(card){card.hidden=false;requestAnimationFrame(()=>card.scrollIntoView({behavior:'smooth',block:'start'}));}
-  });
+  }));
+}
+
+function clubTrialStatusLabel(trial,daysLeft){
+  if(trial.status==='offered')return 'Club Trial · ready to activate';
+  if(trial.status==='conversion_requested')return 'Club Trial · continuation requested';
+  if(trial.status==='converted')return 'Club Trial · continued';
+  if(trial.status==='ended')return 'Club Trial · ended';
+  if(trial.status==='declined')return 'Club Trial · ending after the trial';
+  const days=Math.max(0,Number(daysLeft)||0);
+  return `Club Trial · ${days} day${days===1?'':'s'} remaining`;
+}
+
+function openClubTrialContinuationDialog(trial){
+  if(!isAdmin()||trial?.status!=='active')return;
+  document.getElementById('clubTrialContinuationDialog')?.remove();
+  const targetClubId=club.id;
+  const annualCents=Number(trial.annual_price_cents);
+  const priceAvailable=trial.annual_price_cents!=null&&Number.isFinite(annualCents)&&annualCents>=0;
+  const currency=trial.currency||'AUD';
+  const dialog=document.createElement('dialog');
+  dialog.id='clubTrialContinuationDialog';
+  dialog.setAttribute('aria-labelledby','trialContinuationTitle');
+  dialog.setAttribute('aria-describedby','trialContinuationExplanation');
+  dialog.style.cssText='max-width:620px;width:calc(100% - 32px);border:0;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(20,32,80,.25)';
+  dialog.innerHTML=`<div style="padding:24px">
+    <div class="section-label">After your trial</div>
+    <h2 id="trialContinuationTitle">Continue Club Batting at ${esc(club.name)}</h2>
+    <p>Your trial runs through <strong>${esc(niceDate(trial.ends_on))}</strong>.</p>
+    ${priceAvailable?`<p><strong>${esc(currency)} ${esc(money(annualCents,currency))} per year</strong> for your club’s paid continuation.</p>`:'<p class="notice">Your club’s continuation price is not available. Please ask Club Batting to confirm it before making a decision.</p>'}
+    <p id="trialContinuationExplanation">Requesting paid continuation records your club’s interest in continuing at this price. Payment will be arranged separately; this button does not take payment or automatically charge your club. You can also choose End after trial from the club home screen.</p>
+    <div class="btnrow"><button class="btn secondary" id="confirmTrialContinuation" ${priceAvailable?'':'disabled'}>Request paid continuation</button><button class="btn ghost" id="cancelTrialContinuation" autofocus>Cancel</button></div>
+    <div id="trialContinuationStatus" class="help" role="status" aria-live="polite"></div>
+  </div>`;
+  document.body.appendChild(dialog);
+  const button=dialog.querySelector('#confirmTrialContinuation');
+  const cancel=dialog.querySelector('#cancelTrialContinuation');
+  let saving=false;
+  cancel.onclick=()=>dialog.close();
+  dialog.addEventListener('cancel',event=>{if(saving)event.preventDefault();});
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  button.onclick=async()=>{
+    if(saving||!priceAvailable)return;
+    saving=true;button.disabled=true;cancel.disabled=true;
+    const status=dialog.querySelector('#trialContinuationStatus');
+    status.textContent='Recording your request…';
+    try{
+      const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:targetClubId,p_decision:'continue'});
+      if(error)throw error;
+    }catch(error){
+      status.textContent=error?.message||'Your request could not be recorded. Please try again.';
+      saving=false;button.disabled=false;cancel.disabled=false;return;
+    }
+    dialog.close();
+    try{await renderClubDashboard();}catch(error){alert('Your continuation request was recorded. The club screen could not refresh; please reload it.');}
+  };
+  dialog.showModal();
 }
 
 function wireClubBrandingControls(page){
@@ -2320,6 +2524,7 @@ function wireClubBrandingControls(page){
 
   page.querySelector('#saveClubBranding')?.addEventListener('click',async()=>{
     const button=page.querySelector('#saveClubBranding');
+    const firstSetupSave=!clubSetupProgress().detailsReady;
     draft.website_url=normaliseWebsiteUrl(page.querySelector('#clubWebsiteUrl')?.value||draft.website_url);
     if(draft.website_url && !/^https?:\/\//i.test(draft.website_url)){saveStatus.textContent='Check the website address.';return;}
     if(!validHex(draft.primary_colour)||!validHex(draft.accent_colour)){saveStatus.textContent='Check the two colour values.';return;}
@@ -2331,11 +2536,12 @@ function wireClubBrandingControls(page){
       p_primary_colour:draft.primary_colour,
       p_accent_colour:draft.accent_colour
     });
-    if(error){button.disabled=false;button.textContent='Save branding';saveStatus.textContent=error.message;return;}
+    if(error){button.disabled=false;button.textContent=firstSetupSave?'Save club details & continue':'Save club details';saveStatus.textContent=error.message;return;}
     Object.assign(club,data||draft);
     if(membership?.clubs)Object.assign(membership.clubs,data||draft);
     clubBrandingDraft={...draft};clubBrandingDraftClubId=club.id;
     applyClubTheme();
+    if(firstSetupSave)currentTab='workshop';
     renderShell();
   });
 
@@ -2676,7 +2882,7 @@ function buildWorkspaceAudienceNotice(){
 }
 
 async function renderWorkshop(){
-  document.getElementById('page').innerHTML='<div class="splash">Loading Philosophy Workshop…</div>';
+  document.getElementById('page').innerHTML='<div class="splash">Loading Batting Philosophy Workshop…</div>';
 
   const [
     {data:contribRows,error:cErr},
@@ -2794,9 +3000,12 @@ async function renderWorkshop(){
     ensurePhilosophyScenarioSelection(scenarioResponses,defaultScenarioIds);
   }
 
-  let html=`${buildWorkspaceAudienceNotice()}<div class="guide-context-bar"><span><strong>Philosophy Workshop</strong> · Independent responses first, then the Philosophy Lead brings the club position together.</span><button type="button" class="btn ghost compact-btn" id="workshopGuideLink">Show me how</button></div><div class="workshop-flow-stack">`;
+  // Choosing the club approach closes contributor setup for this round. Returning
+  // here is a review, not an implicit reset of the work that follows it.
+  const setupComplete=!!workshop?.final_draft_ready || !!howWeBatDraft || workshop?.status==='published';
+  let html=`${buildWorkspaceAudienceNotice()}<div class="guide-context-bar"><span><strong>Batting Philosophy Workshop</strong> · Independent responses first, then the Philosophy Lead brings the club position together.</span><button type="button" class="btn ghost compact-btn" id="workshopGuideLink">Show me how</button></div><div class="workshop-flow-stack">`;
 
-  if(isAdmin()){
+  if(isAdmin() && !setupComplete){
     html+=`<section class="card workshop-setup workshop-stage-card">
       <div class="section-label">1 · Contributors</div>
       <h2>Who is contributing?</h2>
@@ -2879,7 +3088,7 @@ async function renderWorkshop(){
 
           <button class="btn ghost add-person-btn" id="addContributorRow" type="button">+ Add another person</button>
           <div id="externalInviteStatus" class="help"></div>
-          <div class="help">New invitations send automatically in Live mode and remain available in Club Pipeline email history.</div>
+          <div class="help">New email invitations are queued when you save. You can manage existing invitations below.</div>
         </div>
 
         <div class="notice compact"><strong>No committee meeting required.</strong><br>Invite people now; they complete their response independently when it suits them.</div>
@@ -2902,9 +3111,9 @@ async function renderWorkshop(){
       ${externalInvites?.length?`<div class="collaborative-invite-history ${collaborative?'show':''}" id="collaborativeInviteHistory">
         <div class="invite-history-head">
           <div>
-            <div class="section-label">Invitations already sent</div>
+            <div class="section-label">Existing invitations</div>
             <h3>Manage existing invitations</h3>
-            <p class="help">These people have already been invited. Saving the selections above <strong>does not invite them again</strong>. Use Resend only if someone needs the invitation sent again.</p>
+            <p class="help">Saving the selections above <strong>does not create another invitation for these people</strong>. Use Resend if someone needs a fresh invitation email.</p>
           </div>
         </div>
         <div class="pending-invites">
@@ -2917,12 +3126,19 @@ async function renderWorkshop(){
         </div>
       </div>`:''}
     </section>`;
+  }else if(isAdmin()){
+    html+=`<section class="card workshop-stage-card workshop-setup-review">
+      <div class="section-label">Workshop setup complete</div>
+      <h2>Review this round’s contributions.</h2>
+      <p class="help">The Philosophy Lead and contributor choices are fixed for this round. You can review the responses below. To change the workshop setup, use <strong>Start new philosophy round</strong> in Workshop settings; the current work will not be reset by revisiting this page.</p>
+      ${externalInvites?.length?`<details class="workshop-existing-invitations"><summary>Existing contributor invitations</summary><div class="pending-invites">${externalInvites.map(i=>`<div class="pending-invite-row"><div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>${esc(i.invited_email)} · ${esc(i.status)}</small></div><div class="member-controls">${i.status==='pending'?`<button class="btn ghost" data-resend-philosophy-invite="${i.id}">Resend</button><button class="btn ghost" data-cancel-philosophy-invite="${i.id}">Cancel</button>`:''}</div></div>`).join('')}</div></details>`:''}
+    </section>`;
   }
 
   html+=`<section class="card workshop-stage-card">
     <div class="section-label">2 · Contributions received</div>
     <h2>What has come back?</h2>
-    <div class="help">Responses stay independent while people are completing them. Once submitted, they appear here before you explore combinations and create How We Bat.</div>
+    <div class="help">Each person completes their response independently. After submitting your own response, you can compare the contributions below. The Philosophy Lead chooses the combination used to create How We Bat.</div>
     <div class="workshop-progress">
       ${workshop?.final_draft_ready && draftSnapshot
         ?`<div><strong>${snapshotCount}</strong><span>included in current synthesis</span></div>
@@ -2956,7 +3172,9 @@ async function renderWorkshop(){
         ?''
         :`<button class="btn secondary" id="myResponseAction">${me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue & submit response':'Review my response'}</button>`}
     </div>`;
-  }else if(!isAdmin()){
+  }else if(isAdmin()){
+    html+=`<div class="notice compact">You can manage contributors and check their progress here. ${postSubmissionStage?'The submitted responses are available to review below.':'Individual responses stay private until contributors have submitted their own response or the workshop reaches the review stage.'} The Philosophy Lead creates and finalises How We Bat.</div>`;
+  }else{
     html+=`<div class="notice">You have not been invited to contribute to this philosophy round.</div>`;
   }
 
@@ -2966,7 +3184,7 @@ async function renderWorkshop(){
     html+=`<section class="card response-status-card" style="margin-top:16px">
       <div class="section-label">Response status</div>
       <h2>Who has submitted?</h2>
-      <div class="help">This status list sits inside the Contributions stage. A saved response remains in progress; a submitted response then appears in full immediately below.</div>
+      <div class="help">A saved response is still in progress. Submitted responses are ready for comparison once you have submitted your own response or the workshop reaches the review stage.</div>
       ${workshopMismatchCount?`<div class="notice workshop-data-warning"><strong>Workshop data needs attention.</strong><br>${workshopMismatchCount} contributor record${workshopMismatchCount===1?' is':'s are'} out of sync with the stored response. Club Batting will not silently include or exclude those responses.</div>`:''}
       <div class="member-list">
         ${(contribRows||[]).map(c=>{
@@ -2987,11 +3205,11 @@ async function renderWorkshop(){
               responseClass='ready';
             }else if(late?.status==='pending'){
               statusText='Submitted after draft started';
-              responseState='Available in Scenario Explorer';
+              responseState='Available to compare below';
               responseClass='problem';
             }else if(late?.status==='ignored'){
               statusText='Submitted after draft started';
-              responseState='Available in Scenario Explorer';
+              responseState='Available to compare below';
               responseClass='waiting';
             }else if(c.status==='submitted'){
               statusText='Submitted';
@@ -3031,12 +3249,12 @@ async function renderWorkshop(){
             <small>${esc(statusText)}</small>
             <span class="workshop-response-state ${responseClass}">${esc(responseState)}</span></div>
             <div class="member-controls">
-              ${c.status==='submitted' && isAdmin() && !workshop?.final_draft_ready?`<button class="btn ghost" data-reopen-contributor="${c.user_id}">Allow changes</button>`:''}
+              ${c.status==='submitted' && isAdmin() && !setupComplete?`<button class="btn ghost" data-reopen-contributor="${c.user_id}">Allow changes</button>`:''}
             </div>
           </div>`;
         }).join('')||'<div class="notice">No accepted contributors selected yet.</div>'}
         ${pendingExternal.map(i=>`<div class="member">
-          <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>Invitation sent · waiting to accept</small><span class="workshop-response-state waiting">Not yet a contributor response</span></div>
+          <div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>Waiting to accept invitation</small><span class="workshop-response-state waiting">Response not started</span></div>
         </div>`).join('')}
       </div>
       ${!workshopMismatchCount && submittedCount!==recordedSynthesisResponses && !workshop?.final_draft_ready
@@ -3047,16 +3265,16 @@ async function renderWorkshop(){
 
   if(canSeeSynthesis){
     if(synthesisLoadError){
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Synthesis</div><h2>The group picture could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>The submitted responses could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
     }else if(scenarioResponses.length){
       html+=renderSynthesis(scenarioResponses,pMap,allSubmitted,synthesisMeta);
     }else{
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Synthesis</div><h2>Waiting for a submitted response.</h2><div class="help">The Scenario Explorer appears once a response has been submitted.</div></section>`;
+      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>Submitted responses will appear here.</h2><div class="help">Once a response is available, you can preview the How We Bat options. The Philosophy Lead chooses which option to use.</div></section>`;
     }
 
   }else if(totalCount>1 && me){
     html+=`<section class="card synthesis-locked workshop-stage-card" style="margin-top:16px">
-      <div class="section-label">2 · Synthesis</div>
+      <div class="section-label">3 · Compare How We Bat options</div>
       <h2>Submit first, then explore the options.</h2>
       <div class="help">Responses stay independent while people are completing them.</div>
     </section>`;
@@ -3177,6 +3395,10 @@ async function renderWorkshop(){
 
   if(document.getElementById('myResponseAction')){
     document.getElementById('myResponseAction').onclick=async()=>{
+      if(me.status==='submitted'){
+        renderMySubmittedPhilosophyResponse(myContribution);
+        return;
+      }
       if(me.status==='invited'){
         const {error}=await supabase.rpc('start_my_philosophy_response',{p_club_id:club.id});
         if(error){alert(error.message);return;}
@@ -3188,7 +3410,7 @@ async function renderWorkshop(){
   }
 
   document.querySelectorAll('[data-reopen-contributor]').forEach(b=>b.onclick=async()=>{
-    if(workshop?.final_draft_ready){
+    if(workshop?.final_draft_ready || howWeBatDraft || workshop?.status==='published'){
       alert('This response is already part of the current synthesis and can no longer be reopened.');
       return;
     }
@@ -3321,6 +3543,11 @@ async function renderWorkshop(){
 }
 
 async function saveWorkshopSetup(existingRows,externalInvites=[]){
+  if(!isAdmin())return;
+  if(workshop?.final_draft_ready || howWeBatDraft || workshop?.status==='published'){
+    alert('This workshop setup is complete. Review the existing contributions, or use Start new philosophy round in Workshop settings to change the setup. Your current work has not been changed.');
+    return;
+  }
   const s=document.getElementById('workshopSetupStatus');
   const btn=document.getElementById('saveWorkshopSetup');
   const externalStatus=document.getElementById('externalInviteStatus');
@@ -3622,7 +3849,7 @@ function renderSubmittedContributionReview(responses,pMap){
   return `<section class="card submitted-contributions-card" style="margin-top:16px">
     <div class="section-label">Submitted responses</div>
     <h2>What did each person say?</h2>
-    <div class="help">These are the actual independent responses available to the Scenario Explorer. Open this only when you want to inspect exactly why a How We Bat option changed.</div>
+    <div class="help">These are the submitted responses used in this How We Bat comparison. Open a full response to see that person's selections, notes and format priorities.</div>
     <div class="submitted-contribution-list">${ordered.map(r=>{
       const name=r.display_name||pMap.get(r.user_id)?.display_name||'Contributor';
       const isLead=r.user_id===leadId;
@@ -3769,7 +3996,7 @@ async function startNewPhilosophyRound(){
     ?`The currently published Club Batting System will stay live until you deliberately publish a replacement.\n\n`
     :'';
   const ok=confirm(
-    `Start a completely new Philosophy Workshop round?\n\n`+
+    `Start a completely new Batting Philosophy Workshop round?\n\n`+
     publishedNote+
     `This will:\n`+
     `• archive the current workshop responses and working state\n`+
@@ -3866,7 +4093,7 @@ function renderDetailedSynthesisBody(responses,pMap){
 function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   const leadId=workshop?.philosophy_lead_user_id;
   const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||(responses||[])[0]||null;
-  if(!leadResponse)return `<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">2 · Synthesis</div><h2>Waiting for the Philosophy Lead's submitted response.</h2></section>`;
+  if(!leadResponse)return `<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>The Philosophy Lead needs to submit their response.</h2><div class="help">The submitted response provides the starting point for How We Bat.</div></section>`;
 
   const selected=selectedScenarioResponses(responses);
   const safeSelected=selected.length?selected:[leadResponse];
@@ -3907,15 +4134,15 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   const hwbLocked=howWeBatDraft?.status==='ready';
 
   return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
-    <div class="section-label">2 · Synthesis · Scenario Explorer</div>
+    <div class="section-label">3 · Compare How We Bat options</div>
     <h2>Which How We Bat feels most like the club?</h2>
-    <div class="help">Choose a combination, then open its How We Bat. Compare the visuals and pick the version that feels right.</div>
+    <div class="help">Choose a combination, then open its How We Bat preview in a new tab. ${hwbLocked?'These previews do not change the locked How We Bat.':isPhilosophyLead()?'Compare the options, then choose “Use this to create How We Bat” when you are ready.':'The Philosophy Lead chooses which option to use for the club.'}</div>
 
     <div class="btnrow" style="margin-top:16px">
       ${presets.map(p=>`<button class="btn ${sameIds(p.ids)?'secondary':'ghost'}" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
     </div>
 
-    ${hwbLocked?`<div class="help" style="margin-top:10px">🔒 How We Bat is locked. These scenarios remain available for reference only.</div>`:(meta?.snapshot?`<div class="help" style="margin-top:10px">A working How We Bat exists. You can still preview or choose another combination until you lock it.</div>`:'')}
+    ${hwbLocked?`<div class="help" style="margin-top:10px">🔒 How We Bat is locked. These comparisons remain available for reference.</div>`:(meta?.snapshot?`<div class="help" style="margin-top:10px">A How We Bat draft exists. The Philosophy Lead can choose another combination until it is locked.</div>`:'')}
 
     <div class="btnrow" style="margin-top:18px">
       <button class="btn ghost" id="openScenarioHwbPreview">Open ${esc(currentLabel)} How We Bat ↗</button>
@@ -4074,6 +4301,18 @@ function renderLateResponseDetail(response){
   <div class="late-detail-dimensions">${dims||'<div class="help">No dimensions selected.</div>'}</div>`;
 }
 
+function renderMySubmittedPhilosophyResponse(response){
+  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}<section class="card">
+    <div class="section-label">Your submitted response</div>
+    <h2>Review your philosophy contribution</h2>
+    ${response
+      ?`<div class="help">Your response is submitted and locked. Here are your identity choices, notes and priorities for each format.</div>${renderLateResponseDetail(response)}`
+      :'<div class="notice">Your response could not be loaded. Return to Batting Philosophy Workshop and refresh the page to try again.</div>'}
+    <div class="btnrow" style="margin-top:16px"><button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button></div>
+  </section>`;
+  document.getElementById('backWorkshop').onclick=()=>{currentTab='workshop';renderTab();};
+}
+
 function renderLatePhilosophyResponses(actions,pMap){
   const pending=(actions||[]).filter(a=>a.status==='pending');
   const actioned=(actions||[]).filter(a=>a.status!=='pending');
@@ -4215,19 +4454,16 @@ async function beginFinalDraftFromSynthesis(){
 }
 
 async function publishPhilosophy(){
+  if(!isPhilosophyLead())return;
   const firstPublish=philosophyVersions.length===0;
 
   const ok=confirm(firstPublish
-    ?`Publish ${club.name}'s Club Batting System?\n\n`+
-      `This will:\n`+
-      `• publish the current Philosophy as v1\n`+
-      `• publish the matching How We Bat\n`+
-      `• activate the Player Plan Structure\n`+
-      `• open Player Plans to registered players\n`+
-      `• queue the Player Plan notification for current players\n\n`+
-      `Nothing is published until you confirm.`
-    :`Publish this as a new Club Batting System version?\n\n`+
-      `The currently published version remains live until you confirm. This release will publish the current Philosophy and matching How We Bat together.`);
+    ?`Publish How We Bat and open Player Plans for ${club.name}?\n\n`+
+      `Players will be able to read How We Bat and start answering their Player Plan questions. An email will be queued automatically for everyone already registered as a player, including those who also coach or captain.\n\n`+
+      `Publish and notify players?`
+    :`Publish the updated How We Bat and Player Plan questions for ${club.name}?\n\n`+
+      `This replaces the currently published club system. An email will be queued automatically for everyone already registered as a player, including those who also coach or captain.\n\n`+
+      `Publish and notify players?`);
   if(!ok)return;
 
   const publishButton=document.getElementById('publishClubSystem');
@@ -4250,35 +4486,28 @@ async function publishPhilosophy(){
     if(submitError){
       if(publishButton){
         publishButton.disabled=false;
-        publishButton.textContent='Publish Club Batting System';
+        publishButton.textContent='Publish & notify players';
       }
       if(publishStatus)publishStatus.textContent=submitError.message;
       return;
     }
   }
 
-  let notifyPlayers=firstPublish;
-  if(!firstPublish){
-    notifyPlayers=confirm('Would you also like to notify current players that the club batting system has been updated?');
-  }
-
   const {data,error}=await supabase.rpc('publish_philosophy',{
     p_club_id:club.id,
-    p_notify_players:notifyPlayers
+    p_notify_players:true
   });
 
   if(error){
     if(publishButton){
       publishButton.disabled=false;
-      publishButton.textContent='Publish Club Batting System';
+      publishButton.textContent='Publish & notify players';
     }
     if(publishStatus)publishStatus.textContent=error.message;
     return;
   }
 
-  alert(firstPublish
-    ?`Club Batting System v${data} is live. How We Bat is published, Player Plans are open, and player notification messages have been queued.`
-    :`Club Batting System v${data} is now live. The matching Philosophy and How We Bat version have been published together.`);
+  alert(`Club Batting System v${data} is live. Players can read How We Bat and open My Player Plan. Notification emails are queued for registered players.`);
 
   await loadData();
   currentTab='howwebat';
@@ -4299,8 +4528,8 @@ function identitySummary(){
 function renderIdentity(){
   if(!myContribution){
     document.getElementById('page').innerHTML=`<div class="card"><h2>Start your philosophy response first.</h2>
-      <div class="help">Go to Philosophy Workshop and choose “Start my response”.</div>
-      <div class="btnrow"><button class="btn secondary" id="backWorkshop">Go to Philosophy Workshop</button></div></div>`;
+      <div class="help">Go to Batting Philosophy Workshop and choose “Start my response”.</div>
+      <div class="btnrow"><button class="btn secondary" id="backWorkshop">Go to Batting Philosophy Workshop</button></div></div>`;
     document.getElementById('backWorkshop').onclick=()=>{currentTab='workshop';renderTab();};
     return;
   }
@@ -4331,7 +4560,7 @@ function renderIdentity(){
       <div id="identityError" class="notice" style="display:none;background:#fff0f0;color:#9f1d1d;border:1px solid #efb8b8"></div>
       <div class="btnrow">
         ${locked
-          ?'<button class="btn secondary" id="backWorkshop">Return to Philosophy Workshop</button>'
+          ?'<button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button>'
           :'<button class="btn secondary" id="saveIdentity">Save & continue</button><span class="status" id="identityStatus"></span>'}
       </div>
     </section>
@@ -4434,7 +4663,7 @@ function renderDimensions(){
       <div id="dimensionNotes"></div>
       <div class="btnrow">
         ${locked
-          ?'<button class="btn secondary" id="backWorkshop">Return to Philosophy Workshop</button>'
+          ?'<button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button>'
           :'<button class="btn secondary" id="saveDims">Save & set format emphasis</button><span class="status" id="dimStatus"></span>'}
       </div>
     </section>
@@ -4457,6 +4686,12 @@ function renderDimensions(){
 }
 
 function renderDimensionNotes(){
+  // Keep typed notes while another idea is selected or deselected. The page is
+  // rebuilt below; reading only saved values here would silently discard edits.
+  document.querySelectorAll('[data-dim-note]').forEach(input=>{
+    const key=input.dataset.dimNote;
+    selectedDims.set(key,{...(selectedDims.get(key)||{}),club_note:input.value});
+  });
   const keys=[...document.querySelectorAll('[data-dim]:checked')].map(x=>x.dataset.dim);
   const locked=contributionLocked();
   document.getElementById('dimensionNotes').innerHTML=keys.length?keys.map(k=>{
@@ -4464,7 +4699,7 @@ function renderDimensionNotes(){
     const note=selectedDims.get(k)?.club_note||'';
     return `<div class="field"><label>${esc(d.label)} — anything specific? (optional)</label>
       <textarea data-dim-note="${k}" placeholder="Leave blank if the selections already say enough…" ${locked?'disabled':''}>${esc(note)}</textarea></div>`;
-  }).join(''):'<div class="notice">Choose some dimensions on the left first.</div>';
+  }).join(''):'<div class="notice">Select an idea to add an optional note about it.</div>';
 }
 
 async function saveDimensions(){
@@ -4545,7 +4780,7 @@ function renderFormats(){
     </tbody></table></div>`:'<div class="notice">No formats are enabled.</div>'}
     <div class="btnrow">
       ${locked
-        ?'<button class="btn secondary" id="backWorkshop">Return to Philosophy Workshop</button>'
+        ?'<button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button>'
         :'<button class="btn secondary" id="saveWeights">Save & review response</button><span class="status" id="weightStatus"></span>'}
     </div>
   </div>`;
@@ -4901,7 +5136,7 @@ function howWeBatBannerEditorRows(format){
   }).sort((a,b)=>a.order-b.order||b.adjustedScore-a.adjustedScore);
 }
 
-function renderHowWeBatBuilder(){
+function renderHowWeBatBuilder(savedMessage=''){
   const draft=ensureHowWeBatWorkingDraft();
   if(draft.status==='ready'){
     currentTab='howwebat';
@@ -4915,14 +5150,13 @@ function renderHowWeBatBuilder(){
   const rows=howWeBatBannerEditorRows(howWeBatBuilderFormat);
 
   const builderIsReady=draft.status==='ready';
-  const builderSaved=!!draft.updated_at;
 
   document.getElementById('page').innerHTML=`<div class="hwb-builder-shell">
     <section class="card hwb-builder-intro">
       <div>
         <div class="section-label">Optional manual control</div>
         <h2>Edit the exact How We Bat wording</h2>
-        <div class="help">The detailed dimensions remain underneath the system and continue to drive Player Plans. <strong>How We Bat is deliberately compressed.</strong> Related High / Very High dimensions reinforce a shared banner rather than becoming separate rules.</div>
+        <div class="help">Review the identity statement and the Key Messages for each format. Save your wording as a draft, or confirm and lock it when the club is ready to build Player Plan Structure.</div>
       </div>
       <div class="hwb-builder-state ${builderIsReady?'ready':'draft'}">
         <strong>${builderIsReady?'HOW WE BAT READY':'WORKING DRAFT'}</strong>
@@ -4931,7 +5165,7 @@ function renderHowWeBatBuilder(){
     </section>
 
     <section class="card" style="margin-top:16px">
-      <div class="section-label">Club-wide identity · appears above all three format tabs</div>
+      <div class="section-label">Club-wide identity · appears across your club’s formats</div>
       <div class="field"><label>Opening identity statement</label><textarea id="hwbIdentity" rows="3">${esc(draft.identity_statement||'')}</textarea></div>
       <div class="field"><label>Closing strapline</label><input id="hwbStrap" value="${esc(draft.closing_strapline||'')}" placeholder="e.g. VALUE YOUR WICKET · KEEP IT MOVING · KNOW WHERE YOU SCORE"></div>
     </section>
@@ -4973,9 +5207,9 @@ function renderHowWeBatBuilder(){
       <div class="notice hwb-rule-note"><strong>Priority rule:</strong> several related High / Very High dimensions strengthen the shared banner. One isolated Very High dimension does not automatically become a headline.</div>
 
       <div class="btnrow hwb-builder-actions">
-        <button class="btn ghost" id="backToHwbView">Back to How We Bat</button>
-        <button class="btn secondary" id="saveHwbDraft">${builderSaved?'Draft saved ✓':'Save How We Bat draft'}</button><button class="btn secondary" id="readyHwbDraft">Confirm & lock How We Bat</button>
-        <span class="status" id="hwbStatus"></span>
+        <button class="btn ghost" id="backToHwbView">Save & return to How We Bat</button>
+        <button class="btn secondary" id="saveHwbDraft">Save How We Bat draft</button><button class="btn secondary" id="readyHwbDraft">Confirm & lock How We Bat</button>
+        <span class="status" id="hwbStatus" aria-live="polite">${howWeBatBuilderDirty?'Unsaved changes':esc(savedMessage)}</span>
       </div>
     </section>
 
@@ -4992,6 +5226,7 @@ function renderHowWeBatBuilder(){
     const checked=[...document.querySelectorAll('[data-hwb-use]:checked')];
     if(checked.length>4){cb.checked=false;alert('Keep How We Bat to a maximum of four banners in each format.');}
     collectHowWeBatBuilderPage();
+    howWeBatBuilderDirty=true;
     renderHowWeBatBuilder();
   });
 
@@ -5004,15 +5239,17 @@ function renderHowWeBatBuilder(){
     collectHowWeBatBuilderPage();
     howWeBatDraft.formats[howWeBatBuilderFormat]=generatedHowWeBatFormat(howWeBatBuilderFormat);
     howWeBatDraft.status='draft';
+    howWeBatBuilderDirty=true;
     renderHowWeBatBuilder();
   };
 
   const markHwbDirty=()=>{
+    howWeBatBuilderDirty=true;
     const save=document.getElementById('saveHwbDraft');
     const st=document.getElementById('hwbStatus');
     if(save){
       save.disabled=false;
-      save.textContent='Save changes';
+      save.textContent='Save How We Bat draft';
     }
     if(st && howWeBatDraft?.status!=='ready')st.textContent='Unsaved changes';
   };
@@ -5021,7 +5258,10 @@ function renderHowWeBatBuilder(){
     .forEach(el=>el.addEventListener('input',markHwbDirty));
 
   if(document.getElementById('backToHwbView')){
-    document.getElementById('backToHwbView').onclick=()=>{currentTab='howwebat';renderTab();};
+    document.getElementById('backToHwbView').onclick=async()=>{
+      if(!await saveHowWeBatBuilder('draft'))return;
+      currentTab='howwebat';renderTab();
+    };
   }
   if(document.getElementById('saveHwbDraft')){
     document.getElementById('saveHwbDraft').onclick=()=>saveHowWeBatBuilder('draft');
@@ -5080,10 +5320,19 @@ function moveHowWeBatBanner(key,direction){
   const j=i+direction;
   if(j<0||j>=banners.length)return;
   [banners[i],banners[j]]=[banners[j],banners[i]];
+  howWeBatBuilderDirty=true;
   renderHowWeBatBuilder();
 }
 
+async function saveHowWeBatBeforeNavigation(){
+  if(!document.getElementById('hwbIdentity'))return true;
+  if(howWeBatBuilderSaving)return false;
+  if(howWeBatDraft?.status==='ready')return true;
+  return !howWeBatBuilderDirty || await saveHowWeBatBuilder('draft');
+}
+
 async function saveHowWeBatBuilder(status){
+  if(!isPhilosophyLead() || howWeBatBuilderSaving || howWeBatDraft?.status==='ready')return false;
   const st=document.getElementById('hwbStatus');
   collectHowWeBatBuilderPage();
   const draft=ensureHowWeBatWorkingDraft();
@@ -5093,28 +5342,33 @@ async function saveHowWeBatBuilder(status){
       const f=draft.formats?.[format];
       if(!f || !f.intro || !f.callout || (f.banners||[]).length<2 || (f.banners||[]).length>4){
         st.textContent=`Review ${label}: it needs an opening, callout and 2–4 banners.`;
-        return;
+        return false;
       }
       if((f.banners||[]).some(x=>!x.title||!x.message)){
         st.textContent=`Review ${label}: every selected banner needs a title and message.`;
-        return;
+        return false;
       }
       if((f.banners||[]).some(x=>!Array.isArray(x.reference_points)||x.reference_points.length<2)){
         st.textContent=`Review ${label}: every Key Message needs at least two useful reference points.`;
-        return;
+        return false;
       }
     }
-    if(!draft.identity_statement){st.textContent='Add the club-wide identity statement first.';return;}
+    if(!draft.identity_statement){st.textContent='Add the club-wide identity statement first.';return false;}
 
     const ok=confirm(
       `Lock How We Bat for the season?\n\n`+
       `This confirms the club's How We Bat and unlocks Player Plan Structure. Once locked, the wording cannot be reopened for routine editing.\n\n`+
-      `Only a new Philosophy Workshop round can replace it, because changing How We Bat changes the foundation used for Player Plans.\n\n`+
+      `Only a new Batting Philosophy Workshop round can replace it, because changing How We Bat changes the foundation used for Player Plans.\n\n`+
       `Lock How We Bat and continue?`
     );
-    if(!ok)return;
+    if(!ok)return false;
   }
 
+  howWeBatBuilderSaving=true;
+  const controls=[...document.querySelectorAll('.hwb-builder-shell input,.hwb-builder-shell textarea,.hwb-builder-shell button')].map(element=>({element,disabled:element.disabled}));
+  controls.forEach(({element})=>element.disabled=true);
+  let persisted=false;
+  try{
   st.textContent=status==='ready'?'Saving How We Bat…':'Saving…';
   const {error}=await supabase.rpc('save_how_we_bat_draft',{
     p_club_id:club.id,
@@ -5123,16 +5377,34 @@ async function saveHowWeBatBuilder(status){
     p_formats:draft.formats||{},
     p_status:status
   });
-  if(error){st.textContent=error.message;return;}
+  if(error){st.textContent=`Your changes could not be saved. ${error.message} Please try again before leaving.`;return false;}
 
+  persisted=true;
+  draft.status=status;
   await loadData();
 
   if(status==='ready'){
     currentTab='plan';
     renderShell();
   }else{
-    st.textContent='Draft saved ✓';
-    renderHowWeBatBuilder();
+    renderHowWeBatBuilder('Draft saved ✓');
+  }
+  return true;
+  }catch(error){
+    if(persisted && status==='ready'){
+      howWeBatBuilderDirty=false;
+      currentTab='howwebat';
+      renderPublishedHowWeBat();
+      alert('How We Bat was locked successfully. The other club data could not refresh; refresh the page before continuing to Player Plan Structure.');
+      return false;
+    }
+    if(st)st.textContent=persisted
+      ?`Your changes were saved, but the page could not refresh. Your wording is still here. Please refresh to load the saved version. ${error.message||''}`
+      :`Your changes could not be saved. ${error.message||'Check your connection and try again.'}`;
+    return false;
+  }finally{
+    howWeBatBuilderSaving=false;
+    controls.forEach(({element,disabled})=>element.disabled=disabled);
   }
 }
 
@@ -5230,7 +5502,7 @@ async function lockCurrentHowWeBat(){
   const ok=confirm(
     `Lock How We Bat for the season?\n\n`+
     `This confirms the club's position and unlocks Player Plan Structure. Once locked, How We Bat cannot be reopened for routine editing.\n\n`+
-    `That is deliberate: Player Plan prompts flow from How We Bat. A different How We Bat requires a new Philosophy Workshop round.\n\n`+
+    `That is deliberate: Player Plan prompts flow from How We Bat. A different How We Bat requires a new Batting Philosophy Workshop round.\n\n`+
     `Lock How We Bat and continue?`
   );
   if(!ok)return;
@@ -5253,17 +5525,26 @@ async function lockCurrentHowWeBat(){
 }
 
 function renderPublishedHowWeBat(){
-  const canSeeWorking=(isPhilosophyLead() || isAdmin()) && !!howWeBatDraft;
+  const canSeeWorking=(isPhilosophyLead() || isAdmin()) && !!howWeBatDraft && clubSetupProgress().workshopReady;
   const version=howWeBatVersions[0]||null;
   const snap=canSeeWorking ? howWeBatDraft : (version?.snapshot||null);
 
   if(!snap){
-    const canBuild=isPhilosophyLead() || isAdmin();
+    const canOpenWorkshop=isPhilosophyLead() || isAdmin();
+    const nextStep=isPhilosophyLead()
+      ?(myContributor?.status==='submitted' || workshop?.final_draft_ready
+        ?'Open Batting Philosophy Workshop to compare the submitted contributions. Choose a combination, then select “Use this to create How We Bat”.'
+        :'Start with your own response in Batting Philosophy Workshop. Submit it, then compare the contributions and create the club’s How We Bat.')
+      :isAdmin()
+        ?(workshop?.philosophy_lead_user_id
+          ?'Your Philosophy Lead creates and finalises How We Bat. Open Batting Philosophy Workshop to manage contributors and check progress.'
+          :'Open Batting Philosophy Workshop to choose a Philosophy Lead and save the workshop setup. The lead will create and finalise the club’s How We Bat.')
+        :'Your Philosophy Lead is preparing the club’s batting approach. It will appear here when the Club Batting System is published.';
     document.getElementById('page').innerHTML=`<section class="card player-gate">
       <div class="section-label">How We Bat</div>
-      <h2>No How We Bat has been created yet.</h2>
-      <p>${canBuild?'Choose the club philosophy in the Scenario Explorer first. Once a combination is selected, its player-facing How We Bat will appear here.':'The club has not published How We Bat yet.'}</p>
-      ${canBuild?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="openPhilosophyForHwb">Open Philosophy Workshop</button><button class="btn ghost" id="emptyHowWeBatGuide">Show me how</button></div>':'<div class="btnrow" style="margin-top:14px"><button class="btn ghost" id="emptyHowWeBatGuide">What is How We Bat?</button></div>'}
+      <h2 style="font-size:clamp(22px,3vw,28px);line-height:1.25">Your club has not finalised its How We Bat yet.</h2>
+      <p>${nextStep}</p>
+      ${canOpenWorkshop?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="openPhilosophyForHwb">Open Batting Philosophy Workshop</button><button class="btn ghost" id="emptyHowWeBatGuide">Show me how</button></div>':'<div class="btnrow" style="margin-top:14px"><button class="btn ghost" id="emptyHowWeBatGuide">What is How We Bat?</button></div>'}
     </section>`;
     if(document.getElementById('openPhilosophyForHwb'))document.getElementById('openPhilosophyForHwb').onclick=()=>{currentTab='workshop';renderTab();};
     if(document.getElementById('emptyHowWeBatGuide'))document.getElementById('emptyHowWeBatGuide').onclick=()=>openClubBattingGuideTopic('how_we_bat');
@@ -5275,10 +5556,15 @@ function renderPublishedHowWeBat(){
   const f=snap.formats?.[publishedHowWeBatFormat];
   const formatLabel=FORMATS.find(([k])=>k===publishedHowWeBatFormat)?.[1]||'';
   const workingReady=canSeeWorking && snap.status==='ready';
+  const publishedComparison=version?.snapshot?upgradeLegacyHowWeBatWording(structuredClone(version.snapshot)):null;
+  const workingPublished=workingReady && workshop?.status==='published' && !!version
+    && snap.identity_statement===publishedComparison?.identity_statement
+    && snap.closing_strapline===publishedComparison?.closing_strapline
+    && JSON.stringify(snap.formats||{})===JSON.stringify(publishedComparison?.formats||{});
 
   document.getElementById('page').innerHTML=`<div class="hwb-published-shell">
     <div class="guide-context-bar"><span><strong>How We Bat</strong> · The club framework players can actually use.</span><button type="button" class="btn ghost compact-btn" id="howWeBatGuideLink">${canSeeWorking?'Show me how':'How this fits together'}</button></div>
-    ${canSeeWorking?`<div class="published-version-note">Working How We Bat · ${workingReady?'🔒 locked for the season':'not locked yet'}</div>`:''}
+    ${canSeeWorking?`<div class="published-version-note">${workingPublished?'Published How We Bat · locked for the season':workingReady?'Locked draft · ready for Player Plan Structure':'Working draft · review before locking'}</div>`:''}
     <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
       <div class="hwb-public-hero" style="padding:24px 38px 22px;min-height:0">
         <div class="k" style="margin-bottom:6px">${esc(club.name)}</div>
@@ -5294,9 +5580,11 @@ function renderPublishedHowWeBat(){
       </div>
       ${snap.closing_strapline?`<div class="hwb-public-footer"><strong>${esc(snap.closing_strapline)}</strong>${canSeeWorking?'':'<span>Know your game. Then read the moment.</span>'}</div>`:''}
     </section>
-    ${canSeeWorking && isPhilosophyLead()?(workingReady
-      ?`<div class="notice compact" style="margin-top:14px"><strong>🔒 How We Bat is locked for the season.</strong><br>This is now the stable club position that Player Plan Structure is built from. It is deliberately no longer editable. If the club undergoes a major change that genuinely requires a different philosophy, start a new Philosophy Workshop round from Workshop settings.</div><div class="btnrow" style="margin-top:10px"><button class="btn secondary" id="continueLockedHwb">Continue to Player Plan Structure</button></div>`
-      :`<div class="notice compact" style="margin-top:14px"><strong>Finalise it, then leave it alone.</strong><br>How We Bat drives the Player Plan prompts. Check the visual version now and make any exact-wording changes you genuinely want before locking it. Once locked, routine editing is disabled for the season.</div><div class="btnrow" style="margin-top:10px"><button class="btn ghost" id="openExactHwbEditor">Edit exact wording</button><button class="btn secondary" id="lockHwbFromView">Confirm & lock How We Bat</button></div>`):''}
+    ${canSeeWorking?(workingReady
+      ?`<div class="notice compact" style="margin-top:14px"><strong>${workingPublished?'How We Bat is published for players.':'How We Bat is locked. Next: Player Plan Structure.'}</strong><br>${workingPublished?'This is the club’s batting approach for the season. Players can read it in How We Bat and use it while building their Player Plans.':`${isPhilosophyLead()?'Review and lock the Player Plan Structure, then select “Publish & notify players”. This opens Player Plans and queues an email for registered players.':'The Philosophy Lead will review and lock Player Plan Structure, then publish it and notify registered players.'} ${version?'Players continue to see the previously published version until then.':'This draft is not visible to players yet.'}`}</div><div class="btnrow" style="margin-top:10px"><button class="btn secondary" id="continueLockedHwb">${workingPublished?'View Player Plan Structure':'Open Player Plan Structure'}</button></div>`
+      :isPhilosophyLead()
+        ?`<div class="notice compact" style="margin-top:14px"><strong>Review and finalise How We Bat.</strong><br>Check each format and make any wording changes, then confirm and lock the club’s approach for the season. Next, review Player Plan Structure and publish the Club Batting System for players.</div><div class="btnrow" style="margin-top:10px"><button class="btn ghost" id="openExactHwbEditor">Edit exact wording</button><button class="btn secondary" id="lockHwbFromView">Confirm & lock How We Bat</button></div>`
+        :`<div class="notice compact" style="margin-top:14px"><strong>Your Philosophy Lead will finalise this draft.</strong><br>You can review each format here. The lead will lock How We Bat, review Player Plan Structure and publish the Club Batting System for players.</div>`):''}
     ${!canSeeWorking && version?`<div class="published-version-note">Published with Club Philosophy v${esc(version.philosophy_version)} · ${new Date(version.published_at).toLocaleDateString()}</div>`:''}
   </div>`;
 
@@ -5333,11 +5621,11 @@ function formatNarrative(format){
 }
 
 function renderPreview(){
-  if(!myContribution){currentTab='workshop';renderTab();return;}
   if(isPhilosophyLead() && workshop?.final_draft_ready){
     renderHowWeBatBuilder();
     return;
   }
+  if(!myContribution){currentTab='workshop';renderTab();return;}
   const formats=enabledFormats();
   if(!formats.some(([k])=>k===previewFormat))previewFormat=formats[0]?.[0]||'limited_overs';
   const identity=identitySummary()+(clubProfile.identity_note?` ${clubProfile.identity_note}`:'');
@@ -5361,13 +5649,13 @@ function renderPreview(){
       <h2>${locked?'Response submitted':'Submit your response'}</h2>
       ${locked
         ?'<div class="philosophy-submit-state submitted"><strong>Submitted ✓</strong><span>Your independent response is locked and is available to the workshop synthesis.</span></div>'
-        :'<div class="philosophy-submit-state waiting"><strong>Saved — not submitted yet</strong><span>Your answers are stored, but they do not count in the Philosophy Workshop until you submit them.</span></div>'}
+        :'<div class="philosophy-submit-state waiting"><strong>Saved — not submitted yet</strong><span>Your answers are stored, but they do not count in the Batting Philosophy Workshop until you submit them.</span></div>'}
       <div class="help">${locked
-        ?'Return to the Workshop to see the synthesis when it is available.'
+        ?'Return to Batting Philosophy Workshop to compare the contributions when they are available.'
         :'Review the response on the left. When you are happy with it, submit it below. Submission locks your response before you see what everyone else has said, keeping each contribution genuinely independent.'}</div>
       <div class="btnrow">
         ${locked
-          ?'<button class="btn secondary" id="backWorkshop">Return to Philosophy Workshop</button>'
+          ?'<button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button>'
           :'<button class="btn secondary philosophy-submit-primary" id="submitPhilosophy">Submit response</button><button class="btn ghost" id="backToFormats">Back to Format Emphasis</button>'}
         <span class="status" id="submitPhilosophyStatus"></span>
       </div>
@@ -5731,10 +6019,37 @@ function renderPlayerPlanAddedIdeas(groups,error=''){
   </details>`;
 }
 
+function renderClubPublicationGate(title,description){
+  const lead=isPhilosophyLead();
+  const training=title==='How We Train';
+  const hwbReady=hasLockedHowWeBatForCurrentRound();
+  const destination=lead?(hwbReady?'plan':howWeBatDraft?'howwebat':'workshop'):training?'guide':isAdmin()?'workshop':'guide';
+  const label=({plan:'Open Player Plan Structure',howwebat:'Open How We Bat',workshop:'Open Batting Philosophy Workshop',guide:training?'What is How We Train?':'What is a Player Plan?'})[destination];
+  const nextStep=lead
+    ?(hwbReady?'Review and lock the Player Plan Structure, then publish the Club Batting System to open Player Plans.':'Finalise How We Bat, then review the Player Plan Structure and publish the Club Batting System.')
+    :isAdmin()?'The Philosophy Lead needs to finalise How We Bat and publish the Club Batting System. You can check progress in Batting Philosophy Workshop.':'We’ll email you when you can start.';
+  document.getElementById('page').innerHTML=`<section class="card player-gate">
+    <div class="section-label">${esc(title)}</div>
+    <h2>${lead||isAdmin()?'Your club is preparing its Player Plans.':'Your Player Plan isn’t ready yet.'}</h2>
+    <p>${esc(lead||isAdmin()?description:'Your club is finalising How We Bat and preparing the questions for your plan.')}</p><p class="help">${esc(nextStep)}</p>
+    ${lead||isAdmin()
+      ?`<div class="btnrow"><button class="btn secondary" id="publicationNextStep">${esc(label)}</button></div>`
+      :'<div class="btnrow"><button class="btn secondary" id="publicationNextStep" disabled aria-describedby="playerPlanWaitingNote">Complete your Player Plan</button></div><p class="help" id="playerPlanWaitingNote">Available once your club releases its plans. You’ll start with Core, then complete the formats you play.</p>'}
+  </section>`;
+  if(lead||isAdmin())document.getElementById('publicationNextStep').onclick=()=>{
+    if(destination==='guide'){openClubBattingGuideTopic(training?'how_we_train':'player_plan');return;}
+    currentTab=destination;renderTab();
+  };
+}
+
 async function renderPlanStructure(){
+  if(!isAdmin()&&!isPhilosophyLead()){
+    currentTab='myplan';
+    return renderMyPlan();
+  }
   const formats=enabledFormats();
   const page=document.getElementById('page');
-  const hwbLocked=howWeBatDraft?.status==='ready' || howWeBatVersions.length>0;
+  const hwbLocked=hasLockedHowWeBatForCurrentRound();
 
   if(!hwbLocked){
     const lead=isPhilosophyLead();
@@ -5742,11 +6057,11 @@ async function renderPlanStructure(){
     page.innerHTML=`<section class="card player-gate">
       <div class="gate-state locked">🔒</div>
       <div class="section-label">Player Plan Structure</div>
-      <h2>Lock How We Bat first.</h2>
-      <p>The Player Plan questions are generated from the club’s player-facing <strong>How We Bat</strong>. Finalise that first, then Club Batting can build the smallest useful set of prompts.</p>
-      <div class="btnrow" style="margin-top:14px">${lead?`<button class="btn secondary" id="backToHowWeBat">${hasHowWeBatDraft?'Open How We Bat':'Open Philosophy Workshop'}</button>`:''}<button class="btn ghost" id="lockedPlanStructureGuide">Show me how</button></div>
+      <h2>${lead?'Finalise How We Bat to create the Player Plan questions.':'Your club is still preparing How We Bat.'}</h2>
+      <p>${lead?'Your club’s How We Bat provides the questions each player will answer. Review and lock How We Bat first, then return here to check those questions.':'The Philosophy Lead needs to finalise How We Bat before the club’s Player Plan questions can be prepared.'}</p>
+      <div class="btnrow" style="margin-top:14px">${lead||isAdmin()?`<button class="btn secondary" id="backToHowWeBat">${lead&&hasHowWeBatDraft?'Open How We Bat':'Open Batting Philosophy Workshop'}</button>`:''}<button class="btn ghost" id="lockedPlanStructureGuide">${lead?'Show me how':'What is Player Plan Structure?'}</button></div>
     </section>`;
-    if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=hasHowWeBatDraft?'howwebat':'workshop';renderTab();};
+    if(document.getElementById('backToHowWeBat'))document.getElementById('backToHowWeBat').onclick=()=>{currentTab=lead&&hasHowWeBatDraft?'howwebat':'workshop';renderTab();};
     if(document.getElementById('lockedPlanStructureGuide'))document.getElementById('lockedPlanStructureGuide').onclick=()=>openClubBattingGuideTopic('player_plan_structure');
     return;
   }
@@ -5770,7 +6085,13 @@ async function renderPlanStructure(){
   const structureReady=locked && !playerPlanStructureDirty;
   const latestVersion=philosophyVersions?.[0]?.version_number||null;
   const latestPublishedStructure=playerPlanStructureVersions?.[0]?.snapshot||null;
-  const currentDraftPublished=!!(locked && latestPublishedStructure && playerPlanStructureDraft?.structure && JSON.stringify(latestPublishedStructure)===JSON.stringify(playerPlanStructureDraft.structure));
+  const latestHwb=howWeBatVersions?.[0]?.snapshot?upgradeLegacyHowWeBatWording(structuredClone(howWeBatVersions[0].snapshot)):null;
+  const currentDraftPublished=!!(workshop?.status==='published' && locked && latestPublishedStructure && playerPlanStructureDraft?.structure
+    && howWeBatDraft?.status==='ready' && latestHwb
+    && howWeBatDraft.identity_statement===latestHwb.identity_statement
+    && howWeBatDraft.closing_strapline===latestHwb.closing_strapline
+    && JSON.stringify(howWeBatDraft.formats||{})===JSON.stringify(latestHwb.formats||{})
+    && JSON.stringify(latestPublishedStructure)===JSON.stringify(playerPlanStructureDraft.structure));
   let playerAddedIdeasHtml='';
   if(isAdmin()){
     const ideaData=await loadPlayerPlanIdeaPlayers();
@@ -5799,15 +6120,15 @@ async function renderPlanStructure(){
   }
 
   const statusHtml=structureReady
-    ?`<div class="notice success"><strong>🔒 Player Plan Structure locked for this season.</strong><br>These are now the prompts players will use. Routine editing is deliberately disabled so existing Player Plans stay aligned with How We Bat.</div>`
+    ?`<div class="notice success"><strong>🔒 Player Plan Structure locked for this season.</strong><br>${currentDraftPublished?'These questions are published and available to players.':'The questions are ready. Publish the Club Batting System to make them available to players.'} They stay locked for the season so Player Plans remain aligned with How We Bat.</div>`
     :`<div class="notice"><strong>Generated from locked How We Bat.</strong><br>Club Batting has kept this deliberately short: three club-wide questions, then one prompt for each How We Bat Key Message. The normal job here is simply to check that the questions make sense.</div>`;
 
   const actionHtml=!editable
-    ?'<div class="help">The Philosophy Lead controls the final Player Plan Structure.</div>'
+    ?`<div class="help">${currentDraftPublished?'Players can now build their plans using these questions.':'The Philosophy Lead needs to '+(structureReady?'publish the Club Batting System to open Player Plans.':'review and lock these questions, then publish the Club Batting System.')}</div>`
     :structureReady
       ?(currentDraftPublished
-        ?`<div class="btnrow"><span class="status">Club Batting System v${esc(latestVersion||'')} published ✓</span></div>`
-        :`<div class="btnrow"><button class="btn secondary" id="publishClubSystem">Publish Club Batting System</button><span class="status" id="publishClubSystemStatus"></span></div>`)
+        ?`<div class="btnrow"><span class="status">Club Batting System v${esc(latestVersion||'')} published ✓</span>${canUsePlayersWorkspace()?'<button class="btn secondary" id="openPublishedPlayers">Open Players</button>':isPlayerUser()?'<button class="btn secondary" id="openPublishedMyPlan">Open My Player Plan</button>':''}</div>`
+        :`<div class="btnrow"><button class="btn secondary" id="publishClubSystem">Publish & notify players</button><span class="status" id="publishClubSystemStatus"></span></div>`)
       :`<div class="btnrow"><button class="btn secondary" id="lockPlanStructure">Confirm & lock Player Plan Structure</button><button class="btn ghost" id="editExactPlanQuestions">Edit exact questions</button><span class="status" id="planStructureStatus"></span></div>`;
 
   page.innerHTML=`<style>
@@ -5827,8 +6148,8 @@ async function renderPlanStructure(){
     ${manualHtml}
     <section class="card" style="margin-top:16px">
       <div class="section-label">${structureReady?'Season structure':'Decision'}</div>
-      <h2>${structureReady?'Set it and leave it.':'Do these ask the right things?'}</h2>
-      <p class="help">${structureReady?'A different structure requires a new Philosophy round so How We Bat and Player Plans can be rebuilt together.':'If yes, lock it. If a club genuinely needs different wording, use the optional exact-question editor first.'}</p>
+      <h2>${currentDraftPublished?'Player Plans are open.':structureReady?'Publish to open Player Plans.':'Review the questions, then lock the structure.'}</h2>
+      <p class="help">${currentDraftPublished?'The structure is fixed for this season. A different structure requires a new Philosophy round so How We Bat and Player Plans can be rebuilt together.':structureReady?'Choose “Publish & notify players” to open How We Bat and Player Plans, and email players to let them know they can start.':'Review the questions above. If they fit your club, confirm and lock them; you will then be able to publish and notify players.'}</p>
       ${actionHtml}
     </section>
   </div>`;
@@ -5866,33 +6187,110 @@ async function renderPlanStructure(){
 
   if(document.getElementById('lockPlanStructure'))document.getElementById('lockPlanStructure').onclick=()=>savePlayerPlanStructure('ready',document.getElementById('lockPlanStructure'));
   if(document.getElementById('publishClubSystem'))document.getElementById('publishClubSystem').onclick=publishPhilosophy;
+  document.getElementById('openPublishedPlayers')?.addEventListener('click',()=>{currentTab='players';renderTab();});
+  document.getElementById('openPublishedMyPlan')?.addEventListener('click',()=>{currentTab='myplan';renderTab();});
+}
+
+let playerPlanStructureSaving=false;
+
+async function savePlayerPlanStructureBeforeNavigation(){
+  if(currentTab!=='plan')return true;
+  if(playerPlanStructureSaving)return false;
+  if(!playerPlanStructureDirty)return true;
+  if(!isPhilosophyLead())return true;
+  return await savePlayerPlanStructure('draft');
 }
 
 async function savePlayerPlanStructure(status,triggerButton=null){
-  if(playerPlanStructureManualEdit)collectPlanStructureEditor();
   const st=document.getElementById('planStructureStatus');
   const btn=triggerButton||(status==='ready'?document.getElementById('lockPlanStructure'):document.getElementById('savePlanStructure'));
+  if(playerPlanStructureSaving)return false;
+  if(playerPlanStructureDraft?.status==='ready'){
+    if(playerPlanStructureDirty){if(st)st.textContent='This season’s structure is locked. Your changes have not been saved.';return false;}
+    return true;
+  }
+  if(!isPhilosophyLead()||!playerPlanStructureWorking)return false;
+  if(playerPlanStructureManualEdit)collectPlanStructureEditor();
   if(status==='ready'){
     const problems=validatePlanStructure(playerPlanStructureWorking);
-    if(problems.length){alert(`Player Plan Structure still needs attention:\n\n${problems.slice(0,8).join('\n')}`);return;}
+    if(problems.length){alert(`Player Plan Structure still needs attention:\n\n${problems.slice(0,8).join('\n')}`);return false;}
     const ok=confirm(
       `Lock Player Plan Structure for the season?\n\n`+
       `These questions are generated from the locked How We Bat and will become the framework players use to build their plans.\n\n`+
       `Once locked, routine editing is disabled. A different structure requires a new Philosophy round so How We Bat and Player Plans stay aligned.\n\n`+
       `Lock this structure?`
     );
-    if(!ok)return;
+    if(!ok)return false;
   }
+  const disabledControls=status==='ready'
+    ?[...document.querySelectorAll('[data-plan-question] input, [data-plan-question] textarea, [data-plan-question] select, [data-plan-move], [data-plan-remove], [data-plan-duplicate], [data-plan-restore], [data-plan-section], #addPlanQuestion, #resetGeneratedPlan, #closePlanEditor, #savePlanStructure, #lockPlanStructure')].map(control=>({control,disabled:control.disabled}))
+    :[];
+  disabledControls.forEach(({control})=>{control.disabled=true;});
+  playerPlanStructureSaving=true;
   if(btn){btn.disabled=true;btn.textContent=status==='ready'?'Locking…':'Saving…';}
   if(st)st.textContent=status==='ready'?'Locking…':'Saving…';
   playerPlanStructureWorking.schema_version=2;
   playerPlanStructureWorking.generated_from=playerPlanStructureWorking.generated_from||'locked_how_we_bat';
-  const {error}=await supabase.rpc('save_player_plan_structure_draft',{p_club_id:club.id,p_structure:playerPlanStructureWorking,p_status:status});
-  if(error){if(st)st.textContent=error.message;if(btn){btn.disabled=false;btn.textContent=status==='ready'?'Confirm & lock Player Plan Structure':'Save exact edits';}return;}
-  playerPlanStructureManualEdit=false;
-  await loadData();
-  playerPlanStructureSection='core';
-  await renderPlanStructure();
+  const savedStructure=structuredClone(playerPlanStructureWorking);
+  const wasManual=playerPlanStructureManualEdit;
+  let persisted=false;
+  try{
+    const {error}=await supabase.rpc('save_player_plan_structure_draft',{p_club_id:club.id,p_structure:savedStructure,p_status:status});
+    if(error)throw error;
+    persisted=true;
+    const savedDraft={...(playerPlanStructureDraft||{}),club_id:club.id,structure:savedStructure,status};
+    playerPlanStructureDraft=savedDraft;
+    // Keep edits made while the request was running; do not replace them with
+    // the earlier snapshot just confirmed by the server.
+    if(playerPlanStructureManualEdit)collectPlanStructureEditor();
+    if(status==='draft'&&JSON.stringify(playerPlanStructureWorking)!==JSON.stringify(savedStructure)){
+      playerPlanStructureDirty=true;
+      if(st)st.textContent='Earlier edits saved. Save your latest changes before leaving.';
+      if(btn){btn.disabled=false;btn.textContent='Save exact edits';}
+      return false;
+    }
+    playerPlanStructureDirty=false;
+    playerPlanStructureManualEdit=false;
+    try{
+      await loadData();
+    }catch(error){
+      // The write succeeded even if refreshing other club data failed. Preserve
+      // the confirmed draft locally so a retry cannot regenerate old questions.
+      playerPlanStructureDraft=savedDraft;
+      playerPlanStructureWorking=structuredClone(savedStructure);
+      playerPlanStructureDirty=false;
+      playerPlanStructureManualEdit=status==='draft'&&wasManual;
+      if(status==='ready')await renderPlanStructure();
+      const message='Saved ✓. The page could not refresh; your changes are saved.';
+      const currentStatus=document.getElementById('planStructureStatus');
+      if(currentStatus)currentStatus.textContent=message;
+      else alert(message);
+      if(btn){btn.disabled=status==='ready';btn.textContent=status==='ready'?'Structure locked':'Save exact edits';}
+      return true;
+    }
+    playerPlanStructureSection='core';
+    await renderPlanStructure();
+    return true;
+  }catch(error){
+    if(persisted){
+      playerPlanStructureDraft={...(playerPlanStructureDraft||{}),club_id:club.id,structure:savedStructure,status};
+      playerPlanStructureWorking=structuredClone(savedStructure);
+      playerPlanStructureDirty=false;
+      playerPlanStructureManualEdit=status==='draft'&&wasManual;
+      if(st)st.textContent='Saved ✓. The page could not refresh; your changes are saved.';
+      if(btn){btn.disabled=status==='ready';btn.textContent=status==='ready'?'Structure locked':'Save exact edits';}
+      return true;
+    }
+    playerPlanStructureDirty=true;
+    if(st)st.textContent=`Save problem: ${error?.message||String(error)}. Your edits are still here.`;
+    if(btn){btn.disabled=false;btn.textContent=status==='ready'?'Confirm & lock Player Plan Structure':'Save exact edits';}
+    return false;
+  }finally{
+    // Failed locking leaves the editor exactly as usable as it was before.
+    // A successful lock keeps any still-mounted old editor controls disabled.
+    if(!persisted||status!=='ready')disabledControls.forEach(({control,disabled})=>{control.disabled=disabled;});
+    playerPlanStructureSaving=false;
+  }
 }
 
 async function submitPhilosophyResponse(){
@@ -5956,7 +6354,7 @@ async function renderPermissions(){
   const amLeadAdmin=leadAdminId===session.user.id;
   const pendingHandover=(pendingHandovers||[])[0]||null;
   const playerJoinLink=`${location.origin}${location.pathname}?player_join=${encodeURIComponent(club.player_join_token||'')}`;
-  const staffJoinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}`;
+  const staffJoinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}&involvement=coach_captain`;
   const signupOpen=club.player_signup_open!==false;
   const clubRoleValues=new Set(['captain','coach','head_coach','admin']);
   const roleMembers=(members||[]).filter(m=>m.user_id===leadAdminId || clubRoleValues.has(m.permission_role));
@@ -6059,16 +6457,16 @@ async function renderPermissions(){
 
   document.getElementById('page').innerHTML=`
   <section class="card">
-    <div class="section-label">Club Setup · Step 2 of 8</div>
+    <div class="section-label">Players · Club people</div>
     <h2>People & Sign-up</h2>
     <div class="help"><strong>Get people into Club Batting first. Give responsibilities second.</strong></div>
-    <div class="help">Players register as <strong>Players</strong>. Club roles such as Captain, Coach, Head Coach and Admin are assigned afterwards. Philosophy Workshop invitations are separate again — contributing to the philosophy does <strong>not</strong> make somebody a coach, captain or Admin.</div>
+    <div class="help">Players register as <strong>Players</strong>. Club roles such as Captain, Coach, Head Coach and Admin are assigned afterwards. Batting Philosophy Workshop invitations are separate again — contributing to the philosophy does <strong>not</strong> make somebody a coach, captain or Admin.</div>
   </section>
 
   <div class="grid permissions-top-grid" style="margin-top:16px">
     <section class="card player-signup-card">
       <div class="section-label">Player sign-up</div>
-      <h2>One normal route for everyone who plays.</h2>
+      <h2>Invite players to register</h2>
       <div class="help">Post the WhatsApp message in the players chat, or use the QR code at training / on a noticeboard. Everyone using this route joins as a <strong>Player</strong>. If they also captain or coach, assign that club role afterwards.</div>
 
       <div class="signup-status-row">
@@ -6113,7 +6511,7 @@ async function renderPermissions(){
 
     <section class="card">
       <div class="section-label">Non-playing staff</div>
-      <h2>Only use this when somebody does not play.</h2>
+      <h2>Invite non-playing staff</h2>
       <div class="notice"><strong>Playing coach or captain?</strong><br>They still use the normal <strong>Player sign-up</strong>. Do not give them a second account.</div>
       <div class="help" style="margin-top:14px">Use the staff route for a genuinely non-playing coach or other staff member who needs to be in Club Batting but should not receive a Player Plan.</div>
       <div class="signup-count" style="margin-top:14px"><strong>${nonPlayingStaffCount}</strong> non-playing staff registered</div>
@@ -6128,7 +6526,7 @@ async function renderPermissions(){
 
   <section class="card" style="margin-top:16px">
     <div class="section-label">Club roles</div>
-    <h2>Find a person, then give them a club responsibility.</h2>
+    <h2>Assign club roles and player access</h2>
     <div class="help">This list is intentionally <strong>not</strong> every person in Club Batting. It contains only people who have been assigned a club role. A Philosophy Contributor stays out of this list unless you separately make them a Captain, Coach, Head Coach or Admin.</div>
 
     <div class="field" style="margin-top:14px">
@@ -6298,7 +6696,7 @@ async function renderPermissions(){
           <button class="btn secondary" data-assign-club-role="${m.user_id}">Assign role</button>
         </div>
       </div>`;
-    }).join(''):'<div class="notice">No matching registered person without a club role.</div>';
+    }).join(''):'<div class="notice">No matching person is waiting for a role. Check People with club roles below, or ask them to register using the player or staff link.</div>';
 
     wrap.querySelectorAll('[data-assign-club-role]').forEach(b=>b.onclick=async()=>{
       const userId=b.dataset.assignClubRole;
@@ -7100,10 +7498,12 @@ function renderPlayerTrainingFormatAccordion(format,raw,feedback){
   const label=formatLabel(format);
   const cards=ready?[...coreTrainingCards(raw),...formatTrainingCards(raw,format)].slice(0,7):[];
   const feedbackFocus=ready?trainingFocusForFormat(feedback,format):[];
+  const nextSection=coreProgress.complete?format:'core';
+  const nextLabel=coreProgress.complete?label:'Core';
 
   return `<details class="card train-format-accordion ${ready?'ready':'locked'}">
     <summary>
-      <div><div class="section-label">${esc(label)}</div><strong>${ready?`My ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?'Targeted from your completed Player Plan.':'Nothing appears here until your Core and format Player Plans are complete.'}</span></div>
+      <div><div class="section-label">${esc(label)}</div><strong>${ready?`My ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?'Targeted from your completed Player Plan.':`Complete ${esc(nextLabel)} in My Player Plan to continue.`}</span></div>
       <div class="train-accordion-state"><b>${ready?'TRAINING PLAN READY':'PLAYER PLAN NOT COMPLETE'}</b><em>Open ↓</em></div>
     </summary>
     <div class="train-simple-body">
@@ -7112,7 +7512,7 @@ function renderPlayerTrainingFormatAccordion(format,raw,feedback){
           ${cards.length?cards.map(c=>renderTrainingPlanCard(c,format)).join(''):'<div class="notice">Your Player Plan is complete, but there are no specific training cues to show yet.</div>'}
         </div>
         ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
-      `:`<div class="train-format-empty"><strong>No targeted ${esc(label)} plan yet.</strong><span>Complete your Core Player Plan and ${esc(label)} Player Plan. This section will then build itself from the game you have actually chosen.</span></div>`}
+      `:`<div class="train-format-empty"><strong>Your ${esc(label)} training plan starts with your Player Plan.</strong><span>${coreProgress.complete?`Finish the ${esc(label)} questions to create your training plan.`:formatProgress.complete?`Your ${esc(label)} answers are complete. Finish Core to create your training plan.`:`Start with Core, then complete the ${esc(label)} questions. Your training plan will use those answers.`}</span><div class="btnrow"><button class="btn secondary" data-go="myplan" data-plan-section="${esc(nextSection)}">Complete ${esc(nextLabel)}</button></div></div>`}
     </div>
   </details>`;
 }
@@ -7141,7 +7541,13 @@ function playerReflectionNeededMatches(feedback){
 async function renderHowWeTrain(){
   const page=document.getElementById('page');
   if(!howWeBatVersions.length){
-    page.innerHTML=`<section class="card player-gate"><div class="gate-state locked">🔒</div><div class="section-label">How We Train</div><h2>The Club Batting System is not live yet.</h2><p>How We Train becomes available when How We Bat has been published.</p></section>`;
+    page.innerHTML=`<section class="card player-gate">
+      <div class="section-label">How We Train</div>
+      <h2>Train your plan until it becomes instinctive.</h2>
+      <p>Practise the decisions you want to make in a match. Once you complete Core and a format in your Player Plan, How We Train will create training suggestions based on your game.</p>
+      <div class="notice compact"><strong>Your club is preparing its Player Plans.</strong><br>${isPlayerUser()?'We’ll email you when you can start. Complete your Player Plan first; your training suggestions will then appear here.':'Club training guidance will appear here when How We Bat is published. Players will receive an email when they can start their plans.'}</div>
+      ${isPlayerUser()?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" disabled aria-describedby="trainingWaitingNote">Complete your Player Plan</button></div><p class="help" id="trainingWaitingNote">Available once your club releases its plans.</p>':''}
+    </section>`;
     return;
   }
 
@@ -7178,8 +7584,8 @@ async function renderHowWeTrain(){
     playerTop=`<section class="card train-plan-readiness compact ${allReady?'ready':'needs-plan'}">
       <div class="train-plan-readiness-copy">
         <div class="section-label">YOUR TRAINING PLAN STARTS WITH YOUR PLAYER PLAN</div>
-        <h2>This page turns your Player Plan into targeted training.</h2>
-        <p>Only completed format plans generate a training plan. Finish or update your Player Plan whenever you want this page to change.</p>
+        <h2>Train your plan until it becomes instinctive.</h2>
+        <p>Practise the decisions you want to make in a match. Complete Core and a format in your Player Plan to create training suggestions based on your game. Update your answers as your game develops.</p>
       </div>
       <div class="train-plan-readiness-side">
         <div class="train-plan-status-list">
@@ -7234,7 +7640,7 @@ async function renderHowWeTrain(){
   ${feedbackAccordion}`;
 
   if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
-  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.go;renderTab();});
+  page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(b.dataset.planSection)builderSection=b.dataset.planSection;currentTab=b.dataset.go;renderTab();});
 
   const rerenderHowWeTrainAt=async(targetId)=>{
     await renderHowWeTrain();
@@ -7340,7 +7746,7 @@ function renderStaffDevelopmentBody(player,canEdit,data){
         <div class="development-history-list compact">${data.training_observations.length?data.training_observations.slice(0,10).map(renderTrainingObservationCard).join(''):'<div class="card notice">No training observations yet.</div>'}</div>
       </section>
     </div>
-    ${renderExternalTrainingEvidenceSection(data.external_training_evidence,{showEmpty:true})}
+    ${renderExternalTrainingEvidenceSection(data.external_training_evidence)}
   </div>`;
 }
 
@@ -7944,28 +8350,17 @@ async function renderPlayersWorkspace(){
     page.innerHTML=`<section class="card player-gate">
       <div class="gate-state locked">🔒</div>
       <div class="section-label">Player access</div>
-      <h2>This workspace has not been assigned to you.</h2>
-      <p>Player Plan access is controlled by the Club Admin through roles and Playing Group permissions.</p>
+      <h2>Ask your Club Admin for access to players.</h2>
+      <p>Your Club Admin can assign a coaching role and the Playing Groups you need to work with.</p>
+      ${isPlayerUser()?'<div class="btnrow"><button class="btn secondary" id="openOwnPlanFromPlayers">Open My Player Plan</button></div>':''}
     </section>`;
-    return;
-  }
-
-  if(!philosophyVersions.length){
-    page.innerHTML=`<section class="card player-gate">
-      <div class="gate-state locked">🔒</div>
-      <div class="section-label">Players</div>
-      <h2>Player Plans are not open yet.</h2>
-      <p>Players can register now. Player Plans remain locked until the Club Batting System is published.</p>
-      ${isAdmin()?`<div class="notice compact" style="margin-top:12px"><strong>Admin roster tools are available now.</strong><br>Create Playing Groups and allocate registered players whenever it is useful; this does not affect the Philosophy build.</div><div class="btnrow"><button class="btn secondary" id="managePlayingGroupsPreLive">Manage Playing Groups</button><button class="btn ghost" id="openPeoplePreLive">People & Sign-up</button></div>`:''}
-    </section>`;
-    document.getElementById('managePlayingGroupsPreLive')?.addEventListener('click',()=>{currentTab='groups';renderTab();});
-    document.getElementById('openPeoplePreLive')?.addEventListener('click',()=>{currentTab='permissions';localStorage.setItem(`bdp-tab-${club.id}`,currentTab);renderTab();});
+    document.getElementById('openOwnPlanFromPlayers')?.addEventListener('click',()=>{currentTab='myplan';renderTab();});
     return;
   }
 
   page.innerHTML='<div class="splash">Loading players…</div>';
 
-  const reminderPromise=isAdmin()
+  const reminderPromise=isAdmin()&&workspacePlayerPlansPublished()
     ?supabase.rpc('get_player_plan_reminder_overview',{p_club_id:club.id})
     :Promise.resolve({data:{reminders:[],cooldown_hours:48,email_mode:'unknown'},error:null});
   const [playersRes,feedbackRes,reminderRes]=await Promise.all([
@@ -8103,17 +8498,26 @@ async function refreshPlayersWorkspaceReminders(){
   playersWorkspaceReminderData.reminders=Array.isArray(playersWorkspaceReminderData.reminders)?playersWorkspaceReminderData.reminders:[];
 }
 
+function workspacePlayerPlansPublished(){
+  return philosophyVersions.length>0&&howWeBatVersions.length>0&&playerPlanStructureVersions.length>0;
+}
+
 function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
   const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
   const feedbackCount=workspaceFeedbackCount(player.id);
-  const planState=playerPlanDeadlineState(player);
+  const plansPublished=workspacePlayerPlansPublished();
+  const planState=plansPublished?playerPlanDeadlineState(player):{firstOverdue:null,nextIncomplete:null};
   const overdue=planState.firstOverdue;
   const next=planState.nextIncomplete;
   const reminder=overdue?workspaceReminderState(player.id,overdue.format_key):{history:[],count:0,inCooldown:false,latest:null,delivery:''};
-  const planHeadline=planState.allComplete
+  const planHeadline=!plansPublished
+    ?'Player Plan questions are being prepared'
+    :planState.allComplete
     ?'Player Plan up to date ✓'
     :`${planState.completeCount}/${planState.totalCount} required sections complete`;
-  const planDetail=overdue
+  const planDetail=!plansPublished
+    ?'Roster, Playing Groups and feedback are available now.'
+    :overdue
     ?`${overdue.label} was due ${niceDate(overdue.due_date)}`
     :next?.due_date
       ?`${next.label} due ${niceDate(next.due_date)}`
@@ -8147,14 +8551,14 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
       </div>
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
-    ${discussionMode?renderWorkspaceRosterDiscussion(player,signals):''}
+    ${signals.length?renderWorkspaceRosterDiscussion(player,signals):''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
       <div><strong style="font-size:12px;color:${overdue?'var(--accent,#D8232A)':'var(--navy2)'}">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${reminderMeta}</div>
       ${reminderAction}
     </div>
     <div class="workspace-roster-actions">
-      <button class="workspace-text-link" data-open-workspace-player="${player.id}">Player Plan</button>
-      <button class="workspace-text-link" data-open-training-plan="${player.id}">Training Plan</button>
+      <button class="workspace-text-link" data-open-workspace-player="${player.id}">${plansPublished?'Player Plan':'View player'}</button>
+      ${plansPublished?`<button class="workspace-text-link" data-open-training-plan="${player.id}">Training Plan</button>`:'<button class="workspace-text-link" disabled title="Training guidance will be available after Player Plans open and the player completes their plan.">Training Plan</button>'}
       <button class="workspace-text-link" data-open-player-feedback="${player.id}">Feedback${feedbackCount?` · ${feedbackCount}`:''}</button>
       ${player.can_edit?`<button class="workspace-text-link add" data-quick-match-observation="${player.id}">+ Match observation</button>
       <button class="workspace-text-link add" data-quick-training-observation="${player.id}">+ Training observation</button>`:''}
@@ -8179,6 +8583,7 @@ function renderPlayersWorkspaceList(){
   const allSignals=workspaceDiscussionSignals();
   const signalPlayerIds=new Set(allSignals.map(s=>s.player.id));
   const discussionMode=playersWorkspaceGroupFilter==='__discussion__';
+  const plansPublished=workspacePlayerPlansPublished();
 
   let filtered=[];
   if(discussionMode){
@@ -8192,8 +8597,8 @@ function renderPlayersWorkspaceList(){
       const matchesGroup=(player.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter);
       return matchesName&&matchesGroup;
     });
-  }else if(query){
-    filtered=players.filter(player=>String(player.display_name||'').toLowerCase().includes(query));
+  }else{
+    filtered=players.filter(player=>!query||String(player.display_name||'').toLowerCase().includes(query));
   }
 
   const playerSignals=new Map();
@@ -8208,16 +8613,16 @@ function renderPlayersWorkspaceList(){
   })).join('');
 
   const discussionPlayers=signalPlayerIds.size;
-  const filteredPlanStates=filtered.map(player=>playerPlanDeadlineState(player));
+  const filteredPlanStates=plansPublished?filtered.map(player=>playerPlanDeadlineState(player)):[];
   const planCompleteCount=filteredPlanStates.filter(x=>x.allComplete).length;
   const planOverdueCount=filteredPlanStates.filter(x=>x.overdue.length).length;
   let emptyCopy='';
   if(!playersWorkspaceGroupFilter&&!query){
-    emptyCopy=`<section class="card workspace-roster-empty"><strong>Select a Playing Group or search for a player.</strong><span>Only players and Playing Groups within your permissions are available here.</span></section>`;
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>${isAdmin()?'Your player list is ready for sign-ups.':'There are no players in your access yet.'}</strong><span>${isAdmin()?'Use People & Sign-up to invite players, and Manage Playing Groups to prepare your groups.':'Your club organiser can assign the players and Playing Groups you work with.'}</span></section>`;
+  }else if(query&&!filtered.length){
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>Try another name or clear your search.</strong><span>Your search found no players in this view. Only players you have permission to access are included.</span><div class="btnrow"><button class="btn ghost" id="clearPlayerSearch">Clear search</button></div></section>`;
   }else if(discussionMode){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No coaching conversations waiting.</strong><span>When feedback creates something worth discussing, the player will appear here automatically.</span></section>`;
-  }else if(query&&!filtered.length){
-    emptyCopy=`<section class="card workspace-roster-empty"><strong>No matching player found.</strong><span>Search only covers players you have permission to access.</span></section>`;
   }else{
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No players to show.</strong><span>There are no accessible players in this Playing Group.</span></section>`;
   }
@@ -8226,9 +8631,9 @@ function renderPlayersWorkspaceList(){
     <div>
       <div class="section-label">${esc(role)} workspace</div>
       <h2>Players</h2>
-      <div class="help">Choose a Playing Group or search for a player. Open their Player Plan, Training Plan or add a quick observation from the same list.</div>
+      <div class="help">${plansPublished?'Find your players, open their plans and follow up on coaching conversations.':'Manage your player list and follow up on coaching conversations while your club prepares its Player Plan questions.'} Filter by Playing Group or search by name.</div>
     </div>
-    ${isAdmin()?`<div class="btnrow compact"><button class="btn ghost" id="managePlanDatesFromPlayers">Plan dates</button><button class="btn ghost" id="managePlayingGroupsFromPlayers">Manage Playing Groups</button></div>`:''}
+    ${isAdmin()?`<div class="btnrow compact"><button class="btn ghost" id="managePeopleFromPlayers">People & Sign-up</button>${plansPublished?'<button class="btn ghost" id="managePlanDatesFromPlayers">Plan dates</button>':''}<button class="btn ghost" id="managePlayingGroupsFromPlayers">Manage Playing Groups</button></div>`:''}
   </section>
 
   <section class="card players-workspace-tools compact">
@@ -8239,15 +8644,15 @@ function renderPlayersWorkspaceList(){
     <div class="field">
       <label>Playing Group</label>
       <select id="workspaceGroupFilter">
-        <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>Select a Playing Group…</option>
+        <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>All accessible players</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
         <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
       </select>
     </div>
-    ${(playersWorkspaceGroupFilter||query)?`<div class="workspace-filter-count compact"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
+    <div class="workspace-filter-count compact"><strong>${filtered.length}</strong><span>shown</span></div>
   </section>
 
-  ${playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> up to date</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
+  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> up to date</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
   ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
   ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
@@ -8256,6 +8661,8 @@ function renderPlayersWorkspaceList(){
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
   document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
+  document.getElementById('managePeopleFromPlayers')?.addEventListener('click',()=>{currentTab='permissions';renderTab();});
+  document.getElementById('clearPlayerSearch')?.addEventListener('click',()=>{playersWorkspaceSearch='';renderPlayersWorkspaceList();});
   document.getElementById('managePlayingGroupsFromPlayers')?.addEventListener('click',()=>{currentTab='groups';renderTab();});
 
   document.getElementById('remindOverduePlayers')?.addEventListener('click',async()=>{
@@ -8394,7 +8801,7 @@ function collectWorkspacePlayerAnswers(){
   if(!playersWorkspaceLocalRaw)playersWorkspaceLocalRaw=workspacePlayerRaw(player);
 
   const section=playersWorkspaceSection;
-  if(section==='summary'||section==='development')return;
+  if(['summary','training','development'].includes(section))return;
 
   if(section==='core'&&!playersWorkspaceLocalRaw.core)playersWorkspaceLocalRaw.core={};
   if(section!=='core'){
@@ -8430,9 +8837,13 @@ function updateWorkspaceSectionBadge(){
 }
 
 async function saveWorkspacePlayerPlanSilently(){
+  if(!workspacePlayerPlansPublished()){
+    if(playersWorkspaceAutosaveTimer){clearTimeout(playersWorkspaceAutosaveTimer);playersWorkspaceAutosaveTimer=null;}
+    return true;
+  }
   const player=workspaceSelectedPlayer();
   if(!player?.can_edit)return true;
-  if(playersWorkspaceSection==='summary'||playersWorkspaceSection==='development')return true;
+  if(['summary','training','development'].includes(playersWorkspaceSection))return true;
 
   if(playersWorkspaceAutosaveTimer){
     clearTimeout(playersWorkspaceAutosaveTimer);
@@ -8485,10 +8896,12 @@ function renderStaffTrainingFormatAccordion(player,format,raw,feedback){
   const label=formatLabel(format);
   const cards=ready?[...coreTrainingCards(raw),...formatTrainingCards(raw,format)].slice(0,7):[];
   const feedbackFocus=ready?trainingFocusForFormat(feedback,format,false):[];
+  const nextSection=coreProgress.complete?format:'core';
+  const nextLabel=coreProgress.complete?label:'Core';
 
   return `<details class="card train-format-accordion ${ready?'ready':'locked'}">
     <summary>
-      <div><div class="section-label">${esc(label)}</div><strong>${ready?`${esc(player.display_name||'Player')} · ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?'Targeted from the player’s completed Player Plan.':'Nothing appears here until Core and this format Player Plan are complete.'}</span></div>
+      <div><div class="section-label">${esc(label)}</div><strong>${ready?`${esc(player.display_name||'Player')} · ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?'Targeted from the player’s completed Player Plan.':`The ${esc(nextLabel)} Player Plan questions still need answers.`}</span></div>
       <div class="train-accordion-state"><b>${ready?'TRAINING PLAN READY':'PLAYER PLAN NOT COMPLETE'}</b><em>Open ↓</em></div>
     </summary>
     <div class="train-simple-body">
@@ -8497,7 +8910,7 @@ function renderStaffTrainingFormatAccordion(player,format,raw,feedback){
           ${cards.length?cards.map(c=>`<article><small>${esc(c.label)}</small>${c.title?`<h3>${esc(c.title)}</h3>`:''}<strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join(''):'<div class="notice">The Player Plan is complete, but there are no specific training cues to show yet.</div>'}
         </div>
         ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
-      `:`<div class="train-format-empty"><strong>No targeted ${esc(label)} plan yet.</strong><span>The player needs to complete Core and ${esc(label)} in their Player Plan before a targeted training plan can be generated.</span></div>`}
+      `:`<div class="train-format-empty"><strong>The ${esc(label)} training plan needs a completed Player Plan.</strong><span>${coreProgress.complete?`Finish the ${esc(label)} questions to generate training guidance.`:`Complete Core${formatProgress.complete?'':` and ${esc(label)}`} to generate training guidance.`}</span><div class="btnrow"><button class="btn secondary" data-workspace-section="${esc(nextSection)}">${player.can_edit?'Open':'View'} ${esc(nextLabel)} Player Plan</button></div></div>`}
     </div>
   </details>`;
 }
@@ -8533,7 +8946,7 @@ function renderWorkspacePlayerDiscussionPanel(player){
 }
 
 async function returnToPlayersWorkspaceList(){
-  await saveWorkspacePlayerPlanSilently();
+  if(await saveWorkspacePlayerPlanSilently()===false)return;
   playersWorkspaceSelectedId=null;
   playersWorkspaceSection='summary';
   playersWorkspaceDevelopmentMode=null;
@@ -8551,11 +8964,16 @@ async function renderPlayersWorkspacePlayer(){
     return;
   }
 
-  const sections=[['summary','Player Plan'],['training','Training Plan'],['development','Feedback'],['core','Core'],...publishedEnabledFormats()];
+  const plansPublished=workspacePlayerPlansPublished();
+  const sections=plansPublished
+    ?[['summary','Player Plan'],['training','Training Plan'],['development','Feedback'],['core','Core'],...publishedEnabledFormats()]
+    :[['summary','Player details'],['development','Feedback']];
   if(!sections.some(([k])=>k===playersWorkspaceSection))playersWorkspaceSection='summary';
 
   const raw=playersWorkspaceLocalRaw||workspacePlayerRaw(player);
-  const {required,complete,total}=workspacePlayerProgress({...player,workflow:{...(player.workflow||{}),raw_answers:raw}});
+  const {required,complete,total}=plansPublished
+    ?workspacePlayerProgress({...player,workflow:{...(player.workflow||{}),raw_answers:raw}})
+    :{required:[],complete:0,total:0};
   const requiredSet=new Set(required);
   const groups=(player.groups||[]).map(g=>`<span class="workspace-group-pill">${esc(g.name)}</span>`).join('');
   const canEdit=!!player.can_edit;
@@ -8584,7 +9002,16 @@ async function renderPlayersWorkspacePlayer(){
 
   let body='';
 
-  if(playersWorkspaceSection==='summary'){
+  if(!plansPublished&&playersWorkspaceSection==='summary'){
+    const savedPlan=player.workflow?.curated_draft;
+    body=`${renderWorkspacePlayerDiscussionPanel(player)}<section class="card">
+      <div class="section-label">Player Plan</div>
+      <h2>Your club is preparing the Player Plan questions.</h2>
+      <p>The Philosophy Lead will publish How We Bat and the questions together. Registered players will receive an email when they can start.</p>
+      <p>${isAdmin()?'You can manage Playing Groups and use feedback now.':'You can use feedback for the players you have access to now.'} Training guidance will follow once the player has completed their plan.</p>
+      <div class="btnrow"><button class="btn secondary" data-workspace-section="development">Open feedback</button></div>
+    </section>${savedPlan&&Object.keys(savedPlan).length?`<section class="card workspace-plan-preview"><p class="help">Previously saved Player Plan · view only while the club prepares its questions.</p>${renderCuratedDraft(savedPlan,player.display_name,'Player Plan')}</section>`:''}`;
+  }else if(playersWorkspaceSection==='summary'){
     const curated=player.workflow?.curated_draft&&Object.keys(player.workflow.curated_draft||{}).length&&!playersWorkspaceLocalRaw
       ?player.workflow.curated_draft
       :curate(raw);
@@ -8615,7 +9042,7 @@ async function renderPlayersWorkspacePlayer(){
       :renderStaffPlayerTrainingPlan(player,raw,developmentData);
   }else if(playersWorkspaceSection==='development'){
     body=developmentError
-      ?`<section class="card"><div class="section-label">Feedback</div><h2>This section could not load.</h2><div class="notice">${esc(developmentError)}</div><div class="help" style="margin-top:10px">If v0.7.0 has just been deployed, make sure its Supabase migration was run first.</div></section>`
+      ?`<section class="card"><div class="section-label">Feedback</div><h2>Feedback is temporarily unavailable.</h2><p>Try loading this section again. If it still will not load, ask your Club Admin for help.</p><div class="btnrow"><button class="btn secondary" id="retryPlayerFeedback">Try again</button></div><details><summary>Error details</summary><div class="notice">${esc(developmentError)}</div></details></section>`
       :`${renderWorkspacePlayerDiscussionPanel(player)}${renderStaffDevelopmentBody(player,canEdit,developmentData)}`;
   }else{
     const section=playersWorkspaceSection;
@@ -8701,10 +9128,11 @@ async function renderPlayersWorkspacePlayer(){
   ${body}`;
 
   document.getElementById('workspaceBackToPlayers').onclick=returnToPlayersWorkspaceList;
+  document.getElementById('retryPlayerFeedback')?.addEventListener('click',()=>renderPlayersWorkspacePlayer());
 
   document.querySelectorAll('[data-workspace-section]').forEach(b=>b.onclick=async()=>{
     if(b.dataset.workspaceSection===playersWorkspaceSection)return;
-    await saveWorkspacePlayerPlanSilently();
+    if(await saveWorkspacePlayerPlanSilently()===false)return;
     playersWorkspaceSection=b.dataset.workspaceSection;
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
@@ -8750,6 +9178,16 @@ function answerFor(section,key){
 
 
 let playerPlanAutosaveTimer=null;
+
+async function saveClubPlanBeforeNavigation(){
+  if(currentTab==='myplan' && myPlayer && (localRaw||playerPlanAutosaveTimer)){
+    return await savePlayerPlanProgressSilently()!==false;
+  }
+  if(currentTab==='players' && playersWorkspaceSelectedId && (playersWorkspaceLocalRaw||playersWorkspaceAutosaveTimer)){
+    return await saveWorkspacePlayerPlanSilently()!==false;
+  }
+  return true;
+}
 
 function requiredPlayerPlanSections(rollout){
   const keys=['core',...(rollout?.requirements||[])
@@ -8868,20 +9306,14 @@ function queuePlayerPlanAutosave(){
 
 async function renderMyPlan(){
   if(!philosophyVersions.length){
-    document.getElementById('page').innerHTML=`<div class="card player-gate">
-      <div class="gate-state locked">🔒</div>
-      <div class="section-label">Player Plans are not open yet</div>
-      <h2>Your club is still finalising its batting philosophy.</h2>
-      <p>The framework that will guide your Player Plan has not been published yet, so there is nothing you need to complete at the moment.</p>
-      <div class="notice">We’ll let players know when the Philosophy Lead releases the Club Batting System. When it goes live, you’ll be guided through your own Player Plan.</div>
-    </div>`;
+    renderClubPublicationGate('My Player Plan','Your Player Plan will open when your club publishes How We Bat and the Player Plan questions.');
     return;
   }
 
   if(!myPlayer){
     document.getElementById('page').innerHTML=`<div class="card">
-      <h2>No Player Plan is attached to this account.</h2>
-      <div class="help">Your account is currently set up as ${esc(labelInvolvement(membership.involvement))}. If you should also be a player, an Admin can help update your club identity.</div>
+      <h2>Your account needs a player profile.</h2>
+      <div class="help">Your account is currently set up as ${esc(labelInvolvement(membership.involvement))}. Ask your club to register you as a player if you also need your own Player Plan.</div>
     </div>`;
     return;
   }
@@ -8891,6 +9323,7 @@ async function renderMyPlan(){
 
   const {data:rolloutData,error:rolloutErr}=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:club.id});
   const rollout=rolloutErr?{groups:[],requirements:[]}:(rolloutData||{groups:[],requirements:[]});
+  const requirementsAvailable=!rolloutErr;
   const requirementMap=new Map((rollout.requirements||[]).map(r=>[r.format_key,r]));
   const rawForProgress=localRaw||rawAnswers();
   const calculatedSectionStatus=automaticSectionStatus(rawForProgress);
@@ -8931,7 +9364,7 @@ async function renderMyPlan(){
   const formatCard=(key,label)=>{
     const req=requirementMap.get(key)||{required:false,due_date:null,sources:[]};
     const progress=sectionProgress(key,rawForProgress);
-    const due=req.required
+    const due=!requirementsAvailable?'Due date unavailable':req.required
       ?(req.due_date?`Required by ${niceDate(req.due_date)}`:'Required now')
       :'Available anytime';
     const source=(req.sources||[]).length?req.sources.join(' + '):'';
@@ -8948,6 +9381,8 @@ async function renderMyPlan(){
         :'Complete Core to create How We Train';
     }else if(req.required){
       detail=`${progressText}${source?` · ${source}`:''} · How We Train unlocks when complete`;
+    }else if(!requirementsAvailable){
+      detail=`${progressText} · Your club’s due dates could not be checked`;
     }else{
       detail=`${progressText} · Complete when useful to create How We Train`;
     }
@@ -8967,14 +9402,14 @@ async function renderMyPlan(){
     :(requirementMap.get(builderSection)||{required:false,due_date:null,sources:[]});
   const currentTrainingReady=builderSection!=='core'&&coreProgress.complete&&currentComplete;
   const currentDueText=currentRequirement?.required
-    ?(currentRequirement.due_date?` Your coaches have set ${niceDate(currentRequirement.due_date)} as the due date.`:' Your coaches have marked this format as required now.')
+    ?(currentRequirement.due_date?` Your club has set ${niceDate(currentRequirement.due_date)} as the due date.`:' Your club has marked this format as required now.')
     :'';
   const sectionStepTitle=builderSection==='core'
     ?(currentComplete?'Core complete ✓':'Start with Core')
     :(currentComplete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`);
   const sectionStepCopy=builderSection==='core'
     ?(currentComplete
-      ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
+      ?'Next, choose a format. Your club can set due dates for the formats your Playing Group needs.'
       :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.')
     :(currentTrainingReady
       ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
@@ -8988,11 +9423,11 @@ async function renderMyPlan(){
       <div>
         <div class="section-label">Your Player Plan</div>
         <h2>Start with Core. Then build the formats you play.</h2>
-        <div class="help">Core is your foundation. After that, each format can be completed when it becomes relevant. Coaches may set due dates for particular Playing Groups. Your How We Train for a format is created only after Core and that format are complete.</div>
+        <div class="help">Core is your foundation. After that, each format can be completed when it becomes relevant. Your club may set due dates for particular Playing Groups. Your How We Train for a format is created only after Core and that format are complete.</div>
         <div class="btnrow compact" style="margin-top:10px"><button type="button" class="btn ghost compact-btn" id="myPlanGuideLink">Show me how</button></div>
       </div>
-      <span class="workflow-status ${completedRequiredSections===requiredSections.length?'approved':''}">
-        ${completedRequiredSections===requiredSections.length
+      <span class="workflow-status ${requirementsAvailable&&completedRequiredSections===requiredSections.length?'approved':''}">
+        ${!requirementsAvailable?'DUE DATES UNAVAILABLE':completedRequiredSections===requiredSections.length
           ?'REQUIRED WORK COMPLETE'
           :`${completedRequiredSections}/${requiredSections.length} REQUIRED SECTIONS COMPLETE`}
       </span>
@@ -9000,7 +9435,7 @@ async function renderMyPlan(){
 
     <div class="player-group-summary">
       <strong>Your Playing Groups</strong>
-      ${(rollout.groups||[]).length
+      ${!requirementsAvailable?'<span>Your Playing Groups could not be loaded.</span>':(rollout.groups||[]).length
         ?`<span>${(rollout.groups||[]).map(g=>esc(g.name)).join(' · ')}</span>`
         :'<span>Unassigned for now — that is completely fine. Your club can add groups later.</span>'}
     </div>
@@ -9017,6 +9452,7 @@ async function renderMyPlan(){
     </div>
   </section>
 
+  ${rolloutErr?'<section class="card notice"><strong>Your club’s due dates could not be loaded.</strong><p>You can keep working on your plan. Required formats and due dates will be confirmed once this information loads.</p><button class="btn ghost" id="retryPlayerPlanDates">Try again</button></section>':''}
   ${formatReferenceHtml}
 
   <div class="grid" style="margin-top:16px">
@@ -9051,9 +9487,9 @@ async function renderMyPlan(){
     </section>
 
     <section class="card">
-      <div class="section-label">Curated draft</div>
-      <h2>What your plan is becoming</h2>
-      <div class="help">The format sections are overlays on one batting identity. Completing one now does not stop you adding or refining another later.</div>
+      <div class="section-label">Your plan so far</div>
+      <h2>See your answers together.</h2>
+      <div class="help">Your Core answers apply across formats. Each format adds the decisions you make in that type of match. You can refine your answers later.</div>
       <div id="draftPreview">${renderDraftPreview()}</div>
     </section>
   </div>`;
@@ -9085,7 +9521,7 @@ async function renderMyPlan(){
     if(builderSection==='core'){
       if(stepTitle)stepTitle.textContent=progress.complete?'Core complete ✓':'Start with Core';
       if(stepCopy)stepCopy.textContent=progress.complete
-        ?'Next, choose a format. Format plans can be completed at any time unless your coaches set a due date.'
+        ?'Next, choose a format. Your club can set due dates for the formats your Playing Group needs.'
         :gaps.length===1
           ?'One required Core answer remains. Your answers save automatically.'
           :`${gaps.length} required Core answers remain. Your answers save automatically.`;
@@ -9114,7 +9550,7 @@ async function renderMyPlan(){
   document.addEventListener('bdp-player-plan-saved',refreshCurrentPlayerPlanState,{once:true});
 
   if(document.getElementById('openHowWeTrainFromPlan'))document.getElementById('openHowWeTrainFromPlan').onclick=async()=>{
-    await savePlayerPlanProgressSilently();
+    if(await savePlayerPlanProgressSilently()===false)return;
     currentTab='howwetrain';
     renderTab();
   };
@@ -9122,8 +9558,9 @@ async function renderMyPlan(){
   document.querySelectorAll('[data-plan-date-format]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openPlanDueDateDialog(b.dataset.planDateFormat);});
 
   if(document.getElementById('myPlanGuideLink'))document.getElementById('myPlanGuideLink').onclick=()=>openClubBattingGuideTopic('player_plan');
+  document.getElementById('retryPlayerPlanDates')?.addEventListener('click',async()=>{if(await saveClubPlanBeforeNavigation())await renderMyPlan();});
   document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=async()=>{
-    await savePlayerPlanProgressSilently();
+    if(await savePlayerPlanProgressSilently()===false)return;
     builderSection=b.dataset.builderSection;
     await renderMyPlan();
   });
@@ -9326,7 +9763,7 @@ async function sendRouteMagicLink(email){
 async function renderSalesProspectRoute(token){
   const {data:p,error}=await supabase.rpc('get_public_sales_prospect',{p_token:token});
   if(error||!p){
-    app.innerHTML=`<div class="login"><h1>Invitation unavailable.</h1><p>${esc(error?.message||'This prospect link is no longer available.')}</p></div>`;
+    app.innerHTML=`<div class="login"><h1>That Club Batting link isn’t available.</h1><p>${esc(error?.message||'This link is no longer available.')}</p></div>`;
     return;
   }
 
@@ -9344,7 +9781,7 @@ async function renderSalesProspectRoute(token){
 
   const place=[p.locality,p.region,p.country].filter(Boolean).join(', ');
   const interested=p.status==='interested'||p.status==='onboarding';
-  const trialInvitationQueued=p.status==='onboarding';
+  const trialLinkQueued=p.status==='onboarding';
   const trialActive=!!p.trial_status&&p.trial_status!=='offered';
   app.innerHTML=`<div class="prospect-shell sales-response-shell sales-guide-shell">
     <section class="prospect-hero sales-prospect-hero">
@@ -9374,9 +9811,9 @@ async function renderSalesProspectRoute(token){
       </section>
 
       <section class="card prospect-card sales-response-card">
-        ${interested?`<div class="notice success"><strong>${trialActive?'Your Club Trial is active.':trialInvitationQueued?'Your Club Trial invitation is on its way.':`Thanks — ${esc(p.club_name)} is marked interested.`}</strong><br>${trialActive?'The club now has the complete Club Batting product for its full trial period. Nothing is automatically charged.':trialInvitationQueued?'A secure activation invitation has been queued for the Club Contact. The full 60 days begin when the trial is activated. Nothing is automatically charged.':'A valid Club Contact email is needed before the secure trial invitation can be sent.'}</div>`:`<h2>Is this worth exploring for your club?</h2><p class="help">Choose Interested to begin the full 60-day Club Trial. No payment is taken and nothing is automatically charged.</p>
+        ${interested?`<div class="notice success"><strong>${trialActive?'Your club has activated its trial.':trialLinkQueued?'Your trial link has been requested.':`Thanks for your interest in Club Batting.`}</strong><br>${trialActive?'Your club can review its trial status after signing in. Nothing is automatically charged at the end of the trial.':trialLinkQueued?'An email with your secure activation link has been queued for the Club Contact. Your full trial begins only when you activate it.':'A valid Club Contact email is needed before we can email your secure trial link.'}</div>`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Request a link to try the complete Club Batting platform with your club. The trial starts when you activate it, with no payment upfront. Paid continuation is a separate choice afterwards.</p>
         <div class="prospect-response-actions">
-          <button class="btn secondary" data-sales-response="interested">Yes — I’m interested</button>
+          <button class="btn secondary" data-sales-response="interested">Send me the trial link</button>
           <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
           <button class="btn ghost" id="wrongContactBtn">I’m not the right person</button>
           <button class="btn ghost" data-sales-response="declined">Not interested</button>
@@ -9389,7 +9826,7 @@ async function renderSalesProspectRoute(token){
           <div class="btnrow"><button class="btn secondary" id="sendSalesReferral">Send referral</button><button class="btn ghost" id="cancelSalesReferral">Cancel</button></div>
         </div>`}
         <div id="salesResponseStatus" class="help"></div>
-        <div class="sales-trial-note"><strong>What happens next:</strong><span>Club Batting automatically prepares the secure invitation. The full 60 days begin when the Club Contact activates the trial.</span></div>
+        ${trialActive?'':`<div class="sales-trial-note"><strong>What happens next:</strong><span>Open the trial link in your email, verify your Club Contact email and activate your trial when you’re ready. Nothing is automatically charged.</span></div>`}
       </section>
     </div>
   </div>`;
@@ -9516,6 +9953,20 @@ function renderDirectBetaRoute(token,p){
 }
 
 function prospectIntro(p){
+  if(p.is_club_trial){
+    const preactivation=!['awaiting_payment','awaiting_admin_handoff','admin_invited','active'].includes(p.status);
+    return `<section class="prospect-hero">
+      <div class="section-label">For ${esc(p.club_name)}</div>
+      <h1>Turn the same batting conversations into a plan for change.</h1>
+      <p>${preactivation?'Thanks for your interest in Club Batting. Your trial is ready when you are. ':''}Use the complete platform with your own players: agree on how your club wants to bat, build individual Player Plans and connect those plans to purposeful practice.</p>
+      <div class="prospect-value-grid">
+        <div><strong>HOW WE BAT</strong><span>Agree on a clear direction for batting across your club.</span></div>
+        <div><strong>MY PLAYER PLAN</strong><span>Help each batter apply that approach to their own game.</span></div>
+        <div><strong>HOW WE TRAIN</strong><span>Practise what each plan needs, then use reflection and feedback to shape the next session.</span></div>
+      </div>
+      <p>${preactivation?'Once you activate, choose who will coordinate the setup and lead your Batting Philosophy Workshop.':'Your club’s next step is to put its approach into practice with players.'} The aim is a shared direction, with room for each batter’s strengths.</p>
+    </section>`;
+  }
   return `<section class="prospect-hero">
     <div class="section-label">For ${esc(p.club_name)}</div>
     <h1>A club-wide batting development system.</h1>
@@ -9551,10 +10002,10 @@ function renderSecretaryProspectRoute(token,p){
     app.innerHTML=`<div class="prospect-shell">
       ${prospectIntro(p)}
       <section class="card prospect-card">
-        <div class="section-label">Club offer</div>
-        <h2>${isClubTrial?`${trialDays}-day Club Trial`:free?'Complimentary club access':`${amount} for this access period`}</h2>
-        <p class="help">${isClubTrial?`Your full ${trialDays} days begin when the Club Contact securely activates the trial. No payment is required and nothing is automatically charged.`:`Access under this offer runs through <strong>${esc(niceDate(p.offer_end))}</strong>. ${free?'No payment is required.':''}`}</p>
-        ${isClubTrial?`<div class="notice compact"><strong>Next step:</strong> verify the Club Contact email, then activate the trial.</div>`:`<div class="committee-summary">
+        <div class="section-label">${isClubTrial?'Your full club trial':'Club offer'}</div>
+        <h2>${isClubTrial?`Give your club ${trialDays} days to put it into practice`:free?'Complimentary club access':`${amount} for this access period`}</h2>
+        <p class="help">${isClubTrial?`Your full ${trialDays} days begin only when you activate the trial. No payment is required upfront and nothing is automatically charged. If you want to keep using Club Batting afterwards, you can review the price and choose paid continuation.`:`Access under this offer runs through <strong>${esc(niceDate(p.offer_end))}</strong>. ${free?'No payment is required.':''}`}</p>
+        ${isClubTrial?`<div class="notice compact"><strong>First, verify your email.</strong><br>Use the Club Contact email this link was sent to. We’ll email you a secure sign-in link, then you can activate the trial. Requesting the sign-in link does not start your trial.</div>`:`<div class="committee-summary">
           <strong>For the committee</strong>
           <p>The Secretary remains the organisational contact, but does not need to run the coaching system. After activation, the Secretary nominates the Club Admin and can step out of day-to-day involvement.</p>
           <button class="btn ghost" id="printSummary">Print / save committee summary</button>
@@ -9563,7 +10014,7 @@ function renderSecretaryProspectRoute(token,p){
         <button class="btn ghost" id="wrongContact">I’m not the right club contact</button>
         <div id="verifyBox" style="display:${isClubTrial?'block':'none'};margin-top:12px">
           <div class="field"><label>Club Contact email</label><input id="routeEmail" type="email" placeholder="secretary@club.com.au"></div>
-          <button class="btn secondary" id="verifySecretary">Send secure sign-in link</button>
+          <button class="btn secondary" id="verifySecretary">${isClubTrial?'Email my secure sign-in link':'Send secure sign-in link'}</button>
           <div id="routeStatus" class="help"></div>
         </div>
         <div id="wrongContactBox" style="display:none;margin-top:12px">
@@ -9581,7 +10032,7 @@ function renderSecretaryProspectRoute(token,p){
     document.getElementById('verifySecretary').onclick=async()=>{
       const st=document.getElementById('routeStatus');st.textContent='Sending…';
       const e=await sendRouteMagicLink(val('routeEmail'));
-      st.textContent=e?e.message:'Check that email and tap the secure sign-in link. You’ll return to this club offer.';
+      st.textContent=e?e.message:(isClubTrial?'Check your email and open the secure sign-in link. You’ll return here to start your trial; it has not started yet.':'Check that email and tap the secure sign-in link. You’ll return to this club offer.');
     };
     document.getElementById('sendContactCorrection').onclick=async()=>{
       const st=document.getElementById('contactCorrectionStatus');st.textContent='Sending…';
@@ -9639,10 +10090,10 @@ function renderSecretaryProspectRoute(token,p){
     ${prospectIntro(p)}
     <section class="card prospect-card">
       <div class="section-label">${isClubTrial?'Club Trial':'Committee approved'}</div>
-      <h2>${isClubTrial?`Start the ${trialDays}-day Club Trial`:free?'No payment is required.':`${amount} is due.`}</h2>
-      <p class="help">Signed in as ${esc(session.user.email||'')}. ${isClubTrial?'The trial dates will be set from today when you start it.':'We verify the Club Contact before any subscription action.'}</p>
+      <h2>${isClubTrial?`Ready to put Club Batting to work for ${esc(p.club_name)}?`:free?'No payment is required.':`${amount} is due.`}</h2>
+      <p class="help">Signed in as ${esc(session.user.email||'')}. ${isClubTrial?`Start your full ${trialDays}-day trial today, then choose who will coordinate your club’s setup. No payment is required upfront and nothing is automatically charged. At the end, you can review the price and choose paid continuation.`:'We verify the Club Contact before any subscription action.'}</p>
       <div class="field"><label>Your name</label><input id="secretaryName" placeholder="Club Secretary / Club Contact"></div>
-      <button class="btn secondary" id="acceptOffer">${isClubTrial?'Start Club Trial':'Confirm & continue'}</button>
+      <button class="btn secondary" id="acceptOffer">${isClubTrial?`Start our ${trialDays}-day trial`:'Confirm & continue'}</button>
       <div id="acceptStatus" class="help"></div>
     </section>
   </div>`;
@@ -9751,7 +10202,7 @@ async function renderPhilosophyInviteRoute(token){
   app.innerHTML=`<div class="login" style="max-width:650px">
     <div class="section-label">Philosophy contributor invitation</div>
     <h1>Contribute to ${esc(i.club_name)}</h1>
-    <p>This gives you access only to the Philosophy Workshop unless the club separately gives you another role or permission.</p>
+    <p>This gives you access only to the Batting Philosophy Workshop unless the club separately gives you another role or permission.</p>
     <div class="field"><label>Your name</label><input id="philosophyInviteName" value="${esc(i.invited_name||'')}"></div>
     <div class="btnrow">
       <button class="btn secondary" id="acceptPhilosophyInvite">Accept & start</button>
