@@ -1,4 +1,4 @@
-// Club Batting v0.8.50.1 — compact Club Pipeline onboarding view
+// Club Batting v0.8.51 — prospect review list + pipeline email exceptions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -34,7 +34,11 @@ let platformMarketAssociationId='';
 let platformMarketAssociationSearch='';
 let platformMarketFitFilter='likely';
 let platformMarketSelectedClubIds=new Set();
-const PLATFORM_MARKET_SCROLL_KEY='bdp-platform-market-scroll-y';
+let platformMarketReviewFilter='ready';
+let platformMarketClubSearch='';
+let platformMarketAssociationFilter='';
+let platformMarketActionMessage='';
+const PLATFORM_MARKET_SCROLL_KEY='bdp-platform-market-scroll-y-v0851';
 let platformMarketScrollY=Number(sessionStorage.getItem(PLATFORM_MARKET_SCROLL_KEY)||0);
 let platformMarketRestoreTimer=null;
 let platformMarketScrollSuppressed=false;
@@ -959,6 +963,86 @@ async function kickLiveEmailDelivery(){
   }catch(err){
     console.warn('Email dispatch could not be started',err);
   }
+}
+
+function outboundMessageAgeMinutes(message){
+  const started=message?.processing_at||message?.created_at;
+  if(!started)return 0;
+  return Math.max(0,(Date.now()-new Date(started).getTime())/60000);
+}
+
+async function loadAllPlatformRows(makeQuery){
+  const rows=[];
+  const pageSize=500;
+  try{
+    for(let offset=0;;offset+=pageSize){
+      const {data,error}=await makeQuery().range(offset,offset+pageSize-1);
+      if(error)return {data:null,error};
+      rows.push(...(data||[]));
+      if(!data||data.length<pageSize)return {data:rows,error:null};
+    }
+  }catch(error){return {data:null,error};}
+}
+
+function safePublicSourceUrl(value){
+  try{const url=new URL(String(value||'').trim());return ['https:','http:'].includes(url.protocol)?url.href:'';}
+  catch{return '';}
+}
+
+async function retryPlatformDelivery(message,settings){
+  if(settings?.email_mode!=='live')throw new Error('Email delivery is not in Live mode. Check provider setup in Platform Settings.');
+  if(!settings.email_live_from||new Date(message.created_at)<new Date(settings.email_live_from))throw new Error('This message is outside the live delivery window and cannot be retried.');
+  if(message.failed_at&&!message.sent_at){
+    const {error}=await supabase.rpc('platform_retry_outbound_message',{p_message_id:message.id});
+    if(error)throw error;
+  }
+  // Keep the existing dispatcher unchanged. It processes the queue in date order.
+  // Check this exact message afterwards; a successful request does not prove it sent.
+  const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'dispatch',limit:25,public_base_url:`${location.origin}${location.pathname}`}});
+  if(error||data?.error)throw new Error(data?.error||error?.message||'Delivery retry could not start.');
+  if(data?.skipped)throw new Error(data.reason||'Delivery was skipped.');
+  const {data:current,error:readError}=await supabase.from('outbound_messages').select('sent_at,failed_at,last_error,processing_at').eq('id',message.id).single();
+  if(readError)throw new Error(`Retry requested, but the result could not be checked: ${readError.message}`);
+  if(current?.failed_at&&!current.sent_at)throw new Error(current.last_error||'Email delivery failed again.');
+  return current?.sent_at?'Email recorded as sent.':'Retry requested. This email is still waiting in the delivery queue.';
+}
+
+function outboundMessageState(message,settings){
+  if(message?.sent_at)return 'sent';
+  if(message?.failed_at)return 'failed';
+  const live=settings?.email_mode==='live';
+  const liveFrom=settings?.email_live_from?new Date(settings.email_live_from).getTime():null;
+  const createdAt=message?.created_at?new Date(message.created_at).getTime():null;
+  if(!live || (liveFrom&&createdAt&&createdAt<liveFrom))return 'prototype-only';
+  if(message?.processing_at)return 'sending';
+  return 'queued';
+}
+
+function outboundMessageNeedsAttention(message,settings){
+  if(message?.hidden_from_platform_queue)return false;
+  if(settings?.email_mode!=='live'||!settings.email_live_from)return false;
+  if(new Date(message?.created_at)<new Date(settings.email_live_from))return false;
+  const state=outboundMessageState(message,settings);
+  return state==='failed'||(['queued','sending'].includes(state)&&outboundMessageAgeMinutes(message)>=10);
+}
+
+function outboundMessageLabel(message,settings){
+  const state=outboundMessageState(message,settings);
+  if(state==='sent')return `Sent ${new Date(message.sent_at).toLocaleString()}`;
+  if(state==='failed')return 'Delivery failed';
+  if(state==='prototype-only')return 'Prototype history';
+  if(outboundMessageAgeMinutes(message)>=10)return state==='sending'?'Sending is delayed':'Queued for more than 10 minutes';
+  return state==='sending'?'Sending':'Queued';
+}
+
+function outboundTemplateLabel(templateKey){
+  return ({
+    prospect_intro:'Prospect invitation',
+    prospect_follow_up:'Prospect follow-up',
+    club_trial_invitation:'Club Trial invitation',
+    club_admin_invitation:'Club Admin invitation',
+    philosophy_lead_invitation:'Philosophy Lead invitation'
+  }[templateKey]||String(templateKey||'Email').replaceAll('_',' '));
 }
 
 async function loadPlatformContext(){
@@ -2795,7 +2879,7 @@ async function renderWorkshop(){
 
           <button class="btn ghost add-person-btn" id="addContributorRow" type="button">+ Add another person</button>
           <div id="externalInviteStatus" class="help"></div>
-          <div class="help">New invitations appear in Email Delivery with secure links. In Live mode they send automatically.</div>
+          <div class="help">New invitations send automatically in Live mode and remain available in Club Pipeline email history.</div>
         </div>
 
         <div class="notice compact"><strong>No committee meeting required.</strong><br>Invite people now; they complete their response independently when it suits them.</div>
@@ -9959,7 +10043,7 @@ async function renderPlatformConsole(){
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['market','Market Discovery'],['home','Club Pipeline'],['clubs','Active Clubs'],['outbox','Email Delivery'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['market','Market Discovery'],['home','Club Pipeline'],['clubs','Active Clubs'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
@@ -9974,7 +10058,7 @@ async function renderPlatformConsole(){
 }
 
 async function renderPlatformView(){
-  document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===platformView));
+  document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===(platformView==='outbox'?'home':platformView)));
   if(platformView==='market')return renderPlatformMarketDiscovery();
   if(platformView==='clubs')return renderPlatformActiveClubs();
   if(platformView==='outbox')return renderPlatformOutbox();
@@ -9983,358 +10067,333 @@ async function renderPlatformView(){
 }
 
 async function renderPlatformMarketDiscovery(options={}){
-  const focusTarget=String(options?.focusTarget||'');
-  const shouldRestoreScroll=options?.restoreScroll!==false && !focusTarget;
-  savePlatformMarketScroll();
+  const page=document.getElementById('platformPage');
+  page.innerHTML='<div class="splash">Loading prospect findings…</div>';
   platformMarketScrollSuppressed=true;
-  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading market discovery…</div>';
-  const regionCode='NSW',countryCode='AU';
-  const [assocRes,clubRes,linkRes,scanRes]=await Promise.all([
-    supabase.from('market_associations').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name'),
-    supabase.from('market_clubs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name'),
-    supabase.from('market_club_associations').select('*'),
+  const countryCode='AU',regionCode='NSW';
+  const [associationRes,clubRes,linkRes,scanRes]=await Promise.all([
+    loadAllPlatformRows(()=>supabase.from('market_associations').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name').order('id')),
+    loadAllPlatformRows(()=>supabase.from('market_clubs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name').order('id')),
+    loadAllPlatformRows(()=>supabase.from('market_club_associations').select('*').order('club_id').order('association_id')),
     supabase.from('market_scan_runs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('started_at',{ascending:false}).limit(30)
   ]);
-  const firstError=assocRes.error||clubRes.error||linkRes.error||scanRes.error;
-  if(firstError){platformMarketScrollSuppressed=false;page.innerHTML=`<div class="notice"><strong>Market Discovery needs the v0.8.3 migration.</strong><br>${esc(firstError.message)}</div>`;return;}
+  const loadError=associationRes.error||clubRes.error||linkRes.error||scanRes.error;
+  if(loadError){
+    platformMarketScrollSuppressed=false;
+    page.innerHTML=`<div class="notice"><strong>Market Discovery could not load.</strong><br>${esc(loadError.message)}</div>`;
+    return;
+  }
 
-  const associations=assocRes.data||[],clubs=clubRes.data||[],links=linkRes.data||[],scans=scanRes.data||[];
-  const clubById=new Map(clubs.map(c=>[c.id,c]));
-  const linksByAssociation=new Map();
-  const linkRowsByAssociation=new Map();
-  const linksForClub=new Map();
-  links.forEach(l=>{
-    if(!linksByAssociation.has(l.association_id))linksByAssociation.set(l.association_id,[]);
-    linksByAssociation.get(l.association_id).push(l.club_id);
-    if(!linkRowsByAssociation.has(l.association_id))linkRowsByAssociation.set(l.association_id,[]);
-    linkRowsByAssociation.get(l.association_id).push(l);
-    if(!linksForClub.has(l.club_id))linksForClub.set(l.club_id,[]);
-    linksForClub.get(l.club_id).push(l);
+  const associations=associationRes.data||[];
+  const clubs=clubRes.data||[];
+  const links=linkRes.data||[];
+  const scans=scanRes.data||[];
+  const associationById=new Map(associations.map(a=>[a.id,a]));
+  const associationNamesByClub=new Map();
+  const clubIdsByAssociation=new Map();
+  links.forEach(link=>{
+    const association=associationById.get(link.association_id);
+    if(association){
+      if(!associationNamesByClub.has(link.club_id))associationNamesByClub.set(link.club_id,[]);
+      associationNamesByClub.get(link.club_id).push(association.name);
+    }
+    if(!clubIdsByAssociation.has(link.association_id))clubIdsByAssociation.set(link.association_id,[]);
+    clubIdsByAssociation.get(link.association_id).push(link.club_id);
   });
-  const associationForClub=new Map();
-  links.forEach(l=>{if(!associationForClub.has(l.club_id))associationForClub.set(l.club_id,[]);associationForClub.get(l.club_id).push(l.association_id);});
-  const contacts=clubs.filter(c=>c.contact_email).length;
-  const likelyCount=clubs.filter(c=>['strong','possible'].includes(c.outreach_fit)).length;
-  const prospectCount=clubs.filter(c=>c.sales_prospect_id).length;
+  const reviewStatus=club=>club.sales_prospect_id&&club.prospect_review_status!=='invited'?'in_pipeline':(club.prospect_review_status||'pending');
+  const validEmail=club=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(club.contact_email||'').trim());
+  const isLikely=club=>['strong','possible'].includes(club.outreach_fit);
+  const isReady=club=>reviewStatus(club)==='pending'&&isLikely(club)&&validEmail(club)&&!!safePublicSourceUrl(club.contact_source_url);
+  const sourceUrl=club=>[club.contact_source_url,club.registry_url,club.source_url,club.website_url].map(safePublicSourceUrl).find(Boolean)||'';
+  const fitLabel=value=>({strong:'Strong fit',possible:'Possible fit',low:'Low fit',review:'Review'}[value]||'Review');
+  const confidenceLabel=value=>({high:'High confidence',contact:'Contact found',website:'Website matched',source_only:'Source only',needs_review:'Needs review'}[value]||'Source recorded');
+  const pending=clubs.filter(c=>reviewStatus(c)==='pending');
+  const ready=pending.filter(isReady);
+  const researching=pending.filter(c=>!isReady(c));
+  const invited=clubs.filter(c=>['invited','in_pipeline'].includes(reviewStatus(c)));
+  const excluded=clubs.filter(c=>reviewStatus(c)==='do_not_invite');
   const latestRegionScan=scans.find(s=>s.scope_type==='region');
-  const niceScan=t=>t?new Date(t).toLocaleString():'Not scanned yet';
-  const fitLabel=v=>({strong:'Strong fit',possible:'Possible fit',low:'Low fit',review:'Review'}[v]||'Review');
-  const typeLabel=v=>({competitive_senior:'Competitive senior',general_senior:'General senior',social_recreational:'Social / recreational',junior_only:'Junior only',veterans_only:'Veterans only',unknown:'Type unclear'}[v]||'Type unclear');
-  const clubSections=(clubId,associationId='')=>{
-    const rows=associationId?(linkRowsByAssociation.get(associationId)||[]).filter(x=>x.club_id===clubId):(linksForClub.get(clubId)||[]);
-    return [...new Set(rows.flatMap(x=>Array.isArray(x.source_sections)?x.source_sections:[]).filter(Boolean))];
-  };
 
   page.innerHTML=`
-    <section class="platform-flow-card market-hero">
-      <div class="section-label">Market Discovery</div>
-      <h2>Map the market. Pull the official contact. Then choose the prospect.</h2>
-      <p>Association and competition sources establish that a club exists and where it sits in the game. Cricket Australia PlayCricket is then used as the preferred public source for the club identity, senior-cricket signal and contact. <strong>Discovery never sends email.</strong></p>
-      <div class="pipeline-strip"><span>CRICKET STRUCTURE</span><b>→</b><span>PLAYCRICKET</span><b>→</b><span>CONTACT</span><b>→</b><span>FIT</span><b>→</b><span>PROSPECT</span></div>
-    </section>
-
-    <div class="platform-metrics market-metrics">
-      <div><strong>${clubs.length}</strong><span>NSW clubs mapped</span></div>
-      <div><strong>${likelyCount}</strong><span>likely fits</span></div>
-      <div><strong>${contacts}</strong><span>contacts ready</span></div>
-      <div><strong>${prospectCount}</strong><span>chosen as prospects</span></div>
-    </div>
-
-    <section class="admin-card form-wide market-region-card">
-      <div class="admin-card-head"><div><div class="section-label">1 · Choose market</div><h2>Australia / New South Wales</h2></div><span class="market-live-pill">NSW adapter live</span></div>
-      <div class="form-grid market-region-grid">
-        <div class="field"><label>Country</label><select id="marketCountry"><option value="AU">Australia</option></select></div>
-        <div class="field"><label>Region / state</label><select id="marketRegion"><option value="NSW">New South Wales</option><option disabled>Victoria — next adapter</option><option disabled>Queensland — next adapter</option><option disabled>Western Australia — next adapter</option><option disabled>South Australia — next adapter</option><option disabled>Tasmania — next adapter</option><option disabled>ACT — next adapter</option><option disabled>Northern Territory — next adapter</option></select></div>
+    <style>
+      #marketClubInventory{max-width:none}
+      #marketClubInventory td{overflow-wrap:anywhere}
+      #marketClubInventory input[type="checkbox"]{width:18px;height:18px;accent-color:var(--navy2);cursor:pointer}
+      #marketClubInventory tr.market-club-selected{background:#eef3ff}
+      #marketClubInventory .prospect-filter-row>*{min-width:0;max-width:100%}
+    </style>
+    <section class="admin-card" style="margin-bottom:16px">
+      <div class="admin-card-head"><div><div class="section-label">Market Discovery</div><h2>Prospects to review</h2><p class="help">Review one compact list, select the clubs you want, then invite them or mark them Do not invite. Inviting queues the introductory email automatically.</p></div><span class="status-pill">New South Wales</span></div>
+      <div class="btnrow" style="margin-top:12px">
+        <span class="status-pill">${ready.length} ready to review</span>
+        <span class="status-pill">${researching.length} still researching</span>
+        <span class="status-pill">${invited.length} in Club Pipeline</span>
+        <span class="status-pill">${excluded.length} do not invite</span>
       </div>
-      <div class="market-source-note"><strong>Registry-first model:</strong> association/competition sources are used to map membership and competition context. Club Batting then looks for the matching public Cricket Australia PlayCricket club record and imports the public club contact and senior-cricket signals. Club websites are not required.</div>
-      <div class="market-action-row"><button class="btn secondary" id="scanMarketRegion">${associations.length?'Refresh NSW association map':'Scan NSW association map'}</button><span id="marketRegionStatus" class="status">Last region scan: ${esc(niceScan(latestRegionScan?.finished_at||latestRegionScan?.started_at))}</span></div>
-    </section>
-
-    <section class="admin-card form-wide">
-      <div class="admin-card-head"><div><div class="section-label">2 · Associations</div><h2>Map clubs, then sync official contacts</h2><p>${associations.length} association / competition records currently mapped. Mapping preserves competition context; contact sync uses public Cricket Australia PlayCricket records rather than club websites.</p></div><div class="market-bulk-actions"><button class="btn ghost" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map + sync all associations</button><button class="btn ghost" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Sync PlayCricket contacts</button></div></div>
-      <div class="prospect-filter-row"><input id="marketAssociationSearch" value="${esc(platformMarketAssociationSearch)}" placeholder="Find an association (e.g. Newcastle)"></div>
-      <div id="marketBulkStatus" class="market-progress"></div>
-      <div class="market-association-list">${associations.length?associations.map(a=>{
-        const ids=linksByAssociation.get(a.id)||[];
-        const assocClubs=ids.map(id=>clubById.get(id)).filter(Boolean);
-        const assocContacts=assocClubs.filter(c=>c.contact_email).length;
-        const assocLikely=assocClubs.filter(c=>['strong','possible'].includes(c.outreach_fit)).length;
-        const source=a.source_type==='official_directory'?'Official source':'Search supplement';
-        return `<article class="market-association-row ${platformMarketAssociationId===a.id?'selected':''}" data-association-name="${esc(a.name.toLowerCase())}">
-          <button class="market-association-main" data-market-association-select="${a.id}">
-            <span><strong>${esc(a.name)}</strong><small>${esc(source)}${a.website_url?' · website resolved':''}</small></span>
-            <span class="market-association-count"><b>${assocClubs.length}</b> clubs · <b>${assocLikely}</b> likely fits · <b>${assocContacts}</b> contacts · View clubs ↓</span>
-          </button>
-          <div class="market-association-actions">
-            ${a.source_url?`<a class="btn ghost compact" href="${esc(a.source_url)}" target="_blank" rel="noopener">Source ↗</a>`:''}
-            ${a.website_url?`<a class="btn ghost compact" href="${esc(a.website_url)}" target="_blank" rel="noopener">Website ↗</a>`:''}
-            <button class="btn ghost compact" data-scan-association="${a.id}">Map clubs</button>
-            <button class="btn ghost compact" data-enrich-association="${a.id}" ${assocClubs.length?'':'disabled'}>Sync PlayCricket</button>
-          </div>
-        </article>`;
-      }).join(''):'<div class="notice">No NSW associations have been mapped yet. Use <strong>Scan NSW association map</strong> above.</div>'}</div>
     </section>
 
     <section class="admin-card form-wide" id="marketClubInventory">
-      <div class="admin-card-head"><div><div class="section-label">3 · Club inventory</div><h2>${platformMarketAssociationId?(associations.find(a=>a.id===platformMarketAssociationId)?.name||'Selected association'):'NSW club inventory'}</h2><p>${platformMarketAssociationId?'Showing mapped clubs from this association.':'Showing the statewide club inventory.'} Lower-fit clubs remain recorded; the default view shows the clubs most relevant to Club Batting.</p></div></div>
-      <div class="market-inventory-filters">
-        <input id="marketClubSearch" placeholder="Search clubs or contact email">
-        <select id="marketFitFilter">
-          <option value="likely" ${platformMarketFitFilter==='likely'?'selected':''}>Likely Club Batting prospects</option>
-          <option value="strong" ${platformMarketFitFilter==='strong'?'selected':''}>Strong fit only</option>
-          <option value="possible" ${platformMarketFitFilter==='possible'?'selected':''}>Possible fit only</option>
-          <option value="review" ${platformMarketFitFilter==='review'?'selected':''}>Needs review</option>
-          <option value="low" ${platformMarketFitFilter==='low'?'selected':''}>Low fit / social / junior / veterans</option>
-          <option value="all" ${platformMarketFitFilter==='all'?'selected':''}>All mapped clubs</option>
+      <div class="admin-card-head"><div><div class="section-label">Agent findings</div><h2>Club prospect list</h2><p class="help">Select all is applied to the list currently shown, so you can select most clubs and untick the few you do not want.</p></div></div>
+      <div class="prospect-filter-row" style="margin-top:14px">
+        <input id="marketProspectSearch" value="${esc(platformMarketClubSearch)}" placeholder="Search club, place, association or email">
+        <select id="marketReviewFilter">
+          <option value="ready" ${platformMarketReviewFilter==='ready'?'selected':''}>Ready to invite</option>
+          <option value="research" ${platformMarketReviewFilter==='research'?'selected':''}>Still researching</option>
+          <option value="pending" ${platformMarketReviewFilter==='pending'?'selected':''}>All undecided</option>
+          <option value="invited" ${platformMarketReviewFilter==='invited'?'selected':''}>In Club Pipeline</option>
+          <option value="do_not_invite" ${platformMarketReviewFilter==='do_not_invite'?'selected':''}>Do not invite</option>
         </select>
-        <select id="marketContactFilter"><option value="all">Any contact status</option><option value="contact">Contact found</option><option value="missing">Contact missing</option><option value="prospect">Already a prospect</option></select>
+        <select id="marketAssociationFilter"><option value="">All associations</option>${associations.map(a=>`<option value="${a.id}" ${platformMarketAssociationFilter===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
       </div>
-      <div class="market-club-toolbar">
+      <div class="market-club-toolbar" style="margin-top:12px">
         <div class="market-selection-actions">
-          <button class="btn ghost compact" id="showAllMarketClubs" ${platformMarketAssociationId?'':'disabled'}>Show all NSW clubs</button>
-          <button class="btn ghost compact" id="selectAllMarketClubs">Select all filtered</button>
-          <button class="btn ghost compact" id="clearMarketClubSelection">Clear selection</button>
-          <button class="btn secondary compact" id="addSelectedMarketProspects" disabled>Add selected to Club Pipeline</button>
+          <button class="btn ghost compact" id="selectAllMarketProspects">Select all</button>
+          <button class="btn ghost compact" id="clearMarketProspectSelection">Clear</button>
+          <button class="btn secondary compact" id="inviteSelectedMarketProspects" disabled>Invite selected</button>
+          <button class="btn ghost compact" id="excludeSelectedMarketProspects" disabled>Do not invite</button>
+          <button class="btn ghost compact" id="restoreSelectedMarketProspects" disabled>Return to review</button>
         </div>
-        <div class="market-selection-summary"><span id="marketSelectionCount" class="help">0 selected</span><span id="marketClubCount" class="help"></span></div>
+        <div class="market-selection-summary"><span id="marketProspectSelectionCount" class="help">0 selected</span><span id="marketProspectShownCount" class="help"></span></div>
       </div>
-      <div id="marketBulkProspectStatus" class="market-progress"></div>
-      <div id="marketClubList"></div>
-    </section>`;
+      <div id="marketProspectActionStatus" class="market-progress">${esc(platformMarketActionMessage)}</div>
+      <div class="admin-table-wrap" style="margin-top:12px">
+        <table class="admin-table">
+          <thead><tr><th style="width:44px"><input id="marketSelectAllCheckbox" type="checkbox" aria-label="Select all shown clubs"></th><th>Club</th><th>Association</th><th>Public contact</th><th>Why selected</th><th>Source</th></tr></thead>
+          <tbody id="marketProspectTableBody"></tbody>
+        </table>
+      </div>
+    </section>
 
-  const invokeDiscovery=async(body)=>{
+    <details class="admin-card form-wide" style="margin-top:16px">
+      <summary><div><div class="section-label">Discovery activity</div><h2>Refresh the background research</h2><p>Use these controls when you want to update the NSW findings. Discovery itself never sends email.</p></div><span>⌄</span></summary>
+      <div class="collapsible-admin-body">
+        <div class="btnrow" style="margin-top:16px"><button class="btn ghost compact" id="scanMarketRegion">Refresh association map</button><button class="btn ghost compact" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map and sync all</button><button class="btn ghost compact" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Sync public contacts</button></div>
+        <div id="marketDiscoveryStatus" class="help">Last association scan: ${esc(latestRegionScan?.finished_at||latestRegionScan?.started_at?new Date(latestRegionScan.finished_at||latestRegionScan.started_at).toLocaleString():'Not run yet')}</div>
+      </div>
+    </details>`;
+
+  const clubsById=new Map(clubs.map(c=>[c.id,c]));
+  const renderProspectRows=()=>{
+    const q=String(platformMarketClubSearch||'').trim().toLowerCase();
+    const associationClubIds=platformMarketAssociationFilter?new Set(clubIdsByAssociation.get(platformMarketAssociationFilter)||[]):null;
+    let shown=clubs.filter(club=>{
+      const status=reviewStatus(club);
+      if(platformMarketReviewFilter==='ready'&&!isReady(club))return false;
+      if(platformMarketReviewFilter==='research'&&!(status==='pending'&&!isReady(club)))return false;
+      if(platformMarketReviewFilter==='pending'&&status!=='pending')return false;
+      if(platformMarketReviewFilter==='invited'&&!['invited','in_pipeline'].includes(status))return false;
+      if(platformMarketReviewFilter==='do_not_invite'&&status!=='do_not_invite')return false;
+      if(associationClubIds&&!associationClubIds.has(club.id))return false;
+      if(q){
+        const associationsForClub=(associationNamesByClub.get(club.id)||[]).join(' ');
+        if(![club.name,club.locality,club.region_name,club.contact_name,club.contact_role,club.contact_email,club.qualification_reason,associationsForClub].some(value=>String(value||'').toLowerCase().includes(q)))return false;
+      }
+      return true;
+    });
+    shown.sort((a,b)=>{
+      const rank={strong:0,possible:1,review:2,low:3};
+      return (rank[a.outreach_fit]??4)-(rank[b.outreach_fit]??4)||String(a.name).localeCompare(String(b.name));
+    });
+
+    const selectable=shown.filter(club=>['pending','do_not_invite'].includes(reviewStatus(club)));
+    const selectableIds=new Set(selectable.map(club=>club.id));
+    for(const id of [...platformMarketSelectedClubIds])if(!selectableIds.has(id))platformMarketSelectedClubIds.delete(id);
+    const display=shown;
+    const body=document.getElementById('marketProspectTableBody');
+    body.innerHTML=display.length?display.map(club=>{
+      const status=reviewStatus(club);
+      const associationsForClub=associationNamesByClub.get(club.id)||[];
+      const source=sourceUrl(club);
+      const selected=platformMarketSelectedClubIds.has(club.id);
+      const contactName=[club.contact_name,club.contact_role].filter(Boolean).join(' · ')||'Public club contact';
+      const reason=club.qualification_reason||`${fitLabel(club.outreach_fit)} based on public cricket records`;
+      return `<tr class="${selected?'market-club-selected':''}">
+        <td><input type="checkbox" data-market-prospect-select="${club.id}" ${selected?'checked':''} ${['invited','in_pipeline'].includes(status)?'disabled':''} aria-label="Select ${esc(club.name)}"></td>
+        <td><strong>${esc(club.name)}</strong><small>${esc([club.locality,club.region_name].filter(Boolean).join(', ')||'Location not recorded')}</small></td>
+        <td>${esc(associationsForClub.slice(0,2).join(' · ')||'Association not recorded')}${associationsForClub.length>2?`<small>+${associationsForClub.length-2} more</small>`:''}</td>
+        <td>${club.contact_email?`<strong>${esc(club.contact_email)}</strong><small>${esc(contactName)}</small>`:'<span class="status-pill">Contact needed</span>'}</td>
+        <td><span class="status-pill">${esc(fitLabel(club.outreach_fit))}</span><small>${esc(reason)}</small></td>
+        <td>${source?`<a href="${esc(source)}" target="_blank" rel="noopener">View source ↗</a><small>${esc(confidenceLabel(club.confidence))}</small>`:'<span class="help">Source needed</span>'}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="6">No clubs match this view.</td></tr>';
+    document.getElementById('marketProspectShownCount').textContent=`${shown.length} shown`;
+    const syncSelectionUi=()=>{
+      document.querySelectorAll('[data-market-prospect-select]').forEach(checkbox=>{
+        checkbox.checked=platformMarketSelectedClubIds.has(checkbox.dataset.marketProspectSelect);
+        checkbox.closest('tr')?.classList.toggle('market-club-selected',checkbox.checked);
+      });
+      const selected=[...platformMarketSelectedClubIds].map(id=>clubsById.get(id)).filter(Boolean);
+      const selectedPending=selected.filter(club=>reviewStatus(club)==='pending');
+      const selectedExcluded=selected.filter(club=>reviewStatus(club)==='do_not_invite');
+      const allInvitable=selectedPending.length===selected.length&&selected.every(isReady);
+      const count=selected.length;
+      const allBox=document.getElementById('marketSelectAllCheckbox');
+      const selectedShown=selectable.filter(club=>platformMarketSelectedClubIds.has(club.id)).length;
+      allBox.checked=selectable.length>0&&selectedShown===selectable.length;
+      allBox.indeterminate=selectedShown>0&&selectedShown<selectable.length;
+      document.getElementById('marketProspectSelectionCount').textContent=`${count} selected${count&&!allInvitable&&selectedPending.length? ' · invitations require suitable fit and a sourced contact':''}`;
+      document.getElementById('selectAllMarketProspects').disabled=selectable.length===0;
+      document.getElementById('clearMarketProspectSelection').disabled=count===0;
+      document.getElementById('inviteSelectedMarketProspects').disabled=count===0||!allInvitable;
+      document.getElementById('inviteSelectedMarketProspects').style.display=platformMarketReviewFilter==='do_not_invite'?'none':'';
+      document.getElementById('excludeSelectedMarketProspects').disabled=selectedPending.length!==count||count===0;
+      document.getElementById('excludeSelectedMarketProspects').style.display=platformMarketReviewFilter==='do_not_invite'||platformMarketReviewFilter==='invited'?'none':'';
+      document.getElementById('restoreSelectedMarketProspects').disabled=selectedExcluded.length!==count||count===0;
+      document.getElementById('restoreSelectedMarketProspects').style.display=platformMarketReviewFilter==='do_not_invite'?'':'none';
+    };
+
+    document.querySelectorAll('[data-market-prospect-select]').forEach(checkbox=>checkbox.onchange=()=>{
+      if(checkbox.checked)platformMarketSelectedClubIds.add(checkbox.dataset.marketProspectSelect);
+      else platformMarketSelectedClubIds.delete(checkbox.dataset.marketProspectSelect);
+      syncSelectionUi();
+    });
+    const selectAll=()=>{selectable.forEach(club=>platformMarketSelectedClubIds.add(club.id));syncSelectionUi();};
+    document.getElementById('selectAllMarketProspects').onclick=selectAll;
+    document.getElementById('marketSelectAllCheckbox').onchange=event=>{
+      if(event.target.checked)selectAll();
+      else{selectable.forEach(club=>platformMarketSelectedClubIds.delete(club.id));syncSelectionUi();}
+    };
+    document.getElementById('clearMarketProspectSelection').onclick=()=>{platformMarketSelectedClubIds.clear();syncSelectionUi();};
+    syncSelectionUi();
+  };
+
+  document.getElementById('marketProspectSearch').oninput=event=>{
+    platformMarketClubSearch=String(event.target.value||'');
+    platformMarketSelectedClubIds.clear();
+    renderProspectRows();
+  };
+  document.getElementById('marketReviewFilter').onchange=event=>{
+    platformMarketReviewFilter=event.target.value;
+    platformMarketSelectedClubIds.clear();
+    renderProspectRows();
+  };
+  document.getElementById('marketAssociationFilter').onchange=event=>{
+    platformMarketAssociationFilter=event.target.value;
+    platformMarketSelectedClubIds.clear();
+    renderProspectRows();
+  };
+
+  let reviewBusy=false;
+  const runReviewAction=async(rpcName)=>{
+    if(reviewBusy)return null;
+    reviewBusy=true;
+    page.querySelectorAll('#marketClubInventory button, #marketClubInventory input, #marketClubInventory select').forEach(control=>control.disabled=true);
+    const totals={invited:0,queued:0,already_contacted:0,in_pipeline:0,needs_contact:0,blocked:0,updated:0,errors:[]};
+    const ids=[...platformMarketSelectedClubIds];
+    try{
+      for(let offset=0;offset<ids.length;offset+=1000){
+        const {data,error}=await supabase.rpc(rpcName,{p_market_club_ids:ids.slice(offset,offset+1000)});
+        if(error)throw error;
+        for(const key of ['invited','queued','already_contacted','in_pipeline','needs_contact','blocked','updated'])totals[key]+=Number(data?.[key]||0);
+        totals.errors.push(...(data?.errors||[]));
+      }
+      return totals;
+    }catch(error){
+      platformMarketActionMessage=`The action stopped: ${error.message}. Any earlier completed batches are retained; review the refreshed list before trying again.`;
+      return null;
+    }finally{reviewBusy=false;}
+  };
+
+  document.getElementById('inviteSelectedMarketProspects').onclick=async()=>{
+    if(reviewBusy)return;
+    const ids=[...platformMarketSelectedClubIds];
+    if(!ids.length)return;
+    if(!confirm(`Invite ${ids.length} selected club${ids.length===1?'':'s'}? This creates the Club Pipeline records and queues their introductory emails.`))return;
+    const button=document.getElementById('inviteSelectedMarketProspects');
+    const status=document.getElementById('marketProspectActionStatus');
+    button.disabled=true;button.textContent='Inviting…';status.textContent='Creating prospects and queuing introductory emails…';
+    const data=await runReviewAction('platform_invite_market_clubs');
+    if(data){
+      platformMarketSelectedClubIds=new Set(data.errors.map(item=>item.market_club_id).filter(Boolean));
+      const invitedCount=data.invited,queuedCount=data.queued,existingCount=data.already_contacted,blockedCount=data.blocked;
+      platformMarketActionMessage=`${invitedCount} club${invitedCount===1?'':'s'} approved · ${queuedCount} introductory email${queuedCount===1?'':'s'} queued${existingCount?` · ${existingCount} already had an introduction`:''}${data.in_pipeline?` · ${data.in_pipeline} already in the pipeline`:''}${data.needs_contact?` · ${data.needs_contact} need a sourced contact`:''}${blockedCount?` · ${blockedCount} could not be invited`:''}.`;
+      if(data.errors.length)platformMarketActionMessage+=' '+data.errors.map(item=>`${item.club_name}: ${item.error}`).join(' · ');
+    }
+    await renderPlatformMarketDiscovery({restoreScroll:false});
+  };
+  document.getElementById('excludeSelectedMarketProspects').onclick=async()=>{
+    if(reviewBusy)return;
+    const ids=[...platformMarketSelectedClubIds];
+    if(!ids.length)return;
+    if(!confirm(`Mark ${ids.length} selected club${ids.length===1?'':'s'} as Do not invite? The decision will be retained so the clubs do not return to this review list.`))return;
+    const status=document.getElementById('marketProspectActionStatus');status.textContent='Saving the review decision…';
+    const data=await runReviewAction('platform_mark_market_clubs_do_not_invite');
+    if(data){platformMarketSelectedClubIds.clear();const changed=data.updated;platformMarketActionMessage=`${changed} club${changed===1?'':'s'} marked Do not invite.`;}
+    await renderPlatformMarketDiscovery({restoreScroll:false});
+  };
+  document.getElementById('restoreSelectedMarketProspects').onclick=async()=>{
+    if(reviewBusy)return;
+    const ids=[...platformMarketSelectedClubIds];
+    if(!ids.length)return;
+    const data=await runReviewAction('platform_restore_market_clubs_to_review');
+    if(data){platformMarketSelectedClubIds.clear();const restored=data.updated;platformMarketActionMessage=`Returned ${restored} club${restored===1?'':'s'} to review.`;}
+    await renderPlatformMarketDiscovery({restoreScroll:false});
+  };
+
+  const invokeDiscovery=async body=>{
     const {data,error}=await supabase.functions.invoke('discover-clubs',{body});
     if(error||data?.error)throw new Error(data?.error||error?.message||'Market discovery failed.');
     return data;
   };
-
+  const scanAssociation=async id=>invokeDiscovery({action:'scan_association',association_id:id});
+  const enrichAssociation=async(id,maxBatches=10)=>{
+    const syncToken=globalThis.crypto?.randomUUID?.()||`sync-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;
+    let contacts=0,remaining=1,batches=0;
+    while(remaining>0&&batches<maxBatches){
+      const data=await invokeDiscovery({action:'enrich_clubs',association_id:id,limit:6,sync_token:syncToken});
+      contacts+=Number(data.contacts_found||0);remaining=Number(data.remaining||0);batches++;
+      if(Number(data.processed||0)===0)break;
+    }
+    return contacts;
+  };
   document.getElementById('scanMarketRegion').onclick=async()=>{
-    const btn=document.getElementById('scanMarketRegion'),st=document.getElementById('marketRegionStatus');
-    btn.disabled=true;btn.textContent='Scanning NSW…';st.textContent='Reading official NSW cricket sources and filling association gaps…';
-    try{const data=await invokeDiscovery({action:'scan_region',country_code:'AU',region_code:'NSW'});st.textContent=`Mapped ${data.associations_discovered||0} association / competition records. Reloading…`;setTimeout(()=>renderPlatformMarketDiscovery(),500);}
-    catch(e){btn.disabled=false;btn.textContent=associations.length?'Refresh NSW association map':'Scan NSW association map';st.textContent=e.message;}
+    const button=document.getElementById('scanMarketRegion'),status=document.getElementById('marketDiscoveryStatus');
+    button.disabled=true;button.textContent='Refreshing…';status.textContent='Refreshing the NSW association map…';
+    try{const data=await invokeDiscovery({action:'scan_region',country_code:countryCode,region_code:regionCode});platformMarketActionMessage=`Association map refreshed · ${Number(data.associations_discovered||0)} records found.`;await renderPlatformMarketDiscovery({restoreScroll:false});}
+    catch(error){button.disabled=false;button.textContent='Refresh association map';status.textContent=error.message;}
   };
-
-  const scanOneAssociation=async(id,button=null)=>{
-    const a=associations.find(x=>x.id===id);if(!a)return null;
-    const old=button?.textContent;if(button){button.disabled=true;button.textContent='Mapping…';}
-    try{return await invokeDiscovery({action:'scan_association',association_id:id});}
-    finally{if(button){button.disabled=false;button.textContent=old||'Map clubs';}}
-  };
-  const enrichOneAssociation=async(id,button=null,maxBatches=10)=>{
-    const old=button?.textContent;if(button){button.disabled=true;button.textContent='Syncing PlayCricket…';}
-    const syncToken=(globalThis.crypto?.randomUUID?.()||`sync-${Date.now()}-${Math.random().toString(36).slice(2,10)}`);
-    let contacts=0,registry=0,remaining=1,unresolved=0,batches=0;
-    try{
-      while(remaining>0&&batches<maxBatches){
-        const data=await invokeDiscovery({action:'enrich_clubs',association_id:id,limit:6,sync_token:syncToken});
-        contacts+=Number(data.contacts_found||0);registry+=Number(data.registry_found||0);remaining=Number(data.remaining||0);unresolved=Number(data.unresolved||0);batches++;
-        if(Number(data.processed||0)===0)break;
-      }
-      return {contacts,registry,remaining,unresolved};
-    }finally{if(button){button.disabled=false;button.textContent=old||'Sync PlayCricket';}}
-  };
-
-  const mapAndSyncAssociation=async(id,button=null)=>{
-    const old=button?.textContent;
-    try{
-      if(button){button.disabled=true;button.textContent='Mapping clubs…';}
-      const mapped=await scanOneAssociation(id,null);
-      if(button)button.textContent='Syncing PlayCricket…';
-      const synced=await enrichOneAssociation(id,null,10);
-      return {mapped,synced};
-    }finally{if(button){button.disabled=false;button.textContent=old||'Map clubs';}}
-  };
-
-  const applyAssociationSearch=()=>{
-    const q=String(platformMarketAssociationSearch||'').trim().toLowerCase();
-    document.querySelectorAll('.market-association-row').forEach(row=>{row.style.display=!q||String(row.dataset.associationName||'').includes(q)?'':'none';});
-  };
-  const marketAssociationSearch=document.getElementById('marketAssociationSearch');
-  applyAssociationSearch();
-  marketAssociationSearch.oninput=e=>{
-    platformMarketAssociationSearch=String(e.target.value||'');
-    applyAssociationSearch();
-  };
-  document.querySelectorAll('[data-market-association-select]').forEach(b=>b.onclick=async()=>{
-    platformMarketAssociationId=b.dataset.marketAssociationSelect;
-    await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
-  });
-  document.querySelectorAll('[data-scan-association]').forEach(b=>b.onclick=async()=>{
-    const id=b.dataset.scanAssociation;platformMarketAssociationId=id;
-    try{
-      await mapAndSyncAssociation(id,b);
-      await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
-    }catch(e){alert(e.message);}
-  });
-  document.querySelectorAll('[data-enrich-association]').forEach(b=>b.onclick=async()=>{
-    const id=b.dataset.enrichAssociation;platformMarketAssociationId=id;
-    try{
-      await enrichOneAssociation(id,b);
-      await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
-    }catch(e){alert(e.message);}
-  });
-
   document.getElementById('scanAllAssociations').onclick=async()=>{
-    if(!confirm(`Map clubs and sync public PlayCricket contacts for all ${associations.length} discovered NSW association / competition records? This can take several minutes.`))return;
-    const btn=document.getElementById('scanAllAssociations'),st=document.getElementById('marketBulkStatus');btn.disabled=true;
-    let ok=0,failed=0,contactsFound=0,unresolved=0;
+    if(!confirm(`Map clubs and sync public contacts for all ${associations.length} NSW association records? This can take several minutes.`))return;
+    const button=document.getElementById('scanAllAssociations'),status=document.getElementById('marketDiscoveryStatus');button.disabled=true;
+    let completed=0,failed=0,contacts=0;
     for(let i=0;i<associations.length;i++){
-      const a=associations[i];st.textContent=`${i+1} of ${associations.length}: mapping ${a.name}, then syncing PlayCricket…`;
-      try{const r=await mapAndSyncAssociation(a.id);ok++;contactsFound+=Number(r?.synced?.contacts||0);unresolved+=Number(r?.synced?.unresolved||0);}catch{failed++;}
+      const association=associations[i];status.textContent=`${i+1} of ${associations.length}: ${association.name}`;
+      try{await scanAssociation(association.id);contacts+=await enrichAssociation(association.id);completed++;}catch{failed++;}
     }
-    st.textContent=`Map + sync finished: ${ok} associations completed · ${contactsFound} new contacts${unresolved?` · ${unresolved} registry matches need research`:''}${failed?` · ${failed} failed`:''}.`;
-    setTimeout(()=>renderPlatformMarketDiscovery(),700);
+    platformMarketActionMessage=`Discovery refresh complete · ${completed} associations · ${contacts} new contacts${failed?` · ${failed} failed`:''}.`;
+    await renderPlatformMarketDiscovery({restoreScroll:false});
   };
-
   document.getElementById('enrichAllContacts').onclick=async()=>{
-    const associationsWithClubs=associations.filter(a=>(linksByAssociation.get(a.id)||[]).length);
-    if(!confirm(`Sync public Cricket Australia PlayCricket records for clubs across ${associationsWithClubs.length} mapped associations? Club websites are not required.`))return;
-    const btn=document.getElementById('enrichAllContacts'),st=document.getElementById('marketBulkStatus');btn.disabled=true;
-    let found=0,registry=0,unresolved=0;
-    for(let i=0;i<associationsWithClubs.length;i++){
-      const a=associationsWithClubs[i];st.textContent=`Syncing PlayCricket ${i+1} of ${associationsWithClubs.length}: ${a.name}`;
-      try{const r=await enrichOneAssociation(a.id,null,10);found+=r.contacts;registry+=r.registry;unresolved+=r.unresolved;}catch{/* leave association for review */}
+    const withClubs=associations.filter(a=>(clubIdsByAssociation.get(a.id)||[]).length);
+    if(!confirm(`Sync public contacts across ${withClubs.length} mapped associations?`))return;
+    const button=document.getElementById('enrichAllContacts'),status=document.getElementById('marketDiscoveryStatus');button.disabled=true;
+    let contacts=0,failed=0;
+    for(let i=0;i<withClubs.length;i++){
+      const association=withClubs[i];status.textContent=`${i+1} of ${withClubs.length}: ${association.name}`;
+      try{contacts+=await enrichAssociation(association.id);}catch{failed++;}
     }
-    st.textContent=`PlayCricket sync finished: ${registry} official records matched · ${found} new contacts${unresolved?` · ${unresolved} need research`:''}.`;
-    setTimeout(()=>renderPlatformMarketDiscovery(),700);
+    platformMarketActionMessage=`Contact sync complete · ${contacts} new contacts${failed?` · ${failed} associations need another attempt`:''}.`;
+    await renderPlatformMarketDiscovery({restoreScroll:false});
   };
 
-  document.getElementById('showAllMarketClubs').onclick=async()=>{platformMarketAssociationId='';await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});};
-
-  const renderClubList=()=>{
-    const q=(document.getElementById('marketClubSearch').value||'').trim().toLowerCase();
-    const contactFilter=document.getElementById('marketContactFilter').value;
-    const fitFilter=document.getElementById('marketFitFilter').value;
-    platformMarketFitFilter=fitFilter;
-    const selectedIds=platformMarketAssociationId?new Set(linksByAssociation.get(platformMarketAssociationId)||[]):null;
-    let shown=clubs.filter(c=>!selectedIds||selectedIds.has(c.id));
-    if(q)shown=shown.filter(c=>[c.name,c.contact_email,c.contact_role,c.locality,c.registry_url,c.qualification_reason,c.metadata?.registry_canonical_name].some(v=>String(v||'').toLowerCase().includes(q)));
-    if(fitFilter==='likely')shown=shown.filter(c=>['strong','possible'].includes(c.outreach_fit));
-    else if(fitFilter!=='all')shown=shown.filter(c=>c.outreach_fit===fitFilter);
-    if(contactFilter==='contact')shown=shown.filter(c=>c.contact_email);
-    if(contactFilter==='missing')shown=shown.filter(c=>!c.contact_email);
-    if(contactFilter==='prospect')shown=shown.filter(c=>c.sales_prospect_id);
-
-    const selectable=shown.filter(c=>!c.sales_prospect_id);
-    const selectableIds=new Set(selectable.map(c=>c.id));
-    for(const id of [...platformMarketSelectedClubIds]){
-      if(!selectableIds.has(id))platformMarketSelectedClubIds.delete(id);
-    }
-
-    const baseCount=clubs.filter(c=>!selectedIds||selectedIds.has(c.id)).length;
-    document.getElementById('marketClubCount').textContent=`${shown.length} shown from ${baseCount} mapped club${baseCount===1?'':'s'}`;
-    const display=shown.slice(0,250);
-    document.getElementById('marketClubList').innerHTML=display.length?`<div class="market-club-list">${display.map(c=>{
-      const assocNames=(associationForClub.get(c.id)||[]).map(id=>associations.find(a=>a.id===id)?.name).filter(Boolean);
-      const sections=clubSections(c.id,platformMarketAssociationId);
-      const readiness=c.contact_email?'Contact ready':c.registry_provider==='Cricket Australia PlayCricket'?'Registry found':'Needs registry match';
-      const registry=c.registry_provider==='Cricket Australia PlayCricket'?`<span class="market-registry-pill">Cricket Australia ✓</span>`:c.registry_provider?`<span class="market-registry-pill">Registry evidence · ${esc(c.registry_provider)}</span>`:'';
-      const selected=platformMarketSelectedClubIds.has(c.id);
-      return `<article class="market-club-row market-fit-${esc(c.outreach_fit||'review')} ${selected?'market-club-selected':''}">
-        <label class="market-club-select" title="${c.sales_prospect_id?'Already in Club Pipeline':'Select this club'}"><input type="checkbox" data-market-select="${c.id}" ${selected?'checked':''} ${c.sales_prospect_id?'disabled':''}></label>
-        <div class="market-club-main">
-          <strong>${esc(c.name)}</strong>
-          <small>${esc(sections.join(' · ')||assocNames.slice(0,2).join(' · ')||'Association link recorded')}</small>
-          <div class="market-club-tags"><span class="market-fit-pill ${esc(c.outreach_fit||'review')}">${esc(fitLabel(c.outreach_fit))}</span><span class="market-type-pill">${esc(typeLabel(c.club_type))}</span>${registry}</div>
-          ${c.qualification_reason?`<small class="market-qualification-reason">${esc(c.qualification_reason)}</small>`:''}
-        </div>
-        <div class="market-club-contact"><span class="market-readiness ${c.contact_email?'ready':c.registry_provider==='Cricket Australia PlayCricket'?'partial':'missing'}">${esc(readiness)}</span>${c.contact_email?`<strong>${esc(c.contact_email)}</strong><small>${esc(c.contact_role||'Public club contact')}</small>`:'<small>No public PlayCricket email found yet</small>'}</div>
-        <div class="market-club-actions">${c.registry_url?`<a class="btn ghost compact" href="${esc(c.registry_url)}" target="_blank" rel="noopener">PlayCricket ↗</a>`:''}<button class="btn ${c.sales_prospect_id?'ghost':'secondary'} compact" data-market-to-prospect="${c.id}" ${c.sales_prospect_id?'disabled':''}>${c.sales_prospect_id?'In Club Pipeline':'Add to Club Pipeline'}</button></div>
-      </article>`;
-    }).join('')}</div>${shown.length>250?`<div class="help">Showing the first 250 matches, but <strong>Select all filtered</strong> still selects all ${selectable.length} eligible clubs in the current filter.</div>`:''}`:'<div class="notice">No clubs match the current filters. Change <strong>Likely Club Batting prospects</strong> to <strong>All mapped clubs</strong> to inspect the full market inventory.</div>';
-
-    const syncSelectionUi=()=>{
-      document.querySelectorAll('[data-market-select]').forEach(cb=>{
-        cb.checked=platformMarketSelectedClubIds.has(cb.dataset.marketSelect);
-        cb.closest('.market-club-row')?.classList.toggle('market-club-selected',cb.checked);
-      });
-      const count=platformMarketSelectedClubIds.size;
-      document.getElementById('marketSelectionCount').textContent=`${count} selected`;
-      document.getElementById('addSelectedMarketProspects').disabled=count===0;
-      document.getElementById('addSelectedMarketProspects').textContent=count?`Add ${count} selected to Club Pipeline`:'Add selected to Club Pipeline';
-      document.getElementById('selectAllMarketClubs').disabled=selectable.length===0;
-      document.getElementById('clearMarketClubSelection').disabled=count===0;
-    };
-
-    document.querySelectorAll('[data-market-select]').forEach(cb=>cb.onchange=()=>{
-      if(cb.checked)platformMarketSelectedClubIds.add(cb.dataset.marketSelect);
-      else platformMarketSelectedClubIds.delete(cb.dataset.marketSelect);
-      syncSelectionUi();
-    });
-
-    document.getElementById('selectAllMarketClubs').onclick=()=>{
-      selectable.forEach(c=>platformMarketSelectedClubIds.add(c.id));
-      syncSelectionUi();
-    };
-    document.getElementById('clearMarketClubSelection').onclick=()=>{
-      platformMarketSelectedClubIds.clear();
-      syncSelectionUi();
-    };
-    document.getElementById('addSelectedMarketProspects').onclick=async()=>{
-      const ids=[...platformMarketSelectedClubIds].filter(id=>selectableIds.has(id));
-      if(!ids.length)return;
-      const btn=document.getElementById('addSelectedMarketProspects');
-      const st=document.getElementById('marketBulkProspectStatus');
-      btn.disabled=true;btn.textContent=`Adding ${ids.length}…`;st.textContent=`Creating ${ids.length} prospect${ids.length===1?'':'s'} from the current filtered selection…`;
-      const {data,error}=await supabase.rpc('platform_add_market_clubs_to_prospects',{p_market_club_ids:ids,p_intended_route:'standard'});
-      if(error){st.textContent=error.message;syncSelectionUi();return;}
-      platformMarketSelectedClubIds.clear();
-      st.textContent=`Added ${Number(data?.added||ids.length)} club${ids.length===1?'':'s'} to Club Pipeline.`;
-      await renderPlatformMarketDiscovery({focusTarget:'inventory',restoreScroll:false});
-    };
-
-    document.querySelectorAll('[data-market-to-prospect]').forEach(b=>b.onclick=async()=>{
-      b.disabled=true;b.textContent='Adding…';
-      const {data,error}=await supabase.rpc('platform_add_market_club_to_prospects',{p_market_club_id:b.dataset.marketToProspect,p_intended_route:'standard'});
-      if(error){b.disabled=false;b.textContent='Add to Club Pipeline';alert(error.message);return;}
-      const club=clubs.find(c=>c.id===b.dataset.marketToProspect);if(club)club.sales_prospect_id=data;
-      platformMarketSelectedClubIds.delete(b.dataset.marketToProspect);
-      b.textContent='In Club Pipeline';renderClubList();
-    });
-
-    syncSelectionUi();
-  };
-  document.getElementById('marketClubSearch').oninput=()=>{platformMarketSelectedClubIds.clear();renderClubList();};
-  document.getElementById('marketContactFilter').onchange=()=>{platformMarketSelectedClubIds.clear();renderClubList();};
-  document.getElementById('marketFitFilter').onchange=()=>{platformMarketSelectedClubIds.clear();renderClubList();};
-
-  renderClubList();
-  page.querySelectorAll('a[target="_blank"]').forEach(a=>a.addEventListener('click',savePlatformMarketScroll));
+  renderProspectRows();
+  page.querySelectorAll('a[target="_blank"]').forEach(link=>link.addEventListener('click',savePlatformMarketScroll));
   platformMarketScrollSuppressed=false;
-
-  // Intentional navigation (select/map/enrich/show-all) must beat passive scroll restoration.
-  // Otherwise the saved pre-render position can drag the user back to the association list
-  // just after we deliberately sent them to the selected association's Club Inventory.
-  if(focusTarget==='inventory'){
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      const target=document.getElementById('marketClubInventory');
-      if(!target)return;
-      target.scrollIntoView({behavior:'smooth',block:'start'});
-      setTimeout(savePlatformMarketScroll,450);
-    }));
-  }else if(focusTarget==='association'){
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      const row=document.querySelector(`.market-association-row.selected`);
-      if(!row)return;
-      row.scrollIntoView({behavior:'smooth',block:'center'});
-      setTimeout(savePlatformMarketScroll,450);
-    }));
-  }else if(shouldRestoreScroll){
-    restorePlatformMarketScroll();
-  }
+  if(options?.restoreScroll!==false)restorePlatformMarketScroll();
 }
+
 async function renderPlatformProspects(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading Club Pipeline…</div>';
-  const [prospectRes,onboardingRes,trialRes,threadRes,messageRes,suppressionRes]=await Promise.all([
+  const [prospectRes,onboardingRes,trialRes,threadRes,messageRes,suppressionRes,settingsRes]=await Promise.all([
     supabase.from('sales_prospects').select('*').order('updated_at',{ascending:false}),
     supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
     supabase.from('club_trials').select('*').order('created_at',{ascending:false}),
     supabase.from('club_batting_guide_threads').select('id,sales_prospect_id,status,human_handoff_reason,updated_at').eq('status','handoff_requested').order('updated_at',{ascending:false}),
-    supabase.from('outbound_messages').select('id,sales_prospect_id,recipient_email,template_key,created_at,sent_at,failed_at,last_error').not('sales_prospect_id','is',null).order('created_at',{ascending:false}).limit(1000),
-    supabase.from('email_suppressions').select('email')
+    loadAllPlatformRows(()=>supabase.from('outbound_messages').select('id,club_id,prospect_id,sales_prospect_id,recipient_email,template_key,subject,provider_name,created_at,processing_at,sent_at,failed_at,last_error').eq('hidden_from_platform_queue',false).is('sent_at',null).order('created_at',{ascending:false}).order('id')),
+    supabase.from('email_suppressions').select('email'),
+    supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
   ]);
-  const loadError=prospectRes.error||onboardingRes.error||trialRes.error||threadRes.error||messageRes.error||suppressionRes.error;
+  const loadError=prospectRes.error||onboardingRes.error||trialRes.error||threadRes.error||messageRes.error||suppressionRes.error||settingsRes.error;
   if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
 
   const rows=prospectRes.data||[];
@@ -10342,6 +10401,7 @@ async function renderPlatformProspects(){
   const trials=trialRes.data||[];
   const guideThreads=threadRes.data||[];
   const messages=messageRes.data||[];
+  const emailSettings=settingsRes.data||{};
   const suppressedEmails=new Set((suppressionRes.data||[]).map(x=>String(x.email||'').trim().toLowerCase()).filter(Boolean));
 
   if(platformSelectedProspectId){
@@ -10356,8 +10416,6 @@ async function renderPlatformProspects(){
   const revisit=rows.filter(x=>x.status==='maybe_later').sort((a,b)=>String(a.follow_up_after||'9999').localeCompare(String(b.follow_up_after||'9999')));
   const today=new Date().toISOString().slice(0,10);
 
-  const latestMessageByProspect=new Map();
-  messages.forEach(m=>{if(m.sales_prospect_id&&!latestMessageByProspect.has(m.sales_prospect_id))latestMessageByProspect.set(m.sales_prospect_id,m);});
   const attentionByProspect=new Map();
   const addAttention=(p,type,reason)=>{
     if(!p)return;
@@ -10374,16 +10432,14 @@ async function renderPlatformProspects(){
     else if(suppressedEmail(p)&&['discovered','ready_to_contact','contacted','interested','maybe_later'].includes(p.status))addAttention(p,'contact','Replace the suppressed Club Contact email');
     if(p.status==='interested'&&!p.onboarding_prospect_id)addAttention(p,'trial',validEmail(p)?'Automatic Club Trial setup has not completed':'The Club Trial is waiting for a contact email');
   });
-  rows.forEach(p=>{
-    const latest=latestMessageByProspect.get(p.id);
-    if(latest?.failed_at&&!latest.sent_at)addAttention(p,'email',`Latest email failed${latest.last_error?`: ${latest.last_error}`:''}`);
-  });
   guideThreads.forEach(t=>addAttention(rows.find(p=>p.id===t.sales_prospect_id),'guide',t.human_handoff_reason||'The club asked to speak to someone'));
   const needsAttention=[...attentionByProspect.values()];
+  const deliveryExceptions=messages.filter(message=>outboundMessageNeedsAttention(message,emailSettings));
 
   const prospectPlace=p=>[p.locality,p.region,p.country].filter(Boolean).join(', ');
   const prospectRow=(p,badge,detail)=>`<button class="sales-prospect-row" data-sales-id="${p.id}"><span class="sales-prospect-main"><strong>${esc(p.club_name)}</strong><small>${esc(detail||prospectPlace(p)||p.contact_email||'Details not recorded')}</small></span><span class="sales-status ${esc(p.status)}">${esc(badge||statusLabel(p.status))}</span><span class="sales-arrow">›</span></button>`;
-  const attentionBadge=item=>item.types.has('contact')?'Add contact':item.types.has('email')?'Email failed':item.types.has('guide')?'Handoff':'Check trial';
+  const attentionBadge=item=>item.types.has('contact')?'Add contact':item.types.has('guide')?'Handoff':'Check trial';
+  const deliveryExceptionRow=message=>`<div class="message-row"><div><strong>${esc(message.subject||outboundTemplateLabel(message.template_key))}</strong><small>${esc(message.recipient_email)} · ${esc(outboundTemplateLabel(message.template_key))} · ${esc(outboundMessageLabel(message,emailSettings))}</small>${message.last_error?`<small class="email-error">${esc(message.last_error)}</small>`:''}</div><div class="message-row-actions"><button class="btn secondary compact" data-retry-pipeline-message="${message.id}">Retry delivery</button></div></div>`;
   const revisitDetail=p=>{
     const timing=p.follow_up_after
       ?(String(p.follow_up_after).slice(0,10)<=today?`Automatic single re-contact is due ${niceDate(p.follow_up_after)}`:`Automatic single re-contact scheduled ${niceDate(p.follow_up_after)}`)
@@ -10393,13 +10449,15 @@ async function renderPlatformProspects(){
 
   page.innerHTML=`
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Normal outreach responses and valid Interested responses move automatically. This page keeps the exceptions and live onboarding work visible.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
+    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Normal outreach responses and valid Interested responses move automatically. This page keeps the exceptions and live onboarding work visible.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length+deliveryExceptions.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
   </section>
 
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="section-label">Needs attention</div><h2>${needsAttention.length?`${needsAttention.length} club${needsAttention.length===1?'':'s'} need a person`:'Nothing needs attention'}</h2>
-    <p class="help">Missing or incorrect contact details, a failed latest email, a requested conversation, or an Interested response that has not moved into a Club Trial.</p>
-    ${needsAttention.length?`<div class="ready-onboarding-list">${needsAttention.map(item=>prospectRow(item.prospect,attentionBadge(item),item.reasons.join(' · '))).join('')}</div>`:'<div class="notice success">There are no current exceptions.</div>'}
+    <div class="section-label">Needs attention</div><h2>${needsAttention.length+deliveryExceptions.length?`${needsAttention.length+deliveryExceptions.length} issue${needsAttention.length+deliveryExceptions.length===1?' needs':'s need'} a person`:'Nothing needs attention'}</h2>
+    <p class="help">Only real exceptions appear here: failed or delayed email delivery, missing contact details, requested conversations, or Club Trial setup that has not completed.</p>
+    ${deliveryExceptions.length?`<div class="message-list" style="margin-bottom:14px">${deliveryExceptions.map(deliveryExceptionRow).join('')}</div>`:''}
+    ${needsAttention.length?`<div class="ready-onboarding-list">${needsAttention.map(item=>prospectRow(item.prospect,attentionBadge(item),item.reasons.join(' · '))).join('')}</div>`:deliveryExceptions.length?'':'<div class="notice success">There are no current exceptions.</div>'}
+    <div id="pipelineDeliveryStatus" class="help" role="status"></div>
   </section>
 
   <section class="admin-card" style="margin-bottom:16px">
@@ -10433,7 +10491,9 @@ async function renderPlatformProspects(){
       <div class="field"><label>Internal note</label><textarea id="salesNotes"></textarea></div>
       <div class="btnrow"><button class="btn secondary" id="addSalesProspect">Add club</button><span id="addSalesStatus" class="status"></span></div>
     </div>
-  </details>`;
+  </details>
+
+  <div class="btnrow" style="justify-content:flex-end"><button class="btn ghost compact" id="openEmailHistory">View email history →</button></div>`;
 
   document.getElementById('openMarketDiscovery').onclick=()=>{platformView='market';renderPlatformConsole();};
   const renderList=()=>{
@@ -10455,6 +10515,19 @@ async function renderPlatformProspects(){
   renderList();
 
   document.getElementById('openOnboardingList')?.addEventListener('click',()=>renderPlatformOnboardingList(onboarding,trials));
+  document.getElementById('openEmailHistory').onclick=()=>{platformView='outbox';renderPlatformView();};
+  page.querySelectorAll('[data-retry-pipeline-message]').forEach(button=>button.onclick=async()=>{
+    const message=messages.find(item=>item.id===button.dataset.retryPipelineMessage);
+    button.disabled=true;button.textContent='Retrying…';
+    try{
+      const result=await retryPlatformDelivery(message,emailSettings);
+      await renderPlatformProspects();
+      const status=document.getElementById('pipelineDeliveryStatus');if(status)status.textContent=result;
+    }catch(error){
+      const status=document.getElementById('pipelineDeliveryStatus');if(status)status.textContent=error.message;
+      button.disabled=false;button.textContent='Retry delivery';
+    }
+  });
 
   document.getElementById('addSalesProspect').onclick=async()=>{
     const st=document.getElementById('addSalesStatus');st.textContent='Adding…';
@@ -10470,12 +10543,20 @@ async function renderPlatformProspects(){
   };
 }
 
-function onboardingProgressLabel(p,trial){
-  if(!trial)return String(p?.status||'').replaceAll('_',' ');
-  if(p?.status==='promo_sent')return 'Invitation sent · awaiting activation';
+function onboardingProgressLabel(p,trial,invitation=null,settings=null){
   if(p?.status==='awaiting_admin_handoff')return 'Trial active · awaiting Club Admin nomination';
   if(p?.status==='admin_invited')return 'Trial active · Club Admin invited';
   if(p?.status==='active')return 'Setup complete';
+  if(!trial)return String(p?.status||'').replaceAll('_',' ');
+  if(trial.status==='offered'){
+    if(invitation?.sent_at)return 'Invitation sent · awaiting activation';
+    if(settings&&invitation&&(!settings.email_live_from||settings.email_mode!=='live'||new Date(invitation.created_at)<new Date(settings.email_live_from)))return 'Prototype invitation · not sent';
+    if(invitation?.failed_at)return 'Invitation delivery failed';
+    if(invitation?.processing_at&&outboundMessageAgeMinutes(invitation)<10)return 'Invitation sending';
+    if(invitation&&outboundMessageAgeMinutes(invitation)>=10)return 'Invitation delayed';
+    if(invitation)return 'Invitation queued';
+    return 'Invitation not confirmed';
+  }
   return String(p?.status||trial.status||'').replaceAll('_',' ');
 }
 
@@ -10487,25 +10568,35 @@ function trialTimingLabel(trial){
     :`${niceDate(trial.starts_on)} – ${niceDate(trial.ends_on)}`;
 }
 
-async function renderPlatformOnboardingList(onboardingRows=null,trialRows=null){
+async function renderPlatformOnboardingList(onboardingRows=null,trialRows=null,messageRows=null){
   const page=document.getElementById('platformPage');
   page.innerHTML='<div class="splash">Loading onboarding list…</div>';
 
   let records=onboardingRows;
   let trials=trialRows;
-  if(!Array.isArray(records)||!Array.isArray(trials)){
-    const [onboardingRes,trialRes]=await Promise.all([
-      supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
-      supabase.from('club_trials').select('*').order('created_at',{ascending:false})
+  let invitationMessages=messageRows;
+  let emailSettings=null;
+  {
+    const [onboardingRes,trialRes,messageRes,settingsRes]=await Promise.all([
+      Array.isArray(records)?Promise.resolve({data:records}):supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
+      Array.isArray(trials)?Promise.resolve({data:trials}):supabase.from('club_trials').select('*').order('created_at',{ascending:false}),
+      loadAllPlatformRows(()=>supabase.from('outbound_messages').select('id,prospect_id,template_key,created_at,processing_at,sent_at,failed_at,last_error').eq('template_key','club_trial_invitation').order('created_at',{ascending:false}).order('id')),
+      supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
     ]);
-    const loadError=onboardingRes.error||trialRes.error;
+    const loadError=onboardingRes.error||trialRes.error||messageRes.error||settingsRes.error;
     if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
     records=onboardingRes.data||[];
     trials=trialRes.data||[];
+    invitationMessages=messageRes.data||[];
+    emailSettings=settingsRes.data;
   }
 
   const current=records.filter(x=>x.status!=='active');
   const trialMap=new Map(trials.map(t=>[t.onboarding_prospect_id,t]));
+  const invitationByProspect=new Map();
+  invitationMessages.filter(message=>message.template_key==='club_trial_invitation').forEach(message=>{
+    if(message.prospect_id&&!invitationByProspect.has(message.prospect_id))invitationByProspect.set(message.prospect_id,message);
+  });
 
   page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backFromOnboardingList">← Club Pipeline</button></div>
     <section class="admin-card">
@@ -10520,7 +10611,7 @@ async function renderPlatformOnboardingList(onboardingRows=null,trialRows=null){
       const t=trialMap.get(p.id);
       const annualCents=t?.annual_price_cents??p.standard_price_cents;
       const currency=t?.currency||'AUD';
-      return `<tr><td><strong>${esc(p.club_name)}</strong></td><td><span class="status-pill">${esc(onboardingProgressLabel(p,t))}</span></td><td>${esc(p.primary_contact_email||'—')}</td><td>${esc(t?trialTimingLabel(t):niceDate(p.offer_end))}</td><td>${annualCents!=null?`${esc(money(annualCents,currency))}/year`:'—'}</td></tr>`;
+      return `<tr><td><strong>${esc(p.club_name)}</strong></td><td><span class="status-pill">${esc(onboardingProgressLabel(p,t,invitationByProspect.get(p.id),emailSettings))}</span></td><td>${esc(p.primary_contact_email||'—')}</td><td>${esc(t?trialTimingLabel(t):niceDate(p.offer_end))}</td><td>${annualCents!=null?`${esc(money(annualCents,currency))}/year`:'—'}</td></tr>`;
     }).join(''):'<tr><td colspan="5">No onboarding clubs match this search.</td></tr>';
   };
 
@@ -10657,21 +10748,37 @@ async function getCommercialPreview(calendar,accessStart,reduction=0,adjustmentE
 
 async function renderPlatformOnboardingDetail(p){
   const page=document.getElementById('platformPage');
-  const [{data:calendars},{data:trial}]=await Promise.all([
+  const [{data:calendars,error:calendarError},{data:trial,error:trialError},{data:invitation,error:invitationError},{data:emailSettings,error:settingsError}]=await Promise.all([
     loadSubscriptionCalendars(),
-    supabase.from('club_trials').select('*').eq('onboarding_prospect_id',p.id).maybeSingle()
+    supabase.from('club_trials').select('*').eq('onboarding_prospect_id',p.id).maybeSingle(),
+    supabase.from('outbound_messages').select('id,prospect_id,template_key,created_at,processing_at,sent_at,failed_at,last_error').eq('prospect_id',p.id).eq('template_key','club_trial_invitation').order('created_at',{ascending:false}).limit(1).maybeSingle(),
+    supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
   ]);
+  const loadError=calendarError||trialError||invitationError||settingsError;
+  if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
   if(trial){
+    const prototypeInvitation=invitation&&!invitation.sent_at&&(!emailSettings.email_live_from||emailSettings.email_mode!=='live'||new Date(invitation.created_at)<new Date(emailSettings.email_live_from));
+    const invitationNotice=invitation?.sent_at
+      ?'<div class="notice success"><strong>Invitation sent.</strong><br>The full trial begins when the Club Contact securely activates it. No admin action is required.</div>'
+      :prototypeInvitation?'<div class="notice"><strong>Prototype invitation.</strong><br>This record is outside the current live delivery window.</div>':invitation?.failed_at
+        ?`<div class="notice"><strong>Invitation delivery failed.</strong><br>${esc(invitation.last_error||'Use Retry delivery in Club Pipeline.')}</div>`
+        :invitation&&outboundMessageAgeMinutes(invitation)>=10
+          ?'<div class="notice"><strong>Invitation delivery is delayed.</strong><br>Use Retry delivery in Club Pipeline.</div>'
+          :invitation?.processing_at
+            ?'<div class="notice"><strong>Invitation is sending.</strong></div>'
+            :invitation
+              ?'<div class="notice"><strong>Invitation queued.</strong><br>It has not yet been recorded as sent.</div>'
+              :'<div class="notice"><strong>Invitation not confirmed.</strong><br>No delivery record was found.</div>';
     page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backOnboarding">← Club Pipeline</button></div>
     <div class="grid">
       <section class="admin-card">
         <div class="section-label">Club Trial onboarding</div><h2>${esc(p.club_name)}</h2>
-        <div class="detail-grid"><div><span>Progress</span><strong>${esc(onboardingProgressLabel(p,trial))}</strong></div><div><span>Club Contact</span><strong>${esc(p.primary_contact_email)}</strong></div><div><span>Trial</span><strong>${esc(trialTimingLabel(trial))}</strong></div><div><span>If continued</span><strong>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year</strong></div></div>
+        <div class="detail-grid"><div><span>Progress</span><strong>${esc(onboardingProgressLabel(p,trial,invitation,emailSettings))}</strong></div><div><span>Club Contact</span><strong>${esc(p.primary_contact_email)}</strong></div><div><span>Trial</span><strong>${esc(trialTimingLabel(trial))}</strong></div><div><span>If continued</span><strong>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year</strong></div></div>
       </section>
       <section class="admin-card">
         <div class="section-label">Automatic progress</div><h2>${Number(trial.duration_days||60)}-day Club Trial</h2>
         ${trial.status==='offered'
-          ?'<div class="notice success"><strong>Invitation queued.</strong><br>The full trial begins when the Club Contact securely activates it. No admin action is required.</div>'
+          ?invitationNotice
           :`<div class="trial-admin-card"><span class="status-pill">${esc(String(trial.status).replaceAll('_',' '))}</span><strong>Trial dates</strong><p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}</p></div>`}
         <p class="help">Nothing is automatically charged at the end. The club must explicitly choose whether to continue.</p>
       </section>
@@ -10811,7 +10918,7 @@ async function renderPlatformOnboarding(manualOnly=false){
     }
     st.textContent='Created';
     const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
-    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Formal invitation ready</strong><span>Amount: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The invitation also appears in Email Delivery.</small></div>`;
+    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Formal invitation ready</strong><span>Amount: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The invitation also appears in Club Pipeline email history.</small></div>`;
     document.getElementById('copyCreatedLink').onclick=async()=>{await navigator.clipboard.writeText(link);document.getElementById('copyCreatedLink').textContent='Copied ✓';};
     platformOnboardingSeed=null;
     await kickLiveEmailDelivery();
@@ -11021,67 +11128,63 @@ async function renderPlatformActiveClubs(){
 }
 
 async function renderPlatformOutbox(){
-  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading email delivery…</div>';
-  const [{data:msgs,error},{data:settings}]=await Promise.all([
-    supabase.from('outbound_messages').select('*').eq('hidden_from_platform_queue',false).order('created_at',{ascending:false}).limit(150),
+  const page=document.getElementById('platformPage');
+  page.innerHTML='<div class="splash">Loading email history…</div>';
+  const [messageRes,settingsRes]=await Promise.all([
+    loadAllPlatformRows(()=>supabase.from('outbound_messages').select('id,recipient_email,template_key,subject,club_name:payload->>club_name,provider_name,created_at,processing_at,sent_at,failed_at,last_error,hidden_from_platform_queue').order('created_at',{ascending:false}).order('id')),
     supabase.from('platform_settings').select('email_mode,email_provider,email_from_name,email_from_address,email_reply_to,email_live_from').eq('singleton',true).single()
   ]);
-  if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
-  const live=settings?.email_mode==='live';
-  const liveFrom=settings?.email_live_from?new Date(settings.email_live_from):null;
-  const isPrototypeOnly=m=>!!(liveFrom&&m.created_at&&new Date(m.created_at)<liveFrom&&!m.sent_at&&!m.failed_at);
-  const deliveryState=m=>m.sent_at?'sent':(m.failed_at?'failed':(isPrototypeOnly(m)?'prototype-only':(m.processing_at?'sending':'queued')));
-  const queued=(msgs||[]).filter(m=>deliveryState(m)==='queued').length;
-  const sending=(msgs||[]).filter(m=>deliveryState(m)==='sending').length;
-  const failed=(msgs||[]).filter(m=>deliveryState(m)==='failed').length;
-  const delivered=(msgs||[]).filter(m=>deliveryState(m)==='sent').length;
-  const prototypeOnly=(msgs||[]).filter(m=>deliveryState(m)==='prototype-only').length;
-  const activeMessages=(msgs||[]).filter(m=>['queued','sending','failed'].includes(deliveryState(m)));
-  const historyMessages=(msgs||[]).filter(m=>['sent','prototype-only'].includes(deliveryState(m)));
-  const clearableCount=(msgs||[]).filter(m=>['sent','failed','prototype-only'].includes(deliveryState(m))).length;
-  const messageRow=m=>{const path=m.payload?.link_path;const link=path?`${location.origin}${location.pathname}${path}`:'';const delivery=deliveryState(m);return `<div class="message-row"><div><strong>${esc(m.subject)}</strong><small>${esc(m.recipient_email)} · ${esc(m.template_key)} · ${esc(delivery)}${m.provider_name?` · ${esc(m.provider_name)}`:''}</small>${m.last_error?`<small class="email-error">${esc(m.last_error)}</small>`:''}</div><div class="message-row-actions">${link?`<button class="btn ghost" data-copy-message="${esc(link)}">Copy link</button>`:''}${m.failed_at&&!m.sent_at?`<button class="btn ghost" data-retry-message="${m.id}">Retry</button>`:''}</div></div>`;};
-  page.innerHTML=`<section class="platform-flow-card"><div class="section-label">Email delivery · Resend</div><h2>${live?'Live automatic email delivery':'Provider test / prototype queue'}</h2><p>${live?'Email is automatic now. This page is mainly here to spot anything stuck or failed, retry a failed send, run a test, or manually flush the queue if the webhook ever needs help.':'The provider can be tested while the platform remains in Prototype mode. Switch Email mode to Live only when the sender/domain is ready and the Database Webhook is connected.'}</p><div class="provider-mini-status"><span><strong>${queued+sending}</strong> waiting</span><span><strong>${failed}</strong> failed</span><span><strong>${delivered}</strong> delivered</span>${prototypeOnly?`<span><strong>${prototypeOnly}</strong> old prototype-only</span>`:''}<span><strong>${esc(settings?.email_from_address||'not configured')}</strong> sender</span></div></section>
-    <section class="admin-card email-provider-actions"><div class="admin-card-head"><div><div class="section-label">Provider controls</div><h2>Test and dispatch</h2></div></div>
-      <div class="form-grid"><div class="field"><label>Test recipient</label><input id="providerTestEmail" type="email" value="${esc(session?.user?.email||'')}"><small>Send a real Club Batting test email to any address.</small></div><div class="field"><label>Current sender</label><input value="${esc(`${settings?.email_from_name||'Club Batting'} <${settings?.email_from_address||'notifications@clubbatting.com'}>`)}" disabled><small>${/@resend\.dev$/i.test(settings?.email_from_address||'')?'Testing sender only. Verify your own domain before emailing clubs.':'Verified custom sender configured.'}</small></div></div>
-      <div class="btnrow"><button class="btn ghost" id="testEmailProvider">Send test email</button>${live?'<button class="btn secondary" id="flushEmailQueue">Send queued now</button>':''}${clearableCount?'<button class="btn ghost" id="clearEmailHistory">Clear completed history</button>':''}<span id="emailProviderStatus" class="status"></span></div>
-    </section>
-    <section class="admin-card"><div class="section-label">Needs attention</div><h2>Waiting or failed</h2>
-      <div class="message-list">${activeMessages.map(messageRow).join('')||'<div class="notice compact">Nothing waiting or failed. Email delivery is healthy.</div>'}</div>
-    </section>
-    ${historyMessages.length?`<details class="admin-card"><summary><strong>Recent delivery history</strong> · ${historyMessages.length} message${historyMessages.length===1?'':'s'}</summary><div class="message-list" style="margin-top:14px">${historyMessages.map(messageRow).join('')}</div></details>`:''}`;
-  page.querySelectorAll('[data-copy-message]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.copyMessage);b.textContent='Copied ✓';});
-  page.querySelectorAll('[data-retry-message]').forEach(b=>b.onclick=async()=>{
-    b.disabled=true;b.textContent='Re-queuing…';
-    const {error}=await supabase.rpc('platform_retry_outbound_message',{p_message_id:b.dataset.retryMessage});
-    if(error){alert(error.message);b.disabled=false;b.textContent='Retry';return;}
-    if(live)await kickLiveEmailDelivery();
-    await renderPlatformOutbox();
-  });
-  document.getElementById('testEmailProvider').onclick=async()=>{
-    const st=document.getElementById('emailProviderStatus');const b=document.getElementById('testEmailProvider');
-    b.disabled=true;b.textContent='Sending…';st.textContent='';
-    const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'test',to:val('providerTestEmail'),public_base_url:`${location.origin}${location.pathname}`}});
-    b.disabled=false;b.textContent='Send test email';
-    st.textContent=error?error.message:(data?.error||'Test email accepted by Resend ✓');
+  const loadError=messageRes.error||settingsRes.error;
+  if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
+  const messages=messageRes.data||[];
+  const settings=settingsRes.data||{};
+  const exceptions=messages.filter(message=>outboundMessageNeedsAttention(message,settings));
+  const sentCount=messages.filter(message=>outboundMessageState(message,settings)==='sent').length;
+
+  page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backFromEmailHistory">← Club Pipeline</button></div>
+    <section class="admin-card form-wide">
+      <div class="admin-card-head"><div><div class="section-label">Email history</div><h2>Delivery audit</h2><p class="help">Search routine delivery history here. Failed or delayed emails also appear in Club Pipeline → Needs attention.</p></div><div class="btnrow"><span class="status-pill">${sentCount} sent</span><span class="status-pill">${exceptions.length} need attention</span></div></div>
+      <div class="prospect-filter-row" style="margin-top:16px"><input id="emailHistorySearch" placeholder="Search subject, recipient, club or message type"><select id="emailHistoryFilter"><option value="all">All messages</option><option value="attention">Needs attention</option><option value="sent">Sent</option><option value="active">Recently queued / sending</option><option value="prototype-only">Prototype history</option></select></div>
+      <div class="admin-table-wrap" style="margin-top:14px"><table class="admin-table"><thead><tr><th>Date</th><th>Message</th><th>Recipient</th><th>Status</th><th>Provider</th><th></th></tr></thead><tbody id="emailHistoryBody"></tbody></table></div>
+      <div id="emailHistoryRetryStatus" class="help" role="status"></div>
+    </section>`;
+
+  const renderHistory=()=>{
+    const q=String(document.getElementById('emailHistorySearch').value||'').trim().toLowerCase();
+    const filter=document.getElementById('emailHistoryFilter').value;
+    let shown=messages.filter(message=>{
+      const state=outboundMessageState(message,settings);
+      if(filter==='attention'&&!outboundMessageNeedsAttention(message,settings))return false;
+      if(filter==='sent'&&state!=='sent')return false;
+      if(filter==='active'&&(!['queued','sending'].includes(state)||outboundMessageNeedsAttention(message,settings)))return false;
+      if(filter==='prototype-only'&&state!=='prototype-only')return false;
+      if(q&&![(message.subject||''),message.recipient_email,message.template_key,message.club_name,message.provider_name].some(value=>String(value||'').toLowerCase().includes(q)))return false;
+      return true;
+    });
+    const body=document.getElementById('emailHistoryBody');
+    body.innerHTML=shown.length?shown.map(message=>{
+      const needsAttention=outboundMessageNeedsAttention(message,settings);
+      const date=message.sent_at||message.failed_at||message.created_at;
+      return `<tr><td>${esc(date?new Date(date).toLocaleString():'—')}</td><td><strong>${esc(message.subject||outboundTemplateLabel(message.template_key))}</strong><small>${esc(outboundTemplateLabel(message.template_key))}</small>${message.last_error?`<small class="email-error">${esc(message.last_error)}</small>`:''}</td><td>${esc(message.recipient_email||'—')}</td><td><span class="status-pill">${esc(outboundMessageLabel(message,settings))}</span></td><td>${esc(message.provider_name||settings.email_provider||'—')}</td><td>${needsAttention?`<button class="btn ghost compact" data-retry-history-message="${message.id}">Retry delivery</button>`:''}</td></tr>`;
+    }).join(''):'<tr><td colspan="6">No email history matches this view.</td></tr>';
+    body.querySelectorAll('[data-retry-history-message]').forEach(button=>button.onclick=async()=>{
+      const message=messages.find(item=>item.id===button.dataset.retryHistoryMessage);
+      button.disabled=true;button.textContent='Retrying…';
+      try{
+        const result=await retryPlatformDelivery(message,settings);
+        await renderPlatformOutbox();
+        const status=document.getElementById('emailHistoryRetryStatus');if(status)status.textContent=result;
+      }catch(error){
+        const status=document.getElementById('emailHistoryRetryStatus');if(status)status.textContent=error.message;
+        button.disabled=false;button.textContent='Retry delivery';
+      }
+    });
   };
-  if(document.getElementById('flushEmailQueue'))document.getElementById('flushEmailQueue').onclick=async()=>{
-    const st=document.getElementById('emailProviderStatus');const b=document.getElementById('flushEmailQueue');
-    b.disabled=true;b.textContent='Sending…';st.textContent='';
-    const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'dispatch',limit:25,public_base_url:`${location.origin}${location.pathname}`}});
-    if(error||data?.error){st.textContent=data?.error||error?.message||'Dispatch failed.';b.disabled=false;b.textContent='Send queued now';return;}
-    st.textContent=`Sent ${data?.sent||0}${data?.failed?`, failed ${data.failed}`:''}${data?.deferred?`, deferred ${data.deferred}`:''}.`;
-    setTimeout(()=>renderPlatformOutbox(),600);
-  };
-  if(document.getElementById('clearEmailHistory'))document.getElementById('clearEmailHistory').onclick=async()=>{
-    const ok=confirm('Clear completed, failed and old Prototype email history from this page? Active queued emails will not be touched. Reminder history is retained in the database for cooldowns and auditing.');
-    if(!ok)return;
-    const b=document.getElementById('clearEmailHistory');const st=document.getElementById('emailProviderStatus');
-    b.disabled=true;b.textContent='Clearing…';st.textContent='';
-    const {data,error}=await supabase.rpc('platform_clear_email_history');
-    if(error){st.textContent=error.message;b.disabled=false;b.textContent='Clear completed history';return;}
-    st.textContent=`Cleared ${Number(data?.hidden||0)} old message${Number(data?.hidden||0)===1?'':'s'} from this page.`;
-    setTimeout(()=>renderPlatformOutbox(),500);
-  };
+
+  document.getElementById('backFromEmailHistory').onclick=()=>{platformView='home';renderPlatformView();};
+  document.getElementById('emailHistorySearch').oninput=renderHistory;
+  document.getElementById('emailHistoryFilter').onchange=renderHistory;
+  renderHistory();
 }
 
 async function renderPlatformSettings(){
@@ -11110,18 +11213,17 @@ async function renderPlatformSettings(){
   <section class="admin-card form-wide"><div class="section-label">Market discovery support</div><h2>Search fallback provider</h2><div class="form-grid">
     <div class="field"><label>Discovery provider</label><select id="settingDiscoveryProvider" ${canCommercial?'':'disabled'}><option value="brave" ${(s.discovery_provider||'brave')==='brave'?'selected':''}>Brave Search API</option></select><small>Official cricket directories are primary. Brave resolves association/club websites and fills gaps. The key stays in Supabase Edge Function Secrets as <strong>BRAVE_SEARCH_API_KEY</strong>.</small></div>
     <div class="field"><label>Provider status</label><div class="provider-check-box" id="discoveryProviderCheck">Not checked</div><button class="btn ghost provider-check-btn" id="checkDiscoveryProvider">Check discovery provider</button></div>
-  </div><div class="notice"><strong>Discovery and outreach stay separate.</strong><br>Market Discovery can persist association and club records automatically, but no discovered club is contacted until a Platform Admin deliberately adds it to the <strong>Club Pipeline</strong>.</div></section>
+  </div><div class="notice"><strong>Discovery and outreach stay separate.</strong><br>Market Discovery can persist association and club records automatically, but no discovered club is contacted until a Platform Admin deliberately selects it and chooses <strong>Invite selected</strong>.</div></section>
 
-  <section class="admin-card form-wide"><div class="section-label">Email delivery</div><h2>Resend sender</h2><div class="form-grid">
-    <div class="field"><label>Email mode</label><select id="settingEmailMode" ${canCommercial?'':'disabled'}><option value="prototype" ${(s.email_mode||'prototype')==='prototype'?'selected':''}>Prototype queue</option><option value="live" ${s.email_mode==='live'?'selected':''}>Live provider</option></select><small>Keep Prototype selected until the test email succeeds and your sending domain is verified.</small></div>
+  <details class="admin-card form-wide"><summary><div><div class="section-label">Provider setup</div><h2>Email delivery settings</h2><p>Open only when changing the Resend sender or delivery mode. Routine history and exceptions live in Club Pipeline.</p></div><span>⌄</span></summary><div class="collapsible-admin-body"><div class="form-grid" style="margin-top:16px">
+    <div class="field"><label>Email mode</label><select id="settingEmailMode" ${canCommercial?'':'disabled'}><option value="prototype" ${(s.email_mode||'prototype')==='prototype'?'selected':''}>Prototype queue</option><option value="live" ${s.email_mode==='live'?'selected':''}>Live provider</option></select><small>Use Live only after the sending domain and Database Webhook are configured.</small></div>
     <div class="field"><label>Email provider</label><select id="settingEmailProvider" ${canCommercial?'':'disabled'}><option value="resend" ${(s.email_provider||'resend')==='resend'?'selected':''}>Resend</option></select><small>The API key is stored only in Supabase Edge Function Secrets as <strong>RESEND_API_KEY</strong>.</small></div>
     <div class="field"><label>From name</label><input id="settingEmailFromName" value="${esc(s.email_from_name||'Club Batting')}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>From email</label><input id="settingEmailFromAddress" type="email" value="${esc(s.email_from_address||'onboarding@resend.dev')}" ${canCommercial?'':'disabled'}><small><strong>onboarding@resend.dev</strong> is testing-only. Once <strong>clubbatting.com</strong> is verified in Resend, use <strong>notifications@clubbatting.com</strong>.</small></div>
     <div class="field"><label>Reply-to email</label><input id="settingEmailReplyTo" type="email" value="${esc(s.email_reply_to||'')}" ${canCommercial?'':'disabled'}><small>Use an address you actually monitor so Club Secretaries can simply reply.</small></div>
     <div class="field"><label>Provider status</label><div class="provider-check-box" id="emailProviderCheck">Not checked</div><button class="btn ghost provider-check-btn" id="checkEmailProvider">Check email provider</button></div>
-    <div class="field"><label>Send a test email</label><input id="settingEmailTestRecipient" type="email" value="${esc(session?.user?.email||'')}" placeholder="your@email.com"><small>While using <strong>onboarding@resend.dev</strong>, Resend normally only allows testing to the email address on your Resend account.</small><div class="provider-check-box" id="emailTestStatus">Not sent</div><button class="btn secondary provider-check-btn" id="sendTestEmail">Send test email</button></div>
   </div>
-  <div class="notice"><strong>Provider-backed, not self-hosted.</strong><br>Supabase owns the workflow and queue. Brave supplies search results; Resend delivers email. Their secret keys never appear in GitHub or the browser. A Database Webhook on <strong>outbound_messages → INSERT</strong> calls <strong>dispatch-outbox</strong>, so normal workflow emails send automatically without someone opening this page.<br><br><strong>Safe go-live:</strong> when Email mode is first changed to Live, the platform records that moment. Old messages created during Prototype testing are not suddenly emailed.</div></section>
+  <div class="notice"><strong>Automatic delivery.</strong><br>Supabase owns the workflow and queue, and Resend delivers email. A Database Webhook on <strong>outbound_messages → INSERT</strong> calls <strong>dispatch-outbox</strong>. Failed or delayed messages surface in <strong>Club Pipeline → Needs attention</strong>; routine messages remain in Email history.</div></div></details>
 
   <section class="admin-card form-wide"><div class="section-label">Regional Club Years</div><h2>Renewal calendars</h2><p class="help">These universal renewal dates give clubs access before their playing season instead of trying to identify each club's exact season start and finish.</p><div class="calendar-list">${(calendars||[]).map(c=>`<div><strong>${esc(c.label)}</strong><span>Club Year renews ${esc(calendarStartLabel(c))}</span></div>`).join('')}</div></section>
   ${canCommercial?'<button class="btn secondary" id="savePlatformSettings">Save settings</button>':''}<div id="settingsStatus" class="help"></div>`;
@@ -11165,24 +11267,6 @@ async function renderPlatformSettings(){
   document.getElementById('checkGuideProvider').click();
   document.getElementById('checkDiscoveryProvider').click();
   document.getElementById('checkEmailProvider').click();
-  document.getElementById('sendTestEmail').onclick=async()=>{
-    const btn=document.getElementById('sendTestEmail');
-    const box=document.getElementById('emailTestStatus');
-    const to=val('settingEmailTestRecipient').trim().toLowerCase();
-    if(!to || !to.includes('@')){
-      box.textContent='Enter a valid test recipient.';box.classList.remove('ok');box.classList.add('bad');return;
-    }
-    btn.disabled=true;btn.textContent='Sending…';box.textContent='Sending through Resend…';box.classList.remove('ok','bad');
-    const {data,error}=await supabase.functions.invoke('dispatch-outbox',{body:{action:'test',to}});
-    const message=error?.message||data?.error||'';
-    if(message){
-      box.textContent=`Test failed — ${message}`;box.classList.remove('ok');box.classList.add('bad');
-    }else{
-      box.textContent=`Sent ✓ · check ${to}`;box.classList.add('ok');box.classList.remove('bad');
-    }
-    btn.disabled=false;btn.textContent='Send test email';
-  };
-
   if(document.getElementById('savePlatformSettings'))document.getElementById('savePlatformSettings').onclick=async()=>{
     const st=document.getElementById('settingsStatus');st.textContent='Saving…';
     const newEmailMode=document.getElementById('settingEmailMode').value;
