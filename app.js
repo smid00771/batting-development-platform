@@ -1,4 +1,4 @@
-// Club Batting v0.8.57 — sourced Market Research, with human approval before outreach
+// Club Batting v0.8.57.1 — clearer discovery and research failure reporting
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -11353,17 +11353,21 @@ function marketResearchJobHtml(job,canControl){
   const status=String(job.status||'queued');
   const labels={queued:'Waiting to start',running:'Researching',paused:'Paused',paused_budget:'Paused at spending limit',completed:'Research complete',cancelled:'Cancelled',failed:'Research stopped'};
   const checked=Number(progress.researched||0),target=Number(job.target_count||25);
+  const failures=Number(progress.failed||0);
+  const heading=status==='completed'&&failures>0?(checked>0?'Research finished with issues':'Research stopped — no clubs researched'):(labels[status]||status);
+  const taskErrors=(Array.isArray(job.task_errors)?job.task_errors:[]).slice(0,5);
   const consumed=Number(job.spent_usd||0)+Number(job.reserved_usd||0);
   const limit=Number(job.budget_usd||0);
   const used=limit>0?Math.min(100,Math.max(0,consumed/limit*100)):0;
   return `<article class="market-research-job" data-market-research-job="${esc(job.id)}">
-    <div class="admin-card-head"><div><strong>${esc(labels[status]||status)}</strong><div class="help">${esc(new Date(job.created_at).toLocaleString())} · up to ${target} clubs</div></div><span class="status-pill">${Number(progress.ready||0)} ready to review</span></div>
-    <p class="help">${checked} researched · ${Number(progress.needs_review||0)} uncertain · ${Number(progress.not_suitable||0)} not suitable${Number(progress.failed||0)?` · ${Number(progress.failed)} could not be researched`:''}${Number(progress.pending||0)+Number(progress.running||0)?` · ${Number(progress.pending||0)+Number(progress.running||0)} tasks remaining`:''}</p>
+    <div class="admin-card-head"><div><strong>${esc(heading)}</strong><div class="help">${esc(new Date(job.created_at).toLocaleString())} · up to ${target} clubs</div></div><span class="status-pill">${Number(progress.ready||0)} ready to review</span></div>
+    <p class="help">${checked} researched · ${Number(progress.needs_review||0)} uncertain · ${Number(progress.not_suitable||0)} not suitable${failures?` · ${failures} research ${failures===1?'task':'tasks'} failed`:''}${Number(progress.pending||0)+Number(progress.running||0)?` · ${Number(progress.pending||0)+Number(progress.running||0)} tasks remaining`:''}</p>
     <p class="help">Contacts in current findings: ${Number(job.contact_counts?.named||0)} named people · ${Math.max(0,Number(job.contact_counts?.general||0))} general club contacts.</p>
     <div class="market-budget-track" role="progressbar" aria-label="Research budget accounted for" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(used)}"><span style="width:${used}%"></span></div>
     <p class="help">${marketResearchMoney(job.spent_usd)} recorded usage + ${marketResearchMoney(job.reserved_usd)} held for calls = ${marketResearchMoney(consumed)} of ${marketResearchMoney(limit)} USD limit.</p>
     ${Number(job.reserved_usd||0)>0?'<p class="help">Held amounts include calls whose final charge is not yet known. They still count towards this limit.</p>':''}
     ${job.last_error?`<p class="notice">${esc(job.last_error)}</p>`:''}
+    ${taskErrors.length?`<details${checked===0?' open':''}><summary>What stopped the research?</summary><ul>${taskErrors.map(item=>`<li><strong>${item.kind==='discover'?'Finding clubs':'Checking a club'}</strong>: ${esc(item.message||'No failure detail was saved.')}</li>`).join('')}</ul></details>`:''}
     <div class="btnrow"><button class="btn ghost compact" data-market-job-review="${esc(job.id)}">Review this batch</button>
     ${canControl&&['queued','running'].includes(status)?`<button class="btn ghost compact" data-market-job-control="pause" data-job-id="${esc(job.id)}">Pause</button>`:''}
     ${canControl&&['paused','paused_budget'].includes(status)?`<label class="help">New total limit (USD, optional)<input type="number" min="${limit}" max="50" step="0.01" data-market-job-budget="${esc(job.id)}" aria-label="New total budget in USD for this batch" placeholder="Keep ${limit.toFixed(2)}" style="max-width:150px"></label><button class="btn secondary compact" data-market-job-control="resume" data-job-id="${esc(job.id)}">Resume</button>`:''}
@@ -11455,9 +11459,9 @@ async function renderPlatformMarketDiscovery(options={}){
     @media(max-width:440px){.market-research-form{grid-template-columns:1fr}}
   </style>
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="admin-card-head"><div><div class="section-label">Market Discovery</div><h2>Find clubs worth approaching</h2><p class="help">Research identifies clubs, checks public contacts and explains why each club may suit Club Batting. You choose who receives the introductory outreach email.</p></div><span class="status-pill">New South Wales</span></div>
+    <div class="admin-card-head"><div><div class="section-label">Market Discovery</div><h2>Find clubs worth approaching</h2><p class="help">Research identifies clubs, checks public contacts and explains why each club may suit Club Batting. You choose who receives the introductory outreach email.</p></div></div>
     <div class="market-research-form">
-      <div><label for="marketResearchMarket">Market</label><select id="marketResearchMarket"><option value="AU:NSW">Australia · New South Wales</option></select></div>
+      <div><label for="marketResearchMarket">Research area</label><select id="marketResearchMarket"><option value="AU:NSW">Australia · New South Wales</option></select></div>
       <div><label for="marketResearchAssociation">Association</label><select id="marketResearchAssociation"><option value="">Across New South Wales</option>${associations.map(a=>`<option value="${esc(a.id)}" ${draft.associationId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
       <div><label for="marketResearchTarget">Clubs to research</label><input id="marketResearchTarget" type="number" min="1" max="25" step="1" value="${esc(draft.targetCount)}"></div>
       <div><label for="marketResearchBudget">Spending limit (USD)</label><input id="marketResearchBudget" type="number" min="0.01" max="50" step="0.01" placeholder="Enter a limit" value="${esc(draft.budgetUsd)}"></div>
