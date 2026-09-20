@@ -1,4 +1,4 @@
-// Club Batting v0.8.57.2 — contact research and complete batch review
+// Club Batting v0.8.57.3 — website access diagnostics and contact research
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -11470,6 +11470,8 @@ async function renderPlatformMarketDiscovery(options={}){
     <p class="help">Research worker v${esc(research.version||'not reported')}. Start with up to 25 clubs. The limit covers recorded research API usage and amounts held for calls; other hosting charges are separate. Research continues in the background after you leave this page.</p>
     <div class="btnrow"><button class="btn secondary" id="startMarketResearch" ${configured&&canControl&&!platformMarketResearchStartBusy?'':'disabled'}>${platformMarketResearchStartBusy?'Starting…':'Start research'}</button><button class="btn ghost compact" id="refreshMarketResearch">Refresh progress</button><span class="status-pill">${configured?'Research is configured':'Research setup needs attention'}</span></div>
     <div id="marketResearchActionStatus" class="help" role="status" aria-live="polite">${esc(platformMarketResearchMessage)}</div>
+    <div style="margin-top:12px"><button class="btn ghost compact" id="checkMarketSources">Check website access</button><span class="help"> Reads the NDCA and Belmont websites. No search or AI calls.</span></div>
+    <div id="marketSourceCheckResult" role="status" aria-live="polite"></div>
     ${!canControl?'<p class="notice">Your platform role can view research. A Platform Owner, Commercial Admin or Support Admin can start and manage it.</p>':''}
     ${researchRes.error?`<p class="notice">Research status could not be checked: ${esc(researchRes.error.message)}. Refresh to retry; saved prospects are shown below.</p>`:''}
     <details ${configured?'':'open'} style="margin-top:12px"><summary>Research setup${configured?'':' · complete these checks before starting'}</summary><ul>${readiness.map(item=>`<li>${item.ready?'✓':'○'} <strong>${esc(item.label||item.key)}</strong>${item.message?` — ${esc(item.message)}`:''}</li>`).join('')||'<li>Deploy and configure Market Research, then refresh this page.</li>'}</ul>${research.pricing?.model?`<p class="help">Research model: ${esc(research.pricing.model)}. Budget uses configured provider rates in USD.</p>`:''}</details>
@@ -11555,6 +11557,19 @@ async function renderPlatformMarketDiscovery(options={}){
   document.getElementById('marketResearchTarget').oninput=event=>{draft.targetCount=event.target.value;};
   document.getElementById('marketResearchBudget').oninput=event=>{draft.budgetUsd=event.target.value;};
   document.getElementById('refreshMarketResearch').onclick=()=>{savePlatformMarketScroll();return renderPlatformMarketDiscovery();};
+  document.getElementById('checkMarketSources').onclick=async()=>{
+    const button=document.getElementById('checkMarketSources'),output=document.getElementById('marketSourceCheckResult');
+    if(button.disabled||!isCurrent())return;
+    button.disabled=true;output.textContent='Checking two public websites. No research batch is being started…';
+    try{
+      const result=await invokeMarketResearch({action:'check_sources'});
+      if(!isCurrent())return;
+      if(!Array.isArray(result?.results))throw new Error('Deploy research worker v0.8.57.3 to use this check.');
+      const passed=result.results.filter(item=>item.ok).length;
+      output.innerHTML=`<p><strong>${passed} of ${result.results.length} websites read successfully.</strong> No Brave or OpenAI calls were made.</p><p class="help">Worker v${esc(result.version)}. This checks page access, not contact accuracy. Share the diagnostic details below before starting another batch.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%">${esc(JSON.stringify(result.results,null,2))}</pre>`;
+    }catch(error){output.textContent=error.message||'The website-access check could not complete.';}
+    finally{button.disabled=false;}
+  };
   document.getElementById('startMarketResearch').onclick=async()=>{
     if(platformMarketResearchStartBusy||!configured||!canControl||!isCurrent())return;
     const status=document.getElementById('marketResearchActionStatus'),button=document.getElementById('startMarketResearch');
