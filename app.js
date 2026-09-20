@@ -1,4 +1,4 @@
-// Club Batting v0.8.57.1 — clearer discovery and research failure reporting
+// Club Batting v0.8.57.2 — contact research and complete batch review
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -11354,7 +11354,8 @@ function marketResearchJobHtml(job,canControl){
   const labels={queued:'Waiting to start',running:'Researching',paused:'Paused',paused_budget:'Paused at spending limit',completed:'Research complete',cancelled:'Cancelled',failed:'Research stopped'};
   const checked=Number(progress.researched||0),target=Number(job.target_count||25);
   const failures=Number(progress.failed||0);
-  const heading=status==='completed'&&failures>0?(checked>0?'Research finished with issues':'Research stopped — no clubs researched'):(labels[status]||status);
+  const contactCount=Number(job.contact_counts?.named||0)+Number(job.contact_counts?.general||0);
+  const heading=status==='completed'&&failures>0?(checked>0?'Research finished with issues':'Research stopped — no clubs researched'):(status==='completed'&&checked>0&&contactCount===0?'Research finished — no verified email contacts':(labels[status]||status));
   const taskErrors=(Array.isArray(job.task_errors)?job.task_errors:[]).slice(0,5);
   const consumed=Number(job.spent_usd||0)+Number(job.reserved_usd||0);
   const limit=Number(job.budget_usd||0);
@@ -11466,7 +11467,7 @@ async function renderPlatformMarketDiscovery(options={}){
       <div><label for="marketResearchTarget">Clubs to research</label><input id="marketResearchTarget" type="number" min="1" max="25" step="1" value="${esc(draft.targetCount)}"></div>
       <div><label for="marketResearchBudget">Spending limit (USD)</label><input id="marketResearchBudget" type="number" min="0.01" max="50" step="0.01" placeholder="Enter a limit" value="${esc(draft.budgetUsd)}"></div>
     </div>
-    <p class="help">Start with up to 25 clubs. The limit covers recorded research API usage and amounts held for calls; other hosting charges are separate. Research continues in the background after you leave this page.</p>
+    <p class="help">Research worker v${esc(research.version||'not reported')}. Start with up to 25 clubs. The limit covers recorded research API usage and amounts held for calls; other hosting charges are separate. Research continues in the background after you leave this page.</p>
     <div class="btnrow"><button class="btn secondary" id="startMarketResearch" ${configured&&canControl&&!platformMarketResearchStartBusy?'':'disabled'}>${platformMarketResearchStartBusy?'Starting…':'Start research'}</button><button class="btn ghost compact" id="refreshMarketResearch">Refresh progress</button><span class="status-pill">${configured?'Research is configured':'Research setup needs attention'}</span></div>
     <div id="marketResearchActionStatus" class="help" role="status" aria-live="polite">${esc(platformMarketResearchMessage)}</div>
     ${!canControl?'<p class="notice">Your platform role can view research. A Platform Owner, Commercial Admin or Support Admin can start and manage it.</p>':''}
@@ -11479,7 +11480,7 @@ async function renderPlatformMarketDiscovery(options={}){
     <div class="btnrow" style="margin-top:12px"><span class="status-pill">${ready.length} ready to review</span><span class="status-pill">${uncertain.length} need review</span><span class="status-pill">${legacy.length} not researched</span><span class="status-pill">${invited.length} in Club Pipeline</span><span class="status-pill">${excluded.length} do not invite</span></div>
     <div class="prospect-filter-row" style="margin-top:14px">
       <input id="marketProspectSearch" value="${esc(platformMarketClubSearch)}" aria-label="Search prospects" placeholder="Search club, place, association or contact">
-      <select id="marketReviewFilter" aria-label="Research and review status">${[['ready','Research ready'],['research','Needs review / uncertain'],['unresearched','Not researched yet'],['pending','All undecided'],['invited','In Club Pipeline'],['do_not_invite','Do not invite']].map(([value,label])=>`<option value="${value}" ${platformMarketReviewFilter===value?'selected':''}>${label}</option>`).join('')}</select>
+      <select id="marketReviewFilter" aria-label="Research and review status">${[['ready','Research ready'],['all','All findings'],['research','Needs review / uncertain'],['unresearched','Not researched yet'],['pending','All undecided'],['invited','In Club Pipeline'],['do_not_invite','Do not invite']].map(([value,label])=>`<option value="${value}" ${platformMarketReviewFilter===value?'selected':''}>${label}</option>`).join('')}</select>
       <select id="marketAssociationFilter" aria-label="Filter prospects by association"><option value="">All associations</option>${associations.map(a=>`<option value="${esc(a.id)}" ${platformMarketAssociationFilter===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
       <select id="marketResearchJobFilter" aria-label="Filter prospects by research batch"><option value="">All research batches</option>${jobs.map(job=>`<option value="${esc(job.id)}" ${platformMarketResearchJobFilter===job.id?'selected':''}>${esc(new Date(job.created_at).toLocaleString())} · ${Number(job.target_count||25)} clubs</option>`).join('')}</select>
     </div>
@@ -11585,7 +11586,7 @@ async function renderPlatformMarketDiscovery(options={}){
     }catch(error){platformMarketResearchMessage=`Start was not confirmed: ${error.message} Retry with the same details to reuse this request.`;if(isCurrent())status.textContent=platformMarketResearchMessage;}
     finally{platformMarketResearchStartBusy=false;if(isCurrent()){button.disabled=false;button.textContent='Start research';}}
   };
-  page.querySelectorAll('[data-market-job-review]').forEach(button=>button.onclick=()=>{platformMarketResearchJobFilter=button.dataset.marketJobReview;platformMarketReviewFilter='ready';platformMarketSelectedClubIds.clear();document.getElementById('marketResearchJobFilter').value=platformMarketResearchJobFilter;document.getElementById('marketReviewFilter').value='ready';renderProspectRows();document.getElementById('marketClubInventory').scrollIntoView({behavior:'smooth',block:'start'});});
+  page.querySelectorAll('[data-market-job-review]').forEach(button=>button.onclick=()=>{platformMarketResearchJobFilter=button.dataset.marketJobReview;platformMarketReviewFilter='all';platformMarketClubSearch='';platformMarketAssociationFilter='';platformMarketSelectedClubIds.clear();document.getElementById('marketResearchJobFilter').value=platformMarketResearchJobFilter;document.getElementById('marketReviewFilter').value='all';document.getElementById('marketProspectSearch').value='';document.getElementById('marketAssociationFilter').value='';renderProspectRows();document.getElementById('marketClubInventory').scrollIntoView({behavior:'smooth',block:'start'});});
   let controlBusy=false;
   page.querySelectorAll('[data-market-job-control]').forEach(button=>button.onclick=async()=>{
     if(controlBusy||!canControl||!isCurrent())return;
