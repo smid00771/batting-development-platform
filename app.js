@@ -1,4 +1,4 @@
-// Club Batting v0.8.56 — cricket first: final-stage club look and confident, player-owned shots
+// Club Batting v0.8.57 — sourced Market Research, with human approval before outreach
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
@@ -39,6 +39,12 @@ let platformMarketReviewFilter='ready';
 let platformMarketClubSearch='';
 let platformMarketAssociationFilter='';
 let platformMarketActionMessage='';
+let platformMarketRenderVersion=0;
+let platformMarketResearchDraft={associationId:'',targetCount:'25',budgetUsd:''};
+let platformMarketResearchStartRequest=null;
+let platformMarketResearchStartBusy=false;
+let platformMarketResearchJobFilter='';
+let platformMarketResearchMessage='';
 const PLATFORM_MARKET_SCROLL_KEY='bdp-platform-market-scroll-y-v0851';
 let platformMarketScrollY=Number(sessionStorage.getItem(PLATFORM_MARKET_SCROLL_KEY)||0);
 let platformMarketRestoreTimer=null;
@@ -11299,6 +11305,7 @@ async function renderPlatformConsole(){
 }
 
 async function renderPlatformView(){
+  platformMarketRenderVersion++; // Invalidate older discovery requests before any navigation.
   document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===(platformView==='outbox'?'home':platformView)));
   if(platformView==='market')return renderPlatformMarketDiscovery();
   if(platformView==='clubs')return renderPlatformActiveClubs();
@@ -11307,213 +11314,288 @@ async function renderPlatformView(){
   return renderPlatformProspects();
 }
 
+function marketResearchClubReady(club,now=Date.now()){
+  if(club?.research_status!=='ready'||!['strong','possible'].includes(club.outreach_fit))return false;
+  const email=String(club.contact_email||'').trim().toLowerCase();
+  const contactUrl=safePublicSourceUrl(club.contact_source_url);
+  const checked=Date.parse(club.research_checked_at||'');
+  const evidence=Array.isArray(club.research_evidence)?club.research_evidence:[];
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&!!contactUrl
+    &&Number.isFinite(checked)&&checked<=now+300000&&now-checked<=90*86400000
+    &&!!String(club.research_summary||'').trim()
+    &&Array.isArray(club.research_uncertainties)&&club.research_uncertainties.length===0
+    &&['identity','activity'].every(kind=>evidence.some(item=>item?.kind===kind&&safePublicSourceUrl(item.url)&&String(item.quote||'').trim()))
+    &&evidence.some(item=>item?.kind==='contact'&&safePublicSourceUrl(item.url)===contactUrl&&String(item.email||'').trim().toLowerCase()===email&&String(item.quote||'').trim());
+}
+
+function marketResearchEvidenceHtml(club){
+  const evidence=(Array.isArray(club.research_evidence)?club.research_evidence:[]).filter(item=>item&&safePublicSourceUrl(item.url)).slice(0,10);
+  const uncertainties=Array.isArray(club.research_uncertainties)?club.research_uncertainties:[];
+  const date=Date.parse(club.research_checked_at||'');
+  const checked=Number.isFinite(date)?new Date(date).toLocaleDateString():'Not checked by research yet';
+  const fallback=[club.contact_source_url,club.registry_url,club.source_url,club.website_url].map(safePublicSourceUrl).find(Boolean);
+  const reason=club.metadata?.market_research_contact?.reason||club.research_contact_reason||club.contact_reason||evidence.find(item=>item.kind==='contact')?.contact_reason||'';
+  return `<details class="market-evidence"><summary>${evidence.length?'Evidence and contact choice':'Recorded sources'}</summary><div class="help">Checked: ${esc(checked)}</div>
+    ${reason?`<p>${esc(reason)}</p>`:''}
+    ${evidence.map(item=>`<div class="market-evidence-item"><a href="${esc(safePublicSourceUrl(item.url))}" target="_blank" rel="noopener noreferrer">${esc(({identity:'Club identity',activity:'Active cricket',contact:'Published contact',fit:'Club suitability'})[item.kind]||'Public source')} ↗</a><small>${esc(String(item.quote||'').slice(0,600))}</small></div>`).join('')}
+    ${!evidence.length&&fallback?`<a href="${esc(fallback)}" target="_blank" rel="noopener noreferrer">View recorded source ↗</a>`:''}
+    ${!evidence.length?'<p class="help">This record has not completed the research checks.</p>':''}
+    ${uncertainties.length?`<p><strong>Still uncertain</strong></p><ul>${uncertainties.map(item=>`<li>${esc(String(item))}</li>`).join('')}</ul>`:''}
+    <p class="help">A published contact does not confirm that the mailbox is deliverable or that the club is interested.</p></details>`;
+}
+
+function marketResearchMoney(value){
+  const n=Number(value);return `$${Number.isFinite(n)?Math.max(0,n).toFixed(4):'0.0000'}`;
+}
+
+function marketResearchJobHtml(job,canControl){
+  const progress=job.progress||{};
+  const status=String(job.status||'queued');
+  const labels={queued:'Waiting to start',running:'Researching',paused:'Paused',paused_budget:'Paused at spending limit',completed:'Research complete',cancelled:'Cancelled',failed:'Research stopped'};
+  const checked=Number(progress.researched||0),target=Number(job.target_count||25);
+  const consumed=Number(job.spent_usd||0)+Number(job.reserved_usd||0);
+  const limit=Number(job.budget_usd||0);
+  const used=limit>0?Math.min(100,Math.max(0,consumed/limit*100)):0;
+  return `<article class="market-research-job" data-market-research-job="${esc(job.id)}">
+    <div class="admin-card-head"><div><strong>${esc(labels[status]||status)}</strong><div class="help">${esc(new Date(job.created_at).toLocaleString())} · up to ${target} clubs</div></div><span class="status-pill">${Number(progress.ready||0)} ready to review</span></div>
+    <p class="help">${checked} researched · ${Number(progress.needs_review||0)} uncertain · ${Number(progress.not_suitable||0)} not suitable${Number(progress.failed||0)?` · ${Number(progress.failed)} could not be researched`:''}${Number(progress.pending||0)+Number(progress.running||0)?` · ${Number(progress.pending||0)+Number(progress.running||0)} tasks remaining`:''}</p>
+    <p class="help">Contacts in current findings: ${Number(job.contact_counts?.named||0)} named people · ${Math.max(0,Number(job.contact_counts?.general||0))} general club contacts.</p>
+    <div class="market-budget-track" role="progressbar" aria-label="Research budget accounted for" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(used)}"><span style="width:${used}%"></span></div>
+    <p class="help">${marketResearchMoney(job.spent_usd)} recorded usage + ${marketResearchMoney(job.reserved_usd)} held for calls = ${marketResearchMoney(consumed)} of ${marketResearchMoney(limit)} USD limit.</p>
+    ${Number(job.reserved_usd||0)>0?'<p class="help">Held amounts include calls whose final charge is not yet known. They still count towards this limit.</p>':''}
+    ${job.last_error?`<p class="notice">${esc(job.last_error)}</p>`:''}
+    <div class="btnrow"><button class="btn ghost compact" data-market-job-review="${esc(job.id)}">Review this batch</button>
+    ${canControl&&['queued','running'].includes(status)?`<button class="btn ghost compact" data-market-job-control="pause" data-job-id="${esc(job.id)}">Pause</button>`:''}
+    ${canControl&&['paused','paused_budget'].includes(status)?`<label class="help">New total limit (USD, optional)<input type="number" min="${limit}" max="50" step="0.01" data-market-job-budget="${esc(job.id)}" aria-label="New total budget in USD for this batch" placeholder="Keep ${limit.toFixed(2)}" style="max-width:150px"></label><button class="btn secondary compact" data-market-job-control="resume" data-job-id="${esc(job.id)}">Resume</button>`:''}
+    ${canControl&&['queued','running','paused','paused_budget'].includes(status)?`<button class="btn ghost compact" data-market-job-control="cancel" data-job-id="${esc(job.id)}">Cancel research</button>`:''}</div>
+  </article>`;
+}
+
+async function invokeMarketResearch(body){
+  const {data,error}=await supabase.functions.invoke('market-research',{body});
+  if(error||data?.error){
+    let message=data?.error||error?.message||'Research request failed.';
+    if(error?.context?.json){try{const detail=await error.context.json();if(detail?.error)message=detail.error;}catch{}}
+    throw new Error(message);
+  }
+  return data||{};
+}
+
 async function renderPlatformMarketDiscovery(options={}){
   const page=document.getElementById('platformPage');
+  if(!page)return;
+  const renderVersion=++platformMarketRenderVersion;
+  const isCurrent=()=>platformView==='market'&&renderVersion===platformMarketRenderVersion&&document.getElementById('platformPage')===page;
   page.innerHTML='<div class="splash">Loading prospect findings…</div>';
   platformMarketScrollSuppressed=true;
   const countryCode='AU',regionCode='NSW';
-  const [associationRes,clubRes,linkRes,scanRes]=await Promise.all([
+  const [associationRes,clubRes,linkRes,scanRes,researchRes]=await Promise.all([
     loadAllPlatformRows(()=>supabase.from('market_associations').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name').order('id')),
     loadAllPlatformRows(()=>supabase.from('market_clubs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('name').order('id')),
     loadAllPlatformRows(()=>supabase.from('market_club_associations').select('*').order('club_id').order('association_id')),
-    supabase.from('market_scan_runs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('started_at',{ascending:false}).limit(30)
-  ]);
+    supabase.from('market_scan_runs').select('*').eq('country_code',countryCode).eq('region_code',regionCode).order('started_at',{ascending:false}).limit(30),
+    invokeMarketResearch({action:'status'}).then(data=>({data}))
+  ].map(request=>Promise.resolve(request).catch(error=>({error}))));
+  if(!isCurrent())return;
   const loadError=associationRes.error||clubRes.error||linkRes.error||scanRes.error;
   if(loadError){
     platformMarketScrollSuppressed=false;
-    page.innerHTML=`<div class="notice"><strong>Market Discovery could not load.</strong><br>${esc(loadError.message)}</div>`;
+    page.innerHTML=`<div class="notice"><strong>Market Discovery could not load.</strong><br>${esc(loadError.message)}<div class="btnrow"><button class="btn ghost" id="retryMarketLoad">Try again</button></div></div>`;
+    document.getElementById('retryMarketLoad').onclick=()=>renderPlatformMarketDiscovery(options);
     return;
   }
-
-  const associations=associationRes.data||[];
-  const clubs=clubRes.data||[];
-  const links=linkRes.data||[];
-  const scans=scanRes.data||[];
+  const associations=associationRes.data||[],clubs=clubRes.data||[],links=linkRes.data||[],scans=scanRes.data||[];
+  const research=researchRes.data||{};
+  const readiness=Array.isArray(research.readiness)?research.readiness:[];
+  const configured=!researchRes.error&&research.configured===true&&readiness.length>0&&readiness.every(item=>item.ready===true);
+  const canControl=['owner','commercial_admin','support_admin'].includes(platformRole);
+  const jobs=(Array.isArray(research.jobs)?research.jobs:[]).slice().sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).map(job=>{
+    const batchClubs=clubs.filter(club=>club.research_job_id===job.id&&club.research_checked_at);
+    const contacts=batchClubs.filter(club=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(club.contact_email||'').trim()));
+    const named=contacts.filter(club=>{
+      if(!String(club.contact_name||'').trim())return false;
+      const contactType=club.metadata?.market_research_contact?.type;
+      if(contactType)return contactType==='named_person';
+      const email=String(club.contact_email||'').trim().toLowerCase();
+      return (Array.isArray(club.research_evidence)?club.research_evidence:[]).some(item=>item.kind==='contact'&&item.contact_type==='named_person'&&safePublicSourceUrl(item.url)===safePublicSourceUrl(club.contact_source_url)&&!!safePublicSourceUrl(item.url)&&String(item.email||'').trim().toLowerCase()===email&&String(item.quote||'').includes(String(club.contact_name).trim()));
+    }).length;
+    return {...job,contact_counts:{named,general:Math.max(0,contacts.length-named)}};
+  });
   const associationById=new Map(associations.map(a=>[a.id,a]));
-  const associationNamesByClub=new Map();
-  const clubIdsByAssociation=new Map();
+  const associationNamesByClub=new Map(),clubIdsByAssociation=new Map();
   links.forEach(link=>{
     const association=associationById.get(link.association_id);
-    if(association){
-      if(!associationNamesByClub.has(link.club_id))associationNamesByClub.set(link.club_id,[]);
-      associationNamesByClub.get(link.club_id).push(association.name);
-    }
+    if(association){if(!associationNamesByClub.has(link.club_id))associationNamesByClub.set(link.club_id,[]);associationNamesByClub.get(link.club_id).push(association.name);}
     if(!clubIdsByAssociation.has(link.association_id))clubIdsByAssociation.set(link.association_id,[]);
     clubIdsByAssociation.get(link.association_id).push(link.club_id);
   });
   const reviewStatus=club=>club.sales_prospect_id&&club.prospect_review_status!=='invited'?'in_pipeline':(club.prospect_review_status||'pending');
-  const validEmail=club=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(club.contact_email||'').trim());
-  const isLikely=club=>['strong','possible'].includes(club.outreach_fit);
-  const isReady=club=>reviewStatus(club)==='pending'&&isLikely(club)&&validEmail(club)&&!!safePublicSourceUrl(club.contact_source_url);
-  const sourceUrl=club=>[club.contact_source_url,club.registry_url,club.source_url,club.website_url].map(safePublicSourceUrl).find(Boolean)||'';
-  const fitLabel=value=>({strong:'Strong fit',possible:'Possible fit',low:'Low fit',review:'Review'}[value]||'Review');
-  const confidenceLabel=value=>({high:'High confidence',contact:'Contact found',website:'Website matched',source_only:'Source only',needs_review:'Needs review'}[value]||'Source recorded');
-  const pending=clubs.filter(c=>reviewStatus(c)==='pending');
-  const ready=pending.filter(isReady);
-  const researching=pending.filter(c=>!isReady(c));
-  const invited=clubs.filter(c=>['invited','in_pipeline'].includes(reviewStatus(c)));
-  const excluded=clubs.filter(c=>reviewStatus(c)==='do_not_invite');
+  const isReady=club=>reviewStatus(club)==='pending'&&marketResearchClubReady(club);
+  const isLegacy=club=>!club.research_status||club.research_status==='unresearched';
+  const pending=clubs.filter(c=>reviewStatus(c)==='pending'),ready=pending.filter(isReady);
+  const uncertain=pending.filter(c=>!isLegacy(c)&&!isReady(c));
+  const legacy=pending.filter(isLegacy);
+  const invited=clubs.filter(c=>['invited','in_pipeline'].includes(reviewStatus(c))),excluded=clubs.filter(c=>reviewStatus(c)==='do_not_invite');
   const latestRegionScan=scans.find(s=>s.scope_type==='region');
+  const researchStatusLabel=club=>isReady(club)?'Ready to review':isLegacy(club)?'Not researched':({ready:'Research needs refreshing',needs_review:'Needs more evidence',not_suitable:'Not suitable',duplicate:'Duplicate',suppressed:'Do not contact'})[club.research_status]||'Needs more evidence';
+  const draft=platformMarketResearchDraft;
 
-  page.innerHTML=`
-    <style>
-      #marketClubInventory{max-width:none}
-      #marketClubInventory td{overflow-wrap:anywhere}
-      #marketClubInventory input[type="checkbox"]{width:18px;height:18px;accent-color:var(--navy2);cursor:pointer}
-      #marketClubInventory tr.market-club-selected{background:#eef3ff}
-      #marketClubInventory .prospect-filter-row>*{min-width:0;max-width:100%}
-    </style>
-    <section class="admin-card" style="margin-bottom:16px">
-      <div class="admin-card-head"><div><div class="section-label">Market Discovery</div><h2>Prospects to review</h2><p class="help">Review one compact list, select the clubs you want, then invite them or mark them Do not invite. Inviting queues the introductory email automatically.</p></div><span class="status-pill">New South Wales</span></div>
-      <div class="btnrow" style="margin-top:12px">
-        <span class="status-pill">${ready.length} ready to review</span>
-        <span class="status-pill">${researching.length} still researching</span>
-        <span class="status-pill">${invited.length} in Club Pipeline</span>
-        <span class="status-pill">${excluded.length} do not invite</span>
-      </div>
-    </section>
-
-    <section class="admin-card form-wide" id="marketClubInventory">
-      <div class="admin-card-head"><div><div class="section-label">Agent findings</div><h2>Club prospect list</h2><p class="help">Select all is applied to the list currently shown, so you can select most clubs and untick the few you do not want.</p></div></div>
-      <div class="prospect-filter-row" style="margin-top:14px">
-        <input id="marketProspectSearch" value="${esc(platformMarketClubSearch)}" placeholder="Search club, place, association or email">
-        <select id="marketReviewFilter">
-          <option value="ready" ${platformMarketReviewFilter==='ready'?'selected':''}>Ready to invite</option>
-          <option value="research" ${platformMarketReviewFilter==='research'?'selected':''}>Still researching</option>
-          <option value="pending" ${platformMarketReviewFilter==='pending'?'selected':''}>All undecided</option>
-          <option value="invited" ${platformMarketReviewFilter==='invited'?'selected':''}>In Club Pipeline</option>
-          <option value="do_not_invite" ${platformMarketReviewFilter==='do_not_invite'?'selected':''}>Do not invite</option>
-        </select>
-        <select id="marketAssociationFilter"><option value="">All associations</option>${associations.map(a=>`<option value="${a.id}" ${platformMarketAssociationFilter===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
-      </div>
-      <div class="market-club-toolbar" style="margin-top:12px">
-        <div class="market-selection-actions">
-          <button class="btn ghost compact" id="selectAllMarketProspects">Select all</button>
-          <button class="btn ghost compact" id="clearMarketProspectSelection">Clear</button>
-          <button class="btn secondary compact" id="inviteSelectedMarketProspects" disabled>Invite selected</button>
-          <button class="btn ghost compact" id="excludeSelectedMarketProspects" disabled>Do not invite</button>
-          <button class="btn ghost compact" id="restoreSelectedMarketProspects" disabled>Return to review</button>
-        </div>
-        <div class="market-selection-summary"><span id="marketProspectSelectionCount" class="help">0 selected</span><span id="marketProspectShownCount" class="help"></span></div>
-      </div>
-      <div id="marketProspectActionStatus" class="market-progress">${esc(platformMarketActionMessage)}</div>
-      <div class="admin-table-wrap" style="margin-top:12px">
-        <table class="admin-table">
-          <thead><tr><th style="width:44px"><input id="marketSelectAllCheckbox" type="checkbox" aria-label="Select all shown clubs"></th><th>Club</th><th>Association</th><th>Public contact</th><th>Why selected</th><th>Source</th></tr></thead>
-          <tbody id="marketProspectTableBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <details class="admin-card form-wide" style="margin-top:16px">
-      <summary><div><div class="section-label">Discovery activity</div><h2>Refresh the background research</h2><p>Use these controls when you want to update the NSW findings. Discovery itself never sends email.</p></div><span>⌄</span></summary>
-      <div class="collapsible-admin-body">
-        <div class="btnrow" style="margin-top:16px"><button class="btn ghost compact" id="scanMarketRegion">Refresh association map</button><button class="btn ghost compact" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map and sync all</button><button class="btn ghost compact" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Sync public contacts</button></div>
-        <div id="marketDiscoveryStatus" class="help">Last association scan: ${esc(latestRegionScan?.finished_at||latestRegionScan?.started_at?new Date(latestRegionScan.finished_at||latestRegionScan.started_at).toLocaleString():'Not run yet')}</div>
-      </div>
-    </details>`;
+  page.innerHTML=`<style>
+    #marketClubInventory{max-width:none}#marketClubInventory td{overflow-wrap:anywhere}
+    #marketClubInventory input[type="checkbox"]{width:18px;height:18px;accent-color:var(--navy2);cursor:pointer}
+    #marketClubInventory tr.market-club-selected{background:#eef3ff}
+    #marketClubInventory .prospect-filter-row>*{min-width:0;max-width:100%}
+    .market-research-form{display:grid;grid-template-columns:1fr 1fr .6fr .7fr;gap:14px;margin:16px 0}
+    .market-research-form label{display:block;font-weight:700;margin-bottom:6px}
+    .market-research-form input,.market-research-form select{width:100%;box-sizing:border-box}
+    .market-research-job{padding:16px 0;border-top:1px solid var(--line,#e0e4ec)}
+    .market-budget-track{height:6px;border-radius:6px;background:#e9edf6;overflow:hidden}.market-budget-track span{display:block;height:100%;background:var(--navy2,#283177)}
+    .market-evidence{min-width:160px;max-width:370px}.market-evidence summary{cursor:pointer;font-weight:700}.market-evidence-item{margin-top:12px}.market-evidence-item small{display:block}
+    @media(max-width:750px){.market-research-form{grid-template-columns:1fr 1fr}}
+    @media(max-width:440px){.market-research-form{grid-template-columns:1fr}}
+  </style>
+  <section class="admin-card" style="margin-bottom:16px">
+    <div class="admin-card-head"><div><div class="section-label">Market Discovery</div><h2>Find clubs worth approaching</h2><p class="help">Research identifies clubs, checks public contacts and explains why each club may suit Club Batting. You choose who receives the introductory outreach email.</p></div><span class="status-pill">New South Wales</span></div>
+    <div class="market-research-form">
+      <div><label for="marketResearchMarket">Market</label><select id="marketResearchMarket"><option value="AU:NSW">Australia · New South Wales</option></select></div>
+      <div><label for="marketResearchAssociation">Association</label><select id="marketResearchAssociation"><option value="">Across New South Wales</option>${associations.map(a=>`<option value="${esc(a.id)}" ${draft.associationId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+      <div><label for="marketResearchTarget">Clubs to research</label><input id="marketResearchTarget" type="number" min="1" max="25" step="1" value="${esc(draft.targetCount)}"></div>
+      <div><label for="marketResearchBudget">Spending limit (USD)</label><input id="marketResearchBudget" type="number" min="0.01" max="50" step="0.01" placeholder="Enter a limit" value="${esc(draft.budgetUsd)}"></div>
+    </div>
+    <p class="help">Start with up to 25 clubs. The limit covers recorded research API usage and amounts held for calls; other hosting charges are separate. Research continues in the background after you leave this page.</p>
+    <div class="btnrow"><button class="btn secondary" id="startMarketResearch" ${configured&&canControl&&!platformMarketResearchStartBusy?'':'disabled'}>${platformMarketResearchStartBusy?'Starting…':'Start research'}</button><button class="btn ghost compact" id="refreshMarketResearch">Refresh progress</button><span class="status-pill">${configured?'Research is configured':'Research setup needs attention'}</span></div>
+    <div id="marketResearchActionStatus" class="help" role="status" aria-live="polite">${esc(platformMarketResearchMessage)}</div>
+    ${!canControl?'<p class="notice">Your platform role can view research. A Platform Owner, Commercial Admin or Support Admin can start and manage it.</p>':''}
+    ${researchRes.error?`<p class="notice">Research status could not be checked: ${esc(researchRes.error.message)}. Refresh to retry; saved prospects are shown below.</p>`:''}
+    <details ${configured?'':'open'} style="margin-top:12px"><summary>Research setup${configured?'':' · complete these checks before starting'}</summary><ul>${readiness.map(item=>`<li>${item.ready?'✓':'○'} <strong>${esc(item.label||item.key)}</strong>${item.message?` — ${esc(item.message)}`:''}</li>`).join('')||'<li>Deploy and configure Market Research, then refresh this page.</li>'}</ul>${research.pricing?.model?`<p class="help">Research model: ${esc(research.pricing.model)}. Budget uses configured provider rates in USD.</p>`:''}</details>
+  </section>
+  ${jobs.length?`<section class="admin-card" style="margin-bottom:16px"><div class="section-label">Latest research batch</div>${marketResearchJobHtml(jobs[0],canControl)}${jobs.length>1?`<details><summary>Previous research batches (${jobs.length-1})</summary>${jobs.slice(1).map(job=>marketResearchJobHtml(job,canControl)).join('')}</details>`:''}<p class="help">Pause and cancel stop new work. An already running provider call may finish and still count towards the limit. Refresh progress to see saved updates.</p></section>`:''}
+  <section class="admin-card form-wide" id="marketClubInventory">
+    <div class="admin-card-head"><div><div class="section-label">Your shortlist</div><h2>Choose the clubs to approach</h2><p class="help">Select all applies to the list shown. Untick any exceptions, then send outreach. Research never sends email on its own.</p></div></div>
+    <div class="btnrow" style="margin-top:12px"><span class="status-pill">${ready.length} ready to review</span><span class="status-pill">${uncertain.length} need review</span><span class="status-pill">${legacy.length} not researched</span><span class="status-pill">${invited.length} in Club Pipeline</span><span class="status-pill">${excluded.length} do not invite</span></div>
+    <div class="prospect-filter-row" style="margin-top:14px">
+      <input id="marketProspectSearch" value="${esc(platformMarketClubSearch)}" aria-label="Search prospects" placeholder="Search club, place, association or contact">
+      <select id="marketReviewFilter" aria-label="Research and review status">${[['ready','Research ready'],['research','Needs review / uncertain'],['unresearched','Not researched yet'],['pending','All undecided'],['invited','In Club Pipeline'],['do_not_invite','Do not invite']].map(([value,label])=>`<option value="${value}" ${platformMarketReviewFilter===value?'selected':''}>${label}</option>`).join('')}</select>
+      <select id="marketAssociationFilter" aria-label="Filter prospects by association"><option value="">All associations</option>${associations.map(a=>`<option value="${esc(a.id)}" ${platformMarketAssociationFilter===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+      <select id="marketResearchJobFilter" aria-label="Filter prospects by research batch"><option value="">All research batches</option>${jobs.map(job=>`<option value="${esc(job.id)}" ${platformMarketResearchJobFilter===job.id?'selected':''}>${esc(new Date(job.created_at).toLocaleString())} · ${Number(job.target_count||25)} clubs</option>`).join('')}</select>
+    </div>
+    <div class="market-club-toolbar" style="margin-top:12px"><div class="market-selection-actions"><button class="btn ghost compact" id="selectAllMarketProspects">Select all</button><button class="btn ghost compact" id="clearMarketProspectSelection">Clear</button><button class="btn secondary compact" id="inviteSelectedMarketProspects" disabled>Send outreach</button><button class="btn ghost compact" id="excludeSelectedMarketProspects" disabled>Do not invite</button><button class="btn ghost compact" id="restoreSelectedMarketProspects" disabled>Return to review</button></div><div class="market-selection-summary"><span id="marketProspectSelectionCount" class="help">0 selected</span><span id="marketProspectShownCount" class="help"></span></div></div>
+    <div id="marketProspectActionStatus" class="market-progress" role="status" aria-live="polite">${esc(platformMarketActionMessage)}</div>
+    <div class="admin-table-wrap" style="margin-top:12px"><table class="admin-table"><thead><tr><th style="width:44px"><input id="marketSelectAllCheckbox" type="checkbox" aria-label="Select all shown clubs"></th><th>Club</th><th>Association</th><th>Who to contact</th><th>Why this club?</th><th>Evidence</th></tr></thead><tbody id="marketProspectTableBody"></tbody></table></div>
+  </section>
+  <details class="admin-card form-wide" style="margin-top:16px"><summary><div><div class="section-label">Existing discovery tools</div><h2>Association mapping and contact refresh</h2><p>These earlier tools maintain the NSW directory. Their records remain Not researched until they complete the new research checks.</p></div><span>⌄</span></summary><div class="collapsible-admin-body"><div class="btnrow" style="margin-top:16px"><button class="btn ghost compact" id="scanMarketRegion">Refresh association map</button><button class="btn ghost compact" id="scanAllAssociations" ${associations.length?'':'disabled'}>Map and sync all</button><button class="btn ghost compact" id="enrichAllContacts" ${clubs.length?'':'disabled'}>Sync public contacts</button></div><div id="marketDiscoveryStatus" class="help">Last association scan: ${esc(latestRegionScan?.finished_at||latestRegionScan?.started_at?new Date(latestRegionScan.finished_at||latestRegionScan.started_at).toLocaleString():'Not run yet')}</div></div></details>`;
 
   const clubsById=new Map(clubs.map(c=>[c.id,c]));
   const renderProspectRows=()=>{
+    if(!isCurrent())return;
     const q=String(platformMarketClubSearch||'').trim().toLowerCase();
     const associationClubIds=platformMarketAssociationFilter?new Set(clubIdsByAssociation.get(platformMarketAssociationFilter)||[]):null;
-    let shown=clubs.filter(club=>{
+    const shown=clubs.filter(club=>{
       const status=reviewStatus(club);
       if(platformMarketReviewFilter==='ready'&&!isReady(club))return false;
-      if(platformMarketReviewFilter==='research'&&!(status==='pending'&&!isReady(club)))return false;
+      if(platformMarketReviewFilter==='research'&&!(status==='pending'&&!isLegacy(club)&&!isReady(club)))return false;
+      if(platformMarketReviewFilter==='unresearched'&&!(status==='pending'&&isLegacy(club)))return false;
       if(platformMarketReviewFilter==='pending'&&status!=='pending')return false;
       if(platformMarketReviewFilter==='invited'&&!['invited','in_pipeline'].includes(status))return false;
       if(platformMarketReviewFilter==='do_not_invite'&&status!=='do_not_invite')return false;
+      if(platformMarketResearchJobFilter&&club.research_job_id!==platformMarketResearchJobFilter)return false;
       if(associationClubIds&&!associationClubIds.has(club.id))return false;
-      if(q){
-        const associationsForClub=(associationNamesByClub.get(club.id)||[]).join(' ');
-        if(![club.name,club.locality,club.region_name,club.contact_name,club.contact_role,club.contact_email,club.qualification_reason,associationsForClub].some(value=>String(value||'').toLowerCase().includes(q)))return false;
-      }
-      return true;
-    });
-    shown.sort((a,b)=>{
-      const rank={strong:0,possible:1,review:2,low:3};
-      return (rank[a.outreach_fit]??4)-(rank[b.outreach_fit]??4)||String(a.name).localeCompare(String(b.name));
-    });
-
+      return !q||[club.name,club.locality,club.region_name,club.contact_name,club.contact_role,club.contact_email,club.research_summary,club.qualification_reason,(associationNamesByClub.get(club.id)||[]).join(' ')].some(value=>String(value||'').toLowerCase().includes(q));
+    }).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
     const selectable=shown.filter(club=>['pending','do_not_invite'].includes(reviewStatus(club)));
     const selectableIds=new Set(selectable.map(club=>club.id));
     for(const id of [...platformMarketSelectedClubIds])if(!selectableIds.has(id))platformMarketSelectedClubIds.delete(id);
-    const display=shown;
-    const body=document.getElementById('marketProspectTableBody');
-    body.innerHTML=display.length?display.map(club=>{
-      const status=reviewStatus(club);
+    document.getElementById('marketProspectTableBody').innerHTML=shown.length?shown.map(club=>{
+      const status=reviewStatus(club),selected=platformMarketSelectedClubIds.has(club.id);
       const associationsForClub=associationNamesByClub.get(club.id)||[];
-      const source=sourceUrl(club);
-      const selected=platformMarketSelectedClubIds.has(club.id);
-      const contactName=[club.contact_name,club.contact_role].filter(Boolean).join(' · ')||'Public club contact';
-      const reason=club.qualification_reason||`${fitLabel(club.outreach_fit)} based on public cricket records`;
-      return `<tr class="${selected?'market-club-selected':''}">
-        <td><input type="checkbox" data-market-prospect-select="${club.id}" ${selected?'checked':''} ${['invited','in_pipeline'].includes(status)?'disabled':''} aria-label="Select ${esc(club.name)}"></td>
-        <td><strong>${esc(club.name)}</strong><small>${esc([club.locality,club.region_name].filter(Boolean).join(', ')||'Location not recorded')}</small></td>
-        <td>${esc(associationsForClub.slice(0,2).join(' · ')||'Association not recorded')}${associationsForClub.length>2?`<small>+${associationsForClub.length-2} more</small>`:''}</td>
-        <td>${club.contact_email?`<strong>${esc(club.contact_email)}</strong><small>${esc(contactName)}</small>`:'<span class="status-pill">Contact needed</span>'}</td>
-        <td><span class="status-pill">${esc(fitLabel(club.outreach_fit))}</span><small>${esc(reason)}</small></td>
-        <td>${source?`<a href="${esc(source)}" target="_blank" rel="noopener">View source ↗</a><small>${esc(confidenceLabel(club.confidence))}</small>`:'<span class="help">Source needed</span>'}</td>
-      </tr>`;
-    }).join(''):'<tr><td colspan="6">No clubs match this view.</td></tr>';
+      const contactEvidence=(Array.isArray(club.research_evidence)?club.research_evidence:[]).find(item=>item.kind==='contact');
+      const person=(club.metadata?.market_research_contact?.type||club.research_contact_type||club.contact_type||contactEvidence?.contact_type)==='general'?'':String(club.contact_name||'').trim();
+      const reason=club.research_summary||club.qualification_reason||'No research recommendation yet.';
+      return `<tr class="${selected?'market-club-selected':''}"><td><input type="checkbox" data-market-prospect-select="${esc(club.id)}" ${selected?'checked':''} ${['invited','in_pipeline'].includes(status)?'disabled':''} aria-label="Select ${esc(club.name)}"></td>
+      <td><strong>${esc(club.name)}</strong><small>${esc([club.locality,club.region_name].filter(Boolean).join(', ')||'Location not recorded')}</small></td>
+      <td>${esc(associationsForClub.slice(0,2).join(' · ')||'Association not recorded')}${associationsForClub.length>2?`<small>+${associationsForClub.length-2} more</small>`:''}</td>
+      <td><strong>${esc(person||'General club contact')}</strong><small>${esc(person?(club.contact_role||'Published club contact'):'Person not identified')}</small>${club.contact_email?`<small>${esc(club.contact_email)}</small>`:'<span class="status-pill">Email needed</span>'}</td>
+      <td><span class="status-pill">${esc(researchStatusLabel(club))}</span><small>${esc(reason)}</small></td><td>${marketResearchEvidenceHtml(club)}</td></tr>`;
+    }).join(''):`<tr><td colspan="6">${platformMarketReviewFilter==='ready'?'No research-ready clubs in this view. Start a batch above or check Needs review / uncertain.':'No clubs match this view.'}</td></tr>`;
     document.getElementById('marketProspectShownCount').textContent=`${shown.length} shown`;
     const syncSelectionUi=()=>{
-      document.querySelectorAll('[data-market-prospect-select]').forEach(checkbox=>{
-        checkbox.checked=platformMarketSelectedClubIds.has(checkbox.dataset.marketProspectSelect);
-        checkbox.closest('tr')?.classList.toggle('market-club-selected',checkbox.checked);
-      });
-      const selected=[...platformMarketSelectedClubIds].map(id=>clubsById.get(id)).filter(Boolean);
-      const selectedPending=selected.filter(club=>reviewStatus(club)==='pending');
-      const selectedExcluded=selected.filter(club=>reviewStatus(club)==='do_not_invite');
-      const allInvitable=selectedPending.length===selected.length&&selected.every(isReady);
-      const count=selected.length;
-      const allBox=document.getElementById('marketSelectAllCheckbox');
-      const selectedShown=selectable.filter(club=>platformMarketSelectedClubIds.has(club.id)).length;
-      allBox.checked=selectable.length>0&&selectedShown===selectable.length;
-      allBox.indeterminate=selectedShown>0&&selectedShown<selectable.length;
-      document.getElementById('marketProspectSelectionCount').textContent=`${count} selected${count&&!allInvitable&&selectedPending.length? ' · invitations require suitable fit and a sourced contact':''}`;
+      page.querySelectorAll('[data-market-prospect-select]').forEach(checkbox=>{checkbox.checked=platformMarketSelectedClubIds.has(checkbox.dataset.marketProspectSelect);checkbox.closest('tr')?.classList.toggle('market-club-selected',checkbox.checked);});
+      const selected=[...platformMarketSelectedClubIds].map(id=>clubsById.get(id)).filter(Boolean),count=selected.length;
+      const selectedPending=selected.filter(club=>reviewStatus(club)==='pending'),selectedExcluded=selected.filter(club=>reviewStatus(club)==='do_not_invite');
+      const allInvitable=selectedPending.length===count&&selected.every(isReady);
+      const selectedShown=selectable.filter(club=>platformMarketSelectedClubIds.has(club.id)).length,allBox=document.getElementById('marketSelectAllCheckbox');
+      allBox.checked=selectable.length>0&&selectedShown===selectable.length;allBox.indeterminate=selectedShown>0&&selectedShown<selectable.length;allBox.disabled=selectable.length===0;
+      document.getElementById('marketProspectSelectionCount').textContent=`${count} selected${count&&!allInvitable&&selectedPending.length?' · outreach requires current, complete research and a sourced contact':''}`;
       document.getElementById('selectAllMarketProspects').disabled=selectable.length===0;
       document.getElementById('clearMarketProspectSelection').disabled=count===0;
-      document.getElementById('inviteSelectedMarketProspects').disabled=count===0||!allInvitable;
+      document.getElementById('inviteSelectedMarketProspects').disabled=count===0||!allInvitable||!canControl;
       document.getElementById('inviteSelectedMarketProspects').style.display=platformMarketReviewFilter==='do_not_invite'?'none':'';
-      document.getElementById('excludeSelectedMarketProspects').disabled=selectedPending.length!==count||count===0;
-      document.getElementById('excludeSelectedMarketProspects').style.display=platformMarketReviewFilter==='do_not_invite'||platformMarketReviewFilter==='invited'?'none':'';
-      document.getElementById('restoreSelectedMarketProspects').disabled=selectedExcluded.length!==count||count===0;
+      document.getElementById('excludeSelectedMarketProspects').disabled=selectedPending.length!==count||count===0||!canControl;
+      document.getElementById('excludeSelectedMarketProspects').style.display=['do_not_invite','invited'].includes(platformMarketReviewFilter)?'none':'';
+      document.getElementById('restoreSelectedMarketProspects').disabled=selectedExcluded.length!==count||count===0||!canControl;
       document.getElementById('restoreSelectedMarketProspects').style.display=platformMarketReviewFilter==='do_not_invite'?'':'none';
     };
-
-    document.querySelectorAll('[data-market-prospect-select]').forEach(checkbox=>checkbox.onchange=()=>{
-      if(checkbox.checked)platformMarketSelectedClubIds.add(checkbox.dataset.marketProspectSelect);
-      else platformMarketSelectedClubIds.delete(checkbox.dataset.marketProspectSelect);
-      syncSelectionUi();
-    });
+    page.querySelectorAll('[data-market-prospect-select]').forEach(checkbox=>checkbox.onchange=()=>{if(checkbox.checked)platformMarketSelectedClubIds.add(checkbox.dataset.marketProspectSelect);else platformMarketSelectedClubIds.delete(checkbox.dataset.marketProspectSelect);syncSelectionUi();});
     const selectAll=()=>{selectable.forEach(club=>platformMarketSelectedClubIds.add(club.id));syncSelectionUi();};
     document.getElementById('selectAllMarketProspects').onclick=selectAll;
-    document.getElementById('marketSelectAllCheckbox').onchange=event=>{
-      if(event.target.checked)selectAll();
-      else{selectable.forEach(club=>platformMarketSelectedClubIds.delete(club.id));syncSelectionUi();}
-    };
+    document.getElementById('marketSelectAllCheckbox').onchange=event=>{if(event.target.checked)selectAll();else{selectable.forEach(club=>platformMarketSelectedClubIds.delete(club.id));syncSelectionUi();}};
     document.getElementById('clearMarketProspectSelection').onclick=()=>{platformMarketSelectedClubIds.clear();syncSelectionUi();};
     syncSelectionUi();
   };
-
-  document.getElementById('marketProspectSearch').oninput=event=>{
-    platformMarketClubSearch=String(event.target.value||'');
-    platformMarketSelectedClubIds.clear();
-    renderProspectRows();
+  document.getElementById('marketProspectSearch').oninput=event=>{platformMarketClubSearch=String(event.target.value||'');platformMarketSelectedClubIds.clear();renderProspectRows();};
+  document.getElementById('marketReviewFilter').onchange=event=>{platformMarketReviewFilter=event.target.value;platformMarketSelectedClubIds.clear();renderProspectRows();};
+  document.getElementById('marketAssociationFilter').onchange=event=>{platformMarketAssociationFilter=event.target.value;platformMarketSelectedClubIds.clear();renderProspectRows();};
+  document.getElementById('marketResearchJobFilter').onchange=event=>{platformMarketResearchJobFilter=event.target.value;platformMarketSelectedClubIds.clear();renderProspectRows();};
+  document.getElementById('marketResearchAssociation').onchange=event=>{draft.associationId=event.target.value;};
+  document.getElementById('marketResearchTarget').oninput=event=>{draft.targetCount=event.target.value;};
+  document.getElementById('marketResearchBudget').oninput=event=>{draft.budgetUsd=event.target.value;};
+  document.getElementById('refreshMarketResearch').onclick=()=>{savePlatformMarketScroll();return renderPlatformMarketDiscovery();};
+  document.getElementById('startMarketResearch').onclick=async()=>{
+    if(platformMarketResearchStartBusy||!configured||!canControl||!isCurrent())return;
+    const status=document.getElementById('marketResearchActionStatus'),button=document.getElementById('startMarketResearch');
+    const target=Number(document.getElementById('marketResearchTarget').value),budget=Number(document.getElementById('marketResearchBudget').value);
+    if(!Number.isInteger(target)||target<1||target>25){status.textContent='Choose between 1 and 25 clubs for this research batch.';return;}
+    if(!Number.isFinite(budget)||budget<0.01||budget>50){status.textContent='Enter a spending limit between 0.01 and 50 USD before starting.';return;}
+    const body={action:'start',country_code:countryCode,region_code:regionCode,association_id:document.getElementById('marketResearchAssociation').value||null,target_count:target,budget_usd:budget};
+    const signature=JSON.stringify(body);
+    const requestStorageKey=`bdp-market-research-start-${session?.user?.id||'unknown'}`;
+    if(!platformMarketResearchStartRequest){try{
+      const saved=JSON.parse(sessionStorage.getItem(requestStorageKey)||'null');
+      if(saved?.signature&&/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(saved.key||''))platformMarketResearchStartRequest=saved;
+    }catch{}}
+    if(!platformMarketResearchStartRequest||platformMarketResearchStartRequest.signature!==signature){
+      const id=globalThis.crypto?.randomUUID?.();
+      if(!id){status.textContent='A secure request ID could not be created. Reload this page in a secure browser connection.';return;}
+      platformMarketResearchStartRequest={signature,key:id};
+    }
+    try{sessionStorage.setItem(requestStorageKey,JSON.stringify(platformMarketResearchStartRequest));}catch{}
+    body.idempotency_key=platformMarketResearchStartRequest.key;
+    platformMarketResearchStartBusy=true;button.disabled=true;button.textContent='Starting…';status.textContent='Saving this research batch…';
+    try{
+      const result=await invokeMarketResearch(body);
+      if(!result.job?.id)throw new Error('The server did not confirm a saved research batch.');
+      try{sessionStorage.removeItem(requestStorageKey);}catch{}
+      platformMarketResearchStartRequest=null;platformMarketResearchStartBusy=false;draft.budgetUsd='';platformMarketResearchJobFilter=result.job.id;
+      platformMarketResearchMessage='Research batch saved. Work continues in the background. Refresh progress to see the findings.';
+      if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});
+    }catch(error){platformMarketResearchMessage=`Start was not confirmed: ${error.message} Retry with the same details to reuse this request.`;if(isCurrent())status.textContent=platformMarketResearchMessage;}
+    finally{platformMarketResearchStartBusy=false;if(isCurrent()){button.disabled=false;button.textContent='Start research';}}
   };
-  document.getElementById('marketReviewFilter').onchange=event=>{
-    platformMarketReviewFilter=event.target.value;
-    platformMarketSelectedClubIds.clear();
-    renderProspectRows();
-  };
-  document.getElementById('marketAssociationFilter').onchange=event=>{
-    platformMarketAssociationFilter=event.target.value;
-    platformMarketSelectedClubIds.clear();
-    renderProspectRows();
-  };
-
+  page.querySelectorAll('[data-market-job-review]').forEach(button=>button.onclick=()=>{platformMarketResearchJobFilter=button.dataset.marketJobReview;platformMarketReviewFilter='ready';platformMarketSelectedClubIds.clear();document.getElementById('marketResearchJobFilter').value=platformMarketResearchJobFilter;document.getElementById('marketReviewFilter').value='ready';renderProspectRows();document.getElementById('marketClubInventory').scrollIntoView({behavior:'smooth',block:'start'});});
+  let controlBusy=false;
+  page.querySelectorAll('[data-market-job-control]').forEach(button=>button.onclick=async()=>{
+    if(controlBusy||!canControl||!isCurrent())return;
+    const job=jobs.find(item=>item.id===button.dataset.jobId),command=button.dataset.marketJobControl;
+    if(!job)return;
+    const body={action:'control',job_id:job.id,command};
+    const status=document.getElementById('marketResearchActionStatus');
+    const budgetInput=page.querySelector(`[data-market-job-budget="${job.id}"]`);
+    if(command==='resume'&&budgetInput?.value){const budget=Number(budgetInput.value);if(!Number.isFinite(budget)||budget<Number(job.budget_usd)||budget>50){status.textContent='The new total limit must be at least the existing limit and no more than 50 USD.';return;}body.budget_usd=budget;}
+    controlBusy=true;button.disabled=true;
+    try{await invokeMarketResearch(body);platformMarketResearchMessage=({pause:'Research paused. Existing findings remain available.',resume:'Research resumed.',cancel:'Research cancelled. Existing findings remain available.'})[command];if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});}
+    catch(error){if(isCurrent())status.textContent=error.message;}
+    finally{controlBusy=false;if(isCurrent())button.disabled=false;}
+  });
   let reviewBusy=false;
   const runReviewAction=async(rpcName)=>{
     if(reviewBusy)return null;
@@ -11536,39 +11618,39 @@ async function renderPlatformMarketDiscovery(options={}){
   };
 
   document.getElementById('inviteSelectedMarketProspects').onclick=async()=>{
-    if(reviewBusy)return;
+    if(reviewBusy||!canControl||!isCurrent())return;
     const ids=[...platformMarketSelectedClubIds];
-    if(!ids.length)return;
-    if(!confirm(`Invite ${ids.length} selected club${ids.length===1?'':'s'}? This creates the Club Pipeline records and queues their introductory emails.`))return;
+    if(!ids.length||!ids.every(id=>isReady(clubsById.get(id))))return;
+    if(!confirm(`Send outreach to ${ids.length} selected club${ids.length===1?'':'s'}? This queues their introductory emails and adds them to Club Pipeline.`))return;
     const button=document.getElementById('inviteSelectedMarketProspects');
     const status=document.getElementById('marketProspectActionStatus');
-    button.disabled=true;button.textContent='Inviting…';status.textContent='Creating prospects and queuing introductory emails…';
+    button.disabled=true;button.textContent='Queuing outreach…';status.textContent='Creating prospects and queuing introductory emails…';
     const data=await runReviewAction('platform_invite_market_clubs');
     if(data){
       platformMarketSelectedClubIds=new Set(data.errors.map(item=>item.market_club_id).filter(Boolean));
       const invitedCount=data.invited,queuedCount=data.queued,existingCount=data.already_contacted,blockedCount=data.blocked;
-      platformMarketActionMessage=`${invitedCount} club${invitedCount===1?'':'s'} approved · ${queuedCount} introductory email${queuedCount===1?'':'s'} queued${existingCount?` · ${existingCount} already had an introduction`:''}${data.in_pipeline?` · ${data.in_pipeline} already in the pipeline`:''}${data.needs_contact?` · ${data.needs_contact} need a sourced contact`:''}${blockedCount?` · ${blockedCount} could not be invited`:''}.`;
+      platformMarketActionMessage=`${invitedCount} club${invitedCount===1?'':'s'} approved · ${queuedCount} introductory email${queuedCount===1?'':'s'} queued${existingCount?` · ${existingCount} already had an introduction`:''}${data.in_pipeline?` · ${data.in_pipeline} already in the pipeline`:''}${data.needs_contact?` · ${data.needs_contact} need a sourced contact`:''}${blockedCount?` · ${blockedCount} could not receive outreach`:''}.`;
       if(data.errors.length)platformMarketActionMessage+=' '+data.errors.map(item=>`${item.club_name}: ${item.error}`).join(' · ');
     }
-    await renderPlatformMarketDiscovery({restoreScroll:false});
+    if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});
   };
   document.getElementById('excludeSelectedMarketProspects').onclick=async()=>{
-    if(reviewBusy)return;
+    if(reviewBusy||!canControl||!isCurrent())return;
     const ids=[...platformMarketSelectedClubIds];
     if(!ids.length)return;
     if(!confirm(`Mark ${ids.length} selected club${ids.length===1?'':'s'} as Do not invite? The decision will be retained so the clubs do not return to this review list.`))return;
     const status=document.getElementById('marketProspectActionStatus');status.textContent='Saving the review decision…';
     const data=await runReviewAction('platform_mark_market_clubs_do_not_invite');
     if(data){platformMarketSelectedClubIds.clear();const changed=data.updated;platformMarketActionMessage=`${changed} club${changed===1?'':'s'} marked Do not invite.`;}
-    await renderPlatformMarketDiscovery({restoreScroll:false});
+    if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});
   };
   document.getElementById('restoreSelectedMarketProspects').onclick=async()=>{
-    if(reviewBusy)return;
+    if(reviewBusy||!canControl||!isCurrent())return;
     const ids=[...platformMarketSelectedClubIds];
     if(!ids.length)return;
     const data=await runReviewAction('platform_restore_market_clubs_to_review');
     if(data){platformMarketSelectedClubIds.clear();const restored=data.updated;platformMarketActionMessage=`Returned ${restored} club${restored===1?'':'s'} to review.`;}
-    await renderPlatformMarketDiscovery({restoreScroll:false});
+    if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});
   };
 
   const invokeDiscovery=async body=>{
@@ -11587,36 +11669,41 @@ async function renderPlatformMarketDiscovery(options={}){
     }
     return contacts;
   };
+  if(!canControl)for(const id of ['scanMarketRegion','scanAllAssociations','enrichAllContacts'])document.getElementById(id).disabled=true;
   document.getElementById('scanMarketRegion').onclick=async()=>{
+    if(!canControl||!isCurrent())return;
     const button=document.getElementById('scanMarketRegion'),status=document.getElementById('marketDiscoveryStatus');
     button.disabled=true;button.textContent='Refreshing…';status.textContent='Refreshing the NSW association map…';
-    try{const data=await invokeDiscovery({action:'scan_region',country_code:countryCode,region_code:regionCode});platformMarketActionMessage=`Association map refreshed · ${Number(data.associations_discovered||0)} records found.`;await renderPlatformMarketDiscovery({restoreScroll:false});}
+    try{const data=await invokeDiscovery({action:'scan_region',country_code:countryCode,region_code:regionCode});platformMarketActionMessage=`Association map refreshed · ${Number(data.associations_discovered||0)} records found.`;if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});}
     catch(error){button.disabled=false;button.textContent='Refresh association map';status.textContent=error.message;}
   };
   document.getElementById('scanAllAssociations').onclick=async()=>{
+    if(!canControl||!isCurrent())return;
     if(!confirm(`Map clubs and sync public contacts for all ${associations.length} NSW association records? This can take several minutes.`))return;
     const button=document.getElementById('scanAllAssociations'),status=document.getElementById('marketDiscoveryStatus');button.disabled=true;
     let completed=0,failed=0,contacts=0;
-    for(let i=0;i<associations.length;i++){
+    for(let i=0;i<associations.length&&isCurrent();i++){
       const association=associations[i];status.textContent=`${i+1} of ${associations.length}: ${association.name}`;
       try{await scanAssociation(association.id);contacts+=await enrichAssociation(association.id);completed++;}catch{failed++;}
     }
     platformMarketActionMessage=`Discovery refresh complete · ${completed} associations · ${contacts} new contacts${failed?` · ${failed} failed`:''}.`;
-    await renderPlatformMarketDiscovery({restoreScroll:false});
+    if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});
   };
   document.getElementById('enrichAllContacts').onclick=async()=>{
+    if(!canControl||!isCurrent())return;
     const withClubs=associations.filter(a=>(clubIdsByAssociation.get(a.id)||[]).length);
     if(!confirm(`Sync public contacts across ${withClubs.length} mapped associations?`))return;
     const button=document.getElementById('enrichAllContacts'),status=document.getElementById('marketDiscoveryStatus');button.disabled=true;
     let contacts=0,failed=0;
-    for(let i=0;i<withClubs.length;i++){
+    for(let i=0;i<withClubs.length&&isCurrent();i++){
       const association=withClubs[i];status.textContent=`${i+1} of ${withClubs.length}: ${association.name}`;
       try{contacts+=await enrichAssociation(association.id);}catch{failed++;}
     }
     platformMarketActionMessage=`Contact sync complete · ${contacts} new contacts${failed?` · ${failed} associations need another attempt`:''}.`;
-    await renderPlatformMarketDiscovery({restoreScroll:false});
+    if(isCurrent())await renderPlatformMarketDiscovery({restoreScroll:false});
   };
 
+  if(!isCurrent())return;
   renderProspectRows();
   page.querySelectorAll('a[target="_blank"]').forEach(link=>link.addEventListener('click',savePlatformMarketScroll));
   platformMarketScrollSuppressed=false;
