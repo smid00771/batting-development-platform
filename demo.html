@@ -3837,7 +3837,7 @@ const QUESTION_LIBRARY={
   },
   pace_method:{
     label:'Which methods against pace are genuinely yours?',
-    options:['Score from width','Clip the pads','Drive only when full enough','Pull the short ball','Leave outside off','Defend good length','Use pace behind square','Hit straight','Rotate into gaps','Get inside the line']
+    options:['Score from width','Clip off the pads','Drive only when full enough','Pull the short ball','Leave outside off','Defend good length','Use pace behind square','Hit straight','Rotate into gaps','Get inside the line']
   },
   risk_management:{
     label:'When is extra risk justified for you?',
@@ -9280,7 +9280,7 @@ function questionSpecFor(format,key){
     },
     long_form:{
       label:'How can you deliberately get off strike without expanding your risk?',
-      options:['Clip the pads for one','Drop the ball into a safe gap','Push straight for one','Use soft hands into point','Use feet safely to spin','Sweep for a controlled single','Wait for the field to offer a low-risk single','Run hard on the misfield','Change strike after pressure has built','Keep my scoring envelope narrow']
+      options:['Clip off the pads for one','Drop the ball into a safe gap','Push straight for one','Use soft hands into point','Use feet safely to spin','Sweep for a controlled single','Wait for the field to offer a low-risk single','Run hard on the misfield','Change strike after pressure has built','Keep my scoring envelope narrow']
     }
   };
 
@@ -16146,7 +16146,7 @@ function demoSeedClub(){
   const answersFor=index=>{
     const raw={core:{},formats:{}};
     const coreChoices=index?{core_strengths:['Sweep','Use feet to spin','Clip / flick'],core_danger:['Predetermining the shot'],core_reset:['Re-check the field','Talk to my partner']}:{core_strengths:['Straight drive','Pull','Clip / flick'],core_danger:['Forcing after dot balls'],core_reset:['Slow breath + cue word','Re-state my scoring plan']};
-    const coreNotes=index?{core_strengths:'Use my feet to spin when the length allows it; keep a single available.',core_danger:'I sometimes decide on the sweep before reading the ball.',core_reset:'Look at the field, breathe, then decide from the next delivery.'}:{core_strengths:'Drive the half-volley straight. Pull a short ball I can control. Clip the pads or push to long-on for one.',core_danger:'Three dots can tempt me to force a shot at a ball outside my scoring area.',core_reset:'Breathe, relax my grip and say: see the ball, trust my shot.'};
+    const coreNotes=index?{core_strengths:'Use my feet to spin when the length allows it; keep a single available.',core_danger:'I sometimes decide on the sweep before reading the ball.',core_reset:'Look at the field, breathe, then decide from the next delivery.'}:{core_strengths:'Drive the half-volley straight. Pull a short ball I can control. Clip off the pads or push to long-on for one.',core_danger:'Three dots can tempt me to force a shot at a ball outside my scoring area.',core_reset:'Breathe, relax my grip and say: see the ball, trust my shot.'};
     for(const section of ['core',...FORMATS.map(([key])=>key)]){
       const target=section==='core'?raw.core:(raw.formats[section]={});
       for(const q of playerPlanQuestionsFor(section)){
