@@ -1420,7 +1420,7 @@ function clubSetupProgress(state={club,workshop,howWeBatDraft,playerPlanStructur
     {key:'howwebat',title:'How We Bat',shortTitle:'How We Bat',tab:'howwebat',complete:howWeBatReady,owner:'Philosophy Lead',action:'Review How We Bat',description:'Review the club’s batting approach, check each format and confirm it for the season.'},
     {key:'structure',title:'Player Plan Structure',shortTitle:'Plan questions',tab:'plan',complete:structureReady,owner:'Philosophy Lead',action:'Review Player Plan questions',description:'Review the questions generated from How We Bat and confirm what players will complete.'},
     {key:'details',title:'Club look',shortTitle:'Club look',tab:'dashboard',complete:detailsReady,owner:'Club Admin',action:'Review club look',description:'Your batting work is ready. Add your club logo and colours, or keep the current look, before the final publication step. You can change the look later.'},
-    {key:'publish',title:'Publish & notify players',shortTitle:'Publish',tab:'plan',complete:published,owner:'Philosophy Lead',action:'Review & publish',description:'Make How We Bat and Player Plans available together. Registered players receive an email explaining how to get started.'}
+    {key:'publish',title:'Publish & notify players',shortTitle:'Publish',tab:'plan',complete:published,owner:'Club Admin',action:'Review & publish',description:'Make How We Bat and Player Plans available together. Registered players receive an email explaining how to get started.'}
   ];
   const firstIncomplete=steps.findIndex(step=>!step.complete);
   return {detailsReady,workshopReady,howWeBatReady,structureReady,published,systemLive,currentIndex:firstIncomplete<0?steps.length:firstIncomplete,steps};
