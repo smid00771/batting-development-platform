@@ -2074,6 +2074,8 @@ function guideTopicNumber(key){
 function guideHelpStyles(){
   // Keep the reading order vertical even where the existing stylesheet uses two columns.
   return `<style>
+    .guide-layout.guide-is-overview{grid-template-columns:minmax(0,1fr)}
+    .guide-layout.guide-is-overview .guide-chat-card{grid-column:1}
     .guide-layout .guide-topic-list{display:flex;flex-direction:column;min-width:0;gap:8px}
     .guide-layout .guide-topic-list button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;width:100%;min-height:48px;font:inherit}
     .guide-layout .guide-topic-list button.guide-topic-overview{grid-template-columns:minmax(0,1fr)}
@@ -2307,6 +2309,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   if(!all.length){page.innerHTML='<section class="card"><h2>Club Batting Guide</h2><p class="help">No Guide topics are available for this role yet.</p></section>';return;}
   if(!all.some(c=>c.capability_key===guideSelectedCapabilityKey))guideSelectedCapabilityKey='whole_process';
   const selected=all.find(c=>c.capability_key===guideSelectedCapabilityKey)||all[0];
+  const isOverview=selected.capability_key==='whole_process';
   const selectedFocus=selected.capability_key==='plan_dates'?'plan_dates':selected.capability_key==='coach_conversations'&&selected.target_tab==='players'?'coach_conversations':'';
   const tutorial=Array.isArray(selected.tutorial)?selected.tutorial:[];
   const progressMap=new Map((progress||[]).map(x=>[x.capability_key,x]));
@@ -2320,18 +2323,18 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   </section>
   ${trial?`<section class="guide-trial-strip"><strong>${esc(clubTrialStatusLabel(trial,daysLeft))}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · Nothing is automatically charged.</span></section>`:''}
   <div id="guideInterventionSlot"></div>
-  <div class="guide-layout">
+  <div class="guide-layout${isOverview?' guide-is-overview':''}">
     <nav class="guide-topic-list" aria-label="Help topics in process order">
-      ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
+      ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${c.capability_key!=='whole_process'&&progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
     </nav>
-    <section class="card guide-tutorial-card">
+    ${isOverview?'':`<section class="card guide-tutorial-card">
       <div class="section-label">${guideTopicNumber(selected.capability_key)===null?'':`Guide ${guideTopicNumber(selected.capability_key)} · `}${esc(selected.title)}</div>
       <h2>${esc(selected.purpose)}</h2>
       <p class="help guide-topic-explanation">${esc(selected.short_explanation)}</p>
       <div class="guide-steps">${tutorial.map((step,i)=>{const unavailable=step.target_tab?guideTargetUnavailableReason(step.target_tab,step.focus||''):'';return `<article><b>${i+1}</b><div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p>${step.target_tab?(unavailable?`<small class="help">${esc(unavailable)}</small>`:`<button class="guide-inline-link" data-guide-target="${esc(step.target_tab)}" data-guide-focus="${esc(step.focus||'')}">${esc(guideTargetLabel(step.target_tab))} →</button>`):''}</div></article>`;}).join('')}</div>
-      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}</div>
+      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}<button type="button" class="btn ghost" data-guide-topic="whole_process">Back to overview</button></div>
       ${selected.target_tab&&selected.target_tab!=='guide'&&guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<p class="help">${esc(guideTargetUnavailableReason(selected.target_tab,selectedFocus))}</p>`:''}
-    </section>
+    </section>`}
     <section class="card guide-chat-card">
       <div class="section-label">Ask the Club Batting Guide</div><h2>How does this work at our club?</h2>
       <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
@@ -2342,14 +2345,14 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   </div>`;
 
   await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
-  document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;renderClubBattingGuide({revealTutorial:true});});
+  document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;return renderClubBattingGuide({revealTutorial:true});});
   document.querySelectorAll('[data-guide-target]').forEach(b=>b.onclick=()=>guideGoToTarget(b.dataset.guideTarget,b.dataset.guideFocus||''));
   document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,selectedFocus));
-  document.getElementById('guideMarkComplete').onclick=async()=>{await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'completed'});renderClubBattingGuide();};
+  document.getElementById('guideMarkComplete')?.addEventListener('click',async()=>{await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'completed'});return renderClubBattingGuide();});
 
   if(revealTutorial){
     requestAnimationFrame(()=>{
-      const card=document.querySelector('.guide-tutorial-card');
+      const card=document.querySelector(isOverview?'.guide-topic-list':'.guide-tutorial-card');
       if(!card)return;
       const rect=card.getBoundingClientRect();
       const nav=document.querySelector('.nav');
