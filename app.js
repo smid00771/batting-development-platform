@@ -1,9 +1,10 @@
-// Club Batting v0.8.57.3 — website access diagnostics and contact research
+// Club Batting v0.8.58.1 — Newcastle City player journey; video parked
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
+const APP_UI_VERSION='0.8.58.1';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1636,6 +1637,7 @@ function accountMenuStyles(){
     .account-menu-action{width:100%;border:0;background:transparent;color:#101a4f;text-align:left;padding:10px 9px;border-radius:9px;font:inherit;font-weight:700;cursor:pointer}
     .account-menu-action:hover{background:#f3f5fa}
     .account-menu-action.danger{color:#9f1d24}
+    .account-menu-version{display:block;padding:8px 9px 2px;border-top:1px solid #edf0f6;font-size:11px;color:#667085}
     @media(max-width:700px){.account-menu-popover{min-width:220px;max-width:min(280px,88vw)}}
   </style>`;
 }
@@ -1650,6 +1652,7 @@ function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother',showPl
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
+      <small class="account-menu-version">Club Batting v${APP_UI_VERSION}</small>
     </div>
   </details>${showPlatform&&platformRole?`<button class="platform-admin-link" id="${platformId}" type="button">Platform Admin</button>`:''}</div>`;
 }
@@ -8080,7 +8083,6 @@ async function renderHowWeTrain(){
         <div class="train-accordion-state">${reflectionNeeded.length?`<b class="attention">${reflectionNeeded.length} REFLECTION NEEDED${reflectionNeeded.length===1?'':'S'}</b>`:''}<em>Open ↓</em></div>
       </summary>
       <div class="train-simple-body">
-        ${feedbackError?`<div class="notice">Feedback could not load: ${esc(feedbackError)}</div>`:''}
         <div class="feedback-player-actions"><button class="btn secondary" id="newMyReflection">Reflect on an innings</button><span>Short reflection only — not homework.</span></div>
         ${howWeTrainReflectionEditId!==null?renderMyReflectionForm(editMatch):''}
         ${reflectionNeeded.length?`<div class="reflection-needed-list"><div class="section-label">YOUR REFLECTION IS NEEDED</div>${reflectionNeeded.map(m=>renderDevelopmentMatchCard(m,{playerMode:true})).join('')}</div>`:''}
@@ -8110,6 +8112,7 @@ async function renderHowWeTrain(){
     <p class="help">Back the work you have put in. When a well-chosen shot does not come off, recognise the commitment and use what you learn to guide your next practice. The aim is to help you score runs, build confidence and enjoy your batting.</p>
   </section>
 
+  ${feedbackError?'<section class="card notice" role="status"><strong>Feedback could not be loaded.</strong><p>Your saved Player Plan is still available. Try again to load your reflections and training observations.</p><button class="btn ghost" id="retryTrainingFeedback">Try again</button></section>':''}
   ${myPlayer?renderCoachingActions(feedback,{playerMode:true}):''}
   ${playerTop}
   ${renderClubTrainingPrinciples()}
@@ -8118,6 +8121,7 @@ async function renderHowWeTrain(){
 
   captureFeedbackEntryBaseline();
   bindCoachingActionControls(feedback,()=>renderHowWeTrain());
+  document.getElementById('retryTrainingFeedback')?.addEventListener('click',async()=>{if(confirmLeaveFeedbackEntry())await renderHowWeTrain();});
   if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;if(b.dataset.planSection)builderSection=b.dataset.planSection;currentTab=b.dataset.go;renderTab();});
 
@@ -9911,6 +9915,8 @@ async function savePlayerPlanProgressSilently(){
   const isCurrentPlayer=()=>myPlayer?.id===playerId&&club?.id===clubId;
   const status=()=>isCurrentPlayer()?document.getElementById('builderStatus'):null;
   if(status())status().textContent='Saving automatically…';
+  const retryButton=()=>isCurrentPlayer()?document.getElementById('retryPlayerPlanSave'):null;
+  if(retryButton())retryButton().hidden=true;
 
   // Serialize writes, not just responses: the database must finish with the
   // latest answers even if the connection is slow while the player keeps typing.
@@ -9938,6 +9944,7 @@ async function savePlayerPlanProgressSilently(){
       if(isCurrentPlayer()&&revision===playerPlanSaveRevision){
         if(!localRaw)localRaw=structuredClone(raw);
         if(status())status().textContent=`Save problem: ${error?.message||'Please try again.'}`;
+        if(retryButton())retryButton().hidden=false;
       }
       return false;
     }
@@ -9956,7 +9963,41 @@ function queuePlayerPlanAutosave(){
   },700);
 }
 
+function playerPlanNextStep(raw,rollout){
+  const required=requiredPlayerPlanSections(rollout);
+  const next=required.find(key=>!sectionProgress(key,raw).complete);
+  if(next)return {section:next,kind:'plan',label:next==='core'?'Continue Core':`Continue ${formatLabel(next)}`};
+  const format=publishedEnabledFormats().find(([key])=>sectionProgress('core',raw).complete&&sectionProgress(key,raw).complete)?.[0];
+  if(format)return {section:format,kind:'training',label:'Take my plan to training'};
+  const first=publishedEnabledFormats()[0];
+  return first?{section:first[0],kind:'plan',label:`Build ${first[1]}`}:{section:'core',kind:'plan',label:'Review my plan'};
+}
+function playerPlanJourneyStyles(){
+  return `<style id="playerPlanJourneyStyles">
+    .plan-journey-head{display:flex;gap:20px;justify-content:space-between;align-items:flex-start}
+    .plan-journey-head>div{min-width:0}.plan-journey-head h2{margin:5px 0 10px}
+    .plan-journey-head p{max-width:680px;margin:0 0 18px;line-height:1.6}
+    .plan-journey-links{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .plan-journey-links .workspace-text-link{font-size:14px;min-height:44px}
+    .plan-progress-disclosure{margin-top:20px;border-top:1px solid #e1e6ee;padding-top:15px}
+    .plan-progress-disclosure>summary,.plan-reference-disclosure>summary,.plan-preview-disclosure>summary{cursor:pointer;list-style:none;font-weight:700;display:flex;align-items:center;gap:12px;justify-content:space-between;min-height:44px}
+    .plan-progress-disclosure>summary::-webkit-details-marker,.plan-reference-disclosure>summary::-webkit-details-marker,.plan-preview-disclosure>summary::-webkit-details-marker{display:none}
+    .plan-progress-disclosure>summary:after,.plan-reference-disclosure>summary:after,.plan-preview-disclosure>summary:after{content:'+';font-size:22px;font-weight:400}
+    .plan-progress-disclosure[open]>summary:after,.plan-reference-disclosure[open]>summary:after,.plan-preview-disclosure[open]>summary:after{content:'−'}
+    .plan-progress-disclosure .plan-format-cards,.plan-reference-disclosure .hwb-public-banner-grid{margin-top:16px}
+    .player-plan-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+    .player-plan-grid>*,.player-plan-grid .builder-head>div{min-width:0}
+    .player-plan-grid .question-card{overflow-wrap:anywhere}
+    .player-plan-grid [hidden]{display:none!important}
+    .plan-journey-links button:focus-visible,.plan-progress-disclosure summary:focus-visible,.plan-reference-disclosure summary:focus-visible,.plan-preview-disclosure summary:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
+    @media(max-width:720px){.plan-journey-head{display:block}.plan-journey-head>.workflow-status{display:inline-block;margin-top:12px}.plan-journey-links .btn{width:100%;min-height:44px}.plan-rollout-player .plan-format-cards{grid-template-columns:1fr!important}.plan-progress-disclosure>summary{flex-wrap:wrap}.player-plan-grid .builder-head{flex-wrap:wrap}}
+  </style>`;
+}
+
+let playerPlanRenderSequence=0;
 async function renderMyPlan(){
+  const renderSequence=++playerPlanRenderSequence,clubId=club?.id,playerId=myPlayer?.id,tabAtStart=currentTab;
+  const isCurrent=()=>renderSequence===playerPlanRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab===tabAtStart;
   if(!philosophyVersions.length){
     renderClubPublicationGate('My Player Plan','Your Player Plan will open when your club publishes How We Bat and the Player Plan questions.');
     return;
@@ -9973,7 +10014,10 @@ async function renderMyPlan(){
   const formats=publishedEnabledFormats();
   if(builderSection!=='core'&&!formats.some(([k])=>k===builderSection))builderSection='core';
 
-  const {data:rolloutData,error:rolloutErr}=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:club.id});
+  let rolloutData=null,rolloutErr=null;
+  try{const result=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:clubId});rolloutData=result.data;rolloutErr=result.error;}
+  catch(error){rolloutErr=error;}
+  if(!isCurrent())return;
   const rollout=rolloutErr?{groups:[],requirements:[]}:(rolloutData||{groups:[],requirements:[]});
   const requirementsAvailable=!rolloutErr;
   const requirementMap=new Map((rollout.requirements||[]).map(r=>[r.format_key,r]));
@@ -10002,20 +10046,21 @@ async function renderMyPlan(){
         const refFormat=liveHowWeBat?.formats?.[builderSection];
         if(!refFormat?.banners?.length)return '';
         const refLabel=FORMATS.find(([k])=>k===builderSection)?.[1]||builderSection;
-        return `<section class="card player-plan-key-messages">
+        return `<details class="card player-plan-key-messages plan-reference-disclosure">
+          <summary>${esc(refLabel)} · Club key messages</summary>
           <div class="section-label">${esc(refLabel)} · How We Bat</div>
           <h2>Your club’s key messages for this format</h2>
           <div class="help">These are reference points, not extra questions. Open any Key Message whenever you want to reconnect your Player Plan to the club philosophy.</div>
           <div class="hwb-public-banner-grid plan-key-message-grid">
             ${refFormat.banners.map((b,i)=>renderKeyMessageReferenceCard(b,i,'plan',builderSection)).join('')}
           </div>
-        </section>`;
+        </details>`;
       })();
 
   const coreProgress=sectionProgress('core',rawForProgress);
-  const formatCard=(key,label)=>{
+  const formatCard=(key,label,raw=rawForProgress)=>{
     const req=requirementMap.get(key)||{required:false,due_date:null,sources:[]};
-    const progress=sectionProgress(key,rawForProgress);
+    const progress=sectionProgress(key,raw);
     const due=!requirementsAvailable?'Due date unavailable':req.required
       ?(req.due_date?`Required by ${niceDate(req.due_date)}`:'Required now')
       :'Available anytime';
@@ -10025,7 +10070,7 @@ async function renderMyPlan(){
       :progress.answeredAny
         ?`${progress.answeredAny} question${progress.answeredAny===1?'':'s'} answered`
         :'Not started';
-    const trainingReady=coreProgress.complete&&progress.complete;
+    const trainingReady=sectionProgress('core',raw).complete&&progress.complete;
     let detail='';
     if(progress.complete){
       detail=trainingReady
@@ -10066,25 +10111,34 @@ async function renderMyPlan(){
     :(currentTrainingReady
       ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
       :`Your answers save automatically. How We Train for ${currentLabel} is created only when Core and this format are complete.${currentDueText}`);
+  const nextStep=playerPlanNextStep(rawForProgress,rollout);
+  const formatCardsHtml=(raw)=>{
+    const core=sectionProgress('core',raw);
+    return `<button type="button" class="plan-format-card core ${builderSection==='core'?'active':''} ${core.complete?'complete':''}" data-builder-section="core">
+      <span class="plan-format-name">Core</span><strong>${core.complete?'✓ Core complete':'Start here'}</strong>
+      <small>${core.complete?'Choose a format next.':`${core.answeredRequired} of ${core.requiredCount} required questions answered`}</small>
+    </button>${formats.map(([key,label])=>formatCard(key,label,raw)).join('')}`;
+  };
   const coreNextFormatLinks=builderSection==='core'
-    ?`<div class="btnrow compact" style="margin-top:10px">${formats.map(([k,l])=>`<button type="button" class="btn ghost" data-builder-section="${k}">${esc(l)} →</button>`).join('')}</div>`
+    ?`<div class="btnrow compact" style="margin-top:10px"><button type="button" class="btn secondary" id="playerPlanNextStepFooter">${esc(nextStep.label)}</button></div>`
     :'';
 
-  document.getElementById('page').innerHTML=`<section class="card plan-rollout-player">
-    <div class="builder-head">
+  document.getElementById('page').innerHTML=`${playerPlanJourneyStyles()}<section class="card plan-rollout-player">
+    <div class="plan-journey-head">
       <div>
         <div class="section-label">Your Player Plan</div>
-        <h2>Start with Core. Then build the formats you play.</h2>
-        <div class="help">Build on your club’s How We Bat with the shots you trust and the balls and situations that suit them. Start with Core, then complete a format to create your How We Train. Practise those shots so you can commit when the opportunity arrives.</div>
-        <div class="btnrow compact" style="margin-top:10px"><button type="button" class="btn ghost compact-btn" id="myPlanGuideLink">Show me how</button></div>
+        <h2>Your shots. Your decisions. Your plan.</h2>
+        <p>Choose the shots you trust and when to use them. Practise them, then commit when the right ball arrives.</p>
+        <div class="plan-journey-links"><button type="button" class="btn secondary" id="playerPlanNextStep">${esc(nextStep.label)}</button><button type="button" class="workspace-text-link" id="viewMyPlanSummary">View my plan</button><button type="button" class="workspace-text-link" id="myPlanGuideLink">Help</button></div>
       </div>
-      <span class="workflow-status ${requirementsAvailable&&completedRequiredSections===requiredSections.length?'approved':''}">
+      <span id="playerPlanOverallStatus" role="status" aria-live="polite" class="workflow-status ${requirementsAvailable&&completedRequiredSections===requiredSections.length?'approved':''}">
         ${!requirementsAvailable?'DUE DATES UNAVAILABLE':completedRequiredSections===requiredSections.length
           ?'REQUIRED WORK COMPLETE'
           :`${completedRequiredSections}/${requiredSections.length} REQUIRED SECTIONS COMPLETE`}
       </span>
     </div>
 
+    <details class="plan-progress-disclosure"><summary>Your progress & formats <span class="help">${esc(currentLabel)} open</span></summary>
     <div class="player-group-summary">
       <strong>Your Playing Groups</strong>
       ${!requirementsAvailable?'<span>Your Playing Groups could not be loaded.</span>':(rollout.groups||[]).length
@@ -10092,22 +10146,14 @@ async function renderMyPlan(){
         :'<span>Unassigned for now — that is completely fine. Your club can add groups later.</span>'}
     </div>
 
-    <div class="plan-format-cards">
-      <button class="plan-format-card core ${builderSection==='core'?'active':''} ${coreProgress.complete?'complete':''}" data-builder-section="core">
-        <span class="plan-format-name">Core</span>
-        <strong>${coreProgress.complete?'✓ Core complete':'Start here'}</strong>
-        <small>${coreProgress.complete
-          ?'Choose a format next.'
-          :`${coreProgress.answeredRequired} of ${coreProgress.requiredCount} required questions answered`}</small>
-      </button>
-      ${formats.map(([k,l])=>formatCard(k,l)).join('')}
-    </div>
+    <div class="plan-format-cards" id="playerPlanFormatCards">${formatCardsHtml(rawForProgress)}</div>
+    </details>
   </section>
 
   ${rolloutErr?'<section class="card notice"><strong>Your club’s due dates could not be loaded.</strong><p>You can keep working on your plan. Required formats and due dates will be confirmed once this information loads.</p><button class="btn ghost" id="retryPlayerPlanDates">Try again</button></section>':''}
   ${formatReferenceHtml}
 
-  <div class="grid" style="margin-top:16px">
+  <div class="grid player-plan-grid" style="margin-top:16px">
     <section class="card">
       <div class="builder-head compact">
         <div>
@@ -10134,19 +10180,31 @@ async function renderMyPlan(){
           <div id="playerPlanRemainingAction" class="btnrow compact" style="margin-top:10px;${currentComplete?'display:none':''}"><button type="button" class="btn ghost" id="jumpToNextUnanswered">Next unanswered question ↓</button><span class="status" id="playerPlanRemainingCount">${currentProgress.requiredCount?`${currentProgress.answeredRequired}/${currentProgress.requiredCount} required answered`:''}</span></div>
           ${builderSection!=='core'?`<div class="btnrow compact" style="margin-top:10px"><button class="btn secondary" id="openHowWeTrainFromPlan" ${currentTrainingReady?'':'disabled'}>${currentTrainingReady?'Open How We Train →':'How We Train locked'}</button></div>`:''}
         </div>
-        <span class="status" id="builderStatus">Saved automatically ✓</span>
+        <div><span class="status" id="builderStatus" role="status" aria-live="polite">${localRaw?'Changes waiting to save…':workflow?.updated_at?'Saved automatically ✓':'Your answers save automatically.'}</span><button type="button" class="btn ghost" id="retryPlayerPlanSave" hidden>Retry saving</button></div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="section-label">Your plan so far</div>
+    <details class="card plan-preview-disclosure" id="myPlanSummary">
+      <summary>Your plan so far</summary>
       <h2>See your answers together.</h2>
       <div class="help">Your Core answers apply across formats. Each format adds the decisions you make in that type of match. You can refine your answers later.</div>
       <div id="draftPreview">${renderDraftPreview()}</div>
-    </section>
+    </details>
   </div>`;
+  document.getElementById('viewMyPlanSummary').onclick=()=>{const summary=document.getElementById('myPlanSummary');summary.open=true;summary.scrollIntoView({behavior:'smooth',block:'start'});};
+  document.getElementById('playerPlanNextStep').onclick=async()=>{
+    if(await savePlayerPlanProgressSilently()===false)return;
+    const next=playerPlanNextStep(localRaw||rawAnswers(),rollout);
+    if(next.kind==='training'){currentTab='howwetrain';await renderTab();return;}
+    if(builderSection!==next.section){builderSection=next.section;await renderMyPlan();}
+    document.getElementById('builderQuestions')?.scrollIntoView({behavior:'smooth',block:'start'});
+  };
+  document.getElementById('playerPlanNextStepFooter')?.addEventListener('click',()=>document.getElementById('playerPlanNextStep').click());
+  document.getElementById('retryPlayerPlanSave').onclick=async()=>{await savePlayerPlanProgressSilently();};
 
+  const renderedProgress=document.getElementById('playerPlanOverallStatus');
   const refreshCurrentPlayerPlanState=()=>{
+    if(document.getElementById('playerPlanOverallStatus')!==renderedProgress)return;
     const raw=localRaw||rawAnswers();
     const progress=sectionProgress(builderSection,raw);
     const coreNow=sectionProgress('core',raw);
@@ -10157,6 +10215,18 @@ async function renderMyPlan(){
     const trainBtn=document.getElementById('openHowWeTrainFromPlan');
     const remainRow=document.getElementById('playerPlanRemainingAction');
     const remainCount=document.getElementById('playerPlanRemainingCount');
+    const nextButton=document.getElementById('playerPlanNextStep');
+    if(nextButton)nextButton.textContent=playerPlanNextStep(raw,rollout).label;
+    const nextFooter=document.getElementById('playerPlanNextStepFooter');
+    if(nextFooter)nextFooter.textContent=playerPlanNextStep(raw,rollout).label;
+    const overall=document.getElementById('playerPlanOverallStatus');
+    const completed=requiredSections.filter(key=>sectionProgress(key,raw).complete).length;
+    if(overall){
+      overall.classList.toggle('approved',requirementsAvailable&&completed===requiredSections.length);
+      overall.textContent=!requirementsAvailable?'DUE DATES UNAVAILABLE':completed===requiredSections.length?'REQUIRED WORK COMPLETE':`${completed}/${requiredSections.length} REQUIRED SECTIONS COMPLETE`;
+    }
+    const cards=document.getElementById('playerPlanFormatCards');
+    if(cards){cards.innerHTML=formatCardsHtml(raw);bindPlanFormatControls();}
 
     if(badge){
       badge.classList.toggle('done',progress.complete);
@@ -10207,15 +10277,17 @@ async function renderMyPlan(){
     renderTab();
   };
 
-  document.querySelectorAll('[data-plan-date-format]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openPlanDueDateDialog(b.dataset.planDateFormat);});
-
   if(document.getElementById('myPlanGuideLink'))document.getElementById('myPlanGuideLink').onclick=()=>openClubBattingGuideTopic('player_plan');
   document.getElementById('retryPlayerPlanDates')?.addEventListener('click',async()=>{if(await saveClubPlanBeforeNavigation())await renderMyPlan();});
-  document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=async()=>{
-    if(await savePlayerPlanProgressSilently()===false)return;
-    builderSection=b.dataset.builderSection;
-    await renderMyPlan();
-  });
+  function bindPlanFormatControls(){
+    document.querySelectorAll('[data-plan-date-format]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openPlanDueDateDialog(b.dataset.planDateFormat);});
+    document.querySelectorAll('[data-builder-section]').forEach(b=>b.onclick=async()=>{
+      if(await savePlayerPlanProgressSilently()===false)return;
+      builderSection=b.dataset.builderSection;
+      await renderMyPlan();
+    });
+  }
+  bindPlanFormatControls();
 
   document.querySelectorAll('.option-chip input').forEach(x=>x.onchange=()=>{
     collectBuilderAnswers();
