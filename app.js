@@ -1667,7 +1667,7 @@ function renderShell(){
 
   // Keep daily player tools easy to reach, including for playing club staff.
   if(isPlayerUser()){
-    nav.push(['playerhome','My Batting','player']);
+    nav.push(['playerhome','Player Home','player']);
     if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','player']);
     nav.push(['myplan','My Player Plan','player']);
     nav.push(['howwetrain','How We Train','player']);
@@ -2020,7 +2020,7 @@ async function openClubBattingGuideTopic(capabilityKey='whole_process'){
 }
 
 function guideTargetLabel(tab){
-  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',myplan:'My Player Plan',howwetrain:'How We Train'}[tab]||'Open area');
+  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',howwetrain:'How We Train'}[tab]||'Open area');
 }
 
 function guideTargetUnavailableReason(tab,focus=''){
@@ -2064,56 +2064,156 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
+const GUIDE_TOPIC_ORDER=['whole_process','philosophy_workshop','how_we_bat','player_plan_structure','plan_dates','player_plan','how_we_train','feedback_loop','coach_conversations'];
+
+function guideTopicNumber(key){
+  const index=GUIDE_TOPIC_ORDER.indexOf(key);
+  return index>0?index:null;
+}
+
+function guideHelpStyles(){
+  // Keep the reading order vertical even where the existing stylesheet uses two columns.
+  return `<style>
+    .guide-layout .guide-topic-list{display:flex;flex-direction:column;min-width:0;gap:8px}
+    .guide-layout .guide-topic-list button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;width:100%;min-height:48px;font:inherit}
+    .guide-layout .guide-topic-list button.guide-topic-overview{grid-template-columns:minmax(0,1fr)}
+    .guide-layout .guide-topic-list button:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+    .guide-layout .guide-topic-list .guide-topic-number{display:grid;place-items:center;width:30px;height:30px;margin:0;border-radius:50%;background:var(--primary);color:#fff;font-size:.85rem;font-weight:800;line-height:1}
+    .guide-layout .guide-topic-list .guide-topic-copy{margin:0;min-width:0}
+    .guide-layout .guide-topic-list strong{color:var(--text);line-height:1.35}
+    .guide-layout .guide-topic-list .guide-topic-description{margin-top:5px;font-size:.85rem;line-height:1.45}
+    .guide-layout .guide-topic-list .guide-topic-complete{margin-top:7px;font-size:.75rem;font-weight:700;color:var(--primary)}
+  </style>`;
+}
+
 function guideCapabilityForCurrentProduct(capability){
   const item={...capability};
-  const tutorial=Array.isArray(item.tutorial)?item.tutorial.map(step=>({...step})):[];
-  if(item.capability_key==='whole_process'){
-    const setupTitles=['Set the club up','Start with the batting','Build the philosophy','Batting Philosophy Workshop','Confirm How We Bat','Lock the Player Plan Structure','Confirm Player Plan questions','Check the club look','Publish the Club Batting System'];
-    const savedStep=(...titles)=>Object.assign({},...tutorial.filter(step=>titles.includes(step.title)));
-    // The setup overview has exactly the five Club Home stages. Merge the old
-    // introductory step into Workshop and preserve other saved step properties.
-    item.tutorial=[
-      {...savedStep('Set the club up','Start with the batting','Build the philosophy','Batting Philosophy Workshop'),title:'Batting Philosophy Workshop',body:'Start at Club Home with the batting. Save the Philosophy Lead and contributors, then gather independent responses and choose the club approach. Later setup stages open as their prerequisites are completed. People & Sign-up and Playing Groups are managed from Players.',target_tab:'workshop'},
-      {...savedStep('Confirm How We Bat'),title:'Confirm How We Bat',body:'The Philosophy Lead compares the contributions, chooses the approach and confirms the messages players will use.',target_tab:'howwebat'},
-      {...savedStep('Lock the Player Plan Structure','Confirm Player Plan questions'),title:'Confirm Player Plan questions',body:'The Philosophy Lead reviews the questions generated from How We Bat and confirms them for this round. Return to Club Home to review the club look before publication.',target_tab:'plan'},
-      {...savedStep('Check the club look'),title:'Check the club look',body:'The Club Admin reviews the club logo and colours at Club Home. Add your own details or choose Keep this look & continue. You can change the look later; this check comes after the Player Plan questions and before publication.',target_tab:'dashboard'},
-      {...savedStep('Publish the Club Batting System'),title:'Publish the Club Batting System',body:'After the Club Admin confirms the club look, the Philosophy Lead selects Publish & notify players on Player Plan Structure. Publication opens player access and queues the readiness emails. Confirming the questions alone does not publish them.',target_tab:'plan'},
-      ...tutorial.filter(step=>!setupTitles.includes(step.title))
-    ].map(step=>{
-      if(step.title==='Set Player Plan dates')return {...step,body:'The Club Admin sets due dates for the formats each Playing Group should complete. Other formats can remain optional.'};
-      if(step.title==='Reflect and observe')return {...step,body:canUsePlayersWorkspace()?'Open Players, choose a player and add a training observation or match feedback. Players record their independent reflections in How We Train. Consider plan alignment across the innings separately from the dismissal ball, then discuss decision and execution. Save any agreed training action with a review date.':'Record your own match reflection in How We Train before comparing views. Assess plan alignment across your innings separately from the dismissal ball, then consider decision and execution. Coaches and captains with assigned access add their observations. Your shared actions and review history are also in How We Train.',target_tab:canUsePlayersWorkspace()?'players':'howwetrain'};
-      if(step.title==='Coach Conversation')return {...step,title:'Agree and review the next action',body:'Discuss the evidence with the player. A training change or plan review records one agreed action and a review date, shared in How We Train. Follow up there and keep the agreement and review history.'};
-      return step;
-    });
-  }else if(item.capability_key==='plan_dates'){
-    item.short_explanation='Every player keeps the T20, Limited Overs and Long Form tabs. Set a due date when a Playing Group is expected to complete a format; leave the date unset when it is optional.';
-    item.tutorial=[
-      {title:'Choose the Playing Group',body:'Set expectations for players in that group.'},
-      {title:'Review each format',body:'T20, Limited Overs and Long Form remain available to every player.'},
-      {title:'Set dates for expected plans',body:'A due date tells the Playing Group which format plans they are expected to complete and powers incomplete and overdue views.'},
-      {title:'Leave other formats undated',body:'If the Playing Group does not play a format, do not set a due date. Players may still complete that plan if they choose.'},
-      {title:'Use reminders selectively',body:'Club Batting can remind overdue players. The built-in cooldown stops repeated messages becoming noise.'}
-    ];
-  }else if(item.capability_key==='player_plan'){
-    if(!isPlayerUser()&&canUsePlayersWorkspace())item.target_tab='players';
-    item.tutorial=tutorial.map(step=>step.title==='Add the relevant format'
-      ? {...step,title:'Use the relevant format',body:'Every player can see T20, Limited Overs and Long Form. Due dates show which format plans their Playing Group is expected to complete; undated formats remain optional.'}
-      : step);
-  }
-  if(item.capability_key==='feedback_loop'&&!canUsePlayersWorkspace()&&isPlayerUser())item.target_tab='howwetrain';
-  if(item.capability_key==='how_we_bat'&&!isPhilosophyLead()&&!isAdmin())item.title='Understand How We Bat';
-  if(Array.isArray(item.tutorial))item.tutorial=item.tutorial.map(step=>{
-    if(item.capability_key==='how_we_bat'&&step.title==='Confirm & lock How We Bat')return {...step,title:'Confirm How We Bat',body:'Confirm the messages for this round, then use them to create the Player Plan questions. Changing the approach later requires a new philosophy round.'};
-    if(item.capability_key==='player_plan_structure'&&['Confirm & lock Player Plan Structure','Confirm Player Plan questions'].includes(step.title))return {...step,title:'Confirm Player Plan questions',body:'Confirm the questions for this round, then return to Club Home. The Club Admin reviews the club look before the Philosophy Lead selects Publish & notify players. Confirming the questions alone does not publish them.'};
-    if(item.capability_key==='how_we_train'&&step.title==='Practise the decision')return {...step,body:'Choose the scoring shots that suit your game, practise executing them and commit when the right ball arrives. Reflect on the decision and execution separately, without judgement. Recognise preparation and commitment, support the batter when execution falls short and choose useful practice. A dismissal alone does not show that the decision or execution was poor.'};
-    if(item.capability_key==='how_we_train'&&step.title==='Reflect on your innings')return {...step,body:'Record your own view before comparing it with coaching feedback. First assess how you followed your plan across the whole innings. Separately consider the dismissal ball: did the choice fit your plan, and how was it executed? One ball does not describe the whole innings. Recognise what you prepared and committed to, then choose useful practice without judgement.'};
-    if(item.capability_key==='coach_conversations'&&step.title==='Discuss before recording the decision')return {...step,body:'Talk with the player about the evidence and their own plan. Recognise preparation and commitment. Follow up on the player’s own commitments and agree useful practice for decision or execution, supporting progress, confidence and enjoyment without judgement. Choose Mark discussed, then Plan stays as it is, Training change agreed, Plan review agreed or No action needed.'};
-    return step;
-  });
-  // Present the current labels even before the refreshed catalogue SQL is applied.
-  const workshopLabel=value=>typeof value==='string'?value.replace(/\b(?:Batting )?Philosophy Workshop\b/g,'Batting Philosophy Workshop'):value;
-  for(const field of ['title','purpose','short_explanation'])item[field]=workshopLabel(item[field]);
-  if(Array.isArray(item.tutorial))item.tutorial=item.tutorial.map(step=>({...step,title:workshopLabel(step.title),body:workshopLabel(step.body)}));
+  const staff=canUsePlayersWorkspace();
+  const playerPlanTarget=!isPlayerUser()&&staff?'players':'myplan';
+  const feedbackTarget=staff?'players':'howwetrain';
+  // Keep database identities, audiences and progress; update the visible copy in app.js.
+  // This also replaces legacy tutorial text without requiring a catalogue migration.
+  const copy={
+    whole_process:{
+      title:'The whole Club Batting process',
+      purpose:'One club approach. A plan for every batter.',
+      short_explanation:'Agree how your club wants to bat. Turn that into How We Bat, individual Player Plans and personalised How We Train plans. Use innings and training feedback to keep improving.',
+      target_tab:'guide',
+      tutorial:[
+        {title:'Agree the batting philosophy',body:'The Philosophy Lead and nominated coaches share their views in the Batting Philosophy Workshop, then settle the club’s approach.',target_tab:'workshop'},
+        {title:'Create How We Bat',body:'Club Batting turns that philosophy into How We Bat: the club’s guide to its batting approach. The Philosophy Lead reviews and confirms it.',target_tab:'howwebat'},
+        {title:'Set the Player Plan questions',body:'How We Bat generates the prompts for individual Player Plans. The Philosophy Lead refines and confirms them; the Club Admin checks the club look before the Lead publishes.',target_tab:'plan'},
+        {title:'Set Player Plan dates',body:'The Club Admin sets due dates for the format plans each Playing Group needs. Other formats stay optional.',target_tab:'players',focus:'plan_dates'},
+        {title:'Build a Player Plan',body:'Each batter chooses their shots, when to use them and how to build an innings. Complete Core, then the formats you play.',target_tab:playerPlanTarget},
+        {title:'Train the plan',body:'The completed plan generates personalised How We Train suggestions. Practise your shots and decisions so you can commit when the right ball arrives.',target_tab:'howwetrain'},
+        {title:'Learn from innings and training',body:'Players reflect on innings; coaches add match and training feedback. Compare the whole innings and the dismissal ball with the Player Plan, separating decision from execution.',target_tab:feedbackTarget},
+        {title:'Agree what comes next',body:'Discuss what worked and what needs practice. Agree a useful action and review date, or keep the plan as it is.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})}
+      ]
+    },
+    philosophy_workshop:{
+      title:'Run the Batting Philosophy Workshop',
+      purpose:'Agree how your club wants to bat.',
+      short_explanation:'The Philosophy Lead and nominated coaches shape the club’s batting philosophy together. Their decisions become the foundation for How We Bat.',
+      target_tab:'workshop',
+      tutorial:[
+        {title:'Choose the Lead and contributors',body:'The Club Admin appoints the Philosophy Lead and invites coaches or other contributors. The Lead is responsible for the final philosophy.'},
+        {title:'Start with independent views',body:'Each contributor answers the Workshop questions before comparing responses. Give different cricket perspectives room to be heard.'},
+        {title:'Agree the club approach',body:'The Philosophy Lead reviews the contributions, resolves differences and chooses the final philosophy.'},
+        {title:'Turn it into How We Bat',body:'Use the agreed philosophy to generate the club’s How We Bat guide.',target_tab:'howwebat'}
+      ]
+    },
+    how_we_bat:{
+      title:isPhilosophyLead()||isAdmin()?'Create How We Bat':'Understand How We Bat',
+      purpose:'Make the club’s approach clear.',
+      short_explanation:'Club Batting turns the agreed philosophy into How We Bat: a shared guide to the club’s batting approach. The Philosophy Lead reviews and confirms it.',
+      target_tab:'howwebat',
+      tutorial:[
+        {title:'Build from the agreed philosophy',body:'Club Batting generates How We Bat from the final Workshop decisions.'},
+        {title:'Make the messages useful',body:'The Philosophy Lead reviews the messages for each format and refines the wording. Keep them clear enough to use in a match.'},
+        {title:'Confirm How We Bat',body:'Confirm the guide for this round. It will shape the questions each batter uses to build a Player Plan.'},
+        {title:'Revisit when the club changes',body:'A new season or a change of direction can call for a new Workshop round. The club can review its approach and publish an updated system.'}
+      ]
+    },
+    player_plan_structure:{
+      title:'Set the Player Plan questions',
+      purpose:'Help every batter make the plan their own.',
+      short_explanation:'How We Bat generates the prompts players use to build their own Player Plans. The Philosophy Lead can edit the exact questions before confirming them.',
+      target_tab:'plan',
+      tutorial:[
+        {title:'Generate the questions',body:'Club Batting uses How We Bat to create Core and format questions for each Player Plan.'},
+        {title:'Refine the wording',body:'The Philosophy Lead checks that the prompts help batters describe their strengths, scoring options, risks and reset cues.'},
+        {title:'Confirm the questions',body:'Confirm them for this round, then return to Club Home. This saves the questions; publishing opens them to players.',target_tab:'dashboard'},
+        {title:'Check the club look',body:'The Club Admin checks the logo and colours, or chooses Keep this look & continue. This happens just before publication.',target_tab:'dashboard'},
+        {title:'Publish and notify players',body:'Once the club look is confirmed, the Philosophy Lead selects Publish & notify players. Players can then build their plans and receive the readiness email.',target_tab:'plan'}
+      ]
+    },
+    plan_dates:{
+      title:'Set Player Plan dates',
+      purpose:'Make the next step clear for each Playing Group.',
+      short_explanation:'The Club Admin sets due dates for the format plans each Playing Group needs. Other formats stay optional.',
+      target_tab:'players',
+      tutorial:[
+        {title:'Start after publication',body:'Once the club’s system is live, the Club Admin opens Player Plan dates from Players.',target_tab:'players',focus:'plan_dates'},
+        {title:'Choose the group and formats',body:'Set a due date for each format the Playing Group should complete. T20, Limited Overs and Long Form remain available to everyone.'},
+        {title:'Leave optional formats undated',body:'Players can still complete these plans if they choose.'},
+        {title:'Check progress',body:'Use the incomplete and overdue views to see who needs a reminder.'}
+      ]
+    },
+    player_plan:{
+      title:'Build a Player Plan',
+      purpose:'Choose your shots. Know when to commit.',
+      short_explanation:'Turn the club’s approach into your own plan: your shots, when to use them and how you’ll build an innings.',
+      target_tab:playerPlanTarget,
+      tutorial:[
+        {title:'Start with Core',body:'Choose the shots you trust, the balls you’ll leave or defend, and the cues that help you reset.',target_tab:playerPlanTarget},
+        {title:'Plan for the formats you play',body:'Answer the format prompts using your strengths and likely match situations. Due dates show which plans your Playing Group needs; other formats are optional.'},
+        {title:'Turn your plan into practice',body:'Complete Core and a format to unlock personalised How We Train suggestions for that format.',target_tab:'howwetrain'},
+        {title:'Keep your plan useful',body:'Return to My Player Plan to review your choices. Player Home points you to your next plan, training or reflection task.',...(isPlayerUser()?{target_tab:'playerhome'}:{})}
+      ]
+    },
+    how_we_train:{
+      title:'Use How We Train',
+      purpose:'Practise your plan. Commit when the ball is there.',
+      short_explanation:'Your Player Plan generates personalised How We Train suggestions. Practise your chosen shots and decisions so you can trust them in a match.',
+      target_tab:'howwetrain',
+      tutorial:[
+        {title:'Start with your Player Plan',body:'Complete Core and a format. How We Train then builds practice suggestions around your own game.',target_tab:playerPlanTarget},
+        {title:'Choose a useful focus',body:'Use your plan and recent feedback to pick what needs practice: a scoring shot, leaving well, taking a single or recognising the right ball.'},
+        {title:'Practise the decision and the skill',body:'Recreate the balls and situations you’ll face. Recognise the opportunity, commit to your choice and practise executing it.'},
+        {title:'Recognise preparation and commitment',body:'A dismissal alone does not make the choice wrong. Support the commitment, discuss decision and execution separately, and choose useful practice.'},
+        {title:'Review the next session',body:'Use feedback and any agreed coaching action to decide what to keep practising. Shared actions and their review history are in How We Train.',target_tab:'howwetrain'}
+      ]
+    },
+    feedback_loop:{
+      title:'Player and coach feedback',
+      purpose:'Learn from the innings, not just the dismissal.',
+      short_explanation:'Players reflect on innings; coaches add match and training feedback. Compare both views with the Player Plan to choose what to practise next.',
+      target_tab:feedbackTarget,
+      tutorial:[
+        {title:'Record your own view first',body:'Players add their innings reflection in How We Train. Coaches and captains with assigned access add match feedback or training observations in Players.',target_tab:feedbackTarget},
+        {title:'Look at the whole innings',body:'Where did the batter follow their plan? Where did they move outside it? Consider what the match situation called for.'},
+        {title:'Look separately at the dismissal ball',body:'Did the choice fit the plan and the ball? Then consider how the shot was executed. One ball does not describe the whole innings.'},
+        {title:'Learn without judgement',body:'Recognise practice and commitment, including when execution falls short. Compare perspectives without forcing agreement, then discuss the most useful next step.'}
+      ]
+    },
+    coach_conversations:{
+      title:'Coach Conversations',
+      purpose:'Agree one useful next step.',
+      short_explanation:'Use the feedback to agree what to practise or review next. Record a useful action and a date to check progress.',
+      target_tab:feedbackTarget,
+      tutorial:[
+        {title:'Open the conversation',body:'Club Batting highlights feedback worth discussing. Use it to ask the player about their plan, decisions and preparation.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
+        {title:'Agree what will help',body:'Recognise commitment and discuss what the evidence suggests. Keep the plan, agree a training change or plan review, or choose no action.'},
+        {title:'Record the action and review date',body:'For a training change or plan review, agree a specific action and when to check progress. The player and authorised coaching staff share it in How We Train.'},
+        {title:'Follow up together',body:'Review what the player practised and what changed. Support confidence and enjoyment while following through on the agreed commitment.',target_tab:'howwetrain'}
+      ]
+    }
+  };
+  if(copy[item.capability_key])Object.assign(item,copy[item.capability_key]);
+  else if(Array.isArray(item.tutorial))item.tutorial=item.tutorial.map(step=>({...step}));
+  const currentLabel=value=>typeof value==='string'?value.replace(/\b(?:Batting )?Philosophy Workshop\b/g,'Batting Philosophy Workshop').replace(/\bMy Batting\b/g,'Player Home'):value;
+  for(const field of ['title','purpose','short_explanation'])item[field]=currentLabel(item[field]);
+  if(Array.isArray(item.tutorial))item.tutorial=item.tutorial.map(step=>({...step,title:currentLabel(step.title),body:currentLabel(step.body)}));
   return item;
 }
 
@@ -2202,10 +2302,12 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   ]);
   if(capErr||progErr){page.innerHTML=`<section class="card"><div class="notice">${esc((capErr||progErr).message)}</div></section>`;return;}
 
-  const all=(capabilities||[]).map(guideCapabilityForCurrentProduct).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process'||(isPhilosophyLead()&&['philosophy_workshop','how_we_bat','player_plan_structure'].includes(c.capability_key)));
+  const topicOrder=key=>{const index=GUIDE_TOPIC_ORDER.indexOf(key);return index<0?GUIDE_TOPIC_ORDER.length:index;};
+  const all=(capabilities||[]).map(guideCapabilityForCurrentProduct).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process'||(isPhilosophyLead()&&['philosophy_workshop','how_we_bat','player_plan_structure'].includes(c.capability_key))).sort((a,b)=>topicOrder(a.capability_key)-topicOrder(b.capability_key));
   if(!all.length){page.innerHTML='<section class="card"><h2>Club Batting Guide</h2><p class="help">No Guide topics are available for this role yet.</p></section>';return;}
   if(!all.some(c=>c.capability_key===guideSelectedCapabilityKey))guideSelectedCapabilityKey='whole_process';
   const selected=all.find(c=>c.capability_key===guideSelectedCapabilityKey)||all[0];
+  const selectedFocus=selected.capability_key==='plan_dates'?'plan_dates':selected.capability_key==='coach_conversations'&&selected.target_tab==='players'?'coach_conversations':'';
   const tutorial=Array.isArray(selected.tutorial)?selected.tutorial:[];
   const progressMap=new Map((progress||[]).map(x=>[x.capability_key,x]));
   const trial=snapshot?.trial||null;
@@ -2213,22 +2315,22 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
 
   await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'seen'});
 
-  page.innerHTML=`<section class="card guide-hero">
-    <div><div class="section-label">Help & tutorials</div><h1>How can we help?</h1><p>Choose a step-by-step guide or ask the Club Batting Guide how something works at <strong>${esc(club.name)}</strong>.</p></div>
+  page.innerHTML=`${guideHelpStyles()}<section class="card guide-hero">
+    <div><div class="section-label">Help & tutorials</div><h1>How Club Batting works</h1><p>The numbered guides follow the club’s process. Read from top to bottom, or choose the stage you need at <strong>${esc(club.name)}</strong>.</p></div>
   </section>
   ${trial?`<section class="guide-trial-strip"><strong>${esc(clubTrialStatusLabel(trial,daysLeft))}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · Nothing is automatically charged.</span></section>`:''}
   <div id="guideInterventionSlot"></div>
   <div class="guide-layout">
-    <aside class="guide-topic-list">
-      ${all.map(c=>`<button data-guide-topic="${esc(c.capability_key)}" class="${c.capability_key===selected.capability_key?'active':''}"><strong>${esc(c.title)}</strong><span>${progressMap.get(c.capability_key)?.state==='completed'?'Complete ✓':esc(c.short_explanation)}</span></button>`).join('')}
-    </aside>
+    <nav class="guide-topic-list" aria-label="Help topics in process order">
+      ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
+    </nav>
     <section class="card guide-tutorial-card">
-      <div class="section-label">${esc(selected.title)}</div>
+      <div class="section-label">${guideTopicNumber(selected.capability_key)===null?'':`Guide ${guideTopicNumber(selected.capability_key)} · `}${esc(selected.title)}</div>
       <h2>${esc(selected.purpose)}</h2>
       <p class="help guide-topic-explanation">${esc(selected.short_explanation)}</p>
       <div class="guide-steps">${tutorial.map((step,i)=>{const unavailable=step.target_tab?guideTargetUnavailableReason(step.target_tab,step.focus||''):'';return `<article><b>${i+1}</b><div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p>${step.target_tab?(unavailable?`<small class="help">${esc(unavailable)}</small>`:`<button class="guide-inline-link" data-guide-target="${esc(step.target_tab)}" data-guide-focus="${esc(step.focus||'')}">${esc(guideTargetLabel(step.target_tab))} →</button>`):''}</div></article>`;}).join('')}</div>
-      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}</div>
-      ${selected.target_tab&&selected.target_tab!=='guide'&&guideTargetUnavailableReason(selected.target_tab)?`<p class="help">${esc(guideTargetUnavailableReason(selected.target_tab))}</p>`:''}
+      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}</div>
+      ${selected.target_tab&&selected.target_tab!=='guide'&&guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<p class="help">${esc(guideTargetUnavailableReason(selected.target_tab,selectedFocus))}</p>`:''}
     </section>
     <section class="card guide-chat-card">
       <div class="section-label">Ask the Club Batting Guide</div><h2>How does this work at our club?</h2>
@@ -2242,7 +2344,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
   document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;renderClubBattingGuide({revealTutorial:true});});
   document.querySelectorAll('[data-guide-target]').forEach(b=>b.onclick=()=>guideGoToTarget(b.dataset.guideTarget,b.dataset.guideFocus||''));
-  document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,''));
+  document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,selectedFocus));
   document.getElementById('guideMarkComplete').onclick=async()=>{await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'completed'});renderClubBattingGuide();};
 
   if(revealTutorial){
@@ -9747,12 +9849,12 @@ async function renderPlayerHome(){
   const playerId=myPlayer?.id;
   const stillCurrent=()=>sequence===playerHomeRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab==='playerhome'&&document.getElementById('page')===page;
   if(!workspacePlayerPlansPublished()){
-    page.innerHTML=`<section class="card player-gate"><div class="section-label">My Batting</div><h2>Your club is preparing How We Bat.</h2><p>You’ll be able to complete your Player Plan once your club has finalised its approach and the plan questions. We’ll email you when you can start.</p><p class="help">Your Player Plan will connect the club’s approach with your own decisions. How We Train will then help you practise those decisions until they become instinctive.</p>${howWeBatVersions.length?'<button class="btn secondary" id="playerHomeReadHowWeBat">Read How We Bat</button>':''}</section>`;
+    page.innerHTML=`<section class="card player-gate"><div class="section-label">Player Home</div><h2>Your club is preparing How We Bat.</h2><p>You’ll be able to complete your Player Plan once your club has finalised its approach and the plan questions. We’ll email you when you can start.</p><p class="help">Your Player Plan will connect the club’s approach with your own decisions. How We Train will then help you practise those decisions until they become instinctive.</p>${howWeBatVersions.length?'<button class="btn secondary" id="playerHomeReadHowWeBat">Read How We Bat</button>':''}</section>`;
     document.getElementById('playerHomeReadHowWeBat')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwebat'}));
     return;
   }
   if(!myPlayer){
-    page.innerHTML='<section class="card"><div class="section-label">My Batting</div><h2>Your account needs a player profile.</h2><p>Ask the person coordinating Club Batting at your club to register you as a player. Your Player Plan and training will then appear here.</p></section>';
+    page.innerHTML='<section class="card"><div class="section-label">Player Home</div><h2>Your account needs a player profile.</h2><p>Ask the person coordinating Club Batting at your club to register you as a player. Your Player Plan and training will then appear here.</p></section>';
     return;
   }
   page.innerHTML='<div class="splash">Finding your next step…</div>';
@@ -9771,7 +9873,7 @@ async function renderPlayerHome(){
   const next=playerHomeNextAction(raw,rollout,feedback);
   const loadNote=!rolloutOk||!feedbackOk||feedback.coaching_actions_error;
   page.innerHTML=`${clubSetupStyles()}<section class="card club-home-next player-home-next">
-    <div class="section-label">My Batting · Your next step</div>
+    <div class="section-label">Player Home · Your next step</div>
     <h2>${esc(next.heading)}</h2>
     <p>${esc(next.copy)}</p>
     ${next.focus?`<div class="notice compact"><strong>${esc(next.focus)}</strong></div>`:''}
