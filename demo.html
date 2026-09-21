@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Explore Club Batting with a completed example club: Workshop, How We Bat, Player Plans, training and feedback."><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'"><title>Club Batting — explore the demo</title><style>:root{--navy:#202f78;--navy2:#17245f;--red:#d8232a;--navy-contrast:#fff;--accent-contrast:#fff;--club-soft:#eef1ff;--club-accent-soft:#fff3f3;--ink:#172033;--muted:#687085;--line:#e2e5ec;--bg:#f4f6fa;--soft:#f8f9fc;--ok:#147a45;--warn:#98630c}
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><meta name="description" content="Explore Club Batting with a completed example club: Workshop, How We Bat, Player Plans, training and feedback."><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'"><title>Club Batting — explore the demo</title><style>:root{--navy:#202f78;--navy2:#17245f;--red:#d8232a;--navy-contrast:#fff;--accent-contrast:#fff;--club-soft:#eef1ff;--club-accent-soft:#fff3f3;--ink:#172033;--muted:#687085;--line:#e2e5ec;--bg:#f4f6fa;--soft:#f8f9fc;--ok:#147a45;--warn:#98630c}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
 button,input,textarea,select{font:inherit}button{cursor:pointer}.splash{padding:60px;text-align:center;color:var(--muted)}
 .shell{max-width:1180px;margin:0 auto;min-height:100vh;background:#fff;box-shadow:0 0 34px rgba(20,30,70,.07)}
@@ -3122,6 +3122,7 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 #demoToolbar{position:sticky;top:0;z-index:1100;background:#f0f7f7;color:#142e42;border-bottom:1px solid #b9d7d5;font:14px/1.4 system-ui,sans-serif;padding:12px max(16px,calc((100vw - 1120px)/2))}
 .demo-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .demo-heading strong{font-size:17px}.demo-badge{font-size:11px;font-weight:700;background:#d5ece8;color:#185a54;border-radius:20px;padding:4px 9px}
+.demo-site-links{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto}.demo-site-links a{display:inline-flex;align-items:center;min-height:44px;font-size:12px;font-weight:700;color:#19364d;text-underline-offset:3px}
 .demo-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .demo-controls label{font-weight:700}.demo-controls select{flex:1;min-width:160px;border:1px solid #9cafbe;border-radius:8px;background:#fff;padding:10px;font:inherit;min-height:44px}
 .demo-controls button{border:1px solid #b9c9cd;background:#fff;color:#19364d;border-radius:8px;min-height:44px;padding:8px 12px;font:inherit}
@@ -3147,7 +3148,7 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 .demo-hwb-inline .demo-hwb-body{overflow:visible}
 @media(max-width:600px){.demo-hwb-head{padding:14px}.demo-hwb-body{padding:8px}.demo-hwb-preview .hwb-public-hero{padding:20px!important}}
 @media(max-width:600px){#demoToolbar{padding:10px 12px}.demo-heading{gap:7px}.demo-heading strong{font-size:15px}.demo-controls{gap:7px}.demo-controls label{font-size:12px}.demo-controls select{font-size:13px}.demo-controls button{font-size:12px}.demo-meta{font-size:11px}#demoHint{padding:10px 16px;font-size:13px}}
-</style></head><body><aside id="demoToolbar" aria-label="Club Batting demo controls"><div class="demo-heading"><strong>Explore Club Batting</strong><span class="demo-badge">Demo · fictional club and players</span></div><div class="demo-controls"><label for="demoStage">Explore</label><select id="demoStage"></select><button type="button" id="demoReset">Reset demo</button></div><div class="demo-meta"><span id="demoRole"></span><span>Completed example · Changes last until reset or reload</span></div></aside><p id="demoHint"></p><p id="demoStatus" role="status" aria-live="polite" hidden></p><div id="app"></div><script>// This demo has its own in-memory data and never reads the live application's storage.
+</style></head><body><aside id="demoToolbar" aria-label="Club Batting demo controls"><div class="demo-heading"><strong>Explore Club Batting</strong><span class="demo-badge">Demo · fictional club and players</span><nav class="demo-site-links" aria-label="Club Batting website"><a href="https://clubbatting.com/">Club Batting home</a><a href="https://clubbatting.com/#try-it">Try it with your club →</a></nav></div><div class="demo-controls"><label for="demoStage">Explore</label><select id="demoStage"></select><button type="button" id="demoReset">Reset demo</button></div><div class="demo-meta"><span id="demoRole"></span><span>Completed example · Changes last until reset or reload</span></div></aside><p id="demoHint"></p><p id="demoStatus" role="status" aria-live="polite" hidden></p><div id="app"></div><script>// This demo has its own in-memory data and never reads the live application's storage.
 const fixtureMemory=()=>{const data=new Map();return {getItem:key=>data.get(key)||null,setItem:(key,value)=>data.set(key,String(value)),removeItem:key=>data.delete(key),clear:()=>data.clear()};};
 const fixtureLocalStorage=fixtureMemory();
 const fixtureSessionStorage=fixtureMemory();
@@ -16297,12 +16298,16 @@ async function demoNavigate(key,{reset=false}={}){
   }catch(error){window.__fixtureError(error.message||String(error));}
   finally{demoNavigationBusy=false;}
 }
+function demoInitialStage(){
+  const requested=new URLSearchParams(location.search).get('stage');
+  return demoStages.some(stage=>stage.key===requested)?requested:'home';
+}
 function startClubDemo(){
   const select=document.getElementById('demoStage');select.innerHTML=demoStages.map(s=>`<option value="${s.key}">${s.label}</option>`).join('');
   select.onchange=()=>demoNavigate(select.value);
   document.getElementById('demoReset').onclick=()=>{if(confirm('Reset this demo’s example answers and feedback?'))return demoNavigate(demoCurrentStage,{reset:true});};
   if(typeof MutationObserver!=='undefined')new MutationObserver(demoDecorate).observe(document.body,{childList:true,subtree:true});
-  return demoNavigate('home',{reset:true});
+  return demoNavigate(demoInitialStage(),{reset:true});
 }
 
 window.demoReady=startClubDemo();
