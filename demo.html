@@ -3150,7 +3150,7 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 .demo-hwb-inline .demo-hwb-body{overflow:visible}
 @media(max-width:600px){.demo-hwb-head{padding:14px}.demo-hwb-body{padding:8px}.demo-hwb-preview .hwb-public-hero{padding:20px!important}}
 @media(max-width:600px){#demoToolbar{padding:10px 12px}.demo-heading{gap:7px}.demo-heading strong{font-size:15px}.demo-controls{gap:7px}.demo-controls label{font-size:12px}.demo-controls select{font-size:13px}.demo-controls button{font-size:12px}.demo-meta{font-size:11px}#demoHint{padding:10px 16px;font-size:13px}}
-</style></head><body><aside id="demoToolbar" aria-label="Club Batting demo controls"><div class="demo-heading"><strong>Explore Club Batting</strong><span class="demo-badge">Demo · fictional club and players</span><nav class="demo-site-links" aria-label="Club Batting website"><a href="https://clubbatting.com/">Club Batting home</a><a href="https://clubbatting.com/app.html?trial=1">Try it free with your club →</a></nav></div><div class="demo-controls"><label for="demoStage">Explore</label><select id="demoStage"></select><button type="button" id="demoReset">Reset demo</button></div><div class="demo-meta"><span id="demoRole"></span><span>Completed example · Changes last until reset or reload</span></div></aside><p id="demoHint"></p><p id="demoStatus" role="status" aria-live="polite" hidden></p><div id="app"></div><script>// This demo has its own in-memory data and never reads the live application's storage.
+</style></head><body><aside id="demoToolbar" aria-label="Club Batting demo controls"><div class="demo-heading"><strong>Explore Club Batting</strong><span class="demo-badge">Demo · fictional club and players</span><nav class="demo-site-links" aria-label="Club Batting website"><a href="https://clubbatting.com/">Club Batting home</a><a href="https://clubbatting.com/app.html?trial=1">Try it free with your club →</a></nav></div><div class="demo-controls"><label for="demoStage">Explore</label><select id="demoStage"></select><button type="button" id="demoReset">Reset demo</button></div><div class="demo-meta"><span id="demoRole"></span><span>Fictional example · Changes last until reset or reload</span></div></aside><p id="demoHint"></p><p id="demoStatus" role="status" aria-live="polite" hidden></p><div id="app"></div><script>// This demo has its own in-memory data and never reads the live application's storage.
 const fixtureMemory=()=>{const data=new Map();return {getItem:key=>data.get(key)||null,setItem:(key,value)=>data.set(key,String(value)),removeItem:key=>data.delete(key),clear:()=>data.clear()};};
 const fixtureLocalStorage=fixtureMemory();
 const fixtureSessionStorage=fixtureMemory();
@@ -3179,7 +3179,7 @@ window.__fixtureDb={
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.59.1';
+const APP_UI_VERSION='0.8.60';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -4588,7 +4588,7 @@ function renderFirstIdentitySetup(){
     <h1>How are you involved?</h1>
     <p>This only determines whether you need your own Player Plan. It does <strong>not</strong> give coaching access — the Club Admin controls that separately.</p>
     <div class="field"><label>Your name</label><input id="myName" value="${esc(userProfile?.display_name||'')}"></div>
-    ${roleCards('myRole',membership.involvement||'both')}
+    ${roleCards('myRole',membership.involvement||'player')}
     <button class="btn secondary" id="saveIdentity">Continue</button>
     <div id="identitySetupStatus" class="help"></div>
   </div>`;
@@ -4723,10 +4723,7 @@ function clubSetupProgress(state={club,workshop,howWeBatDraft,playerPlanStructur
   const round=state.workshop||null;
   const hwbDraft=state.howWeBatDraft||null;
   const planDraft=state.playerPlanStructureDraft||null;
-  const hasPhilosophy=(state.philosophyVersions||[]).length>0;
-  const hasHowWeBat=(state.howWeBatVersions||[]).length>0;
-  const hasStructure=(state.playerPlanStructureVersions||[]).length>0;
-  const systemLive=hasPhilosophy&&hasHowWeBat&&hasStructure;
+  const systemLive=publishedPlayerSystemReady(state);
   const published=systemLive&&(!round||round.status==='published');
   // Existing saved appearances and live systems retain their progress. Cricket
   // drafts alone never count as a confirmed club look for a first publication.
@@ -4741,7 +4738,7 @@ function clubSetupProgress(state={club,workshop,howWeBatDraft,playerPlanStructur
     {key:'howwebat',title:'How We Bat',shortTitle:'How We Bat',tab:'howwebat',complete:howWeBatReady,owner:'Philosophy Lead',action:'Review How We Bat',description:'Review the club’s batting approach, check each format and confirm it for the season.'},
     {key:'structure',title:'Player Plan Structure',shortTitle:'Plan questions',tab:'plan',complete:structureReady,owner:'Philosophy Lead',action:'Review Player Plan questions',description:'Review the questions generated from How We Bat and confirm what players will complete.'},
     {key:'details',title:'Club look',shortTitle:'Club look',tab:'dashboard',complete:detailsReady,owner:'Club Admin',action:'Review club look',description:'Your batting work is ready. Add your club logo and colours, or keep the current look, before the final publication step. You can change the look later.'},
-    {key:'publish',title:'Publish & notify players',shortTitle:'Publish',tab:'plan',complete:published,owner:'Club Admin',action:'Review & publish',description:'Make How We Bat and Player Plans available together. Registered players receive an email explaining how to get started.'}
+    {key:'publish',title:'Publish club setup',shortTitle:'Publish',tab:'plan',complete:published,owner:'Philosophy Lead',action:'Publish club setup',description:'Publish How We Bat and the Player Plan questions together. This opens Player Plans for registered players and queues their ready-to-start email.'}
   ];
   const firstIncomplete=steps.findIndex(step=>!step.complete);
   return {detailsReady,workshopReady,howWeBatReady,structureReady,published,systemLive,currentIndex:firstIncomplete<0?steps.length:firstIncomplete,steps};
@@ -4781,42 +4778,98 @@ function canActOnClubSetupStep(step){
   return isPhilosophyLead();
 }
 
+let clubHomeExpandedStage=null;
+let clubHomeStageClubId=null;
+let clubHomeNextPreparationKey=null;
+
+function clubSetupContentPage(tab){
+  const selectedTab={workshop:'workshop',howwebat:'howwebat',structure:'plan',publish:'plan'}[clubHomeExpandedStage];
+  if(currentTab==='dashboard'&&clubHomeStageClubId===club?.id&&selectedTab===tab){
+    const content=document.getElementById('clubHomePhaseContent');
+    if(content)return content;
+  }
+  return document.getElementById('page');
+}
+
 function clubSetupStyles(){
   return `<style>
-    .club-home-intro{margin:0 0 22px;max-width:760px;line-height:1.6;color:#56627a}
-    .club-setup-progress{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;list-style:none;padding:0;margin:0 0 24px}
-    .club-setup-progress li{display:flex;align-items:flex-start;gap:9px;padding:12px 8px;border-top:3px solid #e5e8ef;min-width:0;color:#667085}
-    .club-setup-progress li.is-complete{border-color:#bddbd3;color:#285d50}
-    .club-setup-progress li.is-current{border-color:var(--navy,#242e72);color:var(--navy,#242e72);background:#f3f5fc;border-radius:0 0 10px 10px}
+    .club-home-intro{margin:0 0 22px;max-width:820px;line-height:1.6;color:#56627a;font-size:15px}
+    .club-progress-title{font-size:clamp(26px,3vw,32px);line-height:1.2;margin:8px 0 12px}
+    .club-preparation{padding:22px;border:1px solid #dce2ee;border-radius:13px;background:#fff}
+    .club-preparation-heading{display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
+    .club-preparation-heading h2{font-size:21px;margin:0 0 7px}.club-preparation-heading p{margin:0;max-width:740px;font-size:15px;line-height:1.6;color:#56627a}
+    .club-preparation-count{font-size:13px;font-weight:750;color:#285d50}
+    .club-setup-progress{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;list-style:none;padding:0;margin:0}
+    .club-setup-progress li{min-width:0}.club-setup-progress button{display:flex;gap:10px;width:100%;height:100%;text-align:left;background:#fff;border:1px solid #dce2ee;border-radius:9px;padding:14px 10px;color:#263857;cursor:pointer;font:inherit;min-height:82px}
+    .club-setup-progress button[aria-expanded="true"]{background:#eef2ff;border-color:var(--navy,#242e72);box-shadow:inset 0 -2px 0 var(--navy,#242e72)}
+    .club-setup-progress .is-current button{border-color:var(--navy,#242e72)}
     .club-setup-marker{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:#edf0f5;font-size:12px;font-weight:800}
-    .is-current .club-setup-marker{background:var(--navy,#242e72);color:var(--navy-contrast,#fff)}
-    .is-complete .club-setup-marker{background:#dceee8}
-    .club-setup-progress strong{display:block;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
-    .club-setup-progress small{display:block;font-size:10px;margin-top:4px}
-    .club-home-next{padding:clamp(22px,4vw,36px);border-left:4px solid var(--navy,#242e72)}
-    .club-home-next h2{font-size:clamp(23px,3vw,31px);line-height:1.2;margin:9px 0 12px;max-width:740px}
-    .club-home-next p{max-width:740px;line-height:1.6}
-    .club-home-owner{font-size:12px;color:#59657c;margin-top:18px}
-    .club-home-overview{margin-top:20px}
-    .club-home-overview>summary{color:var(--navy,#242e72);font-size:13px;font-weight:700;cursor:pointer;width:fit-content;padding:9px 0}
-    .club-home-overview ol{list-style:none;padding:0;margin:8px 0}
-    .club-home-overview li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;padding:16px 0;border-bottom:1px solid #e8ebf2;align-items:start}
-    .club-home-overview li p{margin:6px 0;max-width:720px;font-size:12px;line-height:1.55;color:#58647b}
-    .club-home-overview small{font-size:11px;color:#59657c}
-    .club-home-overview .setup-step-state{display:block;font-size:11px;margin-top:5px}
-    .club-home-link{border:0;background:transparent;padding:7px 0;color:var(--navy,#242e72);font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-    .club-home-secondary{display:flex;flex-wrap:wrap;gap:20px;margin-top:14px}
-    .club-home-round-note{margin:0 0 16px}
-    @media(max-width:650px){.club-setup-progress{grid-template-columns:1fr;gap:0;margin-bottom:18px}.club-setup-progress li{padding:9px 12px;border-top:0;border-left:3px solid #e5e8ef;align-items:center}.club-setup-progress li.is-current{border-left-color:var(--navy,#242e72);border-radius:0 9px 9px 0}.club-setup-progress li.is-complete{border-left-color:#bddbd3}.club-setup-progress li>div:last-child{display:flex;gap:10px;align-items:center;justify-content:space-between;flex:1}.club-setup-progress small{margin:0;white-space:nowrap}.club-home-overview li{grid-template-columns:25px minmax(0,1fr)}.club-home-overview li>button{grid-column:2;justify-self:start}}
+    .is-current .club-setup-marker{background:var(--navy,#242e72);color:var(--navy-contrast,#fff)}.is-complete .club-setup-marker{background:#dceee8;color:#285d50}
+    .club-setup-progress strong{display:block;font-size:14px;line-height:1.4;overflow-wrap:anywhere}.club-setup-progress small{display:block;font-size:12px;line-height:1.5;margin-top:5px}
+    .club-stage-panel{border-top:1px solid #dce2ee;margin-top:20px;padding-top:20px}.club-stage-panel[hidden],.club-branding-card[hidden]{display:none}
+    .club-stage-heading{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.club-stage-heading h3{font-size:22px;margin:0}.club-stage-heading p{font-size:14px;color:#56627a;line-height:1.6;max-width:760px;margin:8px 0}
+    .club-stage-heading small{display:block;font-size:13px;color:#56627a;margin:8px 0 14px}.club-stage-content{margin-top:14px}.club-stage-content:empty{display:none}
+    .club-home-next{margin-top:18px;padding:22px;border-left:4px solid var(--navy,#242e72)}.club-home-next h2{font-size:23px;line-height:1.3;margin:8px 0 12px}.club-home-next p{max-width:820px;line-height:1.6;font-size:15px}.club-home-next .btn:disabled{opacity:.7;cursor:not-allowed}
+    .club-home-owner{font-size:13px;color:#59657c;margin-top:14px}.club-home-round-note{margin:0 0 16px}.club-help-feature{margin-top:22px}
+    @media(max-width:760px){.club-preparation{padding:16px}.club-setup-progress{gap:6px}.club-setup-progress button{padding:12px 8px;gap:6px;flex-wrap:wrap}}
+    @media(max-width:540px){.club-setup-progress{grid-template-columns:1fr}.club-setup-progress button{min-height:58px;flex-wrap:nowrap;align-items:center}.club-setup-progress button>span:last-child{display:flex;flex:1;justify-content:space-between;gap:12px;align-items:center}.club-setup-progress small{margin:0}.club-home-next{padding:18px}}
   </style>`;
 }
 
 function clubSetupProgressHtml(progress){
-  return `<ol class="club-setup-progress" aria-label="Club setup progress">${progress.steps.map((step,index)=>{
+  return `<ol class="club-setup-progress" aria-label="Five preparation steps before players build their plans">${progress.steps.map((step,index)=>{
     const current=index===progress.currentIndex;
-    const state=step.complete?'Complete':current?'Current step':'Locked';
-    return `<li class="${step.complete?'is-complete':current?'is-current':'is-future'}" ${current?'aria-current="step"':''}><span class="club-setup-marker" aria-hidden="true">${step.complete?'✓':index+1}</span><div><strong>${esc(step.shortTitle)}</strong><small>${state}</small></div></li>`;
+    return `<li class="${step.complete?'is-complete':current?'is-current':'is-future'}"><button type="button" data-club-stage="${step.key}" aria-expanded="false" aria-controls="clubHomeStagePanel" ${current?'aria-current="step"':''}><span class="club-setup-marker" aria-hidden="true">${step.complete?'✓':index+1}</span><span><strong>${esc(step.shortTitle)}</strong><small>${step.complete?'Complete':`Not complete${current?' · Next step':''}`}</small></span></button></li>`;
   }).join('')}</ol>`;
+}
+
+async function expandClubHomeStage(key,progress){
+  const page=document.getElementById('page');
+  const panel=document.getElementById('clubHomeStagePanel');
+  const content=document.getElementById('clubHomePhaseContent');
+  if(!panel||!content||currentTab!=='dashboard')return;
+  clubHomeExpandedStage=key;
+  page.querySelectorAll('[data-club-stage]').forEach(button=>button.setAttribute('aria-expanded',String(button.dataset.clubStage===key)));
+  const branding=page.querySelector('.club-branding-card');
+  if(branding)branding.hidden=true;
+  panel.hidden=!key;
+  content.innerHTML='';
+  if(!key)return;
+  const step=progress.steps.find(item=>item.key===key);
+  if(!step)return;
+  const index=progress.steps.indexOf(step);
+  const current=index===progress.currentIndex;
+  const waiting=step.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
+  const canAct=current&&canActOnClubSetupStep(step)&&!waiting;
+  const canView=step.complete&&canOpenClubTab(step.tab)&&(key!=='details'||isAdmin());
+  const description=step.complete
+    ?(key==='publish'?'The club’s batting approach and Player Plan questions are published. Registered players can now build their Player Plans, train, and learn through feedback. People can continue to register.':`View the saved ${step.title}. The full phase information is shown below.`)
+    :current?(waiting?'Your contribution is submitted. Your Philosophy Lead will choose the club’s approach.':step.description)
+    :`Complete ${progress.steps.slice(0,index).filter(item=>!item.complete).map(item=>item.shortTitle).join(', ')} first. This stage is not complete yet.`;
+  document.getElementById('clubHomeStageHeading').innerHTML=`<div><div class="section-label">Step ${index+1} · ${step.complete?'Complete':'Not complete'}</div><h3>${step.complete?'View ':''}${esc(step.title)}</h3><p>${esc(description)}</p><small>${step.complete?'Saved stage':canAct?'Led by':'Waiting for'} ${step.complete?'':esc(step.owner)}${waiting?' · Your response is complete':''}</small></div><button class="btn ghost compact-btn" type="button" id="closeClubHomeStage">Close details</button>`;
+  document.getElementById('closeClubHomeStage').onclick=()=>{
+    expandClubHomeStage(null,progress);
+    page.querySelector(`[data-club-stage="${key}"]`)?.focus({preventScroll:true});
+  };
+  if(key==='details'&&(canAct||canView)&&branding){branding.hidden=false;return;}
+  if(canView&&key!=='details'){
+    try{
+      if(key==='workshop')await renderWorkshop();
+      else if(key==='howwebat')renderPublishedHowWeBat();
+      else await renderPlanStructure();
+    }catch(error){
+      if(clubHomeExpandedStage===key&&currentTab==='dashboard')content.innerHTML=`<div class="notice">${esc(error.message||String(error))}</div>`;
+    }
+    return;
+  }
+  if(current){
+    const label=key==='workshop'&&!workshop?.philosophy_lead_user_id&&isAdmin()?'Choose a Philosophy Lead':step.action;
+    content.innerHTML=`${!canAct&&!waiting?`<p class="help">${key==='details'?'Your Club Admin':'Your Philosophy Lead'} needs to complete this step.</p>`:''}<button class="btn secondary" id="continueClubHomeStage" type="button" ${canAct?'':'disabled'}>${esc(label)}</button>`;
+    document.getElementById('continueClubHomeStage').onclick=async()=>{
+      if(!canAct||!canOpenClubTab(step.tab)||!await saveClubEditsBeforeNavigation())return;
+      currentTab=step.tab;fixtureLocalStorage.setItem(`bdp-tab-${club.id}`,currentTab);await renderTab();
+    };
+  }else if(step.complete){content.innerHTML='<p class="help">Your club’s authorised setup team can view the details of this phase.</p>';}
 }
 
 
@@ -5116,7 +5169,8 @@ async function renderPlayerJoinRoute(token){
     app.innerHTML=`<div class="login" style="max-width:650px">
       <div class="section-label">${esc(info.club_name)}</div>
       <h1>Player sign-up is currently closed.</h1>
-      <p>Your club has temporarily closed self-service player registration. Speak to a club coach or administrator if you still need access.</p>
+      <p>Your club has temporarily closed player registration. Ask your Club Admin when sign-up will reopen.</p>
+      <p>Already registered? <a href="./app.html?signin=1">Sign in to your account</a>.</p>
     </div>`;
     return;
   }
@@ -5126,6 +5180,8 @@ async function renderPlayerJoinRoute(token){
       <div class="section-label">Player sign-up</div>
       <h1>Join ${esc(info.club_name)}</h1>
       <p>This link registers you as a <strong>Player</strong>. If you are also a captain or coach, the Club Admin can add those permissions afterwards.</p>
+      ${info.plans_ready===false?'<div class="notice">You can register now. Your club is preparing its setup; we’ll email you when Player Plans are ready. Assigned workshop and setup roles can take part before then.</div>':''}
+      <p>Already have an account? <a href="./app.html?player_join=${encodeURIComponent(token)}&signin=1">Sign in with your password</a>.</p>
       <div class="field"><label>Your email</label><input id="playerJoinEmail" type="email" placeholder="you@example.com"></div>
       <button class="btn secondary" id="playerJoinSignIn">Send secure sign-in link</button>
       <div id="playerJoinStatus" class="help"></div>
@@ -5154,7 +5210,8 @@ async function renderPlayerJoinRoute(token){
   app.innerHTML=`<div class="login" style="max-width:650px">
     <div class="section-label">Player sign-up</div>
     <h1>Join ${esc(info.club_name)}</h1>
-    <p>You’re joining as a <strong>Player</strong>. Captain/coach access is assigned separately by the club.</p>
+    <p>You’re joining as a <strong>Player</strong>. Captain/coach access and workshop participation are assigned separately by the club.</p>
+    ${info.plans_ready===false?'<div class="notice">Registration is available now. Player Plans open after the club publishes its setup. If you have been assigned a setup role, you can start that work now.</div>':''}
     <div class="field"><label>Your name</label><input id="playerJoinName" value="${esc(profileData?.display_name||'')}" placeholder="Full name"></div>
     <button class="btn secondary" id="completePlayerJoin">Join ${esc(info.club_name)}</button>
     <div id="completePlayerJoinStatus" class="help"></div>
@@ -5458,9 +5515,12 @@ function guideCapabilityForCurrentProduct(capability){
       short_explanation:'Agree how your club wants to bat. Turn that into How We Bat, individual Player Plans and personalised How We Train plans. Use innings and training feedback to keep improving.',
       target_tab:'guide',
       tutorial:[
+        {title:'Register people and assign access',body:'People can sign up at any stage. Everyone who plays joins as a Player; non-playing staff use their own sign-up route. The Club Admin assigns club roles in People & Sign-up and selects workshop participants in the Workshop. Registration alone gives no access to other players or unfinished setup.',target_tab:isAdmin()?'permissions':'guide'},
         {title:'Agree the batting philosophy',body:'The Philosophy Lead and nominated coaches share their views in the Batting Philosophy Workshop, then settle the club’s approach.',target_tab:'workshop'},
         {title:'Create How We Bat',body:'Club Batting turns that philosophy into How We Bat: the club’s guide to its batting approach. The Philosophy Lead reviews and confirms it.',target_tab:'howwebat'},
         {title:'Set the Player Plan questions',body:'How We Bat generates the prompts for individual Player Plans. The Philosophy Lead refines and confirms them; the Club Admin checks the club look before the Lead publishes.',target_tab:'plan'},
+        
+        {title:'Publish, then start Player Plans',body:'The five preparation steps prepare the club’s approach and questions. Registered players see a waiting message until publication, when their ready-to-start email is queued. Player Plans, training and feedback are the continuing part of the process.',target_tab:playerPlanTarget},
         {title:'Set Player Plan dates',body:'The Club Admin sets due dates for the format plans each Playing Group needs. Other formats stay optional.',target_tab:'players',focus:'plan_dates'},
         {title:'Build a Player Plan',body:'Each batter chooses their shots, when to use them and how to build an innings. Complete Core, then the formats you play.',target_tab:playerPlanTarget},
         {title:'Train the plan',body:'The completed plan generates personalised How We Train suggestions. Practise your shots and decisions so you can commit when the right ball arrives.',target_tab:'howwetrain'},
@@ -5777,6 +5837,9 @@ async function renderClubDashboard(){
   const showRoundReview=(isAdmin()||isPhilosophyLead())&&!!(workshop||howWeBatDraft||playerPlanStructureDraft||progress.systemLive);
   const canReviewLook=isAdmin()&&(progress.structureReady||progress.systemLive);
   const showBranding=false;
+  if(clubHomeStageClubId!==club.id){clubHomeExpandedStage=null;clubHomeStageClubId=club.id;clubHomeNextPreparationKey=null;}
+  if(!progress.published&&(!clubHomeExpandedStage||clubHomeNextPreparationKey!==step?.key))clubHomeExpandedStage=step?.key||null;
+  clubHomeNextPreparationKey=step?.key||null;
   const contributorWaiting=step?.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
   const canAct=!!step&&canActOnClubSetupStep(step)&&!contributorWaiting;
   const registeredPlayerCount=(players||[]).length;
@@ -5794,24 +5857,15 @@ async function renderClubDashboard(){
 
   page.innerHTML=`${clubSetupStyles()}
     <div class="section-label">Club Home</div>
-    <p class="club-home-intro">Build a shared batting approach, turn it into a plan for each player and connect those plans to practice. We’ll guide you through one step at a time.</p>
-    <section class="club-help-feature" aria-labelledby="clubHelpTitle">
-      <div><div class="section-label">Help at every step</div><h2 id="clubHelpTitle">Your tutorials. Your Guide.</h2><p>See how each stage works, or ask a question about your next step.</p></div>
-      <div class="btnrow"><button class="btn secondary" type="button" id="dashboardLearnClubBatting">Explore tutorials</button><button class="btn ghost" type="button" id="dashboardAskGuide">Ask the Guide</button></div>
-    </section>
-    ${clubSetupProgressHtml(progress)}
-    ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">You are preparing a new philosophy round. Players can keep using the published How We Bat and Player Plans while you work through these steps.</div>':''}
-    <section class="card club-home-next" aria-labelledby="clubHomeNextTitle">
-      <div class="section-label">${progress.published?'Ready for players':`Step ${progress.currentIndex+1} of ${progress.steps.length}${canAct?' · Your next step':' · Club’s next step'}`}</div>
-      <h2 id="clubHomeNextTitle">${progress.published?'Put your club’s plans into practice.':step?.key==='details'?'Make it look like your club.':esc(step?.title||'Club setup')}</h2>
-      <p>${progress.published
-        ?'How We Bat and Player Plans are available. Players can complete their plans and use How We Train to shape their practice. Coaches and captains can follow up through Players.'
-        :canAct?esc(step.description):esc(waitingCopy)}</p>
-      ${progress.published
-        ?`<div class="btnrow"><button class="btn secondary" type="button" data-home-go="${liveAction.tab}">${liveAction.label}</button></div>${canUsePlayersWorkspace()?`<div class="club-home-owner">${registeredPlayerCount} registered player${registeredPlayerCount===1?'':'s'} · Manage sign-up, roles and playing groups from Players.</div>`:''}`
-        :`<div class="btnrow"><button class="btn secondary" type="button" ${canAct?(step.key==='details'?'data-open-branding':`data-home-go="${step.tab}"`):'disabled aria-disabled="true"'}>${esc(nextLabel)}</button></div><div class="club-home-owner">${canAct?'Led by':'Waiting for'} ${esc(step.owner)}${contributorWaiting?' · Your response is complete':''}</div>`}
-    </section>
-
+    <h1 class="club-progress-title">Your club’s progress</h1>
+    <p class="club-home-intro">Build your club’s approach, bring players on board and keep connecting their plans, training and feedback.</p>
+    ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">You are preparing a new philosophy round. Existing players can keep using the published How We Bat and Player Plans. People can still register and use the published version while you prepare its replacement.</div>':''}
+    <section class="club-preparation" aria-labelledby="clubPreparationTitle">
+      <div class="club-preparation-heading"><div><h2 id="clubPreparationTitle">Before players build their plans</h2><p>These five steps prepare the club’s approach and Player Plan questions. People can sign up at any time, and the Club Admin can assign setup roles. After publication, players build their plans, put them into practice through How We Train, and keep learning through feedback and conversations.</p></div><span class="club-preparation-count">${progress.published?'Ready for Player Plans':`${progress.steps.filter(item=>item.complete).length} of 5 preparation steps complete`}</span></div>
+      ${clubSetupProgressHtml(progress)}
+      <section class="club-stage-panel" id="clubHomeStagePanel" hidden>
+        <div class="club-stage-heading" id="clubHomeStageHeading"></div>
+        <div class="club-stage-content" id="clubHomePhaseContent"></div>
     ${canReviewLook?`<section class="card club-branding-card" style="margin-top:16px" ${showBranding?'':'hidden'}>
       <div class="setup-collapsible-body">
         <h3>Club logo and colours</h3><p class="help setup-collapsible-intro">Your batting approach and Player Plan questions are ready. Personalise the look now, or keep the current look. You can change it after publication too.</p>
@@ -5870,28 +5924,23 @@ async function renderClubDashboard(){
       </div>
     </section>`:''}
 
-    <details class="club-home-overview" id="clubSystemOverview">
-      <summary>View the whole Club Batting system</summary>
-      <ol>${progress.steps.map((item,index)=>{
-        const current=index===progress.currentIndex;
-        const available=(item.complete||current)&&canOpenClubTab(item.tab)&&(item.key!=='details'||canReviewLook);
-        const state=item.complete?'Complete':current?'Current step':'Locked until the previous step is complete';
-        return `<li><span class="club-setup-marker" aria-hidden="true">${item.complete?'✓':index+1}</span><div><strong>${esc(item.title)}</strong><span class="setup-step-state">${state}</span><p>${esc(item.description)}</p><small>${esc(item.owner)}</small></div>${available?`<button class="club-home-link" type="button" ${item.key==='details'?'data-open-branding':`data-home-go="${item.tab}"`}>${item.complete?'Review':'Open current step'}</button>`:''}</li>`;
-      }).join('')}</ol>
-      <p class="help">After publication: players complete their plans, practise with How We Train and review their progress with coaches and captains. Sign-up and player management stay available throughout setup.</p>
-      <div class="club-home-secondary">
-        ${isAdmin()?'<button class="club-home-link" type="button" data-home-go="permissions">People & Sign-up</button>':''}
-        ${progress.systemLive?'<button class="club-home-link" type="button" data-home-go="howwebat">Read How We Bat</button>':''}
-      </div>
-    </details>
-
+      </section>
+    </section>
+    <section class="card club-home-next" aria-labelledby="clubHomeNextTitle">
+      <div class="section-label">${progress.systemLive?'Next · Put the plans into practice':'Available now · People & roles'}</div>
+      <h2 id="clubHomeNextTitle">${progress.systemLive?'Get your players using their plans':'Bring your people on board'}</h2>
+      <p>${progress.systemLive?'Invite anyone who has not registered, organise your Playing Groups and set plan due dates. Registered players can now build their Player Plans, use How We Train and keep learning through feedback.':'People can register now. Everyone who plays joins as a Player; non-playing staff use the staff sign-up link. The Club Admin assigns club roles in People & Sign-up, then chooses the Philosophy Lead and contributors in the Workshop.'}</p>
+      ${progress.systemLive?'':'<div class="notice compact">Players without a setup role will see a clear waiting message until the club publishes. People with assigned workshop or setup access can begin their part now.</div>'}
+      <div class="btnrow" style="margin-top:14px">${isAdmin()?'<button class="btn secondary" type="button" data-home-go="permissions">People & Sign-up</button>':''}${canUsePlayersWorkspace()?`<button class="btn ${isAdmin()?'ghost':'secondary'}" type="button" data-home-go="players">Open Players</button>`:progress.systemLive?`<button class="btn secondary" type="button" data-home-go="${liveAction.tab}">${liveAction.label}</button>`:''}</div>
+      ${canUsePlayersWorkspace()?`<div class="club-home-owner">${registeredPlayerCount} registered player${registeredPlayerCount===1?'':'s'}${club.player_signup_open===false?' · Player sign-up is manually closed. Your Club Admin can reopen it in People & Sign-up.':' · Sign-up is open during club preparation too.'}</div>`:''}
+    </section>
     ${showRoundReview?`<details class="card setup-collapsible club-round-review" style="margin-top:22px">
-      <summary class="setup-collapsible-summary"><div class="setup-collapsible-title"><strong>Review or restart the club’s approach</strong></div><span class="setup-collapsible-toggle"></span></summary>
+      <summary class="setup-collapsible-summary"><div class="setup-collapsible-title"><strong>Start a new club setup</strong></div><span class="setup-collapsible-toggle"></span></summary>
       <div class="setup-collapsible-body">
-        <p>Revisit your club’s approach whenever you need to—for a new season, a change of leadership or a different direction. Review the workshop, or start a new philosophy round.</p>
+        <p>Revisit your club’s approach whenever you need to—for a new season, a change of leadership or a different direction. View the workshop, or deliberately start a new philosophy round.</p>
         <p class="help">Starting a new round archives the current workshop responses and clears the working drafts. Any published How We Bat and Player Plans stay available while you build a replacement. Your club details, players and Playing Groups do not need to be set up again.</p>
         <div class="btnrow">
-          <button class="btn ghost" type="button" data-home-go="workshop">Review Batting Philosophy Workshop</button>
+          <button class="btn ghost" type="button" data-home-go="workshop">View Batting Philosophy Workshop</button>
           <button class="btn ghost" type="button" id="startNewPhilosophyRound">Start a new philosophy round</button>
         </div>
         <p class="help">Club Admin or Philosophy Lead · You’ll confirm before anything is reset.</p>
@@ -5904,7 +5953,11 @@ async function renderClubDashboard(){
         ${trial?`<p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}. Paid continuation is your club’s choice. Nothing is automatically charged.</p>${trial.status==='active'?'<div class="btnrow"><button class="btn ghost compact-btn" id="continueClubTrial">Review continuation options</button><button class="btn ghost compact-btn" id="endClubTrial">End after trial</button></div>':''}`
           :`<div class="help">${entitlement?entitlementActive?'Your club’s access is active.':'Your club’s access needs attention. Contact Club Batting for help.':'Access details are unavailable right now.'}</div>`}
       </div>
-    </details>`:''}`;
+    </details>`:''}
+    <section class="club-help-feature" aria-labelledby="clubHelpTitle">
+      <div><div class="section-label">Help at every step</div><h2 id="clubHelpTitle">Your tutorials. Your Guide.</h2><p>See how each stage works, or ask a question about your next step.</p></div>
+      <div class="btnrow"><button class="btn secondary" type="button" id="dashboardLearnClubBatting">Explore tutorials</button><button class="btn ghost" type="button" id="dashboardAskGuide">Ask the Guide</button></div>
+    </section>`;
 
   document.getElementById('continueClubTrial')?.addEventListener('click',()=>openClubTrialContinuationDialog(trial));
   document.getElementById('startNewPhilosophyRound')?.addEventListener('click',startNewPhilosophyRound);
@@ -5914,6 +5967,8 @@ async function renderClubDashboard(){
     if(error){alert(error.message);return;}await renderClubDashboard();
   });
   if(canReviewLook)wireClubBrandingControls(page);
+  page.querySelectorAll('[data-club-stage]').forEach(button=>button.onclick=()=>expandClubHomeStage(clubHomeExpandedStage===button.dataset.clubStage?null:button.dataset.clubStage,progress));
+  await expandClubHomeStage(clubHomeExpandedStage,progress);
   document.getElementById('dashboardLearnClubBatting')?.addEventListener('click',()=>openClubBattingGuideTopic('whole_process'));
   document.getElementById('dashboardAskGuide')?.addEventListener('click',()=>openClubBattingGuideTopic('whole_process',{focus:'chat'}));
   page.querySelectorAll('[data-home-go]').forEach(b=>b.onclick=async()=>{
@@ -6566,11 +6621,11 @@ function workshopNextStep({me,setupSaved,leadName,outstandingNames,canCompare,lo
 
 let workshopRenderSequence=0;
 async function renderWorkshop(){
-  const page=document.getElementById('page');
+  const page=clubSetupContentPage('workshop');
   const targetClubId=club.id;
   const targetTab=currentTab;
   const renderSequence=++workshopRenderSequence;
-  const stillCurrent=()=>renderSequence===workshopRenderSequence&&club?.id===targetClubId&&currentTab===targetTab&&document.getElementById('page')===page;
+  const stillCurrent=()=>renderSequence===workshopRenderSequence&&club?.id===targetClubId&&currentTab===targetTab&&clubSetupContentPage('workshop')===page;
   page.innerHTML='<div class="splash">Loading Batting Philosophy Workshop…</div>';
 
   const [
@@ -6597,7 +6652,7 @@ async function renderWorkshop(){
 
   if(!stillCurrent())return;
   if(cErr || iErr || snapErr || lateErr || statusErr){
-    document.getElementById('page').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr||statusErr).message)}</div>`;
+    clubSetupContentPage('workshop').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr||statusErr).message)}</div>`;
     return;
   }
 
@@ -7013,7 +7068,7 @@ async function renderWorkshop(){
   }
 
   html+=`<details class="workshop-about"><summary style="cursor:pointer;font-weight:700;padding:14px 0">About this workshop</summary>${buildWorkspaceAudienceNotice()}</details></div>`;
-  document.getElementById('page').innerHTML=html;
+  clubSetupContentPage('workshop').innerHTML=html;
   if(document.getElementById('workshopGuideLink'))document.getElementById('workshopGuideLink').onclick=()=>openClubBattingGuideTopic('philosophy_workshop');
   if(document.getElementById('workshopNextAction'))document.getElementById('workshopNextAction').onclick=async()=>{
     if(nextStep.action==='response'){await document.getElementById('myResponseAction')?.onclick?.();return;}
@@ -9324,7 +9379,7 @@ function renderPublishedHowWeBat(){
           ?'Your Philosophy Lead creates and finalises How We Bat. Open Batting Philosophy Workshop to manage contributors and check progress.'
           :'Open Batting Philosophy Workshop to choose a Philosophy Lead and save the workshop setup. The lead will create and finalise the club’s How We Bat.')
         :'Your Philosophy Lead is preparing the club’s batting approach. It will appear here when the Club Batting System is published.';
-    document.getElementById('page').innerHTML=`<section class="card player-gate">
+    clubSetupContentPage('howwebat').innerHTML=`<section class="card player-gate">
       <div class="section-label">How We Bat</div>
       <h2 style="font-size:clamp(22px,3vw,28px);line-height:1.25">Your club has not finalised its How We Bat yet.</h2>
       <p>${nextStep}</p>
@@ -9346,7 +9401,7 @@ function renderPublishedHowWeBat(){
     && snap.closing_strapline===publishedComparison?.closing_strapline
     && JSON.stringify(snap.formats||{})===JSON.stringify(publishedComparison?.formats||{});
 
-  document.getElementById('page').innerHTML=`<div class="hwb-published-shell">
+  clubSetupContentPage('howwebat').innerHTML=`<div class="hwb-published-shell">
     <div class="guide-context-bar"><span><strong>How We Bat</strong> · The club framework players can actually use.</span><button type="button" class="btn ghost compact-btn" id="howWeBatGuideLink">${canSeeWorking?'Show me how':'How this fits together'}</button></div>
     ${canSeeWorking?`<div class="published-version-note">${workingPublished?'Published How We Bat · locked for the season':workingReady?'Locked draft · ready for Player Plan Structure':'Working draft · review before locking'}</div>`:''}
     <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
@@ -9813,26 +9868,21 @@ function renderPlayerPlanAddedIdeas(groups,error=''){
   </details>`;
 }
 
-function renderClubPublicationGate(title,description){
-  const lead=isPhilosophyLead();
-  const training=title==='How We Train';
-  const hwbReady=hasLockedHowWeBatForCurrentRound();
-  const destination=lead?(hwbReady?'plan':howWeBatDraft?'howwebat':'workshop'):training?'guide':isAdmin()?'workshop':'guide';
-  const label=({plan:'Open Player Plan Structure',howwebat:'Open How We Bat',workshop:'Open Batting Philosophy Workshop',guide:training?'What is How We Train?':'What is a Player Plan?'})[destination];
-  const nextStep=lead
-    ?(hwbReady?'Review and lock the Player Plan Structure, then publish the Club Batting System to open Player Plans.':'Finalise How We Bat, then review the Player Plan Structure and publish the Club Batting System.')
-    :isAdmin()?'The Philosophy Lead needs to finalise How We Bat and publish the Club Batting System. You can check progress in Batting Philosophy Workshop.':'We’ll email you when you can start.';
+function renderClubPublicationGate(title){
+  const setupAccess=canUseClubHome();
   document.getElementById('page').innerHTML=`<section class="card player-gate">
     <div class="section-label">${esc(title)}</div>
-    <h2>${lead||isAdmin()?'Your club is preparing its Player Plans.':'Your Player Plan isn’t ready yet.'}</h2>
-    <p>${esc(lead||isAdmin()?description:'Your club is finalising How We Bat and preparing the questions for your plan.')}</p><p class="help">${esc(nextStep)}</p>
-    ${lead||isAdmin()
-      ?`<div class="btnrow"><button class="btn secondary" id="publicationNextStep">${esc(label)}</button></div>`
-      :'<div class="btnrow"><button class="btn secondary" id="publicationNextStep" disabled aria-describedby="playerPlanWaitingNote">Complete your Player Plan</button></div><p class="help" id="playerPlanWaitingNote">Available once your club releases its plans. You’ll start with Core, then complete the formats you play.</p>'}
+    <h2>${isPlayerUser()?'You’re registered. Your club is preparing its setup.':'Your club is preparing its setup.'}</h2>
+    <p>${esc(club.name)} is completing its batting approach and Player Plan questions. ${isPlayerUser()?'Your Player Plan will open when the club publishes. You do not need to register again.':'You are registered as non-playing staff and do not receive a Player Plan.'}</p>
+    <div class="notice"><strong>What happens next?</strong><br>We’ll email registered players when they can start. Then you’ll build your Player Plan, use How We Train, and keep learning through feedback.</div>
+    <p>${setupAccess?'You have assigned club access and can continue that work now.':'If your club needs you in the Workshop or another setup role, the Club Admin can assign that access to this account. Until then, you can explore the tutorials and ask the Guide.'}</p>
+    <div class="btnrow">${setupAccess?'<button class="btn secondary" id="publicationSetupAccess">Open Club Home</button>':''}<button class="btn ${setupAccess?'ghost':'secondary'}" id="publicationHelp">Explore tutorials & Guide</button><button class="btn ghost" id="refreshPublication">Check for updates</button></div>
   </section>`;
-  if(lead||isAdmin())document.getElementById('publicationNextStep').onclick=()=>{
-    if(destination==='guide'){openClubBattingGuideTopic(training?'how_we_train':'player_plan');return;}
-    currentTab=destination;renderTab();
+  document.getElementById('publicationSetupAccess')?.addEventListener('click',()=>{currentTab='dashboard';renderTab();});
+  document.getElementById('publicationHelp').onclick=()=>openClubBattingGuideTopic('whole_process');
+  document.getElementById('refreshPublication').onclick=async()=>{
+    const button=document.getElementById('refreshPublication');button.disabled=true;button.textContent='Checking…';
+    await loadContext();
   };
 }
 
@@ -9843,7 +9893,7 @@ async function renderPlanStructure(){
     return renderMyPlan();
   }
   const formats=planStructureFormats();
-  const page=document.getElementById('page');
+  const page=clubSetupContentPage('plan');
   const targetClubId=club.id;
   const targetTab=currentTab;
   const renderSequence=++planStructureRenderSequence;
@@ -9865,11 +9915,14 @@ async function renderPlanStructure(){
   }
 
   const editable=isPhilosophyLead();
-  const locked=playerPlanStructureDraft?.status==='ready';
+  const locked=playerPlanStructureDraft?.status==='ready'||(!playerPlanStructureDraft&&clubSetupProgress().published);
   const legacyDraft=!!playerPlanStructureDraft && Number(playerPlanStructureDraft?.structure?.schema_version||0)<2;
 
   if(!playerPlanStructureWorking){
-    if(!playerPlanStructureDraft || (legacyDraft && !locked)){
+    if(!playerPlanStructureDraft&&locked){
+      playerPlanStructureWorking=normalisePlayerPlanStructure(playerPlanStructureVersions[0].snapshot,false);
+      playerPlanStructureDirty=false;
+    }else if(!playerPlanStructureDraft || (legacyDraft && !locked)){
       playerPlanStructureWorking=generatedPlayerPlanStructure(false);
       playerPlanStructureDirty=true;
     }else{
@@ -9885,7 +9938,7 @@ async function renderPlanStructure(){
   const latestVersion=philosophyVersions?.[0]?.version_number||null;
   const latestPublishedStructure=playerPlanStructureVersions?.[0]?.snapshot||null;
   const latestHwb=howWeBatVersions?.[0]?.snapshot?upgradeLegacyHowWeBatWording(structuredClone(howWeBatVersions[0].snapshot)):null;
-  const currentDraftPublished=!!(workshop?.status==='published' && locked && latestPublishedStructure && playerPlanStructureDraft?.structure
+  const currentDraftPublished=(!playerPlanStructureDraft&&clubSetupProgress().published)||!!(workshop?.status==='published' && locked && latestPublishedStructure && playerPlanStructureDraft?.structure
     && howWeBatDraft?.status==='ready' && latestHwb
     && howWeBatDraft.identity_statement===latestHwb.identity_statement
     && howWeBatDraft.closing_strapline===latestHwb.closing_strapline
@@ -9894,7 +9947,7 @@ async function renderPlanStructure(){
   let playerAddedIdeasHtml='';
   if(isAdmin()){
     const ideaData=await loadPlayerPlanIdeaPlayers();
-    if(renderSequence!==planStructureRenderSequence||club?.id!==targetClubId||currentTab!==targetTab||document.getElementById('page')!==page)return;
+    if(renderSequence!==planStructureRenderSequence||club?.id!==targetClubId||currentTab!==targetTab||clubSetupContentPage('plan')!==page)return;
     playerAddedIdeasHtml=renderPlayerPlanAddedIdeas(playerPlanAddedIdeas(ideaData.players,playerPlanStructureWorking),ideaData.error);
   }
 
@@ -10162,6 +10215,7 @@ async function renderPermissions(){
   const pendingHandover=(pendingHandovers||[])[0]||null;
   const playerJoinLink=`${location.origin}${location.pathname}?player_join=${encodeURIComponent(club.player_join_token||'')}`;
   const staffJoinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}&involvement=coach_captain`;
+  const plansReady=workspacePlayerPlansPublished();
   const signupOpen=club.player_signup_open!==false;
   const clubRoleValues=new Set(['captain','coach','head_coach','admin']);
   const roleMembers=(members||[]).filter(m=>m.user_id===leadAdminId || clubRoleValues.has(m.permission_role));
@@ -10263,6 +10317,7 @@ async function renderPermissions(){
   }).join('');
 
   document.getElementById('page').innerHTML=`
+  <style>.player-share-layout[hidden],.join-security-row[hidden]{display:none!important}</style>
   <section class="card">
     <div class="section-label">Players · Club people</div>
     <h2>People & Sign-up</h2>
@@ -10274,6 +10329,7 @@ async function renderPermissions(){
     <section class="card player-signup-card">
       <div class="section-label">Player sign-up</div>
       <h2>Invite players to register</h2>
+      ${plansReady?'':`<div class="notice"><strong>You can register people during preparation.</strong> ${signupOpen?'Players can join now.':'Reopen sign-up when you want to invite players.'} Assign any club roles below, then choose workshop participants in the Workshop. Players without an assigned setup role will see a waiting message until How We Bat and Player Plans are published.</div>`}
       <div class="help">Post the WhatsApp message in the players chat, or use the QR code at training / on a noticeboard. Everyone using this route joins as a <strong>Player</strong>. If they also captain or coach, assign that club role afterwards.</div>
 
       <div class="signup-status-row">
@@ -10302,7 +10358,7 @@ async function renderPermissions(){
 
           <div class="share-preview">
             <strong>What players experience</strong>
-            <span>Open link → enter email → secure sign-in → confirm name → joined as Player.</span>
+            <span>Open link → enter email → secure sign-in → confirm name → joined as Player.</span><span>${plansReady?'Player Plans are available after joining.':'Before publication: registration is complete, with a waiting message for Player Plans. Assigned setup roles are available now.'}</span>
           </div>
         </div>
       </div>
@@ -10430,7 +10486,7 @@ async function renderPermissions(){
   </section>
 `;
 
-  const playerWhatsAppMessage=`${club.name} players — Club Batting is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If you are also a captain or coach, still use this Player link — the club will add that role afterwards. If the club batting philosophy is still being finalised, you can register now and we’ll let you know when Player Plans open.`;
+  const playerWhatsAppMessage=`${club.name} players — Club Batting is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If you are also a captain or coach, still use this Player link — the club will add that role afterwards. ${plansReady?'Read How We Bat, build your Player Plan and use How We Train to put it into practice.':'The club is preparing How We Bat and the Player Plan questions. Register now; we’ll email you when your plan is ready to start. Anyone assigned a setup role can take part in preparation now.'}`;
 
   const copyText=async(text,label,statusId)=>{
     const st=document.getElementById(statusId);
@@ -11473,21 +11529,8 @@ async function renderHowWeTrain(){
   const page=document.getElementById('page');
   const sequence=++howWeTrainRenderSequence,clubId=club?.id,playerId=myPlayer?.id,tabAtStart=currentTab;
   const isCurrent=()=>sequence===howWeTrainRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab===tabAtStart;
-  if(!howWeBatVersions.length){
-    let shared={coaching_actions:[]};
-    if(playerId){
-      page.innerHTML='<div class="splash">Loading How We Train…</div>';
-      try{const response=await supabase.rpc('get_player_coaching_actions',{p_player_id:playerId});shared={coaching_actions:response.data?.actions||[],coaching_actions_error:response.error?.message||''};}catch(error){shared.coaching_actions_error=error?.message||'Could not load';}
-      if(!isCurrent())return;
-    }
-    page.innerHTML=`<section class="card player-gate">
-      <div class="section-label">How We Train</div>
-      <h2>Train your plan until it becomes instinctive.</h2>
-      <p>Practise the decisions you want to make in a match. Once you complete Core and a format in your Player Plan, How We Train will create training suggestions based on your game.</p>
-      <div class="notice compact"><strong>Your club is preparing its Player Plans.</strong><br>${isPlayerUser()?'We’ll email you when you can start. Complete your Player Plan first; your training suggestions will then appear here.':'Club training guidance will appear here when How We Bat is published. Players will receive an email when they can start their plans.'}</div>
-      ${isPlayerUser()?'<div class="btnrow" style="margin-top:14px"><button class="btn secondary" disabled aria-describedby="trainingWaitingNote">Complete your Player Plan</button></div><p class="help" id="trainingWaitingNote">Available once your club releases its plans.</p>':''}
-    </section>${playerId?renderCoachingActions(shared,{playerMode:true}):''}`;
-    bindCoachingActionControls(shared,()=>renderHowWeTrain());
+  if(!workspacePlayerPlansPublished()){
+    renderClubPublicationGate('How We Train');
     return;
   }
 
@@ -12488,8 +12531,14 @@ async function refreshPlayersWorkspaceReminders(){
   playersWorkspaceReminderData.reminders=Array.isArray(playersWorkspaceReminderData.reminders)?playersWorkspaceReminderData.reminders:[];
 }
 
+function publishedPlayerSystemReady(state={philosophyVersions,howWeBatVersions,playerPlanStructureVersions}){
+  const philosophy=state.philosophyVersions?.[0];
+  const howWeBat=state.howWeBatVersions?.[0];
+  const questions=state.playerPlanStructureVersions?.[0];
+  return !!(philosophy&&howWeBat&&questions&&howWeBat.philosophy_version===philosophy.version_number&&questions.philosophy_version===philosophy.version_number);
+}
 function workspacePlayerPlansPublished(){
-  return philosophyVersions.length>0&&howWeBatVersions.length>0&&playerPlanStructureVersions.length>0;
+  return publishedPlayerSystemReady();
 }
 
 function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
@@ -12506,7 +12555,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
     ?'Player Plan up to date ✓'
     :`${planState.completeCount}/${planState.totalCount} required sections complete`;
   const planDetail=!plansPublished
-    ?'Roster, Playing Groups and feedback are available now.'
+    ?'Registration, club roles and Playing Groups are available now. Player Plans open after publication.'
     :overdue
     ?`${overdue.label} was due ${niceDate(overdue.due_date)}`
     :next?.due_date
@@ -12621,11 +12670,12 @@ function renderPlayersWorkspaceList(){
     <div>
       <div class="section-label">${esc(role)} workspace</div>
       <h2>Players</h2>
-      <div class="help">${plansPublished?'Find your players, open their plans and follow up on coaching conversations.':'Manage your player list and follow up on coaching conversations while your club prepares its Player Plan questions.'} Filter by Playing Group or search by name.</div>
+      <div class="help">${plansPublished?'Find your players, open their plans and follow up on coaching conversations.':'Register people, assign club roles and organise Playing Groups while the club prepares its setup. Player Plans open after publication.'} Filter by Playing Group or search by name.</div>
     </div>
     ${isAdmin()?`<div class="btnrow compact"><button class="btn ghost" id="managePeopleFromPlayers">People & Sign-up</button>${plansPublished?'<button class="btn ghost" id="managePlanDatesFromPlayers">Plan dates</button>':''}<button class="btn ghost" id="managePlayingGroupsFromPlayers">Manage Playing Groups</button></div>`:''}
   </section>
 
+  ${plansPublished?'':'<div class="notice" style="margin-top:14px"><strong>People can join now; Player Plans open after publication.</strong> Use People & Sign-up to register people and assign club roles. Choose the Philosophy Lead and contributors in the Workshop. Players without setup access will see a waiting message when they sign in.</div>'}
   <section class="card players-workspace-tools compact">
     <div class="field">
       <label>Find a player</label>
@@ -13217,8 +13267,7 @@ async function renderPlayerHome(){
   const playerId=myPlayer?.id;
   const stillCurrent=()=>sequence===playerHomeRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab==='playerhome'&&document.getElementById('page')===page;
   if(!workspacePlayerPlansPublished()){
-    page.innerHTML=`<section class="card player-gate"><div class="section-label">Player Home</div><h2>Your club is preparing How We Bat.</h2><p>You’ll be able to complete your Player Plan once your club has finalised its approach and the plan questions. We’ll email you when you can start.</p><p class="help">Your Player Plan will connect the club’s approach with your own decisions. How We Train will then help you practise those decisions until they become instinctive.</p>${howWeBatVersions.length?'<button class="btn secondary" id="playerHomeReadHowWeBat">Read How We Bat</button>':''}</section>`;
-    document.getElementById('playerHomeReadHowWeBat')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwebat'}));
+    renderClubPublicationGate('Player Home');
     return;
   }
   if(!myPlayer){
@@ -13468,7 +13517,7 @@ let playerPlanRenderSequence=0;
 async function renderMyPlan(){
   const renderSequence=++playerPlanRenderSequence,clubId=club?.id,playerId=myPlayer?.id,tabAtStart=currentTab;
   const isCurrent=()=>renderSequence===playerPlanRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab===tabAtStart;
-  if(!philosophyVersions.length){
+  if(!workspacePlayerPlansPublished()){
     renderClubPublicationGate('My Player Plan','Your Player Plan will open when your club publishes How We Bat and the Player Plan questions.');
     return;
   }
@@ -16311,7 +16360,10 @@ function fixtureResetGlobals(){
 
 // All people, results and club records in this file are fictional examples.
 const demoStages=[
-  {key:'home',label:'Club Home',tab:'dashboard',role:'admin',hint:'The club has completed its setup and published its batting approach. Explore any stage.'},
+  {key:'home',label:'Club Home · published example',tab:'dashboard',role:'admin',hint:'The five preparation steps are complete. Players can build their plans, train and learn through feedback. People can sign up at any stage. View any saved phase.'},
+  {key:'preparation',label:'Club Home · during preparation',tab:'dashboard',role:'admin',preparing:true,hint:'People can register during preparation. Assign club roles in People & Sign-up, then select the Philosophy Lead and contributors in the Workshop.'},
+  {key:'people',label:'People & Sign-up · during preparation',tab:'permissions',role:'admin',preparing:true,hint:'Player and non-playing staff sign-up stay separate. Registration is available before publication; club roles and workshop access are assigned afterwards.'},
+  {key:'waiting',label:'Player Home · before publication',tab:'playerhome',role:'player',preparing:true,hint:'Alex has registered successfully. Until the club publishes, Player Plans wait; anyone given a workshop or setup role can participate now.'},
   {key:'workshop',label:'Batting Philosophy Workshop',tab:'workshop',role:'admin',hint:'Three contributors have shared independent views. Open their responses and compare How We Bat options.'},
   {key:'howwebat',label:'How We Bat',tab:'howwebat',role:'admin',hint:'This is the club’s published approach. Switch formats to see how the messages change.'},
   {key:'questions',label:'Player Plan questions',tab:'plan',role:'admin',hint:'These confirmed questions come from How We Bat. They help each batter make the club’s approach their own.'},
@@ -16323,11 +16375,13 @@ const demoStages=[
 ];
 let demoCurrentStage='home';
 let demoNavigationBusy=false;
+let demoPublishedSnapshot=null;
 const demoLabels={wicket_preservation:'Value your wicket',leaving_defending:'Leaving and defending',strike_rotation:'Get off strike',boundary_access:'Boundary options',running:'Running between wickets',scoring_areas:'Trusted scoring areas',tempo:'Tempo',matchups:'Matchups',spin_method:'Playing spin',pace_method:'Playing pace',risk_management:'Decision making',reset_routines:'Reset routines',dot_ball_management:'Managing dot balls',powerplay:'Powerplay',death_overs:'Late innings',innovation:'Innovation',patience:'Patience',partnerships:'Partnerships'};
 
 function demoSeedClub(){
+  demoPublishedSnapshot=null;
   fixtureResetGlobals();fixtureLocalStorage.clear();fixtureSessionStorage.clear();
-  club={id:'example-club',name:'Harbour Example Cricket Club',primary_colour:'#203578',accent_colour:'#177c78',branding_updated_at:fixtureNow()};
+  club={id:'example-club',name:'Harbour Example Cricket Club',primary_colour:'#203578',accent_colour:'#177c78',branding_updated_at:fixtureNow(),lead_admin_user_id:'user-admin',player_signup_open:true,player_join_token:'demo-only',join_code:'DEMO-ONLY'};
   session={user:{id:'user-admin',email:'sam@example.test'}};userProfile={user_id:'user-admin',display_name:'Sam Taylor'};
   membership={club_id:club.id,user_id:'user-admin',permission_role:'admin',involvement:'coach_captain'};
   platformRole=null;platformAccessError=false;canBootstrapPlatform=false;
@@ -16371,7 +16425,7 @@ function demoSeedClub(){
   fixtureRows={
     players,user_profiles:[{user_id:'user-admin',display_name:'Sam Taylor'},{user_id:'user-coach',display_name:'Casey Reid'},{user_id:'user-alex',display_name:'Alex Morgan'},{user_id:'user-jordan',display_name:'Jordan Ellis'}],
     club_memberships:[membership,{club_id:club.id,user_id:'user-coach',permission_role:'coach',involvement:'coach_captain'},{club_id:club.id,user_id:'user-alex',permission_role:'player',involvement:'player'},{club_id:club.id,user_id:'user-jordan',permission_role:'captain',involvement:'both'}],
-    philosophy_contributors:contributors,philosophy_contributions:voices,philosophy_contributor_invites:[],philosophy_late_response_actions:[],
+    philosophy_contributors:contributors,philosophy_contributions:voices,philosophy_contributor_invites:[],philosophy_late_response_actions:[],club_access_grants:[],club_admin_handovers:[],
     philosophy_final_draft_snapshots:[{club_id:club.id,responses:voices,response_count:3,source_invited_count:3,created_at:fixtureNow()}],
     player_playing_groups:players.map((p,index)=>({player_id:p.id,playing_group_id:fixtureGroups[index].id,club_id:club.id})),
     player_plan_requirements:fixtureGroups.map((g,index)=>({id:'requirement-'+index,club_id:club.id,format_key:'limited_overs',playing_group_id:g.id,due_date:fixtureDay(14),target_type:'playing_group',active:true})),
@@ -16475,9 +16529,11 @@ openScenarioHowWeBatPreview=function(responses,pMap){
 
 function demoDecorate(){
   // Administrative actions are visible but not offered as working demo operations.
-  for(const id of ['out','joinAnother','startNewPhilosophyRound','managePeopleFromPlayers','managePlayingGroupsFromPlayers','savePlanDates','removePlanDates','remindOverduePlayers','guideAsk','guideSendHandoff','guideHumanHandoff']){
-    const node=document.getElementById(id);if(node){node.disabled=true;node.title='Available in the live club. This is a completed example.';}
+  for(const id of ['out','joinAnother','startNewPhilosophyRound','managePlayingGroupsFromPlayers','savePlanDates','removePlanDates','remindOverduePlayers','guideAsk','guideSendHandoff','guideHumanHandoff','copyPlayerWhatsApp','copyPlayerLink','copyStaffJoinLink','togglePlayerSignup','regeneratePlayerLink','openLeadHandover','sendLeadHandover']){
+    const node=document.getElementById(id);if(node){node.disabled=true;node.title='Available in your live club. These are fictional demo accounts.';}
   }
+  document.querySelectorAll('[data-save-user],[data-assign-club-role],[data-role-user],[data-access-user],[data-access-group-user]').forEach(node=>{node.disabled=true;});
+  const refresh=document.getElementById('refreshPublication');if(refresh)refresh.onclick=()=>demoNavigate('waiting');
   const chat=document.querySelector('.guide-chat-card');
   if(chat){
     // The renderer still owns these controls while awaiting its data. Never
@@ -16489,6 +16545,25 @@ function demoDecorate(){
     chat.hidden=true;
   }
   const question=document.getElementById('guideQuestion');if(question)question.disabled=true;
+}
+// Show the existing registration UI without generating a real sign-up link or QR.
+renderPlayerQRCode=async()=>{
+  const fallback=document.getElementById('qrFallback');
+  if(fallback)fallback.textContent='Your live club’s sign-up QR code appears here. This demo uses fictional accounts.';
+};
+function demoSetPreparation(preparing){
+  if(preparing&&!demoPublishedSnapshot){
+    demoPublishedSnapshot=fixtureClone({workshop,howWeBatDraft,playerPlanStructureDraft,philosophyVersions,howWeBatVersions,playerPlanStructureVersions,workflows:fixtureRows.player_plan_workflows,feedback:fixtureRows.feedback,requirements:fixtureRows.player_plan_requirements});
+    workshop={...workshop,status:'review',final_draft_ready:false,final_draft_started_at:null};
+    howWeBatDraft=null;playerPlanStructureDraft=null;philosophyVersions=[];howWeBatVersions=[];playerPlanStructureVersions=[];
+    fixtureRows.player_plan_workflows=[];fixtureRows.player_plan_requirements=[];
+    fixtureRows.feedback=Object.fromEntries(fixtureRows.players.map(player=>[player.id,{matches:[],training_observations:[],external_training_evidence:[],discussions:[],coaching_actions:[]}]));
+  }else if(!preparing&&demoPublishedSnapshot){
+    ({workshop,howWeBatDraft,playerPlanStructureDraft,philosophyVersions,howWeBatVersions,playerPlanStructureVersions}=demoPublishedSnapshot);
+    fixtureRows.player_plan_workflows=demoPublishedSnapshot.workflows;fixtureRows.feedback=demoPublishedSnapshot.feedback;fixtureRows.player_plan_requirements=demoPublishedSnapshot.requirements;
+    demoPublishedSnapshot=null;
+  }
+  clubHomeExpandedStage=null;clubHomeNextPreparationKey=null;
 }
 const demoOriginalRenderTab=renderTab;
 renderTab=function(){
@@ -16502,6 +16577,7 @@ async function demoNavigate(key,{reset=false}={}){
     if(!reset&&!await saveClubEditsBeforeNavigation())return;
     if(reset){demoSeedClub();}else fixtureResetGlobals();
     const stage=demoStages.find(s=>s.key===key)||demoStages[0];demoCurrentStage=stage.key;
+    demoSetPreparation(!!stage.preparing);
     document.querySelectorAll('dialog').forEach(dialog=>dialog.remove());
     document.getElementById('demoStage').value=stage.key;
     document.getElementById('demoHint').textContent=stage.hint;document.getElementById('demoStatus').hidden=true;
