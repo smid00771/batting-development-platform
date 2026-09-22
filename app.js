@@ -1,10 +1,10 @@
-// Club Batting v0.8.62.4 — club responses do not blacklist a contact email
+// Club Batting v0.8.62.5 — continue directly from outreach to secure trial signup
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.4';
+const APP_UI_VERSION='0.8.62.5';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -10921,7 +10921,6 @@ async function renderSalesProspectRoute(token){
     ended:['Your club’s trial has ended.','Your Club Admin can sign in to review the club’s access. Nothing was automatically charged at the end of the trial.']
   }[p.trial_status];
   const interested=p.status==='interested'||p.status==='onboarding'||!!trialStatusCopy;
-  const trialLinkQueued=p.status==='onboarding';
   app.innerHTML=`<div class="prospect-shell sales-response-shell sales-guide-shell">
     <section class="prospect-hero sales-prospect-hero">
       <div class="section-label">Club Batting</div>
@@ -10948,9 +10947,9 @@ async function renderSalesProspectRoute(token){
     </section>
 
       <section class="card prospect-card sales-response-card">
-        ${interested?`<div class="notice success"><strong>${trialStatusCopy?esc(trialStatusCopy[0]):trialLinkQueued?'Your trial link has been requested.':`Thanks for your interest in Club Batting.`}</strong><br>${trialStatusCopy?esc(trialStatusCopy[1]):trialLinkQueued?'An email with your secure activation link has been queued for the Club Contact. Your full trial begins only when you activate it.':'A valid Club Contact email is needed before we can email your secure trial link.'}</div>${trialStatusCopy?'<div class="btnrow"><button class="btn secondary" id="salesOpenClubBatting">Open Club Batting</button></div>':''}`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Request a link to try the complete Club Batting platform free for 60 days. The full trial starts when you activate it, with no payment upfront. Paid continuation is a separate choice afterwards.</p>
+        ${interested?`${trialStatusCopy?`<div class="notice success"><strong>${esc(trialStatusCopy[0])}</strong><br>${esc(trialStatusCopy[1])}</div><div class="btnrow"><button class="btn secondary" id="salesOpenClubBatting">Open Club Batting</button></div>`:`<h2>Continue your club’s trial sign-up.</h2><p class="help">Your full ${Number(p.trial_days||60)} days begin when you activate. Continue here to sign in or verify your Club Contact email.</p><button class="btn secondary" data-sales-response="interested">Continue to trial sign-up</button>`}`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Try the complete Club Batting platform free for 60 days. Start signing up here, with no payment upfront or automatic charge. Your full trial begins when you activate it.</p>
         <div class="prospect-response-actions">
-          <button class="btn secondary" data-sales-response="interested">Try it free with your club</button>
+          <button class="btn secondary" data-sales-response="interested">Start your free 60-day trial</button>
           <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
           <button class="btn ghost" id="wrongContactBtn">I’m not the right person</button>
           <button class="btn ghost" data-sales-response="declined">Not interested</button>
@@ -10963,7 +10962,7 @@ async function renderSalesProspectRoute(token){
           <div class="btnrow"><button class="btn secondary" id="sendSalesReferral">Send referral</button><button class="btn ghost" id="cancelSalesReferral">Cancel</button></div>
         </div>`}
         <div id="salesResponseStatus" class="help"></div>
-        ${trialStatusCopy?'':`<div class="sales-trial-note"><strong>What happens next:</strong><span>Open the trial link in your email, verify your Club Contact email and activate your trial when you’re ready. Nothing is automatically charged.</span></div>`}
+        ${trialStatusCopy?'':`<div class="sales-trial-note"><strong>What happens next:</strong><span>Continue here to sign in or verify your Club Contact email, then activate your trial. Nothing is automatically charged.</span></div>`}
       </section>
 
       <section class="card prospect-card sales-guide-card" style="border:2px solid var(--primary)">
@@ -11019,17 +11018,43 @@ async function renderSalesProspectRoute(token){
     box.innerHTML=e||data?.error?`<div class="notice compact">${esc(data?.error||e?.message||'Could not record the request.')}</div>`:'<div class="notice success compact"><strong>Request recorded.</strong><br>A person can pick this up with the conversation context already attached.</div>';
   };
 
+  let responseBusy=false;
   const respond=async(response,referralName='',referralEmail='')=>{
-    const st=document.getElementById('salesResponseStatus');st.textContent='Saving…';
-    const {error:e}=await supabase.rpc('respond_sales_prospect',{p_token:token,p_response:response,p_referral_name:referralName,p_referral_email:referralEmail});
-    if(e){st.textContent=e.message;return;}
-    if(response==='interested'){await renderSalesProspectRoute(token);return;}
-    const copy=response==='maybe_later'
-      ?['Thanks — we’ll come back once.','We’ll send one re-contact in about 30 days. There will be no ongoing follow-up sequence.']
-      :response==='wrong_contact'
-        ?[referralEmail?'Thanks — that helps.':'Thanks for letting us know.',referralEmail?'We’ll contact the person you nominated instead.':'We won’t keep prospecting this address.']
-        :['Thanks for letting us know.','We’ll stop following up about this club enquiry. You can use the same email for another club, or return if circumstances change.'];
-    app.innerHTML=`<div class="login" style="max-width:700px"><div class="success-mark">✓</div><h1>${esc(copy[0])}</h1><p>${esc(copy[1])}</p></div>`;
+    if(responseBusy)return;
+    const st=document.getElementById('salesResponseStatus');
+    const responseButtons=[...document.querySelectorAll('[data-sales-response]'),document.getElementById('sendSalesReferral')].filter(Boolean);
+    const stillCurrent=()=>document.getElementById('salesResponseStatus')===st;
+    responseBusy=true;responseButtons.forEach(b=>b.disabled=true);
+    st.textContent=response==='interested'?'Opening your trial sign-up…':'Saving…';
+    try{
+      if(response==='interested'){
+        const {data,error}=await supabase.rpc('begin_sales_trial_signup',{p_token:token});
+        if(!stillCurrent())return;
+        if(error)throw error;
+        if(!data?.public_token||!/^[a-zA-Z0-9-]+$/.test(data.public_token))throw new Error('We couldn’t open your trial sign-up. Please try again.');
+        const nextUrl=new URL(location.href);nextUrl.search='';nextUrl.hash='';nextUrl.searchParams.set('prospect',data.public_token);
+        history.replaceState({},'',nextUrl.pathname+nextUrl.search);
+        await renderProspectRoute(data.public_token);
+        // Land on the actual sign-in/activation form, including on small screens.
+        const field=document.getElementById('routeEmail')||document.getElementById('secretaryName');
+        field?.closest('.prospect-card')?.scrollIntoView?.({block:'start'});
+        field?.focus?.({preventScroll:true});
+        return;
+      }
+      const {error}=await supabase.rpc('respond_sales_prospect',{p_token:token,p_response:response,p_referral_name:referralName,p_referral_email:referralEmail});
+      if(!stillCurrent())return;
+      if(error)throw error;
+      const copy=response==='maybe_later'
+        ?['Thanks — we’ll come back once.','We’ll send one re-contact in about 30 days. There will be no ongoing follow-up sequence.']
+        :response==='wrong_contact'
+          ?[referralEmail?'Thanks — that helps.':'Thanks for letting us know.',referralEmail?'We’ll contact the person you nominated instead.':'We won’t keep prospecting this address.']
+          :['Thanks for letting us know.','We’ll stop following up about this club enquiry. You can use the same email for another club, or return if circumstances change.'];
+      app.innerHTML=`<div class="login" style="max-width:700px"><div class="success-mark">✓</div><h1>${esc(copy[0])}</h1><p>${esc(copy[1])}</p></div>`;
+    }catch(error){
+      if(stillCurrent())st.textContent=['PGRST202','42883'].includes(error?.code)?'Trial sign-up is temporarily unavailable. Please try again shortly.':error?.message||'We couldn’t save your response. Please try again.';
+    }finally{
+      responseBusy=false;if(stillCurrent())responseButtons.forEach(b=>b.disabled=false);
+    }
   };
   document.querySelectorAll('[data-sales-response]').forEach(b=>b.onclick=()=>respond(b.dataset.salesResponse));
   document.getElementById('wrongContactBtn')?.addEventListener('click',()=>{document.getElementById('wrongContactBox').style.display='block';document.getElementById('wrongContactBtn').style.display='none';});
@@ -11310,7 +11335,7 @@ function renderSecretaryProspectRoute(token,p){
         <div class="section-label">${isClubTrial?'Your full club trial':'Club offer'}</div>
         <h2>${isClubTrial?`Give your club ${trialDays} days to put it into practice`:free?'Complimentary club access':`${amount} for this access period`}</h2>
         <p class="help">${isClubTrial?`Your full ${trialDays} days begin only when you activate the trial. No payment is required upfront and nothing is automatically charged. If you want to keep using Club Batting afterwards, you can review the price and choose paid continuation.`:`Access under this offer runs through <strong>${esc(niceDate(p.offer_end))}</strong>. ${free?'No payment is required.':''}`}</p>
-        ${isClubTrial?`<div class="notice compact"><strong>First, verify your email.</strong><br>Use the Club Contact email this link was sent to. We’ll email you a secure sign-in link, then you can activate the trial. Requesting the sign-in link does not start your trial.</div>`:`<div class="committee-summary">
+        ${isClubTrial?`<div class="notice compact"><strong>First, verify your email.</strong><br>Use the email address that received the Club Batting message. We’ll verify it with a secure sign-in link, then you can activate the trial. Requesting the sign-in link does not start your trial.</div>`:`<div class="committee-summary">
           <strong>For the committee</strong>
           <p>The Secretary remains the organisational contact, but does not need to run the coaching system. After activation, the Secretary nominates the Club Admin and can step out of day-to-day involvement.</p>
           <button class="btn ghost" id="printSummary">Print / save committee summary</button>
@@ -12560,6 +12585,7 @@ function onboardingProgressLabel(p,trial,invitation=null,settings=null){
   if(p?.status==='active')return 'Setup complete';
   if(!trial)return String(p?.status||'').replaceAll('_',' ');
   if(trial.status==='offered'){
+    if(p?.signup_started_at)return 'Sign-up in progress · awaiting activation';
     if(invitation?.sent_at)return 'Invitation sent · awaiting activation';
     if(settings&&invitation&&(!settings.email_live_from||settings.email_mode!=='live'||new Date(invitation.created_at)<new Date(settings.email_live_from)))return 'Prototype invitation · not sent';
     if(invitation?.failed_at)return 'Invitation delivery failed';
@@ -12584,8 +12610,8 @@ function onboardingActionsHtml(p,t,invitation,reminder){
   const pending=pendingTrialInvitation(p,t),canSend=['owner','commercial_admin','support_admin'].includes(platformRole),canRemove=['owner','commercial_admin'].includes(platformRole)&&!p.club_id&&!['active','payment_received','awaiting_admin_handoff','admin_invited','awaiting_payment'].includes(p.status)&&Number(p.amount_due_cents||0)===0;
   const reminderState=p.onboarding_reminder_sent_at?`Final reminder sent ${niceDate(p.onboarding_reminder_sent_at)}. Closes ${niceDate(p.onboarding_close_after)} if the club has not activated.`
     :p.onboarding_reminder_message_id?(reminder?.failed_at?'Reminder delivery needs attention. Open Email history to retry.':'Final reminder queued. Its 30-day response window starts when it is sent.')
-    :pending&&!invitation?.sent_at?'The original invitation needs to be sent before a reminder. Check Email history.':'';
-  return `<div class="onboarding-actions">${pending&&canSend&&!p.onboarding_reminder_message_id?`<button class="btn secondary" data-onboarding-remind="${esc(p.id)}" ${invitation?.sent_at?'':'disabled'}>Send reminder</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-onboarding-remove="${esc(p.id)}">Remove from onboarding</button>`:''}</div>${reminderState?`<p class="onboarding-reminder-note">${esc(reminderState)}</p>`:''}<p data-onboarding-action-status="${esc(p.id)}" role="status" aria-live="polite"></p>`;
+    :pending&&!p.signup_started_at&&!invitation?.sent_at?'The original invitation needs to be sent before a reminder. Check Email history.':'';
+  return `<div class="onboarding-actions">${pending&&canSend&&!p.onboarding_reminder_message_id&&(!p.signup_started_at||invitation?.sent_at)?`<button class="btn secondary" data-onboarding-remind="${esc(p.id)}" ${invitation?.sent_at?'':'disabled'}>Send reminder</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-onboarding-remove="${esc(p.id)}">Remove from onboarding</button>`:''}</div>${reminderState?`<p class="onboarding-reminder-note">${esc(reminderState)}</p>`:''}<p data-onboarding-action-status="${esc(p.id)}" role="status" aria-live="polite"></p>`;
 }
 function wireOnboardingActions(container,records,reload){
   container.querySelectorAll('[data-onboarding-remind]').forEach(button=>button.onclick=async()=>{
@@ -12788,7 +12814,9 @@ async function renderPlatformOnboardingDetail(p){
   if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
   if(trial){
     const prototypeInvitation=invitation&&!invitation.sent_at&&(!emailSettings.email_live_from||emailSettings.email_mode!=='live'||new Date(invitation.created_at)<new Date(emailSettings.email_live_from));
-    const invitationNotice=invitation?.sent_at
+    const invitationNotice=p.signup_started_at
+      ?(trial.status==='offered'?'<div class="notice success"><strong>Sign-up in progress.</strong><br>The Club Contact continued directly from the introduction. The full trial begins on secure activation.</div>':'<div class="notice"><strong>Signed up directly.</strong><br>The Club Contact continued from the introduction.</div>')
+      :invitation?.sent_at
       ?'<div class="notice success"><strong>Invitation sent.</strong><br>The full trial begins when the Club Contact securely activates it. No admin action is required.</div>'
       :prototypeInvitation?'<div class="notice"><strong>Prototype invitation.</strong><br>This record is outside the current live delivery window.</div>':invitation?.failed_at
         ?`<div class="notice"><strong>Invitation delivery failed.</strong><br>${esc(invitation.last_error||'Use Retry delivery in Club Pipeline.')}</div>`
