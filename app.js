@@ -1,10 +1,10 @@
-// Club Batting v0.8.62.1 — account choice when starting a club trial
+// Club Batting v0.8.62.4 — club responses do not blacklist a contact email
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.1';
+const APP_UI_VERSION='0.8.62.4';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -10904,7 +10904,7 @@ async function renderSalesProspectRoute(token){
     const messages={
       maybe_later:['Thanks — we’ll come back once.','We’ll send one re-contact in about 30 days. There will be no ongoing follow-up sequence.'],
       wrong_contact:['Thanks for pointing us in the right direction.','We won’t keep prospecting this address.'],
-      declined:['Thanks for letting us know.','We won’t send further prospecting emails to this address.'],
+      declined:['Thanks for letting us know.','We’ll stop following up about this club enquiry. You can use the same email for another club, or return if circumstances change.'],
       do_not_contact:['You’ve been unsubscribed.','We won’t send further prospecting emails to this address.']
     };
     const m=messages[p.status]||messages.declined;
@@ -11028,7 +11028,7 @@ async function renderSalesProspectRoute(token){
       ?['Thanks — we’ll come back once.','We’ll send one re-contact in about 30 days. There will be no ongoing follow-up sequence.']
       :response==='wrong_contact'
         ?[referralEmail?'Thanks — that helps.':'Thanks for letting us know.',referralEmail?'We’ll contact the person you nominated instead.':'We won’t keep prospecting this address.']
-        :['Thanks for letting us know.','We won’t send further prospecting emails to this address.'];
+        :['Thanks for letting us know.','We’ll stop following up about this club enquiry. You can use the same email for another club, or return if circumstances change.'];
     app.innerHTML=`<div class="login" style="max-width:700px"><div class="success-mark">✓</div><h1>${esc(copy[0])}</h1><p>${esc(copy[1])}</p></div>`;
   };
   document.querySelectorAll('[data-sales-response]').forEach(b=>b.onclick=()=>respond(b.dataset.salesResponse));
@@ -12239,6 +12239,7 @@ async function renderPlatformMarketDiscovery(options={}){
 // v0.8.61 Platform Admin: the same acquisition pipeline with a shorter entry point.
 let platformLeadDraft=[];
 let platformLeadImportResult=null;
+let platformLeadSendBusy=false;
 
 function parseClubLeadSheet(text){
   const input=String(text||'').replace(/^\uFEFF/,'');
@@ -12277,7 +12278,7 @@ function parseClubLeadSheet(text){
 }
 
 function openPlatformLeadEntry(seed=null){
-  if(seed){platformLeadDraft=[{club_name:seed.club_name||'',contact_name:seed.contact_name||'',contact_email:seed.contact_email||''}];platformLeadImportResult=null;}
+  if(seed&&!platformLeadSendBusy){platformLeadDraft=[{club_name:seed.club_name||'',contact_name:seed.contact_name||'',contact_email:seed.contact_email||''}];platformLeadImportResult=null;}
   platformView='add_clubs';renderPlatformConsole();
 }
 
@@ -12286,72 +12287,110 @@ function renderPlatformLeadEntry(){
   if(!['owner','commercial_admin','support_admin'].includes(platformRole)){page.innerHTML='<div class="notice">A Platform Owner, Commercial Admin or Support Admin can add club leads.</div>';return;}
   if(!platformLeadDraft.length)platformLeadDraft=Array.from({length:3},()=>({club_name:'',contact_name:'',contact_email:''}));
   page.innerHTML=`<style>
-    .lead-entry-table{width:100%;border-collapse:collapse}.lead-entry-table th{text-align:left;padding:8px}.lead-entry-table td{padding:6px}.lead-entry-table input{width:100%;min-width:130px;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:11px;font-size:15px}.lead-entry-table input[type=checkbox]{min-width:22px;width:22px;height:22px}.lead-entry-table small{font-size:13px}.lead-entry-table{font-size:15px}.lead-entry-table button{font-size:13px}.lead-entry-table th:first-child{width:35%}.lead-entry-table th:last-child{width:48px}
-    .lead-entry-flow{background:#eef3fa;border-left:4px solid #202f78;padding:16px 20px;border-radius:8px;font-size:15px;line-height:1.6;margin:16px 0}.lead-entry-flow strong{display:block;font-size:18px;margin-bottom:5px}.lead-result-row td{vertical-align:top}.lead-result-row small{display:block;margin-top:4px}.lead-entry-scroll{overflow-x:auto}.lead-result-blocked{color:#a42d35}.lead-entry-tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+    .lead-entry-table{width:100%;border-collapse:collapse;font-size:15px}.lead-entry-table th{text-align:left;padding:8px}.lead-entry-table td{padding:6px;vertical-align:top}.lead-entry-table input{width:100%;min-width:130px;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:11px;font-size:15px}.lead-entry-table small,.lead-entry-table button{font-size:13px}.lead-entry-fields th:first-child{width:35%}.lead-entry-fields th:last-child{width:48px}.lead-entry-scroll{overflow-x:auto}.lead-result-blocked{color:#a42d35}.lead-entry-tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}.lead-import-tools{margin-top:18px}.lead-import-tools textarea{display:block;width:100%;box-sizing:border-box;margin-top:8px}
   </style>
   <div class="btnrow"><button class="btn ghost" id="leadBackPipeline">← Club Pipeline</button></div>
-  <section class="admin-card"><div class="section-label">Your own research</div><h2>Add clubs for the promo email</h2>
-    <p>Enter several clubs here, paste cells from Excel, or upload a CSV. Only the club name and contact email are required.</p>
-    <div class="lead-entry-flow"><strong>Start at the beginning of the club journey.</strong>Save club leads → send the promo email → the club explores and responds → Club Batting handles the response and trial setup.</div>
-    <div class="lead-entry-scroll"><table class="lead-entry-table"><thead><tr><th scope="col">Club name</th><th scope="col">Contact name <small>(optional)</small></th><th scope="col">Contact email</th><th></th></tr></thead><tbody id="leadEntryRows"></tbody></table></div>
-    <div class="lead-entry-tools"><button class="btn ghost" id="leadAddRow">+ Add another club</button><button class="btn ghost" id="leadUploadButton">Upload CSV</button><input id="leadCsvFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden><button class="btn ghost" id="leadDownloadTemplate">Download CSV template</button></div>
-    <details><summary>Paste from a spreadsheet</summary><p>Copy the Club name, Contact name and Contact email columns, with or without headings. You can also use just Club name and Contact email. For a file upload, save your spreadsheet as CSV first.</p><label for="leadPaste">Copied cells or CSV text</label><textarea id="leadPaste" rows="5" placeholder="Club name&#9;Contact name&#9;Contact email"></textarea><div class="btnrow"><button class="btn ghost" id="leadUsePaste">Use pasted clubs</button></div></details>
-    <div class="btnrow" style="margin-top:20px"><button class="btn secondary" id="leadCheck">Check clubs</button><span id="leadEntryStatus" role="status" aria-live="polite"></span></div>
+  <section class="admin-card"><h2>Send promo emails</h2>
+    <p>Enter the clubs and contact emails below, then send the promo email.</p>
+    <div class="lead-entry-scroll"><table class="lead-entry-table lead-entry-fields"><thead><tr><th scope="col">Club name</th><th scope="col">Contact name <small>(optional)</small></th><th scope="col">Contact email</th><th></th></tr></thead><tbody id="leadEntryRows"></tbody></table></div>
+    <div class="lead-entry-tools"><button class="btn ghost" id="leadAddRow">+ Add another club</button></div>
+    <details class="lead-import-tools"><summary>Add from a spreadsheet</summary><div class="lead-entry-tools"><button class="btn ghost" id="leadUploadButton">Upload CSV</button><input id="leadCsvFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden><button class="btn ghost" id="leadDownloadTemplate">Download CSV template</button></div><label for="leadPaste">Or paste Club name, Contact name and Contact email columns</label><textarea id="leadPaste" rows="5" placeholder="Club name&#9;Contact name&#9;Contact email"></textarea><p class="help">Pasted clubs are added to the list when you send. Contact name is optional.</p></details>
+    <div class="btnrow" style="margin-top:20px"><button class="btn secondary" id="leadSend">Send promo emails</button><span id="leadEntryStatus" role="status" aria-live="polite"></span></div>
   </section><section id="leadImportReview" class="admin-card" style="margin-top:16px" hidden></section>`;
-  let busy=false;let revision=0;
+  let busy=false;
   const status=document.getElementById('leadEntryStatus');
-  const invalidate=()=>{revision++;platformLeadImportResult=null;document.getElementById('leadImportReview').hidden=true;status.textContent='';};
+  const isCurrent=()=>document.getElementById('leadEntryStatus')===status;
+  const invalidate=()=>{platformLeadImportResult=null;document.getElementById('leadImportReview').hidden=true;status.textContent='';};
+  const currentRows=()=>platformLeadDraft.filter(row=>[row.club_name,row.contact_name,row.contact_email].some(value=>String(value||'').trim())).map(row=>({...row}));
   const renderRows=()=>{
     document.getElementById('leadEntryRows').innerHTML=platformLeadDraft.map((row,index)=>`<tr><td><input data-lead-field="club_name" data-lead-row="${index}" aria-label="Club name, row ${index+1}" value="${esc(row.club_name)}"></td><td><input data-lead-field="contact_name" data-lead-row="${index}" aria-label="Contact name, row ${index+1}" value="${esc(row.contact_name)}"></td><td><input type="email" data-lead-field="contact_email" data-lead-row="${index}" aria-label="Contact email, row ${index+1}" value="${esc(row.contact_email)}"></td><td><button class="btn ghost compact" data-lead-remove="${index}" aria-label="Remove row ${index+1}">×</button></td></tr>`).join('');
-    page.querySelectorAll('[data-lead-field]').forEach(input=>input.oninput=()=>{platformLeadDraft[Number(input.dataset.leadRow)][input.dataset.leadField]=input.value;invalidate();});
-    page.querySelectorAll('[data-lead-remove]').forEach(button=>button.onclick=()=>{if(busy)return;platformLeadDraft.splice(Number(button.dataset.leadRemove),1);invalidate();renderRows();});
+    page.querySelectorAll('[data-lead-field]').forEach(input=>input.oninput=()=>{if(busy||platformLeadSendBusy)return;platformLeadDraft[Number(input.dataset.leadRow)][input.dataset.leadField]=input.value;invalidate();});
+    page.querySelectorAll('[data-lead-remove]').forEach(button=>button.onclick=()=>{if(busy||platformLeadSendBusy)return;platformLeadDraft.splice(Number(button.dataset.leadRemove),1);invalidate();renderRows();});
   };
-  const currentRows=()=>platformLeadDraft.filter(row=>[row.club_name,row.contact_name,row.contact_email].some(value=>String(value||'').trim()));
-  const replaceRows=rows=>{if(currentRows().length&&!confirm('Replace the clubs currently entered with this pasted or uploaded list?'))return;platformLeadDraft=rows;invalidate();renderRows();};
-  const setBusy=value=>{busy=value;page.querySelectorAll('button').forEach(button=>{button.disabled=value;});page.querySelectorAll('input').forEach(input=>{input.disabled=value;});};
-  const renderReview=data=>{
-    const box=document.getElementById('leadImportReview');box.hidden=false;platformLeadImportResult=data;
-    const candidates=data.rows.filter(row=>row.can_send&&row.sales_prospect_id),newCount=data.rows.filter(row=>row.status==='ready').length;
-    box.innerHTML=`<div class="section-label">${data.saved?'Saved in Club Pipeline':'Check your list'}</div><h2>${data.saved?`${data.added} new club${data.added===1?'':'s'} added`:`${newCount} new club${newCount===1?'':'s'} ready to add`}</h2><p>${data.saved?'Choose which saved clubs should receive the promo email. No trial invitation is sent at this stage.':'Saving this list will not send any email. Duplicate, invalid and blocked rows are explained below.'}</p>
-      <div class="lead-entry-scroll"><table class="lead-entry-table"><thead><tr><th>Club</th><th>Contact email</th><th>Result</th><th>${data.saved?'Send':''}</th></tr></thead><tbody>${data.rows.map(row=>`<tr class="lead-result-row"><td>${esc(row.club_name)}${row.contact_name?`<small>${esc(row.contact_name)}</small>`:''}</td><td>${esc(row.contact_email)}</td><td class="${['blocked','invalid','error','active_club'].includes(row.status)?'lead-result-blocked':''}">${esc(row.message)}${row.sales_prospect_id?`<small><button class="btn ghost compact" data-lead-open="${esc(row.sales_prospect_id)}">Open pipeline record</button></small>`:''}</td><td>${data.saved&&row.can_send?`<input type="checkbox" data-lead-send="${esc(row.sales_prospect_id)}" aria-label="Send promo to ${esc(row.club_name)}">`:''}</td></tr>`).join('')}</tbody></table></div>
-      <div class="btnrow" style="margin-top:18px">${!data.saved?'<button class="btn secondary" id="leadSave">Save valid clubs to pipeline</button>':candidates.length?'<button class="btn ghost" id="leadSelectAll">Select all ready clubs</button><button class="btn secondary" id="leadSendSelected" disabled>Send promo email to selected clubs</button>':''}<button class="btn ghost" id="leadReviewPipeline">Open Club Pipeline</button></div><div id="leadSendStatus" role="status" aria-live="polite"></div>`;
-    box.querySelectorAll('[data-lead-open]').forEach(button=>button.onclick=()=>{platformSelectedProspectId=button.dataset.leadOpen;platformView='home';renderPlatformConsole();});
-    document.getElementById('leadReviewPipeline').onclick=()=>{platformView='home';renderPlatformConsole();};
-    document.getElementById('leadSave')?.addEventListener('click',()=>checkOrSave(true));
-    const syncSelected=()=>{const count=Array.from(box.querySelectorAll('[data-lead-send]')).filter(input=>input.checked).length;const button=document.getElementById('leadSendSelected');if(button){button.disabled=!count;button.textContent=count?`Send promo email to ${count} selected club${count===1?'':'s'}`:'Send promo email to selected clubs';}};
-    box.querySelectorAll('[data-lead-send]').forEach(input=>input.onchange=syncSelected);
-    document.getElementById('leadSelectAll')?.addEventListener('click',()=>{box.querySelectorAll('[data-lead-send]').forEach(input=>input.checked=true);syncSelected();});
-    document.getElementById('leadSendSelected')?.addEventListener('click',async()=>{
-      if(busy)return;
-      const ids=Array.from(box.querySelectorAll('[data-lead-send]')).filter(input=>input.checked).map(input=>input.dataset.leadSend);
-      const chosen=candidates.filter(row=>ids.includes(row.sales_prospect_id));
-      if(!chosen.length||!confirm(`Send the Club Batting promo email to these ${chosen.length} club${chosen.length===1?'':'s'}?\n\n${chosen.map(row=>`${row.club_name}: ${row.contact_email}`).join('\n')}\n\nThis starts outreach; it does not activate a trial.`))return;
-      setBusy(true);const st=document.getElementById('leadSendStatus');st.textContent='Queuing promo emails…';
-      try{
-        const {data:sent,error}=await supabase.rpc('platform_queue_club_promos',{p_sales_prospect_ids:ids});if(error)throw Error(error.message);
+  const appendRows=rows=>{
+    const combined=[...currentRows(),...rows];
+    if(combined.length>200)throw Error('Use up to 200 clubs per batch.');
+    platformLeadDraft=combined;invalidate();renderRows();
+  };
+  const setBusy=(value,label='Sending…')=>{
+    busy=value;if(!isCurrent())return;
+    page.querySelectorAll('button,input,textarea').forEach(control=>control.disabled=value);
+    document.getElementById('leadSend').textContent=value?label:'Send promo emails';
+  };
+  const renderResults=data=>{
+    platformLeadImportResult=data;if(!isCurrent())return;
+    const box=document.getElementById('leadImportReview');box.hidden=false;
+    box.innerHTML=`<h2>Email results</h2><div class="lead-entry-scroll"><table class="lead-entry-table"><thead><tr><th>Club</th><th>Contact email</th><th>Result</th></tr></thead><tbody>${data.rows.map(row=>`<tr><td>${esc(row.club_name)}</td><td>${esc(row.contact_email)}</td><td class="${['blocked','invalid','error','active_club'].includes(row.status)?'lead-result-blocked':''}">${esc(row.message)}</td></tr>`).join('')}</tbody></table></div>`;
+    status.textContent=data.summary;
+  };
+  const sendPromos=async()=>{
+    if(busy||platformLeadSendBusy)return;
+    try{
+      const paste=document.getElementById('leadPaste');
+      if(paste.value.trim()){appendRows(parseClubLeadSheet(paste.value));paste.value='';}
+    }catch(error){status.textContent=error.message;return;}
+    const rows=currentRows();if(!rows.length){status.textContent='Enter at least one club.';return;}
+    platformLeadSendBusy=true;setBusy(true);invalidate();status.textContent='Sending promo emails…';
+    let savedRows=null;
+    try{
+      // One user action: the existing import checks and saves, then only eligible
+      // saved leads are queued. Both RPCs retain their server-side duplicate guards.
+      const {data,error}=await supabase.rpc('platform_import_club_leads',{p_rows:rows,p_save:true});
+      if(error)throw Error(error.message);
+      if(data?.saved!==true||!Array.isArray(data.rows))throw Error('The clubs could not be confirmed. Try again.');
+      savedRows=data.rows;
+      const ids=[...new Set(savedRows.filter(row=>row.can_send&&row.sales_prospect_id).map(row=>row.sales_prospect_id))];
+      let results=savedRows;
+      if(ids.length){
+        const {data:sent,error:sendError}=await supabase.rpc('platform_queue_club_promos',{p_sales_prospect_ids:ids});
+        if(sendError)throw Error(sendError.message);
+        if(!Array.isArray(sent?.rows))throw Error('The server did not confirm email queuing.');
         const byId=new Map(sent.rows.map(row=>[row.sales_prospect_id,row]));
-        data.rows=data.rows.map(row=>{const result=byId.get(row.sales_prospect_id);if(!result)return row;return {...row,can_send:!!result.error,message:result.error|| (result.queued?'Promo email queued. The club can explore and respond.':'The promo was already queued; no duplicate was created.')};});
-        renderReview(data);document.getElementById('leadSendStatus').textContent=`${sent.queued} promo email${sent.queued===1?'':'s'} queued. Delivery progress is in Club Pipeline.`;
-        await kickLiveEmailDelivery();
-      }catch(error){st.textContent=error.message||'The promo emails could not be queued.';}
-      finally{setBusy(false);const next=document.getElementById('leadSendSelected');if(next)next.disabled=!Array.from(page.querySelectorAll('[data-lead-send]')).some(input=>input.checked);}
-    });
-  };
-  const checkOrSave=async(save=false)=>{
-    if(busy)return;const rows=currentRows();if(!rows.length){status.textContent='Enter at least one club.';return;}
-    const requestedRevision=revision;setBusy(true);status.textContent=save?'Saving clubs…':'Checking clubs and existing records…';
-    try{const {data,error}=await supabase.rpc('platform_import_club_leads',{p_rows:rows,p_save:save});if(error)throw Error(error.message);if(revision!==requestedRevision||document.getElementById('leadEntryStatus')!==status)return;renderReview(data);status.textContent=save?'Saved. Select clubs below when you are ready to send.':'Check the results below.';}
-    catch(error){status.textContent=error.message||'The list could not be checked.';}
-    finally{setBusy(false);const next=document.getElementById('leadSendSelected');if(next)next.disabled=!Array.from(page.querySelectorAll('[data-lead-send]')).some(input=>input.checked);}
+        results=savedRows.map(row=>{
+          if(!row.can_send||!row.sales_prospect_id)return row;
+          const result=byId.get(row.sales_prospect_id);
+          if(result?.error)return {...row,status:'error',can_send:false,message:`Could not queue: ${result.error}`};
+          if(result?.queued)return {...row,status:'queued',can_send:false,message:'Promo email queued.'};
+          if(result?.already_queued)return {...row,status:'already_queued',can_send:false,message:'Promo email already queued; no duplicate sent.'};
+          return {...row,status:'error',can_send:false,message:'Sending was not confirmed. Click Send promo emails to try again.'};
+        });
+      }
+      const queued=results.filter(row=>row.status==='queued').length;
+      const other=results.filter(row=>!['queued','already_queued'].includes(row.status)).length;
+      const summary=queued?`${queued} promo email${queued===1?'':'s'} queued.${other?' Check the remaining entries below.':''}`:'No new emails queued. See the results below.';
+      renderResults({rows:results,summary});
+      if(results.some(row=>['queued','already_queued'].includes(row.status))){
+        try{await kickLiveEmailDelivery();}catch{/* Messages remain in the normal delivery queue. */}
+      }
+    }catch(error){
+      if(savedRows){
+        renderResults({rows:savedRows.map(row=>row.can_send?{...row,status:'error',can_send:false,message:`Sending not confirmed: ${error.message||'Connection unavailable'}. Try again.`}:row),summary:'Sending was not confirmed for some clubs. Click Send promo emails to retry; already queued emails will not be duplicated.'});
+      }else if(isCurrent())status.textContent=error.message||'The clubs could not be saved. Your entries are still here; try again.';
+    }finally{
+      platformLeadSendBusy=false;setBusy(false);
+      if(!isCurrent()&&platformView==='add_clubs'&&document.getElementById('leadEntryStatus'))renderPlatformLeadEntry();
+    }
   };
   document.getElementById('leadBackPipeline').onclick=()=>{platformView='home';renderPlatformConsole();};
-  document.getElementById('leadAddRow').onclick=()=>{if(platformLeadDraft.length>=200){status.textContent='Use up to 200 clubs per batch.';return;}platformLeadDraft.push({club_name:'',contact_name:'',contact_email:''});invalidate();renderRows();};
-  document.getElementById('leadUsePaste').onclick=()=>{try{replaceRows(parseClubLeadSheet(document.getElementById('leadPaste').value));}catch(error){status.textContent=error.message;}};
+  document.getElementById('leadAddRow').onclick=()=>{if(busy||platformLeadSendBusy)return;if(platformLeadDraft.length>=200){status.textContent='Use up to 200 clubs per batch.';return;}platformLeadDraft.push({club_name:'',contact_name:'',contact_email:''});invalidate();renderRows();};
+  document.getElementById('leadPaste').oninput=()=>{if(!busy&&!platformLeadSendBusy)invalidate();};
   document.getElementById('leadUploadButton').onclick=()=>document.getElementById('leadCsvFile').click();
-  document.getElementById('leadCsvFile').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;try{if(file.size>1048576)throw Error('Use a CSV smaller than 1 MB.');if(!/\.(csv|tsv|txt)$/i.test(file.name))throw Error('Save your spreadsheet as CSV, or paste its cells here.');replaceRows(parseClubLeadSheet(await file.text()));}catch(error){status.textContent=error.message;}finally{event.target.value='';}};
+  document.getElementById('leadCsvFile').onchange=async event=>{
+    if(busy||platformLeadSendBusy)return;
+    const file=event.target.files?.[0];if(!file)return;setBusy(true,'Loading…');status.textContent='Loading clubs…';
+    try{
+      if(file.size>1048576)throw Error('Use a CSV smaller than 1 MB.');
+      if(!/\.(csv|tsv|txt)$/i.test(file.name))throw Error('Save your spreadsheet as CSV, or paste its cells here.');
+      const rows=parseClubLeadSheet(await file.text());if(!isCurrent())return;
+      appendRows(rows);status.textContent=`${rows.length} club${rows.length===1?'':'s'} added to your list.`;
+    }catch(error){if(isCurrent())status.textContent=error.message;}
+    finally{event.target.value='';setBusy(false);}
+  };
   document.getElementById('leadDownloadTemplate').onclick=()=>{const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent('Club name,Contact name,Contact email\r\n');a.download='Club_Batting_Club_Leads.csv';document.body.appendChild(a);a.click();a.remove();};
-  document.getElementById('leadCheck').onclick=()=>checkOrSave(false);
-  renderRows();if(platformLeadImportResult)renderReview(platformLeadImportResult);
+  document.getElementById('leadSend').onclick=sendPromos;
+  renderRows();
+  if(platformLeadImportResult)renderResults(platformLeadImportResult);
+  if(platformLeadSendBusy){setBusy(true);status.textContent='Sending promo emails…';}
 }
 
 async function openEndClubDialog(clubId){
@@ -12600,13 +12639,13 @@ async function renderPlatformOnboardingList(){
   document.getElementById('backFromOnboardingList').onclick=()=>renderPlatformProspects();document.getElementById('onboardingEmailHistory').onclick=()=>{platformView='outbox';renderPlatformView();};document.getElementById('onboardingListSearch').oninput=renderRows;renderRows();
 }
 function closedInvitationPage(clubName,activated=false,confirmed=false,inFlight=false,declined=false){
-  app.innerHTML=`<div class="prospect-shell"><section class="prospect-hero"><div class="section-label">Club Batting</div><h1>${activated?'Your club has already activated.':'This invitation is closed.'}</h1><p>${esc(clubName||'Your club')}</p></section><section class="card prospect-card">${confirmed?`<div class="notice success">Your invitation is closed. No further reminders or promotional emails will be sent to this address.${inFlight?' An email that was already being sent may still arrive.':''}</div>`:''}<p>${activated?'Continue using your existing club account. Closing an old invitation does not end an active club.':confirmed||declined?'Your unused invitation is closed. Your sign-in account and any other active club are unchanged.':'There is no trial running from this invitation. If you want to try Club Batting later, you can request a fresh trial.'}</p><div class="btnrow"><a class="btn secondary" href="./app.html?signin=1">Sign in</a>${!activated&&!confirmed&&!declined?'<a class="btn ghost" href="./app.html?trial=1">Try it free with your club</a>':''}<a class="btn ghost" href="./">Club Batting home</a></div></section></div>`;
+  app.innerHTML=`<div class="prospect-shell"><section class="prospect-hero"><div class="section-label">Club Batting</div><h1>${activated?'Your club has already activated.':'This invitation is closed.'}</h1><p>${esc(clubName||'Your club')}</p></section><section class="card prospect-card">${confirmed?`<div class="notice success">Your invitation is closed. No further reminders or promotional emails will be sent about this club enquiry.${inFlight?' An email that was already being sent may still arrive.':''}</div>`:''}<p>${activated?'Continue using your existing club account. Closing an old invitation does not end an active club.':confirmed||declined?'Your unused invitation is closed. You can use the same email for another club or request a fresh trial later.':'There is no trial running from this invitation. If you want to try Club Batting later, you can request a fresh trial.'}</p><div class="btnrow"><a class="btn secondary" href="./app.html?signin=1">Sign in</a>${!activated&&!confirmed&&!declined?'<a class="btn ghost" href="./app.html?trial=1">Try it free with your club</a>':''}<a class="btn ghost" href="./">Club Batting home</a></div></section></div>`;
 }
 async function renderCloseInvitationRoute(token){
   const {data:p,error}=await supabase.rpc('get_pending_invitation_response',{p_token:token});
   if(error||!p){app.innerHTML=`<div class="login"><h1>That invitation link is unavailable.</h1><p>${esc(error?.message||'It may have been replaced.')}</p><a href="./">Club Batting home</a></div>`;return;}
   if(p.activated||p.closed||!p.can_close){closedInvitationPage(p.club_name,p.activated,false,false,p.closed_reason==='contact_declined');return;}
-  app.innerHTML=`<div class="prospect-shell"><section class="prospect-hero"><div class="section-label">Club Batting invitation</div><h1>Close this invitation?</h1><p>${esc(p.club_name)}</p></section><section class="card prospect-card"><h2>No longer looking to start a trial?</h2><p>Confirm below to close the invitation. We will stop invitation reminders and further promotional emails to this contact address. This does not delete your sign-in account or affect any other active club.</p><div class="btnrow"><button class="btn secondary" id="confirmCloseInvitation">Yes, close this invitation</button><a class="btn ghost" href="./app.html${esc(p.activation_path||'')}">Keep it — return to our trial</a></div><p id="closeInvitationStatus" role="status" aria-live="polite"></p></section></div>`;
+  app.innerHTML=`<div class="prospect-shell"><section class="prospect-hero"><div class="section-label">Club Batting invitation</div><h1>Close this invitation?</h1><p>${esc(p.club_name)}</p></section><section class="card prospect-card"><h2>No longer looking to start a trial?</h2><p>Confirm below to close this club’s invitation and stop further emails about this enquiry. You can use the same email for another club or request a fresh trial later.</p><div class="btnrow"><button class="btn secondary" id="confirmCloseInvitation">Yes, close this invitation</button><a class="btn ghost" href="./app.html${esc(p.activation_path||'')}">Keep it — return to our trial</a></div><p id="closeInvitationStatus" role="status" aria-live="polite"></p></section></div>`;
   const button=document.getElementById('confirmCloseInvitation'),status=document.getElementById('closeInvitationStatus');
   button.onclick=async()=>{button.disabled=true;status.textContent='Closing your invitation…';try{const {data,error}=await supabase.rpc('decline_pending_club_invitation',{p_token:token,p_confirm:true});if(error)throw Error(error.message);closedInvitationPage(p.club_name,false,true,!!data?.already_sending);}catch(error){button.disabled=false;status.textContent=error.message||'Could not close the invitation. Please try again.';}};
 }
@@ -12657,7 +12696,7 @@ async function renderPlatformSalesProspectDetail(p){
         ${hasFollowUp?'<div class="help">The single follow-up has already been used. No drip sequence will follow.</div>':''}
         ${!hasContactEmail&&!['interested','onboarding'].includes(p.status)&&!trial?'<div class="notice">Add a public club contact email before outreach can be queued.</div>':''}
         ${p.status==='interested'&&!trial&&!p.onboarding_prospect_id&&!hasContactEmail?'<div class="notice"><strong>Only one admin action is needed:</strong> add the Club Contact email and press Save details. The rest is automatic.</div>':''}
-        ${p.do_not_contact||['declined','do_not_contact'].includes(p.status)?'<div class="notice"><strong>Do not contact.</strong> This email is suppressed from prospecting.</div>':''}
+        ${p.status==='declined'?'<div class="notice"><strong>Not interested — this club enquiry is closed.</strong> Closing this enquiry does not block the email address for another club.</div>':p.do_not_contact||p.status==='do_not_contact'?'<div class="notice"><strong>Do not contact this prospect.</strong> Further outreach for this record is stopped.</div>':''}
         ${p.onboarding_prospect_id&&!trial?'<div class="notice success"><strong>Moved to Onboarding.</strong></div>':''}
         ${!trial&&adminStatusActions.length?`<details style="margin-top:18px"><summary style="cursor:pointer;font-weight:800">Admin: change prospect status</summary><div class="quick-status-actions" style="margin-top:10px">${adminStatusActions.map(([status,label])=>`<button class="btn ghost" data-sales-status="${status}">${label}</button>`).join('')}</div></details>`:''}
         <div id="salesActionStatus" class="help"></div>
