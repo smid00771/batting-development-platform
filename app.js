@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.59';
+const APP_UI_VERSION='0.8.59.1';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1230,8 +1230,8 @@ async function renderPublicTrialEntry(){
 
 function renderPublicTrialForm(saved={},message=''){
   const signedIn=!!session;
-  app.innerHTML=`<div class="login" style="max-width:680px"><div class="section-label">Club Batting · Club Trial</div>
-    <h1>Try it free with your club.</h1><p>Bring your club’s philosophy, Player Plans and training together. Your full 60-day trial starts when you activate it.</p>
+  app.innerHTML=`<style>.public-trial-entry .prospect-card>p,.public-trial-entry .help,.public-trial-entry .notice{font-size:14px;line-height:1.55}.public-trial-entry .field label{font-size:13px}.public-trial-entry .field input{font-size:16px;min-height:46px}.public-trial-entry .btn{font-size:14px;min-height:44px}.public-trial-entry .prospect-card h2{font-size:27px;margin-top:6px}</style><div class="prospect-shell public-trial-entry">${prospectIntro({is_club_trial:true,entry_phase:'signup',club_name:saved.club_name||'your club'})}<section class="card prospect-card"><div class="section-label">Your full Club Trial</div>
+    <h2>Try it free with your club.</h2><p>Bring your club’s philosophy, Player Plans and training together. Your full 60-day trial starts when you activate it.</p>
     <div class="notice">No upfront payment. No automatic charge. You choose whether to continue after the trial.</div>
     <p>${signedIn?`Signed in as ${esc(session.user.email||'')}. <a href="./app.html">Open your existing club</a>.`:'Already registered? <a href="./app.html?trial=1&signin=1">Sign in to your existing account</a>.'}</p>
     <form id="trialEntryForm">
@@ -1243,7 +1243,7 @@ function renderPublicTrialForm(saved={},message=''){
       <button class="btn secondary" type="submit" id="trialContinue">${signedIn?'Continue to our free trial':'Create account & continue'}</button>
     </form><div id="trialEntryStatus" class="help" role="status" aria-live="polite">${esc(message)}</div>
     <p class="help">Already invited by Club Batting? Use your invitation to continue the trial already prepared for you.</p>
-    <p class="help">Need a hand? <a href="./demo.html?stage=help">Explore the process</a> or email <a href="mailto:enquiries@clubbatting.com">enquiries@clubbatting.com</a>.</p>${authEntryLinks()}</div>`;
+    <p><a class="btn ghost" href="./demo.html?stage=help">Explore the tutorials</a></p>${authEntryLinks()}</section></div>`;
   document.getElementById('trialEntryForm').onsubmit=async event=>{
     event.preventDefault();const button=document.getElementById('trialContinue'),status=document.getElementById('trialEntryStatus');
     const clubName=val('trialClubName'),contactName=val('trialContactName');
@@ -1765,6 +1765,14 @@ async function savePhilosophyResponseBeforeNavigation(){
 
 function accountMenuStyles(){
   return `<style>
+    .shell .nav{flex-wrap:wrap}
+    .shell .nav button[data-tab="guide"]{font-size:14px;min-height:44px;border:2px solid var(--navy);margin-left:auto}
+    .club-help-feature{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:22px 24px;margin:18px 0 22px;background:#f0f5ff;border:2px solid #ccd8f3;border-left:5px solid var(--navy);border-radius:14px}
+    .club-help-feature h2{font-size:23px;line-height:1.25;margin:4px 0 8px;color:var(--navy)}
+    .club-help-feature p{font-size:15px;line-height:1.5;margin:0;max-width:620px;color:#334464}
+    .club-help-feature .btnrow{margin:0;flex-shrink:0}
+    .club-help-feature .btn{font-size:14px;min-height:44px}
+    @media(max-width:700px){.club-help-feature{align-items:stretch;flex-direction:column;padding:20px}.club-help-feature .btnrow{display:grid;grid-template-columns:1fr 1fr}.shell .nav button[data-tab="guide"]{margin-left:0}}
     .account-controls{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
     .platform-admin-link{display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;padding:4px 3px;font:inherit;font-size:12px;font-weight:700;line-height:1.4;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
     .platform-admin-link:hover{text-decoration-thickness:2px}
@@ -1831,7 +1839,7 @@ function renderShell(){
 
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
 
-  nav.push(['guide','Ask Guide & help','help']);
+  nav.push(['guide','Help & Tutorials','help']);
 
   const contextOptions=[...allMemberships.map(m=>`<option value="club:${m.club_id}" ${m.club_id===club.id?'selected':''}>${esc(m.clubs?.name||'Club')}</option>`),platformRole?`<option value="platform">Platform Admin</option>`:''].join('');
 
@@ -1860,7 +1868,7 @@ function renderShell(){
 
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
-  document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process');
+  document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process',{focus:'chat'});
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
   document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;await renderPlatformConsole();});
   document.getElementById('retryAccountAccess')?.addEventListener('click',async()=>{
@@ -1908,7 +1916,9 @@ function renderShell(){
 
     currentTab=nextTab;
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
-    renderTab();
+    if(nextTab==='guide')guideSelectedCapabilityKey='whole_process';
+    await renderTab();
+    if(nextTab==='guide')focusClubGuideArea('tutorials');
   });
   renderTab();
 }
@@ -2161,12 +2171,28 @@ function guideAudienceKey(){
   return isPlayerUser()?'player':'member';
 }
 
-async function openClubBattingGuideTopic(capabilityKey='whole_process'){
+function focusClubGuideArea(area='tutorials'){
+  requestAnimationFrame(()=>{
+    if(currentTab!=='guide')return;
+    const target=area==='chat'
+      ?document.getElementById('demoGuideNote')||document.querySelector('.guide-chat-card')
+      :guideSelectedCapabilityKey==='whole_process'?document.getElementById('guideProcessHeading'):document.querySelector('.guide-tutorial-card');
+    if(!target)return;
+    const nav=document.querySelector('.nav');
+    const offset=(nav?.getBoundingClientRect().height||0)+(document.getElementById('demoToolbar')?.getBoundingClientRect().height||0)+18;
+    target.style.scrollMarginTop=offset+'px';
+    target.setAttribute('tabindex','-1');target.focus({preventScroll:true});
+    target.scrollIntoView({block:'start',behavior:'auto'});
+  });
+}
+
+async function openClubBattingGuideTopic(capabilityKey='whole_process',{focus='tutorials'}={}){
   if(!await saveClubEditsBeforeNavigation())return;
   guideSelectedCapabilityKey=capabilityKey||'whole_process';
   currentTab='guide';
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
-  renderTab();
+  await renderTab();
+  focusClubGuideArea(focus);
 }
 
 function guideTargetLabel(tab){
@@ -2485,7 +2511,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
       <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">I’d rather speak to someone</button><p class="help">Request a conversation with the Club Batting team. Your question and Guide conversation go with it.</p><div id="guideHandoffBox" hidden><label for="guideHandoffReason">What would you like to discuss?</label><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
     </section>
-  <h2 class="guide-process-heading">Explore the process</h2>
+  <h2 class="guide-process-heading" id="guideProcessHeading">Help & Tutorials · Explore the process</h2>
   <div class="guide-layout${isOverview?' guide-is-overview':''}">
     <nav class="guide-topic-list" aria-label="Help topics in process order">
       ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${c.capability_key!=='whole_process'&&progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
@@ -2594,6 +2620,10 @@ async function renderClubDashboard(){
   page.innerHTML=`${clubSetupStyles()}
     <div class="section-label">Club Home</div>
     <p class="club-home-intro">Build a shared batting approach, turn it into a plan for each player and connect those plans to practice. We’ll guide you through one step at a time.</p>
+    <section class="club-help-feature" aria-labelledby="clubHelpTitle">
+      <div><div class="section-label">Help at every step</div><h2 id="clubHelpTitle">Your tutorials. Your Guide.</h2><p>See how each stage works, or ask a question about your next step.</p></div>
+      <div class="btnrow"><button class="btn secondary" type="button" id="dashboardLearnClubBatting">Explore tutorials</button><button class="btn ghost" type="button" id="dashboardAskGuide">Ask the Guide</button></div>
+    </section>
     ${clubSetupProgressHtml(progress)}
     ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">You are preparing a new philosophy round. Players can keep using the published How We Bat and Player Plans while you work through these steps.</div>':''}
     <section class="card club-home-next" aria-labelledby="clubHomeNextTitle">
@@ -2677,7 +2707,6 @@ async function renderClubDashboard(){
       <div class="club-home-secondary">
         ${isAdmin()?'<button class="club-home-link" type="button" data-home-go="permissions">People & Sign-up</button>':''}
         ${progress.systemLive?'<button class="club-home-link" type="button" data-home-go="howwebat">Read How We Bat</button>':''}
-        <button class="club-home-link" type="button" id="dashboardLearnClubBatting">Help with the whole process</button>
       </div>
     </details>
 
@@ -2711,6 +2740,7 @@ async function renderClubDashboard(){
   });
   if(canReviewLook)wireClubBrandingControls(page);
   document.getElementById('dashboardLearnClubBatting')?.addEventListener('click',()=>openClubBattingGuideTopic('whole_process'));
+  document.getElementById('dashboardAskGuide')?.addEventListener('click',()=>openClubBattingGuideTopic('whole_process',{focus:'chat'}));
   page.querySelectorAll('[data-home-go]').forEach(b=>b.onclick=async()=>{
     const tab=b.dataset.homeGo;
     if(!canOpenClubTab(tab)||!await saveClubEditsBeforeNavigation())return;
@@ -10965,11 +10995,12 @@ function renderDirectBetaRoute(token,p){
 
 function prospectIntro(p){
   if(p.is_club_trial){
+    const signup=p.entry_phase==='signup';
     const preactivation=!['awaiting_payment','awaiting_admin_handoff','admin_invited','active'].includes(p.status);
     return `<section class="prospect-hero">
-      <div class="section-label">For ${esc(p.club_name)}</div>
+      <div class="section-label">${signup?'Club Batting · Free Club Trial':`For ${esc(p.club_name)}`}</div>
       <h1>Turn the same batting conversations into a plan for change.</h1>
-      <p>${preactivation?'Thanks for your interest in Club Batting. Your trial is ready when you are. ':''}Agree on how your club wants to bat and help players build their own Player Plans: choose their shots, practise executing them and commit fully when the right ball is there. The aim is to help more players score runs and enjoy their batting.</p>
+      <p>${signup?'Start with a free 60-day Club Trial. ':preactivation?'Thanks for your interest in Club Batting. Your trial is ready when you are. ':''}Agree on how your club wants to bat and help players build their own Player Plans: choose their shots, practise executing them and commit fully when the right ball is there. The aim is to help more players score runs and enjoy their batting.</p>
       <div class="prospect-value-grid">
         <div><strong>HOW WE BAT</strong><span>Agree on a clear direction for batting across your club.</span></div>
         <div><strong>MY PLAYER PLAN</strong><span>Each batter chooses the shots they trust and when to use them, within the club’s approach.</span></div>
