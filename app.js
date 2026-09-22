@@ -1,10 +1,10 @@
-// Club Batting v0.8.58.1 — Newcastle City player journey; video parked
+// Club Batting v0.8.62.1 — account choice when starting a club trial
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62';
+const APP_UI_VERSION='0.8.62.1';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -921,6 +921,9 @@ function restorePlatformMarketScroll(){
 }
 
 let authActionInFlight=false;
+// Only the club/contact names being entered now; never email or password.
+// Keep this in memory while switching accounts or opening password sign-in.
+let publicTrialDraft=null;
 let passwordRecoveryRequired=new URLSearchParams(location.search).has('password_setup') || new URLSearchParams(location.hash.slice(1)).get('type')==='recovery';
 
 async function boot(){
@@ -1117,6 +1120,7 @@ function authEntryLinks(){
 
 function renderLogin(msg=''){
   const platform=new URLSearchParams(location.search).has('platform');
+  const trialEntry=new URLSearchParams(location.search).has('trial');
   app.innerHTML=`<div class="login">
     <div class="section-label">Club Batting${platform?' · Platform Admin':''}</div>
     <h1>${platform?'Platform Admin sign-in':'Welcome back.'}</h1>
@@ -1130,7 +1134,7 @@ function renderLogin(msg=''){
     <p><button class="guide-inline-link" type="button" id="resetPassword">Set or reset your password</button></p>
     <p class="help">Previously used an email link? Set a password once, then sign in here whenever you return.</p>
     <div id="authStatus" class="help" role="status" aria-live="polite"></div>
-    <p class="help">New club? <a href="./app.html?trial=1">Try it free with your club</a>.</p>
+    <p class="help">${trialEntry?'<a href="./app.html?trial=1" id="backToTrialEntry">Back to club details / create an account</a>':'New club? <a href="./app.html?trial=1">Try it free with your club</a>.'}</p>
     ${!platform?'<p class="help"><a href="./app.html?platform=1">Platform Admin sign-in</a></p>':''}
     ${authEntryLinks()}
   </div>`;
@@ -1148,6 +1152,12 @@ function renderLogin(msg=''){
     finally{authActionInFlight=false;button.disabled=false;}
   };
   document.getElementById('resetPassword').onclick=()=>renderPasswordReset(val('email'));
+  if(trialEntry)document.getElementById('backToTrialEntry').onclick=event=>{
+    event.preventDefault();
+    if(authActionInFlight)return;
+    const target=new URL(location.href);target.searchParams.delete('signin');target.searchParams.delete('continue_trial');
+    history.replaceState({},'',target);renderPublicTrialEntry();
+  };
 }
 
 function renderPasswordReset(email=''){
@@ -1209,9 +1219,12 @@ async function openAccountPassword(){
 }
 
 async function continueWebsiteTrial(clubName,contactName){
+  const requestingUserId=session?.user?.id||null;
   const {data,error}=await supabase.rpc('begin_public_club_trial',{p_club_name:clubName,p_contact_name:contactName});
   if(error)throw error;
+  if((session?.user?.id||null)!==requestingUserId)throw new Error('Your signed-in account changed. Check the email shown before continuing.');
   if(!data?.public_token&&!data?.existing_club_id)throw new Error('The trial could not be prepared. Please try again.');
+  publicTrialDraft=null;
   const target=new URL(location.href);target.hash='';target.search='';
   if(data.existing_club_id){target.searchParams.set('club',data.existing_club_id);localStorage.setItem('bdp-context','club');}
   else target.searchParams.set('prospect',data.public_token);
@@ -1220,8 +1233,10 @@ async function continueWebsiteTrial(clubName,contactName){
 }
 
 async function renderPublicTrialEntry(){
-  const saved=session?.user?.user_metadata?.club_trial_request||{};
   const continuation=new URLSearchParams(location.search).get('continue_trial')==='1';
+  // Historical signup metadata belongs to its email-confirmation return only.
+  // Opening a fresh trial must not prefill an earlier club on this account.
+  const saved=continuation?(session?.user?.user_metadata?.club_trial_request||{}):(publicTrialDraft||{});
   if(session&&continuation&&saved.club_name&&saved.contact_name){
     app.innerHTML='<div class="login"><h1>Preparing your club’s trial…</h1><p>Your trial starts only when you activate it on the next screen.</p></div>';
     try{await continueWebsiteTrial(saved.club_name,saved.contact_name);return;}
@@ -1230,25 +1245,73 @@ async function renderPublicTrialEntry(){
   renderPublicTrialForm(saved);
 }
 
+function rememberPublicTrialDraft(){
+  publicTrialDraft={club_name:val('trialClubName'),contact_name:val('trialContactName')};
+  return publicTrialDraft;
+}
+
+async function switchPublicTrialAccount(){
+  const button=document.getElementById('trialUseDifferentEmail');
+  if(!button||button.disabled||authActionInFlight)return;
+  const continueButton=document.getElementById('trialContinue'),status=document.getElementById('trialSwitchStatus');
+  const draft=rememberPublicTrialDraft();
+  button.disabled=true;continueButton.disabled=true;authActionInFlight=true;
+  status.textContent='Signing out so you can choose another email…';
+  try{
+    const {error}=await supabase.auth.signOut({scope:'local'});
+    if(error)throw error;
+    session=null;platformRole=null;platformAccessError=false;canBootstrapPlatform=false;
+    club=null;membership=null;allMemberships=[];userProfile=null;
+    // A previous confirmation URL must not resume the next account's old trial.
+    const target=new URL(location.href);target.hash='';
+    for(const key of ['continue_trial','signin','code'])target.searchParams.delete(key);
+    history.replaceState({},'',target);
+    renderPublicTrialForm(draft,'Choose another email below, or sign in with your password if you already have an account.');
+    document.getElementById('trialEmail').focus();
+  }catch(error){
+    status.textContent=error?.message||'Could not switch accounts. Please try again.';
+  }finally{
+    authActionInFlight=false;button.disabled=false;continueButton.disabled=false;
+  }
+}
+
 function renderPublicTrialForm(saved={},message=''){
   const signedIn=!!session;
-  app.innerHTML=`<style>.public-trial-entry .prospect-card>p,.public-trial-entry .help,.public-trial-entry .notice{font-size:14px;line-height:1.55}.public-trial-entry .field label{font-size:13px}.public-trial-entry .field input{font-size:16px;min-height:46px}.public-trial-entry .btn{font-size:14px;min-height:44px}.public-trial-entry .prospect-card h2{font-size:27px;margin-top:6px}</style><div class="prospect-shell public-trial-entry">${prospectIntro({is_club_trial:true,entry_phase:'signup',club_name:saved.club_name||'your club'})}<section class="card prospect-card"><div class="section-label">Your full Club Trial</div>
+  app.innerHTML=`<style>.public-trial-entry .prospect-card>p,.public-trial-entry .help,.public-trial-entry .notice{font-size:14px;line-height:1.55}.public-trial-entry .field label{font-size:13px}.public-trial-entry .field input{font-size:16px;min-height:46px}.public-trial-entry .btn{font-size:14px;min-height:44px}.public-trial-entry .prospect-card h2{font-size:27px;margin-top:6px}.trial-account-choice{margin:18px 0;padding:16px;border:1px solid #c4cee6;border-left:4px solid #293780;border-radius:12px;background:#f4f6fc;overflow-wrap:anywhere}.trial-account-choice p{margin:8px 0;font-size:14px;line-height:1.55}.trial-account-choice .btnrow{margin-top:12px;align-items:center;gap:12px}.trial-account-choice .btn{background:#fff;border:1px solid #293780;color:#17245f}</style><div class="prospect-shell public-trial-entry">${prospectIntro({is_club_trial:true,entry_phase:'signup',club_name:saved.club_name||'your club'})}<section class="card prospect-card"><div class="section-label">Your full Club Trial</div>
     <h2>Try it free with your club.</h2><p>Bring your club’s philosophy, Player Plans and training together. Your full 60-day trial starts when you activate it.</p>
     <div class="notice">No upfront payment. No automatic charge. You choose whether to continue after the trial.</div>
-    <p>${signedIn?`Signed in as ${esc(session.user.email||'')}. <a href="./app.html">Open your existing club</a>.`:'Already registered? <a href="./app.html?trial=1&signin=1">Sign in to your existing account</a>.'}</p>
+    ${signedIn?`<section class="trial-account-choice" aria-label="Account for this club">
+      <strong>Account for this club</strong>
+      <p>Signed in as <strong>${esc(session.user.email||'')}</strong>.</p>
+      <p>Setting up a different club? Keep this email and enter the new club below, or choose a different email.</p>
+      <div class="btnrow"><button class="btn ghost" type="button" id="trialUseDifferentEmail">Use a different email</button><a href="./app.html">Back to my account</a></div>
+      <p class="help">Choosing a different email signs you out in this browser. Your existing clubs stay as they are.</p>
+      <div id="trialSwitchStatus" class="help" role="status" aria-live="polite"></div>
+    </section>`:'<p>Already registered? <a href="./app.html?trial=1&signin=1" id="trialExistingSignIn">Sign in with your password</a>.</p>'}
     <form id="trialEntryForm">
       <div class="field"><label for="trialClubName">Club name</label><input id="trialClubName" autocomplete="organization" maxlength="160" minlength="3" required value="${esc(saved.club_name||'')}"></div>
       <div class="field"><label for="trialContactName">Your name</label><input id="trialContactName" autocomplete="name" maxlength="120" minlength="2" required value="${esc(saved.contact_name||session?.user?.user_metadata?.display_name||'')}"></div>
       ${signedIn?'':`<div class="field"><label for="trialEmail">Your email</label><input id="trialEmail" type="email" autocomplete="username" required></div>
       <div class="field"><label for="trialPassword">Choose a password</label><input id="trialPassword" type="password" minlength="10" autocomplete="new-password" required></div>
       <p class="help">Use at least 10 characters. Confirm your email once, then use your password for future visits.</p>`}
-      <button class="btn secondary" type="submit" id="trialContinue">${signedIn?'Continue to our free trial':'Create account & continue'}</button>
+      <button class="btn secondary" type="submit" id="trialContinue">${signedIn?'Continue with this email':'Create account & continue'}</button>
     </form><div id="trialEntryStatus" class="help" role="status" aria-live="polite">${esc(message)}</div>
     <p class="help">Already invited by Club Batting? Use your invitation to continue the trial already prepared for you.</p>
     <p><a class="btn ghost" href="./demo.html?stage=help">Explore the tutorials</a></p>${authEntryLinks()}</section></div>`;
+  if(signedIn)document.getElementById('trialUseDifferentEmail').onclick=switchPublicTrialAccount;
+  else document.getElementById('trialExistingSignIn').onclick=event=>{
+    event.preventDefault();
+    if(authActionInFlight)return;
+    rememberPublicTrialDraft();
+    const target=new URL(location.href);target.searchParams.set('signin','1');target.searchParams.delete('continue_trial');
+    history.replaceState({},'',target);renderLogin('Sign in with the email you want to use for this club.');
+  };
   document.getElementById('trialEntryForm').onsubmit=async event=>{
     event.preventDefault();const button=document.getElementById('trialContinue'),status=document.getElementById('trialEntryStatus');
-    const clubName=val('trialClubName'),contactName=val('trialContactName');
+    if(button.disabled||authActionInFlight)return;
+    const {club_name:clubName,contact_name:contactName}=rememberPublicTrialDraft();
+    const switchButton=document.getElementById('trialUseDifferentEmail');
+    if(switchButton)switchButton.disabled=true;
     button.disabled=true;status.textContent='Preparing your next step…';authActionInFlight=true;
     try{
       if(!session){
@@ -1265,7 +1328,7 @@ function renderPublicTrialForm(saved={},message=''){
       }
       await continueWebsiteTrial(clubName,contactName);
     }catch(error){status.textContent=error.message||'We couldn’t prepare the next step. Please try again.';}
-    finally{authActionInFlight=false;button.disabled=false;}
+    finally{authActionInFlight=false;button.disabled=false;if(switchButton)switchButton.disabled=false;}
   };
 }
 
