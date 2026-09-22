@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.60';
+const APP_UI_VERSION='0.8.61';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -27,7 +27,7 @@ let allMemberships=[];
 let platformRole=null;
 let platformAccessError=false;
 let canBootstrapPlatform=false;
-let platformView='market';
+let platformView='home';
 let platformSelectedProspectId=null;
 let platformSelectedOnboardingId=null;
 let platformOnboardingSeed=null;
@@ -2776,7 +2776,7 @@ async function renderClubDashboard(){
       <summary class="setup-collapsible-summary"><div class="setup-collapsible-title"><strong>${trial?esc(clubTrialStatusLabel(trial,trialDaysLeft)):'Club access'}</strong></div><span class="setup-collapsible-toggle"></span></summary>
       <div class="setup-collapsible-body">
         ${trial?`<p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}. Paid continuation is your club’s choice. Nothing is automatically charged.</p>${trial.status==='active'?'<div class="btnrow"><button class="btn ghost compact-btn" id="continueClubTrial">Review continuation options</button><button class="btn ghost compact-btn" id="endClubTrial">End after trial</button></div>':''}`
-          :`<div class="help">${entitlement?entitlementActive?'Your club’s access is active.':'Your club’s access needs attention. Contact Club Batting for help.':'Access details are unavailable right now.'}</div>`}
+          :`<div class="help">${entitlement?.ongoing_complimentary?'Your club has ongoing complimentary access. There is no expiry date, renewal payment or trial deadline.':entitlement?entitlementActive?'Your club’s access is active.':'Your club’s access needs attention. Contact Club Batting for help.':'Access details are unavailable right now.'}</div>`}
       </div>
     </details>`:''}
     <section class="club-help-feature" aria-labelledby="clubHelpTitle">
@@ -10866,6 +10866,8 @@ async function renderSalesProspectRoute(token){
       <p><strong>Know your shots. Practise them. Back yourself when it’s on.</strong></p>
     </section>
 
+    <section class="card prospect-card" style="margin:24px 0"><div class="section-label">Explore before you decide</div><h2>See the Club Batting process in action.</h2><p>Explore the website and the example club without creating an account. The demo tutorials work; your live club also has the Guide to answer questions as you go. You can ask the Guide on this page now.</p><div class="btnrow"><a class="btn secondary" href="${esc(new URL('./',location.href).href)}" target="_blank" rel="noopener noreferrer">Explore the website</a><a class="btn ghost" href="${esc(new URL('demo.html',location.href).href)}" target="_blank" rel="noopener noreferrer">Explore the demo & tutorials</a></div><p class="help">Return here to try it free with your club, choose Maybe later, or update the contact.</p></section>
+
     <section aria-labelledby="salesExampleTitle" style="margin:24px 0">
       <div class="section-label">Illustrative example · fictional player</div>
       <h2 id="salesExampleTitle">From a shot you trust to a decision you commit to.</h2>
@@ -10881,7 +10883,7 @@ async function renderSalesProspectRoute(token){
     </section>
 
       <section class="card prospect-card sales-response-card">
-        ${interested?`<div class="notice success"><strong>${trialStatusCopy?esc(trialStatusCopy[0]):trialLinkQueued?'Your trial link has been requested.':`Thanks for your interest in Club Batting.`}</strong><br>${trialStatusCopy?esc(trialStatusCopy[1]):trialLinkQueued?'An email with your secure activation link has been queued for the Club Contact. Your full trial begins only when you activate it.':'A valid Club Contact email is needed before we can email your secure trial link.'}</div>${trialStatusCopy?'<div class="btnrow"><button class="btn secondary" id="salesOpenClubBatting">Open Club Batting</button></div>':''}`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Request a link to try the complete Club Batting platform with your club. The trial starts when you activate it, with no payment upfront. Paid continuation is a separate choice afterwards.</p>
+        ${interested?`<div class="notice success"><strong>${trialStatusCopy?esc(trialStatusCopy[0]):trialLinkQueued?'Your trial link has been requested.':`Thanks for your interest in Club Batting.`}</strong><br>${trialStatusCopy?esc(trialStatusCopy[1]):trialLinkQueued?'An email with your secure activation link has been queued for the Club Contact. Your full trial begins only when you activate it.':'A valid Club Contact email is needed before we can email your secure trial link.'}</div>${trialStatusCopy?'<div class="btnrow"><button class="btn secondary" id="salesOpenClubBatting">Open Club Batting</button></div>':''}`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Request a link to try the complete Club Batting platform free for 60 days. The full trial starts when you activate it, with no payment upfront. Paid continuation is a separate choice afterwards.</p>
         <div class="prospect-response-actions">
           <button class="btn secondary" data-sales-response="interested">Try it free with your club</button>
           <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
@@ -11708,7 +11710,7 @@ async function renderPlatformConsole(){
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['market','Market Discovery'],['home','Club Pipeline'],['clubs','Active Clubs'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['home','Club Pipeline'],['add_clubs','Add club leads'],['clubs','Active Clubs'],['market','Market Discovery'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
@@ -11726,6 +11728,7 @@ async function renderPlatformConsole(){
 async function renderPlatformView(){
   platformMarketRenderVersion++; // Invalidate older discovery requests before any navigation.
   document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===(platformView==='outbox'?'home':platformView)));
+  if(platformView==='add_clubs')return renderPlatformLeadEntry();
   if(platformView==='market')return renderPlatformMarketDiscovery();
   if(platformView==='clubs')return renderPlatformActiveClubs();
   if(platformView==='outbox')return renderPlatformOutbox();
@@ -11840,7 +11843,8 @@ async function renderPlatformMarketDiscovery(options={}){
   const loadError=associationRes.error||clubRes.error||linkRes.error||scanRes.error;
   if(loadError){
     platformMarketScrollSuppressed=false;
-    page.innerHTML=`<div class="notice"><strong>Market Discovery could not load.</strong><br>${esc(loadError.message)}<div class="btnrow"><button class="btn ghost" id="retryMarketLoad">Try again</button></div></div>`;
+    page.innerHTML=`<div class="btnrow"><button class="btn secondary" id="marketManualFallback">Add clubs from your own research</button></div><div class="notice"><strong>Market Discovery could not load.</strong><br>${esc(loadError.message)}<div class="btnrow"><button class="btn ghost" id="retryMarketLoad">Try again</button></div></div>`;
+    document.getElementById('marketManualFallback')?.addEventListener('click',()=>openPlatformLeadEntry());
     document.getElementById('retryMarketLoad').onclick=()=>renderPlatformMarketDiscovery(options);
     return;
   }
@@ -11895,7 +11899,7 @@ async function renderPlatformMarketDiscovery(options={}){
     @media(max-width:440px){.market-research-form{grid-template-columns:1fr}}
   </style>
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="admin-card-head"><div><div class="section-label">Market Discovery</div><h2>Find clubs worth approaching</h2><p class="help">Research identifies clubs, checks public contacts and explains why each club may suit Club Batting. You choose who receives the introductory outreach email.</p></div></div>
+    <div class="admin-card-head"><div><div class="section-label">Market Discovery</div><h2>Find clubs worth approaching</h2><div class="btnrow"><button class="btn secondary" id="marketManualLeads">Add clubs from your own research</button></div><p class="help">Research identifies clubs, checks public contacts and explains why each club may suit Club Batting. You choose who receives the introductory outreach email.</p></div></div>
     <div class="market-research-form">
       <div><label for="marketResearchMarket">Research area</label><select id="marketResearchMarket"><option value="AU:NSW">Australia · New South Wales</option></select></div>
       <div><label for="marketResearchAssociation">Association</label><select id="marketResearchAssociation"><option value="">Across New South Wales</option>${associations.map(a=>`<option value="${esc(a.id)}" ${draft.associationId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
@@ -11984,6 +11988,7 @@ async function renderPlatformMarketDiscovery(options={}){
     document.getElementById('clearMarketProspectSelection').onclick=()=>{platformMarketSelectedClubIds.clear();syncSelectionUi();};
     syncSelectionUi();
   };
+  document.getElementById('marketManualLeads').onclick=()=>openPlatformLeadEntry();
   document.getElementById('marketProspectSearch').oninput=event=>{platformMarketClubSearch=String(event.target.value||'');platformMarketSelectedClubIds.clear();renderProspectRows();};
   document.getElementById('marketReviewFilter').onchange=event=>{platformMarketReviewFilter=event.target.value;platformMarketSelectedClubIds.clear();renderProspectRows();};
   document.getElementById('marketAssociationFilter').onchange=event=>{platformMarketAssociationFilter=event.target.value;platformMarketSelectedClubIds.clear();renderProspectRows();};
@@ -12165,11 +12170,154 @@ async function renderPlatformMarketDiscovery(options={}){
   if(options?.restoreScroll!==false)restorePlatformMarketScroll();
 }
 
+// v0.8.61 Platform Admin: the same acquisition pipeline with a shorter entry point.
+let platformLeadDraft=[];
+let platformLeadImportResult=null;
+
+function parseClubLeadSheet(text){
+  const input=String(text||'').replace(/^\uFEFF/,'');
+  if(input.length>1048576)throw Error('Use a CSV or pasted list smaller than 1 MB.');
+  const first=input.split(/\r?\n/,1)[0]||'';
+  const delimiter=first.includes('\t')?'\t':first.includes(';')&&!first.includes(',')?';':',';
+  const rows=[];let row=[],cell='',quoted=false,afterQuote=false;
+  for(let i=0;i<=input.length;i++){
+    const ch=input[i];
+    if(quoted){
+      if(ch===undefined)throw Error('A quoted cell is not closed. Check the CSV and try again.');
+      if(ch==='"'){if(input[i+1]==='"'){cell+='"';i++;}else{quoted=false;afterQuote=true;}}
+      else cell+=ch;
+    }else if(ch==='"'&&!cell&&!afterQuote){quoted=true;}
+    else if(ch===delimiter||ch==='\n'||ch==='\r'||ch===undefined){
+      row.push(cell.trim());cell='';afterQuote=false;
+      if(ch!==delimiter){if(row.some(value=>value!==''))rows.push(row);row=[];if(ch==='\r'&&input[i+1]==='\n')i++;}
+    }else if(afterQuote){if(!/\s/.test(ch))throw Error('Unexpected text after a quoted CSV cell.');}
+    else{if(ch==='"')throw Error('Put quotes around the whole cell when a CSV value contains a quote.');cell+=ch;}
+  }
+  if(!rows.length)throw Error('There are no clubs in this list.');
+  const key=value=>String(value).toLowerCase().replace(/[^a-z]/g,'');
+  const aliases={club_name:['club','clubname','nameoftheclub'],contact_name:['contact','contactname','clubcontact','clubcontactname'],contact_email:['email','contactemail','clubcontactemail','emailaddress'],contact_source_url:['source','sourceurl','contactsourceurl']};
+  const columns={};
+  for(const [field,names] of Object.entries(aliases)){const index=rows[0].findIndex(value=>names.includes(key(value)));if(index>=0)columns[field]=index;}
+  const header=columns.club_name!==undefined&&columns.contact_email!==undefined;
+  if(!header&&Object.keys(columns).length>=2)throw Error('Use the column headings Club name, Contact name, Contact email.');
+  const data=header?rows.slice(1):rows;
+  if(!data.length||data.length>200)throw Error('Use between 1 and 200 clubs at a time.');
+  return data.map((values,index)=>{
+    if(!header&&![2,3].includes(values.length))throw Error(`Row ${index+1}: use Club name, Contact name, Contact email; or just Club name, Contact email.`);
+    if(header&&values.length>rows[0].length)throw Error(`Row ${index+2} has more values than column headings.`);
+    return header?Object.fromEntries(Object.entries(aliases).map(([field])=>[field,columns[field]===undefined?'':values[columns[field]]||'']))
+      :{club_name:values[0]||'',contact_name:values.length===3?values[1]:'',contact_email:values.at(-1)||'',contact_source_url:''};
+  });
+}
+
+function openPlatformLeadEntry(seed=null){
+  if(seed){platformLeadDraft=[{club_name:seed.club_name||'',contact_name:seed.contact_name||'',contact_email:seed.contact_email||''}];platformLeadImportResult=null;}
+  platformView='add_clubs';renderPlatformConsole();
+}
+
+function renderPlatformLeadEntry(){
+  const page=document.getElementById('platformPage');
+  if(!['owner','commercial_admin','support_admin'].includes(platformRole)){page.innerHTML='<div class="notice">A Platform Owner, Commercial Admin or Support Admin can add club leads.</div>';return;}
+  if(!platformLeadDraft.length)platformLeadDraft=Array.from({length:3},()=>({club_name:'',contact_name:'',contact_email:''}));
+  page.innerHTML=`<style>
+    .lead-entry-table{width:100%;border-collapse:collapse}.lead-entry-table th{text-align:left;padding:8px}.lead-entry-table td{padding:6px}.lead-entry-table input{width:100%;min-width:130px;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:11px;font-size:15px}.lead-entry-table input[type=checkbox]{min-width:22px;width:22px;height:22px}.lead-entry-table small{font-size:13px}.lead-entry-table{font-size:15px}.lead-entry-table button{font-size:13px}.lead-entry-table th:first-child{width:35%}.lead-entry-table th:last-child{width:48px}
+    .lead-entry-flow{background:#eef3fa;border-left:4px solid #202f78;padding:16px 20px;border-radius:8px;font-size:15px;line-height:1.6;margin:16px 0}.lead-entry-flow strong{display:block;font-size:18px;margin-bottom:5px}.lead-result-row td{vertical-align:top}.lead-result-row small{display:block;margin-top:4px}.lead-entry-scroll{overflow-x:auto}.lead-result-blocked{color:#a42d35}.lead-entry-tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+  </style>
+  <div class="btnrow"><button class="btn ghost" id="leadBackPipeline">← Club Pipeline</button></div>
+  <section class="admin-card"><div class="section-label">Your own research</div><h2>Add clubs for the promo email</h2>
+    <p>Enter several clubs here, paste cells from Excel, or upload a CSV. Only the club name and contact email are required.</p>
+    <div class="lead-entry-flow"><strong>Start at the beginning of the club journey.</strong>Save club leads → send the promo email → the club explores and responds → Club Batting handles the response and trial setup.</div>
+    <div class="lead-entry-scroll"><table class="lead-entry-table"><thead><tr><th scope="col">Club name</th><th scope="col">Contact name <small>(optional)</small></th><th scope="col">Contact email</th><th></th></tr></thead><tbody id="leadEntryRows"></tbody></table></div>
+    <div class="lead-entry-tools"><button class="btn ghost" id="leadAddRow">+ Add another club</button><button class="btn ghost" id="leadUploadButton">Upload CSV</button><input id="leadCsvFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" hidden><button class="btn ghost" id="leadDownloadTemplate">Download CSV template</button></div>
+    <details><summary>Paste from a spreadsheet</summary><p>Copy the Club name, Contact name and Contact email columns, with or without headings. You can also use just Club name and Contact email. For a file upload, save your spreadsheet as CSV first.</p><label for="leadPaste">Copied cells or CSV text</label><textarea id="leadPaste" rows="5" placeholder="Club name&#9;Contact name&#9;Contact email"></textarea><div class="btnrow"><button class="btn ghost" id="leadUsePaste">Use pasted clubs</button></div></details>
+    <div class="btnrow" style="margin-top:20px"><button class="btn secondary" id="leadCheck">Check clubs</button><span id="leadEntryStatus" role="status" aria-live="polite"></span></div>
+  </section><section id="leadImportReview" class="admin-card" style="margin-top:16px" hidden></section>`;
+  let busy=false;let revision=0;
+  const status=document.getElementById('leadEntryStatus');
+  const invalidate=()=>{revision++;platformLeadImportResult=null;document.getElementById('leadImportReview').hidden=true;status.textContent='';};
+  const renderRows=()=>{
+    document.getElementById('leadEntryRows').innerHTML=platformLeadDraft.map((row,index)=>`<tr><td><input data-lead-field="club_name" data-lead-row="${index}" aria-label="Club name, row ${index+1}" value="${esc(row.club_name)}"></td><td><input data-lead-field="contact_name" data-lead-row="${index}" aria-label="Contact name, row ${index+1}" value="${esc(row.contact_name)}"></td><td><input type="email" data-lead-field="contact_email" data-lead-row="${index}" aria-label="Contact email, row ${index+1}" value="${esc(row.contact_email)}"></td><td><button class="btn ghost compact" data-lead-remove="${index}" aria-label="Remove row ${index+1}">×</button></td></tr>`).join('');
+    page.querySelectorAll('[data-lead-field]').forEach(input=>input.oninput=()=>{platformLeadDraft[Number(input.dataset.leadRow)][input.dataset.leadField]=input.value;invalidate();});
+    page.querySelectorAll('[data-lead-remove]').forEach(button=>button.onclick=()=>{if(busy)return;platformLeadDraft.splice(Number(button.dataset.leadRemove),1);invalidate();renderRows();});
+  };
+  const currentRows=()=>platformLeadDraft.filter(row=>[row.club_name,row.contact_name,row.contact_email].some(value=>String(value||'').trim()));
+  const replaceRows=rows=>{if(currentRows().length&&!confirm('Replace the clubs currently entered with this pasted or uploaded list?'))return;platformLeadDraft=rows;invalidate();renderRows();};
+  const setBusy=value=>{busy=value;page.querySelectorAll('button').forEach(button=>{button.disabled=value;});page.querySelectorAll('input').forEach(input=>{input.disabled=value;});};
+  const renderReview=data=>{
+    const box=document.getElementById('leadImportReview');box.hidden=false;platformLeadImportResult=data;
+    const candidates=data.rows.filter(row=>row.can_send&&row.sales_prospect_id),newCount=data.rows.filter(row=>row.status==='ready').length;
+    box.innerHTML=`<div class="section-label">${data.saved?'Saved in Club Pipeline':'Check your list'}</div><h2>${data.saved?`${data.added} new club${data.added===1?'':'s'} added`:`${newCount} new club${newCount===1?'':'s'} ready to add`}</h2><p>${data.saved?'Choose which saved clubs should receive the promo email. No trial invitation is sent at this stage.':'Saving this list will not send any email. Duplicate, invalid and blocked rows are explained below.'}</p>
+      <div class="lead-entry-scroll"><table class="lead-entry-table"><thead><tr><th>Club</th><th>Contact email</th><th>Result</th><th>${data.saved?'Send':''}</th></tr></thead><tbody>${data.rows.map(row=>`<tr class="lead-result-row"><td>${esc(row.club_name)}${row.contact_name?`<small>${esc(row.contact_name)}</small>`:''}</td><td>${esc(row.contact_email)}</td><td class="${['blocked','invalid','error','active_club'].includes(row.status)?'lead-result-blocked':''}">${esc(row.message)}${row.sales_prospect_id?`<small><button class="btn ghost compact" data-lead-open="${esc(row.sales_prospect_id)}">Open pipeline record</button></small>`:''}</td><td>${data.saved&&row.can_send?`<input type="checkbox" data-lead-send="${esc(row.sales_prospect_id)}" aria-label="Send promo to ${esc(row.club_name)}">`:''}</td></tr>`).join('')}</tbody></table></div>
+      <div class="btnrow" style="margin-top:18px">${!data.saved?'<button class="btn secondary" id="leadSave">Save valid clubs to pipeline</button>':candidates.length?'<button class="btn ghost" id="leadSelectAll">Select all ready clubs</button><button class="btn secondary" id="leadSendSelected" disabled>Send promo email to selected clubs</button>':''}<button class="btn ghost" id="leadReviewPipeline">Open Club Pipeline</button></div><div id="leadSendStatus" role="status" aria-live="polite"></div>`;
+    box.querySelectorAll('[data-lead-open]').forEach(button=>button.onclick=()=>{platformSelectedProspectId=button.dataset.leadOpen;platformView='home';renderPlatformConsole();});
+    document.getElementById('leadReviewPipeline').onclick=()=>{platformView='home';renderPlatformConsole();};
+    document.getElementById('leadSave')?.addEventListener('click',()=>checkOrSave(true));
+    const syncSelected=()=>{const count=Array.from(box.querySelectorAll('[data-lead-send]')).filter(input=>input.checked).length;const button=document.getElementById('leadSendSelected');if(button){button.disabled=!count;button.textContent=count?`Send promo email to ${count} selected club${count===1?'':'s'}`:'Send promo email to selected clubs';}};
+    box.querySelectorAll('[data-lead-send]').forEach(input=>input.onchange=syncSelected);
+    document.getElementById('leadSelectAll')?.addEventListener('click',()=>{box.querySelectorAll('[data-lead-send]').forEach(input=>input.checked=true);syncSelected();});
+    document.getElementById('leadSendSelected')?.addEventListener('click',async()=>{
+      if(busy)return;
+      const ids=Array.from(box.querySelectorAll('[data-lead-send]')).filter(input=>input.checked).map(input=>input.dataset.leadSend);
+      const chosen=candidates.filter(row=>ids.includes(row.sales_prospect_id));
+      if(!chosen.length||!confirm(`Send the Club Batting promo email to these ${chosen.length} club${chosen.length===1?'':'s'}?\n\n${chosen.map(row=>`${row.club_name}: ${row.contact_email}`).join('\n')}\n\nThis starts outreach; it does not activate a trial.`))return;
+      setBusy(true);const st=document.getElementById('leadSendStatus');st.textContent='Queuing promo emails…';
+      try{
+        const {data:sent,error}=await supabase.rpc('platform_queue_club_promos',{p_sales_prospect_ids:ids});if(error)throw Error(error.message);
+        const byId=new Map(sent.rows.map(row=>[row.sales_prospect_id,row]));
+        data.rows=data.rows.map(row=>{const result=byId.get(row.sales_prospect_id);if(!result)return row;return {...row,can_send:!!result.error,message:result.error|| (result.queued?'Promo email queued. The club can explore and respond.':'The promo was already queued; no duplicate was created.')};});
+        renderReview(data);document.getElementById('leadSendStatus').textContent=`${sent.queued} promo email${sent.queued===1?'':'s'} queued. Delivery progress is in Club Pipeline.`;
+        await kickLiveEmailDelivery();
+      }catch(error){st.textContent=error.message||'The promo emails could not be queued.';}
+      finally{setBusy(false);const next=document.getElementById('leadSendSelected');if(next)next.disabled=!Array.from(page.querySelectorAll('[data-lead-send]')).some(input=>input.checked);}
+    });
+  };
+  const checkOrSave=async(save=false)=>{
+    if(busy)return;const rows=currentRows();if(!rows.length){status.textContent='Enter at least one club.';return;}
+    const requestedRevision=revision;setBusy(true);status.textContent=save?'Saving clubs…':'Checking clubs and existing records…';
+    try{const {data,error}=await supabase.rpc('platform_import_club_leads',{p_rows:rows,p_save:save});if(error)throw Error(error.message);if(revision!==requestedRevision||document.getElementById('leadEntryStatus')!==status)return;renderReview(data);status.textContent=save?'Saved. Select clubs below when you are ready to send.':'Check the results below.';}
+    catch(error){status.textContent=error.message||'The list could not be checked.';}
+    finally{setBusy(false);const next=document.getElementById('leadSendSelected');if(next)next.disabled=!Array.from(page.querySelectorAll('[data-lead-send]')).some(input=>input.checked);}
+  };
+  document.getElementById('leadBackPipeline').onclick=()=>{platformView='home';renderPlatformConsole();};
+  document.getElementById('leadAddRow').onclick=()=>{if(platformLeadDraft.length>=200){status.textContent='Use up to 200 clubs per batch.';return;}platformLeadDraft.push({club_name:'',contact_name:'',contact_email:''});invalidate();renderRows();};
+  document.getElementById('leadUsePaste').onclick=()=>{try{replaceRows(parseClubLeadSheet(document.getElementById('leadPaste').value));}catch(error){status.textContent=error.message;}};
+  document.getElementById('leadUploadButton').onclick=()=>document.getElementById('leadCsvFile').click();
+  document.getElementById('leadCsvFile').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;try{if(file.size>1048576)throw Error('Use a CSV smaller than 1 MB.');if(!/\.(csv|tsv|txt)$/i.test(file.name))throw Error('Save your spreadsheet as CSV, or paste its cells here.');replaceRows(parseClubLeadSheet(await file.text()));}catch(error){status.textContent=error.message;}finally{event.target.value='';}};
+  document.getElementById('leadDownloadTemplate').onclick=()=>{const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent('Club name,Contact name,Contact email\r\n');a.download='Club_Batting_Club_Leads.csv';document.body.appendChild(a);a.click();a.remove();};
+  document.getElementById('leadCheck').onclick=()=>checkOrSave(false);
+  renderRows();if(platformLeadImportResult)renderReview(platformLeadImportResult);
+}
+
+async function openEndClubDialog(clubId){
+  if(platformRole!=='owner')return;
+  const dialog=document.createElement('dialog');dialog.id='endClubDialog';dialog.style.cssText='max-width:650px;width:calc(100% - 32px);border:0;border-radius:16px;padding:24px;';document.body.appendChild(dialog);
+  dialog.innerHTML='<h2>End & remove club</h2><p>Loading the club details…</p><button class="btn ghost" id="endClubClose">Close</button>';
+  dialog.querySelector('#endClubClose').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+  const {data:preview,error}=await supabase.rpc('platform_club_removal_preview',{p_club_id:clubId});
+  if(!dialog.isConnected&&dialog.isConnected!==undefined)return;
+  if(error){dialog.innerHTML=`<h2>Could not load this club</h2><p>${esc(error.message)}</p><button class="btn ghost" id="endClubClose">Close</button>`;dialog.querySelector('#endClubClose').onclick=()=>dialog.close();return;}
+  dialog.innerHTML=`<div class="section-label">Platform Owner</div><h2>End & remove ${esc(preview.club_name)}?</h2><p>This ends access to the current club and removes it from Active Clubs. Its ${Number(preview.memberships)} membership${Number(preview.memberships)===1?'':'s'}, old sign-up links and pending club emails will be closed.</p><p>The current setup and ${Number(preview.players)} player record${Number(preview.players)===1?'':'s'} are retained in an archive. A later registration starts a fresh club. People keep their sign-in accounts.</p><p>After removal, you can add the contact back to the promo list and test the complete journey from the first email.</p><div class="field"><label for="endClubConfirm">Type <strong>${esc(preview.club_name)}</strong> to confirm</label><input id="endClubConfirm" autocomplete="off"></div><div class="btnrow"><button class="btn danger-lite" id="endClubSubmit" disabled>End & remove club</button><button class="btn ghost" id="endClubCancel">Cancel</button></div><p id="endClubStatus" role="status" aria-live="polite"></p>`;
+  const input=dialog.querySelector('#endClubConfirm'),button=dialog.querySelector('#endClubSubmit'),status=dialog.querySelector('#endClubStatus');let busy=false;
+  input.oninput=()=>{button.disabled=busy||input.value.trim()!==preview.club_name;};dialog.querySelector('#endClubCancel').onclick=()=>{if(!busy)dialog.close();};
+  dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+  button.onclick=async()=>{
+    if(busy||input.value.trim()!==preview.club_name)return;busy=true;button.disabled=true;input.disabled=true;status.textContent='Ending this club and closing its current journey…';
+    try{
+      const {data,error}=await supabase.rpc('platform_end_and_remove_club',{p_club_id:clubId,p_confirmation:input.value.trim()});if(error)throw Error(error.message);
+      allMemberships=allMemberships.filter(m=>m.club_id!==clubId);localStorage.setItem('bdp-context','platform');if(localStorage.getItem('bdp-club-id')===clubId)localStorage.removeItem('bdp-club-id');
+      dialog.innerHTML=`<div class="section-label">Club removed</div><h2>${esc(data.club_name)} has ended.</h2><p>The old club is archived. No new invitation or promo email has been sent.</p><div class="btnrow"><button class="btn secondary" id="removedAddPromo">Add to promo list</button><button class="btn ghost" id="removedClose">Back to Active Clubs</button></div>`;
+      busy=false;dialog.querySelector('#removedAddPromo').onclick=()=>{dialog.close();openPlatformLeadEntry(data);};dialog.querySelector('#removedClose').onclick=()=>{dialog.close();renderPlatformActiveClubs();};
+      await renderPlatformActiveClubs();
+    }catch(error){busy=false;button.disabled=false;input.disabled=false;status.textContent=error.message||'The club could not be removed.';}
+  };
+}
+
+
 async function renderPlatformProspects(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading Club Pipeline…</div>';
   const [prospectRes,onboardingRes,trialRes,threadRes,messageRes,suppressionRes,settingsRes]=await Promise.all([
-    supabase.from('sales_prospects').select('*').order('updated_at',{ascending:false}),
-    supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
+    supabase.from('sales_prospects').select('*').is('retired_at',null).order('updated_at',{ascending:false}),
+    supabase.from('club_prospects').select('*').is('retired_at',null).order('created_at',{ascending:false}),
     supabase.from('club_trials').select('*').order('created_at',{ascending:false}),
     supabase.from('club_batting_guide_threads').select('id,sales_prospect_id,status,human_handoff_reason,updated_at').eq('status','handoff_requested').order('updated_at',{ascending:false}),
     loadAllPlatformRows(()=>supabase.from('outbound_messages').select('id,club_id,prospect_id,sales_prospect_id,recipient_email,template_key,subject,provider_name,created_at,processing_at,sent_at,failed_at,last_error').eq('hidden_from_platform_queue',false).is('sent_at',null).order('created_at',{ascending:false}).order('id')),
@@ -12195,7 +12343,7 @@ async function renderPlatformProspects(){
   const validEmail=p=>String(p?.contact_email||'').trim().includes('@');
   const suppressedEmail=p=>suppressedEmails.has(String(p?.contact_email||'').trim().toLowerCase());
   const statusLabel=s=>({discovered:'Discovered',ready_to_contact:'Ready to contact',contacted:'Awaiting response',interested:'Interested',maybe_later:'Revisit later',wrong_contact:'Wrong contact',declined:'Not interested',onboarding:'Onboarding',do_not_contact:'Do not contact'}[s]||String(s||'').replaceAll('_',' '));
-  const currentOnboarding=onboarding.filter(x=>x.status!=='active');
+  const currentOnboarding=onboarding.filter(x=>!x.retired_at&&x.status!=='active');
   const revisit=rows.filter(x=>x.status==='maybe_later').sort((a,b)=>String(a.follow_up_after||'9999').localeCompare(String(b.follow_up_after||'9999')));
   const today=new Date().toISOString().slice(0,10);
 
@@ -12232,7 +12380,7 @@ async function renderPlatformProspects(){
 
   page.innerHTML=`
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Normal outreach responses and valid Interested responses move automatically. This page keeps the exceptions and live onboarding work visible.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length+deliveryExceptions.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
+    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Normal outreach responses and valid Interested responses move automatically. This page keeps the exceptions and live onboarding work visible.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length+deliveryExceptions.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn secondary" id="pipelineAddLeads">Add club leads</button><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
   </section>
 
   <section class="admin-card" style="margin-bottom:16px">
@@ -12257,27 +12405,11 @@ async function renderPlatformProspects(){
     </div>
   </details>
 
-  <details class="admin-card manual-prospect-card" style="margin-bottom:16px">
-    <summary><div><div class="section-label">Manual entry</div><h2>Add a club manually</h2><p>Use this for a referral or a known club that did not come through Market Discovery.</p></div><span>⌄</span></summary>
-    <div class="collapsible-admin-body">
-      <div class="form-grid">
-        <div class="field"><label>Club name</label><input id="salesClubName"></div>
-        <div class="field"><label>Locality</label><input id="salesLocality"></div>
-        <div class="field"><label>Region / state</label><input id="salesRegion"></div>
-        <div class="field"><label>Country</label><input id="salesCountry" value="Australia"></div>
-        <div class="field"><label>Club website</label><input id="salesWebsite" placeholder="https://..."></div>
-        <div class="field"><label>Public contact source</label><input id="salesSourceUrl" placeholder="Page where the contact was published"></div>
-        <div class="field"><label>Contact name</label><input id="salesContactName"></div>
-        <div class="field"><label>Contact role</label><input id="salesContactRole" value="Club Secretary / contact"></div>
-        <div class="field"><label>Public contact email</label><input id="salesContactEmail" type="email"></div>
-      </div>
-      <div class="field"><label>Internal note</label><textarea id="salesNotes"></textarea></div>
-      <div class="btnrow"><button class="btn secondary" id="addSalesProspect">Add club</button><span id="addSalesStatus" class="status"></span></div>
-    </div>
-  </details>
+  <section class="admin-card" style="margin-bottom:16px"><div class="section-label">Your own research</div><h2>Add clubs for the promo email</h2><p>Enter several clubs, paste from Excel or upload a CSV. They enter this same pipeline before outreach.</p><button class="btn secondary" id="openManualLeadEntry">Add club leads</button></section>
 
   <div class="btnrow" style="justify-content:flex-end"><button class="btn ghost compact" id="openEmailHistory">View email history →</button></div>`;
 
+  document.getElementById('pipelineAddLeads').onclick=()=>openPlatformLeadEntry();
   document.getElementById('openMarketDiscovery').onclick=()=>{platformView='market';renderPlatformConsole();};
   const renderList=()=>{
     const q=(document.getElementById('salesProspectSearch').value||'').trim().toLowerCase();
@@ -12312,18 +12444,8 @@ async function renderPlatformProspects(){
     }
   });
 
-  document.getElementById('addSalesProspect').onclick=async()=>{
-    const st=document.getElementById('addSalesStatus');st.textContent='Adding…';
-    const email=val('salesContactEmail').trim().toLowerCase();
-    const status=email?'ready_to_contact':'discovered';
-    const {data,error}=await supabase.from('sales_prospects').insert({
-      club_name:val('salesClubName'),locality:val('salesLocality'),region:val('salesRegion'),country:val('salesCountry')||'Australia',website_url:val('salesWebsite'),
-      contact_name:val('salesContactName'),contact_role:val('salesContactRole')||'Club Secretary / contact',contact_email:email,contact_source_url:val('salesSourceUrl'),
-      source_type:'manual',intended_route:'standard',status,notes:val('salesNotes')
-    }).select('id').single();
-    if(error){st.textContent=error.message;return;}
-    st.textContent='Added ✓';platformSelectedProspectId=data.id;setTimeout(()=>renderPlatformProspects(),300);
-  };
+  document.getElementById('openManualLeadEntry').onclick=()=>openPlatformLeadEntry();
+
 }
 
 function onboardingProgressLabel(p,trial,invitation=null,settings=null){
@@ -12361,7 +12483,7 @@ async function renderPlatformOnboardingList(onboardingRows=null,trialRows=null,m
   let emailSettings=null;
   {
     const [onboardingRes,trialRes,messageRes,settingsRes]=await Promise.all([
-      Array.isArray(records)?Promise.resolve({data:records}):supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
+      Array.isArray(records)?Promise.resolve({data:records}):supabase.from('club_prospects').select('*').is('retired_at',null).order('created_at',{ascending:false}),
       Array.isArray(trials)?Promise.resolve({data:trials}):supabase.from('club_trials').select('*').order('created_at',{ascending:false}),
       loadAllPlatformRows(()=>supabase.from('outbound_messages').select('id,prospect_id,template_key,created_at,processing_at,sent_at,failed_at,last_error').eq('template_key','club_trial_invitation').order('created_at',{ascending:false}).order('id')),
       supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
@@ -12443,7 +12565,7 @@ async function renderPlatformSalesProspectDetail(p){
         ${p.status==='interested'&&!trial?`<div class="notice"><strong>The club has indicated interest.</strong><br>${hasContactEmail?'Automatic trial setup is pending. No separate onboarding step is required.':'Add and save a valid Club Contact email. Club Batting will then create the trial and queue the invitation automatically.'}</div>`:''}
         ${p.status==='maybe_later'?`<div class="notice"><strong>Automatic single re-contact scheduled.</strong><br>${p.follow_up_after?`Club Batting will re-contact the club on ${esc(niceDate(p.follow_up_after))}, subject to the 90-day frequency cap.`:'A date has not been set. Review the record.'} No follow-up sequence will be added.</div>`:''}
         ${trial?`<div class="trial-admin-card"><span class="status-pill">${esc(String(trial.status).replaceAll('_',' '))}</span><strong>${Number(trial.duration_days||trialDays||60)}-day Club Trial</strong><p>${esc(trialTimingLabel(trial))}</p><p>${esc(money(trial.annual_price_cents,trial.currency||'AUD'))}/year only if the club explicitly chooses to continue.</p></div>`:''}
-        ${canFirstContact?'<button class="btn secondary" id="queueSalesIntro">Queue introduction</button>':''}
+        ${canFirstContact?'<button class="btn secondary" id="queueSalesIntro">Send promo email</button>':''}
         ${canFollowUp?'<button class="btn ghost" id="queueSalesFollowUp">Queue one follow-up</button>':''}
         ${p.status==='contacted'&&!canFollowUp&&!hasFollowUp&&daysSinceContact!==null&&daysSinceContact<7?`<div class="help">One follow-up becomes available after 7 days. ${7-daysSinceContact} day${7-daysSinceContact===1?'':'s'} to go.</div>`:''}
         ${hasFollowUp?'<div class="help">The single follow-up has already been used. No drip sequence will follow.</div>':''}
@@ -12608,307 +12730,56 @@ async function renderPlatformOnboardingDetail(p){
   };
 }
 
-async function renderPlatformOnboarding(manualOnly=false){
-  const page=document.getElementById('platformPage');
-  page.innerHTML=`<div class="splash">Loading ${manualOnly?'custom setup':'onboarding'}…</div>`;
-  const [{data:settings,error:settingsError},{data:calendars,error:calendarError},{data:onboarding,error:onboardingError},{data:interested,error:interestedError},{data:trials,error:trialsError}]=await Promise.all([
-    supabase.from('platform_settings').select('*').eq('singleton',true).single(),
-    loadSubscriptionCalendars(),
-    supabase.from('club_prospects').select('*').order('created_at',{ascending:false}),
-    supabase.from('sales_prospects').select('*').eq('status','interested').order('updated_at',{ascending:false}),
-    supabase.from('club_trials').select('*').order('created_at',{ascending:false})
+async function renderPlatformActiveClubs(message=''){
+  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading clubs…</div>';
+  const [subsRes,clubsRes,removedRes]=await Promise.all([
+    supabase.from('club_subscriptions').select('*').is('retired_at',null).in('status',['active','grace']).order('active_until'),
+    supabase.from('clubs').select('id,name,archived_at').is('archived_at',null).order('name'),
+    supabase.from('platform_club_removals').select('club_id,club_name,contact_name,contact_email,removed_at').order('removed_at',{ascending:false})
   ]);
-  const loadError=settingsError||calendarError||onboardingError||interestedError||trialsError;
-  if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
-
-  const records=onboarding||[];
-  if(platformSelectedOnboardingId){
-    const p=records.find(x=>x.id===platformSelectedOnboardingId);
-    if(p){await renderPlatformOnboardingDetail(p);return;}
-  }
-
-  const today=new Date().toISOString().slice(0,10);
-  const defaultCalendar=(calendars||[]).some(c=>c.code==='australia')?'australia':(calendars?.[0]?.code||'');
-  const seed=platformOnboardingSeed;
-  const ready=interested||[];
-  const trialMap=new Map((trials||[]).map(t=>[t.onboarding_prospect_id,t]));
-
-  page.innerHTML=`${manualOnly?'<div class="btnrow"><button class="btn ghost" id="backToClubPipeline">← Club Pipeline</button></div>':'<section class="platform-flow-card"><div class="section-label">Club Trial progress</div><h2>Interested → invitation sent → trial activated → Club Admin handoff</h2><p>Normal Club Trial onboarding is automatic. Platform Admin only needs to step in when contact details are missing or a club asks for help.</p></section>'}
-    ${!manualOnly&&ready.length&&!seed?`<section class="admin-card"><div class="admin-card-head"><div><div class="section-label">Needs attention</div><h2>${ready.length} club${ready.length===1?'':'s'}</h2></div></div><div class="ready-onboarding-list">${ready.map(x=>`<button class="sales-prospect-row" data-open-interested-prospect="${x.id}"><span class="sales-prospect-main"><strong>${esc(x.club_name)}</strong><small>${esc(x.contact_email||'A Club Contact email is required')}</small></span><span class="sales-status interested">${x.contact_email?'Check setup':'Add email'}</span><span class="sales-arrow">›</span></button>`).join('')}</div></section>`:''}
-    ${!manualOnly?`<section class="admin-card"><div class="section-label">Onboarding progress</div><h2>Club Trials & handoffs</h2><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Club</th><th>Progress</th><th>Trial</th><th>Contact</th><th></th></tr></thead><tbody>${records.filter(x=>x.status!=='active').map(x=>{const t=trialMap.get(x.id);return `<tr><td><strong>${esc(x.club_name)}</strong><small>${esc(t?'Club Trial':x.entry_route.replaceAll('_',' '))}</small></td><td><span class="status-pill">${esc(onboardingProgressLabel(x,t))}</span></td><td>${esc(t?trialTimingLabel(t):niceDate(x.offer_end))}</td><td>${esc(x.primary_contact_email)}</td><td><button class="btn ghost" data-manage-onboarding="${x.id}">View</button></td></tr>`;}).join('')||'<tr><td colspan="5">No clubs currently onboarding.</td></tr>'}</tbody></table></div></section>`:''}
-
-    <details class="admin-card form-wide onboarding-create" ${manualOnly||seed?'open':''}>
-      <summary><div><div class="section-label">Admin exception</div><h2>${seed?`Custom onboarding for ${esc(seed.club_name)}`:'Create custom onboarding manually'}</h2><p>Normal interested clubs do not use this form. Open it only for a special manual or Beta arrangement.</p></div><span>⌄</span></summary>
-      <div class="collapsible-admin-body">
-        <div class="field"><label>Entry route</label><select id="entryRoute"><option value="standard" ${(seed?.intended_route||'standard')==='standard'?'selected':''}>Standard subscription — Club Contact first</option><option value="direct_beta" ${seed?.intended_route==='direct_beta'?'selected':''}>Direct Beta — trial lead becomes initial Admin</option><option value="full_flow_beta" ${seed?.intended_route==='full_flow_beta'?'selected':''}>Full-flow Beta — Club Contact handoff, $0 test flow</option></select></div>
-        <div id="entryRouteHelp" class="notice compact"></div>
-        <div class="form-grid">
-          <div class="field"><label>Club name</label><input id="newClubName" value="${esc(seed?.club_name||'')}"></div>
-          <div class="field"><label id="contactNameLabel">Club Secretary / contact name</label><input id="newContactName" value="${esc(seed?.contact_name||'')}"></div>
-          <div class="field"><label id="contactEmailLabel">Club Secretary / contact email</label><input id="newContactEmail" type="email" value="${esc(seed?.contact_email||'')}"></div>
-          <div class="field"><label>Subscription calendar</label><select id="subscriptionCalendar">${calendarOptions(calendars,defaultCalendar)}</select><small>Sets the club's universal annual renewal date.</small></div>
-          <div class="field"><label>Access starts</label><input id="accessStart" type="date" value="${today}"><small>Normally the activation/payment date.</small></div>
-        </div>
-        <div class="commercial-box">
-          <div class="section-label">Private commercial terms</div><p class="help">These controls never appear to normal clubs. <strong>0% reduction = full standard price. 100% reduction = complimentary.</strong></p>
-          <div class="form-grid"><div class="field"><label>Private rate reduction</label><input id="adjustmentPct" type="number" min="0" max="100" value="${seed?.intended_route&&seed.intended_route!=='standard'?'100':'0'}"></div><div class="field"><label>Custom rate end date (optional)</label><input id="adjustmentEnd" type="date"><small>Only used for a temporary custom rate.</small></div><div class="field"><label>At expiry</label><select id="expiryAction"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div></div>
-          <div class="field"><label>Internal note</label><textarea id="internalNote">${esc(seed?`Started from Club Pipeline${seed.notes?` — ${seed.notes}`:''}`:'')}</textarea></div>
-        </div>
-        <div class="commercial-calculation"><div class="section-label">Calculated offer</div><div id="newClubOfferPreview"><div class="help">Calculating…</div></div></div>
-        <div class="btnrow"><button class="btn secondary" id="createProspect">Create custom onboarding</button>${seed?'<button class="btn ghost" id="cancelOnboardingSeed">Cancel</button>':''}<span class="status" id="createProspectStatus"></span></div>
-        <div id="createdProspectResult"></div>
-      </div>
-    </details>`;
-
-  document.getElementById('backToClubPipeline')?.addEventListener('click',()=>renderPlatformProspects());
-  page.querySelectorAll('[data-manage-onboarding]').forEach(b=>b.onclick=()=>{platformSelectedOnboardingId=b.dataset.manageOnboarding;renderPlatformProspects();});
-  page.querySelectorAll('[data-open-interested-prospect]').forEach(b=>b.onclick=()=>{platformSelectedProspectId=b.dataset.openInterestedProspect;platformView='home';renderPlatformConsole();});
-  if(document.getElementById('cancelOnboardingSeed'))document.getElementById('cancelOnboardingSeed').onclick=()=>{platformOnboardingSeed=null;manualOnly?renderPlatformProspects():renderPlatformOnboarding();};
-
-  const route=document.getElementById('entryRoute');
-  const updateRoute=()=>{
-    const beta=route.value!=='standard';
-    document.getElementById('contactNameLabel').textContent=route.value==='direct_beta'?'Trial lead name':'Club Secretary / contact name';
-    document.getElementById('contactEmailLabel').textContent=route.value==='direct_beta'?'Trial lead email':'Club Secretary / contact email';
-    document.getElementById('entryRouteHelp').innerHTML=route.value==='full_flow_beta'
-      ?'<strong>Full-flow Beta:</strong> no payment is taken, but the club still tests the real Club Contact → Club Admin handoff.'
-      :route.value==='direct_beta'
-        ?'<strong>Direct Beta:</strong> skip the organisational handoff and make the trial lead the initial Club Admin.'
-        :'<strong>Standard subscription:</strong> the Club Contact approves, nominates the payer if needed, payment is completed, then the Club Contact nominates the Club Admin.';
-    if(beta&&Number(val('adjustmentPct')||0)!==100){document.getElementById('adjustmentPct').value=100;}
-  };
-  const refreshPreview=async()=>{
-    const box=document.getElementById('newClubOfferPreview');box.innerHTML='<div class="help">Calculating…</div>';
-    const {data,error}=await getCommercialPreview(document.getElementById('subscriptionCalendar').value,val('accessStart'),Number(val('adjustmentPct')||0),val('adjustmentEnd')||'');
-    box.innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:commercialPreviewHtml(data);
-  };
-  route.onchange=()=>{updateRoute();refreshPreview();};
-  ['subscriptionCalendar','accessStart','adjustmentPct','adjustmentEnd'].forEach(id=>{document.getElementById(id).onchange=refreshPreview;if(id==='adjustmentPct')document.getElementById(id).oninput=refreshPreview;});
-  updateRoute();await refreshPreview();
-
-  document.getElementById('createProspect').onclick=async()=>{
-    const st=document.getElementById('createProspectStatus');st.textContent='Creating…';
-    const reduction=Number(val('adjustmentPct')||0);
-    const {data,error}=await supabase.rpc('platform_create_prospect',{
-      p_club_name:val('newClubName'),p_entry_route:route.value,p_contact_name:val('newContactName'),p_contact_email:val('newContactEmail'),
-      p_subscription_calendar:document.getElementById('subscriptionCalendar').value,p_access_start:val('accessStart'),p_adjustment_percent:reduction,
-      p_adjustment_start:reduction>0?val('accessStart'):null,p_adjustment_end:val('adjustmentEnd')||null,p_expiry_action:document.getElementById('expiryAction').value,p_internal_note:val('internalNote')
-    });
-    if(error){st.textContent=error.message;return;}
-    if(seed){
-      const {error:linkError}=await supabase.rpc('platform_link_sales_onboarding',{p_sales_prospect_id:seed.id,p_onboarding_prospect_id:data.prospect_id});
-      if(linkError){st.textContent=`Onboarding created, but prospect link failed: ${linkError.message}`;return;}
-    }
-    st.textContent='Created';
-    const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
-    document.getElementById('createdProspectResult').innerHTML=`<div class="created-offer"><strong>Formal invitation ready</strong><span>Amount: ${esc(money(data.amount_due_cents,data.currency))}</span><span>Access through: ${esc(niceDate(data.offer_end))}</span><span>Next renewal: ${esc(niceDate(data.next_renewal))}</span><input id="createdLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyCreatedLink">Copy invitation link</button><small>The invitation also appears in Club Pipeline email history.</small></div>`;
-    document.getElementById('copyCreatedLink').onclick=async()=>{await navigator.clipboard.writeText(link);document.getElementById('copyCreatedLink').textContent='Copied ✓';};
-    platformOnboardingSeed=null;
-    await kickLiveEmailDelivery();
-  };
-}
-
-async function openBetaReonboardDialog(targetClub){
-  if(platformRole!=='owner')return;
-  document.getElementById('betaReonboardDialog')?.remove();
-  const dialog=document.createElement('dialog');
-  dialog.id='betaReonboardDialog';
-  dialog.style.cssText='max-width:720px;width:calc(100% - 32px);border:0;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(20,32,80,.28)';
-  document.body.appendChild(dialog);
-
-  const name=targetClub?.name||'this club';
-  dialog.innerHTML=`<div style="padding:24px 26px">
-    <div class="section-label">Full-flow Beta reset</div>
-    <h2 style="margin:4px 0 8px">Re-onboard ${esc(name)} as Beta</h2>
-    <div class="notice" style="margin-top:14px"><strong>This is a destructive Beta-testing action, not a normal club workflow.</strong><br><br>The current pilot club will be moved out of the live product and retained as a Platform Admin archive. Its existing cricket data is <strong>not hard-deleted</strong>. Normal club access, player sign-up links, active players, Playing Groups and rollout requirements are retired so nobody keeps using the pilot by accident.<br><br>Club Batting will then create a brand-new <strong>Full-flow Beta</strong> invitation using the real Club Contact → Club Admin handoff. When that invitation is completed, a fresh club with a new club ID is created.</div>
-    <div class="form-grid" style="margin-top:18px">
-      <div class="field"><label>Club Contact name</label><input id="betaReonboardContactName" placeholder="e.g. Club Secretary"></div>
-      <div class="field"><label>Club Contact email</label><input id="betaReonboardContactEmail" type="email" placeholder="name@club.com.au"></div>
-    </div>
-    <div class="field"><label>Internal note (optional)</label><textarea id="betaReonboardNote" placeholder="e.g. Newcastle City full end-to-end Beta test"></textarea></div>
-    <div class="field" style="margin-top:16px"><label>Type <strong>${esc(name)}</strong> to confirm</label><input id="betaReonboardConfirm" autocomplete="off"></div>
-    <div class="help">The old pilot remains retained in the database for recovery/audit and disappears from normal club switching. There is no one-click restore because the replacement club will be a separate, genuinely clean club.</div>
-    <div class="btnrow" style="margin-top:18px"><button class="btn secondary" id="startBetaReonboard" disabled>Archive pilot & start Beta</button><button class="btn ghost" id="cancelBetaReonboard">Cancel</button><span class="status" id="betaReonboardStatus"></span></div>
-    <div id="betaReonboardResult"></div>
-  </div>`;
-
-  const confirmInput=dialog.querySelector('#betaReonboardConfirm');
-  const startButton=dialog.querySelector('#startBetaReonboard');
-  const status=dialog.querySelector('#betaReonboardStatus');
-  const updateReady=()=>{startButton.disabled=confirmInput.value!==name;};
-  confirmInput.addEventListener('input',updateReady);
-  dialog.querySelector('#cancelBetaReonboard').onclick=()=>dialog.close();
-  dialog.onclick=e=>{if(e.target===dialog)dialog.close();};
-
-  startButton.onclick=async()=>{
-    const contactEmail=dialog.querySelector('#betaReonboardContactEmail').value.trim();
-    const contactName=dialog.querySelector('#betaReonboardContactName').value.trim();
-    if(!contactEmail || !contactEmail.includes('@')){status.textContent='Enter the Club Contact email.';return;}
-    if(confirmInput.value!==name){status.textContent='Type the club name exactly to confirm.';return;}
-    const finalCheck=confirm(`Archive the current ${name} pilot and start a completely fresh Full-flow Beta?\n\nThe pilot data will remain archived, but normal users will lose access to that old club.`);
-    if(!finalCheck)return;
-
-    startButton.disabled=true;startButton.textContent='Archiving pilot…';status.textContent='';
-    const {data,error}=await supabase.rpc('platform_reonboard_club_as_beta',{
-      p_club_id:targetClub.id,
-      p_contact_name:contactName,
-      p_contact_email:contactEmail,
-      p_confirmation:name,
-      p_internal_note:dialog.querySelector('#betaReonboardNote').value.trim()
-    });
-    if(error){startButton.disabled=false;startButton.textContent='Archive pilot & start Beta';status.textContent=error.message;return;}
-
-    allMemberships=allMemberships.filter(m=>m.club_id!==targetClub.id);
-    localStorage.setItem('bdp-context','platform');
-    if(localStorage.getItem('bdp-club-id')===targetClub.id)localStorage.removeItem('bdp-club-id');
-    await kickLiveEmailDelivery();
-
-    const link=`${location.origin}${location.pathname}?prospect=${data.public_token}`;
-    status.textContent='Beta onboarding created ✓';
-    dialog.querySelector('#betaReonboardResult').innerHTML=`<div class="created-offer" style="margin-top:16px"><strong>Pilot archived. Full-flow Beta invitation ready.</strong><span>Sent / queued for: ${esc(contactEmail)}</span><span>The replacement club will be created only when the real onboarding flow is completed.</span><input id="betaReonboardLink" value="${esc(link)}" readonly><button class="btn ghost" id="copyBetaReonboardLink">Copy invitation link</button><small>The old club remains available only as a Platform Admin Beta archive.</small></div>`;
-    dialog.querySelector('#copyBetaReonboardLink').onclick=async()=>{await navigator.clipboard.writeText(link);dialog.querySelector('#copyBetaReonboardLink').textContent='Copied ✓';};
-    startButton.style.display='none';
-    dialog.querySelector('#cancelBetaReonboard').textContent='Close';
-  };
-
-  dialog.addEventListener('close',()=>{dialog.remove();renderPlatformActiveClubs();},{once:true});
-  dialog.showModal();
-}
-
-async function renderPlatformActiveClubs(){
-  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading active clubs…</div>';
-  const [{data:subs,error:subsError},{data:clubs,error:clubsError},{data:calendars,error:calendarError},{data:settings,error:settingsError},{data:betaArchives,error:archiveError},{data:trials,error:trialError}]=await Promise.all([
-    supabase.from('club_subscriptions').select('*,clubs(id,name,archived_at)').in('status',['active','grace']).order('active_until'),
-    supabase.from('clubs').select('id,name,subscription_calendar,season_start,season_end,archived_at').order('name'),
-    loadSubscriptionCalendars(),
-    supabase.from('platform_settings').select('*').eq('singleton',true).single(),
-    supabase.from('club_beta_reonboarding_archives').select('*').order('started_at',{ascending:false}).limit(30),
-    supabase.from('club_trials').select('*').order('ends_on',{ascending:true})
-  ]);
-
-  const loadError=subsError||clubsError||calendarError||settingsError||archiveError||trialError;
-  if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
-
-  const visibleSubs=(subs||[]).filter(s=>!s.clubs?.archived_at);
-  const liveClubs=(clubs||[]).filter(c=>!c.archived_at);
-  const calendarMap=new Map((calendars||[]).map(c=>[c.code,c]));
-  const activeIds=new Set(visibleSubs.map(s=>s.club_id));
-  const unactivated=liveClubs.filter(c=>!activeIds.has(c.id));
-  const trialMap=new Map((trials||[]).filter(t=>t.club_id).map(t=>[t.club_id,t]));
-  const activeTrials=(trials||[]).filter(t=>['offered','active','conversion_requested'].includes(t.status));
-  const canCommercial=['owner','commercial_admin'].includes(platformRole);
-  const canReonboard=platformRole==='owner';
-  const today=new Date().toISOString().slice(0,10);
-  const defaultCalendar=(calendars||[]).some(c=>c.code==='australia')?'australia':(calendars?.[0]?.code||'');
-
-  page.innerHTML=`<section class="admin-card">
-    <div class="section-label">Private commercial management</div><h2>Active clubs</h2>
-    <div class="help">Annual access is based on the club's regional <strong>Club Year</strong>, not its playing season. Clubs do not see the private rate-reduction percentage.</div>
-    <div class="active-club-list">${visibleSubs.map(s=>{
-      const cal=calendarMap.get(s.subscription_calendar);
-      const renewal=nextDayIso(s.season_end);
-      return `<div class="active-club-row">
-        <div><strong>${esc(s.clubs?.name||'Club')}</strong><small>${esc(cal?.label||s.subscription_calendar||'Club Year')} · Club Year ${esc(niceDate(s.season_start))} – ${esc(niceDate(s.season_end))} · annual renewal ${esc(niceDate(renewal))}</small>${trialMap.get(s.club_id)?`<small class="trial-inline-status"><b>Club Trial · ${esc(String(trialMap.get(s.club_id).status).replaceAll('_',' '))}</b> · ${esc(niceDate(trialMap.get(s.club_id).starts_on))} – ${esc(niceDate(trialMap.get(s.club_id).ends_on))}</small>`:''}</div>
-        <div class="active-club-controls">
-          <label>Rate reduction %<input data-sub-adjust="${s.club_id}" type="number" min="0" max="100" value="${esc(s.adjustment_percent)}"><small>0 = full price · 100 = free</small></label>
-          <label>Special rate ends<input data-sub-adjend="${s.club_id}" type="date" value="${esc(s.adjustment_end?String(s.adjustment_end).slice(0,10):'')}"></label>
-          <label>Current access to<input data-sub-active="${s.club_id}" type="date" value="${esc(String(s.active_until).slice(0,10))}"></label>
-          <label>At expiry<select data-sub-expiry="${s.club_id}"><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return standard</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End</option></select></label>
-          ${canCommercial?`<button class="btn ghost" data-save-sub="${s.club_id}">Save</button>`:''}
-          ${canReonboard?`<button class="btn ghost danger-lite" data-reonboard-beta="${s.club_id}">Re-onboard as Beta</button>`:''}
-        </div>
-      </div>`;
-    }).join('')||'<div class="notice">No commercially activated clubs yet.</div>'}</div>
-  </section>
-
-  ${activeTrials.length?`<section class="admin-card" style="margin-top:16px"><div class="section-label">Club Trials</div><h2>${activeTrials.length} current trial${activeTrials.length===1?'':'s'}</h2><div class="message-list">${activeTrials.map(t=>`<div class="message-row"><div><strong>${esc((liveClubs.find(c=>c.id===t.club_id)?.name)||'Trial club')}</strong><small>${esc(niceDate(t.starts_on))} – ${esc(niceDate(t.ends_on))} · ${esc(money(t.annual_price_cents,t.currency||'AUD'))}/year if continued</small></div><div><span class="status-pill">${esc(String(t.status).replaceAll('_',' '))}</span></div></div>`).join('')}</div></section>`:''}
-
-  ${betaArchives?.length?`<details class="admin-card" style="margin-top:16px"><summary><strong>Beta archives</strong> · ${betaArchives.length}</summary><div class="help" style="margin-top:12px">These are retired pilot clubs retained for audit/reference. They are hidden from normal club switching and are not part of the live Beta.</div><div class="message-list" style="margin-top:12px">${betaArchives.map(a=>`<div class="message-row"><div><strong>${esc(a.original_name)}</strong><small>Archived ${esc(niceDate(a.started_at))} · invitation ${esc(a.contact_email)} · ${a.replacement_club_id?'replacement club activated':'onboarding in progress'}</small></div><div><span class="status-pill">${a.replacement_club_id?'Completed':'Beta onboarding'}</span></div></div>`).join('')}</div></details>`:''}
-
-  ${unactivated.length?`<section class="admin-card form-wide" style="margin-top:16px">
-    <div class="section-label">Existing club migration</div><h2>Attach commercial terms to an existing club</h2>
-    <div class="notice"><strong>Use this for clubs created before commercial onboarding existed.</strong><br>This attaches an annual entitlement to the existing club. It does not recreate the club and does not touch players, philosophy work or permissions.</div>
-    ${canCommercial?`
-      <div class="form-grid">
-        <div class="field"><label>Existing club</label><select id="legacyClubId">${unactivated.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
-        <div class="field"><label>Subscription calendar</label><select id="legacyCalendar">${calendarOptions(calendars,unactivated[0]?.subscription_calendar||defaultCalendar)}</select></div>
-        <div class="field"><label>Access starts</label><input id="legacyAccessStart" type="date" value="${today}"></div>
-        <div class="field"><label>Private rate reduction from standard price</label><input id="legacyReduction" type="number" min="0" max="100" value="0"><small>0% = full standard price · 100% = free</small></div>
-        <div class="field"><label>Special rate ends (optional)</label><input id="legacyAdjustmentEnd" type="date"></div>
-        <div class="field"><label>At expiry</label><select id="legacyExpiry"><option value="renewal_approval">Require renewal approval</option><option value="return_standard">Return to standard rate</option><option value="end_subscription">End subscription</option></select></div>
-      </div>
-      <div class="field"><label>Internal note</label><textarea id="legacyNote" placeholder="e.g. Existing pilot club migrated into commercial model"></textarea></div>
-      <div class="commercial-calculation"><div class="section-label">Calculated entitlement</div><div id="legacyOfferPreview"><div class="help">Calculating…</div></div></div>
-      <div class="btnrow"><button class="btn secondary" id="activateExistingClub">Activate existing club</button><span class="status" id="legacyActivateStatus"></span></div>
-    `:'<div class="help">Only Platform Owner / Commercial Admin can attach commercial terms.</div>'}
-  </section>`:''}`;
-
-  page.querySelectorAll('[data-reonboard-beta]').forEach(b=>b.onclick=()=>{
-    const s=visibleSubs.find(x=>String(x.club_id)===String(b.dataset.reonboardBeta));
-    if(!s)return;
-    openBetaReonboardDialog({id:s.club_id,name:s.clubs?.name||'Club'});
+  const error=subsRes.error||clubsRes.error||removedRes.error;if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
+  const clubs=clubsRes.data||[],removed=removedRes.data||[];
+  const byClub=new Map((subsRes.data||[]).map(s=>[s.club_id,s]));
+  const canCommercial=['owner','commercial_admin'].includes(platformRole),canRemove=platformRole==='owner';
+  page.innerHTML=`<style>.active-club-row{align-items:start;display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,3fr);padding:18px;gap:24px}.active-club-row>div:first-child strong{font-size:18px}.active-club-row .btn{font-size:13px}.active-club-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end}.active-club-controls label{min-width:145px;flex:1;font-size:13px;text-transform:none;color:var(--ink)}.active-club-controls input,.active-club-controls select{width:100%;max-width:none;font-size:15px;padding:10px}.active-club-controls label small{display:block;line-height:1.5;font-size:12px}.active-club-controls [hidden]{display:none}.active-club-controls input:disabled,.active-club-controls select:disabled{background:#f2f4f8;color:#73798a}@media(max-width:850px){.active-club-row{grid-template-columns:1fr;gap:14px}}.club-access-description{display:block;margin-top:8px;font-size:15px;line-height:1.5}.club-access-infinity{font-weight:700;color:#166f67}.club-access-header{display:flex;justify-content:space-between;align-items:start;gap:20px;flex-wrap:wrap}</style>
+    <section class="admin-card"><div class="club-access-header"><div><div class="section-label">Platform Admin</div><h2>Active clubs</h2><p>Every new club follows the same promo email and sign-up journey. Adjust its access and rate here once it is registered.</p></div><button class="btn ghost" id="activeAddLeads">Add clubs for promo email</button></div>
+      <div class="notice"><strong>Ongoing free access:</strong> choose <strong>100% rate reduction</strong> and <strong>Special rate ends: Never</strong>. The club keeps access with no renewal date, payment request or trial-expiry reminder. You can change that arrangement here later.</div>
+      ${message?`<p class="notice success" role="status">${esc(message)}</p>`:''}
+      <div class="active-club-list">${clubs.map(c=>{
+        const s=byClub.get(c.id),forever=s?.special_rate_never_ends&&Number(s.adjustment_percent)===100;
+        return `<div class="active-club-row"><div><strong>${esc(c.name)}</strong><span class="club-access-description ${forever?'club-access-infinity':''}">${forever?'Ongoing complimentary access · no expiry or renewal':s?`Access through ${esc(niceDate(s.active_until))}`:'No subscription record. Remove this test setup to restart through the promo-email journey.'}</span></div><div>
+          ${s?`<div class="active-club-controls">
+            <label>Rate reduction %<input data-sub-adjust="${c.id}" type="number" min="0" max="100" step="1" value="${Number(s.adjustment_percent)}" ${canCommercial?'':'disabled'}><small>0 = full price · 100 = free</small></label>
+            <label>Special rate ends<select data-sub-end-mode="${c.id}" ${canCommercial?'':'disabled'}><option value="date" ${s.special_rate_never_ends?'':'selected'}>On a date</option><option value="never" ${s.special_rate_never_ends?'selected':''}>Never</option></select><input data-sub-adjend="${c.id}" type="date" aria-label="Special rate end date for ${esc(c.name)}" value="${esc(s.adjustment_end||'')}" ${s.special_rate_never_ends?'hidden':''} ${canCommercial?'':'disabled'}></label>
+            <label>Access ends<input data-sub-active="${c.id}" type="date" value="${s.active_until==='infinity'?'':esc(String(s.active_until||'').slice(0,10))}" ${forever||!canCommercial?'disabled':''}><small data-sub-access-note="${c.id}">${forever?'Never — ongoing free access':'A separate date from the special rate.'}</small></label>
+            <label>At expiry<select data-sub-expiry="${c.id}" ${forever||!canCommercial?'disabled':''}><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return to standard rate</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End access</option></select></label>
+          </div>`:''}
+          <div class="btnrow" style="margin-top:12px">${s&&canCommercial?`<button class="btn secondary" data-save-access="${c.id}">Save access & rate</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
+        </div></div>`;
+      }).join('')||'<p>No active clubs. Add a lead and send its promo email to start the full journey.</p>'}</div>
+    </section>
+    ${removed.length?`<details class="admin-card" style="margin-top:16px"><summary><strong>Removed clubs</strong> · ${removed.length}</summary><p>These workspaces are closed and retained as archives. Adding a contact to the promo list starts a new journey; it does not restore the old setup.</p>${removed.map(row=>`<div class="message-row"><div><strong>${esc(row.club_name)}</strong><small>Removed ${esc(niceDate(row.removed_at))}${row.contact_email?` · ${esc(row.contact_email)}`:''}</small></div><button class="btn ghost" data-removed-promo="${row.club_id}">Add to promo list</button></div>`).join('')}</details>`:''}`;
+  document.getElementById('activeAddLeads').onclick=()=>openPlatformLeadEntry();
+  page.querySelectorAll('[data-remove-club]').forEach(button=>button.onclick=()=>openEndClubDialog(button.dataset.removeClub));
+  page.querySelectorAll('[data-removed-promo]').forEach(button=>button.onclick=()=>openPlatformLeadEntry(removed.find(row=>row.club_id===button.dataset.removedPromo)));
+  clubs.forEach(c=>{
+    if(!byClub.has(c.id))return;
+    const el=key=>page.querySelector(`[data-sub-${key}="${c.id}"]`);
+    const sync=()=>{const never=el('end-mode').value==='never',free=never&&Number(el('adjust').value)===100;el('adjend').hidden=never;el('active').disabled=free||!canCommercial;el('expiry').disabled=free||!canCommercial;page.querySelector(`[data-sub-access-note="${c.id}"]`).textContent=free?'Never — ongoing free access':never?'The discount continues; access still renews on this date.':'A separate date from the special rate.';};
+    el('end-mode').onchange=sync;el('adjust').oninput=sync;
   });
-
-  page.querySelectorAll('[data-save-sub]').forEach(b=>b.onclick=async()=>{
-    const id=b.dataset.saveSub;
-    b.textContent='Saving…';
-    const {error}=await supabase.rpc('platform_update_subscription_terms',{
-      p_club_id:id,
-      p_adjustment_percent:Number(document.querySelector(`[data-sub-adjust="${id}"]`).value||0),
-      p_adjustment_start:null,
-      p_adjustment_end:document.querySelector(`[data-sub-adjend="${id}"]`).value||null,
-      p_expiry_action:document.querySelector(`[data-sub-expiry="${id}"]`).value,
-      p_active_until:document.querySelector(`[data-sub-active="${id}"]`).value
-    });
-    b.textContent=error?'Error':'Saved ✓';if(error)alert(error.message);
+  page.querySelectorAll('[data-save-access]').forEach(button=>button.onclick=async()=>{
+    const id=button.dataset.saveAccess,el=key=>page.querySelector(`[data-sub-${key}="${id}"]`),status=page.querySelector(`[data-access-result="${id}"]`);
+    const reduction=Number(el('adjust').value),never=el('end-mode').value==='never',free=never&&reduction===100;
+    if(!Number.isFinite(reduction)||reduction<0||reduction>100){status.textContent='Enter a rate reduction between 0 and 100.';return;}
+    if(!free&&!el('active').value){status.textContent='Choose an access end date.';return;}
+    if(reduction>0&&!never&&!el('adjend').value){status.textContent='Choose a special rate end date, or Never.';return;}
+    button.disabled=true;status.textContent='Saving…';
+    try{const {error}=await supabase.rpc('platform_set_club_access_terms',{p_club_id:id,p_adjustment_percent:reduction,p_never_ends:never,p_adjustment_end:never?null:el('adjend').value||null,p_active_until:free?null:el('active').value,p_expiry_action:el('expiry').value});if(error)throw Error(error.message);await renderPlatformActiveClubs(`${clubs.find(c=>c.id===id)?.name||'Club'}: ${free?'ongoing complimentary access saved. No renewal or payment reminders.':'access and rate saved.'}`);}
+    catch(error){status.textContent=error.message||'Could not save the access terms.';button.disabled=false;}
   });
-
-  if(document.getElementById('activateExistingClub')){
-    const selectedClub=()=>unactivated.find(c=>c.id===document.getElementById('legacyClubId').value);
-    const syncLegacyCalendar=()=>{
-      const c=selectedClub();
-      if(c?.subscription_calendar && (calendars||[]).some(x=>x.code===c.subscription_calendar))document.getElementById('legacyCalendar').value=c.subscription_calendar;
-    };
-    const refreshLegacyPreview=async()=>{
-      const box=document.getElementById('legacyOfferPreview');box.innerHTML='<div class="help">Calculating…</div>';
-      const {data,error}=await getCommercialPreview(
-        document.getElementById('legacyCalendar').value,
-        val('legacyAccessStart'),
-        Number(val('legacyReduction')||0),
-        val('legacyAdjustmentEnd')||''
-      );
-      box.innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:commercialPreviewHtml(data);
-    };
-    document.getElementById('legacyClubId').onchange=()=>{syncLegacyCalendar();refreshLegacyPreview();};
-    ['legacyCalendar','legacyAccessStart','legacyReduction','legacyAdjustmentEnd'].forEach(id=>{
-      document.getElementById(id).onchange=refreshLegacyPreview;
-      if(id==='legacyReduction')document.getElementById(id).oninput=refreshLegacyPreview;
-    });
-    await refreshLegacyPreview();
-
-    document.getElementById('activateExistingClub').onclick=async()=>{
-      const st=document.getElementById('legacyActivateStatus');
-      const btn=document.getElementById('activateExistingClub');
-      const c=selectedClub();
-      const reduction=Number(val('legacyReduction')||0);
-      const ok=confirm(`Attach commercial terms to ${c?.name||'this club'}? This keeps the existing club and all of its cricket data.`);
-      if(!ok)return;
-      btn.disabled=true;btn.textContent='Activating…';st.textContent='';
-      const {data,error}=await supabase.rpc('platform_activate_existing_club',{
-        p_club_id:document.getElementById('legacyClubId').value,
-        p_subscription_calendar:document.getElementById('legacyCalendar').value,
-        p_access_start:val('legacyAccessStart'),
-        p_adjustment_percent:reduction,
-        p_adjustment_end:val('legacyAdjustmentEnd')||null,
-        p_expiry_action:document.getElementById('legacyExpiry').value,
-        p_internal_note:val('legacyNote')
-      });
-      if(error){btn.disabled=false;btn.textContent='Activate existing club';st.textContent=error.message;return;}
-      st.textContent=`Activated through ${niceDate(data.active_until)}.`;
-      setTimeout(()=>renderPlatformActiveClubs(),700);
-    };
-  }
 }
+
 
 async function renderPlatformOutbox(){
   const page=document.getElementById('platformPage');
