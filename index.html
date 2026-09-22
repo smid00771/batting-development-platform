@@ -9,7 +9,7 @@
     (() => {
       const query = new URLSearchParams(location.search);
       const fragment = new URLSearchParams(location.hash.slice(1));
-      const appKeys = ['lead', 'prospect', 'payment', 'admin_invite', 'philosophy_invite', 'lead_handover', 'player_join', 'join', 'club', 'tab', 'involvement'];
+      const appKeys = ['lead', 'prospect', 'payment', 'admin_invite', 'philosophy_invite', 'lead_handover', 'player_join', 'join', 'club', 'tab', 'involvement', 'platform', 'trial', 'signin', 'password_setup'];
       const authKeys = ['code', 'access_token', 'refresh_token', 'token_hash', 'error', 'error_code', 'error_description'];
       const isAppLink = appKeys.some(key => query.has(key)) || authKeys.some(key => query.has(key) || fragment.has(key));
       if (!isAppLink) return;
@@ -116,6 +116,7 @@
       <nav class="header-nav" aria-label="Main navigation">
         <a class="nav-section" href="#how-it-works">How it works</a>
         <a class="nav-section" href="./demo.html">Explore the demo <span aria-hidden="true">&nbsp;→</span></a>
+        <a class="nav-section" href="./demo.html?stage=help">Help & tutorials</a>
         <a class="sign-in" href="./app.html">Sign in <span aria-hidden="true">&nbsp;→</span></a>
       </nav>
     </div>
@@ -128,7 +129,7 @@
         <p class="hero-copy">Turn your club’s batting philosophy into a plan every player can own — and practise.</p>
         <div class="hero-actions">
           <a class="button button-primary" href="./demo.html">Explore an example club <span class="arrow" aria-hidden="true">→</span></a>
-          <a class="text-link" href="#try-it">Try it with your club <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="./app.html?trial=1">Try it free with your club <span aria-hidden="true">→</span></a>
         </div>
         <p class="microcopy">A completed club. Every stage open. No sign-in needed.</p>
         <div class="hero-proof"><span>Your club’s approach</span><span>Each player’s game</span><span>A purpose for practice</span></div>
@@ -179,10 +180,12 @@
     </section>
     <section class="container try-section" id="try-it" aria-labelledby="try-heading">
       <div class="try-panel">
-        <div><p class="eyebrow">Bring your club’s approach to life</p><h2>Make it your club’s game.</h2><p>Tell us about your club and what you’d like to work on. We’ll help you explore whether Club Batting fits and arrange the next step.</p></div>
+        <div><p class="eyebrow">Bring your club’s approach to life</p><h2 id="try-heading">Make it your club’s game.</h2><p>Try the complete Club Batting process free for 60 days. Create your account, confirm your email and activate your club’s trial when you’re ready. No upfront payment. No automatic charge.</p></div>
         <div class="try-actions">
+          <a class="button button-light" href="./app.html?trial=1">Try it free with your club <span aria-hidden="true">→</span></a>
+          <p class="small-note">Already registered? <a href="./app.html">Sign in to your club</a>.</p>
           <details class="contact-options" id="contact-options">
-            <summary class="button button-light">Try it with your club <span class="arrow" aria-hidden="true">+</span></summary>
+            <summary class="button button-light">Email the Club Batting team <span class="arrow" aria-hidden="true">+</span></summary>
             <div class="contact-menu">
               <p class="small-note">Choose how to email the Club Batting team.</p>
               <div class="contact-buttons">
@@ -201,30 +204,26 @@
         </div>
       </div>
     </section>
+    <section class="container" aria-labelledby="guide-intro-title" style="margin-block:0 48px;padding:24px;border:2px solid #202f78;border-radius:16px;background:#f1f5ff">
+      <p class="eyebrow">Help at every step</p><h2 id="guide-intro-title" style="font-size:28px;margin:8px 0">You can ask as you go.</h2>
+      <p>Inside your club, the Club Batting Guide answers questions about setup, Player Plans, training and feedback. Open <strong>Ask the Guide</strong> whenever you need a hand.</p>
+      <a class="text-link" href="./demo.html?stage=help">Explore the step-by-step tutorials <span aria-hidden="true">→</span></a>
+    </section>
     <section class="container section faq-section" aria-labelledby="faq-heading">
       <div class="faq-wrap"><div><p class="eyebrow">A few practical things</p><h2>Before you jump in.</h2></div><div class="faq-list">
         <details><summary>Can I explore without an account?</summary><p>Yes. The demo opens a fictional club with every stage completed. Use its Explore menu to move between the Workshop, How We Bat, Player Plans, training and feedback. Example edits last until you reset or reload.</p></details>
         <details><summary>Does every club use the same batting philosophy?</summary><p>Your club defines its approach. The Philosophy Lead and nominated coaches shape How We Bat, then players develop individual plans using prompts based on that approach. The Philosophy Lead can edit those prompts before confirming them.</p></details>
         <details><summary>Who gets the club started?</summary><p>A Club Admin looks after setup and access. The Philosophy Lead brings the club’s batting approach together with nominated coaches. Players can then build their plans, practise and add feedback with their coaches.</p></details>
-        <details><summary>How do we try it with our own club?</summary><p>Use <a href="#try-it">Try it with your club</a> to choose Gmail, open your email app or copy our address. Share your club’s name and what you’d like to work on so we can arrange the next step. Existing players and coaches can <a href="./app.html">sign in here</a>.</p></details>
+        <details><summary>How do we try it with our own club?</summary><p>Choose <a href="./app.html?trial=1">Try it free with your club</a>. Create an account, confirm your email and continue to the trial activation screen. Your full 60 days start when you activate. There is no upfront payment or automatic charge. Existing players and coaches can <a href="./app.html">sign in here</a>.</p></details>
       </div></div>
     </section>
   </main>
-  <footer class="site-footer"><div class="container footer-inner"><div><span class="footer-brand">Club Batting</span><p class="footer-tagline">Your club’s philosophy. Each player’s game.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="./demo.html">Explore the demo</a><a href="#try-it">Get in touch</a><a href="./app.html">Sign in</a></nav></div></footer>
+  <footer class="site-footer"><div class="container footer-inner"><div><span class="footer-brand">Club Batting</span><p class="footer-tagline">Your club’s philosophy. Each player’s game.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="./demo.html">Explore the demo</a><a href="./demo.html?stage=help">Help & tutorials</a><a href="./app.html?platform=1">Platform Admin</a><a href="./app.html">Sign in</a></nav></div></footer>
   <script id="homepage-contact">
     (() => {
-      const options = document.getElementById('contact-options');
       const address = document.getElementById('enquiry-address');
       const copyButton = document.getElementById('copy-enquiry-email');
       const status = document.getElementById('enquiry-copy-status');
-      const reveal = () => { options.open = true; };
-      document.querySelectorAll('a[href="#try-it"]').forEach(link => {
-        link.addEventListener('click', reveal);
-      });
-      const revealFromHash = () => { if (location.hash === '#try-it') reveal(); };
-      window.addEventListener('hashchange', revealFromHash);
-      revealFromHash();
-
       // Native details and the visible address also work without JavaScript.
       copyButton.hidden = false;
       copyButton.addEventListener('click', async () => {

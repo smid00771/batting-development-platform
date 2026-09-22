@@ -3131,6 +3131,7 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 #demoStatus{max-width:1180px;margin:0 auto;padding:14px 24px;background:#fff0d9;color:#60420a;font:14px/1.5 system-ui,sans-serif}
 #demoStatus[hidden]{display:none}
 #app .nav{top:var(--demo-toolbar-height,156px)}
+.demo-guide-explainer{padding:20px;margin-bottom:18px;border-radius:12px;background:#e7efff;color:#13234f;border-left:5px solid #202f78}.demo-guide-explainer h2{font-size:24px;line-height:1.25;margin:8px 0 12px}.demo-guide-explainer p{font-size:16px;line-height:1.6;color:#13234f}.demo-guide-explainer .btn{margin-top:8px}
 #app button:disabled{cursor:default;opacity:.55}
 #app .header-actions .account-controls{display:none}
 .demo-hwb-preview{box-sizing:border-box;width:min(1040px,calc(100vw - 24px));max-width:none;max-height:92vh;max-height:92dvh;margin:auto;padding:0;border:1px solid #dce4ef;border-radius:18px;background:#f7f8fb;color:var(--ink);box-shadow:0 20px 60px rgba(20,32,80,.25);overflow:hidden}
@@ -3148,7 +3149,7 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 .demo-hwb-inline .demo-hwb-body{overflow:visible}
 @media(max-width:600px){.demo-hwb-head{padding:14px}.demo-hwb-body{padding:8px}.demo-hwb-preview .hwb-public-hero{padding:20px!important}}
 @media(max-width:600px){#demoToolbar{padding:10px 12px}.demo-heading{gap:7px}.demo-heading strong{font-size:15px}.demo-controls{gap:7px}.demo-controls label{font-size:12px}.demo-controls select{font-size:13px}.demo-controls button{font-size:12px}.demo-meta{font-size:11px}#demoHint{padding:10px 16px;font-size:13px}}
-</style></head><body><aside id="demoToolbar" aria-label="Club Batting demo controls"><div class="demo-heading"><strong>Explore Club Batting</strong><span class="demo-badge">Demo · fictional club and players</span><nav class="demo-site-links" aria-label="Club Batting website"><a href="https://clubbatting.com/">Club Batting home</a><a href="https://clubbatting.com/#try-it">Try it with your club →</a></nav></div><div class="demo-controls"><label for="demoStage">Explore</label><select id="demoStage"></select><button type="button" id="demoReset">Reset demo</button></div><div class="demo-meta"><span id="demoRole"></span><span>Completed example · Changes last until reset or reload</span></div></aside><p id="demoHint"></p><p id="demoStatus" role="status" aria-live="polite" hidden></p><div id="app"></div><script>// This demo has its own in-memory data and never reads the live application's storage.
+</style></head><body><aside id="demoToolbar" aria-label="Club Batting demo controls"><div class="demo-heading"><strong>Explore Club Batting</strong><span class="demo-badge">Demo · fictional club and players</span><nav class="demo-site-links" aria-label="Club Batting website"><a href="https://clubbatting.com/">Club Batting home</a><a href="https://clubbatting.com/app.html?trial=1">Try it free with your club →</a></nav></div><div class="demo-controls"><label for="demoStage">Explore</label><select id="demoStage"></select><button type="button" id="demoReset">Reset demo</button></div><div class="demo-meta"><span id="demoRole"></span><span>Completed example · Changes last until reset or reload</span></div></aside><p id="demoHint"></p><p id="demoStatus" role="status" aria-live="polite" hidden></p><div id="app"></div><script>// This demo has its own in-memory data and never reads the live application's storage.
 const fixtureMemory=()=>{const data=new Map();return {getItem:key=>data.get(key)||null,setItem:(key,value)=>data.set(key,String(value)),removeItem:key=>data.delete(key),clear:()=>data.clear()};};
 const fixtureLocalStorage=fixtureMemory();
 const fixtureSessionStorage=fixtureMemory();
@@ -4873,7 +4874,7 @@ function renderShell(){
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
-          <button class="btn ghost" id="openClubHelp" type="button" aria-label="Open Help and tutorials">Help</button>
+          <button class="btn secondary" id="openClubHelp" type="button" aria-label="Explore Help and tutorials">Ask the Guide</button>
           ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
@@ -5247,6 +5248,11 @@ function guideTopicNumber(key){
 function guideHelpStyles(){
   // Keep the reading order vertical even where the existing stylesheet uses two columns.
   return `<style>
+    .guide-chat-card{margin-top:18px;border:2px solid var(--primary);background:#f4f7ff}
+    .guide-chat-card h2{margin-top:4px}
+    .guide-chat-card>p{font-size:1rem;line-height:1.55;color:var(--text)}
+    .guide-chat-card .guide-chat-messages.is-empty{min-height:0}
+    .guide-process-heading{margin:28px 0 12px}
     .guide-layout.guide-is-overview{grid-template-columns:minmax(0,1fr)}
     .guide-layout.guide-is-overview .guide-chat-card{grid-column:1}
     .guide-layout .guide-topic-list{display:flex;flex-direction:column;min-width:0;gap:8px}
@@ -5496,6 +5502,14 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   </section>
   ${trial?`<section class="guide-trial-strip"><strong>${esc(clubTrialStatusLabel(trial,daysLeft))}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · Nothing is automatically charged.</span></section>`:''}
   <div id="guideInterventionSlot"></div>
+    <section class="card guide-chat-card">
+      <div class="section-label">Ask the Club Batting Guide</div><h2>A question? Ask it here.</h2><p>Get help with your next step, a feature or the whole process. The Guide replies here as you work.</p>
+      <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
+      <div class="guide-chat-compose"><textarea id="guideQuestion" aria-label="Your question for the Club Batting Guide" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
+      <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
+      <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">I’d rather speak to someone</button><p class="help">Request a conversation with the Club Batting team. Your question and Guide conversation go with it.</p><div id="guideHandoffBox" hidden><label for="guideHandoffReason">What would you like to discuss?</label><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
+    </section>
+  <h2 class="guide-process-heading">Explore the process</h2>
   <div class="guide-layout${isOverview?' guide-is-overview':''}">
     <nav class="guide-topic-list" aria-label="Help topics in process order">
       ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${c.capability_key!=='whole_process'&&progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
@@ -5508,13 +5522,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}<button type="button" class="btn ghost" data-guide-topic="whole_process">Back to overview</button></div>
       ${selected.target_tab&&selected.target_tab!=='guide'&&guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<p class="help">${esc(guideTargetUnavailableReason(selected.target_tab,selectedFocus))}</p>`:''}
     </section>`}
-    <section class="card guide-chat-card">
-      <div class="section-label">Ask the Club Batting Guide</div><h2>How does this work at our club?</h2>
-      <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
-      <div class="guide-chat-compose"><textarea id="guideQuestion" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
-      <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
-      <div class="guide-human-handoff"><button class="guide-inline-link" id="guideHumanHandoff">I’d rather speak to someone</button><div id="guideHandoffBox" hidden><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
-    </section>
+
   </div>`;
 
   await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
@@ -5569,7 +5577,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   document.getElementById('guideSendHandoff').onclick=async()=>{
     const reason=val('guideHandoffReason');
     const {error}=await supabase.rpc('request_club_batting_guide_handoff',{p_club_id:club.id,p_reason:reason});
-    document.getElementById('guideHandoffBox').innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:'<div class="notice success compact"><strong>Request recorded.</strong><br>A person can pick up the conversation with the context already here.</div>';
+    document.getElementById('guideHandoffBox').innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:'<div class="notice success compact"><strong>Request recorded for the Club Batting team.</strong><br>Your question and conversation are available to Platform Admin. No call has been booked.</div>';
   };
 }
 
@@ -16268,7 +16276,9 @@ function demoDecorate(){
     const node=document.getElementById(id);if(node){node.disabled=true;node.title='Available in the live club. This is a completed example.';}
   }
   const chat=document.querySelector('.guide-chat-card');
-  if(chat&&!document.getElementById('demoGuideNote')){const note=document.createElement('p');note.id='demoGuideNote';note.className='help';note.textContent='The tutorials work in this demo. Guide chat is available in the live club.';chat.appendChild(note);}
+  if(chat&&!document.getElementById('demoGuideNote')){
+    chat.innerHTML=`<div id="demoGuideNote" class="demo-guide-explainer"><div class="section-label">Live help in your club</div><h2>Ask a question. Get help as you go.</h2><p>In your live club, ask a question and the Club Batting Guide replies here as you work.</p><p><strong>This demo lets you explore the tutorials below.</strong> Live chat is available after sign-in. You can also request a conversation with the Club Batting team.</p><a class="btn secondary" href="https://clubbatting.com/app.html?tab=guide">Sign in to your club</a></div><div aria-label="Chat preview — available in your live club"><label for="guideQuestion">Chat preview</label><div class="guide-chat-compose"><textarea id="guideQuestion" rows="2" disabled placeholder="e.g. How do players build their own plan?"></textarea><button class="btn ghost" id="guideAsk" disabled>Ask Guide · live club only</button></div></div>`;
+  }
   const question=document.getElementById('guideQuestion');if(question)question.disabled=true;
 }
 const demoOriginalRenderTab=renderTab;

@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.58.1';
+const APP_UI_VERSION='0.8.59';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -920,6 +920,9 @@ function restorePlatformMarketScroll(){
   });
 }
 
+let authActionInFlight=false;
+let passwordRecoveryRequired=new URLSearchParams(location.search).has('password_setup') || new URLSearchParams(location.hash.slice(1)).get('type')==='recovery';
+
 async function boot(){
   document.title='Club Batting';
   const {data:{session:s}}=await supabase.auth.getSession();
@@ -935,7 +938,8 @@ async function boot(){
     const meaningfulAuthChange=
       previousUserId!==nextUserId ||
       ['SIGNED_OUT','USER_UPDATED','PASSWORD_RECOVERY'].includes(event);
-    if(meaningfulAuthChange)setTimeout(()=>routeAuth(),0);
+    if(event==='PASSWORD_RECOVERY')passwordRecoveryRequired=true;
+    if(meaningfulAuthChange&&!authActionInFlight)setTimeout(()=>routeAuth(),0);
   });
 
   // Preserve Market Discovery position when the user opens a club/source in another tab and
@@ -1070,6 +1074,9 @@ async function loadPlatformContext(){
 
 async function routeAuth(){
   const params=new URLSearchParams(location.search);
+  if(passwordRecoveryRequired || params.has('password_setup')){renderPasswordSetup();return;}
+  if(!session && params.has('signin')){renderLogin();return;}
+  if(params.has('trial')){await renderPublicTrialEntry();return;}
   const leadToken=params.get('lead');
   const prospectToken=params.get('prospect');
   const paymentToken=params.get('payment');
@@ -1102,23 +1109,161 @@ async function routeAuth(){
   await loadContext();
 }
 
+function authEntryLinks(){
+  return '<p class="help"><a href="./">Club Batting home</a> · <a href="./demo.html?stage=help">Explore the tutorials</a></p>';
+}
+
 function renderLogin(msg=''){
+  const platform=new URLSearchParams(location.search).has('platform');
   app.innerHTML=`<div class="login">
-    <div style="font-size:10px;font-weight:950;letter-spacing:.14em;text-transform:uppercase;color:#202f78">Club Batting</div>
-    <h1>How your club bats. How each player trains.</h1>
-    <p>Sign in by email. We’ll send a secure magic link — no password required.</p>
+    <div class="section-label">Club Batting${platform?' · Platform Admin':''}</div>
+    <h1>${platform?'Platform Admin sign-in':'Welcome back.'}</h1>
+    <p>Sign in with your email and password. Your club and access stay with your account.</p>
     ${msg?`<div class="notice">${esc(msg)}</div>`:''}
-    <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@club.com.au"></div>
-    <button class="btn secondary" id="send">Send magic link</button>
+    <form id="passwordSignIn">
+      <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn secondary" type="submit" id="signInButton">Sign in</button>
+    </form>
+    <p><button class="guide-inline-link" type="button" id="resetPassword">Set or reset your password</button></p>
+    <p class="help">Previously used an email link? Set a password once, then sign in here whenever you return.</p>
+    <div id="authStatus" class="help" role="status" aria-live="polite"></div>
+    <p class="help">New club? <a href="./app.html?trial=1">Try it free with your club</a>.</p>
+    ${!platform?'<p class="help"><a href="./app.html?platform=1">Platform Admin sign-in</a></p>':''}
+    ${authEntryLinks()}
   </div>`;
-  document.getElementById('send').onclick=async()=>{
-    const email=val('email');
-    if(!email)return;
-    const {error}=await supabase.auth.signInWithOtp({
-      email,
-      options:{emailRedirectTo:redirectUrl()}
-    });
-    renderLogin(error?error.message:'Check your email and tap the sign-in link.');
+  document.getElementById('passwordSignIn').onsubmit=async event=>{
+    event.preventDefault();
+    const button=document.getElementById('signInButton'),status=document.getElementById('authStatus');
+    button.disabled=true;status.textContent='Signing in…';authActionInFlight=true;
+    try{
+      const {data,error}=await supabase.auth.signInWithPassword({email:val('email'),password:document.getElementById('password').value});
+      if(error)throw error;
+      session=data.session;
+      const url=new URL(location.href);url.searchParams.delete('signin');history.replaceState({},'',url);
+      authActionInFlight=false;await routeAuth();
+    }catch(error){status.textContent=error.message||'Sign-in could not complete. Please try again.';}
+    finally{authActionInFlight=false;button.disabled=false;}
+  };
+  document.getElementById('resetPassword').onclick=()=>renderPasswordReset(val('email'));
+}
+
+function renderPasswordReset(email=''){
+  app.innerHTML=`<div class="login"><div class="section-label">Your account</div><h1>Set or reset your password.</h1>
+    <p>Use your existing account email. We’ll send one secure link so you can choose a password.</p>
+    <form id="passwordResetForm"><div class="field"><label for="resetEmail">Email</label><input id="resetEmail" type="email" autocomplete="email" value="${esc(email)}" required></div>
+    <button class="btn secondary" id="requestReset" type="submit">Send password setup link</button></form>
+    <div id="resetStatus" class="help" role="status" aria-live="polite"></div>
+    <p><button class="guide-inline-link" id="backToSignIn">Back to sign-in</button></p>${authEntryLinks()}</div>`;
+  document.getElementById('backToSignIn').onclick=()=>{
+    passwordRecoveryRequired=false;const target=new URL(location.href);target.hash='';target.searchParams.delete('password_setup');
+    history.replaceState({},'',target);renderLogin();
+  };
+  document.getElementById('passwordResetForm').onsubmit=async event=>{
+    event.preventDefault();const button=document.getElementById('requestReset'),status=document.getElementById('resetStatus');
+    button.disabled=true;status.textContent='Sending…';
+    const target=new URL(location.href);target.hash='';target.searchParams.delete('code');target.searchParams.set('password_setup','1');
+    try{
+      const {error}=await supabase.auth.resetPasswordForEmail(val('resetEmail'),{redirectTo:target.href});
+      if(error)throw error;
+      status.textContent='If an account exists for that email, a password setup link is on its way. Check your inbox and junk folder.';
+    }catch(error){status.textContent=error.message||'The link could not be requested. Please try again.';}
+    finally{button.disabled=false;}
+  };
+}
+
+function renderPasswordSetup(){
+  if(!session){
+    renderPasswordReset();
+    document.getElementById('resetStatus').textContent='Open the link from your email to choose a password. If it has expired, request a new one here.';
+    return;
+  }
+  app.innerHTML=`<div class="login"><div class="section-label">Your account</div><h1>Choose your password.</h1>
+    <p>Set a password for ${esc(session.user.email||'your account')} so you can sign in directly next time.</p>
+    <form id="savePasswordForm"><div class="field"><label for="newPassword">New password</label><input id="newPassword" type="password" autocomplete="new-password" minlength="10" required></div>
+    <div class="field"><label for="confirmPassword">Confirm password</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" required></div>
+    <p class="help">Use at least 10 characters.</p><button class="btn secondary" id="savePassword" type="submit">Save password & continue</button></form>
+    <div id="passwordStatus" class="help" role="status" aria-live="polite"></div>${authEntryLinks()}</div>`;
+  document.getElementById('savePasswordForm').onsubmit=async event=>{
+    event.preventDefault();const password=document.getElementById('newPassword').value;
+    const status=document.getElementById('passwordStatus'),button=document.getElementById('savePassword');
+    if(password.length<10){status.textContent='Use at least 10 characters.';return;}
+    if(password!==document.getElementById('confirmPassword').value){status.textContent='The passwords do not match.';return;}
+    button.disabled=true;authActionInFlight=true;status.textContent='Saving…';
+    try{
+      const {error}=await supabase.auth.updateUser({password});if(error)throw error;
+      passwordRecoveryRequired=false;
+      const target=new URL(location.href);target.hash='';target.searchParams.delete('password_setup');target.searchParams.delete('code');
+      history.replaceState({},'',target);authActionInFlight=false;await routeAuth();
+    }catch(error){status.textContent=error.message||'The password could not be saved. Please try again.';}
+    finally{authActionInFlight=false;button.disabled=false;}
+  };
+}
+
+async function openAccountPassword(){
+  if(club&&!await saveClubEditsBeforeNavigation())return;
+  const target=new URL(location.href);target.searchParams.set('password_setup','1');history.replaceState({},'',target);
+  renderPasswordSetup();
+}
+
+async function continueWebsiteTrial(clubName,contactName){
+  const {data,error}=await supabase.rpc('begin_public_club_trial',{p_club_name:clubName,p_contact_name:contactName});
+  if(error)throw error;
+  if(!data?.public_token&&!data?.existing_club_id)throw new Error('The trial could not be prepared. Please try again.');
+  const target=new URL(location.href);target.hash='';target.search='';
+  if(data.existing_club_id){target.searchParams.set('club',data.existing_club_id);localStorage.setItem('bdp-context','club');}
+  else target.searchParams.set('prospect',data.public_token);
+  history.replaceState({},'',target);
+  await routeAuth();
+}
+
+async function renderPublicTrialEntry(){
+  const saved=session?.user?.user_metadata?.club_trial_request||{};
+  const continuation=new URLSearchParams(location.search).get('continue_trial')==='1';
+  if(session&&continuation&&saved.club_name&&saved.contact_name){
+    app.innerHTML='<div class="login"><h1>Preparing your club’s trial…</h1><p>Your trial starts only when you activate it on the next screen.</p></div>';
+    try{await continueWebsiteTrial(saved.club_name,saved.contact_name);return;}
+    catch(error){renderPublicTrialForm(saved,error.message);return;}
+  }
+  renderPublicTrialForm(saved);
+}
+
+function renderPublicTrialForm(saved={},message=''){
+  const signedIn=!!session;
+  app.innerHTML=`<div class="login" style="max-width:680px"><div class="section-label">Club Batting · Club Trial</div>
+    <h1>Try it free with your club.</h1><p>Bring your club’s philosophy, Player Plans and training together. Your full 60-day trial starts when you activate it.</p>
+    <div class="notice">No upfront payment. No automatic charge. You choose whether to continue after the trial.</div>
+    <p>${signedIn?`Signed in as ${esc(session.user.email||'')}. <a href="./app.html">Open your existing club</a>.`:'Already registered? <a href="./app.html?trial=1&signin=1">Sign in to your existing account</a>.'}</p>
+    <form id="trialEntryForm">
+      <div class="field"><label for="trialClubName">Club name</label><input id="trialClubName" autocomplete="organization" maxlength="160" minlength="3" required value="${esc(saved.club_name||'')}"></div>
+      <div class="field"><label for="trialContactName">Your name</label><input id="trialContactName" autocomplete="name" maxlength="120" minlength="2" required value="${esc(saved.contact_name||session?.user?.user_metadata?.display_name||'')}"></div>
+      ${signedIn?'':`<div class="field"><label for="trialEmail">Your email</label><input id="trialEmail" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="trialPassword">Choose a password</label><input id="trialPassword" type="password" minlength="10" autocomplete="new-password" required></div>
+      <p class="help">Use at least 10 characters. Confirm your email once, then use your password for future visits.</p>`}
+      <button class="btn secondary" type="submit" id="trialContinue">${signedIn?'Continue to our free trial':'Create account & continue'}</button>
+    </form><div id="trialEntryStatus" class="help" role="status" aria-live="polite">${esc(message)}</div>
+    <p class="help">Already invited by Club Batting? Use your invitation to continue the trial already prepared for you.</p>
+    <p class="help">Need a hand? <a href="./demo.html?stage=help">Explore the process</a> or email <a href="mailto:enquiries@clubbatting.com">enquiries@clubbatting.com</a>.</p>${authEntryLinks()}</div>`;
+  document.getElementById('trialEntryForm').onsubmit=async event=>{
+    event.preventDefault();const button=document.getElementById('trialContinue'),status=document.getElementById('trialEntryStatus');
+    const clubName=val('trialClubName'),contactName=val('trialContactName');
+    button.disabled=true;status.textContent='Preparing your next step…';authActionInFlight=true;
+    try{
+      if(!session){
+        const target=new URL('./app.html?trial=1&continue_trial=1',location.href);
+        const {data,error}=await supabase.auth.signUp({email:val('trialEmail'),password:document.getElementById('trialPassword').value,
+          options:{emailRedirectTo:target.href,data:{display_name:contactName,club_trial_request:{club_name:clubName,contact_name:contactName}}}});
+        if(error)throw error;
+        if(!data.session){
+          document.getElementById('trialPassword').value='';
+          status.textContent='Check your email to confirm your new account and continue. Your trial has not started. If you already have an account, use Sign in above instead.';
+          return;
+        }
+        session=data.session;
+      }
+      await continueWebsiteTrial(clubName,contactName);
+    }catch(error){status.textContent=error.message||'We couldn’t prepare the next step. Please try again.';}
+    finally{authActionInFlight=false;button.disabled=false;}
   };
 }
 
@@ -1151,7 +1296,8 @@ async function loadContext(){
     return;
   }
 
-  if(!routeClub && platformRole && localStorage.getItem('bdp-context')==='platform'){
+  if(!routeClub && platformRole && (launchParams.has('platform') || localStorage.getItem('bdp-context')==='platform')){
+    if(launchParams.has('platform')){const target=new URL(location.href);target.searchParams.delete('platform');history.replaceState({},'',target);}
     renderPlatformConsole();
     return;
   }
@@ -1651,6 +1797,7 @@ function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother',showPl
       <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
+      <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
       <small class="account-menu-version">Club Batting v${APP_UI_VERSION}</small>
     </div>
@@ -1684,6 +1831,8 @@ function renderShell(){
 
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
 
+  nav.push(['guide','Ask Guide & help','help']);
+
   const contextOptions=[...allMemberships.map(m=>`<option value="club:${m.club_id}" ${m.club_id===club.id?'selected':''}>${esc(m.clubs?.name||'Club')}</option>`),platformRole?`<option value="platform">Platform Admin</option>`:''].join('');
 
   app.innerHTML=`${accountMenuStyles()}<div class="shell">
@@ -1700,7 +1849,7 @@ function renderShell(){
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
-          <button class="btn ghost" id="openClubHelp" type="button" aria-label="Open Help and tutorials">Help</button>
+          <button class="btn secondary" id="openClubHelp" type="button" aria-label="Ask the Club Batting Guide and explore tutorials">Ask the Guide</button>
           ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
@@ -1710,6 +1859,7 @@ function renderShell(){
   </div>`;
 
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
+  document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process');
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
   document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;await renderPlatformConsole();});
@@ -2074,6 +2224,11 @@ function guideTopicNumber(key){
 function guideHelpStyles(){
   // Keep the reading order vertical even where the existing stylesheet uses two columns.
   return `<style>
+    .guide-chat-card{margin-top:18px;border:2px solid var(--primary);background:#f4f7ff}
+    .guide-chat-card h2{margin-top:4px}
+    .guide-chat-card>p{font-size:1rem;line-height:1.55;color:var(--text)}
+    .guide-chat-card .guide-chat-messages.is-empty{min-height:0}
+    .guide-process-heading{margin:28px 0 12px}
     .guide-layout.guide-is-overview{grid-template-columns:minmax(0,1fr)}
     .guide-layout.guide-is-overview .guide-chat-card{grid-column:1}
     .guide-layout .guide-topic-list{display:flex;flex-direction:column;min-width:0;gap:8px}
@@ -2319,10 +2474,18 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'seen'});
 
   page.innerHTML=`${guideHelpStyles()}<section class="card guide-hero">
-    <div><div class="section-label">Help & tutorials</div><h1>How Club Batting works</h1><p>The numbered guides follow the club’s process. Read from top to bottom, or choose the stage you need at <strong>${esc(club.name)}</strong>.</p></div>
+    <div><div class="section-label">Help & tutorials</div><h1>How Club Batting works</h1><p>Follow your club’s process below. Choose a guide to see how each stage works.</p></div>
   </section>
   ${trial?`<section class="guide-trial-strip"><strong>${esc(clubTrialStatusLabel(trial,daysLeft))}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · Nothing is automatically charged.</span></section>`:''}
   <div id="guideInterventionSlot"></div>
+    <section class="card guide-chat-card">
+      <div class="section-label">Ask the Club Batting Guide</div><h2>A question? Ask it here.</h2><p>Get help with your next step, a feature or the whole process. The Guide replies here as you work.</p>
+      <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
+      <div class="guide-chat-compose"><textarea id="guideQuestion" aria-label="Your question for the Club Batting Guide" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
+      <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
+      <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">I’d rather speak to someone</button><p class="help">Request a conversation with the Club Batting team. Your question and Guide conversation go with it.</p><div id="guideHandoffBox" hidden><label for="guideHandoffReason">What would you like to discuss?</label><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
+    </section>
+  <h2 class="guide-process-heading">Explore the process</h2>
   <div class="guide-layout${isOverview?' guide-is-overview':''}">
     <nav class="guide-topic-list" aria-label="Help topics in process order">
       ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${c.capability_key!=='whole_process'&&progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
@@ -2335,13 +2498,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}<button type="button" class="btn ghost" data-guide-topic="whole_process">Back to overview</button></div>
       ${selected.target_tab&&selected.target_tab!=='guide'&&guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<p class="help">${esc(guideTargetUnavailableReason(selected.target_tab,selectedFocus))}</p>`:''}
     </section>`}
-    <section class="card guide-chat-card">
-      <div class="section-label">Ask the Club Batting Guide</div><h2>How does this work at our club?</h2>
-      <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
-      <div class="guide-chat-compose"><textarea id="guideQuestion" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
-      <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
-      <div class="guide-human-handoff"><button class="guide-inline-link" id="guideHumanHandoff">I’d rather speak to someone</button><div id="guideHandoffBox" hidden><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
-    </section>
+
   </div>`;
 
   await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
@@ -2395,8 +2552,11 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   document.getElementById('guideCancelHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=true;document.getElementById('guideHumanHandoff').hidden=false;};
   document.getElementById('guideSendHandoff').onclick=async()=>{
     const reason=val('guideHandoffReason');
+    if(!reason){document.getElementById('guideHandoffReason').focus();return;}
+    const button=document.getElementById('guideSendHandoff');button.disabled=true;
     const {error}=await supabase.rpc('request_club_batting_guide_handoff',{p_club_id:club.id,p_reason:reason});
-    document.getElementById('guideHandoffBox').innerHTML=error?`<div class="notice compact">${esc(error.message)}</div>`:'<div class="notice success compact"><strong>Request recorded.</strong><br>A person can pick up the conversation with the context already here.</div>';
+    if(error){button.disabled=false;document.getElementById('guideChatStatus').textContent=error.message;return;}
+    document.getElementById('guideHandoffBox').innerHTML='<div class="notice success compact"><strong>Request recorded for the Club Batting team.</strong><br>Your question and conversation are available to Platform Admin.</div>';
   };
 }
 
@@ -10644,7 +10804,7 @@ async function renderSalesProspectRoute(token){
       <section class="card prospect-card sales-response-card">
         ${interested?`<div class="notice success"><strong>${trialStatusCopy?esc(trialStatusCopy[0]):trialLinkQueued?'Your trial link has been requested.':`Thanks for your interest in Club Batting.`}</strong><br>${trialStatusCopy?esc(trialStatusCopy[1]):trialLinkQueued?'An email with your secure activation link has been queued for the Club Contact. Your full trial begins only when you activate it.':'A valid Club Contact email is needed before we can email your secure trial link.'}</div>${trialStatusCopy?'<div class="btnrow"><button class="btn secondary" id="salesOpenClubBatting">Open Club Batting</button></div>':''}`:`<h2>See what changes when your club puts it into practice.</h2><p class="help">Request a link to try the complete Club Batting platform with your club. The trial starts when you activate it, with no payment upfront. Paid continuation is a separate choice afterwards.</p>
         <div class="prospect-response-actions">
-          <button class="btn secondary" data-sales-response="interested">Send me the trial link</button>
+          <button class="btn secondary" data-sales-response="interested">Try it free with your club</button>
           <button class="btn ghost" data-sales-response="maybe_later">Maybe later</button>
           <button class="btn ghost" id="wrongContactBtn">I’m not the right person</button>
           <button class="btn ghost" data-sales-response="declined">Not interested</button>
@@ -10660,15 +10820,15 @@ async function renderSalesProspectRoute(token){
         ${trialStatusCopy?'':`<div class="sales-trial-note"><strong>What happens next:</strong><span>Open the trial link in your email, verify your Club Contact email and activate your trial when you’re ready. Nothing is automatically charged.</span></div>`}
       </section>
 
-      <details class="card prospect-card sales-guide-card">
-        <summary style="cursor:pointer;font-weight:800">Have a question? Ask the Club Batting Guide</summary>
+      <section class="card prospect-card sales-guide-card" style="border:2px solid var(--primary)">
+        <div class="section-label">Ask the Club Batting Guide</div>
         <h2>How would this work at our club?</h2>
         <p class="help">Ask naturally. The Guide can explain the product, the setup process, Player Plans, Coach Conversations, Club Trials and what happens next.</p>
         <div id="salesGuideMessages" class="guide-chat-messages is-empty"><div class="guide-chat-empty">e.g. “We already have batting coaches. What does this add?”</div></div>
         <div class="guide-chat-compose"><textarea id="salesGuideQuestion" rows="3" placeholder="Ask a question about Club Batting…"></textarea><button class="btn secondary" id="salesGuideAsk">Ask Guide</button></div>
         <div id="salesGuideStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
         <div class="guide-human-handoff"><button class="guide-inline-link" id="salesHumanHandoff">I’d rather speak to someone</button><div id="salesHandoffBox" hidden><textarea id="salesHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="salesSendHandoff">Request a conversation</button><button class="btn ghost" id="salesCancelHandoff">Cancel</button></div></div></div>
-      </details>
+      </section>
   </div>`;
 
   const initialGuideBox=document.getElementById('salesGuideMessages');
@@ -10981,6 +11141,7 @@ function renderSecretaryProspectRoute(token,p){
   const isClubTrial=!!p.is_club_trial;
   const trialDays=Number(p.trial_days||60);
   const alreadyPaid=['awaiting_admin_handoff','admin_invited','active'].includes(p.status);
+  const passwordSignInUrl=new URL(location.href);passwordSignInUrl.hash='';passwordSignInUrl.searchParams.set('signin','1');
 
   if(!session && ['awaiting_payment','awaiting_admin_handoff','admin_invited','active'].includes(p.status)){
     const headline=p.status==='awaiting_payment'?'Payment is being arranged':p.status==='active'?'Club setup handoff is complete':'Your club is active';
@@ -10989,7 +11150,7 @@ function renderSecretaryProspectRoute(token,p){
       :p.status==='active'
         ?'The Club Admin has taken over. Sign in only if you need to review the organisational handoff.'
         :'Sign in as the Club Contact to nominate or check the Club Admin handoff.';
-    app.innerHTML=`<div class="prospect-shell">${prospectIntro(p)}<section class="card prospect-card"><h2>${headline}</h2><p>${body}</p><div class="field"><label>Club Contact email</label><input id="routeEmail" type="email"></div><button class="btn secondary" id="routeSignIn">Send secure sign-in link</button><div id="routeStatus" class="help"></div></section></div>`;
+    app.innerHTML=`<div class="prospect-shell">${prospectIntro(p)}<section class="card prospect-card"><h2>${headline}</h2><p>${body}</p><p><a class="btn secondary" href="${esc(passwordSignInUrl.href)}">Already registered? Sign in with your password</a></p><div class="field"><label>Club Contact email</label><input id="routeEmail" type="email"></div><button class="btn secondary" id="routeSignIn">Send secure sign-in link</button><div id="routeStatus" class="help"></div></section></div>`;
     document.getElementById('routeSignIn').onclick=async()=>{const st=document.getElementById('routeStatus');st.textContent='Sending…';const e=await sendRouteMagicLink(val('routeEmail'));st.textContent=e?e.message:'Check your email and tap the secure link to return here.';};
     return;
   }
@@ -11009,7 +11170,7 @@ function renderSecretaryProspectRoute(token,p){
         ${isClubTrial?'':`<button class="btn secondary" id="committeeApproved">Our committee has approved — continue</button>`}
         <button class="btn ghost" id="wrongContact">I’m not the right club contact</button>
         <div id="verifyBox" style="display:${isClubTrial?'block':'none'};margin-top:12px">
-          <div class="field"><label>Club Contact email</label><input id="routeEmail" type="email" placeholder="secretary@club.com.au"></div>
+          <p><a class="btn secondary" href="${esc(passwordSignInUrl.href)}">Already registered? Sign in with your password</a></p><div class="field"><label>Club Contact email</label><input id="routeEmail" type="email" placeholder="secretary@club.com.au"></div>
           <button class="btn secondary" id="verifySecretary">${isClubTrial?'Email my secure sign-in link':'Send secure sign-in link'}</button>
           <div id="routeStatus" class="help"></div>
         </div>
@@ -11467,11 +11628,12 @@ async function renderPlatformConsole(){
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['market','Market Discovery'],['home','Club Pipeline'],['clubs','Active Clubs'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['market','Market Discovery'],['home','Club Pipeline'],['clubs','Active Clubs'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
 
+  document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('platformOut').onclick=()=>supabase.auth.signOut();
   if(document.getElementById('platformContextSwitch'))document.getElementById('platformContextSwitch').onchange=async e=>{
     if(e.target.value==='platform')return;
@@ -11487,8 +11649,24 @@ async function renderPlatformView(){
   if(platformView==='market')return renderPlatformMarketDiscovery();
   if(platformView==='clubs')return renderPlatformActiveClubs();
   if(platformView==='outbox')return renderPlatformOutbox();
+  if(platformView==='guide_requests')return renderPlatformGuideRequests();
   if(platformView==='settings')return renderPlatformSettings();
   return renderPlatformProspects();
+}
+
+async function renderPlatformGuideRequests(){
+  const page=document.getElementById('platformPage');
+  page.innerHTML='<div class="splash">Loading conversation requests…</div>';
+  const {data,error}=await supabase.rpc('platform_get_guide_requests');
+  if(platformView!=='guide_requests')return;
+  if(error){page.innerHTML=`<section class="card"><h2>Conversation requests could not load.</h2><p>${esc(error.message)}</p><button class="btn secondary" id="retryGuideRequests">Try again</button></section>`;document.getElementById('retryGuideRequests').onclick=renderPlatformGuideRequests;return;}
+  page.innerHTML=`<section class="card"><div class="section-label">Club Batting Guide</div><h1>Conversation requests</h1><p>Clubs and prospects who asked to speak to someone. Read their question and Guide conversation, contact them, then mark the request resolved.</p>${!data?.length?'<div class="notice">No conversation requests are waiting.</div>':''}</section>
+    ${(data||[]).map(t=>`<section class="card"><div class="section-label">${esc(new Date(t.updated_at).toLocaleString())}</div><h2>${esc(t.club_name)}</h2><p>${esc(t.reason||'The club asked to speak to someone.')}</p><p>${esc(t.contact_email||'No contact email available')}</p><details><summary>Guide conversation</summary>${(t.messages||[]).map(m=>`<p><strong>${m.role==='assistant'?'Guide':m.role==='system'?'System':'Club'}:</strong> ${esc(m.content)}</p>`).join('')||'<p>No chat messages preceded this request.</p>'}</details><div class="btnrow">${t.contact_email?`<a class="btn secondary" href="mailto:${encodeURIComponent(t.contact_email)}?subject=Club%20Batting%20conversation">Reply by email</a>`:''}<button class="btn ghost" data-close-guide-request="${esc(t.id)}">Mark resolved</button></div><div class="help" role="status" id="guide-request-${esc(t.id)}"></div></section>`).join('')}`;
+  document.querySelectorAll('[data-close-guide-request]').forEach(button=>button.onclick=async()=>{
+    button.disabled=true;const {error}=await supabase.rpc('platform_close_guide_request',{p_thread_id:button.dataset.closeGuideRequest});
+    if(error){document.getElementById('guide-request-'+button.dataset.closeGuideRequest).textContent=error.message;button.disabled=false;return;}
+    await renderPlatformGuideRequests();
+  });
 }
 
 function marketResearchClubReady(club,now=Date.now()){
