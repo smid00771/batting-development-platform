@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.61';
+const APP_UI_VERSION='0.8.62';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1054,6 +1054,7 @@ function outboundTemplateLabel(templateKey){
     prospect_intro:'Prospect invitation',
     prospect_follow_up:'Prospect follow-up',
     club_trial_invitation:'Club Trial invitation',
+    club_trial_reminder:'Club Trial activation reminder',
     club_admin_invitation:'Club Admin invitation',
     philosophy_lead_invitation:'Philosophy Lead invitation'
   }[templateKey]||String(templateKey||'Email').replaceAll('_',' '));
@@ -1075,6 +1076,7 @@ async function loadPlatformContext(){
 async function routeAuth(){
   const params=new URLSearchParams(location.search);
   if(passwordRecoveryRequired || params.has('password_setup')){renderPasswordSetup();return;}
+  if(params.has('close_invitation')){await renderCloseInvitationRoute(params.get('close_invitation'));return;}
   if(!session && params.has('signin')){renderLogin();return;}
   if(params.has('trial')){await renderPublicTrialEntry();return;}
   const leadToken=params.get('lead');
@@ -10985,6 +10987,7 @@ async function renderProspectRoute(token){
     app.innerHTML=`<div class="login"><h1>That club link isn’t available.</h1><p>${esc(error?.message||'It may have expired or been replaced.')}</p></div>`;
     return;
   }
+  if(p.invitation_closed){closedInvitationPage(p.club_name);return;}
   await supabase.rpc('mark_prospect_viewed',{p_token:token});
 
   if(p.entry_route==='direct_beta'){
@@ -12315,6 +12318,7 @@ async function openEndClubDialog(clubId){
 
 async function renderPlatformProspects(){
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading Club Pipeline…</div>';
+  const cleanup=await supabase.rpc('platform_expire_pending_club_invitations');if(cleanup.error){page.innerHTML=`<div class="notice">${esc(cleanup.error.message)}</div>`;return;}
   const [prospectRes,onboardingRes,trialRes,threadRes,messageRes,suppressionRes,settingsRes]=await Promise.all([
     supabase.from('sales_prospects').select('*').is('retired_at',null).order('updated_at',{ascending:false}),
     supabase.from('club_prospects').select('*').is('retired_at',null).order('created_at',{ascending:false}),
@@ -12473,56 +12477,75 @@ function trialTimingLabel(trial){
     :`${niceDate(trial.starts_on)} – ${niceDate(trial.ends_on)}`;
 }
 
-async function renderPlatformOnboardingList(onboardingRows=null,trialRows=null,messageRows=null){
-  const page=document.getElementById('platformPage');
-  page.innerHTML='<div class="splash">Loading onboarding list…</div>';
-
-  let records=onboardingRows;
-  let trials=trialRows;
-  let invitationMessages=messageRows;
-  let emailSettings=null;
-  {
-    const [onboardingRes,trialRes,messageRes,settingsRes]=await Promise.all([
-      Array.isArray(records)?Promise.resolve({data:records}):supabase.from('club_prospects').select('*').is('retired_at',null).order('created_at',{ascending:false}),
-      Array.isArray(trials)?Promise.resolve({data:trials}):supabase.from('club_trials').select('*').order('created_at',{ascending:false}),
-      loadAllPlatformRows(()=>supabase.from('outbound_messages').select('id,prospect_id,template_key,created_at,processing_at,sent_at,failed_at,last_error').eq('template_key','club_trial_invitation').order('created_at',{ascending:false}).order('id')),
-      supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
-    ]);
-    const loadError=onboardingRes.error||trialRes.error||messageRes.error||settingsRes.error;
-    if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
-    records=onboardingRes.data||[];
-    trials=trialRes.data||[];
-    invitationMessages=messageRes.data||[];
-    emailSettings=settingsRes.data;
-  }
-
-  const current=records.filter(x=>x.status!=='active');
-  const trialMap=new Map(trials.map(t=>[t.onboarding_prospect_id,t]));
-  const invitationByProspect=new Map();
-  invitationMessages.filter(message=>message.template_key==='club_trial_invitation').forEach(message=>{
-    if(message.prospect_id&&!invitationByProspect.has(message.prospect_id))invitationByProspect.set(message.prospect_id,message);
+function pendingTrialInvitation(p,t){return !p.retired_at&&!p.club_id&&t?.status==='offered'&&!t.activated_at;}
+function onboardingActionsHtml(p,t,invitation,reminder){
+  const pending=pendingTrialInvitation(p,t),canSend=['owner','commercial_admin','support_admin'].includes(platformRole),canRemove=['owner','commercial_admin'].includes(platformRole)&&!p.club_id&&!['active','payment_received','awaiting_admin_handoff','admin_invited','awaiting_payment'].includes(p.status)&&Number(p.amount_due_cents||0)===0;
+  const reminderState=p.onboarding_reminder_sent_at?`Final reminder sent ${niceDate(p.onboarding_reminder_sent_at)}. Closes ${niceDate(p.onboarding_close_after)} if the club has not activated.`
+    :p.onboarding_reminder_message_id?(reminder?.failed_at?'Reminder delivery needs attention. Open Email history to retry.':'Final reminder queued. Its 30-day response window starts when it is sent.')
+    :pending&&!invitation?.sent_at?'The original invitation needs to be sent before a reminder. Check Email history.':'';
+  return `<div class="onboarding-actions">${pending&&canSend&&!p.onboarding_reminder_message_id?`<button class="btn secondary" data-onboarding-remind="${esc(p.id)}" ${invitation?.sent_at?'':'disabled'}>Send reminder</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-onboarding-remove="${esc(p.id)}">Remove from onboarding</button>`:''}</div>${reminderState?`<p class="onboarding-reminder-note">${esc(reminderState)}</p>`:''}<p data-onboarding-action-status="${esc(p.id)}" role="status" aria-live="polite"></p>`;
+}
+function wireOnboardingActions(container,records,reload){
+  container.querySelectorAll('[data-onboarding-remind]').forEach(button=>button.onclick=async()=>{
+    const p=records.find(r=>r.id===button.dataset.onboardingRemind);if(!p)return;
+    if(!confirm(`Send one final activation reminder to ${p.club_name} at ${p.primary_contact_email}?\n\nThey can activate their existing trial or close the invitation. If they do neither within 30 days of the reminder being sent, the invitation leaves the active pipeline. This does not start their trial.`))return;
+    button.disabled=true;const status=container.querySelector(`[data-onboarding-action-status="${p.id}"]`);status.textContent='Queuing reminder…';
+    try{const {data,error}=await supabase.rpc('platform_remind_pending_invitation',{p_prospect_id:p.id});if(error)throw Error(error.message);await reload();if(!data?.closed)await kickLiveEmailDelivery();}
+    catch(error){status.textContent=error.message||'Could not queue the reminder.';button.disabled=false;}
   });
-
-  page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backFromOnboardingList">← Club Pipeline</button></div>
-    <section class="admin-card">
-      <div class="admin-card-head"><div><div class="section-label">Currently onboarding</div><h2>${current.length} club${current.length===1?'':'s'}</h2><p class="help">One line per club. Completed setup moves to Active Clubs automatically.</p></div><div class="prospect-filter-row"><input id="onboardingListSearch" placeholder="Search club or contact email"></div></div>
-      <div class="admin-table-wrap" style="margin-top:12px"><table class="admin-table"><thead><tr><th>Club</th><th>Progress</th><th>Club Contact</th><th>Trial</th><th>If continued</th></tr></thead><tbody id="onboardingListBody"></tbody></table></div>
-    </section>`;
-
-  const renderRows=()=>{
-    const q=String(document.getElementById('onboardingListSearch').value||'').trim().toLowerCase();
-    const shown=q?current.filter(p=>[p.club_name,p.primary_contact_name,p.primary_contact_email].some(v=>String(v||'').toLowerCase().includes(q))):current;
-    document.getElementById('onboardingListBody').innerHTML=shown.length?shown.map(p=>{
-      const t=trialMap.get(p.id);
-      const annualCents=t?.annual_price_cents??p.standard_price_cents;
-      const currency=t?.currency||'AUD';
-      return `<tr><td><strong>${esc(p.club_name)}</strong></td><td><span class="status-pill">${esc(onboardingProgressLabel(p,t,invitationByProspect.get(p.id),emailSettings))}</span></td><td>${esc(p.primary_contact_email||'—')}</td><td>${esc(t?trialTimingLabel(t):niceDate(p.offer_end))}</td><td>${annualCents!=null?`${esc(money(annualCents,currency))}/year`:'—'}</td></tr>`;
-    }).join(''):'<tr><td colspan="5">No onboarding clubs match this search.</td></tr>';
+  container.querySelectorAll('[data-onboarding-remove]').forEach(button=>button.onclick=()=>{
+    const p=records.find(r=>r.id===button.dataset.onboardingRemove);if(p)openRemovePendingInvitation(p,reload);
+  });
+}
+function openRemovePendingInvitation(p,reload){
+  if(!['owner','commercial_admin'].includes(platformRole))return;
+  const dialog=document.createElement('dialog');dialog.id='removePendingDialog';dialog.style.cssText='max-width:620px;width:calc(100% - 32px);border:0;border-radius:16px;padding:26px;color:#17245f;';
+  dialog.innerHTML=`<div class="section-label">Pending invitation</div><h2>Remove ${esc(p.club_name)} from onboarding?</h2><p>This closes the unused invitation and its pending emails. The old record is archived. No club workspace or sign-in account is deleted.</p><p>You can add the club to the promo list again later. Removal does not send a message or mark the contact as opted out.</p><div class="field"><label for="removePendingName">Type ${esc(p.club_name)} to confirm</label><input id="removePendingName" autocomplete="off"></div><div class="btnrow"><button class="btn danger-lite" id="removePendingConfirm" disabled>Remove from onboarding</button><button class="btn ghost" id="removePendingCancel">Cancel</button></div><p id="removePendingStatus" role="status"></p>`;
+  document.body.appendChild(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();let busy=false;
+  const input=dialog.querySelector('#removePendingName'),button=dialog.querySelector('#removePendingConfirm'),status=dialog.querySelector('#removePendingStatus');
+  input.oninput=()=>button.disabled=busy||input.value.trim()!==p.club_name;
+  dialog.querySelector('#removePendingCancel').onclick=()=>{if(!busy)dialog.close();};dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+  button.onclick=async()=>{
+    if(busy||input.value.trim()!==p.club_name)return;busy=true;button.disabled=true;input.disabled=true;status.textContent='Closing the invitation…';
+    try{const {data,error}=await supabase.rpc('platform_remove_pending_invitation',{p_prospect_id:p.id,p_confirmation:input.value.trim()});if(error)throw Error(error.message);await reload();
+      dialog.innerHTML=`<h2>${esc(data.club_name)} has been removed from onboarding.</h2><p>The invitation is closed and its old links cannot activate a club.${data.already_sending?' An email that was already being sent may still arrive.':''}</p><button class="btn secondary" id="pendingRemovedDone">Done</button>`;busy=false;dialog.querySelector('#pendingRemovedDone').onclick=()=>dialog.close();
+    }catch(error){busy=false;button.disabled=false;input.disabled=false;status.textContent=error.message||'The invitation could not be removed.';}
   };
-
-  document.getElementById('backFromOnboardingList').onclick=()=>renderPlatformProspects();
-  document.getElementById('onboardingListSearch').oninput=renderRows;
-  renderRows();
+}
+async function renderPlatformOnboardingList(){
+  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading onboarding list…</div>';
+  const cleanup=await supabase.rpc('platform_expire_pending_club_invitations');
+  if(cleanup.error){page.innerHTML=`<div class="notice">${esc(cleanup.error.message)}</div>`;return;}
+  const [onboardingRes,trialRes,messageRes,settingsRes]=await Promise.all([
+    supabase.from('club_prospects').select('*').is('retired_at',null).order('created_at',{ascending:false}),
+    supabase.from('club_trials').select('*').order('created_at',{ascending:false}),
+    loadAllPlatformRows(()=>supabase.from('outbound_messages').select('id,prospect_id,template_key,created_at,processing_at,sent_at,failed_at,last_error').in('template_key',['club_trial_invitation','club_trial_reminder']).order('created_at',{ascending:false}).order('id')),
+    supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
+  ]);
+  const error=onboardingRes.error||trialRes.error||messageRes.error||settingsRes.error;if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
+  const current=(onboardingRes.data||[]).filter(p=>!p.retired_at&&p.status!=='active'),trialMap=new Map((trialRes.data||[]).map(t=>[t.onboarding_prospect_id,t])),invitations=new Map(),reminders=new Map();
+  (messageRes.data||[]).forEach(m=>{const map=m.template_key==='club_trial_reminder'?reminders:invitations;if(!map.has(m.prospect_id))map.set(m.prospect_id,m);});
+  page.innerHTML=`<style>.onboarding-list-head{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}.onboarding-list-head input{width:min(360px,100%);padding:12px;border:1px solid var(--line);border-radius:9px;font-size:16px}.onboarding-clubs{display:grid;gap:16px;margin-top:20px}.onboarding-club{border:1px solid var(--line);border-radius:12px;padding:20px}.onboarding-club h3{margin:0 0 7px;font-size:20px}.onboarding-club p{line-height:1.5;font-size:15px;overflow-wrap:anywhere}.onboarding-club .status-pill{font-size:13px;padding:6px 10px}.onboarding-facts{display:flex;flex-wrap:wrap;gap:12px 30px;font-size:14px;line-height:1.5;margin:14px 0}.onboarding-actions{display:flex;gap:10px;flex-wrap:wrap}.onboarding-actions .btn{font-size:13px}.onboarding-reminder-note{padding:12px;background:#eef3fa;border-radius:9px}.onboarding-intro{max-width:850px;font-size:15px;line-height:1.6}</style>
+    <div class="btnrow"><button class="btn ghost" id="backFromOnboardingList">← Club Pipeline</button><button class="btn ghost" id="onboardingEmailHistory">Email history</button></div>
+    <section class="admin-card"><div class="onboarding-list-head"><div><div class="section-label">Currently onboarding</div><h2>${current.length} club${current.length===1?'':'s'}</h2></div><input id="onboardingListSearch" aria-label="Search onboarding clubs" placeholder="Search club or contact email"></div>
+    <p class="onboarding-intro">Send one final reminder to a club awaiting activation. It can start its existing trial or close the invitation. If it does neither within 30 days of the reminder being sent, the invitation is archived. The full trial still begins only on activation.</p><div id="onboardingListBody" class="onboarding-clubs"></div></section>`;
+  const renderRows=()=>{
+    const q=document.getElementById('onboardingListSearch').value.trim().toLowerCase(),shown=q?current.filter(p=>[p.club_name,p.primary_contact_name,p.primary_contact_email].some(x=>String(x||'').toLowerCase().includes(q))):current;
+    document.getElementById('onboardingListBody').innerHTML=shown.map(p=>{const t=trialMap.get(p.id),invitation=invitations.get(p.id);return `<article class="onboarding-club"><h3>${esc(p.club_name)}</h3><span class="status-pill">${esc(onboardingProgressLabel(p,t,invitation,settingsRes.data))}</span><p>${esc(p.primary_contact_name||'Club Contact')} · ${esc(p.primary_contact_email||'Contact email not set')}</p><div class="onboarding-facts"><span>${esc(t?trialTimingLabel(t):niceDate(p.offer_end))}</span><span>If continued: ${esc(money(t?.annual_price_cents??p.standard_price_cents,t?.currency||'AUD'))}/year</span></div>${onboardingActionsHtml(p,t,invitation,reminders.get(p.id))}<button class="btn ghost" data-onboarding-detail="${esc(p.id)}">View details</button></article>`;}).join('')||'<p>No clubs are currently waiting here.</p>';
+    wireOnboardingActions(page,shown,()=>renderPlatformOnboardingList());page.querySelectorAll('[data-onboarding-detail]').forEach(b=>b.onclick=()=>renderPlatformOnboardingDetail(current.find(p=>p.id===b.dataset.onboardingDetail)));
+  };
+  document.getElementById('backFromOnboardingList').onclick=()=>renderPlatformProspects();document.getElementById('onboardingEmailHistory').onclick=()=>{platformView='outbox';renderPlatformView();};document.getElementById('onboardingListSearch').oninput=renderRows;renderRows();
+}
+function closedInvitationPage(clubName,activated=false,confirmed=false,inFlight=false,declined=false){
+  app.innerHTML=`<div class="prospect-shell"><section class="prospect-hero"><div class="section-label">Club Batting</div><h1>${activated?'Your club has already activated.':'This invitation is closed.'}</h1><p>${esc(clubName||'Your club')}</p></section><section class="card prospect-card">${confirmed?`<div class="notice success">Your invitation is closed. No further reminders or promotional emails will be sent to this address.${inFlight?' An email that was already being sent may still arrive.':''}</div>`:''}<p>${activated?'Continue using your existing club account. Closing an old invitation does not end an active club.':confirmed||declined?'Your unused invitation is closed. Your sign-in account and any other active club are unchanged.':'There is no trial running from this invitation. If you want to try Club Batting later, you can request a fresh trial.'}</p><div class="btnrow"><a class="btn secondary" href="./app.html?signin=1">Sign in</a>${!activated&&!confirmed&&!declined?'<a class="btn ghost" href="./app.html?trial=1">Try it free with your club</a>':''}<a class="btn ghost" href="./">Club Batting home</a></div></section></div>`;
+}
+async function renderCloseInvitationRoute(token){
+  const {data:p,error}=await supabase.rpc('get_pending_invitation_response',{p_token:token});
+  if(error||!p){app.innerHTML=`<div class="login"><h1>That invitation link is unavailable.</h1><p>${esc(error?.message||'It may have been replaced.')}</p><a href="./">Club Batting home</a></div>`;return;}
+  if(p.activated||p.closed||!p.can_close){closedInvitationPage(p.club_name,p.activated,false,false,p.closed_reason==='contact_declined');return;}
+  app.innerHTML=`<div class="prospect-shell"><section class="prospect-hero"><div class="section-label">Club Batting invitation</div><h1>Close this invitation?</h1><p>${esc(p.club_name)}</p></section><section class="card prospect-card"><h2>No longer looking to start a trial?</h2><p>Confirm below to close the invitation. We will stop invitation reminders and further promotional emails to this contact address. This does not delete your sign-in account or affect any other active club.</p><div class="btnrow"><button class="btn secondary" id="confirmCloseInvitation">Yes, close this invitation</button><a class="btn ghost" href="./app.html${esc(p.activation_path||'')}">Keep it — return to our trial</a></div><p id="closeInvitationStatus" role="status" aria-live="polite"></p></section></div>`;
+  const button=document.getElementById('confirmCloseInvitation'),status=document.getElementById('closeInvitationStatus');
+  button.onclick=async()=>{button.disabled=true;status.textContent='Closing your invitation…';try{const {data,error}=await supabase.rpc('decline_pending_club_invitation',{p_token:token,p_confirm:true});if(error)throw Error(error.message);closedInvitationPage(p.club_name,false,true,!!data?.already_sending);}catch(error){button.disabled=false;status.textContent=error.message||'Could not close the invitation. Please try again.';}};
 }
 
 async function renderPlatformSalesProspectDetail(p){
@@ -12686,8 +12709,10 @@ async function renderPlatformOnboardingDetail(p){
           ?invitationNotice
           :`<div class="trial-admin-card"><span class="status-pill">${esc(String(trial.status).replaceAll('_',' '))}</span><strong>Trial dates</strong><p>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))}</p></div>`}
         <p class="help">Nothing is automatically charged at the end. The club must explicitly choose whether to continue.</p>
+        ${onboardingActionsHtml(p,trial,invitation,null)}
       </section>
     </div>`;
+    wireOnboardingActions(page,[p],()=>renderPlatformOnboardingList());
     document.getElementById('backOnboarding').onclick=()=>{platformSelectedOnboardingId=null;renderPlatformProspects();};
     return;
   }
