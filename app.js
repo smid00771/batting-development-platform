@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.6';
+const APP_UI_VERSION='0.8.62.8';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1472,29 +1472,53 @@ function renderNoClub(){
   };
 }
 
-function renderFirstIdentitySetup(){
+function renderFirstIdentitySetup({editing=false}={}){
   app.innerHTML=`<div class="login" style="max-width:720px">
     <div class="section-label">${esc(club.name)}</div>
-    <h1>How are you involved?</h1>
+    <h1>${editing?'Your involvement':'How are you involved?'}</h1>
     <p>This only determines whether you need your own Player Plan. It does <strong>not</strong> give coaching access — the Club Admin controls that separately.</p>
+    ${editing?'<p>Choose how you take part in this club. Your assigned club roles stay as they are. Any earlier Player Plan and feedback are retained if you stop playing.</p>':''}
     <div class="field"><label>Your name</label><input id="myName" value="${esc(userProfile?.display_name||'')}"></div>
-    ${roleCards('myRole',membership.involvement||'player')}
-    <button class="btn secondary" id="saveIdentity">Continue</button>
-    <div id="identitySetupStatus" class="help"></div>
+    ${roleCards('myRole',membership.involvement||'')}
+    <div class="btnrow"><button class="btn secondary" id="saveIdentity">${editing?'Save changes':'Continue'}</button>${editing?'<button class="btn ghost" id="cancelIdentity">Cancel</button>':''}</div>
+    <div id="identitySetupStatus" class="help" role="status" aria-live="polite"></div>
   </div>`;
   wireRoleCards();
-
+  const targetClubId=club.id,requestingUserId=session?.user?.id;
+  const button=document.getElementById('saveIdentity');
+  const stillCurrent=()=>club?.id===targetClubId&&session?.user?.id===requestingUserId&&document.getElementById('saveIdentity')===button;
+  let saving=false;
+  document.getElementById('cancelIdentity')?.addEventListener('click',()=>{if(!saving)renderShell();});
   document.getElementById('saveIdentity').onclick=async()=>{
+    if(saving||!stillCurrent())return;
     const status=document.getElementById('identitySetupStatus');
     const involvement=document.querySelector('input[name="myRole"]:checked')?.value;
+    const displayName=val('myName');
+    if(!['player','coach_captain','both'].includes(involvement)){status.textContent='Choose how you are involved.';return;}
+    if(displayName.length<2||displayName.length>120){status.textContent='Enter your name (2–120 characters).';return;}
+    saving=true;button.disabled=true;
+    const controls=[document.getElementById('myName'),...document.querySelectorAll('input[name="myRole"]'),document.getElementById('cancelIdentity')].filter(Boolean);
+    controls.forEach(control=>control.disabled=true);
     status.textContent='Saving…';
-    const {error}=await supabase.rpc('setup_my_club_identity',{
-      p_club_id:club.id,
-      p_display_name:val('myName'),
-      p_involvement:involvement
-    });
-    if(error){status.textContent=error.message;return;}
-    await loadContext();
+    try{
+      const {error}=await supabase.rpc('setup_my_club_identity',{
+        p_club_id:targetClubId,p_display_name:displayName,p_involvement:involvement
+      });
+      if(error)throw error;
+      if(!stillCurrent())return;
+      // A successful request must not silently reload a different involvement.
+      const {data:saved,error:readError}=await supabase.from('club_memberships')
+        .select('involvement').eq('club_id',targetClubId).eq('user_id',requestingUserId).maybeSingle();
+      if(readError)throw readError;
+      if(saved?.involvement!==involvement)throw new Error('Your involvement was not saved correctly. Please try again.');
+      if(!stillCurrent())return;
+      playersWorkspaceSelectedId=null;playersWorkspaceData=null;playersWorkspaceFeedbackData=null;
+      await loadContext();
+    }catch(error){
+      if(stillCurrent())status.textContent=error?.message||'We couldn’t save your involvement. Please try again.';
+    }finally{
+      saving=false;if(stillCurrent()){button.disabled=false;controls.forEach(control=>control.disabled=false);}
+    }
   };
 }
 
@@ -1505,7 +1529,7 @@ async function loadData(){
     supabase.from('philosophy_dimension_catalogue').select('*').order('sort_order'),
     supabase.from('club_philosophy_dimensions').select('*').eq('club_id',club.id),
     supabase.from('club_format_weights').select('*').eq('club_id',club.id),
-    supabase.from('players').select('*').eq('club_id',club.id).eq('user_id',session.user.id).maybeSingle(),
+    supabase.from('players').select('*').eq('club_id',club.id).eq('user_id',session.user.id).eq('active',true).maybeSingle(),
     supabase.from('philosophy_workshops').select('*').eq('club_id',club.id).maybeSingle(),
     supabase.from('philosophy_contributors').select('*').eq('club_id',club.id).eq('user_id',session.user.id).maybeSingle(),
     supabase.from('philosophy_versions').select('*').eq('club_id',club.id).order('version_number',{ascending:false}),
@@ -1569,7 +1593,7 @@ async function loadData(){
     weights=new Map(publishedWeights);
   }
 
-  myPlayer=playerRes.data||null;
+  myPlayer=isPlayerUser()?(playerRes.data||null):null;
 
   if(myPlayer){
     const {data:w}=await supabase
@@ -1914,7 +1938,7 @@ function accountMenuStyles(){
   </style>`;
 }
 
-function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
+function accountMenuHtml({allowJoin=true,allowInvolvement=false,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
   const email=session?.user?.email||'';
   const name=userProfile?.display_name||session?.user?.user_metadata?.display_name||'Your account';
   return `<div class="account-controls"><details class="account-menu">
@@ -1923,6 +1947,7 @@ function accountMenuHtml({allowJoin=true,outId='out',joinId='joinAnother',showPl
       <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
+      ${allowInvolvement?'<button class="account-menu-action" id="accountInvolvement" type="button">Your involvement</button>':''}
       <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
       <small class="account-menu-version">Club Batting v${APP_UI_VERSION}</small>
@@ -1976,7 +2001,7 @@ function renderShell(){
           ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <button class="btn secondary" id="openClubHelp" type="button" aria-label="Ask the Club Batting Guide and explore tutorials">Ask the Guide</button>
-          ${accountMenuHtml({allowJoin:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
+          ${accountMenuHtml({allowJoin:true,allowInvolvement:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
     </header>
@@ -1986,6 +2011,7 @@ function renderShell(){
 
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
+  document.getElementById('accountInvolvement').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderFirstIdentitySetup({editing:true});};
   document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process',{focus:'chat'});
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
   document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;await renderPlatformConsole();});
@@ -7095,7 +7121,8 @@ async function renderPermissions(){
   }
 
   const activeGroups=playingGroups||[];
-  const activePlayers=(players||[]).filter(p=>p.active!==false);
+  const nonPlayingUserIds=new Set((members||[]).filter(m=>m.involvement==='coach_captain').map(m=>m.user_id));
+  const activePlayers=(players||[]).filter(p=>p.active!==false&&!nonPlayingUserIds.has(p.user_id));
   const playerUserIds=new Set(activePlayers.map(p=>p.user_id).filter(Boolean));
   const activePlayerCount=activePlayers.length;
   const nonPlayingStaffCount=(members||[]).filter(m=>m.involvement==='coach_captain').length;
@@ -7117,8 +7144,8 @@ async function renderPermissions(){
   );
 
   const registrationLabel=m=>{
-    if(playerUserIds.has(m.user_id) || ['player','both'].includes(m.involvement))return 'Registered player';
     if(m.involvement==='coach_captain')return 'Non-playing staff';
+    if(playerUserIds.has(m.user_id) || ['player','both'].includes(m.involvement))return 'Registered player';
     return 'Registered member';
   };
 
@@ -9284,30 +9311,32 @@ async function renderPlayersWorkspace(){
   const reminderPromise=isAdmin()&&workspacePlayerPlansPublished()
     ?supabase.rpc('get_player_plan_reminder_overview',{p_club_id:club.id})
     :Promise.resolve({data:{reminders:[],cooldown_hours:48,email_mode:'unknown'},error:null});
-  const [playersRes,feedbackRes,reminderRes]=await Promise.all([
+  const [playersRes,feedbackRes,reminderRes,rosterRes]=await Promise.all([
     supabase.rpc('get_players_workspace',{p_club_id:club.id}),
     supabase.rpc('get_feedback_workspace',{p_club_id:club.id}),
-    reminderPromise
+    reminderPromise,
+    supabase.from('players').select('id').eq('club_id',club.id).eq('active',true)
   ]);
 
-  if(playersRes.error){
+  if(playersRes.error||rosterRes.error){
     page.innerHTML=`<section class="card">
       <div class="section-label">Players</div>
       <h2>Player access could not load.</h2>
-      <div class="notice">${esc(playersRes.error.message)}</div>
+      <div class="notice">${esc((playersRes.error||rosterRes.error).message)}</div>
     </section>`;
     return;
   }
 
   playersWorkspaceData=playersRes.data||{role:membership.permission_role,groups:[],players:[]};
-  playersWorkspaceData.players=Array.isArray(playersWorkspaceData.players)?playersWorkspaceData.players:[];
+  const activePlayerIds=new Set((rosterRes.data||[]).map(p=>p.id));
+  playersWorkspaceData.players=(Array.isArray(playersWorkspaceData.players)?playersWorkspaceData.players:[]).filter(p=>activePlayerIds.has(p.id));
   playersWorkspaceData.groups=Array.isArray(playersWorkspaceData.groups)?playersWorkspaceData.groups:[];
 
   if(feedbackRes.error){
     playersWorkspaceFeedbackData={role:membership.permission_role,players:[],error:feedbackRes.error.message};
   }else{
     playersWorkspaceFeedbackData=feedbackRes.data||{role:membership.permission_role,players:[]};
-    playersWorkspaceFeedbackData.players=Array.isArray(playersWorkspaceFeedbackData.players)?playersWorkspaceFeedbackData.players:[];
+    playersWorkspaceFeedbackData.players=(Array.isArray(playersWorkspaceFeedbackData.players)?playersWorkspaceFeedbackData.players:[]).filter(p=>activePlayerIds.has(p.id));
   }
 
   playersWorkspaceReminderData=reminderRes?.error
