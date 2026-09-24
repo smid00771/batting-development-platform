@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.12';
+const APP_UI_VERSION='0.8.62.13';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -94,9 +94,15 @@ let workshopConversation=null;
 let workshopDiscussionTimer=null;
 let workshopLastRoute='';
 const workshopCommentDrafts=new Map();
+let appNavigationCurrent=null;
+let appNavigationRestoring=false;
+let appNavigationRequest=0;
+let appNavigationBounce=null;
 
 
 let playersWorkspaceClubId=null;
+let playersWorkspaceUserId=null;
+let playersWorkspaceRenderSequence=0;
 let playersWorkspaceData=null;
 let playersWorkspaceSelectedId=null;
 let playersWorkspaceSection='summary';
@@ -104,6 +110,7 @@ let playersWorkspaceLocalRaw=null;
 let playersWorkspaceAutosaveTimer=null;
 let playersWorkspaceSearch='';
 let playersWorkspaceGroupFilter='';
+let playersWorkspaceShowAll=false;
 let playersWorkspaceDevelopmentMode=null;
 let playersWorkspaceDevelopmentMatchId=null;
 let playersWorkspaceFeedbackData=null;
@@ -957,7 +964,7 @@ async function boot(){
   // Preserve Market Discovery position when the user opens a club/source in another tab and
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
-  window.addEventListener('popstate',handleWorkshopPreviewHistory);
+  window.addEventListener('popstate',handleAppNavigationHistory);
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -1342,7 +1349,9 @@ function renderPublicTrialForm(saved={},message=''){
   };
 }
 
-async function loadContext(){
+async function loadContext({navigation=null,navigationRequest=null}={}){
+  const requestingUser=session?.user?.id;
+  const stillCurrent=()=>session?.user?.id===requestingUser&&(navigationRequest===null||navigationRequest===appNavigationRequest);
   app.innerHTML='<div class="splash">Loading…</div>';
 
   const {data:memberships,error}=await supabase
@@ -1350,6 +1359,7 @@ async function loadContext(){
     .select('club_id,role,involvement,permission_role,clubs(id,name,slug,join_code,player_join_token,player_signup_open,lead_admin_user_id,primary_colour,accent_colour,logo_data_url,website_url,branding_updated_at,subscription_calendar,season_start,season_end,archived_at)')
     .eq('user_id',session.user.id);
 
+  if(!stillCurrent())return;
   if(error){
     app.innerHTML=`<div class="splash">${esc(error.message)}</div>`;
     return;
@@ -1371,7 +1381,7 @@ async function loadContext(){
     return;
   }
 
-  if(!routeClub && platformRole && (launchParams.has('platform') || localStorage.getItem('bdp-context')==='platform')){
+  if(!navigation && !routeClub && platformRole && (launchParams.has('platform') || localStorage.getItem('bdp-context')==='platform')){
     if(launchParams.has('platform')){const target=new URL(location.href);target.searchParams.delete('platform');history.replaceState({},'',target);}
     renderPlatformConsole();
     return;
@@ -1383,7 +1393,7 @@ async function loadContext(){
     return;
   }
 
-  const savedClub=routeClub||localStorage.getItem('bdp-club-id');
+  const savedClub=navigation?.clubId||routeClub||localStorage.getItem('bdp-club-id');
   membership=allMemberships.find(m=>m.club_id===savedClub)||allMemberships[0];
   club=membership.clubs;
   localStorage.setItem('bdp-club-id',club.id);
@@ -1398,6 +1408,7 @@ async function loadContext(){
     .eq('user_id',session.user.id)
     .maybeSingle();
 
+  if(!stillCurrent())return;
   userProfile=profileData||null;
 
   if(!userProfile || !hasPlayingChoice(membership.involvement)){
@@ -1411,6 +1422,7 @@ async function loadContext(){
     document.getElementById('retryClubLoad').onclick=loadContext;
     return;
   }
+  if(!stillCurrent())return;
   // Return visits start with the next useful action. Explicit email links
   // still open the area promised in the message.
   currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
@@ -1421,7 +1433,8 @@ async function loadContext(){
     }
     clearClubLaunchRoute();
   }
-  renderShell();
+  if(navigation?.clubId===club.id)restoreClubNavigationState(navigation);
+  return renderShell();
 }
 
 function clearClubLaunchRoute(){
@@ -2106,13 +2119,14 @@ function renderShell(){
       return;
     }
 
+    if(nextTab==='players'){playersWorkspaceSelectedId=null;clearPlayersWorkspaceSearch();}
     currentTab=nextTab;
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
     if(nextTab==='guide')guideSelectedCapabilityKey='whole_process';
     await renderTab();
     if(nextTab==='guide')focusClubGuideArea('tutorials');
   });
-  renderTab();
+  return renderTab();
 }
 
 
@@ -2317,19 +2331,118 @@ function renderJoinAnotherClub(){
   };
 }
 
+// Browser history stores destinations and roster filters, never answers or credentials.
+// The first screen replaces the current entry; subsequent screens create real Back/Forward steps.
+function clubNavigationRoute(){
+  const route={scope:'club',clubId:club?.id,tab:currentTab};
+  if(currentTab==='players')Object.assign(route,{
+    playerId:playersWorkspaceSelectedId,playerSection:playersWorkspaceSection,
+    search:playersWorkspaceSearch,group:playersWorkspaceGroupFilter,showAll:playersWorkspaceShowAll
+  });
+  if(currentTab==='myplan')route.planSection=builderSection;
+  if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
+  if(currentTab==='workshop_preview')route.previewKey=workshopPreview?.key;
+  return route;
+}
+function platformNavigationRoute(){
+  return {scope:'platform',view:platformView,prospectId:platformSelectedProspectId,onboardingId:platformSelectedOnboardingId};
+}
+function appNavigationKey(route){
+  return JSON.stringify([route.scope,route.clubId,route.tab,route.playerId,route.playerId?route.playerSection:null,route.planSection,route.previewKey,route.view,route.prospectId,route.onboardingId]);
+}
+function recordAppNavigation(route){
+  if(appNavigationRestoring||!session?.user?.id||!history.pushState)return;
+  const userId=session.user.id;
+  const previous=appNavigationCurrent?.userId===userId?appNavigationCurrent:null;
+  const changed=previous&&appNavigationKey(previous.route)!==appNavigationKey(route);
+  const marker={version:1,userId,trail:previous?.trail||`${Date.now()}-${Math.random()}`,index:previous?(previous.index+(changed?1:0)):0,route};
+  const state={...history.state,clubBattingWorkshop:null,clubBattingNavigation:marker};
+  if(changed)history.pushState(state,'');
+  else history.replaceState(state,'');
+  appNavigationCurrent=marker;
+  return !!changed;
+}
+function restoreClubNavigationState(route){
+  currentTab=canOpenClubTab(route.tab)?route.tab:canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  if(currentTab==='players'){
+    resetPlayersWorkspaceForClub();
+    playersWorkspaceSelectedId=route.playerId||null;
+    playersWorkspaceSection=route.playerSection||'summary';
+    playersWorkspaceSearch=route.search||'';
+    playersWorkspaceGroupFilter=route.group||'';
+    playersWorkspaceShowAll=!!route.showAll;
+    playersWorkspaceLocalRaw=null;
+    playersWorkspaceDevelopmentMode=null;
+    playersWorkspaceDevelopmentMatchId=null;
+  }
+  if(currentTab==='myplan')builderSection=route.planSection||'core';
+  if(currentTab==='dashboard'){
+    clubHomeStageClubId=club.id;clubHomeExpandedStage=route.homeStage||null;
+  }
+  if(currentTab==='workshop_preview'&&(!workshopPreview||workshopPreview.key!==route.previewKey||workshopPreview.clubId!==club.id||workshopPreview.userId!==session.user.id||workshopPreview.round!==workshopReviewContext?.round_number))currentTab='workshop';
+  localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+}
+async function handleAppNavigationHistory(event){
+  const target=event.state?.clubBattingNavigation;
+  if(appNavigationBounce&&target?.trail===appNavigationBounce.trail&&target.index===appNavigationBounce.index){
+    appNavigationBounce=null;return;
+  }
+  const source=appNavigationCurrent;
+  if(!target||target.version!==1||!['club','platform'].includes(target.route?.scope))return;
+  const request=++appNavigationRequest;
+  if(!session||target.userId!==session.user.id){
+    appNavigationCurrent=null;appNavigationRestoring=false;
+    await routeAuth();return;
+  }
+  appNavigationRestoring=true;
+  const returnToSource=()=>{
+    if(source?.trail===target.trail&&source.index!==target.index){
+      appNavigationBounce=source;history.go(source.index-target.index);
+    }else if(source)history.replaceState({...history.state,clubBattingNavigation:source},'');
+  };
+  try{
+    // Back uses the same autosave/unsaved-work checks as the app's own navigation.
+    const saved=await saveClubEditsBeforeNavigation();
+    if(request!==appNavigationRequest||session?.user?.id!==target.userId)return;
+    if(!saved){returnToSource();return;}
+    const route=target.route;
+    if(route.scope==='platform'){
+      platformView=['home','add_clubs','clubs','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
+      platformSelectedProspectId=route.prospectId||null;
+      platformSelectedOnboardingId=route.onboardingId||null;
+      await renderPlatformConsole(); // Refresh platform permission before opening an old destination.
+    }else{
+      localStorage.setItem('bdp-context','club');localStorage.setItem('bdp-club-id',route.clubId);
+      if(club?.id!==route.clubId||!document.getElementById('page'))await loadContext({navigation:route,navigationRequest:request});
+      else{
+        restoreClubNavigationState(route);
+        await renderTab(); // Player details are reloaded through the permitted workspace RPC.
+      }
+    }
+    if(request!==appNavigationRequest)return;
+    const actual=document.getElementById('platformPage')?platformNavigationRoute():document.getElementById('page')?clubNavigationRoute():route;
+    appNavigationCurrent={...target,route:actual};
+    history.replaceState({...history.state,clubBattingNavigation:appNavigationCurrent,clubBattingWorkshop:null},'');
+    window.scrollTo?.({top:0,left:0,behavior:'instant'});
+  }catch(error){
+    if(request===appNavigationRequest){returnToSource();alert(`Couldn’t open that screen. ${error?.message||'Please try again.'}`);}
+  }finally{
+    if(request===appNavigationRequest)appNavigationRestoring=false;
+  }
+}
+
 function renderTab(){
   if(!canOpenClubTab(currentTab)){
     currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   }
+  if(currentTab==='players')resetPlayersWorkspaceForClub();
+  recordAppNavigation(clubNavigationRoute());
   const route=`${club?.id}:${currentTab}`;
-  const previousTab=workshopLastRoute.split(':').at(-1);
-  const workshopTabs=['workshop','identity','dimensions','formats','preview','howwebat','workshop_preview'];
-  const scrollOnArrival=route!==workshopLastRoute&&(workshopTabs.includes(currentTab)||workshopTabs.includes(previousTab));
+  const scrollOnArrival=route!==workshopLastRoute;
   workshopLastRoute=route;
   if(currentTab!=='workshop_preview'){
     if(!['workshop','dashboard'].includes(currentTab))clearTimeout(workshopDiscussionTimer);
-    if(history.state?.clubBattingWorkshop?.view==='preview')history.replaceState({...history.state,clubBattingWorkshop:null},'');
   }
   const arrived=()=>{
     if(scrollOnArrival&&`${club?.id}:${currentTab}`===route){
@@ -2435,6 +2548,8 @@ async function guideGoToTarget(tab,focus=''){
   if(unavailable){alert(unavailable);return;}
   if(!await saveClubEditsBeforeNavigation())return;
   if(tab==='players'){
+    resetPlayersWorkspaceForClub();
+    clearPlayersWorkspaceSearch();
     playersWorkspaceSelectedId=null;
     playersWorkspaceSection='summary';
   }
@@ -2957,7 +3072,7 @@ async function renderClubDashboard(){
   page.querySelectorAll('[data-home-go]').forEach(b=>b.onclick=async()=>{
     const tab=b.dataset.homeGo;
     if(!canOpenClubTab(tab)||!await saveClubEditsBeforeNavigation())return;
-    if(tab==='players')playersWorkspaceSelectedId=null;
+    if(tab==='players'){playersWorkspaceSelectedId=null;clearPlayersWorkspaceSearch();}
     currentTab=tab;
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
     renderTab();
@@ -4884,6 +4999,7 @@ function bindWorkshopReturn(){
   };
 }
 function handleWorkshopPreviewHistory(event){
+  if(event.state?.clubBattingNavigation)return handleAppNavigationHistory(event);
   const marker=event.state?.clubBattingWorkshop;
   if(!marker||marker.clubId!==club?.id||marker.userId!==session?.user?.id)return;
   if(marker.view==='preview'&&workshopPreview&&workshopPreview.clubId===club.id&&workshopPreview.userId===session.user.id){
@@ -4894,7 +5010,7 @@ function handleWorkshopPreviewHistory(event){
 }
 function closeWorkshopPreview(){
   clearTimeout(workshopDiscussionTimer);
-  if(history.state?.clubBattingWorkshop?.view==='preview'){
+  if(history.state?.clubBattingNavigation?.route?.tab==='workshop_preview'||history.state?.clubBattingWorkshop?.view==='preview'){
     history.back();
   }else{currentTab='workshop';renderTab();}
 }
@@ -4910,9 +5026,7 @@ function openScenarioHowWeBatPreview(responses,pMap){
   workshopPreview={clubId:club.id,userId:session.user.id,round:ctx.round_number,ids,responses:selected,pMap,draft,format:formats[0][0],
     names:selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'),
     key:[club.id,session.user.id,ctx.round_number,...ids].join(':'),expectedDraftUpdatedAt:ctx.draft_meta?.updated_at??howWeBatDraft?.updated_at??null,hasExistingDraft:!!(ctx.draft_meta||howWeBatDraft),choiceRequestId:null};
-  const marker={clubId:club.id,userId:session.user.id};
-  history.replaceState({...history.state,clubBattingWorkshop:{...marker,view:'workshop'}},'');
-  history.pushState({...history.state,clubBattingWorkshop:{...marker,view:'preview'}},'');
+  recordAppNavigation(clubNavigationRoute());
   currentTab='workshop_preview';return renderTab();
 }
 function workshopPreviewCurrent(ctx){
@@ -5208,6 +5322,7 @@ function renderLateResponseDetail(response){
 
 function renderMySubmittedPhilosophyResponse(response){
   currentTab='preview';
+  recordAppNavigation(clubNavigationRoute());
   workshopLastRoute=`${club.id}:preview`;
   document.getElementById('page').innerHTML=`${workshopReturnHtml()}<section class="card">
     <div class="section-label">Your submitted response</div>
@@ -9476,15 +9591,22 @@ async function openPlanDueDateDialog(defaultFormat=null){
   dialog.showModal();
 }
 
+function clearPlayersWorkspaceSearch(){
+  playersWorkspaceSearch='';
+  playersWorkspaceGroupFilter='';
+  playersWorkspaceShowAll=false;
+  playersWorkspaceDiscussionKey=null;
+}
+
 function resetPlayersWorkspaceForClub(){
-  if(playersWorkspaceClubId===club.id)return;
+  if(playersWorkspaceClubId===club.id&&playersWorkspaceUserId===session?.user?.id)return;
   playersWorkspaceClubId=club.id;
+  playersWorkspaceUserId=session?.user?.id;
   playersWorkspaceData=null;
   playersWorkspaceSelectedId=null;
   playersWorkspaceSection='summary';
   playersWorkspaceLocalRaw=null;
-  playersWorkspaceSearch='';
-  playersWorkspaceGroupFilter='';
+  clearPlayersWorkspaceSearch();
   playersWorkspaceDevelopmentMode=null;
   playersWorkspaceDevelopmentMatchId=null;
   playersWorkspaceFeedbackData=null;
@@ -9497,8 +9619,10 @@ function resetPlayersWorkspaceForClub(){
 }
 
 async function renderPlayersWorkspace(){
+  const renderSequence=++playersWorkspaceRenderSequence;
   resetPlayersWorkspaceForClub();
   const page=document.getElementById('page');
+  const targetClub=club.id,targetUser=session?.user?.id;
 
   if(!canUsePlayersWorkspace()){
     page.innerHTML=`<section class="card player-gate">
@@ -9524,6 +9648,7 @@ async function renderPlayersWorkspace(){
     supabase.from('players').select('id').eq('club_id',club.id).eq('active',true)
   ]);
 
+  if(renderSequence!==playersWorkspaceRenderSequence||club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!=='players'||document.getElementById('page')!==page)return;
   if(playersRes.error||rosterRes.error){
     page.innerHTML=`<section class="card">
       <div class="section-label">Players</div>
@@ -9673,21 +9798,25 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
   const planState=plansPublished?playerPlanDeadlineState(player):{firstOverdue:null,nextIncomplete:null};
   const overdue=planState.firstOverdue;
   const next=planState.nextIncomplete;
+  const coreComplete=plansPublished&&sectionProgress('core',planState.raw).complete;
+  const formatProgress=plansPublished?publishedEnabledFormats().map(([key,label])=>({label,complete:sectionProgress(key,planState.raw).complete})):[];
+  const completedFormats=formatProgress.filter(format=>format.complete).map(format=>format.label);
   const reminder=overdue?workspaceReminderState(player.id,overdue.format_key):{history:[],count:0,inCooldown:false,latest:null,delivery:''};
   const planHeadline=!plansPublished
     ?'Player Plan questions are being prepared'
-    :planState.allComplete
-    ?'Player Plan up to date ✓'
-    :`${planState.completeCount}/${planState.totalCount} required sections complete`;
+    :coreComplete?'Core complete ✓':'Core still to complete';
   const planDetail=!plansPublished
     ?'Registration, club roles and Playing Groups are available now. Player Plans open after publication.'
-    :overdue
+    :formatProgress.length
+      ?`${completedFormats.length}/${formatProgress.length} format plans complete${completedFormats.length?` · ${completedFormats.join(', ')}`:''}`
+      :'No format plans available yet.';
+  const deadlineDetail=!plansPublished?'':overdue
     ?`${overdue.label} was due ${niceDate(overdue.due_date)}`
     :next?.due_date
       ?`${next.label} due ${niceDate(next.due_date)}`
       :next
-        ?`${next.label} still to complete`
-        :'Core still to complete';
+        ?`${next.label} required · still to complete`
+        :'';
 
   let reminderMeta='';
   let reminderAction='';
@@ -9717,7 +9846,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
     </div>
     ${signals.length?renderWorkspaceRosterDiscussion(player,signals):''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
-      <div><strong style="font-size:12px;color:${overdue?'var(--accent,#D8232A)':'var(--navy2)'}">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${reminderMeta}</div>
+      <div><strong style="font-size:12px;color:${overdue?'var(--accent,#D8232A)':'var(--navy2)'}">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${deadlineDetail?`<span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(deadlineDetail)}</span>`:''}${reminderMeta}</div>
       ${reminderAction}
     </div>
     <div class="workspace-roster-actions">
@@ -9739,6 +9868,7 @@ async function refreshPlayersWorkspaceFeedback(){
 }
 
 function renderPlayersWorkspaceList(){
+  if(currentTab==='players'&&recordAppNavigation(clubNavigationRoute()))window.scrollTo?.({top:0,left:0,behavior:'instant'});
   const page=document.getElementById('page');
   const data=playersWorkspaceData||{players:[],groups:[]};
   const players=data.players||[];
@@ -9748,6 +9878,7 @@ function renderPlayersWorkspaceList(){
   const signalPlayerIds=new Set(allSignals.map(s=>s.player.id));
   const discussionMode=playersWorkspaceGroupFilter==='__discussion__';
   const plansPublished=workspacePlayerPlansPublished();
+  const hasSelection=!!(query||playersWorkspaceGroupFilter||playersWorkspaceShowAll);
 
   let filtered=[];
   if(discussionMode){
@@ -9761,7 +9892,7 @@ function renderPlayersWorkspaceList(){
       const matchesGroup=(player.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter);
       return matchesName&&matchesGroup;
     });
-  }else{
+  }else if(query||playersWorkspaceShowAll){
     filtered=players.filter(player=>!query||String(player.display_name||'').toLowerCase().includes(query));
   }
 
@@ -9781,8 +9912,10 @@ function renderPlayersWorkspaceList(){
   const planCompleteCount=filteredPlanStates.filter(x=>x.allComplete).length;
   const planOverdueCount=filteredPlanStates.filter(x=>x.overdue.length).length;
   let emptyCopy='';
-  if(!playersWorkspaceGroupFilter&&!query){
+  if(!players.length){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>${isAdmin()?'Your player list is ready for sign-ups.':'There are no players in your access yet.'}</strong><span>${isAdmin()?'Use People & Sign-up to invite players, and Manage Playing Groups to prepare your groups.':'Your Club Admin can assign the players and Playing Groups you work with.'}</span></section>`;
+  }else if(!hasSelection){
+    emptyCopy='<section class="card workspace-roster-empty"><strong>Find a player</strong><span>Search for a player or choose a Playing Group to view their plans and record feedback.</span></section>';
   }else if(query&&!filtered.length){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Try another name or clear your search.</strong><span>Your search found no players in this view. Only players you have permission to access are included.</span><div class="btnrow"><button class="btn ghost" id="clearPlayerSearch">Clear search</button></div></section>`;
   }else if(discussionMode){
@@ -9796,6 +9929,7 @@ function renderPlayersWorkspaceList(){
       <div class="section-label">${esc(role)} workspace</div>
       <h2>Players</h2>
       <div class="help">${plansPublished?'Find your players, open their plans and follow up on coaching conversations.':'Register people, assign club roles and organise Playing Groups while the club prepares its setup. Player Plans open after publication.'} Filter by Playing Group or search by name.</div>
+      <div class="btnrow compact" style="margin-top:8px"><span class="help" id="workspaceRegisteredCount"><strong>${players.length}</strong> ${isAdmin()?'registered':'accessible'} player${players.length===1?'':'s'}</span>${players.length?`<button type="button" class="workspace-text-link" id="workspaceShowAllPlayers">${playersWorkspaceShowAll?'Hide player list':'Show all players'}</button>`:''}${query||playersWorkspaceGroupFilter?'<button type="button" class="workspace-text-link" id="workspaceClearSelection">Clear selection</button>':''}</div>
     </div>
     ${isAdmin()?`<div class="btnrow compact"><button class="btn ghost" id="managePeopleFromPlayers">People & Sign-up</button>${plansPublished?'<button class="btn ghost" id="managePlanDatesFromPlayers">Plan dates</button>':''}<button class="btn ghost" id="managePlayingGroupsFromPlayers">Manage Playing Groups</button></div>`:''}
   </section>
@@ -9803,21 +9937,21 @@ function renderPlayersWorkspaceList(){
   ${plansPublished?'':'<div class="notice" style="margin-top:14px"><strong>People can join now; Player Plans open after publication.</strong> Use People & Sign-up to register people and assign club roles. Choose the Philosophy Lead and contributors in the Workshop. Players without setup access will see a waiting message when they sign in.</div>'}
   <section class="card players-workspace-tools compact">
     <div class="field">
-      <label>Find a player</label>
-      <input id="workspacePlayerSearch" value="${esc(playersWorkspaceSearch)}" placeholder="Search by name">
+      <label for="workspacePlayerSearch">Find a player</label>
+      <input id="workspacePlayerSearch" value="${esc(playersWorkspaceSearch)}" placeholder="Search by name" type="search" autocomplete="off">
     </div>
     <div class="field">
-      <label>Playing Group</label>
+      <label for="workspaceGroupFilter">Playing Group</label>
       <select id="workspaceGroupFilter">
-        <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>All accessible players</option>
+        <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>${query?'All Playing Groups':'Choose a Playing Group…'}</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
         <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
       </select>
     </div>
-    <div class="workspace-filter-count compact"><strong>${filtered.length}</strong><span>shown</span></div>
+    ${hasSelection?`<div class="workspace-filter-count compact" role="status" aria-live="polite"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
   </section>
 
-  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> up to date</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
+  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
   ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
   ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
@@ -9827,6 +9961,11 @@ function renderPlayersWorkspaceList(){
 
   document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
   document.getElementById('managePeopleFromPlayers')?.addEventListener('click',()=>{currentTab='permissions';renderTab();});
+  document.getElementById('workspaceShowAllPlayers')?.addEventListener('click',()=>{
+    if(!confirmLeaveFeedbackEntry())return;
+    const show=!playersWorkspaceShowAll;clearPlayersWorkspaceSearch();playersWorkspaceShowAll=show;renderPlayersWorkspaceList();
+  });
+  document.getElementById('workspaceClearSelection')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;clearPlayersWorkspaceSearch();renderPlayersWorkspaceList();});
   document.getElementById('clearPlayerSearch')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;playersWorkspaceSearch='';renderPlayersWorkspaceList();});
   document.getElementById('managePlayingGroupsFromPlayers')?.addEventListener('click',()=>{currentTab='groups';renderTab();});
 
@@ -9853,6 +9992,7 @@ function renderPlayersWorkspaceList(){
   if(search)search.oninput=()=>{
     if(!confirmLeaveFeedbackEntry()){search.value=playersWorkspaceSearch;return;}
     playersWorkspaceSearch=search.value;
+    playersWorkspaceShowAll=false;
     renderPlayersWorkspaceList();
     requestAnimationFrame(()=>{
       const next=document.getElementById('workspacePlayerSearch');
@@ -9864,6 +10004,7 @@ function renderPlayersWorkspaceList(){
   if(filter)filter.onchange=()=>{
     if(!confirmLeaveFeedbackEntry()){filter.value=playersWorkspaceGroupFilter;return;}
     playersWorkspaceGroupFilter=filter.value;
+    playersWorkspaceShowAll=false;
     playersWorkspaceDiscussionKey=null;
     renderPlayersWorkspaceList();
   };
@@ -10133,6 +10274,8 @@ async function renderPlayersWorkspacePlayer(){
     ?[['summary','Player Plan'],['training','Training Plan'],['development','Feedback'],['core','Core'],...publishedEnabledFormats()]
     :[['summary','Player details'],['development','Feedback']];
   if(!sections.some(([k])=>k===playersWorkspaceSection))playersWorkspaceSection='summary';
+  if(recordAppNavigation(clubNavigationRoute()))window.scrollTo?.({top:0,left:0,behavior:'instant'});
+  const targetClub=club?.id,targetUser=session?.user?.id,targetPlayer=player.id,targetSection=playersWorkspaceSection;
 
   const raw=playersWorkspaceLocalRaw||workspacePlayerRaw(player);
   const {required,complete,total}=plansPublished
@@ -10155,6 +10298,7 @@ async function renderPlayersWorkspacePlayer(){
     }
   }
 
+  if(club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!=='players'||playersWorkspaceSelectedId!==targetPlayer||playersWorkspaceSection!==targetSection||document.getElementById('page')!==page)return;
   const sectionTabs=sections.map(([key,label])=>{
     if(key==='summary'||key==='training'||key==='development'){
       return `<button data-workspace-section="${key}" class="${playersWorkspaceSection===key?'active':''}">${esc(label)}</button>`;
@@ -10193,7 +10337,8 @@ async function renderPlayersWorkspacePlayer(){
     body=`<div class="workspace-summary-grid">
       <section class="card">
         <div class="section-label">Plan progress</div>
-        <h2>${complete===total?'Required work complete ✓':`${complete}/${total} required sections complete`}</h2>
+        <h2>Core and format progress</h2>
+        <p class="help">${complete}/${total} currently required sections complete. Each format plan has its own progress below.</p>
         <div class="workspace-progress-grid">${progressCards}</div>
         <div class="help workspace-updated">${esc(workspaceUpdatedLabel(player))}</div>
       </section>
@@ -10657,6 +10802,7 @@ async function renderMyPlan(){
 
   const formats=publishedEnabledFormats();
   if(builderSection!=='core'&&!formats.some(([k])=>k===builderSection))builderSection='core';
+  if(currentTab==='myplan')recordAppNavigation(clubNavigationRoute());
 
   let rolloutData=null,rolloutErr=null;
   try{const result=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:clubId});rolloutData=result.data;rolloutErr=result.error;}
@@ -12052,6 +12198,7 @@ async function renderPlatformConsole(){
 }
 
 async function renderPlatformView(){
+  recordAppNavigation(platformNavigationRoute());
   platformMarketRenderVersion++; // Invalidate older discovery requests before any navigation.
   document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===(platformView==='outbox'?'home':platformView)));
   if(platformView==='add_clubs')return renderPlatformLeadEntry();
@@ -12679,6 +12826,8 @@ async function openEndClubDialog(clubId){
 
 
 async function renderPlatformProspects(){
+  recordAppNavigation(platformNavigationRoute());
+  const navigationKey=appNavigationKey(platformNavigationRoute()),targetUser=session?.user?.id;
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading Club Pipeline…</div>';
   const cleanup=await supabase.rpc('platform_expire_pending_club_invitations');if(cleanup.error){page.innerHTML=`<div class="notice">${esc(cleanup.error.message)}</div>`;return;}
   const [prospectRes,onboardingRes,trialRes,threadRes,messageRes,suppressionRes,settingsRes]=await Promise.all([
@@ -12691,6 +12840,7 @@ async function renderPlatformProspects(){
     supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
   ]);
   const loadError=prospectRes.error||onboardingRes.error||trialRes.error||threadRes.error||messageRes.error||suppressionRes.error||settingsRes.error;
+  if(session?.user?.id!==targetUser||appNavigationKey(platformNavigationRoute())!==navigationKey||document.getElementById('platformPage')!==page)return;
   if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
 
   const rows=prospectRes.data||[];
@@ -12701,6 +12851,11 @@ async function renderPlatformProspects(){
   const emailSettings=settingsRes.data||{};
   const suppressedEmails=new Set((suppressionRes.data||[]).map(x=>String(x.email||'').trim().toLowerCase()).filter(Boolean));
 
+  if(platformSelectedOnboardingId){
+    const p=onboarding.find(x=>x.id===platformSelectedOnboardingId);
+    if(p){await renderPlatformOnboardingDetail(p);return;}
+    platformSelectedOnboardingId=null;
+  }
   if(platformSelectedProspectId){
     const p=rows.find(x=>x.id===platformSelectedProspectId);
     if(p){await renderPlatformSalesProspectDetail(p);return;}
@@ -12918,7 +13073,10 @@ async function renderCloseInvitationRoute(token){
 }
 
 async function renderPlatformSalesProspectDetail(p){
+  platformSelectedProspectId=p.id;platformSelectedOnboardingId=null;
+  recordAppNavigation(platformNavigationRoute());
   const page=document.getElementById('platformPage');
+  const targetUser=session?.user?.id,navigationKey=appNavigationKey(platformNavigationRoute());
   const [{data:events},{data:trial,error:trialError},{data:guideThreads}]=await Promise.all([
     supabase.from('sales_prospect_events').select('*').eq('sales_prospect_id',p.id).order('created_at',{ascending:false}).limit(30),
     supabase.from('club_trials').select('*').eq('sales_prospect_id',p.id).maybeSingle(),
@@ -12928,6 +13086,7 @@ async function renderPlatformSalesProspectDetail(p){
   const {data:onboarding,error:onboardingError}=onboardingId
     ?await supabase.from('club_prospects').select('*').eq('id',onboardingId).maybeSingle()
     :{data:null,error:null};
+  if(session?.user?.id!==targetUser||document.getElementById('platformPage')!==page||appNavigationKey(platformNavigationRoute())!==navigationKey)return;
   const onboardingLoadError=trialError?.message||onboardingError?.message
     ||((onboardingId||p.status==='onboarding')&&!onboarding?'The linked onboarding record is unavailable.':'');
   const canCancelOnboarding=!p.retired_at&&!onboardingLoadError&&canCancelPendingOnboarding(onboarding,trial);
@@ -13058,13 +13217,18 @@ async function getCommercialPreview(calendar,accessStart,reduction=0,adjustmentE
 }
 
 async function renderPlatformOnboardingDetail(p){
+  if(!p)return renderPlatformProspects();
+  platformSelectedOnboardingId=p.id;platformSelectedProspectId=null;
+  recordAppNavigation(platformNavigationRoute());
   const page=document.getElementById('platformPage');
+  const targetUser=session?.user?.id,navigationKey=appNavigationKey(platformNavigationRoute());
   const [{data:calendars,error:calendarError},{data:trial,error:trialError},{data:invitation,error:invitationError},{data:emailSettings,error:settingsError}]=await Promise.all([
     loadSubscriptionCalendars(),
     supabase.from('club_trials').select('*').eq('onboarding_prospect_id',p.id).maybeSingle(),
     supabase.from('outbound_messages').select('id,prospect_id,template_key,created_at,processing_at,sent_at,failed_at,last_error').eq('prospect_id',p.id).eq('template_key','club_trial_invitation').order('created_at',{ascending:false}).limit(1).maybeSingle(),
     supabase.from('platform_settings').select('email_mode,email_live_from').eq('singleton',true).single()
   ]);
+  if(session?.user?.id!==targetUser||document.getElementById('platformPage')!==page||appNavigationKey(platformNavigationRoute())!==navigationKey)return;
   const loadError=calendarError||trialError||invitationError||settingsError;
   if(loadError){page.innerHTML=`<div class="notice">${esc(loadError.message)}</div>`;return;}
   if(trial){
