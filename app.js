@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.8';
+const APP_UI_VERSION='0.8.62.9';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1916,6 +1916,13 @@ function accountMenuStyles(){
     .club-help-feature .btn{font-size:14px;min-height:44px}
     @media(max-width:700px){.club-help-feature{align-items:stretch;flex-direction:column;padding:20px}.club-help-feature .btnrow{display:grid;grid-template-columns:1fr 1fr}.shell .nav button[data-tab="guide"]{margin-left:0}}
     .account-controls{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+    .context-switcher{display:grid;gap:5px;width:220px;max-width:100%;min-width:0;flex:0 1 220px;text-align:left}
+    .context-switcher-label{font-size:12px;font-weight:700;line-height:1.3;color:inherit}
+    .context-switcher-control{position:relative;display:block;min-width:0}
+    .context-switcher .context-switch{appearance:none;-webkit-appearance:none;display:block;box-sizing:border-box;width:100%;max-width:100%;min-height:44px;margin:0;padding:10px 42px 10px 12px;border:1px solid #b5c2dc;border-radius:10px;background:#fff;color:#101a4f;font:inherit;font-size:16px;font-weight:700;line-height:1.3;text-overflow:ellipsis;cursor:pointer}
+    .context-switcher .context-switch:focus-visible{outline:3px solid #829dea;outline-offset:3px}
+    .context-switcher-chevron{position:absolute;right:16px;top:50%;display:block;width:9px;height:9px;box-sizing:border-box;border-right:2px solid #101a4f;border-bottom:2px solid #101a4f;transform:translateY(-70%) rotate(45deg);pointer-events:none}
+    @media(max-width:700px){.shell .hero .topline{flex-direction:column;align-items:stretch}.shell .hero .header-actions,.platform-header .header-actions{width:100%;min-width:0;justify-content:flex-start}}
     .platform-admin-link{display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;padding:4px 3px;font:inherit;font-size:12px;font-weight:700;line-height:1.4;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
     .platform-admin-link:hover{text-decoration-thickness:2px}
     .platform-admin-link:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:4px}
@@ -1936,6 +1943,16 @@ function accountMenuStyles(){
     .account-menu-version{display:block;padding:8px 9px 2px;border-top:1px solid #edf0f6;font-size:11px;color:#667085}
     @media(max-width:700px){.account-menu-popover{min-width:220px;max-width:min(280px,88vw)}}
   </style>`;
+}
+
+function contextSwitcherHtml(id,options){
+  return `<label class="context-switcher" for="${id}">
+    <span class="context-switcher-label">Switch view</span>
+    <span class="context-switcher-control">
+      <select id="${id}" class="context-switch" aria-label="Switch view: club or platform">${options}</select>
+      <span class="context-switcher-chevron" aria-hidden="true"></span>
+    </span>
+  </label>`;
 }
 
 function accountMenuHtml({allowJoin=true,allowInvolvement=false,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
@@ -1998,7 +2015,7 @@ function renderShell(){
           </div>
         </div>
         <div class="header-actions">
-          ${(allMemberships.length>1||platformRole)?`<select id="contextSwitch" class="context-switch" aria-label="Switch club or platform">${contextOptions}</select>`:''}
+          ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <button class="btn secondary" id="openClubHelp" type="button" aria-label="Ask the Club Batting Guide and explore tutorials">Ask the Guide</button>
           ${accountMenuHtml({allowJoin:true,allowInvolvement:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
@@ -11825,7 +11842,7 @@ async function renderPlatformConsole(){
     <header class="platform-header">
       <div><div class="section-label">Private Platform Administration</div><h1>Club Batting</h1><p>Find clubs, follow the few exceptions that need attention, and see each Club Trial through to activation.</p></div>
       <div class="header-actions">
-        ${allMemberships.length?`<select id="platformContextSwitch" class="context-switch" aria-label="Switch club or platform"><option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}</select>`:''}
+        ${allMemberships.length?contextSwitcherHtml('platformContextSwitch',`<option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}`):''}
         ${accountMenuHtml({allowJoin:false,outId:'platformOut'})}
       </div>
     </header>
