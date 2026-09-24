@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.13';
+const APP_UI_VERSION='0.8.62.14';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -98,6 +98,7 @@ let appNavigationCurrent=null;
 let appNavigationRestoring=false;
 let appNavigationRequest=0;
 let appNavigationBounce=null;
+let accountReturnTab='dashboard';
 
 
 let playersWorkspaceClubId=null;
@@ -1128,6 +1129,8 @@ async function routeAuth(){
 
   if(!session){renderLogin();return;}
   await loadPlatformContext();
+  // Reload this browser entry after authentication. Explicit club/platform links win.
+  if(!params.has('club')&&!params.has('tab')&&!params.has('platform')&&await resumeAppNavigationOnLoad())return;
   await loadContext();
 }
 
@@ -1367,6 +1370,11 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
 
   allMemberships=(memberships||[]).filter(m=>!m.clubs?.archived_at);
 
+  if(navigation?.scope==='platform'&&platformRole){
+    restorePlatformNavigationState(navigation);
+    return renderPlatformConsole();
+  }
+
   const launchParams=new URLSearchParams(location.search);
   const routeClub=launchParams.get('club');
   const routeTab=launchParams.get('tab');
@@ -1383,12 +1391,11 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
 
   if(!navigation && !routeClub && platformRole && (launchParams.has('platform') || localStorage.getItem('bdp-context')==='platform')){
     if(launchParams.has('platform')){const target=new URL(location.href);target.searchParams.delete('platform');history.replaceState({},'',target);}
-    renderPlatformConsole();
-    return;
+    return renderPlatformConsole();
   }
 
   if(!allMemberships.length){
-    if(platformRole){renderPlatformConsole();return;}
+    if(platformRole)return renderPlatformConsole();
     renderNoClub();
     return;
   }
@@ -1419,12 +1426,11 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   try{await loadData();}
   catch(error){
     app.innerHTML=`<div class="login"><h1>Your club’s plans could not be loaded.</h1><p>${esc(error.message||'Check your connection and try again.')}</p><button class="btn secondary" id="retryClubLoad">Try again</button></div>`;
-    document.getElementById('retryClubLoad').onclick=loadContext;
+    document.getElementById('retryClubLoad').onclick=()=>loadContext({navigation,navigationRequest});
     return;
   }
   if(!stillCurrent())return;
-  // Return visits start with the next useful action. Explicit email links
-  // still open the area promised in the message.
+  // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(routeClub===club.id){
     if(['playerhome','myplan','howwebat','howwetrain','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
@@ -1433,7 +1439,11 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
     }
     clearClubLaunchRoute();
   }
-  if(navigation?.clubId===club.id)restoreClubNavigationState(navigation);
+  if(navigation?.clubId===club.id){
+    if(navigation.tab==='workshop_preview')await restoreWorkshopPreviewFromNavigation(navigation);
+    if(!stillCurrent())return;
+    restoreClubNavigationState(navigation);
+  }
   return renderShell();
 }
 
@@ -1500,6 +1510,7 @@ function hasPlayingChoice(involvement){
 }
 
 function renderFirstIdentitySetup({editing=false}={}){
+  if(editing)recordAccountScreen('account_involvement');
   app.innerHTML=`<div class="login" style="max-width:720px">
     <div class="section-label">${esc(club.name)}</div>
     <h1>${editing?'Your involvement':'How are you involved?'}</h1>
@@ -1516,7 +1527,7 @@ function renderFirstIdentitySetup({editing=false}={}){
   const button=document.getElementById('saveIdentity');
   const stillCurrent=()=>club?.id===targetClubId&&session?.user?.id===requestingUserId&&document.getElementById('saveIdentity')===button;
   let saving=false;
-  document.getElementById('cancelIdentity')?.addEventListener('click',()=>{if(!saving)renderShell();});
+  document.getElementById('cancelIdentity')?.addEventListener('click',()=>{if(!saving)closeAccountScreen();});
   document.getElementById('saveIdentity').onclick=async()=>{
     if(saving||!stillCurrent())return;
     const status=document.getElementById('identitySetupStatus');
@@ -1706,13 +1717,14 @@ function clubSetupUnavailableReason(tab){
 }
 
 function canOpenClubTab(tab){
+  if(['account_involvement','join_club'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
   if(tab==='playerhome')return isPlayerUser();
   if(['permissions','groups'].includes(tab))return isAdmin();
   if(['players','feedback'].includes(tab))return canUsePlayersWorkspace();
   if(tab==='workshop_preview')return !!workshopPreview&&workshopPreview.clubId===club?.id&&workshopPreview.userId===session?.user?.id;
   if(tab==='workshop')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()||canContributePhilosophy());
-  if(['identity','dimensions','formats','preview'].includes(tab))return !clubSetupUnavailableReason(tab)&&(isPhilosophyLead()||canContributePhilosophy());
+  if(['identity','dimensions','formats','preview','submitted_response'].includes(tab))return !clubSetupUnavailableReason(tab)&&(isPhilosophyLead()||canContributePhilosophy());
   if(tab==='plan')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead());
   if(tab==='howwebat')return howWeBatVersions.length>0||(!clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()));
   if(tab==='myplan')return isPlayerUser();
@@ -1728,6 +1740,7 @@ function canActOnClubSetupStep(step){
 }
 
 let clubHomeExpandedStage=null;
+let clubHomeRestoredStage=false;
 let clubHomeStageClubId=null;
 let clubHomeNextPreparationKey=null;
 
@@ -1782,6 +1795,7 @@ async function expandClubHomeStage(key,progress){
   const content=document.getElementById('clubHomePhaseContent');
   if(!panel||!content||currentTab!=='dashboard')return;
   clubHomeExpandedStage=key;
+  recordAppNavigation(clubNavigationRoute());
   page.querySelectorAll('[data-club-stage]').forEach(button=>button.setAttribute('aria-expanded',String(button.dataset.clubStage===key)));
   const branding=page.querySelector('.club-branding-card');
   if(branding)branding.hidden=true;
@@ -2307,6 +2321,7 @@ async function renderJoinByCode(joinCode){
 }
 
 function renderJoinAnotherClub(){
+  recordAccountScreen('join_club');
   app.innerHTML=`<div class="login" style="max-width:720px">
     <div class="section-label">Add another club to this login</div>
     <h1>Join another club.</h1>
@@ -2317,7 +2332,7 @@ function renderJoinAnotherClub(){
     <div class="btnrow"><button class="btn secondary" id="joinClub">Join club</button><button class="btn ghost" id="cancelJoin">Cancel</button><span class="status" id="joinStatus"></span></div>
   </div>`;
   wireRoleCards();
-  document.getElementById('cancelJoin').onclick=renderShell;
+  document.getElementById('cancelJoin').onclick=closeAccountScreen;
   document.getElementById('joinClub').onclick=async()=>{
     const involvement=document.querySelector('input[name="joinRole"]:checked')?.value;
     const st=document.getElementById('joinStatus');
@@ -2333,6 +2348,16 @@ function renderJoinAnotherClub(){
 
 // Browser history stores destinations and roster filters, never answers or credentials.
 // The first screen replaces the current entry; subsequent screens create real Back/Forward steps.
+function recordAccountScreen(tab){
+  if(!club||!session)return;
+  if(!['account_involvement','join_club'].includes(currentTab))accountReturnTab=currentTab;
+  currentTab=tab;
+  recordAppNavigation(clubNavigationRoute());
+}
+function closeAccountScreen(){
+  currentTab=canOpenClubTab(accountReturnTab)?accountReturnTab:'dashboard';
+  return renderShell();
+}
 function clubNavigationRoute(){
   const route={scope:'club',clubId:club?.id,tab:currentTab};
   if(currentTab==='players')Object.assign(route,{
@@ -2341,7 +2366,12 @@ function clubNavigationRoute(){
   });
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
-  if(currentTab==='workshop_preview')route.previewKey=workshopPreview?.key;
+  if(currentTab==='workshop_preview'&&workshopPreview){
+    route.previewKey=workshopPreview.key;
+    route.preview={ids:[...workshopPreview.ids],round:workshopPreview.round,format:workshopPreview.format};
+  }
+  route.viewState={howWeBatFormat:publishedHowWeBatFormat,builderFormat:howWeBatBuilderFormat,questionsSection:playerPlanStructureSection,responseFormat:previewFormat,guideTopic:guideSelectedCapabilityKey};
+  if(['account_involvement','join_club'].includes(currentTab))route.returnTab=accountReturnTab;
   return route;
 }
 function platformNavigationRoute(){
@@ -2349,6 +2379,39 @@ function platformNavigationRoute(){
 }
 function appNavigationKey(route){
   return JSON.stringify([route.scope,route.clubId,route.tab,route.playerId,route.playerId?route.playerSection:null,route.planSection,route.previewKey,route.view,route.prospectId,route.onboardingId]);
+}
+function validAppNavigationMarker(marker){
+  return !!(marker?.version===1&&marker.userId===session?.user?.id&&typeof marker.trail==='string'&&Number.isInteger(marker.index)&&marker.index>=0&&
+    (marker.route?.scope==='platform'||(marker.route?.scope==='club'&&typeof marker.route.clubId==='string'&&typeof marker.route.tab==='string')));
+}
+function restorePlatformNavigationState(route){
+  platformView=['home','add_clubs','clubs','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
+  platformSelectedProspectId=route.prospectId||null;
+  platformSelectedOnboardingId=route.onboardingId||null;
+}
+function replaceRestoredNavigation(marker){
+  const route=document.getElementById('platformPage')?platformNavigationRoute():document.getElementById('page')||document.getElementById('cancelIdentity')||document.getElementById('cancelJoin')?clubNavigationRoute():null;
+  if(!route)return;
+  appNavigationCurrent={...marker,route};
+  history.replaceState({...history.state,clubBattingNavigation:appNavigationCurrent,clubBattingWorkshop:null},'');
+}
+async function resumeAppNavigationOnLoad(){
+  const marker=history.state?.clubBattingNavigation;
+  if(appNavigationCurrent||!validAppNavigationMarker(marker))return false;
+  const request=++appNavigationRequest;
+  appNavigationCurrent=marker;appNavigationRestoring=true;
+  try{
+    await loadContext({navigation:marker.route,navigationRequest:request});
+    if(request===appNavigationRequest&&session?.user?.id===marker.userId)replaceRestoredNavigation(marker);
+  }catch(error){
+    if(request===appNavigationRequest&&session?.user?.id===marker.userId){
+      app.innerHTML=`<div class="login"><h1>This screen could not reload.</h1><p>${esc(error?.message||'Check your connection and try again.')}</p><button class="btn secondary" id="retryNavigationReload">Try again</button></div>`;
+      document.getElementById('retryNavigationReload').onclick=()=>{appNavigationCurrent=null;return routeAuth();};
+    }
+  }finally{
+    if(request===appNavigationRequest)appNavigationRestoring=false;
+  }
+  return true;
 }
 function recordAppNavigation(route){
   if(appNavigationRestoring||!session?.user?.id||!history.pushState)return;
@@ -2363,7 +2426,15 @@ function recordAppNavigation(route){
   return !!changed;
 }
 function restoreClubNavigationState(route){
-  currentTab=canOpenClubTab(route.tab)?route.tab:canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  const view=route.viewState||{};
+  if(FORMATS.some(([key])=>key===view.howWeBatFormat))publishedHowWeBatFormat=view.howWeBatFormat;
+  if(FORMATS.some(([key])=>key===view.builderFormat))howWeBatBuilderFormat=view.builderFormat;
+  if(FORMATS.some(([key])=>key===view.responseFormat))previewFormat=view.responseFormat;
+  if(['core',...FORMATS.map(([key])=>key)].includes(view.questionsSection))playerPlanStructureSection=view.questionsSection;
+  if(typeof view.guideTopic==='string')guideSelectedCapabilityKey=view.guideTopic;
+  if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
+  const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
+  currentTab=canOpenClubTab(tab)?tab:canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
   if(currentTab==='players'){
     resetPlayersWorkspaceForClub();
     playersWorkspaceSelectedId=route.playerId||null;
@@ -2378,6 +2449,7 @@ function restoreClubNavigationState(route){
   if(currentTab==='myplan')builderSection=route.planSection||'core';
   if(currentTab==='dashboard'){
     clubHomeStageClubId=club.id;clubHomeExpandedStage=route.homeStage||null;
+    clubHomeRestoredStage=Object.hasOwn(route,'homeStage');
   }
   if(currentTab==='workshop_preview'&&(!workshopPreview||workshopPreview.key!==route.previewKey||workshopPreview.clubId!==club.id||workshopPreview.userId!==session.user.id||workshopPreview.round!==workshopReviewContext?.round_number))currentTab='workshop';
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
@@ -2407,22 +2479,20 @@ async function handleAppNavigationHistory(event){
     if(!saved){returnToSource();return;}
     const route=target.route;
     if(route.scope==='platform'){
-      platformView=['home','add_clubs','clubs','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
-      platformSelectedProspectId=route.prospectId||null;
-      platformSelectedOnboardingId=route.onboardingId||null;
+      restorePlatformNavigationState(route);
       await renderPlatformConsole(); // Refresh platform permission before opening an old destination.
     }else{
       localStorage.setItem('bdp-context','club');localStorage.setItem('bdp-club-id',route.clubId);
       if(club?.id!==route.clubId||!document.getElementById('page'))await loadContext({navigation:route,navigationRequest:request});
       else{
+        if(route.tab==='workshop_preview')await restoreWorkshopPreviewFromNavigation(route);
+        if(request!==appNavigationRequest||session?.user?.id!==target.userId)return;
         restoreClubNavigationState(route);
         await renderTab(); // Player details are reloaded through the permitted workspace RPC.
       }
     }
     if(request!==appNavigationRequest)return;
-    const actual=document.getElementById('platformPage')?platformNavigationRoute():document.getElementById('page')?clubNavigationRoute():route;
-    appNavigationCurrent={...target,route:actual};
-    history.replaceState({...history.state,clubBattingNavigation:appNavigationCurrent,clubBattingWorkshop:null},'');
+    replaceRestoredNavigation(target);
     window.scrollTo?.({top:0,left:0,behavior:'instant'});
   }catch(error){
     if(request===appNavigationRequest){returnToSource();alert(`Couldn’t open that screen. ${error?.message||'Please try again.'}`);}
@@ -2454,6 +2524,8 @@ function renderTab(){
   };
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
   const map={
+    account_involvement:()=>renderFirstIdentitySetup({editing:true}),
+    join_club:renderJoinAnotherClub,
     dashboard:renderClubDashboard,
     playerhome:renderPlayerHome,
     groups:renderPlayingGroups,
@@ -2465,6 +2537,7 @@ function renderTab(){
     dimensions:renderDimensions,
     formats:renderFormats,
     preview:renderPreview,
+    submitted_response:()=>renderMySubmittedPhilosophyResponse(myContribution),
     plan:renderPlanStructure,
     permissions:renderPermissions,
     howwebat:renderPublishedHowWeBat,
@@ -2822,6 +2895,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   const all=(capabilities||[]).map(guideCapabilityForCurrentProduct).filter(c=>!c.audience?.length||c.audience.includes(role)||c.capability_key==='whole_process'||(isPhilosophyLead()&&['philosophy_workshop','how_we_bat','player_plan_structure'].includes(c.capability_key))).sort((a,b)=>topicOrder(a.capability_key)-topicOrder(b.capability_key));
   if(!all.length){page.innerHTML='<section class="card"><h2>Club Batting Guide</h2><p class="help">No Guide topics are available for this role yet.</p></section>';return;}
   if(!all.some(c=>c.capability_key===guideSelectedCapabilityKey))guideSelectedCapabilityKey='whole_process';
+  if(currentTab==='guide')recordAppNavigation(clubNavigationRoute());
   const selected=all.find(c=>c.capability_key===guideSelectedCapabilityKey)||all[0];
   const isOverview=selected.capability_key==='whole_process';
   const selectedFocus=selected.capability_key==='plan_dates'?'plan_dates':selected.capability_key==='coach_conversations'&&selected.target_tab==='players'?'coach_conversations':'';
@@ -2936,7 +3010,8 @@ async function renderClubDashboard(){
   const canReviewLook=isAdmin()&&(progress.structureReady||progress.systemLive);
   const showBranding=false;
   if(clubHomeStageClubId!==club.id){clubHomeExpandedStage=null;clubHomeStageClubId=club.id;clubHomeNextPreparationKey=null;}
-  if(!progress.published&&(!clubHomeExpandedStage||clubHomeNextPreparationKey!==step?.key))clubHomeExpandedStage=step?.key||null;
+  if(!clubHomeRestoredStage&&!progress.published&&(!clubHomeExpandedStage||clubHomeNextPreparationKey!==step?.key))clubHomeExpandedStage=step?.key||null;
+  clubHomeRestoredStage=false;
   clubHomeNextPreparationKey=step?.key||null;
   const contributorWaiting=step?.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
   const canAct=!!step&&canActOnClubSetupStep(step);
@@ -5014,18 +5089,47 @@ function closeWorkshopPreview(){
     history.back();
   }else{currentTab='workshop';renderTab();}
 }
+function makeWorkshopPreview(selected,pMap,ctx,requestedFormat=null){
+  const draft=generatedHowWeBatDraftFromPhilosophy(buildScenarioDraft(selected));
+  const formats=FORMATS.filter(([f])=>draft.formats?.[f]);
+  if(!formats.length)return null;
+  const ids=selected.map(r=>r.user_id).sort();
+  return {clubId:club.id,userId:session.user.id,round:ctx.round_number,ids,responses:selected,pMap,draft,format:formats.some(([key])=>key===requestedFormat)?requestedFormat:formats[0][0],
+    names:selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'),
+    key:[club.id,session.user.id,ctx.round_number,...ids].join(':'),expectedDraftUpdatedAt:ctx.draft_meta?.updated_at??howWeBatDraft?.updated_at??null,hasExistingDraft:!!(ctx.draft_meta||howWeBatDraft),choiceRequestId:null};
+}
+async function restoreWorkshopPreviewFromNavigation(route){
+  if(workshopPreview?.key===route.previewKey&&workshopPreview?.round===workshopReviewContext?.round_number){
+    if(workshopPreview.draft.formats?.[route.preview?.format])workshopPreview.format=route.preview.format;
+    return;
+  }
+  workshopPreview=null;
+  const clubId=club?.id,userId=session?.user?.id;
+  const prefix=`${clubId}:${userId}:`;
+  // Version .13 stored the same round and selected response IDs in its preview key.
+  const legacy=typeof route.previewKey==='string'&&route.previewKey.startsWith(prefix)?route.previewKey.slice(prefix.length).split(':'):[];
+  const selection=route.preview||{round:Number(legacy[0]),ids:legacy.slice(1)};
+  if(!Array.isArray(selection.ids)||!selection.ids.length||!Number.isInteger(selection.round))return;
+  const {data:context,error}=await supabase.rpc('get_workshop_review_context',{p_club_id:clubId});
+  if(error)throw error;
+  if(club?.id!==clubId||session?.user?.id!==userId)return;
+  workshopReviewContext={...context,clubId,userId};
+  if(context?.workshop_state)workshop={...workshop,...context.workshop_state};
+  if(!context?.can_review||context.round_number!==selection.round)return;
+  const ids=new Set(selection.ids);
+  const selected=(context.responses||[]).filter(response=>ids.has(response.user_id));
+  if(selected.length!==ids.size||!selected.some(response=>response.user_id===workshop?.philosophy_lead_user_id))return;
+  const profiles=new Map(selected.map(response=>[response.user_id,{display_name:response.display_name}]));
+  workshopPreview=makeWorkshopPreview(selected,profiles,workshopReviewContext,selection.format);
+}
 function openScenarioHowWeBatPreview(responses,pMap){
   const ctx=workshopReviewContext;
   if(!ctx?.can_review||ctx.clubId!==club?.id||ctx.userId!==session?.user?.id){alert('Return to Workshop and refresh the submitted responses.');return;}
   const selected=selectedScenarioResponses(responses);
   if(!selected.some(r=>r.user_id===workshop?.philosophy_lead_user_id)){alert('The Philosophy Lead needs to submit their response before comparisons can begin.');return;}
-  const draft=generatedHowWeBatDraftFromPhilosophy(buildScenarioDraft(selected));
-  const formats=FORMATS.filter(([f])=>draft.formats?.[f]);
-  if(!formats.length){alert('This combination does not currently produce a How We Bat preview.');return;}
-  const ids=selected.map(r=>r.user_id).sort();
-  workshopPreview={clubId:club.id,userId:session.user.id,round:ctx.round_number,ids,responses:selected,pMap,draft,format:formats[0][0],
-    names:selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'),
-    key:[club.id,session.user.id,ctx.round_number,...ids].join(':'),expectedDraftUpdatedAt:ctx.draft_meta?.updated_at??howWeBatDraft?.updated_at??null,hasExistingDraft:!!(ctx.draft_meta||howWeBatDraft),choiceRequestId:null};
+  const preview=makeWorkshopPreview(selected,pMap,ctx);
+  if(!preview){alert('This combination does not currently produce a How We Bat preview.');return;}
+  workshopPreview=preview;
   recordAppNavigation(clubNavigationRoute());
   currentTab='workshop_preview';return renderTab();
 }
@@ -5054,6 +5158,7 @@ function renderWorkshopPreview(){
   document.getElementById('bottomBackWorkshopPreview').onclick=closeWorkshopPreview;
   page.querySelectorAll('[data-workshop-preview-format]').forEach(btn=>btn.onclick=()=>{
     ctx.format=btn.dataset.workshopPreviewFormat;
+    recordAppNavigation(clubNavigationRoute());
     page.querySelectorAll('[data-workshop-preview-format]').forEach(b=>{const active=b===btn;b.className=`btn ${active?'secondary':'ghost'}`;b.setAttribute('aria-pressed',String(active));});
     document.getElementById('workshopVersionContent').innerHTML=renderHowWeBatLivePreview(ctx.draft,ctx.format,false);
   });
@@ -5321,9 +5426,9 @@ function renderLateResponseDetail(response){
 }
 
 function renderMySubmittedPhilosophyResponse(response){
-  currentTab='preview';
+  currentTab='submitted_response';
   recordAppNavigation(clubNavigationRoute());
-  workshopLastRoute=`${club.id}:preview`;
+  workshopLastRoute=`${club.id}:submitted_response`;
   document.getElementById('page').innerHTML=`${workshopReturnHtml()}<section class="card">
     <div class="section-label">Your submitted response</div>
     <h2>Review your philosophy contribution</h2>
@@ -6193,6 +6298,7 @@ function renderHowWeBatBuilder(savedMessage=''){
   }
   const formats=enabledFormats();
   if(!formats.some(([k])=>k===howWeBatBuilderFormat))howWeBatBuilderFormat=formats[0]?.[0]||'limited_overs';
+  recordAppNavigation(clubNavigationRoute());
   const formatLabel=FORMATS.find(([k])=>k===howWeBatBuilderFormat)?.[1]||'Format';
   const formatDraft=draft.formats[howWeBatBuilderFormat]||generatedHowWeBatFormat(howWeBatBuilderFormat);
   const rows=howWeBatBannerEditorRows(howWeBatBuilderFormat);
@@ -6602,6 +6708,7 @@ function renderPublishedHowWeBat(){
 
   const formats=FORMATS.filter(([k])=>snap.formats?.[k]);
   if(!formats.some(([k])=>k===publishedHowWeBatFormat))publishedHowWeBatFormat=formats[0]?.[0]||'limited_overs';
+  recordAppNavigation(clubNavigationRoute());
   const f=snap.formats?.[publishedHowWeBatFormat];
   const formatLabel=FORMATS.find(([k])=>k===publishedHowWeBatFormat)?.[1]||'';
   const workingReady=canSeeWorking && snap.status==='ready';
@@ -6681,6 +6788,7 @@ function renderPreview(){
   if(!myContribution){currentTab='workshop';renderTab();return;}
   const formats=enabledFormats();
   if(!formats.some(([k])=>k===previewFormat))previewFormat=formats[0]?.[0]||'limited_overs';
+  recordAppNavigation(clubNavigationRoute());
   const identity=identitySummary()+(clubProfile.identity_note?` ${clubProfile.identity_note}`:'');
   const locked=contributionLocked();
 
@@ -7147,6 +7255,7 @@ async function renderPlanStructure(){
 
   const validSections=['core',...formats.map(([k])=>k)];
   if(!validSections.includes(playerPlanStructureSection))playerPlanStructureSection='core';
+  recordAppNavigation(clubNavigationRoute());
   const structureReady=locked && !playerPlanStructureDirty;
   const lookReady=clubSetupProgress().detailsReady;
   const latestVersion=philosophyVersions?.[0]?.version_number||null;
