@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.11';
+const APP_UI_VERSION='0.8.62.12';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -87,6 +87,8 @@ let philosophyScenarioSelectedIds=new Set();
 let philosophyScenarioStateKey='';
 let philosophyScenarioFormat='limited_overs';
 let workshopReviewContext=null;
+let permissionDraftState=null;
+let permissionsRenderSequence=0;
 let workshopPreview=null;
 let workshopConversation=null;
 let workshopDiscussionTimer=null;
@@ -1398,7 +1400,7 @@ async function loadContext(){
 
   userProfile=profileData||null;
 
-  if(!userProfile || !membership.involvement){
+  if(!userProfile || !hasPlayingChoice(membership.involvement)){
     renderFirstIdentitySetup();
     return;
   }
@@ -1480,11 +1482,16 @@ function renderNoClub(){
   };
 }
 
+function hasPlayingChoice(involvement){
+  return ['player','coach_captain','both'].includes(involvement);
+}
+
 function renderFirstIdentitySetup({editing=false}={}){
   app.innerHTML=`<div class="login" style="max-width:720px">
     <div class="section-label">${esc(club.name)}</div>
     <h1>${editing?'Your involvement':'How are you involved?'}</h1>
     <p>This only determines whether you need your own Player Plan. It does <strong>not</strong> give coaching access — the Club Admin controls that separately.</p>
+    ${membership.involvement==='philosophy_contributor'?'<p>Your Workshop invitation is accepted. Before you continue, tell us whether you also play for this club. Your Workshop access and any assigned club roles stay with your account.</p>':''}
     ${editing?'<p>Choose how you take part in this club. Your assigned club roles stay as they are. Any earlier Player Plan and feedback are retained if you stop playing.</p>':''}
     <div class="field"><label>Your name</label><input id="myName" value="${esc(userProfile?.display_name||'')}"></div>
     ${roleCards('myRole',membership.involvement||'')}
@@ -3611,7 +3618,8 @@ async function renderWorkshop(){
     {data:draftSnapshot,error:snapErr},
     {data:lateActions,error:lateErr},
     {data:workshopStatus,error:statusErr},
-    {data:reviewContext,error:reviewErr}
+    {data:reviewContext,error:reviewErr},
+    {data:changeOptions,error:changeErr}
   ]=await Promise.all([
     supabase.from('philosophy_contributors').select('*').eq('club_id',club.id),
     (isAdmin() || isPhilosophyLead())
@@ -3626,7 +3634,8 @@ async function renderWorkshop(){
     (isAdmin() || isPhilosophyLead())
       ?supabase.rpc('get_philosophy_workshop_status',{p_club_id:club.id})
       :Promise.resolve({data:null,error:null}),
-    supabase.rpc('get_workshop_review_context',{p_club_id:targetClubId})
+    supabase.rpc('get_workshop_review_context',{p_club_id:targetClubId}),
+    supabase.rpc('get_workshop_change_options',{p_club_id:targetClubId})
   ]);
 
   if(!stillCurrent())return;
@@ -3723,6 +3732,9 @@ async function renderWorkshop(){
       ${progressHtml}
       ${leadName?`<p class="help" style="margin-top:12px">Philosophy Lead: ${esc(leadName)}</p>`:''}
     </section>`;
+
+  if(changeOptions?.previous_response)html+=`<section class="card" style="margin-top:12px"><h3>Keep your previous contribution?</h3><p>Your responses from Workshop round ${Number(changeOptions.previous_response.round_number)} are available. Load them, review or edit them, then submit for this round.</p><button class="btn secondary" id="reuseWorkshopResponse">Use my saved responses from previous Workshop</button><p id="reuseWorkshopStatus" role="status"></p></section>`;
+  if(isPhilosophyLead()&&hasChosenWorkshopApproach())html+=`<section class="card" style="margin-top:12px"><h3>Want to choose a different How We Bat?</h3>${changeErr?`<p class="notice">${esc(changeErr.message)}</p>`:changeOptions?.can_reopen?'<p>Reopen the choice using the same submitted responses and shared conversation. Nobody needs to redo their contribution.</p><button class="btn ghost" id="reopenWorkshopChoice">Change our How We Bat choice</button><p id="reopenWorkshopStatus" role="status"></p>':`<p>${changeOptions?.completed_plan_exists?'A Player Plan has been completed. To change direction, start a new Workshop round below. Returning contributors can reuse their saved responses.':'The choice cannot be reopened here. Refresh to check the current Workshop.'}</p>`}</section>`;
 
   if(isAdmin() && !setupComplete){
     html+=`<details class="card workshop-setup workshop-stage-card" id="workshopContributors" ${setupSaved?'':'open'}>
@@ -4014,7 +4026,7 @@ async function renderWorkshop(){
       <div class="help" style="margin-top:10px">Rare maintenance actions live here so they do not compete with the normal workshop flow.</div>
       <div style="display:grid;gap:10px;margin-top:12px">
         ${isPhilosophyLead() && workshop?.final_draft_ready && howWeBatDraft?.status!=='ready'?`<div class="notice compact"><strong>Reset How We Bat draft</strong><br>Before How We Bat is locked, you can regenerate the editable draft from the current working philosophy. Any manual edits in the current draft will be replaced.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="resetHowWeBatDraft">Reset How We Bat draft</button></div></div>`:''}
-        <div class="notice compact"><strong>Start a new philosophy round</strong><br>Revisit your club’s approach for a new season, a change of leadership or whenever you want to change direction. The current round is archived and any published How We Bat and Player Plans stay available until a replacement is published.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="startNewPhilosophyRound">Start a new philosophy round</button></div></div>
+        <div class="notice compact"><strong>Start a new philosophy round</strong><br>Archive this round and review who will contribute next. Returning contributors can load their own saved responses, review them and submit again. Published How We Bat and Player Plans stay available until a replacement is published.<div class="btnrow" style="margin-top:8px"><button class="btn ghost" id="startNewPhilosophyRound">Start a new philosophy round</button></div></div>
       </div>
     </details>`;
   }
@@ -4030,6 +4042,8 @@ async function renderWorkshop(){
 
   html+=`<details class="workshop-about"><summary style="cursor:pointer;font-weight:700;padding:14px 0">About this workshop</summary>${buildWorkspaceAudienceNotice()}</details></div>`;
   clubSetupContentPage('workshop').innerHTML=html;
+  document.getElementById('reopenWorkshopChoice')?.addEventListener('click',()=>reopenWorkshopChoice(changeOptions));
+  document.getElementById('reuseWorkshopResponse')?.addEventListener('click',()=>reuseWorkshopResponse(changeOptions));
   if(document.getElementById('workshopGuideLink'))document.getElementById('workshopGuideLink').onclick=()=>openClubBattingGuideTopic('philosophy_workshop');
   if(document.getElementById('workshopNextAction'))document.getElementById('workshopNextAction').onclick=async()=>{
     if(nextStep.action==='response'){await document.getElementById('myResponseAction')?.onclick?.();return;}
@@ -4754,6 +4768,48 @@ async function resetHowWeBatDraftFromCurrentPhilosophy(){
   renderShell();
 }
 
+async function reopenWorkshopChoice(options){
+  const button=document.getElementById('reopenWorkshopChoice');
+  if(!button||button.disabled||!isPhilosophyLead()||!options?.can_reopen)return;
+  if(!confirm('Reopen the How We Bat choice? Everyone’s submitted responses and the shared conversation will stay in this Workshop. Choose another option, review its wording and confirm the Player Plan questions again. Any published version stays available until you publish the replacement.'))return;
+  const targetClub=club.id,targetUser=session.user.id;
+  const expected=workshopReviewContext?.draft_meta?.updated_at||howWeBatDraft?.updated_at||null;
+  button.disabled=true;
+  const status=document.getElementById('reopenWorkshopStatus');status.textContent='Reopening the choice…';
+  let saved=false;
+  try{
+    const {error}=await supabase.rpc('reopen_workshop_how_we_bat',{p_club_id:targetClub,p_round_number:options.round_number,p_expected_draft_updated_at:expected});
+    if(error)throw error;saved=true;
+    if(club?.id!==targetClub||session?.user?.id!==targetUser)return;
+    philosophyScenarioSelectedIds=new Set();philosophyScenarioStateKey='';
+    await loadData();currentTab='workshop';renderShell();
+  }catch(error){
+    if(document.getElementById('reopenWorkshopChoice')!==button)return;
+    status.textContent=saved?'The choice is reopened. Refresh to load the Workshop.':error.message||'Could not confirm the change. Refresh the Workshop before trying again.';
+    button.disabled=saved;
+  }
+}
+
+async function reuseWorkshopResponse(options){
+  const button=document.getElementById('reuseWorkshopResponse');
+  if(!button||button.disabled||!options?.previous_response)return;
+  if(myContribution&&!confirm('Replace your current unsubmitted answers with your saved responses from the previous Workshop? You can review and edit them before submitting.'))return;
+  const targetClub=club.id,targetUser=session.user.id;
+  button.disabled=true;
+  const status=document.getElementById('reuseWorkshopStatus');status.textContent='Loading your saved responses…';
+  let saved=false;
+  try{
+    const {error}=await supabase.rpc('reuse_my_workshop_response',{p_club_id:targetClub,p_round_number:options.round_number,p_archive_id:options.previous_response.archive_id,p_expected_updated_at:myContribution?.updated_at||null});
+    if(error)throw error;saved=true;
+    if(club?.id!==targetClub||session?.user?.id!==targetUser)return;
+    await loadData();currentTab='preview';renderShell();
+  }catch(error){
+    if(document.getElementById('reuseWorkshopResponse')!==button)return;
+    status.textContent=saved?'Your responses are loaded. Refresh to review and submit them.':error.message||'Could not load your responses. Refresh and try again.';
+    button.disabled=saved;
+  }
+}
+
 async function startNewPhilosophyRound(){
   if(!isAdmin()&&!isPhilosophyLead())return;
   const targetClubId=club.id;
@@ -4771,7 +4827,8 @@ async function startNewPhilosophyRound(){
     `• archive the current workshop responses and working state\n`+
     `• clear the current editable Philosophy / How We Bat / Player Plan Structure drafts\n`+
     `• keep all published versions unchanged\n`+
-    `• return the current contributor list to a fresh invited state so you can keep, remove or add people before they respond again\n\n`+
+    `• return the current contributor list to a fresh invited state so you can keep, remove or add people\n`+
+    `• let returning contributors load their own saved responses, review them and submit again without retyping\n\n`+
     `Your club details, players and Playing Groups stay in place. You can choose a new Philosophy Lead and contributors, then work through How We Bat and Player Plan Structure in order before publishing the replacement.`
   );
   if(!ok)return;
@@ -6234,7 +6291,7 @@ async function saveHowWeBatBuilder(status){
     const ok=confirm(
       `Lock How We Bat for the season?\n\n`+
       `This confirms the club's How We Bat and unlocks Player Plan Structure. Once locked, the wording cannot be reopened for routine editing.\n\n`+
-      `Only a new Batting Philosophy Workshop round can replace it, because changing How We Bat changes the foundation used for Player Plans.\n\n`+
+      `Before any Player Plan is completed, the Philosophy Lead can reopen the choice in the Workshop using the same contributions. After that, a new round is required; contributors can reuse their saved responses.\n\n`+
       `Lock How We Bat and continue?`
     );
     if(!ok)return false;
@@ -6378,7 +6435,7 @@ async function lockCurrentHowWeBat(){
   const ok=confirm(
     `Lock How We Bat for the season?\n\n`+
     `This confirms the club's position and unlocks Player Plan Structure. Once locked, How We Bat cannot be reopened for routine editing.\n\n`+
-    `That is deliberate: Player Plan prompts flow from How We Bat. A different How We Bat requires a new Batting Philosophy Workshop round.\n\n`+
+    `Before any Player Plan is completed, you can reopen the choice in the Workshop using the same contributions. After that, start a new round; contributors can reuse their saved responses.\n\n`+
     `Lock How We Bat and continue?`
   );
   if(!ok)return;
@@ -7218,6 +7275,10 @@ async function submitPhilosophyResponse(){
 /* ---------------- PERMISSIONS ---------------- */
 
 async function renderPermissions(){
+  const draftState=permissionDrafts();
+  const sequence=++permissionsRenderSequence;
+  const targetClub=club.id,targetUser=session.user.id,targetTab=currentTab;
+  const stillCurrent=()=>permissionsRenderSequence===sequence&&club?.id===targetClub&&session?.user?.id===targetUser&&currentTab===targetTab;
   document.getElementById('page').innerHTML='<div class="splash">Loading people & sign-up…</div>';
 
   const {data:members,error}=await supabase
@@ -7225,13 +7286,14 @@ async function renderPermissions(){
     .select('club_id,user_id,involvement,permission_role')
     .eq('club_id',club.id);
 
+  if(!stillCurrent())return;
   if(error){
     document.getElementById('page').innerHTML=`<div class="notice">${esc(error.message)}</div>`;
     return;
   }
 
   const userIds=(members||[]).map(m=>m.user_id);
-  const [{data:profiles},{data:grants},{data:players},{data:playingGroups},{data:pendingHandovers}]=await Promise.all([
+  const [{data:profiles,error:profileError},{data:grants,error:grantError},{data:players,error:playerError},{data:playingGroups,error:groupError},{data:pendingHandovers,error:handoverError}]=await Promise.all([
     userIds.length?supabase.from('user_profiles').select('*').in('user_id',userIds):Promise.resolve({data:[]}),
     supabase.from('club_access_grants').select('*').eq('club_id',club.id),
     supabase.from('players').select('id,user_id,display_name,active').eq('club_id',club.id),
@@ -7239,6 +7301,12 @@ async function renderPermissions(){
     supabase.from('club_admin_handovers').select('*').eq('club_id',club.id).eq('status','pending').order('created_at',{ascending:false}).limit(1)
   ]);
 
+  if(!stillCurrent())return;
+  const accessLoadError=profileError||grantError||playerError||groupError||handoverError;
+  if(accessLoadError){
+    document.getElementById('page').innerHTML=`<section class="card"><h2>People could not be loaded</h2><p>${esc(accessLoadError.message)}</p><p>Your unsaved changes are kept while this page is open.</p><button class="btn secondary" id="retryPeopleLoad">Try again</button></section>`;
+    document.getElementById('retryPeopleLoad').onclick=renderPermissions;return;
+  }
   const pMap=new Map((profiles||[]).map(p=>[p.user_id,p]));
   const grantMap=new Map();
   for(const g of grants||[]){
@@ -7272,7 +7340,7 @@ async function renderPermissions(){
   const registrationLabel=m=>{
     if(m.involvement==='coach_captain')return 'Non-playing staff';
     if(playerUserIds.has(m.user_id) || ['player','both'].includes(m.involvement))return 'Registered player';
-    return 'Registered member';
+    return 'Playing involvement not yet chosen';
   };
 
   const accessStateFor=userId=>{
@@ -7330,7 +7398,7 @@ async function renderPermissions(){
         ${m.permission_role!=='admin'&&access==='pending'?'<span class="pending">PLAYER ACCESS NOT SET</span>':''}
       </div>
       <div class="member-controls">
-        <select data-role-user="${m.user_id}">
+        <select data-role-user="${m.user_id}" aria-label="Club role for ${esc(name)}">
           ${[
             ['none','No club role'],
             ['captain','Captain'],
@@ -7339,15 +7407,13 @@ async function renderPermissions(){
             ['admin','Admin']
           ].map(([v,l])=>`<option value="${v}" ${m.permission_role===v?'selected':''}>${l}</option>`).join('')}
         </select>
-        ${m.permission_role==='admin'
-          ?'<select disabled><option>Full club access</option></select>'
-          :`<select data-access-user="${m.user_id}">
+        <select data-access-user="${m.user_id}" aria-label="Player access for ${esc(name)}">
             <option value="pending" ${access==='pending'?'selected':''}>No assigned player access</option>
             <option value="whole_view" ${access==='whole_view'?'selected':''}>Whole club · view</option>
             <option value="whole_edit" ${access==='whole_edit'?'selected':''}>Whole club · view + edit</option>
             <option value="groups_view" ${access==='groups_view'?'selected':''}>Selected Playing Groups · view</option>
             <option value="groups_edit" ${access==='groups_edit'?'selected':''}>Selected Playing Groups · view + edit</option>
-          </select>`}
+          </select>
         <div class="permission-group-picker" data-group-picker-user="${m.user_id}" style="display:${m.permission_role!=='admin'&&['groups_view','groups_edit'].includes(access)?'flex':'none'}">
           ${activeGroups.length?activeGroups.map(g=>`<label>
             <input type="checkbox" data-access-group-user="${m.user_id}" value="${g.id}" ${selectedGroupIds.includes(g.id)?'checked':''}>
@@ -7444,6 +7510,8 @@ async function renderPermissions(){
 
     <div style="margin-top:18px">
       <div class="section-label">People with club roles</div>
+      <p class="help">Playing involvement decides who has a Player Plan. Club roles and player access are separate. People joining through a Workshop invitation must also choose whether they play.</p>
+      <div class="btnrow"><button class="btn secondary" id="saveAllPeopleChanges" disabled>Save all changes</button><span id="peopleChangesStatus" role="status" aria-live="polite"></span></div>
       <div class="member-list">${roleMemberHtml||'<div class="notice">No Captain, Coach, Head Coach or additional Admin roles have been assigned yet.</div>'}</div>
     </div>
   </section>
@@ -7713,11 +7781,13 @@ async function renderPermissions(){
     };
   }
 
+  draftState.baselines=new Map(roleMembers.map(m=>[m.user_id,{role:m.permission_role,access:m.permission_role==='admin'?'whole_edit':accessStateFor(m.user_id).access,groups:accessStateFor(m.user_id).selectedGroupIds.sort()}]));
   const markPermissionDirty=userId=>{
-    const button=document.querySelector(`[data-save-user="${userId}"]`);
-    if(!button)return;
-    button.disabled=false;
-    button.textContent='Save changes';
+    const value=readPermissionRow(userId);
+    if(!value)return;
+    if(JSON.stringify(value)===JSON.stringify(draftState.baselines.get(userId)))draftState.edits.delete(userId);
+    else draftState.edits.set(userId,value);
+    draftState.errors.delete(userId);updatePermissionControls(draftState);
   };
 
   document.querySelectorAll('[data-role-user]').forEach(s=>s.onchange=()=>{
@@ -7735,6 +7805,23 @@ async function renderPermissions(){
   });
 
   document.querySelectorAll('[data-save-user]').forEach(b=>b.onclick=()=>saveMemberPermission(b.dataset.saveUser));
+  for(const [userId,value] of draftState.edits){
+    const role=document.querySelector(`[data-role-user="${userId}"]`);
+    if(!role){draftState.edits.delete(userId);continue;}
+    role.value=value.role;
+    document.querySelector(`[data-access-user="${userId}"]`).value=value.access;
+    document.querySelectorAll(`[data-access-group-user="${userId}"]`).forEach(x=>x.checked=value.groups.includes(x.value));
+  }
+  updatePermissionControls(draftState);
+  document.getElementById('saveAllPeopleChanges').onclick=async()=>{
+    if(draftState.saving.size)return;
+    const pending=[...draftState.edits.keys()];
+    for(const userId of pending){
+      if(permissionDraftState!==draftState||club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!==targetTab)return;
+      if(!await saveMemberPermission(userId,{refresh:false}))break;
+    }
+    if(stillCurrent())await renderPermissions();
+  };
 }
 
 function labelInvolvement(v){
@@ -7749,69 +7836,62 @@ function labelInvolvement(v){
           :'Not set';
 }
 
-async function saveMemberPermission(userId){
-  const button=document.querySelector(`[data-save-user="${userId}"]`);
-  const role=document.querySelector(`[data-role-user="${userId}"]`).value;
-  const access=role==='admin'?'whole_edit':(document.querySelector(`[data-access-user="${userId}"]`)?.value||'pending');
-  const selectedGroupIds=[...document.querySelectorAll(`[data-access-group-user="${userId}"]:checked`)].map(x=>x.value);
+function permissionDrafts(){
+  const key=`${session?.user?.id}:${club?.id}`;
+  if(permissionDraftState?.key!==key)permissionDraftState={key,edits:new Map(),baselines:new Map(),saving:new Set(),errors:new Map()};
+  return permissionDraftState;
+}
 
-  if(button){
-    button.disabled=true;
-    button.textContent='Saving…';
+function readPermissionRow(userId){
+  const control=document.querySelector(`[data-role-user="${userId}"]`);
+  if(!control)return null;
+  const role=control.value;
+  const access=role==='admin'?'whole_edit':role==='none'?'pending':document.querySelector(`[data-access-user="${userId}"]`)?.value||'pending';
+  return {role,access,groups:['groups_view','groups_edit'].includes(access)?[...document.querySelectorAll(`[data-access-group-user="${userId}"]`)].filter(x=>x.checked).map(x=>x.value).sort():[]};
+}
+
+function updatePermissionControls(state){
+  if(permissionDraftState!==state)return;
+  document.querySelectorAll('[data-save-user]').forEach(button=>{
+    const id=button.dataset.saveUser,role=document.querySelector(`[data-role-user="${id}"]`),access=document.querySelector(`[data-access-user="${id}"]`);
+    const busy=state.saving.has(id),dirty=state.edits.has(id);
+    button.disabled=busy||!dirty;button.textContent=busy?'Saving…':state.errors.has(id)?'Retry save':dirty?'Save changes':'Saved ✓';
+    role.disabled=busy;
+    access.disabled=busy||['admin','none'].includes(role.value);
+    if(role.value==='admin')access.value='whole_edit';
+    if(role.value==='none')access.value='pending';
+    const groupAccess=['groups_view','groups_edit'].includes(access.value)&&!['admin','none'].includes(role.value);
+    const picker=document.querySelector(`[data-group-picker-user="${id}"]`);if(picker)picker.style.display=groupAccess?'flex':'none';
+    document.querySelectorAll(`[data-access-group-user="${id}"]`).forEach(x=>x.disabled=busy);
+  });
+  const saveAll=document.getElementById('saveAllPeopleChanges');if(saveAll)saveAll.disabled=!state.edits.size||!!state.saving.size;
+  const status=document.getElementById('peopleChangesStatus');
+  if(status)status.textContent=state.errors.size?[...state.errors.values()].join(' '):state.saving.size?'Saving changes…':state.edits.size?`${state.edits.size} ${state.edits.size===1?'person has':'people have'} unsaved changes.`:'All changes saved.';
+}
+
+async function saveMemberPermission(userId,{refresh=true}={}){
+  const state=permissionDrafts();
+  if(state.saving.has(userId))return false;
+  const value=state.edits.get(userId);if(!value)return true;
+  const targetClub=club.id,targetUser=session.user.id,targetTab=currentTab;
+  if(['groups_view','groups_edit'].includes(value.access)&&!value.groups.length){
+    state.errors.set(userId,'Choose at least one Playing Group before saving.');updatePermissionControls(state);return false;
   }
-
-  const restoreUnsavedButton=()=>{
-    if(!button)return;
-    button.disabled=false;
-    button.textContent='Save changes';
-  };
-
-  const {error:roleError}=await supabase
-    .from('club_memberships')
-    .update({permission_role:role})
-    .eq('club_id',club.id)
-    .eq('user_id',userId);
-
-  if(roleError){restoreUnsavedButton();alert(roleError.message);return;}
-
-  const {error:deleteError}=await supabase
-    .from('club_access_grants')
-    .delete()
-    .eq('club_id',club.id)
-    .eq('user_id',userId);
-
-  if(deleteError){restoreUnsavedButton();alert(deleteError.message);return;}
-
-  let rows=[];
-  if(access==='whole_view'){
-    rows=[{club_id:club.id,user_id:userId,scope:'whole_club',can_view:true,can_edit:false}];
-  }
-  if(access==='whole_edit'){
-    rows=[{club_id:club.id,user_id:userId,scope:'whole_club',can_view:true,can_edit:true}];
-  }
-  if(access==='groups_view' || access==='groups_edit'){
-    if(!selectedGroupIds.length){
-      restoreUnsavedButton();
-      alert('Choose at least one Playing Group for this access level.');
-      return;
-    }
-    rows=selectedGroupIds.map(groupId=>({
-      club_id:club.id,
-      user_id:userId,
-      scope:'playing_group',
-      playing_group_id:groupId,
-      can_view:true,
-      can_edit:access==='groups_edit'
-    }));
-  }
-
-  if(rows.length){
-    const {error}=await supabase.from('club_access_grants').insert(rows);
-    if(error){alert(error.message);return;}
-  }
-
-  if(button)button.textContent='Saved ✓';
-  await loadContext();
+  state.saving.add(userId);state.errors.delete(userId);updatePermissionControls(state);
+  let saved=false;
+  try{
+    const {error}=await supabase.rpc('save_club_person_access',{p_club_id:targetClub,p_user_id:userId,p_role:value.role,p_access:value.access,p_group_ids:value.groups});
+    if(error)throw error;
+    saved=true;
+    if(state.edits.get(userId)===value)state.edits.delete(userId);
+    state.baselines.set(userId,value);
+  }catch(error){state.errors.set(userId,error.message||'Could not save this person. Your changes are still here; try again.');}
+  finally{state.saving.delete(userId);}
+  if(permissionDraftState!==state||club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!==targetTab)return saved;
+  updatePermissionControls(state);
+  // Other edited rows live in state.edits and are reapplied after this read.
+  if(saved&&refresh)await renderPermissions();
+  return saved;
 }
 
 
@@ -11663,7 +11743,7 @@ async function renderPhilosophyInviteRoute(token){
   app.innerHTML=`<div class="login" style="max-width:650px">
     <div class="section-label">Philosophy contributor invitation</div>
     <h1>Contribute to ${esc(i.club_name)}</h1>
-    <p>This gives you access only to the Batting Philosophy Workshop unless the club separately gives you another role or permission.</p>
+    <p>Accept your Workshop invitation, then confirm whether you also play for this club. Players get their own Player Plan. The Club Admin assigns Captain, Coach or Admin roles and player access separately.</p>
     <div class="field"><label>Your name</label><input id="philosophyInviteName" value="${esc(i.invited_name||'')}"></div>
     <div class="btnrow">
       <button class="btn secondary" id="acceptPhilosophyInvite">Accept & start</button>
