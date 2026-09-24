@@ -1,10 +1,10 @@
-// Club Batting v0.8.62.10 — Workshop navigation, shared comparisons and discussion
+// Club Batting v0.8.62.11 — Explicit Workshop choice and one shared conversation
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.10';
+const APP_UI_VERSION='0.8.62.11';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -88,6 +88,7 @@ let philosophyScenarioStateKey='';
 let philosophyScenarioFormat='limited_overs';
 let workshopReviewContext=null;
 let workshopPreview=null;
+let workshopConversation=null;
 let workshopDiscussionTimer=null;
 let workshopLastRoute='';
 const workshopCommentDrafts=new Map();
@@ -1639,6 +1640,12 @@ function hasLockedHowWeBatForCurrentRound(){
 }
 // One persisted-state model drives the landing page, overview and route guards.
 // A new workshop never borrows completion from the system players are still using.
+function hasChosenWorkshopApproach(round=workshop,draft=howWeBatDraft){
+  // Draft generation and contribution submission are not a club decision.
+  // Preserve already-confirmed legacy work; new choices have an explicit marker.
+  const activeRound=round?!!round.final_draft_ready:true;
+  return activeRound&&(draft?.status==='ready'||!!round?.how_we_bat_selected_at);
+}
 function clubSetupProgress(state={club,workshop,howWeBatDraft,playerPlanStructureDraft,philosophyVersions,howWeBatVersions,playerPlanStructureVersions}){
   const c=state.club||{};
   const round=state.workshop||null;
@@ -1651,7 +1658,7 @@ function clubSetupProgress(state={club,workshop,howWeBatDraft,playerPlanStructur
   const detailsReady=!!(c.branding_updated_at||c.logo_data_url||c.website_url||systemLive);
   // Older clubs can have a saved draft without a workshop row. An unfinished
   // current workshop cannot inherit a leftover draft from an earlier round.
-  const workshopReady=published||!!round?.final_draft_ready||(!round&&!!hwbDraft);
+  const workshopReady=published||hasChosenWorkshopApproach(round,hwbDraft);
   const howWeBatReady=workshopReady&&(published||hwbDraft?.status==='ready');
   const structureReady=howWeBatReady&&(published||planDraft?.status==='ready');
   const steps=[
@@ -1739,7 +1746,7 @@ function clubSetupStyles(){
 }
 
 function clubSetupStepStatus(step){
-  if(step.key==='workshop'&&step.complete)return 'Working draft chosen';
+  if(step.key==='workshop'&&step.complete)return 'Completed · How We Bat selected';
   return step.complete?'Complete':'Not complete';
 }
 function clubSetupProgressHtml(progress){
@@ -1768,6 +1775,7 @@ async function expandClubHomeStage(key,progress){
   const waiting=step.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
   const canAct=current&&canActOnClubSetupStep(step);
   const canView=step.complete&&canOpenClubTab(step.tab)&&(key!=='details'||isAdmin());
+  const inlineWorkshop=key==='workshop'&&canOpenClubTab('workshop')&&(canView||myContributor?.status==='submitted'||(isPhilosophyLead()&&workshop?.final_draft_ready));
   const description=step.complete
     ?(key==='publish'?'The club’s batting approach and Player Plan questions are published. Registered players can now build their Player Plans, train, and learn through feedback. People can continue to register.':`View the saved ${step.title}. The full phase information is shown below.`)
     :current?(waiting?'Your response is submitted. You can now compare and discuss the options. Only the Philosophy Lead confirms the club’s approach.':step.description)
@@ -1778,7 +1786,11 @@ async function expandClubHomeStage(key,progress){
     page.querySelector(`[data-club-stage="${key}"]`)?.focus({preventScroll:true});
   };
   if(key==='details'&&(canAct||canView)&&branding){branding.hidden=false;return;}
-  if(canView&&key!=='details'){
+  if(inlineWorkshop){
+    document.getElementById('clubHomeStageHeading').innerHTML=`<div class="section-label">Workshop · ${step.complete?'Completed — How We Bat selected':'Choose How We Bat'}</div><button class="btn ghost compact-btn" type="button" id="closeClubHomeStage">Close details</button>`;
+    document.getElementById('closeClubHomeStage').onclick=()=>expandClubHomeStage(null,progress);
+  }
+  if((canView||inlineWorkshop)&&key!=='details'){
     try{
       if(key==='workshop')await renderWorkshop();
       else if(key==='howwebat')renderPublishedHowWeBat();
@@ -2309,7 +2321,7 @@ function renderTab(){
   const scrollOnArrival=route!==workshopLastRoute&&(workshopTabs.includes(currentTab)||workshopTabs.includes(previousTab));
   workshopLastRoute=route;
   if(currentTab!=='workshop_preview'){
-    clearTimeout(workshopDiscussionTimer);
+    if(!['workshop','dashboard'].includes(currentTab))clearTimeout(workshopDiscussionTimer);
     if(history.state?.clubBattingWorkshop?.view==='preview')history.replaceState({...history.state,clubBattingWorkshop:null},'');
   }
   const arrived=()=>{
@@ -3570,16 +3582,16 @@ function workshopNextStep({me,setupSaved,leadName,outstandingNames,canCompare,lo
     ?{title:'Choose who will shape your club’s approach.',body:'Select a Philosophy Lead and save the contributors for this round. Each person then answers independently.',action:'setup',label:'Choose contributors'}
     :{title:'Your workshop is being prepared.',body:'Your Club Admin needs to choose a Philosophy Lead and save the contributors before this round can begin.'};
   if(workshop?.status==='published')return {title:'Your club’s approach is in use.',body:'Players can use the published How We Bat, build their Player Plans and put them into practice. This round’s original responses remain available below.',action:'dashboard',label:'Return to Club Home'};
-  if(isPhilosophyLead()&&(workshop?.final_draft_ready||howWeBatDraft))return howWeBatDraft?.status==='ready'
+  if(isPhilosophyLead()&&hasChosenWorkshopApproach())return howWeBatDraft?.status==='ready'
     ?{title:'How We Bat is confirmed.',body:'Return to Club Home for the next setup step. The original contributions and this round’s decisions are preserved below.',action:'dashboard',label:'Continue club setup'}
     :{title:'Review and confirm How We Bat.',body:'Your chosen contributions have become the club’s draft. Check the messages players will use, make any final edits and confirm the approach.',action:'howwebat',label:'Review How We Bat'};
-  if(me&&me.status!=='submitted')return {
+  if(me&&me.status!=='submitted'&&!canCompare)return {
     title:me.status==='in_progress'?'Finish your independent response.':'Add your batting perspective.',
     body:me.status==='in_progress'?'Your saved answers are waiting. Continue through the remaining steps, then review and submit your response.':'Choose what matters to your club, explain where useful and set the emphasis for each format. Other responses stay hidden until you submit your own.',
     action:'response',label:me.status==='in_progress'?'Continue my response':'Start my response'
   };
-  if(!isPhilosophyLead()&&canCompare&&!loadError)return {title:me?.status==='submitted'?'Your response is submitted. Compare and discuss How We Bat.':'Compare and discuss How We Bat.',body:`Explore the combinations of submitted responses and add a comment on any preview. ${waiting} Only ${lead} can confirm the club’s approach.`,action:'compare',label:'Compare and discuss How We Bat'};
-  if(isPhilosophyLead()&&canCompare&&!loadError)return {title:'Choose the approach your club will use.',body:`Compare the submitted contributions and preview how they shape How We Bat. ${waiting||'The invited contributors have submitted their responses.'} You decide when to move forward with the responses available.`,action:'compare',label:'Compare contributions'};
+  if(!isPhilosophyLead()&&canCompare&&!loadError)return {title:me?.status==='submitted'?'Your response is submitted. Compare and discuss How We Bat.':'Compare and discuss How We Bat.',body:`Explore the combinations above and join the shared conversation about which version fits the club. ${waiting} Only ${lead} can confirm the club’s approach.`,action:'compare',label:'Compare How We Bat options'};
+  if(isPhilosophyLead()&&canCompare&&!loadError)return {title:'Choose the approach your club will use.',body:`Compare the versions and discuss them together. Select “Choose this How We Bat” in a preview when you have decided. ${waiting||'The invited contributors have submitted their responses.'} You decide when to move forward with the responses available.`,action:'compare',label:'Compare contributions'};
   if(loadError)return {title:'The submitted contributions could not be loaded.',body:'Your saved responses are still recorded. Open the contribution details for the error and try again before choosing your club’s approach.',action:'status',label:'View contribution details'};
   return {title:`${lead} is bringing the club approach together.`,body:`${me?.status==='submitted'?'Your response is submitted and preserved. ':''}${waiting||'The next step is for the Philosophy Lead to compare the submitted responses and choose the approach used for How We Bat.'}`,action:me?.status==='submitted'?'response':'status',label:me?.status==='submitted'?'Review my response':'View contribution progress'};
 }
@@ -3648,6 +3660,7 @@ async function renderWorkshop(){
   }
   if(!stillCurrent())return;
 
+  if(reviewContext?.workshop_state)workshop={...workshop,...reviewContext.workshop_state};
   const pMap=new Map(profiles.map(x=>[x.user_id,x]));
   const elevatedCricketRoles=new Set(['captain','coach','head_coach','admin']);
   const staffMembers=(members||[]).filter(m=>elevatedCricketRoles.has(m.permission_role));
@@ -3698,11 +3711,16 @@ async function renderWorkshop(){
   const leadName=pMap.get(workshop?.philosophy_lead_user_id)?.display_name||visibleResponses.find(r=>r.user_id===workshop?.philosophy_lead_user_id)?.display_name||'';
   const outstandingNames=reviewContext?.outstanding_names||[];
   const nextStep=workshopNextStep({me,setupSaved,leadName,outstandingNames,canCompare:canSeeSynthesis&&scenarioResponses.length>0,loadError:synthesisLoadError});
-  let html=`<div class="guide-context-bar"><span><strong>Batting Philosophy Workshop</strong></span><button type="button" class="btn ghost compact-btn" id="workshopGuideLink">Workshop help</button></div><div class="workshop-flow-stack">
-    <section class="card workshop-next-step" id="workshopNextStep" style="border-left:4px solid var(--navy,#242e72)">
+  const comparisonFirst=canSeeSynthesis&&(!hasChosenWorkshopApproach()||!isPhilosophyLead());
+  const progressHtml=invitedTotal?`<p class="notice compact" id="workshopResponseProgress" role="status"><strong>${submittedCount} of ${invitedTotal} responses submitted</strong> · ${outstandingCount?`${outstandingCount} still to contribute. They can continue submitting.`:'All invited responses are in.'}<br>${hasChosenWorkshopApproach()?(howWeBatDraft?.status==='ready'?'How We Bat is confirmed.':'The Philosophy Lead has selected How We Bat. Final wording review is next.'):'The Workshop stays in progress until the Philosophy Lead chooses How We Bat.'}</p>`:'';
+  synthesisMeta.progressHtml=comparisonFirst?progressHtml:'';
+  const conversationKey=[targetClubId,session.user.id,reviewContext?.round_number].join(':');
+  workshopConversation=canSeeSynthesis?(workshopConversation?.key===conversationKey?workshopConversation:{clubId:targetClubId,userId:session.user.id,round:reviewContext.round_number,key:conversationKey,loading:false,sending:false}):null;
+  let html=`${comparisonFirst?'':'<div class="guide-context-bar"><span><strong>Batting Philosophy Workshop</strong></span><button type="button" class="btn ghost compact-btn" id="workshopGuideLink">Workshop help</button></div>'}<div class="workshop-flow-stack"><!--comparison-first-->`;
+  if(!comparisonFirst)html+=`<section class="card workshop-next-step" id="workshopNextStep" style="border-left:4px solid var(--navy,#242e72)">
       <div class="section-label">Your next step</div><h2>${esc(nextStep.title)}</h2><p class="help">${esc(nextStep.body)}</p>
       ${nextStep.action?`<div class="btnrow"><button type="button" class="btn secondary" id="workshopNextAction" data-workshop-next="${nextStep.action}">${esc(nextStep.label)}</button></div>`:''}
-      ${invitedTotal?`<p class="notice compact" role="status"><strong>${submittedCount} of ${invitedTotal} responses submitted</strong> · ${outstandingCount?`${outstandingCount} still to contribute. They can continue submitting.`:"All invited responses are in."}<br>${howWeBatDraft?.status==='ready'?'How We Bat is confirmed.':workshop?.final_draft_ready?'A working draft has been chosen. How We Bat is not confirmed yet.':'Only the Philosophy Lead confirms the club’s How We Bat.'}</p>`:''}
+      ${progressHtml}
       ${leadName?`<p class="help" style="margin-top:12px">Philosophy Lead: ${esc(leadName)}</p>`:''}
     </section>`;
 
@@ -3967,25 +3985,29 @@ async function renderWorkshop(){
     </section>`;
   }
 
-  html+='</details><div id="workshopComparison">';
+  html+='</details>';
+  let comparisonHtml='<div id="workshopComparison">';
   if(canSeeSynthesis){
     if(synthesisLoadError){
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>The submitted responses could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
+      comparisonHtml+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>The submitted responses could not be loaded.</h2><div class="notice">${esc(synthesisLoadError.message)}</div></section>`;
     }else if(scenarioResponses.length){
-      html+=renderSynthesis(scenarioResponses,pMap,allSubmitted,synthesisMeta);
+      comparisonHtml+=renderSynthesis(scenarioResponses,pMap,allSubmitted,synthesisMeta);
     }else{
-      html+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>Submitted responses will appear here.</h2><div class="help">Once a response is available, you can preview the How We Bat options. The Philosophy Lead chooses which option to use.</div></section>`;
+      comparisonHtml+=`<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>Submitted responses will appear here.</h2><div class="help">Once a response is available, you can preview the How We Bat options. The Philosophy Lead chooses which option to use.</div></section>`;
     }
 
   }else if(totalCount>1 && me){
-    html+=`<section class="card synthesis-locked workshop-stage-card" style="margin-top:16px">
+    comparisonHtml+=`<section class="card synthesis-locked workshop-stage-card" style="margin-top:16px">
       <div class="section-label">3 · Compare How We Bat options</div>
       <h2>Submit first, then explore the options.</h2>
       <div class="help">Responses stay independent while people are completing them.</div>
     </section>`;
   }
 
-  html+='</div>';
+  if(canSeeSynthesis)comparisonHtml+=renderWorkshopConversation(workshopConversation);
+  comparisonHtml+='</div>';
+  if(comparisonFirst)html=html.replace('<!--comparison-first-->',()=>comparisonHtml);
+  else html+=comparisonHtml;
   if(isAdmin() || isPhilosophyLead()){
     html+=`<details class="card workshop-maintenance" style="margin-top:16px">
       <summary style="cursor:pointer;font-weight:700">Workshop settings</summary>
@@ -4272,12 +4294,13 @@ async function renderWorkshop(){
     };
   }
   rememberWorkshopSetupSnapshot();
+  if(workshopConversation)return bindWorkshopConversation(workshopConversation);
 }
 
 async function saveWorkshopSetup(existingRows,externalInvites=[]){
   if(!isAdmin())return;
   if(workshop?.final_draft_ready || howWeBatDraft || workshop?.status==='published'){
-    alert('This workshop setup is complete. Review the existing contributions, or use Start new philosophy round in Workshop settings to change the setup. Your current work has not been changed.');
+    alert('The contributor list is fixed for this round. Compare the existing responses, or use Start new philosophy round in Workshop settings to change the contributor list. Your current work has not been changed.');
     return;
   }
   const s=document.getElementById('workshopSetupStatus');
@@ -4650,14 +4673,11 @@ function scenarioResponsePool(baseResponses,lateActions,pMap){
 function ensurePhilosophyScenarioSelection(responses,defaultIds=[]){
   const validIds=(responses||[]).map(r=>r.user_id).filter(Boolean);
   const leadId=workshop?.philosophy_lead_user_id;
-  const stateKey=`${club?.id||''}:${validIds.slice().sort().join(',')}:${workshop?.final_draft_started_at||'live'}`;
+  const stateKey=`${club?.id||''}:${validIds.slice().sort().join(',')}:${workshop?.final_draft_started_at||'live'}:${workshop?.how_we_bat_selected_at||'unselected'}`;
   if(philosophyScenarioStateKey!==stateKey){
     philosophyScenarioStateKey=stateKey;
-    let persisted=[];
-    if(workshop?.final_draft_ready){
-      try{persisted=JSON.parse(sessionStorage.getItem(`bdp-philosophy-working-voices:${club?.id||''}`)||'[]');}catch(e){persisted=[];}
-    }
-    const seed=(Array.isArray(persisted)&&persisted.length)?persisted:(defaultIds||[]);
+    const chosen=workshop?.how_we_bat_selected_response_ids;
+    const seed=(hasChosenWorkshopApproach()&&Array.isArray(chosen)&&chosen.length)?chosen:(defaultIds||[]);
     philosophyScenarioSelectedIds=new Set(seed.filter(id=>validIds.includes(id)));
     if(!philosophyScenarioSelectedIds.size && leadId && validIds.includes(leadId))philosophyScenarioSelectedIds.add(leadId);
     if(!philosophyScenarioSelectedIds.size && validIds[0])philosophyScenarioSelectedIds.add(validIds[0]);
@@ -4832,7 +4852,7 @@ function openScenarioHowWeBatPreview(responses,pMap){
   const ids=selected.map(r=>r.user_id).sort();
   workshopPreview={clubId:club.id,userId:session.user.id,round:ctx.round_number,ids,responses:selected,pMap,draft,format:formats[0][0],
     names:selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'),
-    key:[club.id,session.user.id,ctx.round_number,...ids].join(':'),loading:false,sending:false};
+    key:[club.id,session.user.id,ctx.round_number,...ids].join(':'),expectedDraftUpdatedAt:ctx.draft_meta?.updated_at??howWeBatDraft?.updated_at??null,hasExistingDraft:!!(ctx.draft_meta||howWeBatDraft),choiceRequestId:null};
   const marker={clubId:club.id,userId:session.user.id};
   history.replaceState({...history.state,clubBattingWorkshop:{...marker,view:'workshop'}},'');
   history.pushState({...history.state,clubBattingWorkshop:{...marker,view:'preview'}},'');
@@ -4840,12 +4860,6 @@ function openScenarioHowWeBatPreview(responses,pMap){
 }
 function workshopPreviewCurrent(ctx){
   return workshopPreview===ctx&&currentTab==='workshop_preview'&&club?.id===ctx.clubId&&session?.user?.id===ctx.userId;
-}
-function workshopDiscussionCurrent(ctx){
-  return workshopPreviewCurrent(ctx)&&!!document.getElementById('workshopCommentForm');
-}
-function workshopDiscussionArgs(ctx){
-  return {p_club_id:ctx.clubId,p_round_number:ctx.round,p_scenario_user_ids:ctx.ids};
 }
 function renderWorkshopPreview(){
   const ctx=workshopPreview;
@@ -4855,88 +4869,90 @@ function renderWorkshopPreview(){
   const page=document.getElementById('page');
   page.innerHTML=`<style>
     .workshop-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-    .workshop-preview-head .btn,.workshop-discussion .btn{min-height:44px}
+    .workshop-preview-head .btn{min-height:44px}
     .workshop-preview .hwb-publication-preview{margin-top:12px}.workshop-preview .hwb-public-tabs{display:none}
-    .workshop-discussion{margin-top:20px}.workshop-comment{padding:14px 0;border-bottom:1px solid #dce2ee;overflow-wrap:anywhere}
-    .workshop-comment p{white-space:pre-wrap;line-height:1.6;margin:8px 0}.workshop-comment time{display:block;font-size:12px;color:#59657c;margin-top:4px}
-    .workshop-discussion textarea{width:100%;box-sizing:border-box;min-height:110px}.workshop-discussion [role="status"]{display:block;margin:10px 0}
     @media(max-width:600px){.workshop-preview .hwb-public-hero{padding:22px 18px}.workshop-preview .hwb-public-body{padding:20px 16px}}
   </style><div class="workshop-preview">
-    <div class="workshop-preview-head"><button type="button" class="btn ghost" id="backWorkshopPreview">← Back to Workshop</button><button type="button" class="btn ghost" id="jumpWorkshopDiscussion">Discuss this version ↓</button></div>
-    <section class="card"><div class="section-label">Comparison preview · Workshop round ${Number(ctx.round)}</div><h1 style="font-size:clamp(23px,4vw,32px)">How We Bat: ${esc(naturalList(ctx.names))}</h1><p class="help">This preview shows how these submitted responses combine. Exploring and commenting does not change the club’s chosen approach. Only the Philosophy Lead can confirm How We Bat.</p>
+    <div class="workshop-preview-head"><button type="button" class="btn ghost" id="backWorkshopPreview">← Back to Workshop</button></div>
+    <section class="card"><div class="section-label">Comparison preview · Workshop round ${Number(ctx.round)}</div><h1 style="font-size:clamp(23px,4vw,32px)">How We Bat: ${esc(naturalList(ctx.names))}</h1><p class="help">This preview shows how these submitted responses combine. Opening a preview does not choose it. Use the shared conversation on the Workshop screen to discuss all versions. Only the Philosophy Lead can confirm How We Bat.</p>
     <div class="btnrow">${formats.map(([f,label])=>`<button class="btn ${f===ctx.format?'secondary':'ghost'}" type="button" data-workshop-preview-format="${esc(f)}" aria-pressed="${f===ctx.format}">${esc(label)}</button>`).join('')}</div></section>
     <div id="workshopVersionContent">${renderHowWeBatLivePreview(ctx.draft,ctx.format,false)}</div>
-    ${isPhilosophyLead()&&howWeBatDraft?.status!=='ready'?'<section class="card" style="margin-top:16px"><h2>Use this as the working draft?</h2><p class="help">You can edit the wording next. Confirm How We Bat only when you are ready to lock the approach for the season.</p><button type="button" class="btn secondary" id="usePreviewScenario">Use this version as our draft →</button></section>':''}
-    <section class="card workshop-discussion" aria-labelledby="workshopDiscussionHeading"><div class="section-label">Shared discussion</div><h2 id="workshopDiscussionHeading" tabindex="-1">Discuss this version</h2><p class="help">Comments here belong to this combination of contributors, across all its formats. Everyone with review access can read and reply. Mention a format if your comment is specific to it.</p><button type="button" class="btn ghost" id="refreshWorkshopDiscussion">Refresh comments</button><span id="workshopDiscussionLoadStatus" role="status">Loading comments…</span><div id="workshopComments"></div>
-    <form id="workshopCommentForm"><div class="field"><label for="workshopCommentBody">Your comment</label><textarea id="workshopCommentBody" maxlength="2000" placeholder="What feels right? What would you change?">${esc(workshopCommentDrafts.get(ctx.key)?.body||'')}</textarea><small>Up to 2,000 characters. Comments are shared here; no email is sent.</small></div><button type="submit" class="btn secondary" id="postWorkshopComment">Post comment</button><span role="status" id="workshopCommentStatus"></span></form>
-    <div class="btnrow" style="margin-top:16px"><button type="button" class="btn ghost" id="bottomBackWorkshopPreview">← Back to Workshop</button></div></section></div>`;
+    ${isPhilosophyLead()&&howWeBatDraft?.status!=='ready'?'<section class="card" style="margin-top:16px"><h2>Is this the club’s How We Bat?</h2><p class="help">Choosing this version completes the Workshop selection step. You can review the wording next, before confirming it for the season.</p><button type="button" class="btn secondary" id="usePreviewScenario">Choose this How We Bat →</button></section>':''}
+    <div class="btnrow" style="margin-top:16px"><button type="button" class="btn ghost" id="bottomBackWorkshopPreview">← Back to comparisons and conversation</button></div></div>`;
   document.getElementById('backWorkshopPreview').onclick=closeWorkshopPreview;
   document.getElementById('bottomBackWorkshopPreview').onclick=closeWorkshopPreview;
-  document.getElementById('jumpWorkshopDiscussion').onclick=()=>{document.getElementById('workshopDiscussionHeading').scrollIntoView({behavior:'smooth',block:'start'});document.getElementById('workshopDiscussionHeading').focus({preventScroll:true});};
   page.querySelectorAll('[data-workshop-preview-format]').forEach(btn=>btn.onclick=()=>{
     ctx.format=btn.dataset.workshopPreviewFormat;
     page.querySelectorAll('[data-workshop-preview-format]').forEach(b=>{const active=b===btn;b.className=`btn ${active?'secondary':'ghost'}`;b.setAttribute('aria-pressed',String(active));});
     document.getElementById('workshopVersionContent').innerHTML=renderHowWeBatLivePreview(ctx.draft,ctx.format,false);
   });
-  document.getElementById('workshopCommentBody').oninput=e=>{
-    const old=workshopCommentDrafts.get(ctx.key);
-    workshopCommentDrafts.set(ctx.key,{body:e.target.value,id:old?.body===e.target.value?old.id:null});
-  };
-  document.getElementById('workshopCommentForm').onsubmit=async e=>{e.preventDefault();await postWorkshopComment(ctx);};
-  document.getElementById('refreshWorkshopDiscussion').onclick=()=>refreshWorkshopDiscussion(ctx);
   const choose=document.getElementById('usePreviewScenario');
   if(choose)choose.onclick=async()=>{
     if(ctx.choosing)return;
     ctx.choosing=true;choose.disabled=true;
     try{
-      // Recheck the round before changing the Lead's working draft.
-      const {error}=await supabase.rpc('get_workshop_discussion',workshopDiscussionArgs(ctx));
-      if(!workshopPreviewCurrent(ctx))return;
-      if(error)throw error;
       philosophyScenarioSelectedIds=new Set(ctx.ids);
-      await applySelectedVoiceScenario(ctx.responses,ctx.pMap);
+      await applySelectedVoiceScenario(ctx.responses,ctx.pMap,ctx);
     }catch(error){if(workshopPreviewCurrent(ctx))alert(error.message||'The draft could not be created.');}
     finally{ctx.choosing=false;choose.disabled=false;}
   };
-  return refreshWorkshopDiscussion(ctx);
 }
-async function refreshWorkshopDiscussion(ctx){
+function workshopConversationCurrent(ctx){
+  return workshopConversation===ctx&&club?.id===ctx.clubId&&session?.user?.id===ctx.userId&&
+    (currentTab==='workshop'||(currentTab==='dashboard'&&clubHomeExpandedStage==='workshop'))&&!!document.getElementById('workshopCommentForm');
+}
+function workshopConversationArgs(ctx){return {p_club_id:ctx.clubId,p_round_number:ctx.round};}
+function renderWorkshopConversation(ctx){
+  return `<style>.workshop-discussion{margin-top:16px}.workshop-discussion .btn{min-height:44px}.workshop-comment{padding:14px 0;border-bottom:1px solid #dce2ee;overflow-wrap:anywhere}.workshop-comment p{white-space:pre-wrap;line-height:1.6;margin:8px 0}.workshop-comment time,.workshop-comment small{display:block;font-size:12px;color:#59657c;margin-top:4px}.workshop-discussion textarea{width:100%;box-sizing:border-box;min-height:110px}.workshop-discussion [role="status"]{display:block;margin:10px 0}</style>
+    <section class="card workshop-discussion" aria-labelledby="workshopDiscussionHeading"><div class="section-label">One shared conversation</div><h2 id="workshopDiscussionHeading">Which version do we prefer?</h2><p class="help">Talk about all the How We Bat options here. Name the combination you mean, explain your preference and reply to each other. The Philosophy Lead makes the final choice.</p><button type="button" class="btn ghost" id="refreshWorkshopDiscussion">Refresh conversation</button><span id="workshopDiscussionLoadStatus" role="status">Loading conversation…</span><div id="workshopComments"></div>
+    <form id="workshopCommentForm"><div class="field"><label for="workshopCommentBody">Add to the conversation</label><textarea id="workshopCommentBody" maxlength="2000" placeholder="Which version feels right for our club, and why?" ${ctx.sending?'disabled':''}>${esc(workshopCommentDrafts.get(ctx.key)?.body||'')}</textarea><small>Up to 2,000 characters. Shared with the Workshop review group; no email is sent.</small></div><button type="submit" class="btn secondary" id="postWorkshopComment" ${ctx.sending?'disabled':''}>Post comment</button><span role="status" id="workshopCommentStatus">${ctx.sending?'Posting…':''}</span></form></section>`;
+}
+function bindWorkshopConversation(ctx){
+  document.getElementById('workshopCommentBody').oninput=e=>{
+    const old=workshopCommentDrafts.get(ctx.key);
+    workshopCommentDrafts.set(ctx.key,{body:e.target.value,id:old?.body===e.target.value?old.id:null});
+  };
+  document.getElementById('workshopCommentForm').onsubmit=async e=>{e.preventDefault();await postWorkshopComment(ctx);};
+  document.getElementById('refreshWorkshopDiscussion').onclick=()=>refreshWorkshopConversation(ctx);
+  return refreshWorkshopConversation(ctx);
+}
+async function refreshWorkshopConversation(ctx){
   clearTimeout(workshopDiscussionTimer);
-  if(!workshopDiscussionCurrent(ctx)||ctx.loading)return;
+  if(!workshopConversationCurrent(ctx)||ctx.loading)return;
   ctx.loading=true;
   try{
     if(document.hidden)return;
-    const {data,error}=await supabase.rpc('get_workshop_discussion',workshopDiscussionArgs(ctx));
-    if(!workshopDiscussionCurrent(ctx))return;
+    const {data,error}=await supabase.rpc('get_workshop_conversation',workshopConversationArgs(ctx));
+    if(!workshopConversationCurrent(ctx))return;
     if(error)throw error;
     const messages=data?.messages||[];
-    document.getElementById('workshopComments').innerHTML=messages.length?messages.map(m=>`<article class="workshop-comment"><strong>${esc(m.author_name)}${m.author_user_id===ctx.userId?' · You':''}</strong><time datetime="${esc(m.created_at)}">${esc(new Date(m.created_at).toLocaleString())}</time><p>${esc(m.body)}</p></article>`).join(''):'<p class="help">No comments on this version yet. Start the conversation below.</p>';
-    document.getElementById('workshopDiscussionLoadStatus').textContent=`${Number(data?.total_count||0)>100?'Showing the latest 100 comments. ':''}Comments are up to date. Refreshes automatically while this screen is open.`;
+    document.getElementById('workshopComments').innerHTML=messages.length?messages.map(m=>`<article class="workshop-comment"><strong>${esc(m.author_name)}${m.author_user_id===ctx.userId?' · You':''}</strong><time datetime="${esc(m.created_at)}">${esc(new Date(m.created_at).toLocaleString())}</time>${m.original_version?`<small>Earlier comment on ${esc(m.original_version)}</small>`:''}<p>${esc(m.body)}</p></article>`).join(''):'<p class="help">No comments yet. Start the conversation about the versions above.</p>';
+    document.getElementById('workshopDiscussionLoadStatus').textContent=`${Number(data?.total_count||0)>100?'Showing the latest 100 comments. ':''}Conversation up to date. Refreshes automatically while this screen is open.`;
   }catch(error){
-    if(workshopDiscussionCurrent(ctx))document.getElementById('workshopDiscussionLoadStatus').textContent=`Comments could not be refreshed. ${error.message||'Check your connection and try Refresh comments.'}`;
+    if(workshopConversationCurrent(ctx))document.getElementById('workshopDiscussionLoadStatus').textContent=`The conversation could not be refreshed. ${error.message||'Check your connection and try Refresh conversation.'}`;
   }finally{
     ctx.loading=false;
-    if(workshopDiscussionCurrent(ctx))workshopDiscussionTimer=setTimeout(()=>refreshWorkshopDiscussion(ctx),15000);
+    if(workshopConversationCurrent(ctx))workshopDiscussionTimer=setTimeout(()=>refreshWorkshopConversation(ctx),15000);
   }
 }
 async function postWorkshopComment(ctx){
-  if(!workshopDiscussionCurrent(ctx)||ctx.sending)return;
-  const input=document.getElementById('workshopCommentBody'),btn=document.getElementById('postWorkshopComment'),status=document.getElementById('workshopCommentStatus');
+  if(!workshopConversationCurrent(ctx)||ctx.sending)return;
+  const input=document.getElementById('workshopCommentBody'),status=document.getElementById('workshopCommentStatus');
   const body=input.value.trim();
   if(!body||body.length>2000){status.textContent='Write a comment of 1 to 2,000 characters.';return;}
   const previous=workshopCommentDrafts.get(ctx.key);
   const pending={body,id:previous?.body?.trim()===body&&previous.id?previous.id:crypto.randomUUID()};
   workshopCommentDrafts.set(ctx.key,pending);
-  ctx.sending=true;btn.disabled=true;input.disabled=true;status.textContent='Posting…';
+  ctx.sending=true;document.getElementById('postWorkshopComment').disabled=true;input.disabled=true;status.textContent='Posting…';
   try{
-    const {error}=await supabase.rpc('post_workshop_comment',{...workshopDiscussionArgs(ctx),p_message_id:pending.id,p_body:body});
+    const {error}=await supabase.rpc('post_workshop_conversation',{...workshopConversationArgs(ctx),p_message_id:pending.id,p_body:body});
     if(error)throw error;
     if(workshopCommentDrafts.get(ctx.key)===pending)workshopCommentDrafts.delete(ctx.key);
-    if(!workshopDiscussionCurrent(ctx))return;
+    if(!workshopConversationCurrent(ctx))return;
     document.getElementById('workshopCommentBody').value='';document.getElementById('workshopCommentStatus').textContent='Comment posted.';
-    await refreshWorkshopDiscussion(ctx);
-  }catch(error){if(workshopDiscussionCurrent(ctx))document.getElementById('workshopCommentStatus').textContent=`We could not confirm your comment was posted. Your text is kept; retrying will not post it twice. ${error.message||''}`;}
-  finally{ctx.sending=false;btn.disabled=false;input.disabled=false;}
+    await refreshWorkshopConversation(ctx);
+  }catch(error){if(workshopConversationCurrent(ctx))document.getElementById('workshopCommentStatus').textContent=`We could not confirm your comment was posted. Your text is kept; retrying will not post it twice. ${error.message||''}`;}
+  finally{ctx.sending=false;if(workshopConversationCurrent(ctx)){document.getElementById('postWorkshopComment').disabled=false;document.getElementById('workshopCommentBody').disabled=false;}}
 }
 
 function renderDetailedSynthesisBody(responses,pMap){
@@ -5002,18 +5018,18 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
 
   return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
     <div class="section-label">3 · Compare How We Bat options</div>
-    <h2>Which How We Bat feels most like the club?</h2>
-    <div class="help">Choose a combination, then preview and discuss it here. Everyone who has submitted can explore these options. ${hwbLocked?'These previews do not change the locked How We Bat.':isPhilosophyLead()?'Open a preview to discuss it, then choose it as your working draft when you are ready.':'The Philosophy Lead chooses which option to use for the club.'}</div>
+    <h2>Which How We Bat feels most like the club?</h2>${meta?.progressHtml||''}
+    <div class="help">Choose a combination to preview. Discuss all versions together in the conversation below. Everyone who has submitted can explore these options. ${hwbLocked?'These previews do not change the locked How We Bat.':isPhilosophyLead()?'When you have decided, open that preview and select “Choose this How We Bat”.':'The Philosophy Lead chooses which option to use for the club.'}</div>
 
     <div class="btnrow" style="margin-top:16px">
       ${presets.map(p=>`<button class="btn ${sameIds(p.ids)?'secondary':'ghost'}" aria-pressed="${sameIds(p.ids)}" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
     </div>
 
     ${otherResponses.length>3?`<fieldset style="margin-top:16px;border:1px solid #dce2ee;border-radius:10px;padding:16px"><legend>Or choose any combination</legend><p class="help">${esc(displayName(leadResponse))} is included as the Philosophy Lead.</p>${otherResponses.map(r=>`<label style="display:flex;gap:10px;align-items:center;min-height:44px"><input type="checkbox" data-scenario-voice="${esc(r.user_id)}" ${selectedIds.has(r.user_id)?'checked':''}>${esc(displayName(r))}</label>`).join('')}</fieldset>`:''}
-    ${hwbLocked?`<div class="help" style="margin-top:10px">🔒 How We Bat is locked. These comparisons remain available for reference.</div>`:(meta?.snapshot?`<div class="help" style="margin-top:10px">A How We Bat draft exists. The Philosophy Lead can choose another combination until it is locked.</div>`:'')}
+    ${hwbLocked?`<div class="help" style="margin-top:10px">🔒 How We Bat is locked. These comparisons remain available for reference.</div>`:(hasChosenWorkshopApproach()?`<div class="help" style="margin-top:10px">A version has been selected. The Philosophy Lead can choose another until How We Bat is confirmed.</div>`:'')}
 
     <div class="btnrow" style="margin-top:18px">
-      <button class="btn secondary" id="openScenarioHwbPreview">Preview and discuss this version →</button><span class="help">${esc(currentLabel)}</span>
+      <button class="btn secondary" id="openScenarioHwbPreview">Preview this version →</button><span class="help">${esc(currentLabel)}</span>
       ${!baselineOnly?`<button class="btn ghost" id="showScenarioChanges">What changed?</button>`:''}
 
     </div>
@@ -5037,82 +5053,37 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   </section>`;
 }
 
-async function applySelectedVoiceScenario(responses,pMap){
-  if(!isPhilosophyLead()){alert('Only the Philosophy Lead can choose the club’s working draft.');return;}
+async function applySelectedVoiceScenario(responses,pMap,preview=workshopPreview){
+  if(!isPhilosophyLead()){alert('Only the Philosophy Lead can choose the club’s How We Bat.');return;}
   const targetClubId=club.id,targetUserId=session.user.id;
   const isCurrent=()=>club?.id===targetClubId&&session?.user?.id===targetUserId;
-
+  if(!preview||!workshopPreviewCurrent(preview)){alert('Open a How We Bat preview before choosing it.');return;}
   if(!confirmLeaveWorkshopSetup())return;
-  const selected=selectedScenarioResponses(responses);
-  if(!selected.length){alert('Select at least the Philosophy Lead response.');return;}
-  const leadId=workshop?.philosophy_lead_user_id;
-  if(!selected.some(r=>r.user_id===leadId)){alert('The Philosophy Lead baseline must remain part of the scenario.');return;}
-
-  const names=selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
-  const draft=buildScenarioDraft(selected);
-  const hwb=generatedHowWeBatDraftFromPhilosophy(draft);
-
+  const selected=responses.filter(r=>preview.ids.includes(r.user_id));
+  if(!selected.some(r=>r.user_id===workshop?.philosophy_lead_user_id)){alert('The Philosophy Lead original must be included.');return;}
   if(howWeBatDraft?.status==='ready'){
-    alert('How We Bat is locked for this season. To replace it, start a new philosophy round from Workshop settings.');
-    return;
+    alert('How We Bat is confirmed for this season. Start a new Workshop round to replace it.');return;
   }
-
-  // Before the season lock, a different scenario can replace the current working draft.
-  if(workshop?.final_draft_ready && howWeBatDraft){
-    const ok=confirm(
-      `Replace the current How We Bat draft using ${naturalList(names)}?\n\n`+
-      `This keeps every submitted response unchanged, but it will regenerate the editable How We Bat draft from this combination of voices.`
-    );
-    if(!ok)return;
-  }
-
-  if(!workshop?.final_draft_ready){
-    const {error}=await supabase.rpc('begin_final_philosophy_draft',{
-      p_club_id:targetClubId,
-      p_identity_values:draft.identity_values,
-      p_identity_note:draft.identity_note,
-      p_formats_enabled:draft.formats_enabled,
-      p_selected_dimensions:draft.selected_dimensions,
-      p_dimension_notes:draft.dimension_notes,
-      p_format_weights:draft.format_weights
+  if(preview.hasExistingDraft&&!preview.choiceRequestId&&!confirm('Choose this How We Bat for the club?\n\nThis replaces the existing editable draft with this version. All original contributions and conversation comments are kept.'))return;
+  const draft=buildScenarioDraft(selected);
+  if(!preview.choiceRequestId)preview.choiceRequestId=crypto.randomUUID();
+  let saved=false;
+  try{
+    const {error}=await supabase.rpc('choose_workshop_how_we_bat',{
+      p_club_id:targetClubId,p_round_number:preview.round,p_response_user_ids:preview.ids,
+      p_philosophy:draft,p_how_we_bat:preview.draft,
+      p_response_versions:Object.fromEntries(selected.map(r=>[r.user_id,r.submitted_at||null])),
+      p_expected_draft_updated_at:preview.expectedDraftUpdatedAt,p_request_id:preview.choiceRequestId
     });
+    if(error)throw error;
+    saved=true;
     if(!isCurrent())return;
-    if(error){alert(error.message);return;}
-  }else{
-    const {error}=await supabase
-      .from('philosophy_contributions')
-      .update({
-        identity_values:draft.identity_values,
-        identity_note:draft.identity_note,
-        formats_enabled:draft.formats_enabled,
-        selected_dimensions:draft.selected_dimensions,
-        dimension_notes:draft.dimension_notes,
-        format_weights:draft.format_weights,
-        submitted_at:null,
-        updated_at:new Date().toISOString()
-      })
-      .eq('club_id',targetClubId)
-      .eq('user_id',leadId);
+    await loadData();
     if(!isCurrent())return;
-    if(error){alert(error.message);return;}
+    currentTab='howwebat';renderShell();
+  }catch(error){
+    if(isCurrent())alert(saved?'Your How We Bat choice was saved, but the page could not refresh. Refresh to continue; you do not need to choose again.':`The choice could not be confirmed. Return to Workshop and check before trying again. ${error.message||''}`);
   }
-
-  sessionStorage.setItem(`bdp-philosophy-working-voices:${targetClubId}`,JSON.stringify(selected.map(r=>r.user_id)));
-
-  const {error:hErr}=await supabase.rpc('save_how_we_bat_draft',{
-    p_club_id:targetClubId,
-    p_identity_statement:hwb.identity_statement||'',
-    p_closing_strapline:hwb.closing_strapline||'',
-    p_formats:hwb.formats||{},
-    p_status:'draft'
-  });
-  if(!isCurrent())return;
-  if(hErr){alert(hErr.message);return;}
-
-  await loadData();
-  if(!isCurrent())return;
-  currentTab='howwebat';
-  renderShell();
 }
 
 function renderSynthesis(responses,pMap,allSubmitted,meta=null){
@@ -6528,6 +6499,9 @@ function formatNarrative(format){
 
 function renderPreview(){
   queueMicrotask(bindWorkshopReturn);
+  if(isPhilosophyLead()&&workshop?.final_draft_ready&&!hasChosenWorkshopApproach()){
+    currentTab='workshop';return renderTab();
+  }
   if(isPhilosophyLead() && workshop?.final_draft_ready){
     renderHowWeBatBuilder();
     return;
