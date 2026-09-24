@@ -1,10 +1,10 @@
-// Club Batting v0.8.62.5 — continue directly from outreach to secure trial signup
+// Club Batting v0.8.62.10 — Workshop navigation, shared comparisons and discussion
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.9';
+const APP_UI_VERSION='0.8.62.10';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -86,6 +86,12 @@ let playerPlanStructureManualEdit=false;
 let philosophyScenarioSelectedIds=new Set();
 let philosophyScenarioStateKey='';
 let philosophyScenarioFormat='limited_overs';
+let workshopReviewContext=null;
+let workshopPreview=null;
+let workshopDiscussionTimer=null;
+let workshopLastRoute='';
+const workshopCommentDrafts=new Map();
+
 
 let playersWorkspaceClubId=null;
 let playersWorkspaceData=null;
@@ -948,6 +954,7 @@ async function boot(){
   // Preserve Market Discovery position when the user opens a club/source in another tab and
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
+  window.addEventListener('popstate',handleWorkshopPreviewHistory);
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -1676,6 +1683,7 @@ function canOpenClubTab(tab){
   if(tab==='playerhome')return isPlayerUser();
   if(['permissions','groups'].includes(tab))return isAdmin();
   if(['players','feedback'].includes(tab))return canUsePlayersWorkspace();
+  if(tab==='workshop_preview')return !!workshopPreview&&workshopPreview.clubId===club?.id&&workshopPreview.userId===session?.user?.id;
   if(tab==='workshop')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()||canContributePhilosophy());
   if(['identity','dimensions','formats','preview'].includes(tab))return !clubSetupUnavailableReason(tab)&&(isPhilosophyLead()||canContributePhilosophy());
   if(tab==='plan')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead());
@@ -1730,10 +1738,14 @@ function clubSetupStyles(){
   </style>`;
 }
 
+function clubSetupStepStatus(step){
+  if(step.key==='workshop'&&step.complete)return 'Working draft chosen';
+  return step.complete?'Complete':'Not complete';
+}
 function clubSetupProgressHtml(progress){
   return `<ol class="club-setup-progress" aria-label="Five preparation steps before players build their plans">${progress.steps.map((step,index)=>{
     const current=index===progress.currentIndex;
-    return `<li class="${step.complete?'is-complete':current?'is-current':'is-future'}"><button type="button" data-club-stage="${step.key}" aria-expanded="false" aria-controls="clubHomeStagePanel" ${current?'aria-current="step"':''}><span class="club-setup-marker" aria-hidden="true">${step.complete?'✓':index+1}</span><span><strong>${esc(step.shortTitle)}</strong><small>${step.complete?'Complete':`Not complete${current?' · Next step':''}`}</small></span></button></li>`;
+    return `<li class="${step.complete?'is-complete':current?'is-current':'is-future'}"><button type="button" data-club-stage="${step.key}" aria-expanded="false" aria-controls="clubHomeStagePanel" ${current?'aria-current="step"':''}><span class="club-setup-marker" aria-hidden="true">${step.complete?'✓':index+1}</span><span><strong>${esc(step.shortTitle)}</strong><small>${esc(clubSetupStepStatus(step))}${!step.complete&&current?' · Next step':''}</small></span></button></li>`;
   }).join('')}</ol>`;
 }
 
@@ -1754,13 +1766,13 @@ async function expandClubHomeStage(key,progress){
   const index=progress.steps.indexOf(step);
   const current=index===progress.currentIndex;
   const waiting=step.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
-  const canAct=current&&canActOnClubSetupStep(step)&&!waiting;
+  const canAct=current&&canActOnClubSetupStep(step);
   const canView=step.complete&&canOpenClubTab(step.tab)&&(key!=='details'||isAdmin());
   const description=step.complete
     ?(key==='publish'?'The club’s batting approach and Player Plan questions are published. Registered players can now build their Player Plans, train, and learn through feedback. People can continue to register.':`View the saved ${step.title}. The full phase information is shown below.`)
-    :current?(waiting?'Your contribution is submitted. Your Philosophy Lead will choose the club’s approach.':step.description)
+    :current?(waiting?'Your response is submitted. You can now compare and discuss the options. Only the Philosophy Lead confirms the club’s approach.':step.description)
     :`Complete ${progress.steps.slice(0,index).filter(item=>!item.complete).map(item=>item.shortTitle).join(', ')} first. This stage is not complete yet.`;
-  document.getElementById('clubHomeStageHeading').innerHTML=`<div><div class="section-label">Step ${index+1} · ${step.complete?'Complete':'Not complete'}</div><h3>${step.complete?'View ':''}${esc(step.title)}</h3><p>${esc(description)}</p><small>${step.complete?'Saved stage':canAct?'Led by':'Waiting for'} ${step.complete?'':esc(step.owner)}${waiting?' · Your response is complete':''}</small></div><button class="btn ghost compact-btn" type="button" id="closeClubHomeStage">Close details</button>`;
+  document.getElementById('clubHomeStageHeading').innerHTML=`<div><div class="section-label">Step ${index+1} · ${esc(clubSetupStepStatus(step))}</div><h3>${step.complete?'View ':''}${esc(step.title)}</h3><p>${esc(description)}</p><small>${step.complete?'Saved stage':canAct?'Led by':'Waiting for'} ${step.complete?'':esc(step.owner)}${waiting?' · Your response is submitted':''}</small></div><button class="btn ghost compact-btn" type="button" id="closeClubHomeStage">Close details</button>`;
   document.getElementById('closeClubHomeStage').onclick=()=>{
     expandClubHomeStage(null,progress);
     page.querySelector(`[data-club-stage="${key}"]`)?.focus({preventScroll:true});
@@ -1777,7 +1789,7 @@ async function expandClubHomeStage(key,progress){
     return;
   }
   if(current){
-    const label=key==='workshop'&&!workshop?.philosophy_lead_user_id&&isAdmin()?'Choose a Philosophy Lead':step.action;
+    const label=waiting?'Compare and discuss How We Bat':key==='workshop'&&!workshop?.philosophy_lead_user_id&&isAdmin()?'Choose a Philosophy Lead':step.action;
     content.innerHTML=`${!canAct&&!waiting?`<p class="help">${key==='details'?'Your Club Admin':'Your Philosophy Lead'} needs to complete this step.</p>`:''}<button class="btn secondary" id="continueClubHomeStage" type="button" ${canAct?'':'disabled'}>${esc(label)}</button>`;
     document.getElementById('continueClubHomeStage').onclick=async()=>{
       if(!canAct||!canOpenClubTab(step.tab)||!await saveClubEditsBeforeNavigation())return;
@@ -2291,6 +2303,23 @@ function renderTab(){
     currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   }
+  const route=`${club?.id}:${currentTab}`;
+  const previousTab=workshopLastRoute.split(':').at(-1);
+  const workshopTabs=['workshop','identity','dimensions','formats','preview','howwebat','workshop_preview'];
+  const scrollOnArrival=route!==workshopLastRoute&&(workshopTabs.includes(currentTab)||workshopTabs.includes(previousTab));
+  workshopLastRoute=route;
+  if(currentTab!=='workshop_preview'){
+    clearTimeout(workshopDiscussionTimer);
+    if(history.state?.clubBattingWorkshop?.view==='preview')history.replaceState({...history.state,clubBattingWorkshop:null},'');
+  }
+  const arrived=()=>{
+    if(scrollOnArrival&&`${club?.id}:${currentTab}`===route){
+      window.scrollTo?.({top:0,left:0,behavior:'instant'});
+      const heading=document.getElementById('page')?.querySelector('h1')||document.getElementById('page')?.querySelector('h2');
+      if(heading){heading.setAttribute('tabindex','-1');heading.focus({preventScroll:true});}
+    }
+    bindWorkshopReturn();
+  };
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
   const map={
     dashboard:renderClubDashboard,
@@ -2299,6 +2328,7 @@ function renderTab(){
     players:renderPlayersWorkspace,
     feedback:renderFeedbackWorkspace,
     workshop:renderWorkshop,
+    workshop_preview:renderWorkshopPreview,
     identity:renderIdentity,
     dimensions:renderDimensions,
     formats:renderFormats,
@@ -2313,12 +2343,13 @@ function renderTab(){
   try{
     const result=(map[currentTab]||renderMyPlan)();
     if(result && typeof result.then==='function'){
-      return result.catch(err=>{
+      return result.then(arrived).catch(err=>{
         console.error(err);
         const page=document.getElementById('page');
         if(page)page.innerHTML=`<section class="card"><div class="section-label">This page could not finish loading</div><h2>Something interrupted the page.</h2><div class="notice">${esc(err?.message||String(err))}</div><div class="help" style="margin-top:10px">Your saved data has not been deleted. Refresh once; if this returns, send us the wording above.</div></section>`;
       });
     }
+    arrived();
   }catch(err){
     console.error(err);
     const page=document.getElementById('page');
@@ -2774,14 +2805,14 @@ async function renderClubDashboard(){
   if(!progress.published&&(!clubHomeExpandedStage||clubHomeNextPreparationKey!==step?.key))clubHomeExpandedStage=step?.key||null;
   clubHomeNextPreparationKey=step?.key||null;
   const contributorWaiting=step?.key==='workshop'&&canContributePhilosophy()&&!isPhilosophyLead()&&!isAdmin()&&myContributor?.status==='submitted';
-  const canAct=!!step&&canActOnClubSetupStep(step)&&!contributorWaiting;
+  const canAct=!!step&&canActOnClubSetupStep(step);
   const registeredPlayerCount=(players||[]).length;
   const entitlementActive=entitlement?.active!==false;
   const trialDaysLeft=trial?.ends_on?Math.max(0,Math.ceil((new Date(`${trial.ends_on}T23:59:59`).getTime()-Date.now())/86400000)):null;
   const liveAction=canUsePlayersWorkspace()?{tab:'players',label:'Open Players'}:isPlayerUser()?{tab:'myplan',label:'Complete your Player Plan'}:{tab:'howwebat',label:'Read How We Bat'};
-  const nextLabel=step?.key==='workshop'&&!workshop?.philosophy_lead_user_id&&isAdmin()?'Choose a Philosophy Lead':step?.action;
+  const nextLabel=contributorWaiting?'Compare and discuss How We Bat':step?.key==='workshop'&&!workshop?.philosophy_lead_user_id&&isAdmin()?'Choose a Philosophy Lead':step?.action;
   const waitingCopy=contributorWaiting
-    ?'Your contribution is submitted. Your Philosophy Lead will review the contributions and choose the club’s approach. You can come back here to check progress.'
+    ?'Your response is submitted. Compare and discuss the How We Bat options with the other contributors. Only the Philosophy Lead confirms the club’s approach.'
     :step?.key==='details'
       ?'Your Club Admin needs to check the club look before publication. They can add the logo and colours or keep the current look.'
       :step?.key==='workshop'
@@ -3547,6 +3578,7 @@ function workshopNextStep({me,setupSaved,leadName,outstandingNames,canCompare,lo
     body:me.status==='in_progress'?'Your saved answers are waiting. Continue through the remaining steps, then review and submit your response.':'Choose what matters to your club, explain where useful and set the emphasis for each format. Other responses stay hidden until you submit your own.',
     action:'response',label:me.status==='in_progress'?'Continue my response':'Start my response'
   };
+  if(!isPhilosophyLead()&&canCompare&&!loadError)return {title:me?.status==='submitted'?'Your response is submitted. Compare and discuss How We Bat.':'Compare and discuss How We Bat.',body:`Explore the combinations of submitted responses and add a comment on any preview. ${waiting} Only ${lead} can confirm the club’s approach.`,action:'compare',label:'Compare and discuss How We Bat'};
   if(isPhilosophyLead()&&canCompare&&!loadError)return {title:'Choose the approach your club will use.',body:`Compare the submitted contributions and preview how they shape How We Bat. ${waiting||'The invited contributors have submitted their responses.'} You decide when to move forward with the responses available.`,action:'compare',label:'Compare contributions'};
   if(loadError)return {title:'The submitted contributions could not be loaded.',body:'Your saved responses are still recorded. Open the contribution details for the error and try again before choosing your club’s approach.',action:'status',label:'View contribution details'};
   return {title:`${lead} is bringing the club approach together.`,body:`${me?.status==='submitted'?'Your response is submitted and preserved. ':''}${waiting||'The next step is for the Philosophy Lead to compare the submitted responses and choose the approach used for How We Bat.'}`,action:me?.status==='submitted'?'response':'status',label:me?.status==='submitted'?'Review my response':'View contribution progress'};
@@ -3566,7 +3598,8 @@ async function renderWorkshop(){
     {data:externalInvites,error:iErr},
     {data:draftSnapshot,error:snapErr},
     {data:lateActions,error:lateErr},
-    {data:workshopStatus,error:statusErr}
+    {data:workshopStatus,error:statusErr},
+    {data:reviewContext,error:reviewErr}
   ]=await Promise.all([
     supabase.from('philosophy_contributors').select('*').eq('club_id',club.id),
     (isAdmin() || isPhilosophyLead())
@@ -3580,12 +3613,13 @@ async function renderWorkshop(){
       :Promise.resolve({data:[],error:null}),
     (isAdmin() || isPhilosophyLead())
       ?supabase.rpc('get_philosophy_workshop_status',{p_club_id:club.id})
-      :Promise.resolve({data:null,error:null})
+      :Promise.resolve({data:null,error:null}),
+    supabase.rpc('get_workshop_review_context',{p_club_id:targetClubId})
   ]);
 
   if(!stillCurrent())return;
-  if(cErr || iErr || snapErr || lateErr || statusErr){
-    clubSetupContentPage('workshop').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr||statusErr).message)}</div>`;
+  if(cErr || iErr || snapErr || lateErr || statusErr || reviewErr){
+    clubSetupContentPage('workshop').innerHTML=`<div class="notice">${esc((cErr||iErr||snapErr||lateErr||statusErr||reviewErr).message)}</div>`;
     return;
   }
 
@@ -3620,14 +3654,14 @@ async function renderWorkshop(){
   const leadCandidates=(members||[]).filter(m=>
     elevatedCricketRoles.has(m.permission_role) || m.user_id===workshop?.philosophy_lead_user_id
   );
-  const submittedCount=(contribRows||[]).filter(x=>x.status==='submitted').length;
+  const submittedCount=Number(reviewContext?.response_count||0);
   const totalCount=(contribRows||[]).length;
   const pendingExternal=(externalInvites||[]).filter(x=>x.status==='pending');
-  const invitedTotal=totalCount+pendingExternal.length;
+  const invitedTotal=Number(reviewContext?.invited_count||0);
   const outstandingCount=Math.max(invitedTotal-submittedCount,0);
   const me=(contribRows||[]).find(x=>x.user_id===session.user.id)||myContributor;
   const postSubmissionStage=!!workshop?.final_draft_ready || ['review','published'].includes(workshop?.status);
-  const canSeeSynthesis=(!!me && me.status==='submitted') || ((isPhilosophyLead() || isAdmin()) && postSubmissionStage);
+  const canSeeSynthesis=reviewContext?.can_review===true;
   const allSubmitted=invitedTotal>0 && submittedCount===invitedTotal;
   const collaborative=workshop?.mode==='collaborative';
   const snapshotResponses=Array.isArray(draftSnapshot?.responses)?draftSnapshot.responses:[];
@@ -3643,38 +3677,13 @@ async function renderWorkshop(){
   // Resolve the response set once, before rendering the page. The same response set is then
   // used for Contributions received and the Scenario Explorer so the workflow reads
   // from top to bottom without changing its definition of who has contributed.
-  let visibleResponses=[];
-  let synthesisMeta=null;
-  let synthesisLoadError=null;
-  if(canSeeSynthesis){
-    if(workshop?.final_draft_ready && snapshotResponses.length){
-      visibleResponses=snapshotResponses;
-      synthesisMeta={
-        snapshot:true,
-        responseCount:snapshotCount,
-        invitedCount:snapshotInvitedCount,
-        createdAt:draftSnapshot?.created_at||workshop?.final_draft_started_at,
-        mismatchCount:0
-      };
-    }else{
-      const {data:source,error:sourceErr}=await supabase.rpc('get_philosophy_synthesis_source',{p_club_id:club.id});
-      if(sourceErr){
-        synthesisLoadError=sourceErr;
-      }else{
-        visibleResponses=Array.isArray(source?.responses)?source.responses:[];
-        synthesisMeta={
-          snapshot:false,
-          responseCount:Number(source?.response_count||visibleResponses.length||0),
-          invitedCount:invitedTotal,
-          submittedContributorCount:Number(source?.submitted_contributor_count||submittedCount||0),
-          mismatchCount:Number(source?.mismatch_count||0)
-        };
-      }
-    }
-  }
+  const visibleResponses=Array.isArray(reviewContext?.responses)?reviewContext.responses:[];
+  const synthesisMeta={snapshot:!!workshop?.final_draft_ready,responseCount:submittedCount,invitedCount:invitedTotal};
+  const synthesisLoadError=null;
+  workshopReviewContext={...reviewContext,clubId:targetClubId,userId:session.user.id};
 
   if(!stillCurrent())return;
-  const scenarioResponses=scenarioResponsePool(visibleResponses,lateActions||[],pMap);
+  const scenarioResponses=visibleResponses;
   const defaultScenarioIds=workshop?.final_draft_ready && snapshotResponses.length
     ?snapshotResponses.map(r=>r.user_id)
     :visibleResponses.map(r=>r.user_id);
@@ -3686,13 +3695,14 @@ async function renderWorkshop(){
   // here is a review, not an implicit reset of the work that follows it.
   const setupComplete=!!workshop?.final_draft_ready || !!howWeBatDraft || workshop?.status==='published';
   const setupSaved=setupComplete||!!(workshop?.philosophy_lead_user_id&&(contribRows||[]).some(c=>c.user_id===workshop.philosophy_lead_user_id));
-  const leadName=pMap.get(workshop?.philosophy_lead_user_id)?.display_name||'';
-  const outstandingNames=[...(contribRows||[]).filter(c=>c.status!=='submitted').map(c=>pMap.get(c.user_id)?.display_name||'a contributor'),...pendingExternal.map(i=>i.invited_name||i.invited_email)];
+  const leadName=pMap.get(workshop?.philosophy_lead_user_id)?.display_name||visibleResponses.find(r=>r.user_id===workshop?.philosophy_lead_user_id)?.display_name||'';
+  const outstandingNames=reviewContext?.outstanding_names||[];
   const nextStep=workshopNextStep({me,setupSaved,leadName,outstandingNames,canCompare:canSeeSynthesis&&scenarioResponses.length>0,loadError:synthesisLoadError});
   let html=`<div class="guide-context-bar"><span><strong>Batting Philosophy Workshop</strong></span><button type="button" class="btn ghost compact-btn" id="workshopGuideLink">Workshop help</button></div><div class="workshop-flow-stack">
     <section class="card workshop-next-step" id="workshopNextStep" style="border-left:4px solid var(--navy,#242e72)">
       <div class="section-label">Your next step</div><h2>${esc(nextStep.title)}</h2><p class="help">${esc(nextStep.body)}</p>
       ${nextStep.action?`<div class="btnrow"><button type="button" class="btn secondary" id="workshopNextAction" data-workshop-next="${nextStep.action}">${esc(nextStep.label)}</button></div>`:''}
+      ${invitedTotal?`<p class="notice compact" role="status"><strong>${submittedCount} of ${invitedTotal} responses submitted</strong> · ${outstandingCount?`${outstandingCount} still to contribute. They can continue submitting.`:"All invited responses are in."}<br>${howWeBatDraft?.status==='ready'?'How We Bat is confirmed.':workshop?.final_draft_ready?'A working draft has been chosen. How We Bat is not confirmed yet.':'Only the Philosophy Lead confirms the club’s How We Bat.'}</p>`:''}
       ${leadName?`<p class="help" style="margin-top:12px">Philosophy Lead: ${esc(leadName)}</p>`:''}
     </section>`;
 
@@ -3824,7 +3834,7 @@ async function renderWorkshop(){
     </div></details>`;
   }else if(isAdmin()){
     html+=`<details class="card workshop-stage-card workshop-setup-review" id="workshopContributors"><summary style="cursor:pointer;font-weight:700">Contributors and invitations · this round</summary><div style="margin-top:16px">
-      <div class="section-label">Workshop setup complete</div>
+      <div class="section-label">Contributor selection saved</div>
       <h2>Review this round’s contributions.</h2>
       <p class="help">The Philosophy Lead and contributor choices are fixed for this round. You can review the responses below. To change the workshop setup, use <strong>Start new philosophy round</strong> in Workshop settings; the current work will not be reset by revisiting this page.</p>
       ${externalInvites?.length?`<details class="workshop-existing-invitations"><summary>Existing contributor invitations</summary><div class="pending-invites">${externalInvites.map(i=>`<div class="pending-invite-row"><div><strong>${esc(i.invited_name||i.invited_email)}</strong><small>${esc(i.invited_email)} · ${esc(i.status)}</small></div><div class="member-controls">${i.status==='pending'?`<button class="btn ghost" data-resend-philosophy-invite="${i.id}">Resend</button><button class="btn ghost" data-cancel-philosophy-invite="${i.id}">Cancel</button>`:''}</div></div>`).join('')}</div></details>`:''}
@@ -3836,15 +3846,11 @@ async function renderWorkshop(){
     <section class="card workshop-stage-card">
     <div class="section-label">2 · Contributions received</div>
     <h2>What has come back?</h2>
-    <div class="help">Each person completes their response independently. After submitting your own response, you can compare the contributions below. The Philosophy Lead chooses the combination used to create How We Bat.</div>
+    <div class="help">Each person completes their response independently. After submitting your own response, you can preview and discuss every combination below. The Philosophy Lead chooses the combination used to create How We Bat.</div>
     <div class="workshop-progress">
-      ${workshop?.final_draft_ready && draftSnapshot
-        ?`<div><strong>${snapshotCount}</strong><span>included in current synthesis</span></div>
-          <div><strong>${pendingLate.length}</strong><span>new submitted voice${pendingLate.length===1?'':'s'} available to explore</span></div>
-          <div><strong>${Math.max(snapshotInvitedCount-snapshotCount-pendingLate.length,0)}</strong><span>still outstanding</span></div>`
-        :`<div><strong>${submittedCount}</strong><span>submitted</span></div>
-          <div><strong>${outstandingCount}</strong><span>still outstanding</span></div>
-          <div><strong>${pendingExternal.length}</strong><span>email invitations pending</span></div>`}
+      <div><strong>${submittedCount}</strong><span>responses submitted</span></div>
+      <div><strong>${outstandingCount}</strong><span>still to contribute</span></div>
+      <div><strong>${Number(reviewContext?.pending_invite_count||0)}</strong><span>email invitations pending</span></div>
     </div>`;
 
   if(me){
@@ -3860,8 +3866,8 @@ async function renderWorkshop(){
           ?'Your independent response is preserved in the response set below. Explore the submitted voices, choose the combination that feels right, then create How We Bat directly from it.'
           :me.status==='submitted'
             ?(myLateAction
-              ?'Your response was submitted after the final-draft snapshot. It is locked and the Philosophy Lead will decide whether to incorporate it.'
-              :'Your independent response is locked. You can now review the responses and synthesis when they are available.')
+              ?'Your response is submitted and available in the comparisons. The Philosophy Lead decides which combination to use.'
+              :'Your independent response is submitted. You can now compare the available versions and discuss them with the other contributors.')
             :me.status==='in_progress'
               ?'Your work is saved, but it is not submitted yet. Continue through Club Identity → What We Value → Format Emphasis, then use the final Submit response step.'
               :'You have been invited to contribute independently.'}</p>
@@ -3871,7 +3877,7 @@ async function renderWorkshop(){
         :`<button class="btn secondary" id="myResponseAction">${me.status==='invited'?'Start my response':me.status==='in_progress'?'Continue & submit response':'Review my response'}</button>`}
     </div>`;
   }else if(isAdmin()){
-    html+=`<div class="notice compact">You can manage contributors and check their progress here. ${postSubmissionStage?'The submitted responses are available to review below.':'Individual responses stay private until contributors have submitted their own response or the workshop reaches the review stage.'} The Philosophy Lead creates and finalises How We Bat.</div>`;
+    html+=`<div class="notice compact">You can manage contributors and check their progress here. ${canSeeSynthesis?'The submitted responses are available to review below.':'Submit your own response to see the comparisons if you are a contributor.'} The Philosophy Lead creates and finalises How We Bat.</div>`;
   }else{
     html+=`<div class="notice">You have not been invited to contribute to this philosophy round.</div>`;
   }
@@ -4150,6 +4156,12 @@ async function renderWorkshop(){
     await rerenderWorkshopKeepScroll();
   });
 
+  document.querySelectorAll('[data-scenario-voice]').forEach(input=>input.onchange=async()=>{
+    if(input.checked)philosophyScenarioSelectedIds.add(input.dataset.scenarioVoice);
+    else philosophyScenarioSelectedIds.delete(input.dataset.scenarioVoice);
+    philosophyScenarioSelectedIds.add(workshop.philosophy_lead_user_id);
+    await rerenderWorkshopKeepScroll();
+  });
   if(document.getElementById('openScenarioHwbPreview')){
     document.getElementById('openScenarioHwbPreview').onclick=()=>openScenarioHowWeBatPreview(scenarioResponses,pMap);
   }
@@ -4774,51 +4786,157 @@ async function startNewPhilosophyRound(){
   }
 }
 
+function workshopReturnHtml(){
+  return '<div class="btnrow" style="margin-bottom:16px"><button type="button" class="btn ghost" id="workshopReturn">← Back to Workshop</button></div>';
+}
+function workshopResponseHeader(step){
+  const labels=['Club identity','Batting ideas','Format priorities','Review & submit'];
+  return `<section class="card" style="margin-bottom:16px"><div class="section-label">Your contribution · Step ${step} of 4</div><h2>${labels[step-1]}</h2><p class="help">${step===4?'Check your answers, then submit your response to see and discuss the group’s How We Bat options.':'Answer for yourself. Use the save and continue button at the bottom to move to the next step.'}</p><ol aria-label="Your response steps" style="display:flex;flex-wrap:wrap;gap:8px 24px;padding-left:20px">${labels.map((label,i)=>`<li ${i+1===step?'aria-current="step" style="font-weight:750"':''}>${label}</li>`).join('')}</ol>${workshopReturnHtml()}<p class="help">Back to Workshop saves your answers without submitting them.</p></section>`;
+}
+function bindWorkshopReturn(){
+  const btn=document.getElementById('workshopReturn');
+  if(!btn)return;
+  btn.onclick=async()=>{
+    const targetClub=club?.id,targetUser=session?.user?.id,targetTab=currentTab;
+    btn.disabled=true;
+    try{
+      if(!await saveClubEditsBeforeNavigation())return;
+      if(club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!==targetTab)return;
+      currentTab='workshop';await renderTab();
+    }finally{btn.disabled=false;}
+  };
+}
+function handleWorkshopPreviewHistory(event){
+  const marker=event.state?.clubBattingWorkshop;
+  if(!marker||marker.clubId!==club?.id||marker.userId!==session?.user?.id)return;
+  if(marker.view==='preview'&&workshopPreview&&workshopPreview.clubId===club.id&&workshopPreview.userId===session.user.id){
+    currentTab='workshop_preview';renderTab();
+  }else if(marker.view==='workshop'){
+    currentTab='workshop';renderTab();
+  }
+}
+function closeWorkshopPreview(){
+  clearTimeout(workshopDiscussionTimer);
+  if(history.state?.clubBattingWorkshop?.view==='preview'){
+    history.back();
+  }else{currentTab='workshop';renderTab();}
+}
 function openScenarioHowWeBatPreview(responses,pMap){
+  const ctx=workshopReviewContext;
+  if(!ctx?.can_review||ctx.clubId!==club?.id||ctx.userId!==session?.user?.id){alert('Return to Workshop and refresh the submitted responses.');return;}
   const selected=selectedScenarioResponses(responses);
-  const leadId=workshop?.philosophy_lead_user_id;
-  const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||(responses||[])[0]||null;
-  const safeSelected=selected.length?selected:(leadResponse?[leadResponse]:[]);
-  if(!safeSelected.length){alert('There is no submitted response available to preview yet.');return;}
-
-  const draft=generatedHowWeBatDraftFromPhilosophy(buildScenarioDraft(safeSelected));
+  if(!selected.some(r=>r.user_id===workshop?.philosophy_lead_user_id)){alert('The Philosophy Lead needs to submit their response before comparisons can begin.');return;}
+  const draft=generatedHowWeBatDraftFromPhilosophy(buildScenarioDraft(selected));
   const formats=FORMATS.filter(([f])=>draft.formats?.[f]);
   if(!formats.length){alert('This combination does not currently produce a How We Bat preview.');return;}
-
-  const names=safeSelected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor');
-  const shortNames=names.map(name=>(name||'Contributor').trim().split(/\s+/)[0]||'Contributor');
-  const scenarioLabel=shortNames.join(' + ');
-  const title=`How We Bat — ${scenarioLabel}`;
-  const styleAssets=[...document.head.querySelectorAll('link[rel="stylesheet"],style')].map(n=>n.outerHTML).join('\n');
-  const tabButtons=formats.map(([f,label],i)=>`<button type="button" data-clean-hwb-tab="${esc(f)}" class="${i===0?'active':''}">${esc(label)}</button>`).join('');
-  const panels=formats.map(([f],i)=>`<div data-clean-hwb-panel="${esc(f)}" style="${i===0?'':'display:none'}">${renderHowWeBatLivePreview(draft,f,false)}</div>`).join('');
-
-  const win=window.open('','_blank');
-  if(!win){alert('Your browser blocked the preview tab. Allow pop-ups for this site, then try again.');return;}
-
-  win.document.open();
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${styleAssets}<style>
-    html,body{margin:0;padding:0;background:#f7f8fb;}
-    body{min-height:100vh;}
-    .clean-hwb-shell{max-width:980px;margin:0 auto;padding:18px 16px 48px;}
-    .clean-hwb-preview-head{position:sticky;top:0;z-index:20;padding:10px 0 12px;background:#f7f8fb;}
-    .clean-hwb-scenario-label{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px;padding:6px 10px;border-radius:999px;background:#fff;border:1px solid #dfe4ef;color:#59627a;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;box-shadow:0 1px 2px rgba(20,32,80,.04);}
-    .clean-hwb-scenario-label strong{color:#18245f;letter-spacing:0;text-transform:none;font-size:13px;}
-    .clean-hwb-format-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0;}
-    .clean-hwb-format-tabs button{border:0;border-radius:999px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer;background:#e9edf7;color:#18245f;}
-    .clean-hwb-format-tabs button.active{background:#203588;color:#fff;}
-    .clean-hwb-shell .hwb-publication-preview .hwb-public-tabs{display:none!important;}
-    .clean-hwb-shell .hwb-publication-preview{margin:0;}
-    @media(max-width:700px){.clean-hwb-shell{padding:8px 8px 32px}.clean-hwb-preview-head{padding-top:8px}}
-  </style></head><body><main class="clean-hwb-shell"><div class="clean-hwb-preview-head"><div class="clean-hwb-scenario-label">Comparison preview <span>·</span> <strong>${esc(scenarioLabel)}</strong></div><div class="clean-hwb-format-tabs">${tabButtons}</div></div>${panels}</main><script>
-    document.querySelectorAll('[data-clean-hwb-tab]').forEach(btn=>btn.addEventListener('click',()=>{
-      const format=btn.dataset.cleanHwbTab;
-      document.querySelectorAll('[data-clean-hwb-tab]').forEach(x=>x.classList.toggle('active',x===btn));
-      document.querySelectorAll('[data-clean-hwb-panel]').forEach(panel=>panel.style.display=panel.dataset.cleanHwbPanel===format?'':'none');
-      window.scrollTo({top:0,left:0,behavior:'instant'});
-    }));
-  <\/script></body></html>`);
-  win.document.close();
+  const ids=selected.map(r=>r.user_id).sort();
+  workshopPreview={clubId:club.id,userId:session.user.id,round:ctx.round_number,ids,responses:selected,pMap,draft,format:formats[0][0],
+    names:selected.map(r=>r.display_name||pMap.get(r.user_id)?.display_name||'Contributor'),
+    key:[club.id,session.user.id,ctx.round_number,...ids].join(':'),loading:false,sending:false};
+  const marker={clubId:club.id,userId:session.user.id};
+  history.replaceState({...history.state,clubBattingWorkshop:{...marker,view:'workshop'}},'');
+  history.pushState({...history.state,clubBattingWorkshop:{...marker,view:'preview'}},'');
+  currentTab='workshop_preview';return renderTab();
+}
+function workshopPreviewCurrent(ctx){
+  return workshopPreview===ctx&&currentTab==='workshop_preview'&&club?.id===ctx.clubId&&session?.user?.id===ctx.userId;
+}
+function workshopDiscussionCurrent(ctx){
+  return workshopPreviewCurrent(ctx)&&!!document.getElementById('workshopCommentForm');
+}
+function workshopDiscussionArgs(ctx){
+  return {p_club_id:ctx.clubId,p_round_number:ctx.round,p_scenario_user_ids:ctx.ids};
+}
+function renderWorkshopPreview(){
+  const ctx=workshopPreview;
+  if(!ctx||!workshopPreviewCurrent(ctx)){currentTab='workshop';return renderTab();}
+  clearTimeout(workshopDiscussionTimer);
+  const formats=FORMATS.filter(([f])=>ctx.draft.formats?.[f]);
+  const page=document.getElementById('page');
+  page.innerHTML=`<style>
+    .workshop-preview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+    .workshop-preview-head .btn,.workshop-discussion .btn{min-height:44px}
+    .workshop-preview .hwb-publication-preview{margin-top:12px}.workshop-preview .hwb-public-tabs{display:none}
+    .workshop-discussion{margin-top:20px}.workshop-comment{padding:14px 0;border-bottom:1px solid #dce2ee;overflow-wrap:anywhere}
+    .workshop-comment p{white-space:pre-wrap;line-height:1.6;margin:8px 0}.workshop-comment time{display:block;font-size:12px;color:#59657c;margin-top:4px}
+    .workshop-discussion textarea{width:100%;box-sizing:border-box;min-height:110px}.workshop-discussion [role="status"]{display:block;margin:10px 0}
+    @media(max-width:600px){.workshop-preview .hwb-public-hero{padding:22px 18px}.workshop-preview .hwb-public-body{padding:20px 16px}}
+  </style><div class="workshop-preview">
+    <div class="workshop-preview-head"><button type="button" class="btn ghost" id="backWorkshopPreview">← Back to Workshop</button><button type="button" class="btn ghost" id="jumpWorkshopDiscussion">Discuss this version ↓</button></div>
+    <section class="card"><div class="section-label">Comparison preview · Workshop round ${Number(ctx.round)}</div><h1 style="font-size:clamp(23px,4vw,32px)">How We Bat: ${esc(naturalList(ctx.names))}</h1><p class="help">This preview shows how these submitted responses combine. Exploring and commenting does not change the club’s chosen approach. Only the Philosophy Lead can confirm How We Bat.</p>
+    <div class="btnrow">${formats.map(([f,label])=>`<button class="btn ${f===ctx.format?'secondary':'ghost'}" type="button" data-workshop-preview-format="${esc(f)}" aria-pressed="${f===ctx.format}">${esc(label)}</button>`).join('')}</div></section>
+    <div id="workshopVersionContent">${renderHowWeBatLivePreview(ctx.draft,ctx.format,false)}</div>
+    ${isPhilosophyLead()&&howWeBatDraft?.status!=='ready'?'<section class="card" style="margin-top:16px"><h2>Use this as the working draft?</h2><p class="help">You can edit the wording next. Confirm How We Bat only when you are ready to lock the approach for the season.</p><button type="button" class="btn secondary" id="usePreviewScenario">Use this version as our draft →</button></section>':''}
+    <section class="card workshop-discussion" aria-labelledby="workshopDiscussionHeading"><div class="section-label">Shared discussion</div><h2 id="workshopDiscussionHeading" tabindex="-1">Discuss this version</h2><p class="help">Comments here belong to this combination of contributors, across all its formats. Everyone with review access can read and reply. Mention a format if your comment is specific to it.</p><button type="button" class="btn ghost" id="refreshWorkshopDiscussion">Refresh comments</button><span id="workshopDiscussionLoadStatus" role="status">Loading comments…</span><div id="workshopComments"></div>
+    <form id="workshopCommentForm"><div class="field"><label for="workshopCommentBody">Your comment</label><textarea id="workshopCommentBody" maxlength="2000" placeholder="What feels right? What would you change?">${esc(workshopCommentDrafts.get(ctx.key)?.body||'')}</textarea><small>Up to 2,000 characters. Comments are shared here; no email is sent.</small></div><button type="submit" class="btn secondary" id="postWorkshopComment">Post comment</button><span role="status" id="workshopCommentStatus"></span></form>
+    <div class="btnrow" style="margin-top:16px"><button type="button" class="btn ghost" id="bottomBackWorkshopPreview">← Back to Workshop</button></div></section></div>`;
+  document.getElementById('backWorkshopPreview').onclick=closeWorkshopPreview;
+  document.getElementById('bottomBackWorkshopPreview').onclick=closeWorkshopPreview;
+  document.getElementById('jumpWorkshopDiscussion').onclick=()=>{document.getElementById('workshopDiscussionHeading').scrollIntoView({behavior:'smooth',block:'start'});document.getElementById('workshopDiscussionHeading').focus({preventScroll:true});};
+  page.querySelectorAll('[data-workshop-preview-format]').forEach(btn=>btn.onclick=()=>{
+    ctx.format=btn.dataset.workshopPreviewFormat;
+    page.querySelectorAll('[data-workshop-preview-format]').forEach(b=>{const active=b===btn;b.className=`btn ${active?'secondary':'ghost'}`;b.setAttribute('aria-pressed',String(active));});
+    document.getElementById('workshopVersionContent').innerHTML=renderHowWeBatLivePreview(ctx.draft,ctx.format,false);
+  });
+  document.getElementById('workshopCommentBody').oninput=e=>{
+    const old=workshopCommentDrafts.get(ctx.key);
+    workshopCommentDrafts.set(ctx.key,{body:e.target.value,id:old?.body===e.target.value?old.id:null});
+  };
+  document.getElementById('workshopCommentForm').onsubmit=async e=>{e.preventDefault();await postWorkshopComment(ctx);};
+  document.getElementById('refreshWorkshopDiscussion').onclick=()=>refreshWorkshopDiscussion(ctx);
+  const choose=document.getElementById('usePreviewScenario');
+  if(choose)choose.onclick=async()=>{
+    if(ctx.choosing)return;
+    ctx.choosing=true;choose.disabled=true;
+    try{
+      // Recheck the round before changing the Lead's working draft.
+      const {error}=await supabase.rpc('get_workshop_discussion',workshopDiscussionArgs(ctx));
+      if(!workshopPreviewCurrent(ctx))return;
+      if(error)throw error;
+      philosophyScenarioSelectedIds=new Set(ctx.ids);
+      await applySelectedVoiceScenario(ctx.responses,ctx.pMap);
+    }catch(error){if(workshopPreviewCurrent(ctx))alert(error.message||'The draft could not be created.');}
+    finally{ctx.choosing=false;choose.disabled=false;}
+  };
+  return refreshWorkshopDiscussion(ctx);
+}
+async function refreshWorkshopDiscussion(ctx){
+  clearTimeout(workshopDiscussionTimer);
+  if(!workshopDiscussionCurrent(ctx)||ctx.loading)return;
+  ctx.loading=true;
+  try{
+    if(document.hidden)return;
+    const {data,error}=await supabase.rpc('get_workshop_discussion',workshopDiscussionArgs(ctx));
+    if(!workshopDiscussionCurrent(ctx))return;
+    if(error)throw error;
+    const messages=data?.messages||[];
+    document.getElementById('workshopComments').innerHTML=messages.length?messages.map(m=>`<article class="workshop-comment"><strong>${esc(m.author_name)}${m.author_user_id===ctx.userId?' · You':''}</strong><time datetime="${esc(m.created_at)}">${esc(new Date(m.created_at).toLocaleString())}</time><p>${esc(m.body)}</p></article>`).join(''):'<p class="help">No comments on this version yet. Start the conversation below.</p>';
+    document.getElementById('workshopDiscussionLoadStatus').textContent=`${Number(data?.total_count||0)>100?'Showing the latest 100 comments. ':''}Comments are up to date. Refreshes automatically while this screen is open.`;
+  }catch(error){
+    if(workshopDiscussionCurrent(ctx))document.getElementById('workshopDiscussionLoadStatus').textContent=`Comments could not be refreshed. ${error.message||'Check your connection and try Refresh comments.'}`;
+  }finally{
+    ctx.loading=false;
+    if(workshopDiscussionCurrent(ctx))workshopDiscussionTimer=setTimeout(()=>refreshWorkshopDiscussion(ctx),15000);
+  }
+}
+async function postWorkshopComment(ctx){
+  if(!workshopDiscussionCurrent(ctx)||ctx.sending)return;
+  const input=document.getElementById('workshopCommentBody'),btn=document.getElementById('postWorkshopComment'),status=document.getElementById('workshopCommentStatus');
+  const body=input.value.trim();
+  if(!body||body.length>2000){status.textContent='Write a comment of 1 to 2,000 characters.';return;}
+  const previous=workshopCommentDrafts.get(ctx.key);
+  const pending={body,id:previous?.body?.trim()===body&&previous.id?previous.id:crypto.randomUUID()};
+  workshopCommentDrafts.set(ctx.key,pending);
+  ctx.sending=true;btn.disabled=true;input.disabled=true;status.textContent='Posting…';
+  try{
+    const {error}=await supabase.rpc('post_workshop_comment',{...workshopDiscussionArgs(ctx),p_message_id:pending.id,p_body:body});
+    if(error)throw error;
+    if(workshopCommentDrafts.get(ctx.key)===pending)workshopCommentDrafts.delete(ctx.key);
+    if(!workshopDiscussionCurrent(ctx))return;
+    document.getElementById('workshopCommentBody').value='';document.getElementById('workshopCommentStatus').textContent='Comment posted.';
+    await refreshWorkshopDiscussion(ctx);
+  }catch(error){if(workshopDiscussionCurrent(ctx))document.getElementById('workshopCommentStatus').textContent=`We could not confirm your comment was posted. Your text is kept; retrying will not post it twice. ${error.message||''}`;}
+  finally{ctx.sending=false;btn.disabled=false;input.disabled=false;}
 }
 
 function renderDetailedSynthesisBody(responses,pMap){
@@ -4841,7 +4959,7 @@ function renderDetailedSynthesisBody(responses,pMap){
 
 function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   const leadId=workshop?.philosophy_lead_user_id;
-  const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||(responses||[])[0]||null;
+  const leadResponse=(responses||[]).find(r=>r.user_id===leadId)||null;
   if(!leadResponse)return `<section class="card workshop-stage-card" style="margin-top:16px"><div class="section-label">3 · Compare How We Bat options</div><h2>The Philosophy Lead needs to submit their response.</h2><div class="help">The submitted response provides the starting point for How We Bat.</div></section>`;
 
   const selected=selectedScenarioResponses(responses);
@@ -4885,18 +5003,19 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
   return `<section class="card synthesis workshop-stage-card" style="margin-top:16px">
     <div class="section-label">3 · Compare How We Bat options</div>
     <h2>Which How We Bat feels most like the club?</h2>
-    <div class="help">Choose a combination, then open its How We Bat preview in a new tab. ${hwbLocked?'These previews do not change the locked How We Bat.':isPhilosophyLead()?'Compare the options, then choose “Use this to create How We Bat” when you are ready.':'The Philosophy Lead chooses which option to use for the club.'}</div>
+    <div class="help">Choose a combination, then preview and discuss it here. Everyone who has submitted can explore these options. ${hwbLocked?'These previews do not change the locked How We Bat.':isPhilosophyLead()?'Open a preview to discuss it, then choose it as your working draft when you are ready.':'The Philosophy Lead chooses which option to use for the club.'}</div>
 
     <div class="btnrow" style="margin-top:16px">
-      ${presets.map(p=>`<button class="btn ${sameIds(p.ids)?'secondary':'ghost'}" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
+      ${presets.map(p=>`<button class="btn ${sameIds(p.ids)?'secondary':'ghost'}" aria-pressed="${sameIds(p.ids)}" data-scenario-preset="${esc(p.ids.join(','))}">${esc(p.label)}</button>`).join('')}
     </div>
 
+    ${otherResponses.length>3?`<fieldset style="margin-top:16px;border:1px solid #dce2ee;border-radius:10px;padding:16px"><legend>Or choose any combination</legend><p class="help">${esc(displayName(leadResponse))} is included as the Philosophy Lead.</p>${otherResponses.map(r=>`<label style="display:flex;gap:10px;align-items:center;min-height:44px"><input type="checkbox" data-scenario-voice="${esc(r.user_id)}" ${selectedIds.has(r.user_id)?'checked':''}>${esc(displayName(r))}</label>`).join('')}</fieldset>`:''}
     ${hwbLocked?`<div class="help" style="margin-top:10px">🔒 How We Bat is locked. These comparisons remain available for reference.</div>`:(meta?.snapshot?`<div class="help" style="margin-top:10px">A How We Bat draft exists. The Philosophy Lead can choose another combination until it is locked.</div>`:'')}
 
     <div class="btnrow" style="margin-top:18px">
-      <button class="btn ghost" id="openScenarioHwbPreview">Open ${esc(currentLabel)} How We Bat ↗</button>
+      <button class="btn secondary" id="openScenarioHwbPreview">Preview and discuss this version →</button><span class="help">${esc(currentLabel)}</span>
       ${!baselineOnly?`<button class="btn ghost" id="showScenarioChanges">What changed?</button>`:''}
-      ${isPhilosophyLead()&&!hwbLocked?`<button class="btn secondary" id="useVoiceScenario">Use this to create How We Bat</button>`:''}
+
     </div>
 
     ${!baselineOnly?`<dialog id="scenarioChangesDialog" style="max-width:620px;width:calc(100% - 32px);border:0;border-radius:16px;padding:0;box-shadow:0 20px 60px rgba(20,32,80,.25)">
@@ -4919,6 +5038,10 @@ function renderVoiceScenarioExplorer(responses,pMap,allSubmitted,meta=null){
 }
 
 async function applySelectedVoiceScenario(responses,pMap){
+  if(!isPhilosophyLead()){alert('Only the Philosophy Lead can choose the club’s working draft.');return;}
+  const targetClubId=club.id,targetUserId=session.user.id;
+  const isCurrent=()=>club?.id===targetClubId&&session?.user?.id===targetUserId;
+
   if(!confirmLeaveWorkshopSetup())return;
   const selected=selectedScenarioResponses(responses);
   if(!selected.length){alert('Select at least the Philosophy Lead response.');return;}
@@ -4945,7 +5068,7 @@ async function applySelectedVoiceScenario(responses,pMap){
 
   if(!workshop?.final_draft_ready){
     const {error}=await supabase.rpc('begin_final_philosophy_draft',{
-      p_club_id:club.id,
+      p_club_id:targetClubId,
       p_identity_values:draft.identity_values,
       p_identity_note:draft.identity_note,
       p_formats_enabled:draft.formats_enabled,
@@ -4953,6 +5076,7 @@ async function applySelectedVoiceScenario(responses,pMap){
       p_dimension_notes:draft.dimension_notes,
       p_format_weights:draft.format_weights
     });
+    if(!isCurrent())return;
     if(error){alert(error.message);return;}
   }else{
     const {error}=await supabase
@@ -4967,23 +5091,26 @@ async function applySelectedVoiceScenario(responses,pMap){
         submitted_at:null,
         updated_at:new Date().toISOString()
       })
-      .eq('club_id',club.id)
+      .eq('club_id',targetClubId)
       .eq('user_id',leadId);
+    if(!isCurrent())return;
     if(error){alert(error.message);return;}
   }
 
-  sessionStorage.setItem(`bdp-philosophy-working-voices:${club.id}`,JSON.stringify(selected.map(r=>r.user_id)));
+  sessionStorage.setItem(`bdp-philosophy-working-voices:${targetClubId}`,JSON.stringify(selected.map(r=>r.user_id)));
 
   const {error:hErr}=await supabase.rpc('save_how_we_bat_draft',{
-    p_club_id:club.id,
+    p_club_id:targetClubId,
     p_identity_statement:hwb.identity_statement||'',
     p_closing_strapline:hwb.closing_strapline||'',
     p_formats:hwb.formats||{},
     p_status:'draft'
   });
+  if(!isCurrent())return;
   if(hErr){alert(hErr.message);return;}
 
   await loadData();
+  if(!isCurrent())return;
   currentTab='howwebat';
   renderShell();
 }
@@ -5052,7 +5179,9 @@ function renderLateResponseDetail(response){
 }
 
 function renderMySubmittedPhilosophyResponse(response){
-  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}<section class="card">
+  currentTab='preview';
+  workshopLastRoute=`${club.id}:preview`;
+  document.getElementById('page').innerHTML=`${workshopReturnHtml()}<section class="card">
     <div class="section-label">Your submitted response</div>
     <h2>Review your philosophy contribution</h2>
     ${response
@@ -5061,6 +5190,8 @@ function renderMySubmittedPhilosophyResponse(response){
     <div class="btnrow" style="margin-top:16px"><button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button></div>
   </section>`;
   document.getElementById('backWorkshop').onclick=()=>{currentTab='workshop';renderTab();};
+  bindWorkshopReturn();
+  window.scrollTo?.({top:0,left:0,behavior:'instant'});
 }
 
 function renderLatePhilosophyResponses(actions,pMap){
@@ -5304,7 +5435,7 @@ function renderIdentity(){
   }
 
   const locked=contributionLocked();
-  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ Independent response submitted. It is locked so the group synthesis cannot influence your original answers.</div>':''}
+  document.getElementById('page').innerHTML=`${workshopResponseHeader(1)}${locked?'<div class="submitted-banner">✓ Independent response submitted. It is locked so the group synthesis cannot influence your original answers.</div>':''}
   <div class="grid">
     <section class="card">
       <div class="section-label">What should survive every format?</div>
@@ -5330,7 +5461,7 @@ function renderIdentity(){
       <div class="btnrow">
         ${locked
           ?'<button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button>'
-          :'<button class="btn secondary" id="saveIdentity">Save & continue</button><button type="button" class="btn ghost" id="responseBack">Back to Workshop</button><span class="status" id="identityStatus"></span>'}
+          :'<button class="btn secondary" id="saveIdentity">Save & continue to batting ideas →</button><button type="button" class="btn ghost" id="responseBack">Back to Workshop</button><span class="status" id="identityStatus"></span>'}
       </div>
     </section>
   </div>`;
@@ -5348,6 +5479,7 @@ function renderIdentity(){
   });
 
   document.getElementById('saveIdentity').onclick=async()=>{
+    const targetClubId=club.id,targetUserId=session.user.id;
     const btn=document.getElementById('saveIdentity');
     const err=document.getElementById('identityError');
     collectIdentity(true);
@@ -5358,7 +5490,7 @@ function renderIdentity(){
     const ok=await saveClubProfile('identityStatus');
     if(ok){
       btn.textContent='Saved ✓';
-      setTimeout(()=>{currentTab='dimensions';renderTab();},300);
+      if(currentTab==='identity'&&club?.id===targetClubId&&session?.user?.id===targetUserId){currentTab='dimensions';renderTab();}
     }else{
       btn.disabled=false;
       btn.textContent='Save & continue';
@@ -5411,7 +5543,7 @@ function renderDimensions(){
   if(!myContribution){currentTab='workshop';renderTab();return;}
   const locked=contributionLocked();
 
-  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
+  document.getElementById('page').innerHTML=`${workshopResponseHeader(2)}${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
   <div class="grid">
     <section class="card">
       <div class="section-label">Stimulus, not a prescription</div>
@@ -5434,7 +5566,7 @@ function renderDimensions(){
       <div class="btnrow">
         ${locked
           ?'<button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button>'
-          :'<button class="btn secondary" id="saveDims">Save & set format emphasis</button><button type="button" class="btn ghost" id="responseBack">Back to Club Identity</button><span class="status" id="dimStatus"></span>'}
+          :'<button class="btn secondary" id="saveDims">Save & continue to format priorities →</button><button type="button" class="btn ghost" id="responseBack">Back to Club Identity</button><span class="status" id="dimStatus"></span>'}
       </div>
     </section>
   </div>`;
@@ -5535,7 +5667,7 @@ function renderFormats(){
   const formats=enabledFormats();
   const locked=contributionLocked();
 
-  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
+  document.getElementById('page').innerHTML=`${workshopResponseHeader(3)}${locked?'<div class="submitted-banner">✓ Independent response submitted and locked.</div>':''}
   <div class="card">
     <div class="section-label">When does each thing matter most?</div>
     <h2>Format emphasis</h2>
@@ -5552,7 +5684,7 @@ function renderFormats(){
     <div class="btnrow">
       ${locked
         ?'<button class="btn secondary" id="backWorkshop">Return to Batting Philosophy Workshop</button>'
-        :'<button class="btn secondary" id="saveWeights">Save & review response</button><button type="button" class="btn ghost" id="responseBack">Back to What We Value</button><span class="status" id="weightStatus"></span>'}
+        :'<button class="btn secondary" id="saveWeights">Save & review my response →</button><button type="button" class="btn ghost" id="responseBack">Back to What We Value</button><span class="status" id="weightStatus"></span>'}
     </div>
   </div>`;
 
@@ -5909,6 +6041,7 @@ function howWeBatBannerEditorRows(format){
 }
 
 function renderHowWeBatBuilder(savedMessage=''){
+  queueMicrotask(bindWorkshopReturn);
   const draft=ensureHowWeBatWorkingDraft();
   if(draft.status==='ready'){
     currentTab='howwebat';
@@ -5923,7 +6056,7 @@ function renderHowWeBatBuilder(savedMessage=''){
 
   const builderIsReady=draft.status==='ready';
 
-  document.getElementById('page').innerHTML=`<div class="hwb-builder-shell">
+  document.getElementById('page').innerHTML=`${workshopReturnHtml()}<div class="hwb-builder-shell">
     <section class="card hwb-builder-intro">
       <div>
         <div class="section-label">Optional manual control</div>
@@ -6297,6 +6430,7 @@ async function lockCurrentHowWeBat(){
 }
 
 function renderPublishedHowWeBat(){
+  queueMicrotask(bindWorkshopReturn);
   const canSeeWorking=(isPhilosophyLead() || isAdmin()) && !!howWeBatDraft && clubSetupProgress().workshopReady;
   const version=howWeBatVersions[0]||null;
   const snap=canSeeWorking ? howWeBatDraft : (version?.snapshot||null);
@@ -6334,7 +6468,7 @@ function renderPublishedHowWeBat(){
     && snap.closing_strapline===publishedComparison?.closing_strapline
     && JSON.stringify(snap.formats||{})===JSON.stringify(publishedComparison?.formats||{});
 
-  clubSetupContentPage('howwebat').innerHTML=`<div class="hwb-published-shell">
+  clubSetupContentPage('howwebat').innerHTML=`${canSeeWorking?workshopReturnHtml():''}<div class="hwb-published-shell">
     <div class="guide-context-bar"><span><strong>How We Bat</strong> · The club framework players can actually use.</span><button type="button" class="btn ghost compact-btn" id="howWeBatGuideLink">${canSeeWorking?'Show me how':'How this fits together'}</button></div>
     ${canSeeWorking?`<div class="published-version-note">${workingPublished?'Published How We Bat · locked for the season':workingReady?'Locked draft · ready for Player Plan Structure':'Working draft · review before locking'}</div>`:''}
     <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
@@ -6393,6 +6527,7 @@ function formatNarrative(format){
 }
 
 function renderPreview(){
+  queueMicrotask(bindWorkshopReturn);
   if(isPhilosophyLead() && workshop?.final_draft_ready){
     renderHowWeBatBuilder();
     return;
@@ -6403,10 +6538,10 @@ function renderPreview(){
   const identity=identitySummary()+(clubProfile.identity_note?` ${clubProfile.identity_note}`:'');
   const locked=contributionLocked();
 
-  document.getElementById('page').innerHTML=`${buildWorkspaceAudienceNotice()}${locked?'<div class="submitted-banner">✓ This is your locked independent response.</div>':''}
+  document.getElementById('page').innerHTML=`${workshopResponseHeader(4)}${locked?'<div class="submitted-banner">✓ This is your locked independent response.</div>':''}
   <div class="grid">
     <section><div class="preview">
-      <div class="preview-head"><div class="k">${esc(club.name)}</div><h2>How We Bat</h2><div style="font-size:11px;line-height:1.5;opacity:.9">${esc(identity)}</div></div>
+      <div class="preview-head"><div class="k">${esc(club.name)}</div><h2>Your response preview</h2><div style="font-size:11px;line-height:1.5;opacity:.9">${esc(identity)}</div></div>
       <div class="preview-section"><h3>Our identity</h3><p>${esc(identity)}</p></div>
       <div class="preview-section">
         <div class="format-tabs">${formats.map(([k,l])=>`<button data-preview-format="${k}" class="${k===previewFormat?'active':''}">${l}</button>`).join('')}</div>
@@ -6417,7 +6552,7 @@ function renderPreview(){
       </div>
     </div></section>
     <section class="card philosophy-submit-card ${locked?'submitted':''}">
-      <div class="section-label">${locked?'Response complete':'FINAL STEP'}</div>
+      <div class="section-label">${locked?'Your response submitted':'YOUR FINAL STEP'}</div>
       <h2>${locked?'Response submitted':'Submit your response'}</h2>
       ${locked
         ?'<div class="philosophy-submit-state submitted"><strong>Submitted ✓</strong><span>Your independent response is locked and is available to the workshop synthesis.</span></div>'
