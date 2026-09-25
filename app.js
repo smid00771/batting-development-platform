@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.14';
+const APP_UI_VERSION='0.8.62.15';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -13430,14 +13430,14 @@ async function renderPlatformActiveClubs(message=''){
       ${message?`<p class="notice success" role="status">${esc(message)}</p>`:''}
       <div class="active-club-list">${clubs.map(c=>{
         const s=byClub.get(c.id),forever=s?.special_rate_never_ends&&Number(s.adjustment_percent)===100;
-        return `<div class="active-club-row"><div><strong>${esc(c.name)}</strong><span class="club-access-description ${forever?'club-access-infinity':''}">${forever?'Ongoing complimentary access · no expiry or renewal':s?`Access through ${esc(niceDate(s.active_until))}`:'No subscription record. Remove this test setup to restart through the promo-email journey.'}</span></div><div>
+        return `<div class="active-club-row"><div><strong>${esc(c.name)}</strong><span data-sub-description="${c.id}" class="club-access-description ${forever?'club-access-infinity':''}">${forever?'Ongoing complimentary access · no expiry or renewal':s?`Access through ${esc(niceDate(s.active_until))}`:'No subscription record. Remove this test setup to restart through the promo-email journey.'}</span></div><div>
           ${s?`<div class="active-club-controls">
             <label>Rate reduction %<input data-sub-adjust="${c.id}" type="number" min="0" max="100" step="1" value="${Number(s.adjustment_percent)}" ${canCommercial?'':'disabled'}><small>0 = full price · 100 = free</small></label>
             <label>Special rate ends<select data-sub-end-mode="${c.id}" ${canCommercial?'':'disabled'}><option value="date" ${s.special_rate_never_ends?'':'selected'}>On a date</option><option value="never" ${s.special_rate_never_ends?'selected':''}>Never</option></select><input data-sub-adjend="${c.id}" type="date" aria-label="Special rate end date for ${esc(c.name)}" value="${esc(s.adjustment_end||'')}" ${s.special_rate_never_ends?'hidden':''} ${canCommercial?'':'disabled'}></label>
             <label>Access ends<input data-sub-active="${c.id}" type="date" value="${s.active_until==='infinity'?'':esc(String(s.active_until||'').slice(0,10))}" ${forever||!canCommercial?'disabled':''}><small data-sub-access-note="${c.id}">${forever?'Never — ongoing free access':'A separate date from the special rate.'}</small></label>
             <label>At expiry<select data-sub-expiry="${c.id}" ${forever||!canCommercial?'disabled':''}><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return to standard rate</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End access</option></select></label>
           </div>`:''}
-          <div class="btnrow" style="margin-top:12px">${s&&canCommercial?`<button class="btn secondary" data-save-access="${c.id}">Save access & rate</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
+          <div class="btnrow" style="margin-top:12px">${s&&canCommercial?`<button class="btn ghost" data-save-access="${c.id}" disabled>Saved ✓</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
         </div></div>`;
       }).join('')||'<p>No active clubs. Add a lead and send its promo email to start the full journey.</p>'}</div>
     </section>
@@ -13447,19 +13447,47 @@ async function renderPlatformActiveClubs(message=''){
   page.querySelectorAll('[data-removed-promo]').forEach(button=>button.onclick=()=>openPlatformLeadEntry(removed.find(row=>row.club_id===button.dataset.removedPromo)));
   clubs.forEach(c=>{
     if(!byClub.has(c.id))return;
-    const el=key=>page.querySelector(`[data-sub-${key}="${c.id}"]`);
-    const sync=()=>{const never=el('end-mode').value==='never',free=never&&Number(el('adjust').value)===100;el('adjend').hidden=never;el('active').disabled=free||!canCommercial;el('expiry').disabled=free||!canCommercial;page.querySelector(`[data-sub-access-note="${c.id}"]`).textContent=free?'Never — ongoing free access':never?'The discount continues; access still renews on this date.':'A separate date from the special rate.';};
-    el('end-mode').onchange=sync;el('adjust').oninput=sync;
-  });
-  page.querySelectorAll('[data-save-access]').forEach(button=>button.onclick=async()=>{
-    const id=button.dataset.saveAccess,el=key=>page.querySelector(`[data-sub-${key}="${id}"]`),status=page.querySelector(`[data-access-result="${id}"]`);
-    const reduction=Number(el('adjust').value),never=el('end-mode').value==='never',free=never&&reduction===100;
-    if(!Number.isFinite(reduction)||reduction<0||reduction>100){status.textContent='Enter a rate reduction between 0 and 100.';return;}
-    if(!free&&!el('active').value){status.textContent='Choose an access end date.';return;}
-    if(reduction>0&&!never&&!el('adjend').value){status.textContent='Choose a special rate end date, or Never.';return;}
-    button.disabled=true;status.textContent='Saving…';
-    try{const {error}=await supabase.rpc('platform_set_club_access_terms',{p_club_id:id,p_adjustment_percent:reduction,p_never_ends:never,p_adjustment_end:never?null:el('adjend').value||null,p_active_until:free?null:el('active').value,p_expiry_action:el('expiry').value});if(error)throw Error(error.message);await renderPlatformActiveClubs(`${clubs.find(c=>c.id===id)?.name||'Club'}: ${free?'ongoing complimentary access saved. No renewal or payment reminders.':'access and rate saved.'}`);}
-    catch(error){status.textContent=error.message||'Could not save the access terms.';button.disabled=false;}
+    const keys=['adjust','end-mode','adjend','active','expiry'];
+    const fields=Object.fromEntries(keys.map(key=>[key,page.querySelector(`[data-sub-${key}="${c.id}"]`)])),el=key=>fields[key];
+    const button=page.querySelector(`[data-save-access="${c.id}"]`),status=page.querySelector(`[data-access-result="${c.id}"]`);
+    const note=page.querySelector(`[data-sub-access-note="${c.id}"]`),description=page.querySelector(`[data-sub-description="${c.id}"]`);
+    const values=()=>JSON.stringify(keys.map(key=>el(key).value));
+    let savedValues=values(),saving=false;
+    const sync=()=>{
+      const never=el('end-mode').value==='never',free=never&&Number(el('adjust').value)===100;
+      el('adjend').hidden=never;
+      keys.forEach(key=>{el(key).disabled=saving||!canCommercial||(free&&['active','expiry'].includes(key));});
+      note.textContent=free?'Never — ongoing free access':never?'The discount continues; access still renews on this date.':'A separate date from the special rate.';
+      if(button){
+        const dirty=values()!==savedValues;
+        button.disabled=saving||!dirty;
+        button.className=`btn ${dirty?'secondary':'ghost'}`;
+        button.textContent=saving?'Saving…':dirty?'Save changes':'Saved ✓';
+      }
+    };
+    keys.forEach(key=>{el(key).oninput=el(key).onchange=()=>{if(!saving)status.textContent='';sync();};});
+    sync();
+    if(!button)return;
+    button.onclick=async()=>{
+      if(saving||values()===savedValues)return;
+      const reduction=Number(el('adjust').value),never=el('end-mode').value==='never',free=never&&reduction===100;
+      if(!Number.isFinite(reduction)||reduction<0||reduction>100){status.textContent='Enter a rate reduction between 0 and 100.';return;}
+      if(!free&&!el('active').value){status.textContent='Choose an access end date.';return;}
+      if(reduction>0&&!never&&!el('adjend').value){status.textContent='Choose a special rate end date, or Never.';return;}
+      const terms={p_club_id:c.id,p_adjustment_percent:reduction,p_never_ends:never,p_adjustment_end:never?null:el('adjend').value||null,p_active_until:free?null:el('active').value,p_expiry_action:el('expiry').value};
+      saving=true;status.textContent='Saving…';sync();
+      try{
+        const {error}=await supabase.rpc('platform_set_club_access_terms',terms);
+        if(error)throw Error(error.message);
+        // Reflect the confirmed save in this row without discarding another club's edits.
+        el('adjust').value=String(reduction);el('adjend').value=terms.p_adjustment_end||'';el('active').value=terms.p_active_until||'';
+        savedValues=values();
+        description.className=`club-access-description ${free?'club-access-infinity':''}`;
+        description.textContent=free?'Ongoing complimentary access · no expiry or renewal':`Access through ${niceDate(terms.p_active_until)}`;
+        status.textContent=free?'Ongoing complimentary access saved. No renewal or payment reminders.':'Access and rate saved.';
+      }catch(error){status.textContent=error.message||'Could not save the access terms.';}
+      finally{saving=false;sync();}
+    };
   });
 }
 
