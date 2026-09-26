@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.19';
+const APP_UI_VERSION='0.8.62.20';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1999,6 +1999,117 @@ async function savePhilosophyResponseBeforeNavigation(){
 }
 
 
+let myCoachingUpdates={clubId:null,userId:null,updates:[],error:'',loaded:false};
+let coachingUpdatesSequence=0,coachingNoteObserver=null,pendingCoachingUpdate=null;
+const coachingSeenPending=new Set();
+function coachingUpdateScopeMatches(state=myCoachingUpdates){return state.clubId===club?.id&&state.userId===session?.user?.id&&!!myPlayer&&isPlayerUser();}
+
+function renderCoachingUpdatesMenu(){
+  const host=document.getElementById('coachingUpdatesHost');if(!host)return;
+  const wasOpen=!!document.getElementById('coachingUpdatesMenu')?.open;
+  const state=myCoachingUpdates,rows=coachingUpdateScopeMatches(state)?state.updates:[];
+  host.innerHTML=`<details class="account-menu" id="coachingUpdatesMenu" ${wasOpen?'open':''}>
+    <summary class="btn ghost" id="coachingUpdatesToggle" style="min-height:44px" aria-label="Coaching updates${rows.length?`: ${rows.length} unread`:''}">
+      <svg width="18" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+      Coaching ${rows.length?`<span class="coaching-unread-badge">${rows.length}</span>`:''}<span class="account-menu-chevron" aria-hidden="true">⌄</span>
+    </summary><div class="account-menu-popover coaching-updates-popover"><strong>Coaching updates</strong>
+      <div role="status" aria-live="polite" class="account-access-status">${state.error?'Updates could not be checked. Try again.':!state.loaded?'Checking for new notes…':rows.length?`${rows.length} unread coaching note${rows.length===1?'':'s'}`:'You’re up to date.'}</div>
+      ${rows.map(u=>`<button type="button" class="account-menu-action" data-open-coaching-update="${esc(u.source_key)}">${esc(u.author_name)} · ${u.source_kind==='match'?'Match observation':'Training observation'}<small>${esc(formatDateShort(u.changed_at))} · ${u.can_open?'View note':'Add your reflection to view'}</small></button>`).join('')}
+      <button type="button" class="account-menu-action" id="checkCoachingUpdates">Check for updates</button>
+    </div></details>`;
+  document.getElementById('coachingUpdatesToggle').onclick=()=>{void refreshMyCoachingUpdates();};
+  document.getElementById('checkCoachingUpdates').onclick=()=>refreshMyCoachingUpdates();
+  host.querySelectorAll('[data-open-coaching-update]').forEach(button=>button.onclick=async()=>{
+    const update=myCoachingUpdates.updates.find(u=>u.source_key===button.dataset.openCoachingUpdate);
+    if(!update||!coachingUpdateScopeMatches()||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
+    pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
+    document.getElementById('coachingUpdatesMenu').open=false;
+    currentTab='howwetrain';howWeTrainReflectionEditId=update.source_kind==='match'&&!update.can_open?update.match_id:null;
+    await renderTab();
+  });
+}
+
+async function refreshMyCoachingUpdates(){
+  if(!document.getElementById('coachingUpdatesHost')||!myPlayer||!isPlayerUser())return;
+  const clubId=club.id,userId=session?.user?.id,sequence=++coachingUpdatesSequence;
+  if(!coachingUpdateScopeMatches())myCoachingUpdates={clubId,userId,updates:[],error:'',loaded:false};
+  renderCoachingUpdatesMenu();
+  try{
+    const {data,error}=await supabase.rpc('get_my_coaching_updates',{p_club_id:clubId});if(error)throw error;
+    if(club?.id!==clubId||session?.user?.id!==userId||sequence!==coachingUpdatesSequence)return;
+    myCoachingUpdates={clubId,userId,updates:Array.isArray(data?.updates)?data.updates:[],error:'',loaded:true};
+  }catch(error){
+    if(club?.id!==clubId||session?.user?.id!==userId||sequence!==coachingUpdatesSequence)return;
+    myCoachingUpdates={...myCoachingUpdates,error:error?.message||'Could not check updates',loaded:true};
+  }
+  renderCoachingUpdatesMenu();watchVisibleCoachingNotes();
+}
+
+function coachingNoteElement(update){
+  return document.querySelector(update.source_kind==='match'?`[data-coach-feedback-id="${update.source_id}"]`:`[data-training-observation-id="${update.source_id}"]`);
+}
+async function acknowledgeCoachingUpdate(update){
+  const note=coachingNoteElement(update);
+  if(currentTab!=='howwetrain'||!coachingUpdateScopeMatches()||!note||note.dataset.coachingNoteUpdatedAt!==update.changed_at)return;
+  const scope=myCoachingUpdates,key=`${scope.clubId}:${scope.userId}:${update.source_key}:${update.changed_at}`;
+  if(coachingSeenPending.has(key))return;
+  coachingSeenPending.add(key);
+  try{
+    const {data,error}=await supabase.rpc('mark_my_coaching_update_seen',{p_club_id:scope.clubId,p_source_key:update.source_key,p_changed_at:update.changed_at});
+    if(error)throw error;
+    if(data===true&&coachingUpdateScopeMatches(scope)){
+      myCoachingUpdates={...myCoachingUpdates,updates:myCoachingUpdates.updates.filter(u=>!(u.source_key===update.source_key&&u.changed_at===update.changed_at))};
+      renderCoachingUpdatesMenu();
+    }
+  }catch(error){/* Keep the unread badge if the acknowledgement was not saved. */}
+  finally{coachingSeenPending.delete(key);}
+}
+
+function watchVisibleCoachingNotes(){
+  coachingNoteObserver?.disconnect();coachingNoteObserver=null;
+  if(currentTab!=='howwetrain'||!coachingUpdateScopeMatches()||typeof IntersectionObserver==='undefined')return;
+  const scope=myCoachingUpdates;
+  coachingNoteObserver=new IntersectionObserver(entries=>{
+    if(!coachingUpdateScopeMatches(scope)||currentTab!=='howwetrain')return;
+    for(const entry of entries){
+      if(!entry.isIntersecting)continue;
+      const update=myCoachingUpdates.updates.find(u=>coachingNoteElement(u)===entry.target);
+      if(update)void acknowledgeCoachingUpdate(update);
+    }
+  },{threshold:0.25});
+  for(const update of myCoachingUpdates.updates){const element=coachingNoteElement(update);if(element)coachingNoteObserver.observe(element);}
+}
+
+function coachingHistoryItems(items,kind,limit){
+  const target=pendingCoachingUpdate;
+  return items.filter((item,index)=>index<limit||(target&&coachingUpdateScopeMatches(target)&&
+    (kind==='match'?item.id===target.match_id:item.id===target.source_id)));
+}
+
+function coachingHistoryHtml(items,kind,limit,renderItem){
+  const recent=coachingHistoryItems(items,kind,limit),shown=new Set(recent.map(item=>item.id));
+  const older=items.filter(item=>!shown.has(item.id));
+  return recent.map(renderItem).join('')+(older.length?`<details><summary>Earlier ${kind==='match'?'match':'training'} notes (${older.length})</summary>${older.map(renderItem).join('')}</details>`:'');
+}
+
+async function revealPendingCoachingUpdate(){
+  watchVisibleCoachingNotes();
+  const update=pendingCoachingUpdate;
+  if(!update||!coachingUpdateScopeMatches(update)||currentTab!=='howwetrain')return;
+  const history=document.getElementById('trainingFeedbackLoop');if(history)history.open=true;
+  const note=coachingNoteElement(update);
+  if(note){
+    pendingCoachingUpdate=null;note.scrollIntoView({behavior:'smooth',block:'center'});
+    // Also supports browsers without IntersectionObserver when a note was explicitly opened.
+    await acknowledgeCoachingUpdate(update);
+  }else{
+    document.getElementById('myReflectionForm')?.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+}
+
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refreshMyCoachingUpdates();});
+window.addEventListener?.('focus',()=>{void refreshMyCoachingUpdates();});
+
 function accountMenuStyles(){
   return `<style>
     .shell .nav{flex-wrap:wrap}
@@ -2010,6 +2121,10 @@ function accountMenuStyles(){
     .club-help-feature .btn{font-size:14px;min-height:44px}
     @media(max-width:700px){.club-help-feature{align-items:stretch;flex-direction:column;padding:20px}.club-help-feature .btnrow{display:grid;grid-template-columns:1fr 1fr}.shell .nav button[data-tab="guide"]{margin-left:0}}
     .account-controls{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+    .coaching-unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 5px;border-radius:14px;background:#c51f32;color:white;font-size:12px;font-weight:800;box-sizing:border-box}
+    .coaching-updates-popover{width:min(310px,85vw);max-height:65vh;overflow:auto;box-sizing:border-box}
+    .coaching-updates-popover .account-menu-action{line-height:1.4;white-space:normal}
+    .coaching-updates-popover small{display:block;font-size:12px;font-weight:400;margin-top:4px}
     .context-switcher{display:grid;gap:5px;width:220px;max-width:100%;min-width:0;flex:0 1 220px;text-align:left}
     .context-switcher-label{font-size:12px;font-weight:700;line-height:1.3;color:inherit}
     .context-switcher-control{position:relative;display:block;min-width:0}
@@ -2112,6 +2227,7 @@ function renderShell(){
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <button class="btn secondary" id="openClubHelp" type="button" aria-label="Ask the Club Batting Guide and explore tutorials">Ask the Guide</button>
+          ${isPlayerUser()&&myPlayer?'<div id="coachingUpdatesHost"></div>':''}
           ${accountMenuHtml({allowJoin:true,allowInvolvement:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
@@ -2120,6 +2236,7 @@ function renderShell(){
     <main class="page" id="page"></main>
   </div>`;
 
+  void refreshMyCoachingUpdates();
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('accountInvolvement').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderFirstIdentitySetup({editing:true});};
@@ -8408,7 +8525,7 @@ function renderTrainingPlanCard(card,format){
 function developmentFocusItems(data,raw){
   const items=[];
   for(const o of data?.training_observations||[]){
-    if(!String(o.next_training_focus||'').trim())continue;
+    if((data?.coaching_actions||[]).some(a=>a.training_observation_id===o.id)||!String(o.next_training_focus||'').trim())continue;
     items.push({
       text:o.next_training_focus.trim(),
       source:`Training observation · ${o.observer_name||'Coach / Captain'}`,
@@ -8427,7 +8544,7 @@ function developmentFocusItems(data,raw){
   }
   for(const m of data?.matches||[]){
     for(const f of m.coach_feedback||[]){
-      if(!String(f.next_training_focus||'').trim())continue;
+      if((data?.coaching_actions||[]).some(a=>a.match_feedback_id===f.id)||!String(f.next_training_focus||'').trim())continue;
       items.push({
         text:f.next_training_focus.trim(),
         source:`Match feedback · ${f.author_name||'Coach / Captain'}`,
@@ -8486,7 +8603,7 @@ function matchMetaLine(match){
 
 function developmentViewBlock(title,view,author=''){
   if(!view)return `<div class="development-view empty"><strong>${esc(title)}</strong><span>No entry yet.</span></div>`;
-  return `<div class="development-view">
+  return `<div class="development-view" ${view.id?`data-coach-feedback-id="${esc(view.id)}" data-coaching-note-updated-at="${esc(view.updated_at||view.created_at||'')}"`:''}>
     <div class="development-view-title"><strong>${esc(title)}</strong>${author?`<span>${esc(author)}</span>`:''}</div>
     <div class="development-mini-grid">
       <span><small>INNINGS OVERALL · BATTED TO PLAN</small><strong>${esc(PLAN_ALIGNMENT_LABELS[view.batting_to_plan]||'—')}</strong></span>
@@ -8522,19 +8639,19 @@ function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false}=
     `:`<div class="development-compare-grid">
       ${developmentViewBlock('PLAYER VIEW',match.player_reflection)}
       ${coaches.length
-        ?coaches.slice(0,2).map(f=>developmentViewBlock('COACH VIEW',f,f.author_name||'Coach / Captain')).join('')
+        ?coaches.filter((f,index)=>index<2||(playerMode&&pendingCoachingUpdate?.source_id===f.id)).map(f=>developmentViewBlock('COACH VIEW',f,f.author_name||'Coach / Captain')).join('')
         :developmentViewBlock('COACH VIEW',null)}
     </div>`}
     <div class="development-actions">
       ${playerMode?`<button class="btn ${reflectionNeeded?'secondary':'ghost'}" data-edit-my-reflection="${match.id}">${match.player_reflection?'Edit my reflection':'Add my reflection'}</button>`:''}
-      ${staffCanEdit?`<button class="btn ghost" data-add-coach-feedback="${match.id}">Add coaching feedback</button>`:''}
+      ${staffCanEdit?`<button class="btn ghost" data-add-coach-feedback="${match.id}">Add coaching feedback</button>${coaches.filter(f=>f.author_user_id===session?.user?.id).map(f=>`<button class="btn secondary" data-edit-coach-feedback="${esc(f.id)}" data-edit-match="${esc(match.id)}">Edit my observation${coaches.filter(x=>x.author_user_id===session?.user?.id).length>1?` · ${esc(formatDateShort(f.created_at))}`:''}</button>`).join('')}`:''}
     </div>
   </article>`;
 }
 
-function renderTrainingObservationCard(o){
+function renderTrainingObservationCard(o,{staffCanEdit=false}={}){
   const formats=(o.format_keys||[]).map(formatLabel).join(' + ')||'General / Core';
-  return `<article class="training-observation-card">
+  return `<article class="training-observation-card" data-training-observation-id="${esc(o.id)}" data-coaching-note-updated-at="${esc(o.updated_at||o.created_at||'')}">
     <div class="training-observation-head">
       <div><div class="section-label">${esc(formatDateShort(o.observed_on))} · ${esc(formats)}</div><h3>${esc(TRAINING_OBSERVATION_LABELS[o.observation_type]||'Training observation')}</h3></div>
       <span class="observation-plan-badge ${esc(o.training_to_plan)}">${esc(PLAN_ALIGNMENT_LABELS[o.training_to_plan]||'—')} · training to plan</span>
@@ -8542,6 +8659,7 @@ function renderTrainingObservationCard(o){
     <div class="help">${esc(o.observer_name||'Coach / Captain')}</div>
     ${o.next_training_focus?`<div class="development-next"><small>TRAIN NEXT</small><strong>${esc(o.next_training_focus)}</strong></div>`:''}
     ${o.note?`<p>${esc(o.note)}</p>`:''}
+    ${staffCanEdit&&o.observer_user_id===session?.user?.id?`<button type="button" class="btn secondary" data-edit-training-observation="${esc(o.id)}">Edit my observation</button>`:''}
   </article>`;
 }
 
@@ -8660,15 +8778,15 @@ function renderCoachingActions(feedback,{playerMode=true}={}){
   const card=a=>{
     const due=a.status==='open'&&String(a.review_on)<=todayIso();
     return `<article class="training-observation-card" style="margin-top:12px">
-      <div class="section-label">${esc(a.format_key?formatLabel(a.format_key):'All formats')} · ${a.status==='open'?(due?'Review due':'Agreed action'):a.status==='completed'?'Completed':'Stopped'}</div>
+      <div class="section-label">${esc(a.format_key?formatLabel(a.format_key):'All formats')} · ${a.status==='open'?(due?'Review due':'Agreed action'):a.status==='completed'?'Actioned':'Stopped'}</div>
       <h3>${esc(a.task)}</h3>
       <p class="help">${playerMode?'Your next action':'Player’s next action'} · Recorded by ${esc(a.recorded_by_name||'Club coaching team')} · ${a.status==='open'?'Review':'Review date'} ${esc(formatDateShort(a.review_on))}</p>
-      ${a.status==='open'&&a.can_review?`<button class="btn secondary" data-review-coaching-action="${esc(a.id)}">${due?'Review this action':'Record progress'}</button>`:''}
+      ${a.status==='open'&&a.can_review?`<button class="btn secondary" data-review-coaching-action="${esc(a.id)}">Review / mark actioned</button>`:''}
       <div data-coaching-review-slot="${esc(a.id)}"></div>
-      ${a.reviews?.length?`<details style="margin-top:10px"><summary>Agreement and review history</summary>${a.reviews.map(r=>`<p><strong>${Number(r.revision)===1?'Agreed':r.outcome==='continue'?'Continue practising':r.outcome==='completed'?'Completed':'Stopped'} · ${esc(formatDateShort(r.reviewed_at))}</strong><br>${esc(r.note)}<br><small>${esc(r.reviewed_by_name||'Club member')}${r.next_review_on?` · Review ${esc(formatDateShort(r.next_review_on))}`:''}</small></p>`).join('')}</details>`:''}
+      ${a.reviews?.length?`<details style="margin-top:10px"><summary>Agreement and review history</summary>${a.reviews.map(r=>`<p><strong>${Number(r.revision)===1?'Agreed':r.outcome==='continue'?'Continue practising':r.outcome==='completed'?'Actioned':'Stopped'} · ${esc(formatDateShort(r.reviewed_at))}</strong><br>${esc(r.note)}<br><small>${esc(r.reviewed_by_name||'Club member')}${r.next_review_on?` · Review ${esc(formatDateShort(r.next_review_on))}`:''}</small></p>`).join('')}</details>`:''}
     </article>`;
   };
-  return `<section class="card" id="sharedCoachingActions"><div class="section-label">Agreed next actions</div><h2>${open.length?'Take your next step into training.':'Keep the useful part of each conversation.'}</h2><p>One agreed action and a date to check how it went. The player and authorised coaching team see the same action and updates.</p>${feedback?.coaching_actions_error?'<div class="notice">Shared actions could not load. Reload this page to try again; your other feedback is still available.</div>':''}${open.length?open.map(card).join(''):!feedback?.coaching_actions_error?'<p class="help">No open agreed actions. After a coaching conversation, record the next training focus and when to review it.</p>':''}${closed.length?`<details style="margin-top:14px"><summary>Previous actions (${closed.length})</summary>${closed.map(card).join('')}</details>`:''}</section>`;
+  return `<section class="card" id="sharedCoachingActions"><div class="section-label">Agreed next actions</div><h2>${open.length?'Take your next step into training.':'Keep the useful part of each conversation.'}</h2><p>One agreed action and a date to check how it went. The player and authorised coaching team see the same action and updates.</p>${feedback?.coaching_actions_error?'<div class="notice">Shared actions could not load. Reload this page to try again; your other feedback is still available.</div>':''}${open.length?open.map(card).join(''):!feedback?.coaching_actions_error?`<p class="help">No open agreed actions. ${playerMode?'Your coach can record a training focus and review date in a match or training observation.':'To add one, enter “One thing to train next” and a review date when saving a match or training observation.'}</p>`:''}${closed.length?`<details style="margin-top:14px"><summary>Previous actions (${closed.length})</summary>${closed.map(card).join('')}</details>`:''}</section>`;
 }
 
 function freezeCoachingForm(form){
@@ -8713,7 +8831,7 @@ function bindCoachingActionControls(feedback,onSaved){
     document.getElementById('coachingActionForm')?.remove();
     const host=[...document.querySelectorAll('[data-coaching-review-slot]')].find(el=>el.dataset.coachingReviewSlot===action.id);if(!host)return;
     const form=document.createElement('div');form.id='coachingReviewForm';form.className='development-entry-form';
-    form.innerHTML=`<div class="field"><label for="coachingReviewOutcome">What happens next?</label><select id="coachingReviewOutcome"><option value="continue">Keep practising — review again</option><option value="completed">Completed — the focus is now part of my game</option><option value="stopped">Stop this action — explain why below</option></select></div><div class="field"><label for="coachingReviewNote">What did you notice?</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What changed in training or your innings? What still needs work?"></textarea></div><div class="field" id="coachingNextReviewField"><label for="coachingNextReviewDate">Next review</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value="${coachingReviewDateDefault()}"></div><p class="help">Your update is shared with the player and authorised coaching team.</p><div class="btnrow"><button class="btn secondary" id="saveCoachingReview">Save review</button><button class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
+    form.innerHTML=`<div class="field"><label for="coachingReviewOutcome">What happens next?</label><select id="coachingReviewOutcome"><option value="continue">Keep practising — review again</option><option value="completed">Actioned — this follow-up is complete</option><option value="stopped">Stop this action — explain why below</option></select></div><div class="field"><label for="coachingReviewNote">What did you notice?</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What changed in training or your innings? What still needs work?"></textarea></div><div class="field" id="coachingNextReviewField"><label for="coachingNextReviewDate">Next review</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value="${coachingReviewDateDefault()}"></div><p class="help">Your update is shared with the player and authorised coaching team.</p><div class="btnrow"><button class="btn secondary" id="saveCoachingReview">Save review</button><button class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
     host.appendChild(form);captureFeedbackEntryBaseline();
     const requestId=globalThis.crypto.randomUUID();
     document.getElementById('coachingReviewOutcome').onchange=()=>{document.getElementById('coachingNextReviewField').hidden=document.getElementById('coachingReviewOutcome').value!=='continue';};
@@ -8740,16 +8858,18 @@ function bindCoachingActionControls(feedback,onSaved){
 
 async function loadDevelopmentFeedback(playerId){
   if(!playerId)return {matches:[],training_observations:[],external_training_evidence:[],coaching_actions:[]};
-  const [feedbackResponse,actionResponse]=await Promise.all([
+  const [feedbackResponse,actionResponse,contextResponse]=await Promise.all([
     Promise.resolve(supabase.rpc('get_development_feedback_for_player',{p_player_id:playerId})).catch(error=>({error})),
-    Promise.resolve(supabase.rpc('get_player_coaching_actions',{p_player_id:playerId})).catch(error=>({error}))
+    Promise.resolve(supabase.rpc('get_player_coaching_actions',{p_player_id:playerId})).catch(error=>({error})),
+    Promise.resolve(supabase.rpc('get_coach_observation_context',{p_player_id:playerId})).catch(error=>({error}))
   ]);
   const {data,error}=feedbackResponse;
   if(error){const failure=new Error(error.message||'Feedback could not load');failure.sharedActions={coaching_actions:Array.isArray(actionResponse.data?.actions)?actionResponse.data.actions:[],coaching_actions_error:actionResponse.error?.message||''};throw failure;}
   return {
     ...(data||{}),
-    matches:Array.isArray(data?.matches)?data.matches:[],
-    training_observations:Array.isArray(data?.training_observations)?data.training_observations:[],
+    matches:(Array.isArray(data?.matches)?data.matches:[]).map(m=>{const context=contextResponse.data?.matches?.find(c=>c.id===m.id);return {...m,...context,edit_context:context,coach_feedback:(m.coach_feedback||[]).map(f=>({...f,needs_conversation:!!contextResponse.data?.feedback?.find(x=>x.id===f.id)?.needs_conversation}))};}),
+    observation_edit_error:contextResponse.error?.message||'',
+    training_observations:Array.isArray(contextResponse.data?.training_observations)?contextResponse.data.training_observations:Array.isArray(data?.training_observations)?data.training_observations:[],
     external_training_evidence:Array.isArray(data?.external_training_evidence)?data.external_training_evidence:[],
     coaching_actions:Array.isArray(actionResponse.data?.actions)?actionResponse.data.actions:[],
     coaching_actions_error:actionResponse.error?.message||''
@@ -8870,7 +8990,7 @@ function trainingFocusForFormat(feedback,format,playerMode=true){
   for(const o of feedback?.training_observations||[]){
     const keys=Array.isArray(o.format_keys)?o.format_keys:[];
     if(keys.length && !keys.includes(format))continue;
-    if(!String(o.next_training_focus||'').trim())continue;
+    if((feedback?.coaching_actions||[]).some(a=>a.training_observation_id===o.id)||!String(o.next_training_focus||'').trim())continue;
     items.push({
       text:o.next_training_focus.trim(),
       source:`Training observation · ${o.observer_name||'Coach / Captain'}`,
@@ -8891,7 +9011,7 @@ function trainingFocusForFormat(feedback,format,playerMode=true){
     // Players record their own view before any part of a coach's match
     // feedback shapes their training. Staff can see the focus immediately.
     const coach=(!playerMode||m.player_reflection)?(m.coach_feedback||[])[0]:null;
-    if(String(coach?.next_training_focus||'').trim())items.push({
+    if(!(feedback?.coaching_actions||[]).some(a=>a.match_feedback_id===coach?.id)&&String(coach?.next_training_focus||'').trim())items.push({
       text:coach.next_training_focus.trim(),
       source:`Match feedback · ${coach.author_name||'Coach / Captain'}`,
       date:coach.updated_at||coach.created_at||m.match_date||''
@@ -9052,11 +9172,11 @@ async function renderHowWeTrain(){
         <div class="development-history-grid simple">
           <section>
             <div class="development-history-title"><strong>Innings reflections & coach feedback</strong><span>${feedback.matches.length} recorded</span></div>
-            <div class="development-history-list">${feedback.matches.length?feedback.matches.filter(m=>!reflectionNeeded.some(x=>x.id===m.id)).slice(0,8).map(m=>renderDevelopmentMatchCard(m,{playerMode:true})).join(''):'<div class="notice">No innings reflections yet.</div>'}</div>
+            <div class="development-history-list">${feedback.matches.length?coachingHistoryHtml(feedback.matches.filter(m=>!reflectionNeeded.some(x=>x.id===m.id)),'match',8,m=>renderDevelopmentMatchCard(m,{playerMode:true})):'<div class="notice">No innings reflections yet.</div>'}</div>
           </section>
           <section>
             <div class="development-history-title"><strong>Training observations</strong><span>${feedback.training_observations.length} recorded</span></div>
-            <div class="development-history-list compact">${feedback.training_observations.length?feedback.training_observations.slice(0,8).map(renderTrainingObservationCard).join(''):'<div class="notice">Coach or captain training observations will appear here when there is something worth recording.</div>'}</div>
+            <div class="development-history-list compact">${feedback.training_observations.length?coachingHistoryHtml(feedback.training_observations,'training',8,renderTrainingObservationCard):'<div class="notice">Coach or captain training observations will appear here when there is something worth recording.</div>'}</div>
           </section>
         </div>
         ${renderExternalTrainingEvidenceSection(feedback.external_training_evidence)}
@@ -9136,42 +9256,119 @@ async function renderHowWeTrain(){
     howWeTrainReflectionEditId=null;
     await rerenderHowWeTrainAt('trainingFeedbackLoop');
   };
+  await revealPendingCoachingUpdate();
 }
 
-function renderStaffTrainingObservationForm(player){
+let staffObservationEditId=null;
+
+function observationReviewField(action=null){
+  return `<div class="field"><label for="staffObservationReviewOn">Review this training focus on</label><input id="staffObservationReviewOn" type="date" value="${esc(action?.review_on||coachingReviewDateDefault())}" ${action?.status==='open'?'':`min="${todayIso()}"`} ${action&&action.status!=='open'?'disabled':''}><p class="help">Adding a training focus creates a shared action in the player’s How We Train. It appears in coaching follow-ups immediately and is flagged when review is due. Any coach with edit access can action it.</p></div>`;
+}
+
+function observationConversationField(selected=false){
+  return `<div class="field" id="staffObservationConversationField"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="staffObservationConversation" ${selected?'checked':''} style="width:auto;margin:0">Needs a coaching conversation</label><p class="help">Tick this if the note needs a discussion without a training action. Open training actions appear in Needs a Coaching Conversation automatically.</p></div>`;
+}
+
+function wireObservationSave(player,kind,onSaved){
+  const form=document.getElementById('staffDevelopmentForm');
+  const button=document.getElementById(kind==='match'?'saveStaffMatchFeedback':'saveTrainingObservation');
+  if(!form||!button)return;
+  const targetClub=club?.id,targetUser=session?.user?.id;
+  const stillCurrent=()=>club?.id===targetClub&&session?.user?.id===targetUser&&document.getElementById('staffDevelopmentForm')===form;
+  const focus=document.getElementById(kind==='match'?'staffMatchNextFocus':'staffTrainingNextFocus');
+  const review=document.getElementById('staffObservationReviewOn');
+  const closed=form.dataset.actionClosed==='true';
+  const sync=()=>{review.disabled=closed||!focus.value.trim();review.required=!!focus.value.trim()&&!closed;const field=document.getElementById('staffObservationConversationField');if(field)field.hidden=!!focus.value.trim();};
+  focus.addEventListener('input',sync);sync();
+  let requestId=null,requestPayload=null;
+  button.onclick=async()=>{
+    if(coachingActionSavePending||button.disabled||!stillCurrent())return;
+    const status=document.getElementById('staffDevelopmentStatus');
+    const values=kind==='match'?{
+      match_id:form.dataset.matchId||null,match_updated_at:form.dataset.matchUpdatedAt||null,
+      match_date:val('staffMatchDate')||null,format_key:val('staffMatchFormat'),opposition:val('staffMatchOpposition'),score_text:val('staffMatchScore'),dismissal_summary:val('staffMatchDismissal'),
+      batting_to_plan:document.querySelector('input[name="staffBattingToPlan"]:checked')?.value,
+      dismissal_classification:document.querySelector('input[name="staffDismissalClass"]:checked')?.value,main_issue:val('staffMatchMainIssue')||null,
+      next_training_focus:val('staffMatchNextFocus'),note:val('staffMatchNote')
+    }:{
+      observed_on:val('trainingObservationDate')||null,format_keys:[...document.querySelectorAll('[data-training-format]:checked')].map(x=>x.value),
+      training_to_plan:document.querySelector('input[name="staffTrainingToPlan"]:checked')?.value,
+      observation_type:document.querySelector('input[name="staffObservationType"]:checked')?.value,
+      next_training_focus:val('staffTrainingNextFocus'),note:val('staffTrainingNote')
+    };
+    values.needs_conversation=!values.next_training_focus&&!!document.getElementById('staffObservationConversation')?.checked;
+    if(kind==='match'?(!values.batting_to_plan||!values.dismissal_classification):(!values.training_to_plan||!values.observation_type)){status.textContent='Choose the two quick observation answers first.';return;}
+    const reviewOn=values.next_training_focus||closed?review.value||null:null;
+    if(values.next_training_focus&&!closed&&(!reviewOn||(reviewOn<todayIso()&&reviewOn!==form.dataset.originalReview))){status.textContent='Choose a review date from today onwards.';return;}
+    if(form.dataset.originalFocus&&!values.next_training_focus&&!closed&&!confirm('Remove this training focus and stop its open follow-up action?'))return;
+    const args={p_player_id:player.id,p_kind:kind,p_observation_id:form.dataset.observationId||null,p_expected_updated_at:form.dataset.observationUpdatedAt||null,
+      p_values:values,p_review_on:reviewOn,p_expected_action_revision:form.dataset.actionRevision?Number(form.dataset.actionRevision):null};
+    const payload=JSON.stringify(args);
+    // Retrying an uncertain response reuses the same receipt. Changed fields get a new receipt.
+    if(payload!==requestPayload){requestId=globalThis.crypto.randomUUID();requestPayload=payload;}
+    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
+    try{
+      const {error}=await supabase.rpc('save_coach_observation',{...args,p_request_id:requestId});
+      if(error)throw error;
+      feedbackEntryBaselines.set(form,feedbackEntryValues(form));status.textContent='Saved.';coachingActionSavePending=false;
+      if(!stillCurrent())return;
+      try{await onSaved();}catch(error){status.textContent='Saved successfully. Reload this page to see the latest observation and action.';}
+    }catch(error){status.textContent=error?.message||'Could not confirm the save. Your observation is still here; try Save again.';restore();}
+    finally{coachingActionSavePending=false;}
+  };
+}
+
+function renderStaffTrainingObservationForm(player,data={},observationId=null){
   const enabled=publishedEnabledFormats();
-  return `<section class="card development-entry-form" id="staffDevelopmentForm">
-    <div class="development-form-head"><div><div class="section-label">Training observation</div><h2>Record what you noticed.</h2><div class="help">Notice how the player recognises the right ball and commits to their chosen shot. Record decision and execution details that will help them practise. Leave the format unticked for general/Core practice.</div></div></div>
-    <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${todayIso()}"></div>
-    <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}"><span>${esc(l)}</span></label>`).join('')}</div></div>
-    <div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],'mostly')}</div>
-    <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),'right_shots_right_balls')}</div>
-    <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffTrainingNextFocus" maxlength="240" placeholder="One useful focus is enough"></div>
-    <div class="field"><label>Short note <span>optional</span></label><textarea id="staffTrainingNote" maxlength="500" rows="3" placeholder="Only add detail if it helps the player"></textarea></div>
-    <div class="btnrow"><button class="btn secondary" id="saveTrainingObservation">Save observation</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
+  const observation=observationId?(data.training_observations||[]).find(o=>o.id===observationId&&o.observer_user_id===session?.user?.id):null;
+  if(observationId&&!observation)return '<section class="card notice">This observation is no longer available to edit. Return to Feedback and reload.</section>';
+  const action=observation?(data.coaching_actions||[]).find(a=>a.training_observation_id===observation.id):null;
+  const closed=!!action&&action.status!=='open';
+  const editError=observation&&(data.coaching_actions_error||data.observation_edit_error);
+  return `<section class="card development-entry-form" id="staffDevelopmentForm" data-observation-id="${esc(observation?.id||'')}" data-observation-updated-at="${esc(observation?.updated_at||'')}" data-action-revision="${action?.revision||''}" data-action-closed="${closed}" data-original-focus="${esc(action?.status==='open'?observation?.next_training_focus||'':'')}" data-original-review="${esc(action?.review_on||'')}">
+    <div class="development-form-head"><div><div class="section-label">Training observation</div><h2>${observation?'Edit your training observation.':'Record what you noticed.'}</h2><div class="help">Notice how the player recognises the right ball and commits to their chosen shot. Record decision and execution details that will help them practise. Leave the format unticked for general/Core practice.</div></div></div>
+    <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${esc(observation?.observed_on||todayIso())}"></div>
+    <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}" ${observation?.format_keys?.includes(k)?'checked':''}><span>${esc(l)}</span></label>`).join('')}</div></div>
+    <div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],observation?.training_to_plan||'mostly')}</div>
+    <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),observation?.observation_type||'right_shots_right_balls')}</div>
+    <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffTrainingNextFocus" maxlength="240" placeholder="One useful focus is enough" value="${esc(observation?.next_training_focus||'')}" ${closed?'disabled':''}></div>
+    ${observationReviewField(action)}
+    ${observationConversationField(observation?.needs_conversation)}
+    ${closed?'<p class="notice">This training action is closed. You can correct the observation; add a new observation if there is a new training focus.</p>':''}
+    ${editError?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
+    <div class="field"><label>Short note <span>optional</span></label><textarea id="staffTrainingNote" maxlength="500" rows="3" placeholder="Only add detail if it helps the player">${esc(observation?.note||'')}</textarea></div>
+    <div class="btnrow"><button class="btn secondary" id="saveTrainingObservation" ${editError?'disabled':''}>${observation?'Save changes':'Save observation'}</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
   </section>`;
 }
 
-function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelopmentMatchId){
-  const match=matchId
-    ?data?.matches?.find(m=>m.id===matchId)||null
-    :null;
+function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelopmentMatchId,feedbackId=staffObservationEditId){
+  const match=matchId?data?.matches?.find(m=>m.id===matchId)||null:null;
+  const feedback=feedbackId?match?.coach_feedback?.find(f=>f.id===feedbackId&&f.author_user_id===session?.user?.id):null;
+  if(feedbackId&&!feedback)return '<section class="card notice">This observation is no longer available to edit. Return to Feedback and reload.</section>';
+  const action=feedback?(data?.coaching_actions||[]).find(a=>a.match_feedback_id===feedback.id):null;
+  const closed=!!action&&action.status!=='open';
+  const sharedReadonly=!!match&&!match.edit_context?.can_edit_details;
   const format=match?.format_key||publishedEnabledFormats()[0]?.[0]||'limited_overs';
-  return `<section class="card development-entry-form" id="staffDevelopmentForm">
-    <div class="development-form-head"><div><div class="section-label">Match observation</div><h2>${match?'Add your view to this innings':'Record what you noticed in the innings'}</h2><div class="help">Recognise the player’s preparation and full commitment, even when execution falls short. Review the innings overall and the dismissal ball separately: a player can follow their plan overall, then move outside it for one ball. Consider shot choice and execution separately too. Agree useful practice without judgement.</div></div></div>
-    <div class="development-match-fields">
+  return `<section class="card development-entry-form" id="staffDevelopmentForm" data-match-id="${esc(match?.id||'')}" data-match-updated-at="${esc(match?.edit_context?.updated_at||'')}" data-observation-id="${esc(feedback?.id||'')}" data-observation-updated-at="${esc(feedback?.updated_at||'')}" data-action-revision="${action?.revision||''}" data-action-closed="${closed}" data-original-focus="${esc(action?.status==='open'?feedback?.next_training_focus||'':'')}" data-original-review="${esc(action?.review_on||'')}">
+    <div class="development-form-head"><div><div class="section-label">Match observation</div><h2>${feedback?'Edit your match observation':match?'Add your view to this innings':'Record what you noticed in the innings'}</h2><div class="help">Recognise the player’s preparation and full commitment, even when execution falls short. Review the innings overall and the dismissal ball separately: a player can follow their plan overall, then move outside it for one ball. Consider shot choice and execution separately too. Agree useful practice without judgement.</div></div></div>
+    ${sharedReadonly?'<p class="help">These innings details were recorded by someone else and stay as saved. You can add or edit your own observation below.</p>':''}<fieldset class="development-match-fields" style="border:0;padding:0;margin:0" ${sharedReadonly?'disabled':''}>
       <div class="field"><label>Date</label><input id="staffMatchDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
       <div class="field"><label>Format</label><select id="staffMatchFormat">${publishedEnabledFormats().map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
       <div class="field"><label>Opposition <span>optional</span></label><input id="staffMatchOpposition" maxlength="160" value="${esc(match?.opposition||'')}"></div>
       <div class="field"><label>Score <span>optional</span></label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}"></div>
-    </div>
-    <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Pulled a short ball; caught on the boundary"></div>
-    <div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","The approach moved away from the plan"]],'mostly')}</div>
-    <div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","Not really a Player Plan issue","Not dismissed / good bowling / run out / other"]],'not_applicable')}</div>
-    <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join('')}</select></div>
-    <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" maxlength="240" placeholder="One useful focus is enough"></div>
-    <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed"></textarea></div>
-    <div class="btnrow"><button class="btn secondary" id="saveStaffMatchFeedback">Save coaching feedback</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
+    </fieldset>
+    <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" ${sharedReadonly?'disabled':''} maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Pulled a short ball; caught on the boundary"></div>
+    <div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","The approach moved away from the plan"]],feedback?.batting_to_plan||'mostly')}</div>
+    <div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","Not really a Player Plan issue","Not dismissed / good bowling / run out / other"]],feedback?.dismissal_classification||'not_applicable')}</div>
+    <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${feedback?.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+    <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" value="${esc(feedback?.next_training_focus||'')}" ${closed?'disabled':''} maxlength="240" placeholder="One useful focus is enough"></div>
+    ${observationReviewField(action)}
+    ${observationConversationField(feedback?.needs_conversation)}
+    <p class="help">The training focus is shared with the player straight away. Your other match answers remain hidden until they add their own reflection.</p>
+    ${closed?'<p class="notice">This training action is closed. You can correct the observation; add a new observation if there is a new training focus.</p>':''}
+    ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
+    <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
+    <div class="btnrow"><button class="btn secondary" id="saveStaffMatchFeedback" ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'disabled':''}>${feedback?'Save changes':'Save observation'}</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
   </section>`;
 }
 
@@ -9183,19 +9380,22 @@ function renderStaffDevelopmentBody(player,canEdit,data){
         ${canEdit?`<div class="btnrow"><button class="btn secondary" id="addTrainingObservation">Add training observation</button><button class="btn ghost" id="addNewMatchFeedback">Add match observation</button></div>`:'<span class="workspace-access-badge view">VIEW ONLY</span>'}
       </div>
     </section>
-    ${playersWorkspaceDevelopmentMode==='training'&&canEdit?renderStaffTrainingObservationForm(player):''}
+    ${playersWorkspaceDevelopmentMode==='training'&&canEdit?renderStaffTrainingObservationForm(player,data,staffObservationEditId):''}
     ${playersWorkspaceDevelopmentMode==='match'&&canEdit?renderStaffMatchFeedbackForm(player,data):''}
+    <details class="card" id="pastCoachingNotes"><summary style="cursor:pointer;min-height:44px;line-height:1.5"><strong>Past coaching notes</strong> · ${data.matches.length+data.training_observations.length} match / training records · Open or hide</summary>
+    <p class="help">Your saved observations stay here. Open a match to edit your own note. Open actions and review dates remain above.</p>
     <div class="development-history-grid">
       <section>
         <div class="development-history-title"><strong>Match reflections & coaching feedback</strong><span>${data.matches.length} recorded</span></div>
-        <div class="development-history-list">${data.matches.length?data.matches.slice(0,10).map(m=>renderDevelopmentMatchCard(m,{staffCanEdit:canEdit})).join(''):'<div class="card notice">No match feedback yet.</div>'}</div>
+        <div class="development-history-list">${data.matches.length?data.matches.slice(0,10).map(m=>renderDevelopmentMatchCard(m,{staffCanEdit:canEdit})).join(''):'<div class="card notice">No match feedback yet.</div>'}${data.matches.length>10?`<details><summary>Earlier match notes (${data.matches.length-10})</summary>${data.matches.slice(10).map(m=>renderDevelopmentMatchCard(m,{staffCanEdit:canEdit})).join('')}</details>`:''}</div>
       </section>
       <section>
         <div class="development-history-title"><strong>Training observations</strong><span>${data.training_observations.length} recorded</span></div>
-        <div class="development-history-list compact">${data.training_observations.length?data.training_observations.slice(0,10).map(renderTrainingObservationCard).join(''):'<div class="card notice">No training observations yet.</div>'}</div>
+        <div class="development-history-list compact">${data.training_observations.length?data.training_observations.slice(0,10).map(o=>renderTrainingObservationCard(o,{staffCanEdit:canEdit})).join(''):'<div class="card notice">No training observations yet.</div>'}${data.training_observations.length>10?`<details><summary>Earlier training notes (${data.training_observations.length-10})</summary>${data.training_observations.slice(10).map(o=>renderTrainingObservationCard(o,{staffCanEdit:canEdit})).join('')}</details>`:''}</div>
       </section>
     </div>
     ${renderExternalTrainingEvidenceSection(data.external_training_evidence)}
+    </details>
   </div>`;
 }
 
@@ -9213,20 +9413,35 @@ function wireStaffDevelopmentControls(player,canEdit,data){
 
   if(document.getElementById('addTrainingObservation'))document.getElementById('addTrainingObservation').onclick=async()=>{
     if(!confirmLeaveFeedbackEntry())return;
+    staffObservationEditId=null;
     playersWorkspaceDevelopmentMode='training';
     playersWorkspaceDevelopmentMatchId=null;
     await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   };
   if(document.getElementById('addNewMatchFeedback'))document.getElementById('addNewMatchFeedback').onclick=async()=>{
     if(!confirmLeaveFeedbackEntry())return;
+    staffObservationEditId=null;
     playersWorkspaceDevelopmentMode='match';
     playersWorkspaceDevelopmentMatchId=null;
     await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   };
   page.querySelectorAll('[data-add-coach-feedback]').forEach(b=>b.onclick=async()=>{
     if(!confirmLeaveFeedbackEntry())return;
+    staffObservationEditId=null;
     playersWorkspaceDevelopmentMode='match';
     playersWorkspaceDevelopmentMatchId=b.dataset.addCoachFeedback;
+    await rerenderStaffDevelopmentAt('staffDevelopmentForm');
+  });
+  page.querySelectorAll('[data-edit-coach-feedback]').forEach(button=>button.onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
+    staffObservationEditId=button.dataset.editCoachFeedback;
+    playersWorkspaceDevelopmentMatchId=button.dataset.editMatch;
+    playersWorkspaceDevelopmentMode='match';
+    await rerenderStaffDevelopmentAt('staffDevelopmentForm');
+  });
+  page.querySelectorAll('[data-edit-training-observation]').forEach(button=>button.onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
+    staffObservationEditId=button.dataset.editTrainingObservation;playersWorkspaceDevelopmentMatchId=null;playersWorkspaceDevelopmentMode='training';
     await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   });
   if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=async()=>{
@@ -9237,57 +9452,12 @@ function wireStaffDevelopmentControls(player,canEdit,data){
     await rerenderStaffDevelopmentAt('developmentOverview');
   };
 
-  if(document.getElementById('saveTrainingObservation'))document.getElementById('saveTrainingObservation').onclick=async()=>{
-    const btn=document.getElementById('saveTrainingObservation');
-    const st=document.getElementById('staffDevelopmentStatus');
-    const toPlan=document.querySelector('input[name="staffTrainingToPlan"]:checked')?.value;
-    const type=document.querySelector('input[name="staffObservationType"]:checked')?.value;
-    const formatKeys=[...document.querySelectorAll('[data-training-format]:checked')].map(x=>x.value);
-    if(!toPlan||!type){st.textContent='Choose the two quick observation answers first.';return;}
-    btn.disabled=true;btn.textContent='Saving…';st.textContent='';
-    const {error}=await supabase.rpc('add_training_observation',{
-      p_player_id:player.id,
-      p_observed_on:val('trainingObservationDate')||null,
-      p_format_keys:formatKeys,
-      p_training_to_plan:toPlan,
-      p_observation_type:type,
-      p_next_training_focus:val('staffTrainingNextFocus'),
-      p_note:val('staffTrainingNote')
-    });
-    if(error){btn.disabled=false;btn.textContent='Save observation';st.textContent=error.message;return;}
-    playersWorkspaceDevelopmentMode=null;
-    playersWorkspaceDevelopmentMatchId=null;
-    await refreshPlayersWorkspaceFeedback();
-    await rerenderStaffDevelopmentAt('developmentOverview');
+  const afterSave=async()=>{
+    staffObservationEditId=null;playersWorkspaceDevelopmentMode=null;playersWorkspaceDevelopmentMatchId=null;
+    await refreshPlayersWorkspaceFeedback();await rerenderStaffDevelopmentAt('developmentOverview');
   };
-
-  if(document.getElementById('saveStaffMatchFeedback'))document.getElementById('saveStaffMatchFeedback').onclick=async()=>{
-    const btn=document.getElementById('saveStaffMatchFeedback');
-    const st=document.getElementById('staffDevelopmentStatus');
-    const batting=document.querySelector('input[name="staffBattingToPlan"]:checked')?.value;
-    const dismissal=document.querySelector('input[name="staffDismissalClass"]:checked')?.value;
-    if(!batting||!dismissal){st.textContent='Choose the two quick coaching answers first.';return;}
-    btn.disabled=true;btn.textContent='Saving…';st.textContent='';
-    const {error}=await supabase.rpc('add_staff_match_feedback',{
-      p_player_id:player.id,
-      p_match_id:playersWorkspaceDevelopmentMatchId||null,
-      p_match_date:val('staffMatchDate')||null,
-      p_opposition:val('staffMatchOpposition'),
-      p_format_key:document.getElementById('staffMatchFormat').value,
-      p_score_text:val('staffMatchScore'),
-      p_dismissal_summary:val('staffMatchDismissal'),
-      p_batting_to_plan:batting,
-      p_dismissal_classification:dismissal,
-      p_main_issue:document.getElementById('staffMatchMainIssue').value||null,
-      p_next_training_focus:val('staffMatchNextFocus'),
-      p_note:val('staffMatchNote')
-    });
-    if(error){btn.disabled=false;btn.textContent='Save coaching feedback';st.textContent=error.message;return;}
-    playersWorkspaceDevelopmentMode=null;
-    playersWorkspaceDevelopmentMatchId=null;
-    await refreshPlayersWorkspaceFeedback();
-    await rerenderStaffDevelopmentAt('developmentOverview');
-  };
+  wireObservationSave(player,'training',afterSave);
+  wireObservationSave(player,'match',afterSave);
 }
 
 
@@ -9307,9 +9477,12 @@ function resetFeedbackWorkspaceForClub(){
 }
 
 async function loadFeedbackWorkspaceData(){
-  const {data,error}=await supabase.rpc('get_feedback_workspace',{p_club_id:club.id});
+  const [{data,error},alerts]=await Promise.all([
+    supabase.rpc('get_feedback_workspace',{p_club_id:club.id}),
+    Promise.resolve(supabase.rpc('get_coaching_action_alerts',{p_club_id:club.id})).catch(error=>({error}))
+  ]);
   if(error)throw error;
-  const result=data||{};
+  const result={...(data||{}),action_alerts:alerts.data?.actions||[],conversation_flags:alerts.data?.conversation_flags||[],action_alerts_error:alerts.error?.message||''};
   result.players=Array.isArray(result.players)?result.players:[];
   return result;
 }
@@ -9339,6 +9512,11 @@ function discussionSignalIdentity(playerId,signalKey){
 
 function feedbackDiscussionSignals(data){
   const signals=[];
+  for(const flag of data?.conversation_flags||[]){
+    const player=(data.players||[]).find(p=>p.id===flag.player_id);if(!player)continue;
+    signals.push({key:flag.signal_key,player,formatKey:flag.format_key,sourceAt:flag.source_at,tone:'amber',priority:1,
+      title:'Coach requested a conversation',summary:flag.summary||'Follow up on the observation.',suggestion:'Talk through the note, then record what you agreed.'});
+  }
   for(const player of data?.players||[]){
     const matches=Array.isArray(player.matches)?player.matches:[];
     const outsideByFormat=new Map();
@@ -9541,7 +9719,7 @@ function renderFeedbackAdd(data){
     </div>
   </section>
   ${player&&feedbackWorkspaceEntryMode==='training'?renderStaffTrainingObservationForm(player):''}
-  ${player&&feedbackWorkspaceEntryMode==='match'?renderStaffMatchFeedbackForm(player,{matches:player.matches||[]},feedbackWorkspaceMatchId):''}`;
+  ${player&&feedbackWorkspaceEntryMode==='match'?renderStaffMatchFeedbackForm(player,{matches:player.matches||[]},feedbackWorkspaceMatchId,null):''}`;
 }
 
 async function renderFeedbackWorkspace(){
@@ -9595,27 +9773,10 @@ async function renderFeedbackWorkspace(){
   captureFeedbackEntryBaseline();
   const selected=(data.players||[]).find(p=>p.id===feedbackWorkspaceSelectedPlayerId)||null;
   if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;renderFeedbackWorkspace();};
-  if(selected&&document.getElementById('saveTrainingObservation'))document.getElementById('saveTrainingObservation').onclick=async()=>{
-    const btn=document.getElementById('saveTrainingObservation'),st=document.getElementById('staffDevelopmentStatus');
-    const toPlan=document.querySelector('input[name="staffTrainingToPlan"]:checked')?.value;
-    const type=document.querySelector('input[name="staffObservationType"]:checked')?.value;
-    const formatKeys=[...document.querySelectorAll('[data-training-format]:checked')].map(x=>x.value);
-    if(!toPlan||!type){st.textContent='Choose the two quick observation answers first.';return;}
-    btn.disabled=true;btn.textContent='Saving…';
-    const {error}=await supabase.rpc('add_training_observation',{p_player_id:selected.id,p_observed_on:val('trainingObservationDate')||null,p_format_keys:formatKeys,p_training_to_plan:toPlan,p_observation_type:type,p_next_training_focus:val('staffTrainingNextFocus'),p_note:val('staffTrainingNote')});
-    if(error){btn.disabled=false;btn.textContent='Save observation';st.textContent=error.message;return;}
-    feedbackWorkspaceEntryMode=null;await renderFeedbackWorkspace();
-  };
-  if(selected&&document.getElementById('saveStaffMatchFeedback'))document.getElementById('saveStaffMatchFeedback').onclick=async()=>{
-    const btn=document.getElementById('saveStaffMatchFeedback'),st=document.getElementById('staffDevelopmentStatus');
-    const batting=document.querySelector('input[name="staffBattingToPlan"]:checked')?.value;
-    const dismissal=document.querySelector('input[name="staffDismissalClass"]:checked')?.value;
-    if(!batting||!dismissal){st.textContent='Choose the two quick coaching answers first.';return;}
-    btn.disabled=true;btn.textContent='Saving…';
-    const {error}=await supabase.rpc('add_staff_match_feedback',{p_player_id:selected.id,p_match_id:feedbackWorkspaceMatchId||null,p_match_date:val('staffMatchDate')||null,p_opposition:val('staffMatchOpposition'),p_format_key:document.getElementById('staffMatchFormat').value,p_score_text:val('staffMatchScore'),p_dismissal_summary:val('staffMatchDismissal'),p_batting_to_plan:batting,p_dismissal_classification:dismissal,p_main_issue:document.getElementById('staffMatchMainIssue').value||null,p_next_training_focus:val('staffMatchNextFocus'),p_note:val('staffMatchNote')});
-    if(error){btn.disabled=false;btn.textContent='Save coaching feedback';st.textContent=error.message;return;}
-    feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;await renderFeedbackWorkspace();
-  };
+  if(selected){
+    const afterSave=async()=>{feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;await renderFeedbackWorkspace();};
+    wireObservationSave(selected,'training',afterSave);wireObservationSave(selected,'match',afterSave);
+  }
 }
 
 /* ---------------- PLAYERS WORKSPACE ---------------- */
@@ -9854,11 +10015,12 @@ async function renderPlayersWorkspace(){
   const reminderPromise=isAdmin()&&workspacePlayerPlansPublished()
     ?supabase.rpc('get_player_plan_reminder_overview',{p_club_id:club.id})
     :Promise.resolve({data:{reminders:[],cooldown_hours:48,email_mode:'unknown'},error:null});
-  const [playersRes,feedbackRes,reminderRes,rosterRes]=await Promise.all([
+  const [playersRes,feedbackRes,reminderRes,rosterRes,actionRes]=await Promise.all([
     supabase.rpc('get_players_workspace',{p_club_id:club.id}),
     supabase.rpc('get_feedback_workspace',{p_club_id:club.id}),
     reminderPromise,
-    supabase.from('players').select('id').eq('club_id',club.id).eq('active',true)
+    supabase.from('players').select('id').eq('club_id',club.id).eq('active',true),
+    Promise.resolve(supabase.rpc('get_coaching_action_alerts',{p_club_id:club.id})).catch(error=>({error}))
   ]);
 
   if(renderSequence!==playersWorkspaceRenderSequence||club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!=='players'||document.getElementById('page')!==page)return;
@@ -9883,6 +10045,10 @@ async function renderPlayersWorkspace(){
     playersWorkspaceFeedbackData.players=(Array.isArray(playersWorkspaceFeedbackData.players)?playersWorkspaceFeedbackData.players:[]).filter(p=>activePlayerIds.has(p.id));
   }
 
+  playersWorkspaceFeedbackData.action_alerts=(actionRes.data?.actions||[]).filter(a=>activePlayerIds.has(a.player_id));
+  playersWorkspaceFeedbackData.conversation_flags=(actionRes.data?.conversation_flags||[]).filter(a=>activePlayerIds.has(a.player_id));
+  playersWorkspaceFeedbackData.action_alerts_error=actionRes.error?.message||'';
+
   playersWorkspaceReminderData=reminderRes?.error
     ?{reminders:[],cooldown_hours:48,email_mode:'unknown',error:reminderRes.error.message}
     :(reminderRes?.data||{reminders:[],cooldown_hours:48,email_mode:'unknown'});
@@ -9903,7 +10069,9 @@ function workspaceFeedbackPlayer(playerId){
 }
 
 function workspaceDiscussionSignals(){
-  return feedbackDiscussionSignals(playersWorkspaceFeedbackData||{players:[]});
+  const feedback=playersWorkspaceFeedbackData||{players:[]};
+  const players=(playersWorkspaceData?.players||feedback.players||[]).map(p=>({...p,...(feedback.players||[]).find(f=>f.id===p.id)}));
+  return feedbackDiscussionSignals({...feedback,players});
 }
 
 function workspaceSignalsForPlayer(playerId){
@@ -9914,6 +10082,7 @@ function workspaceOpenPlayer(playerId,section='summary',developmentMode=null){
   if(!confirmLeaveFeedbackEntry())return;
   playersWorkspaceSelectedId=playerId;
   playersWorkspaceSection=section;
+  staffObservationEditId=null;
   playersWorkspaceDevelopmentMode=developmentMode;
   playersWorkspaceDevelopmentMatchId=null;
   playersWorkspaceLocalRaw=null;
@@ -10173,6 +10342,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
     ${renderWorkspaceAssignment(player,assignmentGroups)}
+    ${renderPlayerActionAlert(player.id)}
     ${signals.length?renderWorkspaceRosterDiscussion(player,signals):''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
       <div><strong style="font-size:12px;color:var(--navy2)">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${deadlineDetail?`<span style="display:block;margin-top:2px;font-size:11px;color:${overdue?'var(--accent,#D8232A);font-weight:700':'var(--muted)'}">${esc(deadlineDetail)}</span>`:''}${reminderMeta}</div>
@@ -10196,6 +10366,13 @@ async function refreshPlayersWorkspaceFeedback(){
   }
 }
 
+function renderPlayerActionAlert(playerId){
+  const actions=(playersWorkspaceFeedbackData?.action_alerts||[]).filter(a=>a.player_id===playerId);
+  if(!actions.length)return '';
+  const due=actions.filter(a=>a.review_on<=todayIso());
+  return `<div class="notice compact" style="margin-top:12px"><strong>${due.length?`${due.length} training review${due.length===1?'':'s'} due`:`${actions.length} open training action${actions.length===1?'':'s'}`}</strong><p>${esc((due[0]||actions[0]).task)}</p><button type="button" class="btn secondary" data-open-coaching-actions="${esc(playerId)}">Open follow-up actions</button></div>`;
+}
+
 function renderPlayersWorkspaceList(){
   if(currentTab==='players'&&recordAppNavigation(clubNavigationRoute()))window.scrollTo?.({top:0,left:0,behavior:'instant'});
   const page=document.getElementById('page');
@@ -10206,6 +10383,11 @@ function renderPlayersWorkspaceList(){
   const query=playersWorkspaceSearch.trim().toLowerCase();
   const allSignals=workspaceDiscussionSignals();
   const signalPlayerIds=new Set(allSignals.map(s=>s.player.id));
+  for(const action of playersWorkspaceFeedbackData?.action_alerts||[])signalPlayerIds.add(action.player_id);
+  const actionsMode=playersWorkspaceGroupFilter==='__actions__';
+  const actionAlerts=playersWorkspaceFeedbackData?.action_alerts||[];
+  const actionPlayerIds=new Set(actionAlerts.map(a=>a.player_id));
+  const dueActions=actionAlerts.filter(a=>a.review_on<=todayIso());
   const discussionMode=playersWorkspaceGroupFilter==='__discussion__';
   const unassignedMode=playersWorkspaceGroupFilter==='__unassigned__';
   const unassignedCount=players.filter(player=>!(player.groups||[]).some(g=>g.active!==false)).length;
@@ -10213,10 +10395,10 @@ function renderPlayersWorkspaceList(){
   const hasSelection=!!(query||playersWorkspaceGroupFilter||playersWorkspaceShowAll);
 
   let filtered=[];
-  if(discussionMode){
+  if(discussionMode||actionsMode){
     filtered=players.filter(player=>{
       const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
-      return matchesName&&signalPlayerIds.has(player.id);
+      return matchesName&&(actionsMode?actionPlayerIds:signalPlayerIds).has(player.id);
     });
   }else if(playersWorkspaceGroupFilter){
     filtered=players.filter(player=>{
@@ -10251,6 +10433,8 @@ function renderPlayersWorkspaceList(){
     emptyCopy='<section class="card workspace-roster-empty"><strong>Find a player</strong><span>Search for a player or choose a Playing Group to view their plans and record feedback.</span></section>';
   }else if(query&&!filtered.length){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Try another name or clear your search.</strong><span>Your search found no players in this view. Only players you have permission to access are included.</span><div class="btnrow"><button class="btn ghost" id="clearPlayerSearch">Clear search</button></div></section>`;
+  }else if(actionsMode){
+    emptyCopy='<section class="card workspace-roster-empty"><strong>No open training actions.</strong><span>Training focuses and review dates recorded in observations appear here.</span></section>';
   }else if(discussionMode){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No coaching conversations waiting.</strong><span>When feedback creates something worth discussing, the player will appear here automatically.</span></section>`;
   }else if(unassignedMode){
@@ -10270,6 +10454,8 @@ function renderPlayersWorkspaceList(){
   </section>
 
   ${plansPublished?'':'<div class="notice" style="margin-top:14px"><strong>People can join now; Player Plans open after publication.</strong> Use People & Sign-up to register people and assign club roles. Choose the Philosophy Lead and contributors in the Workshop. Players without setup access will see a waiting message when they sign in.</div>'}
+  ${actionAlerts.length?`<section class="card notice" role="status"><strong>${dueActions.length?`${dueActions.length} training review${dueActions.length===1?'':'s'} due`:`${actionAlerts.length} open training action${actionAlerts.length===1?'':'s'}`}</strong><p>Follow up on the player’s training focus. Any coach with edit access can record progress or mark it actioned.</p><button type="button" class="btn secondary" id="showCoachingActionPlayers">View follow-ups · ${actionPlayerIds.size} player${actionPlayerIds.size===1?'':'s'}</button></section>`:''}
+  ${playersWorkspaceFeedbackData?.action_alerts_error?'<div class="notice">Training follow-ups could not load. Reload to check for due reviews.</div>':''}
   <section class="card players-workspace-tools compact">
     <div class="field">
       <label for="workspacePlayerSearch">Find a player</label>
@@ -10281,7 +10467,7 @@ function renderPlayersWorkspaceList(){
         <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>${query?'All Playing Groups':'Choose a Playing Group…'}</option>
         <option value="__unassigned__" ${unassignedMode?'selected':''}>Currently unassigned · ${unassignedCount}</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
-        <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
+        <option disabled>──────────</option><option value="__actions__" ${actionsMode?'selected':''}>Training follow-ups · ${actionPlayerIds.size}</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
       </select>
     </div>
     ${hasSelection?`<div class="workspace-filter-count compact" role="status" aria-live="polite"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
@@ -10289,7 +10475,7 @@ function renderPlayersWorkspaceList(){
 
   ${unassignedMode&&filtered.length?`<div class="notice compact" id="workspaceAssignmentHelp">${isAdmin()&&assignmentGroups.length?'Tick one or more Playing Groups on each card, then click Assign selected groups. Assigned players leave this list.':'These players have no active Playing Group.'}</div>`:''}
   ${isAdmin()?`<div class="help" id="workspaceAssignmentNotice" role="status" aria-live="polite">${esc(workspaceAssignmentState().notice)}</div>`:''}
-  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
+  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&!actionsMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
   ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
   ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
@@ -10297,6 +10483,7 @@ function renderPlayersWorkspaceList(){
 
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
+  document.getElementById('showCoachingActionPlayers')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;playersWorkspaceSearch='';playersWorkspaceGroupFilter='__actions__';renderPlayersWorkspaceList();});
   document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
   document.getElementById('managePeopleFromPlayers')?.addEventListener('click',()=>{currentTab='permissions';renderTab();});
   document.getElementById('workspaceShowAllPlayers')?.addEventListener('click',()=>{
@@ -10357,6 +10544,7 @@ function renderPlayersWorkspaceList(){
 }
 
 function bindPlayersWorkspaceRosterActions(allSignals=workspaceDiscussionSignals()){
+  document.querySelectorAll('[data-open-coaching-actions]').forEach(button=>button.onclick=()=>workspaceOpenPlayer(button.dataset.openCoachingActions,'development'));
   document.querySelectorAll('[data-open-workspace-player]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openWorkspacePlayer,'summary'));
   document.querySelectorAll('[data-open-training-plan]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openTrainingPlan,'training'));
   document.querySelectorAll('[data-open-player-feedback]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openPlayerFeedback,'development'));
@@ -10786,7 +10974,7 @@ async function renderPlayersWorkspacePlayer(){
   ${['training','development'].includes(playersWorkspaceSection)?renderCoachingActions(developmentData,{playerMode:false}):''}
   ${body}`;
 
-  bindCoachingActionControls(developmentData,()=>renderPlayersWorkspacePlayer());
+  bindCoachingActionControls(developmentData,async()=>{await refreshPlayersWorkspaceFeedback();await renderPlayersWorkspacePlayer();});
   document.getElementById('workspaceBackToPlayers').onclick=returnToPlayersWorkspaceList;
   document.getElementById('retryPlayerFeedback')?.addEventListener('click',()=>renderPlayersWorkspacePlayer());
 
@@ -10916,6 +11104,7 @@ async function renderPlayerHome(){
     <div class="btnrow" style="margin-top:18px"><button class="btn" id="playerHomeNext">${esc(next.label)}</button></div>
   </section>
   ${loadNote?`<div class="notice compact" role="status" style="margin-top:14px">${!rolloutOk?'Your club’s required formats and due dates could not be checked. ':''}${!feedbackOk?'Your latest feedback could not be loaded. ':feedback.coaching_actions_error?'Shared training actions could not be loaded. ':''}You can keep using your saved plan.<button class="club-home-link" id="retryPlayerHome" type="button" style="margin-left:12px">Try again</button></div>`:''}
+  ${(feedback.coaching_actions||[]).some(a=>a.status==='open')?`<section class="card notice" role="status"><strong>${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.review_on<=todayIso())?'Training review due':'You have a training follow-up'}</strong><p>Your coaching team has recorded a training focus and review date.</p><button class="btn secondary" id="playerHomeActionAlert">Open How We Train</button></section>`:''}
   <div class="club-home-secondary" aria-label="Your batting tools">
     <button class="club-home-link" id="playerHomePlan">My Player Plan</button>
     ${plan.ready.length?'<button class="club-home-link" id="playerHomeTraining">How We Train</button>':''}
@@ -10923,6 +11112,7 @@ async function renderPlayerHome(){
     <button class="club-home-link" id="playerHomePhilosophy">Read How We Bat</button>
   </div>
   ${plan.ready.length?`<p class="help" style="margin-top:18px">Training ready for ${esc(plan.ready.map(x=>x.label).join(' and '))}.${rolloutOk&&!plan.pendingRequired.length?' Your required plan questions are complete.':''}</p>`:''}`;
+  document.getElementById('playerHomeActionAlert')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain',anchor:'sharedCoachingActions'}));
   document.getElementById('playerHomeNext').onclick=()=>openPlayerHomeAction(next);
   document.getElementById('playerHomePlan').onclick=()=>openPlayerHomeAction({tab:'myplan'});
   document.getElementById('playerHomeTraining')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain'}));
