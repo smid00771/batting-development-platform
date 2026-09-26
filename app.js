@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.16';
+const APP_UI_VERSION='0.8.62.17';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1119,7 +1119,7 @@ async function routeAuth(){
 
   if(joinCodeToken){
     if(!session){
-      renderLogin('Sign in to continue joining the club. Your invitation link will still be here after sign-in.');
+      renderJoinAccountEntry();
       return;
     }
     await loadPlatformContext();
@@ -1136,6 +1136,39 @@ async function routeAuth(){
 
 function authEntryLinks(){
   return '<p class="help"><a href="./">Club Batting home</a> · <a href="./demo.html?stage=help">Explore the tutorials</a></p>';
+}
+
+function renderJoinAccountEntry(){
+  const params=new URLSearchParams(location.search);
+  const staffRoute=params.get('involvement')==='coach_captain';
+  const passwordUrl=new URL(location.href);passwordUrl.searchParams.set('signin','1');
+  app.innerHTML=`<div class="login" style="max-width:650px">
+    <div class="section-label">${staffRoute?'Non-playing staff sign-up':'Club invitation'}</div>
+    <h1>${staffRoute?'Join your club as non-playing staff.':'Join your club.'}</h1>
+    <p>Enter your email. We’ll send you a secure link to create or open your Club Batting account, then bring you back here to finish joining.</p>
+    ${staffRoute?'<div class="notice">This registers you as <strong>non-playing staff</strong>, so you won’t receive a Player Plan. Your club assigns any coaching or administration role separately.</div>':''}
+    <form id="joinAccountForm">
+      <div class="field"><label for="joinAccountEmail">Your email</label><input id="joinAccountEmail" type="email" autocomplete="email" required></div>
+      <button class="btn secondary" id="joinAccountButton" type="submit">Email my secure account link</button>
+    </form>
+    <div id="joinAccountStatus" class="help" role="status" aria-live="polite"></div>
+    <p class="help">Already use Club Batting? <a href="${esc(passwordUrl.href)}">Sign in with your password</a>.</p>
+    ${authEntryLinks()}
+  </div>`;
+  document.getElementById('joinAccountForm').onsubmit=async event=>{
+    event.preventDefault();
+    const button=document.getElementById('joinAccountButton'),status=document.getElementById('joinAccountStatus');
+    button.disabled=true;status.textContent='Sending…';authActionInFlight=true;
+    try{
+      const {error}=await supabase.auth.signInWithOtp({
+        email:val('joinAccountEmail'),
+        options:{emailRedirectTo:redirectUrl(),shouldCreateUser:true}
+      });
+      if(error)throw error;
+      status.textContent='Check your email and tap the secure link. It will bring you back here to finish joining your club.';
+    }catch(error){status.textContent=error.message||'The secure account link could not be sent. Please try again.';}
+    finally{authActionInFlight=false;button.disabled=false;}
+  };
 }
 
 function renderLogin(msg=''){
