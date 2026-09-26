@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.21';
+const APP_UI_VERSION='0.8.62.22';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -2601,7 +2601,7 @@ function restoreClubNavigationState(route){
     playersWorkspaceSelectedId=route.playerId||null;
     playersWorkspaceSection=route.playerSection||'summary';
     playersWorkspaceSearch=route.search||'';
-    playersWorkspaceGroupFilter=route.group||'';
+    playersWorkspaceGroupFilter=route.group==='__actions__'?'__discussion__':route.group||'';
     playersWorkspaceShowAll=!!route.showAll;
     playersWorkspaceLocalRaw=null;
     playersWorkspaceDevelopmentMode=null;
@@ -2670,6 +2670,11 @@ async function handleAppNavigationHistory(event){
 }
 
 function renderTab(){
+  if(currentTab==='feedback'&&canUsePlayersWorkspace()){
+    resetPlayersWorkspaceForClub();playersWorkspaceSelectedId=null;playersWorkspaceSection='summary';
+    playersWorkspaceSearch='';playersWorkspaceGroupFilter='__discussion__';currentTab='players';
+    localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
+  }
   if(!canOpenClubTab(currentTab)){
     currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
@@ -2864,7 +2869,7 @@ function guideCapabilityForCurrentProduct(capability){
         {title:'Build a Player Plan',body:'Each batter chooses their shots, when to use them and how to build an innings. Complete Core, then the formats you play.',target_tab:playerPlanTarget},
         {title:'Train the plan',body:'The completed plan generates personalised How We Train suggestions. Practise your shots and decisions so you can commit when the right ball arrives.',target_tab:'howwetrain'},
         {title:'Learn from innings and training',body:'Players reflect on innings; coaches add match and training feedback. Compare the whole innings and the dismissal ball with the Player Plan, separating decision from execution.',target_tab:feedbackTarget},
-        {title:'Agree what comes next',body:'Discuss what worked and what needs practice. Agree a useful action and review date, or keep the plan as it is.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})}
+        {title:'Agree what comes next',body:'Discuss what worked and what needs practice. Use Coach Conversations to record what you agreed. A review date is optional; mark Discussed / Actioned when finished.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})}
       ]
     },
     philosophy_workshop:{
@@ -2938,31 +2943,33 @@ function guideCapabilityForCurrentProduct(capability){
         {title:'Choose a useful focus',body:'Use your plan and recent feedback to pick what needs practice: a scoring shot, leaving well, taking a single or recognising the right ball.'},
         {title:'Practise the decision and the skill',body:'Recreate the balls and situations you’ll face. Recognise the opportunity, commit to your choice and practise executing it.'},
         {title:'Recognise preparation and commitment',body:'A dismissal alone does not make the choice wrong. Support the commitment, discuss decision and execution separately, and choose useful practice.'},
-        {title:'Review the next session',body:'Use feedback and any agreed coaching action to decide what to keep practising. Shared actions and their review history are in How We Train.',target_tab:'howwetrain'}
+        {title:'Review Coach Conversations',body:'Your Coach Conversations in How We Train hold current observations, discussion notes and agreed training work. Review dates are optional. Add a progress note or mark Discussed / Actioned when finished; completed conversations move into Past conversations.',target_tab:'howwetrain'}
       ]
     },
     feedback_loop:{
-      title:'Player and coach feedback',
-      purpose:'Learn from the innings, not just the dismissal.',
-      short_explanation:'Players reflect on innings; coaches add match and training feedback. Compare both views with the Player Plan to choose what to practise next.',
+      title:"Player and coach feedback",
+      purpose:"Learn from the innings, not just the dismissal.",
+      short_explanation:"Record match or training observations, then use Coach Conversations to discuss them and agree what happens next. General coaching notes do not require an innings reflection.",
       target_tab:feedbackTarget,
       tutorial:[
-        {title:'Record your own view first',body:'Players add their innings reflection in How We Train. Coaches and captains with assigned access add match feedback or training observations in Players.',target_tab:feedbackTarget},
-        {title:'Look at the whole innings',body:'Where did the batter follow their plan? Where did they move outside it? Consider what the match situation called for.'},
-        {title:'Look separately at the dismissal ball',body:'Did the choice fit the plan and the ball? Then consider how the shot was executed. One ball does not describe the whole innings.'},
-        {title:'Learn without judgement',body:'Recognise practice and commitment, including when execution falls short. Compare perspectives without forcing agreement, then discuss the most useful next step.'}
+        {"title": "Add an observation", "body": "In Players, open the player’s Coach Conversations and choose Add match observation or Add training observation. Coaches with edit access can add observations; the original author can edit their own observation.",target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
+        {"title": "Choose whether it concerns the Player Plan", "body": "For a general note, select This isn’t about their Player Plan. The player can read it immediately without an innings reflection. For plan-related match feedback, the player records their own view before seeing the coach’s answers. Training observations remain immediately visible."},
+        {"title": "Compare decisions and execution", "body": "For plan-related feedback, consider the whole innings and the dismissal ball separately. Recognise preparation and commitment, even when execution falls short. Use different perspectives to start a useful conversation."},
+        {"title": "Flag a conversation when needed", "body": "Select Requires a coaching conversation, add a training focus, or set an optional review date. These feed the same Coach Conversations filter and player alerts. A plain note stays Current without automatically requesting a conversation."},
+        {"title": "Record what happens next", "body": "Open Add note / mark Discussed or Actioned to record the discussion, keep it open with an optional review date, or complete it. Any coach with edit access can follow it through, even if another coach wrote the observation."}
       ]
     },
     coach_conversations:{
-      title:'Coach Conversations',
-      purpose:'Agree one useful next step.',
-      short_explanation:'Use the feedback to agree what to practise or review next. Record a useful action and a date to check progress.',
+      title:"Coach Conversations",
+      purpose:"Discuss the evidence and agree the next step.",
+      short_explanation:"One place for observations that need discussion, agreed actions and review dates. Coaches use Players → Coach Conversations; players find their shared conversations in How We Train.",
       target_tab:feedbackTarget,
       tutorial:[
-        {title:'Open the conversation',body:'Club Batting highlights feedback worth discussing. Use it to ask the player about their plan, decisions and preparation.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
-        {title:'Agree what will help',body:'Recognise commitment and discuss what the evidence suggests. Keep the plan, agree a training change or plan review, or choose no action.'},
-        {title:'Record the action and review date',body:'For a training change or plan review, agree a specific action and when to check progress. The player and authorised coaching staff share it in How We Train.'},
-        {title:'Follow up together',body:'Review what the player practised and what changed. Support confidence and enjoyment while following through on the agreed commitment.',target_tab:'howwetrain'}
+        {"title": "Find conversations needing attention", "body": "In Players, choose Coach Conversations from Show players, or use the compact reminder’s View button. This combines requested conversations, open follow-ups and feedback patterns, counting each player once. The reminder disappears when none need attention or when the filter is already selected.",target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
+        {"title": "Open one shared conversation", "body": "Select Open on the player’s highlighted card. The Coach Conversations page keeps the observation, related discussion prompts, author’s edit button and shared progress notes together. Ordinary notes remain Current even when no alert is requested."},
+        {"title": "Add notes or agree an action", "body": "Use Add note / mark Discussed or Actioned to record what happened. For a feedback pattern without an existing action, Agree a next step records a training action. Players can add progress to shared actions in How We Train; coaches need edit access to change them."},
+        {"title": "Use a review date only when useful", "body": "Review dates start blank and are optional. A date can be added, changed or removed while the conversation is open. A date flags the item for coach and player; it is highlighted when due. Clearing a date removes that reminder, while any separate training focus or conversation request remains active."},
+        {"title": "Complete it and keep the history", "body": "Choose Discussed / Actioned or Close — no further action needed, and record a short note. This clears that conversation’s alerts for coach and player and moves the thread into collapsed Past conversations. Other unresolved conversations remain. Reading an unread note clears its bell badge only; it does not complete the conversation."}
       ]
     }
   };
@@ -8759,11 +8766,49 @@ function coachingReviewDateDefault(){
 }
 let coachingActionSavePending=false;
 
-function renderCoachingActions(feedback,{playerMode=true,includeObservations=false,staffCanEdit=false}={}){
+function coachingSignalAction(signal,actions=[]){
+  const coach=latestCoachFeedback(signal.match);
+  const manualMatch=String(signal.key||'').startsWith('coach_note:match:')?signal.key.slice('coach_note:match:'.length):null;
+  const manualTraining=String(signal.key||'').startsWith('coach_note:training:')?signal.key.slice('coach_note:training:'.length):null;
+  return actions.find(a=>(!a.player_id||a.player_id===signal.player?.id)&&(
+    (a.signal_key===signal.key&&(!a.source_at||!signal.sourceAt||Date.parse(a.source_at)>=Date.parse(signal.sourceAt)))||
+    (a.match_feedback_id&&a.match_feedback_id===(manualMatch||coach?.id))||
+    (a.training_observation_id&&a.training_observation_id===(manualTraining||signal.observation?.id))
+  ))||null;
+}
+function coachingConversationItems(actions=[],signals=[]){
+  const items=new Map();
+  for(const action of actions){
+    if(action.status&&action.status!=='open')continue;
+    items.set(`action:${action.id}`,{key:`action:${action.id}`,playerId:action.player_id,action,signals:[],reviewOn:action.review_on||null});
+  }
+  for(const signal of signals){
+    const linked=coachingSignalAction(signal,actions);
+    if(linked&&linked.status&&linked.status!=='open')continue;
+    const key=linked?`action:${linked.id}`:`signal:${signal.player.id}:${signal.key}`;
+    if(!items.has(key))items.set(key,{key,playerId:signal.player.id,action:null,signals:[],reviewOn:null});
+    const item=items.get(key);if(!item.signals.some(s=>s.key===signal.key))item.signals.push(signal);
+  }
+  return [...items.values()].sort((a,b)=>String(a.reviewOn||'9999').localeCompare(String(b.reviewOn||'9999'))||a.key.localeCompare(b.key));
+}
+function workspaceCoachConversations(playerId=null){
+  const accessible=new Set((playersWorkspaceData?.players||playersWorkspaceFeedbackData?.players||[]).map(p=>p.id));
+  return coachingConversationItems(playersWorkspaceFeedbackData?.action_alerts||[],workspaceDiscussionSignals())
+    .filter(x=>accessible.has(x.playerId)&&(!playerId||x.playerId===playerId));
+}
+function renderConversationSignal(signal){
+  return `<article class="training-observation-card" data-coach-signal-card="${esc(signal.key)}" style="margin-top:12px">
+    <div class="section-label">Conversation needed</div><h3>${esc(signal.title)}</h3><p>${esc(signal.summary)}</p><p class="help">${esc(signal.suggestion)}</p>
+    ${signal.match?`<details><summary>View the innings evidence</summary>${renderDevelopmentMatchCard(signal.match)}</details>`:''}
+    ${signal.player?.can_edit?`<div class="btnrow"><button class="btn secondary" data-player-discussion="${esc(signal.key)}" data-outcome="no_action">Add note / mark Discussed or Actioned</button><button class="btn ghost" data-player-discussion="${esc(signal.key)}" data-outcome="adjust_training">Agree a next step</button></div>`:''}
+    <div data-player-discussion-slot="${esc(signal.key)}"></div></article>`;
+}
+
+function renderCoachingActions(feedback,{playerMode=true,includeObservations=false,staffCanEdit=false,signals=[]}={}){
   const actions=Array.isArray(feedback?.coaching_actions)?feedback.coaching_actions:[];
-  const open=actions.filter(a=>a.status==='open').sort((a,b)=>String(a.review_on||'9999').localeCompare(String(b.review_on||'9999')));
+  const current=coachingConversationItems(actions,playerMode?[]:signals);
   const closed=actions.filter(a=>a.status!=='open').sort((a,b)=>String(b.updated_at).localeCompare(String(a.updated_at)));
-  const card=a=>{
+  const card=(a,reasons=[])=>{
     const due=a.status==='open'&&!!a.review_on&&String(a.review_on)<=todayIso();
     const match=(feedback.matches||[]).find(m=>(m.coach_feedback||[]).some(f=>f.id===a.match_feedback_id));
     const note=match?.coach_feedback.find(f=>f.id===a.match_feedback_id);
@@ -8772,16 +8817,17 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
     const hiddenPlan=playerMode&&match&&!match.player_reflection&&note?.plan_related!==false;
     const isTask=!!(note?.next_training_focus||training?.next_training_focus)||(!a.match_feedback_id&&!a.training_observation_id);
     return `<article class="training-observation-card" data-coaching-action-card="${esc(a.id)}" style="margin-top:12px">
-      <div class="section-label">${a.status==='open'?(due?'Review due':a.follow_up_requested===false?'Current note':'Follow-up open'):a.status==='completed'?'Discussed / Actioned':'Closed'}${a.review_on?` · Review ${esc(formatDateShort(a.review_on))}`:' · No review date'}</div>
+      <div class="section-label">${a.status==='open'?(due?'Review due':a.follow_up_requested===false?'Current note':'Conversation open'):a.status==='completed'?'Discussed / Actioned':'Closed'}${a.review_on?` · Review ${esc(formatDateShort(a.review_on))}`:' · No review date'}</div>
       ${source||`<h3>${esc(a.task)}</h3>`}
       ${source&&isTask&&(hiddenPlan||a.task!==(note?.next_training_focus||training?.next_training_focus))?`<p><strong>Agreed action:</strong> ${esc(a.task)}</p>`:''}
+      ${reasons.length?`<div class="notice compact"><strong>Worth discussing</strong>${reasons.map(r=>`<p data-coach-signal-card="${esc(r.key)}">${esc(r.title)} · ${esc(r.summary)}</p>`).join('')}</div>`:''}
       <p class="help">Recorded by ${esc(a.recorded_by_name||'Club coaching team')}${a.status==='open'?' · Stays current until marked Discussed / Actioned.':''}</p>
       ${a.status==='open'&&a.can_review?`<button class="btn secondary" data-review-coaching-action="${esc(a.id)}">Add note / mark Discussed or Actioned</button>`:''}
       <div data-coaching-review-slot="${esc(a.id)}"></div>
       ${a.reviews?.length?`<details style="margin-top:10px"><summary>Notes and updates (${a.reviews.length})</summary>${a.reviews.map(r=>`<p><strong>${Number(r.revision)===1?'Recorded':r.outcome==='continue'?'Update':r.outcome==='completed'?'Discussed / Actioned':'Closed'} · ${esc(formatDateShort(r.reviewed_at))}</strong><br>${esc(r.note)}<br><small>${esc(r.reviewed_by_name||'Club member')}${r.next_review_on?` · Review ${esc(formatDateShort(r.next_review_on))}`:''}</small></p>`).join('')}</details>`:''}
     </article>`;
   };
-  return `<section class="card" id="sharedCoachingActions"><div class="section-label">${includeObservations?'Coaching notes and follow-ups':'Coaching follow-ups'}</div><h2>Current (${open.length})</h2><p class="help">Add a note to record the conversation. Discussed / Actioned clears this follow-up for the player and coaches. Review dates are optional.</p>${feedback?.coaching_actions_error?'<div class="notice">Follow-ups could not load. Reload this page to try again.</div>':''}${open.length?open.map(card).join(''):!feedback?.coaching_actions_error?'<p class="help">No current coaching notes or actions.</p>':''}${closed.length?`<details id="pastCoachingNotes" style="margin-top:14px"><summary>Past coaching notes and actions (${closed.length})</summary>${closed.map(card).join('')}</details>`:''}</section>`;
+  return `<section class="card" id="sharedCoachingActions"><div class="section-label">Coach Conversations</div><h2>Current (${current.length})</h2><p class="help">Observations, discussion notes and agreed next steps stay together here. Review dates are optional. Mark Discussed / Actioned when the conversation is complete.</p>${feedback?.coaching_actions_error?'<div class="notice">Conversations could not all load. Reload this page to check the latest notes and reviews.</div>':''}${current.length?current.map(item=>item.action?card(item.action,item.signals):renderConversationSignal(item.signals[0])).join(''):!feedback?.coaching_actions_error?'<p class="help">No current coaching conversations.</p>':''}${closed.length?`<details id="pastCoachingNotes" style="margin-top:14px"><summary>Past conversations (${closed.length})</summary>${closed.map(a=>card(a)).join('')}</details>`:''}</section>`;
 }
 
 function freezeCoachingForm(form){
@@ -8826,7 +8872,7 @@ function bindCoachingActionControls(feedback,onSaved){
     document.getElementById('coachingActionForm')?.remove();
     const host=[...document.querySelectorAll('[data-coaching-review-slot]')].find(el=>el.dataset.coachingReviewSlot===action.id);if(!host)return;
     const form=document.createElement('div');form.id='coachingReviewForm';form.className='development-entry-form';
-    form.innerHTML=`<div class="field"><label for="coachingReviewOutcome">What happens next?</label><select id="coachingReviewOutcome"><option value="continue">Keep open — add a note or change review date</option><option value="completed">Discussed / Actioned — clear this follow-up</option><option value="stopped">Close — no further action needed</option></select></div><div class="field"><label for="coachingReviewNote">Discussion / progress note</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What did you discuss or do? What happens next?"></textarea></div><div class="field" id="coachingNextReviewField"><label for="coachingNextReviewDate">Review date (optional)</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value="${esc(action.review_on||'')}"></div><p class="help">Your update is shared with the player and authorised coaching team.</p><div class="btnrow"><button class="btn secondary" id="saveCoachingReview">Save review</button><button class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
+    form.innerHTML=`<div class="field"><label for="coachingReviewOutcome">What happens next?</label><select id="coachingReviewOutcome"><option value="continue">Keep open — add a note or change review date</option><option value="completed">Discussed / Actioned — complete this conversation</option><option value="stopped">Close — no further action needed</option></select></div><div class="field"><label for="coachingReviewNote">Discussion / progress note</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What did you discuss or do? What happens next?"></textarea></div><div class="field" id="coachingNextReviewField"><label for="coachingNextReviewDate">Review date (optional)</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value="${esc(action.review_on||'')}"></div><p class="help">Your update is shared with the player and authorised coaching team.</p><div class="btnrow"><button class="btn secondary" id="saveCoachingReview">Save review</button><button class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
     host.appendChild(form);captureFeedbackEntryBaseline();
     const targetClub=club?.id,targetUser=session?.user?.id;
     const stillCurrent=()=>club?.id===targetClub&&session?.user?.id===targetUser&&document.getElementById('coachingReviewForm')===form;
@@ -9250,7 +9296,7 @@ function observationReviewField(action=null){
   return `<div class="field"><label for="staffObservationReviewOn">Review date <span>optional</span></label><input id="staffObservationReviewOn" type="date" value="${esc(action?.review_on||'')}" ${action?.status==='open'?'':`min="${todayIso()}"`} ${action&&action.status!=='open'?'disabled':''}><p class="help">Leave blank if no date is agreed. A date flags this follow-up for the player and coaches; it is highlighted when due. You can change or clear it while the note is current.</p></div>`;
 }
 function observationConversationField(selected=false){
-  return `<div class="field" id="staffObservationConversationField"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="staffObservationConversation" ${selected?'checked':''} style="width:auto;margin:0">Needs a coaching conversation</label><p class="help">This, a training focus, or a review date adds one shared follow-up to Needs a Coaching Conversation. No duplicate alerts.</p></div>`;
+  return `<div class="field" id="staffObservationConversationField"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="staffObservationConversation" ${selected?'checked':''} style="width:auto;margin:0">Needs a coaching conversation</label><p class="help">This, a training focus, or a review date brings the player into Coach Conversations. The note, date and updates stay together.</p></div>`;
 }
 function observationPurposeField(note=null){
   return `<div class="field"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="staffObservationGeneral" ${note?.plan_related===false?'checked':''} style="width:auto;margin:0">This isn’t about their Player Plan</label><p class="help" id="staffObservationPurposeHint">General notes are shared straight away. Player Plan match observations ask for an independent player reflection first.</p></div>`;
@@ -9367,13 +9413,13 @@ function renderStaffDevelopmentBody(player,canEdit,data){
   return `<div class="staff-development-shell">
     <section class="card development-overview" id="developmentOverview">
       <div class="development-loop-head">
-        <div><div class="section-label">Coaching</div><h2>Feedback</h2><div class="help">Record an observation, add discussion notes and agree the next step here.</div></div>
+        <div><div class="section-label">Coaching</div><h2>Coach Conversations</h2><div class="help">Record an observation, add discussion notes and agree the next step here.</div></div>
         ${canEdit?`<div class="btnrow"><button class="btn secondary" id="addTrainingObservation">Add training observation</button><button class="btn ghost" id="addNewMatchFeedback">Add match observation</button></div>`:'<span class="workspace-access-badge view">VIEW ONLY</span>'}
       </div>
     </section>
     ${playersWorkspaceDevelopmentMode==='training'&&canEdit?renderStaffTrainingObservationForm(player,data,staffObservationEditId):''}
     ${playersWorkspaceDevelopmentMode==='match'&&canEdit?renderStaffMatchFeedbackForm(player,data):''}
-    ${renderCoachingActions(data,{playerMode:false,includeObservations:true,staffCanEdit:canEdit})}
+    ${renderCoachingActions(data,{playerMode:false,includeObservations:true,staffCanEdit:canEdit,signals:workspaceSignalsForPlayer(player.id)})}
     ${renderExternalTrainingEvidenceSection(data.external_training_evidence)}
   </div>`;
 }
@@ -9710,60 +9756,8 @@ function renderFeedbackAdd(data){
 }
 
 async function renderFeedbackWorkspace(){
-  resetFeedbackWorkspaceForClub();
-  const page=document.getElementById('page');
-  if(!canUsePlayersWorkspace()){
-    page.innerHTML=`<section class="card player-gate"><div class="gate-state locked">🔒</div><div class="section-label">Feedback</div><h2>This workspace has not been assigned to you.</h2><p>Coach/Captain feedback follows the same Player and Playing Group permissions as the Players workspace.</p></section>`;
-    return;
-  }
-  if(!howWeBatVersions.length){
-    page.innerHTML=`<section class="card player-gate"><div class="gate-state locked">🔒</div><div class="section-label">Feedback</div><h2>The Club Batting System is not live yet.</h2><p>Feedback becomes useful once Player Plans are available.</p></section>`;
-    return;
-  }
-
-  page.innerHTML='<div class="splash">Loading feedback…</div>';
-  try{feedbackWorkspaceData=await loadFeedbackWorkspaceData();}
-  catch(e){page.innerHTML=`<section class="card"><div class="section-label">Feedback</div><h2>This workspace could not load.</h2><div class="notice">${esc(e?.message||String(e))}</div><div class="help" style="margin-top:10px">If v0.7.1 has just been deployed, make sure its Supabase migration was run first.</div></section>`;return;}
-
-  const data=feedbackWorkspaceData;
-  const signals=feedbackDiscussionSignals(data);
-  const discussionPlayerCount=new Set(signals.map(s=>s.player.id)).size;
-  const awaiting=(data.players||[]).reduce((n,p)=>n+(p.matches||[]).filter(m=>(m.coach_feedback||[]).length&&!m.player_reflection).length,0);
-  const tabs=[['discussion',`Needs Discussion${signals.length?` · ${signals.length}`:''}`],['recent',`Recent Feedback${awaiting?` · ${awaiting} waiting`:''}`],['add','Add Feedback']];
-  let body='';
-  if(feedbackWorkspaceSection==='discussion')body=`<section class="card feedback-discussion-intro"><div><div class="section-label">Coach / Captain overview</div><h2>${discussionPlayerCount?`${discussionPlayerCount} player${discussionPlayerCount===1?'':'s'} worth a conversation`:'Nothing currently needs a coaching conversation.'}</h2><p>The system only surfaces patterns that are useful to discuss — not every poor innings or imperfect net session.</p></div></section><div class="feedback-signal-list">${signals.length?signals.map(renderDiscussionSignalCard).join(''):`<section class="card feedback-all-clear"><strong>All clear ✓</strong><span>Keep collecting short reflections and observations. New patterns will appear here automatically when they become worth discussing.</span></section>`}</div>`;
-  if(feedbackWorkspaceSection==='recent')body=renderFeedbackRecent(data);
-  if(feedbackWorkspaceSection==='add')body=renderFeedbackAdd(data);
-
-  page.innerHTML=`<section class="card feedback-hero"><div><div class="section-label">Feedback</div><h1>See what is worth talking about.</h1><p>Short player reflections and coach observations are compiled into useful conversations — then fed back into training.</p><button class="guide-inline-link" id="feedbackGuideLink">How Coach Conversations work →</button></div><div class="feedback-hero-count"><strong>${discussionPlayerCount}</strong><span>PLAYER${discussionPlayerCount===1?'':'S'} TO SPEAK TO</span></div></section><div class="feedback-tabs">${tabs.map(([k,l])=>`<button data-feedback-section="${k}" class="${feedbackWorkspaceSection===k?'active':''}">${esc(l)}</button>`).join('')}</div>${body}`;
-
-  document.getElementById('feedbackGuideLink')?.addEventListener('click',()=>openClubBattingGuideTopic('coach_conversations'));
-  document.querySelectorAll('[data-feedback-section]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceSection=b.dataset.feedbackSection;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;feedbackWorkspaceDiscussionKey=null;renderFeedbackWorkspace();});
-  document.querySelectorAll('[data-open-plan-from-feedback]').forEach(b=>b.onclick=()=>{if(confirmLeaveFeedbackEntry())openPlayerPlanFromFeedback(b.dataset.openPlanFromFeedback);});
-  document.querySelectorAll('[data-view-feedback-player]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspacePlayerFilter=b.dataset.viewFeedbackPlayer;feedbackWorkspaceSection='recent';feedbackWorkspaceDiscussionKey=null;renderFeedbackWorkspace();});
-  document.querySelectorAll('[data-toggle-discussion]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;const identity=discussionSignalIdentity(b.dataset.discussionPlayer,b.dataset.toggleDiscussion);feedbackWorkspaceDiscussionKey=feedbackWorkspaceDiscussionKey===identity?null:identity;renderFeedbackWorkspace();});
-  document.querySelectorAll('[data-discussion-outcome]').forEach(b=>b.onclick=()=>{
-    const signal=signals.find(s=>s.key===b.dataset.signalKey&&s.player.id===b.dataset.discussionPlayer);if(!signal||!signal.player.can_edit)return;
-    openCoachingConversationForm(signal,b.dataset.discussionOutcome,b.closest('.discussion-outcome-picker'),async()=>{
-      feedbackWorkspaceDiscussionKey=null;await renderFeedbackWorkspace();
-    });
-  });
-
-  const filter=document.getElementById('feedbackPlayerFilter');if(filter)filter.onchange=()=>{if(!confirmLeaveFeedbackEntry()){filter.value=feedbackWorkspacePlayerFilter;return;}feedbackWorkspacePlayerFilter=filter.value;renderFeedbackWorkspace();};
-  document.querySelectorAll('[data-add-coach-view-player]').forEach(b=>b.onclick=()=>{feedbackWorkspaceSelectedPlayerId=b.dataset.addCoachViewPlayer;feedbackWorkspaceMatchId=b.dataset.addCoachViewMatch;feedbackWorkspaceEntryMode='match';feedbackWorkspaceSection='add';renderFeedbackWorkspace();});
-
-  const addPlayer=document.getElementById('feedbackAddPlayer');if(addPlayer)addPlayer.onchange=()=>{if(!confirmLeaveFeedbackEntry()){addPlayer.value=feedbackWorkspaceSelectedPlayerId||'';return;}feedbackWorkspaceSelectedPlayerId=addPlayer.value||null;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;renderFeedbackWorkspace();};
-  const addTraining=document.getElementById('feedbackAddTraining');if(addTraining)addTraining.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceEntryMode='training';feedbackWorkspaceMatchId=null;renderFeedbackWorkspace().then(()=>requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'})));};
-  const addMatch=document.getElementById('feedbackAddMatch');if(addMatch)addMatch.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceEntryMode='match';feedbackWorkspaceMatchId=null;renderFeedbackWorkspace().then(()=>requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'})));};
-
-  wireQuickChoices(page);
-  captureFeedbackEntryBaseline();
-  const selected=(data.players||[]).find(p=>p.id===feedbackWorkspaceSelectedPlayerId)||null;
-  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=()=>{if(!confirmLeaveFeedbackEntry())return;feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;renderFeedbackWorkspace();};
-  if(selected){
-    const afterSave=async()=>{feedbackWorkspaceEntryMode=null;feedbackWorkspaceMatchId=null;await renderFeedbackWorkspace();};
-    wireObservationSave(selected,'training',afterSave);wireObservationSave(selected,'match',afterSave);
-  }
+  currentTab='feedback';
+  return renderTab(); // Compatibility entry point for older saved links and help targets.
 }
 
 /* ---------------- PLAYERS WORKSPACE ---------------- */
@@ -10066,7 +10060,7 @@ function workspaceSignalsForPlayer(playerId){
   return workspaceDiscussionSignals().filter(s=>s.player.id===playerId);
 }
 
-function workspaceOpenPlayer(playerId,section='summary',developmentMode=null,actionId=null){
+function workspaceOpenPlayer(playerId,section='summary',developmentMode=null,actionId=null,signalKey=null){
   if(!confirmLeaveFeedbackEntry())return;
   playersWorkspaceSelectedId=playerId;
   playersWorkspaceSection=section;
@@ -10077,6 +10071,9 @@ function workspaceOpenPlayer(playerId,section='summary',developmentMode=null,act
   return renderPlayersWorkspacePlayer().then(()=>{
     if(actionId&&playersWorkspaceSelectedId===playerId&&playersWorkspaceSection===section){
       requestAnimationFrame(()=>[...document.querySelectorAll('[data-coaching-action-card]')].find(el=>el.dataset.coachingActionCard===actionId)?.scrollIntoView({behavior:'smooth',block:'start'}));
+    }
+    if(signalKey&&playersWorkspaceSelectedId===playerId&&playersWorkspaceSection===section){
+      requestAnimationFrame(()=>[...document.querySelectorAll('[data-coach-signal-card]')].find(el=>el.dataset.coachSignalCard===signalKey)?.scrollIntoView({behavior:'smooth',block:'start'}));
     }
     if(developmentMode){
       requestAnimationFrame(()=>document.getElementById('staffDevelopmentForm')?.scrollIntoView({behavior:'smooth',block:'start'}));
@@ -10090,29 +10087,8 @@ function workspaceFeedbackCount(playerId){
   return (p.matches?.length||0)+(p.training_observations?.length||0);
 }
 
-function renderWorkspaceRosterDiscussion(player,signals){
-  if(!signals.length)return '';
-  const primary=signals[0];
-  const isOpen=playersWorkspaceDiscussionKey===discussionSignalIdentity(player.id,primary.key);
-  return `<div class="workspace-roster-discussion ${primary.tone}">
-    <div class="workspace-roster-discussion-copy">
-      <span class="workspace-discussion-badge">NEEDS DISCUSSION${signals.length>1?` · ${signals.length} ITEMS`:''}</span>
-      <strong>${esc(primary.title)}</strong>
-      <small>${esc(primary.summary)}</small>
-    </div>
-    <button type="button" class="btn secondary" data-open-player-feedback="${esc(player.id)}">Open</button>
-    ${player.can_edit?`<button class="workspace-text-link strong" data-toggle-roster-discussion="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">${isOpen?'Close':'Mark discussed'}</button>`:''}
-    ${isOpen&&player.can_edit?`<div class="workspace-discussion-outcomes">
-      <span>${esc(primary.suggestion)}</span>
-      <p class="help">Record what you agreed. A training change or plan review creates a shared action. The review date is optional.</p>
-      <div>
-        <button data-roster-discussion-outcome="keep_plan" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">Plan stays as it is</button>
-        <button data-roster-discussion-outcome="adjust_training" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">Training change agreed</button>
-        <button data-roster-discussion-outcome="review_plan" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">Plan review agreed</button>
-        <button data-roster-discussion-outcome="no_action" data-signal-key="${esc(primary.key)}" data-discussion-player="${esc(player.id)}">No action needed</button>
-      </div>
-    </div>`:''}
-  </div>`;
+function renderWorkspaceRosterDiscussion(player,signals=[]){
+  return renderPlayerActionAlert(player.id,signals);
 }
 
 function workspaceReminderHistory(playerId,formatKey=''){
@@ -10334,8 +10310,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
     ${renderWorkspaceAssignment(player,assignmentGroups)}
-    ${renderPlayerActionAlert(player.id)}
-    ${signals.length?renderWorkspaceRosterDiscussion(player,signals):''}
+    ${renderPlayerActionAlert(player.id,signals)}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
       <div><strong style="font-size:12px;color:var(--navy2)">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${deadlineDetail?`<span style="display:block;margin-top:2px;font-size:11px;color:${overdue?'var(--accent,#D8232A);font-weight:700':'var(--muted)'}">${esc(deadlineDetail)}</span>`:''}${reminderMeta}</div>
       ${reminderAction}
@@ -10343,7 +10318,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
     <div class="workspace-roster-actions">
       <button class="workspace-text-link" data-open-workspace-player="${player.id}">${plansPublished?'Player Plan':'View player'}</button>
       ${plansPublished?`<button class="workspace-text-link" data-open-training-plan="${player.id}">Training Plan</button>`:'<button class="workspace-text-link" disabled title="Training guidance will be available after Player Plans open and the player completes their plan.">Training Plan</button>'}
-      <button class="workspace-text-link" data-open-player-feedback="${player.id}">Feedback${feedbackCount?` · ${feedbackCount}`:''}</button>
+      <button class="workspace-text-link" data-open-player-feedback="${player.id}">Coach Conversations</button>
       ${player.can_edit?`<button class="workspace-text-link add" data-quick-match-observation="${player.id}">+ Match observation</button>
       <button class="workspace-text-link add" data-quick-training-observation="${player.id}">+ Training observation</button>`:''}
     </div>
@@ -10358,14 +10333,32 @@ async function refreshPlayersWorkspaceFeedback(){
   }
 }
 
-function renderPlayerActionAlert(playerId){
+function renderPlayerActionAlert(playerId,signals=workspaceSignalsForPlayer(playerId)){
   const actions=(playersWorkspaceFeedbackData?.action_alerts||[]).filter(a=>a.player_id===playerId);
-  if(!actions.length)return '';
-  const due=actions.filter(a=>a.review_on&&a.review_on<=todayIso());
-  return `<div class="notice compact" style="margin-top:12px"><strong>${due.length?`${due.length} coaching review${due.length===1?'':'s'} due`:`${actions.length} open coaching follow-up${actions.length===1?'':'s'}`}</strong><p>${esc((due[0]||actions[0]).summary||(due[0]||actions[0]).task)}</p><button type="button" class="btn secondary" data-open-coaching-actions="${esc(playerId)}" data-coaching-action-id="${esc((due[0]||actions[0]).id)}">Open</button></div>`;
+  const items=coachingConversationItems(actions,signals);if(!items.length)return '';
+  const due=items.filter(x=>x.reviewOn&&x.reviewOn<=todayIso()),primary=due[0]||items[0];
+  const signal=primary.signals[0],action=primary.action;
+  return `<div class="workspace-roster-discussion amber" data-coach-conversations-player="${esc(playerId)}">
+    <div class="workspace-roster-discussion-copy"><span class="workspace-discussion-badge">COACH CONVERSATIONS · ${items.length} CURRENT${due.length?` · ${due.length} REVIEW DUE`:''}</span>
+    <strong>${esc(signal?.title||'Conversation requested')}</strong><small>${esc(action?.summary||signal?.summary||action?.task||'Open the conversation to record what happens next.')}</small>
+    ${primary.reviewOn?`<small>Review ${esc(formatDateShort(primary.reviewOn))}</small>`:''}</div>
+    <button type="button" class="btn secondary" data-open-coaching-actions="${esc(playerId)}" data-coaching-action-id="${esc(action?.id||'')}" data-coaching-signal-key="${esc(signal?.key||'')}">Open</button></div>`;
+}
+
+function renderCoachConversationsSummary(conversations){
+  if(!conversations.length)return '';
+  const players=new Set(conversations.map(x=>x.playerId)).size;
+  const due=conversations.filter(x=>x.reviewOn&&x.reviewOn<=todayIso()).length;
+  return `<aside class="card" id="coachConversationsSummary" role="status" style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:12px 16px;margin-top:14px;background:#f7f8fd;border-color:#dce1f2">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" style="flex:none;color:var(--primary)"><path d="M20 11a7 7 0 0 1-7 7H8l-5 3V10a7 7 0 0 1 7-7h3a7 7 0 0 1 7 8Z"/><path d="M7 9h9M7 13h6"/></svg>
+    <div style="flex:1 1 180px;line-height:1.5"><strong>Coach Conversations</strong><span class="help" style="display:block">${players} player${players===1?' needs':'s need'} attention</span></div>
+    ${due?`<span style="border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap;background:#fff3d8;color:#855008">${due} review${due===1?'':'s'} due</span>`:''}
+    <button type="button" class="btn ghost" id="showCoachConversations" aria-label="View Coach Conversations" style="margin-left:auto;min-height:40px">View <span aria-hidden="true">→</span></button>
+  </aside>`;
 }
 
 function renderPlayersWorkspaceList(){
+  if(playersWorkspaceGroupFilter==='__actions__')playersWorkspaceGroupFilter='__discussion__';
   if(currentTab==='players'&&recordAppNavigation(clubNavigationRoute()))window.scrollTo?.({top:0,left:0,behavior:'instant'});
   const page=document.getElementById('page');
   const data=playersWorkspaceData||{players:[],groups:[]};
@@ -10374,12 +10367,8 @@ function renderPlayersWorkspaceList(){
   const role=permissionRoleLabel(data.role||membership.permission_role);
   const query=playersWorkspaceSearch.trim().toLowerCase();
   const allSignals=workspaceDiscussionSignals();
-  const signalPlayerIds=new Set(allSignals.map(s=>s.player.id));
-  for(const action of playersWorkspaceFeedbackData?.action_alerts||[])signalPlayerIds.add(action.player_id);
-  const actionsMode=playersWorkspaceGroupFilter==='__actions__';
-  const actionAlerts=playersWorkspaceFeedbackData?.action_alerts||[];
-  const actionPlayerIds=new Set(actionAlerts.map(a=>a.player_id));
-  const dueActions=actionAlerts.filter(a=>a.review_on&&a.review_on<=todayIso());
+  const conversations=workspaceCoachConversations();
+  const signalPlayerIds=new Set(conversations.map(x=>x.playerId));
   const discussionMode=playersWorkspaceGroupFilter==='__discussion__';
   const unassignedMode=playersWorkspaceGroupFilter==='__unassigned__';
   const unassignedCount=players.filter(player=>!(player.groups||[]).some(g=>g.active!==false)).length;
@@ -10387,10 +10376,10 @@ function renderPlayersWorkspaceList(){
   const hasSelection=!!(query||playersWorkspaceGroupFilter||playersWorkspaceShowAll);
 
   let filtered=[];
-  if(discussionMode||actionsMode){
+  if(discussionMode){
     filtered=players.filter(player=>{
       const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
-      return matchesName&&(actionsMode?actionPlayerIds:signalPlayerIds).has(player.id);
+      return matchesName&&signalPlayerIds.has(player.id);
     });
   }else if(playersWorkspaceGroupFilter){
     filtered=players.filter(player=>{
@@ -10425,8 +10414,6 @@ function renderPlayersWorkspaceList(){
     emptyCopy='<section class="card workspace-roster-empty"><strong>Find a player</strong><span>Search for a player or choose a Playing Group to view their plans and record feedback.</span></section>';
   }else if(query&&!filtered.length){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Try another name or clear your search.</strong><span>Your search found no players in this view. Only players you have permission to access are included.</span><div class="btnrow"><button class="btn ghost" id="clearPlayerSearch">Clear search</button></div></section>`;
-  }else if(actionsMode){
-    emptyCopy='<section class="card workspace-roster-empty"><strong>No open training actions.</strong><span>Training focuses and review dates recorded in observations appear here.</span></section>';
   }else if(discussionMode){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No coaching conversations waiting.</strong><span>When feedback creates something worth discussing, the player will appear here automatically.</span></section>`;
   }else if(unassignedMode){
@@ -10446,20 +10433,20 @@ function renderPlayersWorkspaceList(){
   </section>
 
   ${plansPublished?'':'<div class="notice" style="margin-top:14px"><strong>People can join now; Player Plans open after publication.</strong> Use People & Sign-up to register people and assign club roles. Choose the Philosophy Lead and contributors in the Workshop. Players without setup access will see a waiting message when they sign in.</div>'}
-  ${actionAlerts.length?`<section class="card notice" role="status"><strong>${dueActions.length?`${dueActions.length} coaching review${dueActions.length===1?'':'s'} due`:`${actionAlerts.length} open coaching follow-up${actionAlerts.length===1?'':'s'}`}</strong><p>Follow up on the player’s training focus. Any coach with edit access can record progress or mark it actioned.</p><button type="button" class="btn secondary" id="showCoachingActionPlayers">View follow-ups · ${actionPlayerIds.size} player${actionPlayerIds.size===1?'':'s'}</button></section>`:''}
-  ${playersWorkspaceFeedbackData?.action_alerts_error?'<div class="notice">Coaching follow-ups could not load. Reload to check for due reviews.</div>':''}
+  ${!discussionMode?renderCoachConversationsSummary(conversations):''}
+  ${playersWorkspaceFeedbackData?.action_alerts_error?'<div class="notice">Some Coach Conversations could not load. Reload to check the latest notes and review dates.</div>':''}
   <section class="card players-workspace-tools compact">
     <div class="field">
       <label for="workspacePlayerSearch">Find a player</label>
       <input id="workspacePlayerSearch" value="${esc(playersWorkspaceSearch)}" placeholder="Search by name" type="search" autocomplete="off">
     </div>
     <div class="field">
-      <label for="workspaceGroupFilter">Playing Group</label>
+      <label for="workspaceGroupFilter">Show players</label>
       <select id="workspaceGroupFilter">
         <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>${query?'All Playing Groups':'Choose a Playing Group…'}</option>
         <option value="__unassigned__" ${unassignedMode?'selected':''}>Currently unassigned · ${unassignedCount}</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
-        <option disabled>──────────</option><option value="__actions__" ${actionsMode?'selected':''}>Coaching follow-ups · ${actionPlayerIds.size}</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
+        <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Coach Conversations · ${discussionPlayers}</option>
       </select>
     </div>
     ${hasSelection?`<div class="workspace-filter-count compact" role="status" aria-live="polite"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
@@ -10467,7 +10454,7 @@ function renderPlayersWorkspaceList(){
 
   ${unassignedMode&&filtered.length?`<div class="notice compact" id="workspaceAssignmentHelp">${isAdmin()&&assignmentGroups.length?'Tick one or more Playing Groups on each card, then click Assign selected groups. Assigned players leave this list.':'These players have no active Playing Group.'}</div>`:''}
   ${isAdmin()?`<div class="help" id="workspaceAssignmentNotice" role="status" aria-live="polite">${esc(workspaceAssignmentState().notice)}</div>`:''}
-  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&!actionsMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
+  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
   ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
   ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
@@ -10475,7 +10462,7 @@ function renderPlayersWorkspaceList(){
 
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
-  document.getElementById('showCoachingActionPlayers')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;playersWorkspaceSearch='';playersWorkspaceGroupFilter='__actions__';renderPlayersWorkspaceList();});
+  document.getElementById('showCoachConversations')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;playersWorkspaceSearch='';playersWorkspaceGroupFilter='__discussion__';renderPlayersWorkspaceList();});
   document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
   document.getElementById('managePeopleFromPlayers')?.addEventListener('click',()=>{currentTab='permissions';renderTab();});
   document.getElementById('workspaceShowAllPlayers')?.addEventListener('click',()=>{
@@ -10536,7 +10523,7 @@ function renderPlayersWorkspaceList(){
 }
 
 function bindPlayersWorkspaceRosterActions(allSignals=workspaceDiscussionSignals()){
-  document.querySelectorAll('[data-open-coaching-actions]').forEach(button=>button.onclick=()=>workspaceOpenPlayer(button.dataset.openCoachingActions,'development',null,button.dataset.coachingActionId||null));
+  document.querySelectorAll('[data-open-coaching-actions]').forEach(button=>button.onclick=()=>workspaceOpenPlayer(button.dataset.openCoachingActions,'development',null,button.dataset.coachingActionId||null,button.dataset.coachingActionId?null:button.dataset.coachingSignalKey||null));
   document.querySelectorAll('[data-open-workspace-player]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openWorkspacePlayer,'summary'));
   document.querySelectorAll('[data-open-training-plan]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openTrainingPlan,'training'));
   document.querySelectorAll('[data-open-player-feedback]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openPlayerFeedback,'development'));
@@ -10554,22 +10541,7 @@ function bindPlayersWorkspaceRosterActions(allSignals=workspaceDiscussionSignals
     renderPlayersWorkspaceList();
   });
 
-  document.querySelectorAll('[data-toggle-roster-discussion]').forEach(b=>b.onclick=()=>{
-    if(!confirmLeaveFeedbackEntry())return;
-    const identity=discussionSignalIdentity(b.dataset.discussionPlayer,b.dataset.toggleRosterDiscussion);
-    playersWorkspaceDiscussionKey=playersWorkspaceDiscussionKey===identity?null:identity;
-    renderPlayersWorkspaceList();
-  });
 
-  document.querySelectorAll('[data-roster-discussion-outcome]').forEach(b=>b.onclick=()=>{
-    const signal=allSignals.find(s=>s.key===b.dataset.signalKey&&s.player.id===b.dataset.discussionPlayer);
-    if(!signal||!signal.player.can_edit)return;
-    openCoachingConversationForm(signal,b.dataset.rosterDiscussionOutcome,b.closest('.workspace-discussion-outcomes'),async()=>{
-      playersWorkspaceDiscussionKey=null;
-      await refreshPlayersWorkspaceFeedback();
-      renderPlayersWorkspaceList();
-    });
-  });
 }
 
 function workspaceSelectedPlayer(){
@@ -10767,12 +10739,8 @@ function renderStaffPlayerTrainingPlan(player,raw,feedback){
 }
 
 function renderWorkspacePlayerDiscussionPanel(player){
-  const signals=workspaceSignalsForPlayer(player.id);
-  if(!signals.length)return '';
-  return `<section class="card workspace-player-discussion-panel"><div class="section-label">Player Plan conversations</div>
-    ${signals.map(s=>`<div class="workspace-player-discussion-item ${s.tone}"><div><strong>${esc(s.title)}</strong><span>${esc(s.summary)}</span><small>${esc(s.suggestion)}</small>
-      ${player.can_edit?`<div class="btnrow"><button class="btn secondary" data-player-discussion="${esc(s.key)}" data-outcome="no_action">Add note / Mark discussed</button><button class="btn ghost" data-player-discussion="${esc(s.key)}" data-outcome="adjust_training">Agree a training action</button></div>`:''}
-      <div data-player-discussion-slot="${esc(s.key)}"></div></div></div>`).join('')}</section>`;
+  const count=workspaceCoachConversations(player.id).length;if(!count)return '';
+  return `<section class="card notice"><strong>Coach Conversations · ${count} current</strong><p>Open the conversation to read the notes and record what happens next.</p><button class="btn secondary" data-workspace-section="development">Open Coach Conversations</button></section>`;
 }
 
 async function returnToPlayersWorkspaceList(){
@@ -10797,8 +10765,8 @@ async function renderPlayersWorkspacePlayer(){
 
   const plansPublished=workspacePlayerPlansPublished();
   const sections=plansPublished
-    ?[['summary','Player Plan'],['training','Training Plan'],['development','Feedback'],['core','Core'],...publishedEnabledFormats()]
-    :[['summary','Player details'],['development','Feedback']];
+    ?[['summary','Player Plan'],['training','Training Plan'],['development','Coach Conversations'],['core','Core'],...publishedEnabledFormats()]
+    :[['summary','Player details'],['development','Coach Conversations']];
   if(!sections.some(([k])=>k===playersWorkspaceSection))playersWorkspaceSection='summary';
   if(recordAppNavigation(clubNavigationRoute()))window.scrollTo?.({top:0,left:0,behavior:'instant'});
   const targetClub=club?.id,targetUser=session?.user?.id,targetPlayer=player.id,targetSection=playersWorkspaceSection;
@@ -10879,7 +10847,7 @@ async function renderPlayersWorkspacePlayer(){
   }else if(playersWorkspaceSection==='development'){
     body=developmentError
       ?`<section class="card"><div class="section-label">Feedback</div><h2>Feedback is temporarily unavailable.</h2><p>Try loading this section again. If it still will not load, ask your Club Admin for help.</p><div class="btnrow"><button class="btn secondary" id="retryPlayerFeedback">Try again</button></div><details><summary>Error details</summary><div class="notice">${esc(developmentError)}</div></details></section>`
-      :`${renderStaffDevelopmentBody(player,canEdit,developmentData)}${renderWorkspacePlayerDiscussionPanel(player)}`;
+      :`${renderStaffDevelopmentBody(player,canEdit,developmentData)}`;
   }else{
     const section=playersWorkspaceSection;
     const label=section==='core'?'Core':(FORMATS.find(([k])=>k===section)?.[1]||section);
@@ -10961,7 +10929,7 @@ async function renderPlayersWorkspacePlayer(){
 
   <div class="workspace-player-tabs">${sectionTabs}</div>
 
-  ${playersWorkspaceSection==='training'?renderCoachingActions(developmentData,{playerMode:false}):''}
+  ${playersWorkspaceSection==='training'?renderWorkspacePlayerDiscussionPanel(player):''}
   ${body}`;
 
   bindCoachingActionControls(developmentData,async()=>{await refreshPlayersWorkspaceFeedback();await renderPlayersWorkspacePlayer();});
@@ -11035,12 +11003,12 @@ function playerHomeNextAction(raw,rollout,feedback,today=todayIso()){
   }
   const actions=(feedback?.coaching_actions||[]).filter(x=>x.status==='open'&&x.follow_up_requested!==false).sort((a,b)=>String(a.review_on||'9999-12-31').localeCompare(String(b.review_on||'9999-12-31')));
   const dueAction=actions.find(x=>x.review_on&&String(x.review_on).slice(0,10)<=today);
-  if(dueAction)return {kind:'review',heading:'Review your coaching follow-up',copy:'Your agreed review date has arrived. Record what changed, then decide the next step with your coach or captain.',label:'Review the agreed action',tab:'howwetrain',anchor:'sharedCoachingActions',focus:dueAction.task,meta:`Review due ${niceDate(dueAction.review_on)}`};
+  if(dueAction)return {kind:'review',heading:'Review your Coach Conversation',copy:'Your agreed review date has arrived. Record what changed, then decide the next step with your coach or captain.',label:'Review the agreed action',tab:'howwetrain',anchor:'sharedCoachingActions',focus:dueAction.task,meta:`Review due ${niceDate(dueAction.review_on)}`};
   const reflection=playerReflectionNeededMatches(feedback).slice().sort((a,b)=>String(b.match_date||'').localeCompare(String(a.match_date||'')))[0];
   if(reflection)return {kind:'reflection',heading:'Reflect on your latest innings',copy:'Record your own view first. You can then compare it with the coaching feedback and choose what to practise next.',label:'Add your innings reflection',tab:'howwetrain',anchor:'myReflectionForm',matchId:reflection.id,meta:[formatLabel(reflection.format_key),reflection.opposition,formatDateShort(reflection.match_date)].filter(Boolean).join(' · ')};
   if(actions.length){
     const next=actions[0];
-    return {kind:'training',heading:'Your coaching follow-up',copy:'Open the coaching note and any agreed practice in How We Train. Add an update when you have discussed or actioned it.',label:'Open How We Train',tab:'howwetrain',anchor:'sharedCoachingActions',focus:next.task,meta:next.review_on?`Review on ${niceDate(next.review_on)}`:''};
+    return {kind:'training',heading:'Your Coach Conversations',copy:'Open the coaching note and any agreed practice in How We Train. Add an update when you have discussed or actioned it.',label:'Open How We Train',tab:'howwetrain',anchor:'sharedCoachingActions',focus:next.task,meta:next.review_on?`Review on ${niceDate(next.review_on)}`:''};
   }
   if(plan.ready.length){
     const cues=plan.ready.flatMap(x=>trainingFocusForFormat(feedback,x.format)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
@@ -11099,7 +11067,7 @@ async function renderPlayerHome(){
     <div class="btnrow" style="margin-top:18px"><button class="btn" id="playerHomeNext">${esc(next.label)}</button></div>
   </section>
   ${loadNote?`<div class="notice compact" role="status" style="margin-top:14px">${!rolloutOk?'Your club’s required formats and due dates could not be checked. ':''}${!feedbackOk?'Your latest feedback could not be loaded. ':feedback.coaching_actions_error?'Shared training actions could not be loaded. ':''}You can keep using your saved plan.<button class="club-home-link" id="retryPlayerHome" type="button" style="margin-left:12px">Try again</button></div>`:''}
-  ${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.follow_up_requested!==false)?`<section class="card notice" role="status"><strong>${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.review_on&&a.review_on<=todayIso())?'Coaching review due':'You have a coaching follow-up'}</strong><p>Your coaching team has a follow-up for you. Open it to see the note, any agreed practice and an optional review date.</p><button class="btn secondary" id="playerHomeActionAlert">Open How We Train</button></section>`:''}
+  ${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.follow_up_requested!==false)?`<section class="card notice" role="status"><strong>${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.review_on&&a.review_on<=todayIso())?'Coach Conversation review due':'You have a Coach Conversation'}</strong><p>Open Coach Conversations in How We Train to see the note, any agreed practice and the optional review date.</p><button class="btn secondary" id="playerHomeActionAlert">Open How We Train</button></section>`:''}
   <div class="club-home-secondary" aria-label="Your batting tools">
     <button class="club-home-link" id="playerHomePlan">My Player Plan</button>
     ${plan.ready.length?'<button class="club-home-link" id="playerHomeTraining">How We Train</button>':''}

@@ -5525,7 +5525,7 @@ function guideCapabilityForCurrentProduct(capability){
         {title:'Build a Player Plan',body:'Each batter chooses their shots, when to use them and how to build an innings. Complete Core, then the formats you play.',target_tab:playerPlanTarget},
         {title:'Train the plan',body:'The completed plan generates personalised How We Train suggestions. Practise your shots and decisions so you can commit when the right ball arrives.',target_tab:'howwetrain'},
         {title:'Learn from innings and training',body:'Players reflect on innings; coaches add match and training feedback. Compare the whole innings and the dismissal ball with the Player Plan, separating decision from execution.',target_tab:feedbackTarget},
-        {title:'Agree what comes next',body:'Discuss what worked and what needs practice. Agree a useful action and review date, or keep the plan as it is.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})}
+        {title:'Agree what comes next',body:'Discuss what worked and what needs practice. Use Coach Conversations to record what you agreed. A review date is optional; mark Discussed / Actioned when finished.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})}
       ]
     },
     philosophy_workshop:{
@@ -5599,31 +5599,33 @@ function guideCapabilityForCurrentProduct(capability){
         {title:'Choose a useful focus',body:'Use your plan and recent feedback to pick what needs practice: a scoring shot, leaving well, taking a single or recognising the right ball.'},
         {title:'Practise the decision and the skill',body:'Recreate the balls and situations you’ll face. Recognise the opportunity, commit to your choice and practise executing it.'},
         {title:'Recognise preparation and commitment',body:'A dismissal alone does not make the choice wrong. Support the commitment, discuss decision and execution separately, and choose useful practice.'},
-        {title:'Review the next session',body:'Use feedback and any agreed coaching action to decide what to keep practising. Shared actions and their review history are in How We Train.',target_tab:'howwetrain'}
+        {title:'Review Coach Conversations',body:'Your Coach Conversations in How We Train hold current observations, discussion notes and agreed training work. Review dates are optional. Add a progress note or mark Discussed / Actioned when finished; completed conversations move into Past conversations.',target_tab:'howwetrain'}
       ]
     },
     feedback_loop:{
-      title:'Player and coach feedback',
-      purpose:'Learn from the innings, not just the dismissal.',
-      short_explanation:'Players reflect on innings; coaches add match and training feedback. Compare both views with the Player Plan to choose what to practise next.',
+      title:"Player and coach feedback",
+      purpose:"Learn from the innings, not just the dismissal.",
+      short_explanation:"Record match or training observations, then use Coach Conversations to discuss them and agree what happens next. General coaching notes do not require an innings reflection.",
       target_tab:feedbackTarget,
       tutorial:[
-        {title:'Record your own view first',body:'Players add their innings reflection in How We Train. Coaches and captains with assigned access add match feedback or training observations in Players.',target_tab:feedbackTarget},
-        {title:'Look at the whole innings',body:'Where did the batter follow their plan? Where did they move outside it? Consider what the match situation called for.'},
-        {title:'Look separately at the dismissal ball',body:'Did the choice fit the plan and the ball? Then consider how the shot was executed. One ball does not describe the whole innings.'},
-        {title:'Learn without judgement',body:'Recognise practice and commitment, including when execution falls short. Compare perspectives without forcing agreement, then discuss the most useful next step.'}
+        {"title": "Add an observation", "body": "In Players, open the player’s Coach Conversations and choose Add match observation or Add training observation. Coaches with edit access can add observations; the original author can edit their own observation.",target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
+        {"title": "Choose whether it concerns the Player Plan", "body": "For a general note, select This isn’t about their Player Plan. The player can read it immediately without an innings reflection. For plan-related match feedback, the player records their own view before seeing the coach’s answers. Training observations remain immediately visible."},
+        {"title": "Compare decisions and execution", "body": "For plan-related feedback, consider the whole innings and the dismissal ball separately. Recognise preparation and commitment, even when execution falls short. Use different perspectives to start a useful conversation."},
+        {"title": "Flag a conversation when needed", "body": "Select Requires a coaching conversation, add a training focus, or set an optional review date. These feed the same Coach Conversations filter and player alerts. A plain note stays Current without automatically requesting a conversation."},
+        {"title": "Record what happens next", "body": "Open Add note / mark Discussed or Actioned to record the discussion, keep it open with an optional review date, or complete it. Any coach with edit access can follow it through, even if another coach wrote the observation."}
       ]
     },
     coach_conversations:{
-      title:'Coach Conversations',
-      purpose:'Agree one useful next step.',
-      short_explanation:'Use the feedback to agree what to practise or review next. Record a useful action and a date to check progress.',
+      title:"Coach Conversations",
+      purpose:"Discuss the evidence and agree the next step.",
+      short_explanation:"One place for observations that need discussion, agreed actions and review dates. Coaches use Players → Coach Conversations; players find their shared conversations in How We Train.",
       target_tab:feedbackTarget,
       tutorial:[
-        {title:'Open the conversation',body:'Club Batting highlights feedback worth discussing. Use it to ask the player about their plan, decisions and preparation.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
-        {title:'Agree what will help',body:'Recognise commitment and discuss what the evidence suggests. Keep the plan, agree a training change or plan review, or choose no action.'},
-        {title:'Record the action and review date',body:'For a training change or plan review, agree a specific action and when to check progress. The player and authorised coaching staff share it in How We Train.'},
-        {title:'Follow up together',body:'Review what the player practised and what changed. Support confidence and enjoyment while following through on the agreed commitment.',target_tab:'howwetrain'}
+        {"title": "Find conversations needing attention", "body": "In Players, choose Coach Conversations from Show players, or use the compact reminder’s View button. This combines requested conversations, open follow-ups and feedback patterns, counting each player once. The reminder disappears when none need attention or when the filter is already selected.",target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
+        {"title": "Open one shared conversation", "body": "Select Open on the player’s highlighted card. The Coach Conversations page keeps the observation, related discussion prompts, author’s edit button and shared progress notes together. Ordinary notes remain Current even when no alert is requested."},
+        {"title": "Add notes or agree an action", "body": "Use Add note / mark Discussed or Actioned to record what happened. For a feedback pattern without an existing action, Agree a next step records a training action. Players can add progress to shared actions in How We Train; coaches need edit access to change them."},
+        {"title": "Use a review date only when useful", "body": "Review dates start blank and are optional. A date can be added, changed or removed while the conversation is open. A date flags the item for coach and player; it is highlighted when due. Clearing a date removes that reminder, while any separate training focus or conversation request remains active."},
+        {"title": "Complete it and keep the history", "body": "Choose Discussed / Actioned or Close — no further action needed, and record a short note. This clears that conversation’s alerts for coach and player and moves the thread into collapsed Past conversations. Other unresolved conversations remain. Reading an unread note clears its bell badge only; it does not complete the conversation."}
       ]
     }
   };
@@ -12686,7 +12688,7 @@ function renderPlayersWorkspaceList(){
       <select id="workspaceGroupFilter">
         <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>All accessible players</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
-        <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
+        <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Coach Conversations · ${discussionPlayers}</option>
       </select>
     </div>
     <div class="workspace-filter-count compact"><strong>${filtered.length}</strong><span>shown</span></div>
@@ -12976,7 +12978,7 @@ function renderWorkspacePlayerDiscussionPanel(player){
   const signals=workspaceSignalsForPlayer(player.id);
   if(!signals.length)return '';
   return `<section class="card workspace-player-discussion-panel">
-    <div class="section-label">Needs a Coaching Conversation</div>
+    <div class="section-label">Coach Conversations</div>
     ${signals.map(s=>`<div class="workspace-player-discussion-item ${s.tone}">
       <div><strong>${esc(s.title)}</strong><span>${esc(s.summary)}</span><small>${esc(s.suggestion)}</small></div>
     </div>`).join('')}
