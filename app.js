@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.17';
+const APP_UI_VERSION='0.8.62.18';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -117,6 +117,8 @@ let playersWorkspaceDevelopmentMatchId=null;
 let playersWorkspaceFeedbackData=null;
 let playersWorkspaceReminderData=null;
 let playersWorkspaceDiscussionKey=null;
+let playingGroupsView=null;
+let playingGroupsRenderSequence=0;
 
 let howWeTrainSelectedFormats=new Set(['limited_overs']);
 let howWeTrainReflectionEditId=null;
@@ -2401,6 +2403,10 @@ function clubNavigationRoute(){
     playerId:playersWorkspaceSelectedId,playerSection:playersWorkspaceSection,
     search:playersWorkspaceSearch,group:playersWorkspaceGroupFilter,showAll:playersWorkspaceShowAll
   });
+  if(currentTab==='groups'){
+    const {source,search,target}=ensurePlayingGroupsView();
+    route.assignments={source,search,target};
+  }
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
   if(currentTab==='workshop_preview'&&workshopPreview){
@@ -2484,6 +2490,13 @@ function restoreClubNavigationState(route){
     playersWorkspaceDevelopmentMatchId=null;
   }
   if(currentTab==='myplan')builderSection=route.planSection||'core';
+  if(currentTab==='groups'){
+    const state=ensurePlayingGroupsView();
+    const saved=route.assignments||{};
+    state.source=typeof saved.source==='string'?saved.source:'unassigned';
+    state.search=typeof saved.search==='string'?saved.search:'';
+    state.target=typeof saved.target==='string'?saved.target:'';
+  }
   if(currentTab==='dashboard'){
     clubHomeStageClubId=club.id;clubHomeExpandedStage=route.homeStage||null;
     clubHomeRestoredStage=Object.hasOwn(route,'homeStage');
@@ -3505,8 +3518,18 @@ function wireClubBrandingControls(page){
 
 /* ---------------- PLAYING GROUPS ---------------- */
 
+function ensurePlayingGroupsView(){
+  if(playingGroupsView?.clubId!==club?.id||playingGroupsView?.userId!==session?.user?.id){
+    playingGroupsView={clubId:club?.id,userId:session?.user?.id,source:'unassigned',search:'',target:''};
+  }
+  return playingGroupsView;
+}
+
 async function renderPlayingGroups(){
+  const renderSequence=++playingGroupsRenderSequence;
+  const state=ensurePlayingGroupsView();
   const page=document.getElementById('page');
+  const stillCurrent=()=>renderSequence===playingGroupsRenderSequence&&state===playingGroupsView&&state.clubId===club?.id&&state.userId===session?.user?.id&&currentTab==='groups'&&document.getElementById('page')===page;
   page.innerHTML='<div class="splash">Loading Playing Groups…</div>';
 
   const [{data:groups,error:gErr},{data:players,error:pErr},{data:assignments,error:aErr}]=await Promise.all([
@@ -3515,6 +3538,7 @@ async function renderPlayingGroups(){
     supabase.from('player_playing_groups').select('*').eq('club_id',club.id)
   ]);
 
+  if(!stillCurrent())return;
   if(gErr||pErr||aErr){
     page.innerHTML=`<div class="notice">${esc((gErr||pErr||aErr).message)}</div>`;
     return;
@@ -3531,6 +3555,15 @@ async function renderPlayingGroups(){
 
   const groupMap=new Map((groups||[]).map(g=>[g.id,g]));
   const unassigned=(players||[]).filter(p=>(byPlayer.get(p.id)||[]).filter(id=>groupMap.get(id)?.active).length===0);
+  const unassignedIds=new Set(unassigned.map(p=>p.id));
+  if(!['all','unassigned',...activeGroups.map(g=>g.id)].includes(state.source))state.source='unassigned';
+  if(!activeGroups.some(g=>g.id===state.target))state.target='';
+  const shownPlayers=()=>{
+    const query=state.search.trim().toLowerCase();
+    return (players||[]).filter(p=>(!query||String(p.display_name||'').toLowerCase().includes(query))&&
+      (state.source==='all'||(state.source==='unassigned'?unassignedIds.has(p.id):(byPlayer.get(p.id)||[]).includes(state.source))));
+  };
+  const playersToAdd=()=>shownPlayers().filter(p=>!(byPlayer.get(p.id)||[]).includes(state.target));
 
   const renderGroupRow=(g,i,list)=>`<div class="playing-group-row ${g.active?'':'inactive'}">
     <div class="playing-group-order">
@@ -3582,7 +3615,7 @@ async function renderPlayingGroups(){
 
     <section class="card">
       <div class="section-label">New players</div>
-      <h2>Unassigned is a valid starting point.</h2>
+      <h2>Players waiting for a group</h2>
       <div class="help">Players register themselves through the normal Player QR/link. They do <strong>not</strong> guess which grade they are in. The club assigns Playing Groups later, when it actually knows.</div>
 
       <div class="unassigned-summary">
@@ -3615,27 +3648,29 @@ async function renderPlayingGroups(){
         <h2>One player can belong to several groups.</h2>
         <div class="help">Group membership controls rollout requirements, filtering and group-based coach/captain access. It never deletes or changes a player’s plan.</div>
       </div>
-      <input id="groupPlayerSearch" class="player-search" placeholder="Search players…">
+      <input id="groupPlayerSearch" class="player-search" placeholder="Search players…" aria-label="Search players" value="${esc(state.search)}">
     </div>
 
-    ${activeGroups.length?`<div class="group-bulk-tool">
+    <div class="group-bulk-tool">
       <div>
-        <strong>Bulk add a pool of players</strong>
-        <span>Useful for groups such as “Dennis Broad Cup — Eligible Pool”. Choose an existing group (or everyone/unassigned), then add that whole pool to another group.</span>
+        <strong>Filter and assign players</strong>
+        <span>Choose Currently unassigned to work through new players. Search narrows the list. Add the players shown to a Playing Group, or use Add on an individual row.</span>
       </div>
-      <select id="bulkSourceGroup">
-        <option value="all">All active players</option>
-        <option value="unassigned">Currently unassigned</option>
-        ${activeGroups.map(g=>`<option value="${g.id}">Players in ${esc(g.name)}</option>`).join('')}
+      <select id="bulkSourceGroup" aria-label="Show players">
+        <option value="unassigned" ${state.source==='unassigned'?'selected':''}>Currently unassigned</option>
+        <option value="all" ${state.source==='all'?'selected':''}>All active players</option>
+        ${activeGroups.map(g=>`<option value="${g.id}" ${state.source===g.id?'selected':''}>Players in ${esc(g.name)}</option>`).join('')}
       </select>
       <span class="bulk-arrow">→</span>
-      <select id="bulkTargetGroup">
+      <select id="bulkTargetGroup" aria-label="Add shown players to Playing Group" ${activeGroups.length?'':'disabled'}>
         <option value="">Add to Playing Group…</option>
-        ${activeGroups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+        ${activeGroups.map(g=>`<option value="${g.id}" ${state.target===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
       </select>
-      <button class="btn ghost" id="bulkAddPool">Add pool</button>
-      <span id="bulkPoolStatus" class="status"></span>
-    </div>`:''}
+      <button class="btn ghost" id="bulkAddShownPlayers" disabled>Add shown players</button>
+      <span id="bulkPoolStatus" class="status" role="status"></span>
+    </div>
+    <div id="groupAssignmentCount" class="help" role="status" aria-live="polite"></div>
+    <div id="groupAssignmentEmpty" class="notice compact" hidden></div>
 
     <div class="player-group-assignment-list">
       ${(players||[]).map(p=>{
@@ -3644,7 +3679,7 @@ async function renderPlayingGroups(){
           .filter(Boolean)
           .sort((a,b)=>(a.sort_order-b.sort_order)||a.name.localeCompare(b.name));
         const available=activeGroups.filter(g=>!assigned.some(a=>a.id===g.id));
-        return `<div class="player-group-assignment-row" data-player-assignment-row data-player-name="${esc((p.display_name||'').toLowerCase())}">
+        return `<div class="player-group-assignment-row" data-player-assignment-row="${p.id}">
           <div class="player-group-person">
             <strong>${esc(p.display_name)}</strong>
             <small>${assigned.filter(g=>g.active).length?'Assigned':'Unassigned'}</small>
@@ -3663,7 +3698,7 @@ async function renderPlayingGroups(){
             <button class="btn ghost" data-add-player-group="${p.id}" ${!available.length?'disabled':''}>Add</button>
           </div>
         </div>`;
-      }).join('')||'<div class="notice">No active players have registered yet.</div>'}
+      }).join('')}
     </div>
   </section>
 `;
@@ -3725,39 +3760,60 @@ async function renderPlayingGroups(){
     };
   }
 
-  if(document.getElementById('bulkAddPool')){
-    document.getElementById('bulkAddPool').onclick=async()=>{
-      const source=document.getElementById('bulkSourceGroup').value;
-      const target=document.getElementById('bulkTargetGroup').value;
+  let bulkAssignmentPending=false;
+  const applyAssignmentFilter=()=>{
+    const shown=shownPlayers();
+    const ids=new Set(shown.map(p=>p.id));
+    page.querySelectorAll('[data-player-assignment-row]').forEach(row=>{
+      row.style.display=ids.has(row.dataset.playerAssignmentRow)?'grid':'none';
+    });
+    const remaining=state.target?playersToAdd().length:0;
+    document.getElementById('bulkAddShownPlayers').disabled=bulkAssignmentPending||!state.target||!remaining;
+    document.getElementById('groupAssignmentCount').textContent=`${shown.length} player${shown.length===1?'':'s'} shown${state.target?` · ${remaining} to add to ${groupMap.get(state.target).name}`:''}`;
+    const empty=document.getElementById('groupAssignmentEmpty');
+    empty.hidden=shown.length>0;
+    empty.textContent=!(players||[]).length?'No active players have registered yet.':state.search.trim()?'No players match this filter and search.':state.source==='unassigned'?'No unassigned players. Everyone currently belongs to at least one active Playing Group.':'No players in this Playing Group.';
+    recordAppNavigation(clubNavigationRoute());
+  };
+  document.getElementById('bulkSourceGroup').onchange=e=>{
+    if(!stillCurrent()||bulkAssignmentPending)return;
+    state.source=e.target.value;document.getElementById('bulkPoolStatus').textContent='';applyAssignmentFilter();
+  };
+  document.getElementById('groupPlayerSearch').oninput=e=>{
+    if(!stillCurrent()||bulkAssignmentPending)return;
+    state.search=e.target.value;document.getElementById('bulkPoolStatus').textContent='';applyAssignmentFilter();
+  };
+  document.getElementById('bulkTargetGroup').onchange=e=>{
+    if(!stillCurrent()||bulkAssignmentPending)return;
+    state.target=e.target.value;document.getElementById('bulkPoolStatus').textContent='';applyAssignmentFilter();
+  };
+  document.getElementById('bulkAddShownPlayers').onclick=async()=>{
+      if(!stillCurrent()||bulkAssignmentPending)return;
+      const target=state.target;
       const st=document.getElementById('bulkPoolStatus');
-
       if(!target){st.textContent='Choose the group to add players to.';return;}
-      if(source===target){st.textContent='Choose a different target group.';return;}
-
-      let ids=[];
-      if(source==='all'){
-        ids=(players||[]).map(p=>p.id);
-      }else if(source==='unassigned'){
-        ids=unassigned.map(p=>p.id);
-      }else{
-        ids=(players||[])
-          .filter(p=>(byPlayer.get(p.id)||[]).includes(source))
-          .map(p=>p.id);
-      }
-
-      if(!ids.length){st.textContent='No players match that source group.';return;}
-
+      const ids=playersToAdd().map(p=>p.id);
+      if(!ids.length){st.textContent='No shown players need adding to this group.';return;}
+      bulkAssignmentPending=true;
+      const controls=[...page.querySelectorAll('button,input,select')].map(el=>[el,el.disabled]);
+      controls.forEach(([el])=>el.disabled=true);
       st.textContent='Adding…';
-      const {data:count,error}=await supabase.rpc('assign_players_to_playing_group',{
-        p_group_id:target,
-        p_player_ids:ids
-      });
-
-      if(error){st.textContent=error.message;return;}
-      st.textContent=`${count||0} new assignment${Number(count)===1?'':'s'} added.`;
-      await renderPlayingGroups();
-    };
-  }
+      try{
+        const {data:count,error}=await supabase.rpc('assign_players_to_playing_group',{p_group_id:target,p_player_ids:ids});
+        if(error)throw error;
+        if(!stillCurrent())return;
+        await renderPlayingGroups();
+        if(currentTab==='groups'&&state===playingGroupsView&&state.clubId===club?.id&&state.userId===session?.user?.id){
+          const status=document.getElementById('bulkPoolStatus');
+          if(status)status.textContent=`${count||0} new assignment${Number(count)===1?'':'s'} added.`;
+        }
+      }catch(error){
+        if(stillCurrent())st.textContent=error.message||'Players could not be added. Please try again.';
+      }finally{
+        bulkAssignmentPending=false;
+        if(stillCurrent()){controls.forEach(([el,disabled])=>el.disabled=disabled);applyAssignmentFilter();}
+      }
+  };
 
   document.querySelectorAll('[data-add-player-group]').forEach(b=>b.onclick=async()=>{
     const playerId=b.dataset.addPlayerGroup;
@@ -3781,12 +3837,7 @@ async function renderPlayingGroups(){
   });
 
 
-  document.getElementById('groupPlayerSearch').oninput=e=>{
-    const q=e.target.value.trim().toLowerCase();
-    document.querySelectorAll('[data-player-assignment-row]').forEach(row=>{
-      row.style.display=!q||row.dataset.playerName.includes(q)?'grid':'none';
-    });
-  };
+  applyAssignmentFilter();
 }
 
 
@@ -9971,7 +10022,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
       ?`${completedFormats.length}/${formatProgress.length} format plans complete${completedFormats.length?` · ${completedFormats.join(', ')}`:''}`
       :'No format plans available yet.';
   const deadlineDetail=!plansPublished?'':overdue
-    ?`${overdue.label} was due ${niceDate(overdue.due_date)}`
+    ?`Overdue: ${overdue.label} · due ${niceDate(overdue.due_date)}`
     :next?.due_date
       ?`${next.label} due ${niceDate(next.due_date)}`
       :next
@@ -10006,7 +10057,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
     </div>
     ${signals.length?renderWorkspaceRosterDiscussion(player,signals):''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
-      <div><strong style="font-size:12px;color:${overdue?'var(--accent,#D8232A)':'var(--navy2)'}">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${deadlineDetail?`<span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(deadlineDetail)}</span>`:''}${reminderMeta}</div>
+      <div><strong style="font-size:12px;color:var(--navy2)">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${deadlineDetail?`<span style="display:block;margin-top:2px;font-size:11px;color:${overdue?'var(--accent,#D8232A);font-weight:700':'var(--muted)'}">${esc(deadlineDetail)}</span>`:''}${reminderMeta}</div>
       ${reminderAction}
     </div>
     <div class="workspace-roster-actions">
@@ -10037,6 +10088,8 @@ function renderPlayersWorkspaceList(){
   const allSignals=workspaceDiscussionSignals();
   const signalPlayerIds=new Set(allSignals.map(s=>s.player.id));
   const discussionMode=playersWorkspaceGroupFilter==='__discussion__';
+  const unassignedMode=playersWorkspaceGroupFilter==='__unassigned__';
+  const unassignedCount=players.filter(player=>!(player.groups||[]).some(g=>g.active!==false)).length;
   const plansPublished=workspacePlayerPlansPublished();
   const hasSelection=!!(query||playersWorkspaceGroupFilter||playersWorkspaceShowAll);
 
@@ -10049,7 +10102,7 @@ function renderPlayersWorkspaceList(){
   }else if(playersWorkspaceGroupFilter){
     filtered=players.filter(player=>{
       const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
-      const matchesGroup=(player.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter);
+      const matchesGroup=unassignedMode?!(player.groups||[]).some(g=>g.active!==false):(player.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter);
       return matchesName&&matchesGroup;
     });
   }else if(query||playersWorkspaceShowAll){
@@ -10080,6 +10133,8 @@ function renderPlayersWorkspaceList(){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Try another name or clear your search.</strong><span>Your search found no players in this view. Only players you have permission to access are included.</span><div class="btnrow"><button class="btn ghost" id="clearPlayerSearch">Clear search</button></div></section>`;
   }else if(discussionMode){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No coaching conversations waiting.</strong><span>When feedback creates something worth discussing, the player will appear here automatically.</span></section>`;
+  }else if(unassignedMode){
+    emptyCopy=`<section class="card workspace-roster-empty"><strong>No unassigned players.</strong><span>Everyone in your access currently belongs to at least one active Playing Group.</span></section>`;
   }else{
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No players to show.</strong><span>There are no accessible players in this Playing Group.</span></section>`;
   }
@@ -10104,6 +10159,7 @@ function renderPlayersWorkspaceList(){
       <label for="workspaceGroupFilter">Playing Group</label>
       <select id="workspaceGroupFilter">
         <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>${query?'All Playing Groups':'Choose a Playing Group…'}</option>
+        <option value="__unassigned__" ${unassignedMode?'selected':''}>Currently unassigned · ${unassignedCount}</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
         <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Needs a Coaching Conversation · ${discussionPlayers}</option>
       </select>
@@ -10111,7 +10167,8 @@ function renderPlayersWorkspaceList(){
     ${hasSelection?`<div class="workspace-filter-count compact" role="status" aria-live="polite"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
   </section>
 
-  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
+  ${unassignedMode&&filtered.length?`<div class="notice compact">These players have no active Playing Group.${isAdmin()?' Use Manage Playing Groups to assign them.':''}</div>`:''}
+  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
   ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
   ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
@@ -10127,10 +10184,15 @@ function renderPlayersWorkspaceList(){
   });
   document.getElementById('workspaceClearSelection')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;clearPlayersWorkspaceSearch();renderPlayersWorkspaceList();});
   document.getElementById('clearPlayerSearch')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;playersWorkspaceSearch='';renderPlayersWorkspaceList();});
-  document.getElementById('managePlayingGroupsFromPlayers')?.addEventListener('click',()=>{currentTab='groups';renderTab();});
+  document.getElementById('managePlayingGroupsFromPlayers')?.addEventListener('click',()=>{
+    const state=ensurePlayingGroupsView();
+    state.source=(data.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter)?playersWorkspaceGroupFilter:'unassigned';
+    state.search=unassignedMode||state.source!=='unassigned'?playersWorkspaceSearch:'';
+    currentTab='groups';return renderTab();
+  });
 
   document.getElementById('remindOverduePlayers')?.addEventListener('click',async()=>{
-    if(!playersWorkspaceGroupFilter||playersWorkspaceGroupFilter==='__discussion__')return;
+    if(!(data.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter))return;
     const ok=confirm(`Queue one Player Plan reminder for each overdue player in this Playing Group? Players still inside the 48-hour cooldown will be skipped.`);
     if(!ok)return;
     const btn=document.getElementById('remindOverduePlayers');
@@ -10640,7 +10702,7 @@ async function renderPlayersWorkspacePlayer(){
 let playerHomeRenderSequence=0;
 
 function playerHomePlanState(raw,rollout){
-  const requirements=new Map((rollout?.requirements||[]).filter(r=>r.required).map(r=>[r.format_key,r]));
+  const requirements=playerPlanRequirementMap(rollout);
   const core=sectionProgress('core',raw);
   const formats=publishedEnabledFormats().map(([format,label])=>({
     format,label,progress:sectionProgress(format,raw),required:requirements.has(format),
@@ -10648,7 +10710,7 @@ function playerHomePlanState(raw,rollout){
   }));
   return {
     core,formats,
-    pendingRequired:formats.filter(x=>x.required&&!x.progress.complete).sort((a,b)=>String(a.due_date||'9999-12-31').localeCompare(String(b.due_date||'9999-12-31'))),
+    pendingRequired:formats.filter(x=>x.required&&!x.progress.complete).sort((a,b)=>String(a.due_date||todayIso()).localeCompare(String(b.due_date||todayIso()))),
     ready:formats.filter(x=>core.complete&&x.progress.complete),
     started:formats.filter(x=>!x.progress.complete&&x.progress.answeredAny>0),
     available:formats.filter(x=>!x.required&&!x.progress.complete&&x.progress.answeredAny===0)
@@ -10660,7 +10722,7 @@ function playerHomeNextAction(raw,rollout,feedback,today=todayIso()){
   if(!plan.core.complete)return {kind:'plan',heading:'Complete your Player Plan',copy:'Start with Core: the shots you trust, the decisions you want to make and the reset you can use under pressure.',label:'Continue Core',tab:'myplan',section:'core'};
   if(plan.pendingRequired.length){
     const next=plan.pendingRequired[0];
-    return {kind:'plan',heading:'Complete your Player Plan',copy:`Your club needs your ${next.label} plan${next.due_date?` by ${niceDate(next.due_date)}`:''}. Finish this section to create training suggestions for that format.`,label:`Continue ${next.label}`,tab:'myplan',section:next.format};
+    return {kind:'plan',heading:`Your club’s priority: ${next.label}`,copy:`Complete this format next.${next.due_date?` ${String(next.due_date).slice(0,10)<today?'Overdue — due':'Required by'} ${niceDate(next.due_date)}.`:' Your club has marked it as required now.'} Your Core is complete. Other formats remain available.`,label:`Continue ${next.label}`,tab:'myplan',section:next.format};
   }
   const actions=(feedback?.coaching_actions||[]).filter(x=>x.status==='open').sort((a,b)=>String(a.review_on||'9999-12-31').localeCompare(String(b.review_on||'9999-12-31')));
   const dueAction=actions.find(x=>x.review_on&&String(x.review_on).slice(0,10)<=today);
@@ -10772,11 +10834,21 @@ async function saveClubPlanBeforeNavigation(){
   return true;
 }
 
+function playerPlanRequirementMap(rollout){
+  // Format priorities belong to the player's Playing Groups. Core is shared by everyone.
+  if(!(rollout?.groups||[]).length)return new Map();
+  const enabled=new Set(publishedEnabledFormats().map(([key])=>key));
+  const requirements=new Map();
+  for(const req of rollout?.requirements||[]){
+    if(!req.required||!enabled.has(req.format_key))continue;
+    const previous=requirements.get(req.format_key);
+    if(!previous||String(req.due_date||todayIso())<String(previous.due_date||todayIso()))requirements.set(req.format_key,req);
+  }
+  return new Map([...requirements].sort(([,a],[,b])=>String(a.due_date||todayIso()).localeCompare(String(b.due_date||todayIso()))));
+}
+
 function requiredPlayerPlanSections(rollout){
-  const keys=['core',...(rollout?.requirements||[])
-    .filter(r=>r.required)
-    .map(r=>r.format_key)];
-  return [...new Set(keys)];
+  return ['core',...playerPlanRequirementMap(rollout).keys()];
 }
 
 function answerHasContent(answer){
@@ -10918,8 +10990,7 @@ function playerPlanNextStep(raw,rollout){
   if(next)return {section:next,kind:'plan',label:next==='core'?'Continue Core':`Continue ${formatLabel(next)}`};
   const format=publishedEnabledFormats().find(([key])=>sectionProgress('core',raw).complete&&sectionProgress(key,raw).complete)?.[0];
   if(format)return {section:format,kind:'training',label:'Take my plan to training'};
-  const first=publishedEnabledFormats()[0];
-  return first?{section:first[0],kind:'plan',label:`Build ${first[1]}`}:{section:'core',kind:'plan',label:'Review my plan'};
+  return publishedEnabledFormats().length?{kind:'choose-format',label:'Choose a format'}:{section:'core',kind:'plan',label:'Review my plan'};
 }
 function playerPlanJourneyStyles(){
   return `<style id="playerPlanJourneyStyles">
@@ -10970,7 +11041,7 @@ async function renderMyPlan(){
   if(!isCurrent())return;
   const rollout=rolloutErr?{groups:[],requirements:[]}:(rolloutData||{groups:[],requirements:[]});
   const requirementsAvailable=!rolloutErr;
-  const requirementMap=new Map((rollout.requirements||[]).map(r=>[r.format_key,r]));
+  const requirementMap=playerPlanRequirementMap(rollout);
   const rawForProgress=localRaw||rawAnswers();
   const calculatedSectionStatus=automaticSectionStatus(rawForProgress);
   const sectionStatus={
@@ -11008,6 +11079,16 @@ async function renderMyPlan(){
       })();
 
   const coreProgress=sectionProgress('core',rawForProgress);
+  const focusCopy=(raw)=>{
+    const plan=playerHomePlanState(raw,rollout),priority=plan.pendingRequired[0];
+    if(!plan.core.complete)return {title:'Focus first: Core',copy:priority?`Finish Core, then complete ${priority.label}${priority.due_date?` — required by ${niceDate(priority.due_date)}`:' — required by your club'}.`:'Finish the required Core questions, then choose a format.'};
+    if(!requirementsAvailable)return {title:'Your club’s priority could not be checked',copy:'Retry loading the due dates below. You can keep working on your saved plan.'};
+    if(priority)return {title:`Your club’s priority: ${priority.label}`,copy:`Complete ${priority.label} next.${priority.due_date?` ${String(priority.due_date).slice(0,10)<todayIso()?'Overdue — due':'Required by'} ${niceDate(priority.due_date)}.`:' Required now.'} Other formats remain available.`};
+    if(requirementMap.size)return {title:'Your club’s required work is complete',copy:'Take your plan to training, or choose another format when useful.'};
+    return {title:'Choose the format you play next',copy:(rollout.groups||[]).length?'Your club has not set a required format for you. Choose the format you want to prepare for.':'You are not assigned to a Playing Group yet. You can choose a format while your club organises your group.'};
+  };
+  const focusHtml=(raw)=>{const focus=focusCopy(raw);return `<strong>${esc(focus.title)}</strong><div>${esc(focus.copy)}</div>`;};
+  const orderedFormats=[...formats].sort(([a],[b])=>Number(requirementMap.has(b))-Number(requirementMap.has(a))||(requirementMap.has(a)&&requirementMap.has(b)?String(requirementMap.get(a).due_date||todayIso()).localeCompare(String(requirementMap.get(b).due_date||todayIso())):0));
   const formatCard=(key,label,raw=rawForProgress)=>{
     const req=requirementMap.get(key)||{required:false,due_date:null,sources:[]};
     const progress=sectionProgress(key,raw);
@@ -11021,6 +11102,7 @@ async function renderMyPlan(){
         ?`${progress.answeredAny} question${progress.answeredAny===1?'':'s'} answered`
         :'Not started';
     const trainingReady=sectionProgress('core',raw).complete&&progress.complete;
+    const priority=playerHomePlanState(raw,rollout).pendingRequired[0]?.format===key;
     let detail='';
     if(progress.complete){
       detail=trainingReady
@@ -11036,7 +11118,7 @@ async function renderMyPlan(){
 
     return `<div style="position:relative;min-width:0">
       <button class="plan-format-card ${builderSection===key?'active':''} ${progress.complete?'complete':''} ${req.required?'required':''}" data-builder-section="${key}" style="width:100%;height:100%">
-        <span class="plan-format-name">${esc(label)}</span>
+        <span class="plan-format-name">${esc(label)}${priority?' · Club priority':''}</span>
         <strong>${progress.complete?'✓ Player Plan complete':esc(due)}</strong>
         <small>${esc(detail)}</small>
       </button>
@@ -11056,7 +11138,7 @@ async function renderMyPlan(){
     :(currentComplete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`);
   const sectionStepCopy=builderSection==='core'
     ?(currentComplete
-      ?'Next, choose a format. Your club can set due dates for the formats your Playing Group needs.'
+      ?focusCopy(rawForProgress).copy
       :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.')
     :(currentTrainingReady
       ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
@@ -11066,8 +11148,8 @@ async function renderMyPlan(){
     const core=sectionProgress('core',raw);
     return `<button type="button" class="plan-format-card core ${builderSection==='core'?'active':''} ${core.complete?'complete':''}" data-builder-section="core">
       <span class="plan-format-name">Core</span><strong>${core.complete?'✓ Core complete':'Start here'}</strong>
-      <small>${core.complete?'Choose a format next.':`${core.answeredRequired} of ${core.requiredCount} required questions answered`}</small>
-    </button>${formats.map(([key,label])=>formatCard(key,label,raw)).join('')}`;
+      <small>${core.complete?esc(focusCopy(raw).title):`${core.answeredRequired} of ${core.requiredCount} required questions answered`}</small>
+    </button>${orderedFormats.map(([key,label])=>formatCard(key,label,raw)).join('')}`;
   };
   const coreNextFormatLinks=builderSection==='core'
     ?`<div class="btnrow compact" style="margin-top:10px"><button type="button" class="btn secondary" id="playerPlanNextStepFooter">${esc(nextStep.label)}</button></div>`
@@ -11079,6 +11161,7 @@ async function renderMyPlan(){
         <div class="section-label">Your Player Plan</div>
         <h2>Your shots. Your decisions. Your plan.</h2>
         <p>Choose the shots you trust and when to use them. Practise them, then commit when the right ball arrives.</p>
+        <div class="notice compact" id="playerPlanFocus" role="status" aria-live="polite" style="margin-bottom:14px">${focusHtml(rawForProgress)}</div>
         <div class="plan-journey-links"><button type="button" class="btn secondary" id="playerPlanNextStep">${esc(nextStep.label)}</button><button type="button" class="workspace-text-link" id="viewMyPlanSummary">View my plan</button><button type="button" class="workspace-text-link" id="myPlanGuideLink">Help</button></div>
       </div>
       <span id="playerPlanOverallStatus" role="status" aria-live="polite" class="workflow-status ${requirementsAvailable&&completedRequiredSections===requiredSections.length?'approved':''}">
@@ -11088,7 +11171,7 @@ async function renderMyPlan(){
       </span>
     </div>
 
-    <details class="plan-progress-disclosure"><summary>Your progress & formats <span class="help">${esc(currentLabel)} open</span></summary>
+    <details class="plan-progress-disclosure" id="playerPlanProgress"><summary>Your progress & formats <span class="help">${esc(currentLabel)} open</span></summary>
     <div class="player-group-summary">
       <strong>Your Playing Groups</strong>
       ${!requirementsAvailable?'<span>Your Playing Groups could not be loaded.</span>':(rollout.groups||[]).length
@@ -11145,6 +11228,9 @@ async function renderMyPlan(){
   document.getElementById('playerPlanNextStep').onclick=async()=>{
     if(await savePlayerPlanProgressSilently()===false)return;
     const next=playerPlanNextStep(localRaw||rawAnswers(),rollout);
+    if(next.kind==='choose-format'){
+      const progress=document.getElementById('playerPlanProgress');progress.open=true;progress.scrollIntoView({behavior:'smooth',block:'start'});return;
+    }
     if(next.kind==='training'){currentTab='howwetrain';await renderTab();return;}
     if(builderSection!==next.section){builderSection=next.section;await renderMyPlan();}
     document.getElementById('builderQuestions')?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -11166,6 +11252,8 @@ async function renderMyPlan(){
     const remainRow=document.getElementById('playerPlanRemainingAction');
     const remainCount=document.getElementById('playerPlanRemainingCount');
     const nextButton=document.getElementById('playerPlanNextStep');
+    const focus=document.getElementById('playerPlanFocus');
+    if(focus)focus.innerHTML=focusHtml(raw);
     if(nextButton)nextButton.textContent=playerPlanNextStep(raw,rollout).label;
     const nextFooter=document.getElementById('playerPlanNextStepFooter');
     if(nextFooter)nextFooter.textContent=playerPlanNextStep(raw,rollout).label;
@@ -11193,7 +11281,7 @@ async function renderMyPlan(){
     if(builderSection==='core'){
       if(stepTitle)stepTitle.textContent=progress.complete?'Core complete ✓':'Start with Core';
       if(stepCopy)stepCopy.textContent=progress.complete
-        ?'Next, choose a format. Your club can set due dates for the formats your Playing Group needs.'
+        ?focusCopy(raw).copy
         :gaps.length===1
           ?'One required Core answer remains. Your answers save automatically.'
           :`${gaps.length} required Core answers remain. Your answers save automatically.`;
