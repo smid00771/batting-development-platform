@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.15';
+const APP_UI_VERSION='0.8.62.16';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1115,7 +1115,7 @@ async function routeAuth(){
   if(adminInviteToken){await renderAdminInviteRoute(adminInviteToken);return;}
   if(philosophyInviteToken){await renderPhilosophyInviteRoute(philosophyInviteToken);return;}
   if(leadHandoverToken){await renderLeadAdminHandoverRoute(leadHandoverToken);return;}
-  if(playerJoinToken){await renderPlayerJoinRoute(playerJoinToken);return;}
+  if(params.has('player_join')){await renderPlayerJoinRoute(playerJoinToken);return;}
 
   if(joinCodeToken){
     if(!session){
@@ -2146,6 +2146,10 @@ function renderShell(){
 
 
 async function renderPlayerJoinRoute(token){
+  if(!String(token||'').trim()){
+    app.innerHTML=`<div class="login"><div class="section-label">Player sign-up</div><h1>This player sign-up link is incomplete.</h1><p>Ask your club for the full player sign-up link, then open it again.</p><p>Already registered? <a href="./app.html?signin=1">Sign in to your account</a>.</p></div>`;
+    return;
+  }
   const {data:info,error}=await supabase.rpc('get_public_player_join',{p_token:token});
 
   if(error || !info){
@@ -7517,12 +7521,13 @@ async function renderPermissions(){
   }
 
   const userIds=(members||[]).map(m=>m.user_id);
-  const [{data:profiles,error:profileError},{data:grants,error:grantError},{data:players,error:playerError},{data:playingGroups,error:groupError},{data:pendingHandovers,error:handoverError}]=await Promise.all([
+  const [{data:profiles,error:profileError},{data:grants,error:grantError},{data:players,error:playerError},{data:playingGroups,error:groupError},{data:pendingHandovers,error:handoverError},signupResult]=await Promise.all([
     userIds.length?supabase.from('user_profiles').select('*').in('user_id',userIds):Promise.resolve({data:[]}),
     supabase.from('club_access_grants').select('*').eq('club_id',club.id),
     supabase.from('players').select('id,user_id,display_name,active').eq('club_id',club.id),
     supabase.from('playing_groups').select('*').eq('club_id',club.id).eq('active',true).order('sort_order').order('name'),
-    supabase.from('club_admin_handovers').select('*').eq('club_id',club.id).eq('status','pending').order('created_at',{ascending:false}).limit(1)
+    supabase.from('club_admin_handovers').select('*').eq('club_id',club.id).eq('status','pending').order('created_at',{ascending:false}).limit(1),
+    supabase.from('clubs').select('id,join_code,player_join_token,player_signup_open').eq('id',targetClub).maybeSingle()
   ]);
 
   if(!stillCurrent())return;
@@ -7548,7 +7553,16 @@ async function renderPermissions(){
   const leadAdminName=pMap.get(leadAdminId)?.display_name||'Club Admin';
   const amLeadAdmin=leadAdminId===session.user.id;
   const pendingHandover=(pendingHandovers||[])[0]||null;
-  const playerJoinLink=`${location.origin}${location.pathname}?player_join=${encodeURIComponent(club.player_join_token||'')}`;
+  // Fetch current sharing settings here: a repaired or replaced link must not
+  // depend on the membership object cached when this account first signed in.
+  const signupSettingsLoaded=!signupResult.error&&signupResult.data?.id===targetClub;
+  if(signupSettingsLoaded){
+    club.player_join_token=signupResult.data.player_join_token;
+    club.player_signup_open=signupResult.data.player_signup_open;
+    club.join_code=signupResult.data.join_code;
+  }
+  const playerJoinToken=signupSettingsLoaded&&typeof club.player_join_token==='string'?club.player_join_token:'';
+  const playerJoinLink=playerJoinToken.trim()?`${location.origin}${location.pathname}?player_join=${encodeURIComponent(playerJoinToken)}`:'';
   const staffJoinLink=`${location.origin}${location.pathname}?join=${encodeURIComponent(club.join_code||'')}&involvement=coach_captain`;
   const plansReady=workspacePlayerPlansPublished();
   const signupOpen=club.player_signup_open!==false;
@@ -7667,17 +7681,18 @@ async function renderPermissions(){
 
       <div class="signup-status-row">
         <div>
-          <span class="signup-pill ${signupOpen?'open':'closed'}">${signupOpen?'● SIGN-UP OPEN':'○ SIGN-UP CLOSED'}</span>
+          <span class="signup-pill ${signupSettingsLoaded&&signupOpen?'open':'closed'}">${!signupSettingsLoaded?'SIGN-UP STATUS UNAVAILABLE':signupOpen?'● SIGN-UP OPEN':'○ SIGN-UP CLOSED'}</span>
           <div class="signup-count"><strong>${activePlayerCount}</strong> players registered</div>
         </div>
-        <button class="btn ghost" id="togglePlayerSignup">${signupOpen?'Close sign-up':'Open sign-up'}</button>
+        <button class="btn ghost" id="togglePlayerSignup" ${signupSettingsLoaded?'':'disabled'}>${signupOpen?'Close sign-up':'Open sign-up'}</button>
       </div>
 
+      ${playerJoinLink?'':'<div class="notice" role="status">A complete player sign-up link isn’t available yet. Try loading it again before sharing.<div class="btnrow"><button class="btn ghost" id="retryPlayerSignupLink">Try again</button></div></div>'}
       <div class="player-share-layout">
         <div class="qr-panel">
           <div class="qr-frame">
             <img id="playerSignupQR" alt="${esc(club.name)} player sign-up QR code" style="display:none">
-            <div id="qrFallback" class="qr-loading">Generating QR…</div>
+            <div id="qrFallback" class="qr-loading">${playerJoinLink?'Generating QR…':'Sign-up link unavailable'}</div>
           </div>
           <a class="btn ghost" id="downloadPlayerQR" style="display:none">Download QR image</a>
         </div>
@@ -7685,8 +7700,8 @@ async function renderPermissions(){
         <div class="share-actions">
           <h3>For the Players WhatsApp chat</h3>
           <p>Use the message button — the link is easier for players who are already reading it on their phone.</p>
-          <button class="btn secondary" id="copyPlayerWhatsApp">Copy WhatsApp message</button>
-          <button class="btn ghost" id="copyPlayerLink">Copy player sign-up link</button>
+          <button class="btn ${playerJoinLink?'secondary':'ghost'}" id="copyPlayerWhatsApp" ${playerJoinLink?'':'disabled'}>Copy WhatsApp message</button>
+          <button class="btn ghost" id="copyPlayerLink" ${playerJoinLink?'':'disabled'}>Copy player sign-up link</button>
           <div id="playerShareStatus" class="help"></div>
 
           <div class="share-preview">
@@ -7701,7 +7716,7 @@ async function renderPermissions(){
           <strong>Need to replace the link?</strong>
           <span>Regenerating invalidates the old Player link and QR immediately.</span>
         </div>
-        <button class="btn ghost" id="regeneratePlayerLink">Regenerate link & QR</button>
+        <button class="btn ghost" id="regeneratePlayerLink" ${signupSettingsLoaded?'':'disabled'}>Regenerate link & QR</button>
       </div>
     </section>
 
@@ -7833,22 +7848,24 @@ async function renderPermissions(){
     }
   };
 
-  document.getElementById('copyPlayerWhatsApp').onclick=()=>copyText(
-    playerWhatsAppMessage,'WhatsApp message','playerShareStatus'
-  );
-  document.getElementById('copyPlayerLink').onclick=()=>copyText(
-    playerJoinLink,'Player sign-up link','playerShareStatus'
-  );
+  const copyPlayerShare=(text,label)=>{
+    if(!stillCurrent()||!playerJoinLink)return;
+    return copyText(text,label,'playerShareStatus');
+  };
+  document.getElementById('copyPlayerWhatsApp').onclick=()=>copyPlayerShare(playerWhatsAppMessage,'WhatsApp message');
+  document.getElementById('copyPlayerLink').onclick=()=>copyPlayerShare(playerJoinLink,'Player sign-up link');
+  if(document.getElementById('retryPlayerSignupLink'))document.getElementById('retryPlayerSignupLink').onclick=()=>{if(stillCurrent())return renderPermissions();};
   document.getElementById('copyStaffJoinLink').onclick=()=>copyText(
     staffJoinLink,'Non-playing staff sign-up link','staffJoinStatus'
   );
 
   document.getElementById('togglePlayerSignup').onclick=async()=>{
+    if(!stillCurrent()||!signupSettingsLoaded)return;
     const button=document.getElementById('togglePlayerSignup');
     button.disabled=true;
     button.textContent=signupOpen?'Closing…':'Opening…';
     const {error}=await supabase.rpc('set_player_signup_open',{
-      p_club_id:club.id,
+      p_club_id:targetClub,
       p_open:!signupOpen
     });
     if(error){alert(error.message);button.disabled=false;return;}
@@ -7856,18 +7873,19 @@ async function renderPermissions(){
   };
 
   document.getElementById('regeneratePlayerLink').onclick=async()=>{
+    if(!stillCurrent()||!signupSettingsLoaded)return;
     const ok=confirm('Regenerate the Player Sign-up link and QR? The current link and QR will stop working immediately.');
     if(!ok)return;
     const button=document.getElementById('regeneratePlayerLink');
     button.disabled=true;
     button.textContent='Regenerating…';
-    const {error}=await supabase.rpc('regenerate_player_join_token',{p_club_id:club.id});
+    const {error}=await supabase.rpc('regenerate_player_join_token',{p_club_id:targetClub});
     if(error){alert(error.message);button.disabled=false;button.textContent='Regenerate link & QR';return;}
     await loadContext();
   };
 
 
-  renderPlayerQRCode(playerJoinLink);
+  if(playerJoinLink)renderPlayerQRCode(playerJoinLink);
 
   const renderPersonSearch=()=>{
     const wrap=document.getElementById('clubPersonSearchResults');
