@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.18';
+const APP_UI_VERSION='0.8.62.19';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -117,6 +117,7 @@ let playersWorkspaceDevelopmentMatchId=null;
 let playersWorkspaceFeedbackData=null;
 let playersWorkspaceReminderData=null;
 let playersWorkspaceDiscussionKey=null;
+let playersWorkspaceAssignments=null;
 let playingGroupsView=null;
 let playingGroupsRenderSequence=0;
 
@@ -9823,6 +9824,7 @@ function resetPlayersWorkspaceForClub(){
   playersWorkspaceFeedbackData=null;
   playersWorkspaceReminderData=null;
   playersWorkspaceDiscussionKey=null;
+  playersWorkspaceAssignments=null;
   if(playersWorkspaceAutosaveTimer){
     clearTimeout(playersWorkspaceAutosaveTimer);
     playersWorkspaceAutosaveTimer=null;
@@ -10002,7 +10004,122 @@ function workspacePlayerPlansPublished(){
   return publishedPlayerSystemReady();
 }
 
-function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
+function workspaceAssignmentState(){
+  if(playersWorkspaceAssignments?.clubId!==club?.id||playersWorkspaceAssignments?.userId!==session?.user?.id){
+    playersWorkspaceAssignments={clubId:club?.id,userId:session?.user?.id,drafts:new Map(),pending:new Set(),errors:new Map(),notice:''};
+  }
+  return playersWorkspaceAssignments;
+}
+
+function renderWorkspaceAssignment(player,groups){
+  if(!isAdmin())return '';
+  const state=workspaceAssignmentState();
+  if((player.groups||[]).some(g=>g.active!==false)&&!state.errors.has(player.id))return '';
+  if(!groups.length)return `<div class="notice compact">Create a Playing Group to assign ${esc(player.display_name||'this player')}. <button type="button" class="btn ghost" data-workspace-create-group>+ Create Playing Group</button></div>`;
+  const available=groups.filter(g=>!(player.groups||[]).some(a=>a.id===g.id));
+  const draft=new Set([...(state.drafts.get(player.id)||[])].filter(id=>available.some(g=>g.id===id)));
+  state.drafts.set(player.id,draft);
+  const pending=state.pending.has(player.id);
+  return `<div style="margin-top:12px" data-workspace-assignment="${player.id}">
+    <fieldset style="border:0;padding:0;margin:0">
+      <legend style="font-weight:700;font-size:12px;margin-bottom:5px">Playing Groups for ${esc(player.display_name||'this player')} · choose one or more</legend>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        ${available.map(g=>`<label style="display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-height:44px;box-sizing:border-box"><input type="checkbox" data-workspace-assign-group="${player.id}" value="${g.id}" ${draft.has(g.id)?'checked':''} ${pending?'disabled':''} style="width:auto;margin:0"><span>${esc(g.name)}</span></label>`).join('')}
+      </div>
+      <button type="button" class="btn secondary" data-workspace-assign-player="${player.id}" style="min-height:44px" ${pending||!draft.size?'disabled':''}>${pending?'Assigning…':state.errors.has(player.id)?'Retry selected groups':'Assign selected groups'}</button>
+    </fieldset>
+    <div class="help" role="status" aria-live="polite" data-workspace-assignment-status="${player.id}">${esc(state.errors.get(player.id)||'')}</div>
+  </div>`;
+}
+
+function updateWorkspaceAssignmentCard(playerId){
+  const page=document.getElementById('page');
+  const state=workspaceAssignmentState();
+  const data=playersWorkspaceData||{players:[],groups:[]};
+  const player=data.players.find(p=>p.id===playerId);
+  const row=page.querySelector(`[data-workspace-roster-player="${playerId}"]`);
+  if(row){
+    if(!player||(playersWorkspaceGroupFilter==='__unassigned__'&&(player.groups||[]).some(g=>g.active!==false)&&!state.errors.has(playerId))){
+      row.remove();
+    }else{
+      const holder=document.createElement('div');
+      holder.innerHTML=renderWorkspaceRosterRow(player,{assignmentGroups:data.groups.filter(g=>g.active!==false),signals:workspaceSignalsForPlayer(playerId)});
+      row.replaceWith(holder.querySelector('article'));
+    }
+  }
+  const unassigned=data.players.filter(p=>!(p.groups||[]).some(g=>g.active!==false)).length;
+  const option=document.getElementById('workspaceGroupFilter')?.querySelector('[value="__unassigned__"]');
+  if(option)option.textContent=`Currently unassigned · ${unassigned}`;
+  const count=page.querySelectorAll('[data-workspace-roster-player]').length;
+  const counter=page.querySelector('.workspace-filter-count strong');
+  if(counter)counter.textContent=count;
+  if(!count&&playersWorkspaceGroupFilter==='__unassigned__'){
+    page.querySelector('.workspace-roster-list').innerHTML=`<section class="card workspace-roster-empty"><strong>${unassigned?'No more unassigned players match this search.':'No unassigned players.'}</strong><span>${unassigned?'Clear or change your search to continue assigning players.':'Everyone in your access currently belongs to at least one active Playing Group.'}</span></section>`;
+  }
+  const help=document.getElementById('workspaceAssignmentHelp');if(help)help.hidden=!count;
+  const notice=document.getElementById('workspaceAssignmentNotice');if(notice)notice.textContent=state.notice;
+  bindWorkspaceAssignments(page,data.groups.filter(g=>g.active!==false));
+  bindPlayersWorkspaceRosterActions();
+}
+
+function bindWorkspaceAssignments(page,groups){
+  const state=workspaceAssignmentState();
+  const sameContext=()=>state===playersWorkspaceAssignments&&club?.id===state.clubId&&session?.user?.id===state.userId;
+  const onList=()=>sameContext()&&isAdmin()&&currentTab==='players'&&!playersWorkspaceSelectedId&&document.getElementById('page')===page;
+  page.querySelectorAll('[data-workspace-create-group]').forEach(button=>button.onclick=()=>document.getElementById('managePlayingGroupsFromPlayers')?.click());
+  page.querySelectorAll('[data-workspace-assign-group]').forEach(input=>input.onchange=()=>{
+    const id=input.dataset.workspaceAssignGroup;
+    if(!onList()||state.pending.has(id)||![...page.querySelectorAll('[data-workspace-assign-group]')].includes(input))return;
+    const selected=new Set([...page.querySelectorAll(`[data-workspace-assign-group="${id}"]`)].filter(el=>el.checked&&groups.some(g=>g.id===el.value)).map(el=>el.value));
+    state.drafts.set(id,selected);
+    page.querySelector(`[data-workspace-assign-player="${id}"]`).disabled=!selected.size;
+  });
+  page.querySelectorAll('[data-workspace-assign-player]').forEach(button=>button.onclick=async()=>{
+    const id=button.dataset.workspaceAssignPlayer;
+    if(!onList()||state.pending.has(id)||page.querySelector(`[data-workspace-assign-player="${id}"]`)!==button)return;
+    const player=playersWorkspaceData?.players?.find(p=>p.id===id);
+    const selected=groups.filter(g=>state.drafts.get(id)?.has(g.id)&&!(player?.groups||[]).some(a=>a.id===g.id));
+    if(!player||!selected.length)return;
+    state.pending.add(id);state.errors.delete(id);state.notice='';
+    button.disabled=true;button.textContent='Assigning…';
+    page.querySelectorAll(`[data-workspace-assign-group="${id}"]`).forEach(input=>input.disabled=true);
+    const saved=[],failed=[];
+    try{
+      for(const group of selected){
+        if(!sameContext()||!isAdmin())return;
+        try{
+          const {error}=await supabase.rpc('assign_players_to_playing_group',{p_group_id:group.id,p_player_ids:[id]});
+          if(error)throw error;
+          if(!sameContext())return;
+          saved.push(group.name);state.drafts.get(id)?.delete(group.id);
+          const current=playersWorkspaceData?.players?.find(p=>p.id===id);
+          if(current&&!(current.groups||[]).some(g=>g.id===group.id))current.groups=[...(current.groups||[]),group];
+        }catch(error){failed.push(`${group.name}: ${error?.message||'could not save'}`);}
+      }
+      if(!sameContext())return;
+      // Reload current group requirements without replacing the list or other cards.
+      if(saved.length){
+        try{
+          const {data,error}=await supabase.rpc('get_players_workspace',{p_club_id:state.clubId});
+          if(sameContext()&&!error&&Array.isArray(data?.players)){
+            const fresh=data.players.find(p=>p.id===id);
+            if(fresh)playersWorkspaceData.players=playersWorkspaceData.players.map(p=>p.id===id?fresh:p);
+          }
+        }catch(error){console.warn('Assignment saved; current plan requirements could not reload',error);}
+      }
+      if(!sameContext())return;
+      if(failed.length)state.errors.set(id,`${saved.length?`Saved: ${saved.join(', ')}. `:''}Still to assign — ${failed.join('; ')}. Retry the selected groups.`);
+      else{state.drafts.delete(id);state.notice=`${player.display_name||'Player'} assigned to ${saved.join(' and ')}.`;}
+    }finally{
+      if(sameContext()){
+        state.pending.delete(id);
+        if(onList())updateWorkspaceAssignmentCard(id);
+      }
+    }
+  });
+}
+
+function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assignmentGroups=[]}={}){
   const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
   const feedbackCount=workspaceFeedbackCount(player.id);
   const plansPublished=workspacePlayerPlansPublished();
@@ -10047,7 +10164,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
     }
   }
 
-  return `<article class="workspace-roster-row" ${overdue?'style="border-left:4px solid var(--accent,#D8232A)"':''}>
+  return `<article class="workspace-roster-row" data-workspace-roster-player="${player.id}" ${overdue?'style="border-left:4px solid var(--accent,#D8232A)"':''}>
     <div class="workspace-roster-person">
       <div>
         <h3>${esc(player.display_name||'Player')}</h3>
@@ -10055,6 +10172,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[]}={}){
       </div>
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
+    ${renderWorkspaceAssignment(player,assignmentGroups)}
     ${signals.length?renderWorkspaceRosterDiscussion(player,signals):''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
       <div><strong style="font-size:12px;color:var(--navy2)">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${deadlineDetail?`<span style="display:block;margin-top:2px;font-size:11px;color:${overdue?'var(--accent,#D8232A);font-weight:700':'var(--muted)'}">${esc(deadlineDetail)}</span>`:''}${reminderMeta}</div>
@@ -10083,6 +10201,7 @@ function renderPlayersWorkspaceList(){
   const page=document.getElementById('page');
   const data=playersWorkspaceData||{players:[],groups:[]};
   const players=data.players||[];
+  const assignmentGroups=(data.groups||[]).filter(g=>g.active!==false);
   const role=permissionRoleLabel(data.role||membership.permission_role);
   const query=playersWorkspaceSearch.trim().toLowerCase();
   const allSignals=workspaceDiscussionSignals();
@@ -10117,6 +10236,7 @@ function renderPlayersWorkspaceList(){
 
   const roster=filtered.map(player=>renderWorkspaceRosterRow(player,{
     discussionMode,
+    assignmentGroups,
     signals:playerSignals.get(player.id)||[]
   })).join('');
 
@@ -10167,7 +10287,8 @@ function renderPlayersWorkspaceList(){
     ${hasSelection?`<div class="workspace-filter-count compact" role="status" aria-live="polite"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
   </section>
 
-  ${unassignedMode&&filtered.length?`<div class="notice compact">These players have no active Playing Group.${isAdmin()?' Use Manage Playing Groups to assign them.':''}</div>`:''}
+  ${unassignedMode&&filtered.length?`<div class="notice compact" id="workspaceAssignmentHelp">${isAdmin()&&assignmentGroups.length?'Tick one or more Playing Groups on each card, then click Assign selected groups. Assigned players leave this list.':'These players have no active Playing Group.'}</div>`:''}
+  ${isAdmin()?`<div class="help" id="workspaceAssignmentNotice" role="status" aria-live="polite">${esc(workspaceAssignmentState().notice)}</div>`:''}
   ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
   ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
@@ -10190,6 +10311,7 @@ function renderPlayersWorkspaceList(){
     state.search=unassignedMode||state.source!=='unassigned'?playersWorkspaceSearch:'';
     currentTab='groups';return renderTab();
   });
+  bindWorkspaceAssignments(page,assignmentGroups);
 
   document.getElementById('remindOverduePlayers')?.addEventListener('click',async()=>{
     if(!(data.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter))return;
@@ -10231,6 +10353,10 @@ function renderPlayersWorkspaceList(){
     renderPlayersWorkspaceList();
   };
 
+  bindPlayersWorkspaceRosterActions(allSignals);
+}
+
+function bindPlayersWorkspaceRosterActions(allSignals=workspaceDiscussionSignals()){
   document.querySelectorAll('[data-open-workspace-player]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openWorkspacePlayer,'summary'));
   document.querySelectorAll('[data-open-training-plan]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openTrainingPlan,'training'));
   document.querySelectorAll('[data-open-player-feedback]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openPlayerFeedback,'development'));
