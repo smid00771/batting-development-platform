@@ -1,10 +1,10 @@
-// Club Batting v0.8.62.11 — Explicit Workshop choice and one shared conversation
+// Club Batting 0.8.62.23 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.22';
+const APP_UI_VERSION='0.8.62.23';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -2816,7 +2816,7 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
-const GUIDE_TOPIC_ORDER=['whole_process','philosophy_workshop','how_we_bat','player_plan_structure','plan_dates','player_plan','how_we_train','feedback_loop','coach_conversations'];
+const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "how_we_train", "feedback_loop", "coach_conversations", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
 
 function guideTopicNumber(key){
   const index=GUIDE_TOPIC_ORDER.indexOf(key);
@@ -2839,147 +2839,800 @@ function guideHelpStyles(){
     .guide-layout .guide-topic-list button:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
     .guide-layout .guide-topic-list .guide-topic-number{display:grid;place-items:center;width:30px;height:30px;margin:0;border-radius:50%;background:var(--primary);color:#fff;font-size:.85rem;font-weight:800;line-height:1}
     .guide-layout .guide-topic-list .guide-topic-copy{margin:0;min-width:0}
+    .guide-layout .guide-topic-list [hidden]{display:none!important}
     .guide-layout .guide-topic-list strong{color:var(--text);line-height:1.35}
     .guide-layout .guide-topic-list .guide-topic-description{margin-top:5px;font-size:.85rem;line-height:1.45}
     .guide-layout .guide-topic-list .guide-topic-complete{margin-top:7px;font-size:.75rem;font-weight:700;color:var(--primary)}
   </style>`;
 }
 
+// BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
+const CLUB_BATTING_HELP = {
+  "whole_process": {
+    "capability_key": "whole_process",
+    "title": "The whole Club Batting process",
+    "purpose": "One club approach. Each batter’s own game.",
+    "short_explanation": "Register people, agree How We Bat, publish the questions, then build Player Plans, practise and keep Coach Conversations useful.",
+    "target_tab": "guide",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Start the club and register people",
+        "body": "The full 60-day Club Trial starts on activation. People can join during preparation; choosing whether they play is separate from any coaching or administration role."
+      },
+      {
+        "title": "Complete the five preparation steps",
+        "body": "Club Home guides the responsible people through Batting Philosophy Workshop, How We Bat, Player Plan questions, Club look, then Publish & notify players. Submitting contributions alone does not complete the Workshop.",
+        "target_tab": "dashboard"
+      },
+      {
+        "title": "Choose the club approach",
+        "body": "Contributors answer independently, then compare and discuss How We Bat options together. Only the Philosophy Lead chooses the working version and confirms How We Bat.",
+        "target_tab": "workshop"
+      },
+      {
+        "title": "Build and train individual plans",
+        "body": "After publication, each batter completes Core and the priority formats for their Playing Groups. Core plus a completed format unlocks that format’s personalised How We Train. All three format tabs remain available.",
+        "target_tab": "$player_plan"
+      },
+      {
+        "title": "Keep learning together",
+        "body": "Record match or training observations. Coach Conversations combines discussion requests, agreed actions and review dates. Dates are optional; record what happened and mark Discussed / Actioned when finished.",
+        "target_tab": "$feedback",
+        "focus": "coach_conversations"
+      }
+    ],
+    "sort_order": 10,
+    "active": true
+  },
+  "trial_sign_up": {
+    "capability_key": "trial_sign_up",
+    "title": "Start a club trial",
+    "purpose": "Try the full process with your club.",
+    "short_explanation": "The trial lasts 60 days from activation. There is no upfront payment or automatic charge.",
+    "target_tab": "guide",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Start from the website or an invitation",
+        "body": "Use Try it free with your club on the website, or Start your 60-day trial in a club invitation. Use an existing invitation to continue a trial already prepared for your club."
+      },
+      {
+        "title": "Use the right account",
+        "body": "Enter the club and your name. If already signed in, continue with that email or choose Use a different email. Changing account does not remove your existing clubs."
+      },
+      {
+        "title": "Confirm your email and activate",
+        "body": "Create/sign in to your account, follow the email confirmation when required, then select Start our 60-day trial. The website path does not need a second trial invitation email. Authentication emails may still be required."
+      },
+      {
+        "title": "Choose your involvement",
+        "body": "Choose Player, Non-playing staff, or Player who also coaches or captains for this club. This determines whether you need a Player Plan. The person activating the club begins as its Lead Admin; other club roles are assigned separately."
+      },
+      {
+        "title": "Continue only if the club chooses",
+        "body": "The trial gives full product access. At the end, the club explicitly chooses whether to continue. Payment collection is not live in this beta; the Guide must not promise automatic Stripe billing or available corporate tiers."
+      }
+    ],
+    "sort_order": 20,
+    "active": true
+  },
+  "people_sign_up": {
+    "capability_key": "people_sign_up",
+    "title": "Register players and non-playing staff",
+    "purpose": "Get people in, then assign responsibilities.",
+    "short_explanation": "Use the correct club sign-up link. Playing involvement, club roles and Workshop invitations are separate.",
+    "target_tab": "permissions",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Share the player link",
+        "body": "Club Admin opens People & Sign-up and uses Copy WhatsApp message, Copy player sign-up link or the QR code. Share the complete generated link; an empty player_join= link is not usable. A playing coach or captain uses the player route.",
+        "target_tab": "permissions"
+      },
+      {
+        "title": "Use the staff route for non-players",
+        "body": "Copy non-playing staff sign-up link is for someone who does not play and should not receive a Player Plan. New staff can create an account from that route; they do not need an existing account. The legacy coach_captain text in the URL does not assign a Captain role."
+      },
+      {
+        "title": "Confirm membership before expecting player access",
+        "body": "Follow sign-in/email confirmation and enter your name. Registration does not grant coaching access to other players. Club Admin assigns the role and player access after registration."
+      },
+      {
+        "title": "Workshop invitees also choose involvement",
+        "body": "Someone joining through a Workshop invitation must say whether they play. A playing contributor gets their own Player Plan; a non-playing contributor does not. Contributing alone gives no Coach, Captain or Admin role."
+      },
+      {
+        "title": "Manage the link and correct involvement",
+        "body": "Club Admin can open/close player sign-up or regenerate the link and QR; regeneration invalidates the old player link. A member can use Account → Your involvement to correct their playing choice for the current club. Before publication, ordinary players wait for the club’s ready-to-start notification."
+      }
+    ],
+    "sort_order": 30,
+    "active": true
+  },
+  "roles_and_access": {
+    "capability_key": "roles_and_access",
+    "title": "Assign club roles and player access",
+    "purpose": "Give each person the access they need.",
+    "short_explanation": "A club role and access to players are separate choices; playing involvement remains independent.",
+    "target_tab": "permissions",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Find a registered person",
+        "body": "In People & Sign-up, type at least two letters in Find a registered person. This search includes players and non-playing members. The People with club roles list shows assigned staff roles, not the entire membership.",
+        "target_tab": "permissions"
+      },
+      {
+        "title": "Choose the role and scope",
+        "body": "Assign Captain, Coach, Head Coach or Admin. For coaching roles, choose no assigned player access, whole-club view/edit, or selected Playing Groups with view/edit. Admin has full club access. Being a Head Coach or Captain does not itself make someone a registered player."
+      },
+      {
+        "title": "Save one or several changes",
+        "body": "Adjust multiple people, then use Save all changes. Saving one row retains unsaved edits on other rows. Check the saved state and any error beside a person before leaving."
+      },
+      {
+        "title": "Keep Workshop responsibilities separate",
+        "body": "Choose the Philosophy Lead and contributors in the Workshop. A contributor needs a separate coaching role and player access before they can view or edit other players. Philosophy Lead and Lead Admin are different responsibilities."
+      }
+    ],
+    "sort_order": 40,
+    "active": true
+  },
+  "admin_handover": {
+    "capability_key": "admin_handover",
+    "title": "Hand over Lead Admin",
+    "purpose": "Pass the club on without starting again.",
+    "short_explanation": "The Lead Admin uses a formal invitation and acceptance process; ordinary role changes do not transfer that responsibility.",
+    "target_tab": "permissions",
+    "audience": [
+      "admin"
+    ],
+    "tutorial": [
+      {
+        "title": "Open Admin continuity",
+        "body": "The current Lead Admin opens People & Sign-up → Lead Admin. Clubs may have several Admins, but one Lead Admin is responsible for formal handover.",
+        "target_tab": "permissions"
+      },
+      {
+        "title": "Nominate the successor",
+        "body": "Choose an existing registered person or enter the incoming person’s name and email, then send the handover. It remains pending until accepted; the outgoing person keeps responsibility meanwhile."
+      },
+      {
+        "title": "Accept with the correct account",
+        "body": "The invited person opens the secure handover link and signs in with the intended email. They accept the Lead Admin role and choose what role/player access the outgoing Admin retains."
+      },
+      {
+        "title": "Cancel a pending handover if needed",
+        "body": "The current Lead Admin can cancel while it is pending. An expired or cancelled invitation needs a new handover invitation. Changing a person’s ordinary Admin dropdown is not the formal transfer."
+      }
+    ],
+    "sort_order": 50,
+    "active": true
+  },
+  "philosophy_workshop": {
+    "capability_key": "philosophy_workshop",
+    "title": "Run the Batting Philosophy Workshop",
+    "purpose": "Hear independent views, then choose together.",
+    "short_explanation": "Contributors submit their own responses before comparing options. The Philosophy Lead owns the final choice.",
+    "target_tab": "workshop",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Choose the Lead and contributors",
+        "body": "Club Admin appoints the Philosophy Lead and selects registered contributors or invites them by email. Invitees also choose playing/non-playing involvement when joining; Workshop access does not grant coaching access.",
+        "target_tab": "workshop"
+      },
+      {
+        "title": "Complete your own contribution",
+        "body": "Work through Club identity, Batting ideas, Format priorities and Review & submit. Save and continue moves to the top of the next screen. Back to Workshop saves answers without submitting them."
+      },
+      {
+        "title": "Compare after submitting",
+        "body": "Submitted contributors can explore How We Bat combinations that include the Lead’s response. Choose a combination, then Preview this version. Use Back to Workshop to return; previews stay within the app."
+      },
+      {
+        "title": "Use the shared conversation",
+        "body": "There is one Workshop conversation about all the options. It is shared by the people permitted to review that round; it is not a separate chat for each combination."
+      },
+      {
+        "title": "Let the Lead choose",
+        "body": "Only the Philosophy Lead selects the working How We Bat version. All contributors submitted means responses are ready, not Workshop complete. The selected version then goes through How We Bat review and confirmation; other contributors cannot make the final choice."
+      }
+    ],
+    "sort_order": 60,
+    "active": true
+  },
+  "workshop_changes": {
+    "capability_key": "workshop_changes",
+    "title": "Change a choice or start a new round",
+    "purpose": "Keep useful contributions when the club changes direction.",
+    "short_explanation": "Reopen an early choice without redoing responses, or start a new round and reuse saved responses.",
+    "target_tab": "workshop",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Reopen an early choice",
+        "body": "Before any Player Plan has been completed, the Philosophy Lead can use Change our How We Bat choice in the Workshop. The existing submitted responses and shared conversation remain. Select another combination and reconfirm the later preparation steps.",
+        "target_tab": "workshop"
+      },
+      {
+        "title": "Use a new round when required",
+        "body": "Once a Player Plan has been completed, change direction through Start a new philosophy round in Workshop settings. Read the confirmation: the current round is archived, contributor choices are reviewed, and a replacement is prepared."
+      },
+      {
+        "title": "Reuse your own earlier response",
+        "body": "When selected again, a returning contributor can choose Use my saved responses from previous Workshop. This loads their own earlier answers into the new round for review and editing. They still submit for the new round; nobody’s answer is silently resubmitted."
+      },
+      {
+        "title": "Keep the existing published system available",
+        "body": "Starting a replacement round keeps published How We Bat and Player Plans available while the club prepares the replacement. Publishing the replacement is a separate explicit action."
+      },
+      {
+        "title": "Distinguish regenerating from reopening",
+        "body": "Reset How We Bat draft replaces manual edits in an unconfirmed draft with generated wording from the current working philosophy. It is not the same as selecting a different combination or starting a new round."
+      }
+    ],
+    "sort_order": 70,
+    "active": true
+  },
+  "how_we_bat": {
+    "capability_key": "how_we_bat",
+    "title": "Review and confirm How We Bat",
+    "purpose": "Make the chosen club approach clear.",
+    "short_explanation": "The Philosophy Lead reviews the chosen combination and confirms the messages players will use.",
+    "target_tab": "howwebat",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Choose the combination first",
+        "body": "Use Compare How We Bat options in the Workshop, preview and discuss the options, then let the Philosophy Lead choose. A generated preview alone is not the club’s confirmed How We Bat.",
+        "target_tab": "workshop"
+      },
+      {
+        "title": "Review the format messages",
+        "body": "The Lead checks the editable How We Bat draft and its format messages. Refine the wording so players can use it in matches and training. Preserve room for each batter’s strengths.",
+        "target_tab": "howwebat"
+      },
+      {
+        "title": "Confirm before preparing questions",
+        "body": "Confirm How We Bat to enable the Player Plan questions step. Confirmation is distinct from publishing the whole system; ordinary players receive the published version after publication."
+      },
+      {
+        "title": "Read the published approach",
+        "body": "Players can open How We Bat once published. Changing the club approach follows the reopen/new-round rules; it should not silently rewrite the player’s personal plan."
+      }
+    ],
+    "sort_order": 80,
+    "active": true
+  },
+  "player_plan_structure": {
+    "capability_key": "player_plan_structure",
+    "title": "Set the Player Plan questions",
+    "purpose": "Turn the club approach into useful personal choices.",
+    "short_explanation": "How We Bat generates Core and format prompts. The Philosophy Lead checks and confirms them before publication.",
+    "target_tab": "plan",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Start after How We Bat confirmation",
+        "body": "Club Home opens this step after the Lead has confirmed How We Bat. The questions are generated from the chosen approach.",
+        "target_tab": "plan"
+      },
+      {
+        "title": "Review Core and all formats",
+        "body": "Core covers strengths, Danger and Reset; format questions help players describe how they build an innings. Every player has Core, T20, Limited Overs and Long Form."
+      },
+      {
+        "title": "Refine exact questions if needed",
+        "body": "The Philosophy Lead can open the exact-question editor, make changes and Save exact edits. Reset to generated questions discards manual edits in the working draft. Keep the prompts focused and manageable."
+      },
+      {
+        "title": "Confirm, then publish separately",
+        "body": "Confirming the questions completes this preparation step. Club Admin checks the club look, then the Philosophy Lead chooses Publish & notify players. Confirmation alone does not release Player Plans."
+      }
+    ],
+    "sort_order": 90,
+    "active": true
+  },
+  "club_look_publication": {
+    "capability_key": "club_look_publication",
+    "title": "Check the club look and publish",
+    "purpose": "Open the agreed system to players.",
+    "short_explanation": "Branding follows the cricket preparation. Publication is the final explicit preparation action.",
+    "target_tab": "dashboard",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Check the club look",
+        "body": "After How We Bat and Player Plan questions are confirmed, Club Admin reviews the logo and colours or chooses Keep this look & continue. Branding is not a prerequisite for people registering.",
+        "target_tab": "dashboard"
+      },
+      {
+        "title": "Publish when ready",
+        "body": "The Philosophy Lead selects Publish & notify players after all preparation steps are ready. This publishes the club approach and questions together."
+      },
+      {
+        "title": "Tell registered players they can begin",
+        "body": "Publication queues the ready-to-start email for registered players. Delivery depends on the club’s email setup; the Guide should not claim an email has arrived just because it was queued."
+      },
+      {
+        "title": "Keep the next step clear",
+        "body": "Before publication, ordinary players see a waiting message. People with assigned Workshop/setup responsibilities can work during preparation. Club Home’s completed preparation stages stay available for review."
+      }
+    ],
+    "sort_order": 100,
+    "active": true
+  },
+  "playing_groups": {
+    "capability_key": "playing_groups",
+    "title": "Organise Playing Groups",
+    "purpose": "Find the players you need and assign newcomers efficiently.",
+    "short_explanation": "Use the unassigned filter and save several group selections together. Groups control access and plan priorities, not available format tabs.",
+    "target_tab": "groups",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain"
+    ],
+    "tutorial": [
+      {
+        "title": "Find unassigned players",
+        "body": "In Players, choose Currently unassigned from Show players. This is a filter for people with no active Playing Group, not a real group. Search by name can narrow it further.",
+        "target_tab": "players"
+      },
+      {
+        "title": "Assign several groups at once",
+        "body": "Club Admin ticks the desired Playing Groups on an unassigned player’s card, then chooses Assign selected groups. Save once after choosing all groups. The saved player leaves the unassigned list while other players’ draft selections stay in place."
+      },
+      {
+        "title": "Manage the wider roster",
+        "body": "Manage Playing Groups lets Club Admin create, rename, reorder and activate/deactivate groups, and add or remove members. Add shown players acts on the displayed filtered/search results; check the target group before saving.",
+        "target_tab": "groups"
+      },
+      {
+        "title": "Understand what groups change",
+        "body": "A player can belong to more than one group. The player inherits the applicable format due dates; where the same format has several dates, the earliest active date is the priority. Group membership also determines coaching access that Admin assigned by group."
+      },
+      {
+        "title": "Keep unassigned players neutral",
+        "body": "Unassigned players have no group-derived format priority. Core still comes first. All three format tabs stay available; assigning a group never adds or removes a tab."
+      }
+    ],
+    "sort_order": 110,
+    "active": true
+  },
+  "plan_dates": {
+    "capability_key": "plan_dates",
+    "title": "Set Player Plan dates",
+    "purpose": "Show players which format needs attention next.",
+    "short_explanation": "Club Admin sets due dates per Playing Group and format; undated formats remain optional.",
+    "target_tab": "players",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain"
+    ],
+    "tutorial": [
+      {
+        "title": "Open Plan dates",
+        "body": "After publication, Club Admin opens Players → Plan dates. Choose one or more Playing Groups and the format, then save the date.",
+        "target_tab": "players",
+        "focus": "plan_dates"
+      },
+      {
+        "title": "Prioritise the formats the group plays",
+        "body": "Set dates for the formats that group should complete. A group that does not play T20 can leave T20 undated. Every player still has T20, Limited Overs and Long Form, and can complete optional formats."
+      },
+      {
+        "title": "Let membership set the priority",
+        "body": "Players first complete Core, then see the required incomplete format with the earliest date as their next step. Unassigned players have no group-derived format priority. A later group assignment updates the priority."
+      },
+      {
+        "title": "Read progress accurately",
+        "body": "Core and format completion are separate. Core complete does not mean every format is complete. Red overdue indicators mean an incomplete required section is past its date; they do not label every incomplete Core or player as overdue."
+      },
+      {
+        "title": "Review or remind when necessary",
+        "body": "Select a Playing Group in Players to see currently required progress and overdue counts. Admin can send eligible overdue reminders, subject to the existing reminder cooldown and email delivery mode. Remove an active due-date requirement when it is no longer needed."
+      }
+    ],
+    "sort_order": 120,
+    "active": true
+  },
+  "player_plan": {
+    "capability_key": "player_plan",
+    "title": "Build and update your Player Plan",
+    "purpose": "Choose your shots. Know when to commit.",
+    "short_explanation": "Start with Core, then use your Playing Group’s due dates to prioritise formats. Other formats remain available.",
+    "target_tab": "$player_plan",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Start with Core",
+        "body": "Open My Player Plan. Describe your strengths and trusted shots, your Danger signs and your Reset. Completing Core builds the foundation; it does not complete all three format plans.",
+        "target_tab": "$player_plan"
+      },
+      {
+        "title": "Follow your next step",
+        "body": "Player Home and My Player Plan identify required or overdue formats from your Playing Groups. If unassigned, there is no group format priority. Ask Club Admin if your group membership is missing."
+      },
+      {
+        "title": "Complete formats in your own words",
+        "body": "Work through T20, Limited Overs and Long Form as relevant. The tabs always remain available. Answers save automatically; a section is complete when its required questions are answered. Check the saved indicator before leaving. A complete Core section does not mean all format plans are complete."
+      },
+      {
+        "title": "Review and keep improving",
+        "body": "Use View my plan to read your answers together. Edit your own plan as your game develops. Coaches with edit access can also work on it; Club Batting does not automatically change your answers because of a coaching observation."
+      },
+      {
+        "title": "Train once the foundation is ready",
+        "body": "Core plus a completed format unlocks personalised training for that format. You can still read shared coaching notes/actions in How We Train while plan sections are unfinished.",
+        "target_tab": "howwetrain"
+      }
+    ],
+    "sort_order": 130,
+    "active": true
+  },
+  "how_we_train": {
+    "capability_key": "how_we_train",
+    "title": "Use How We Train",
+    "purpose": "Practise the shot and the decision.",
+    "short_explanation": "Combine your club principles, personal plan and agreed coaching work.",
+    "target_tab": "$training",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Open your personal training view",
+        "body": "How We Train uses your own Player Plan. A coach opens the player’s Training Plan from Players. Core plus the chosen completed format is needed for that format’s personalised suggestions.",
+        "target_tab": "$training"
+      },
+      {
+        "title": "Choose useful work",
+        "body": "Practise your trusted scoring options, recognising the right ball, reliable singles, leaving/defending and your Reset. Mix deliveries and situations so practice trains the decision as well as execution."
+      },
+      {
+        "title": "Keep agreed coaching work visible",
+        "body": "Coach Conversations holds current observations, agreed training actions and progress notes. A coach’s one thing to train appears in the player’s How We Train. Dates are optional; general shared notes remain available even before the plan is finished."
+      },
+      {
+        "title": "Reflect and review",
+        "body": "Record your own innings reflection when prompted. Genuine plan-related match feedback stays independent until you add your view; a general note does not require that reflection. Use Add note / mark Discussed or Actioned to record progress or finish shared work."
+      },
+      {
+        "title": "Back preparation and commitment",
+        "body": "A well-chosen shot can still end in a wicket. Discuss decision and execution separately. Support the player’s confidence and enjoyment, and agree one useful next step rather than changing their plan automatically."
+      }
+    ],
+    "sort_order": 140,
+    "active": true
+  },
+  "feedback_loop": {
+    "title": "Player and coach feedback",
+    "purpose": "Learn from the innings, not just the dismissal.",
+    "short_explanation": "Record match or training observations, then use Coach Conversations to discuss them and agree what happens next. General coaching notes do not require an innings reflection.",
+    "tutorial": [
+      {
+        "title": "Add an observation",
+        "body": "In Players, open the player’s Coach Conversations and choose Add match observation or Add training observation. Coaches with edit access can add observations; the original author can edit their own observation.",
+        "target_tab": "$feedback",
+        "focus": "coach_conversations"
+      },
+      {
+        "title": "Choose whether it concerns the Player Plan",
+        "body": "For a general note, select This isn’t about their Player Plan. The player can read it immediately without an innings reflection. For plan-related match feedback, the player records their own view before seeing the coach’s answers. Training observations remain immediately visible."
+      },
+      {
+        "title": "Compare decisions and execution",
+        "body": "For plan-related feedback, consider the whole innings and the dismissal ball separately. Recognise preparation and commitment, even when execution falls short. Use different perspectives to start a useful conversation."
+      },
+      {
+        "title": "Flag a conversation when needed",
+        "body": "Select Needs a coaching conversation, add a training focus, or set an optional review date. These feed the same Coach Conversations filter and player alerts. A plain note stays Current without automatically requesting a conversation."
+      },
+      {
+        "title": "Record what happens next",
+        "body": "Open Add note / mark Discussed or Actioned to record the discussion, keep it open with an optional review date, or complete it. Any coach with edit access can follow it through, even if another coach wrote the observation."
+      }
+    ],
+    "capability_key": "feedback_loop",
+    "target_tab": "$feedback",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 150,
+    "active": true
+  },
+  "coach_conversations": {
+    "title": "Coach Conversations",
+    "purpose": "Discuss the evidence and agree the next step.",
+    "short_explanation": "One place for observations that need discussion, agreed actions and review dates. Coaches use Players → Coach Conversations; players find their shared conversations in How We Train.",
+    "tutorial": [
+      {
+        "title": "Find conversations needing attention",
+        "body": "In Players, choose Coach Conversations from Show players, or use the compact reminder’s View button. This combines requested conversations, open follow-ups and feedback patterns, counting each player once. The reminder disappears when none need attention or when the filter is already selected.",
+        "target_tab": "$feedback",
+        "focus": "coach_conversations"
+      },
+      {
+        "title": "Open one shared conversation",
+        "body": "Select Open on the player’s highlighted card. The Coach Conversations page keeps the observation, related discussion prompts, author’s edit button and shared progress notes together. Ordinary notes remain Current even when no alert is requested."
+      },
+      {
+        "title": "Add notes or agree an action",
+        "body": "Use Add note / mark Discussed or Actioned to record what happened. For a feedback pattern without an existing action, Agree a next step records a training action. Players can add progress to shared actions in How We Train; coaches need edit access to change them."
+      },
+      {
+        "title": "Use a review date only when useful",
+        "body": "Review dates start blank and are optional. A date can be added, changed or removed while the conversation is open. A date flags the item for coach and player; it is highlighted when due. Clearing a date removes that reminder, while any separate training focus or conversation request remains active."
+      },
+      {
+        "title": "Complete it and keep the history",
+        "body": "Choose Discussed / Actioned or Close — no further action needed, and record a short note. This clears that conversation’s alerts for coach and player and moves the thread into collapsed Past conversations. Other unresolved conversations remain. Reading an unread note clears its bell badge only; it does not complete the conversation."
+      }
+    ],
+    "capability_key": "coach_conversations",
+    "target_tab": "$feedback",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 160,
+    "active": true
+  },
+  "notifications": {
+    "capability_key": "notifications",
+    "title": "Read coaching updates and reviews",
+    "purpose": "Notice what is new and what still needs attention.",
+    "short_explanation": "Unread notes and open conversations are different: reading clears the badge; completion clears the work.",
+    "target_tab": "howwetrain",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Look beside Account",
+        "body": "A player’s coaching bell shows unread coaching notes in the current club. It checks when the app opens and when returning to the browser tab/window. This is an in-app badge, not a phone push notification."
+      },
+      {
+        "title": "Open the note",
+        "body": "A general note or training observation can be read immediately. For genuine Player Plan match feedback, first add your independent innings reflection. Seeing the menu alone does not mark the note read."
+      },
+      {
+        "title": "Keep the conversation open until dealt with",
+        "body": "Reading clears that note’s unread badge only. An open conversation, training focus or dated review remains until it is completed or its relevant reminder is removed. The player sees shared conversations in How We Train.",
+        "target_tab": "howwetrain"
+      },
+      {
+        "title": "Complete it together",
+        "body": "The player or a coach with edit access can add progress on a shared action. Discussed / Actioned or Close clears that thread’s coach/player alerts and keeps the history in Past conversations. Another unresolved item can still leave the player in the filter."
+      },
+      {
+        "title": "Check the latest state",
+        "body": "Refresh reloads the current screen and latest permitted data. The system does not currently promise instant cross-device updates or send a new email for every coaching note. Later edits to a current observation can make it unread again."
+      }
+    ],
+    "sort_order": 170,
+    "active": true
+  },
+  "navigation_account": {
+    "capability_key": "navigation_account",
+    "title": "Find your club, account and saved screen",
+    "purpose": "Get back to the right place.",
+    "short_explanation": "Use the club/context selector, Account and in-app return buttons. Refresh keeps the current screen.",
+    "target_tab": "guide",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Switch club or Platform Admin",
+        "body": "Use the current club/Platform Admin selector and its dropdown arrow. It is separate from Account. Platform Admin appears only for authorised accounts; switching context does not sign you out."
+      },
+      {
+        "title": "Manage your own involvement",
+        "body": "Account → Your involvement controls whether you play for the current club. Player who also coaches or captains still needs a Player Plan. Club roles and access to other players are assigned separately."
+      },
+      {
+        "title": "Use Back and refresh",
+        "body": "Browser Back/Forward follows app screens visited in the current session; refresh reloads the current screen and data. Back at the start of your app history can still leave the site. Workshop previews also have Back to Workshop."
+      },
+      {
+        "title": "Protect work when moving",
+        "body": "Use Save and continue or the screen’s save action and check the saved state. The app may stop navigation if a save fails or ask before abandoning unsaved work. It should not treat a failed save as completed."
+      },
+      {
+        "title": "Get help in context",
+        "body": "Help & Tutorials is available beside the account/navigation controls. Choose a topic or ask the Club Batting Guide. Your question remains visible above the answer. The Guide explains the product; it does not carry out edits or book a call merely by saying so."
+      }
+    ],
+    "sort_order": 180,
+    "active": true
+  },
+  "guide_support": {
+    "capability_key": "guide_support",
+    "title": "Use the Guide and ask for help",
+    "purpose": "Get a practical next step without guessing.",
+    "short_explanation": "Tutorials explain the process; the Guide answers questions using the maintained product knowledge.",
+    "target_tab": "guide",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Find the relevant tutorial",
+        "body": "Open Help & Tutorials and choose a topic. A tutorial completion mark means you have read the help, not that the club’s corresponding setup task is complete."
+      },
+      {
+        "title": "Ask a focused question",
+        "body": "Use Ask Guide for help with the current club process, a feature or where to go next. Your question and answer stay in the conversation. The Guide should name the real screen/control and respect your role."
+      },
+      {
+        "title": "Ask a person when needed",
+        "body": "Use I’d rather speak to someone and send the request with a short explanation. This requests a conversation and includes the Guide exchange; it does not guarantee a booked call or response time."
+      },
+      {
+        "title": "Know the limits",
+        "body": "The public demo has tutorials and local fictional data but no live AI chat, real accounts or message delivery. Stripe, Market Discovery and corporate/network tiers are not released features. The Guide must not invent controls, hidden format settings or completed actions."
+      },
+      {
+        "title": "Use gentle prompts only when relevant",
+        "body": "The app may offer guidance when it detects a meaningful unfinished part of the process. Those prompts can be deferred or dismissed. Proactive Guide email escalation remains disabled."
+      }
+    ],
+    "sort_order": 190,
+    "active": true
+  },
+  "platform_pipeline": {
+    "capability_key": "platform_pipeline",
+    "title": "Manage the Club Pipeline",
+    "purpose": "Keep invitations and trials easy to follow.",
+    "short_explanation": "Platform Admin manages prospects and access; clubs can return to express interest later.",
+    "target_tab": "guide",
+    "audience": [
+      "admin"
+    ],
+    "tutorial": [
+      {
+        "title": "Use Club Pipeline",
+        "body": "An authorised Platform Admin adds or reviews club leads, their contact details, responses and onboarding progress. History remains available for finding a record later. Market Discovery is deferred; do not describe it as an available automated discovery service."
+      },
+      {
+        "title": "Continue directly into the trial",
+        "body": "Interested clubs can continue from outreach into trial sign-up. Website visitors are already in that path and do not need a duplicate trial invitation email. Required account confirmation emails are separate."
+      },
+      {
+        "title": "Close unwanted onboarding",
+        "body": "On an unactivated onboarding record, use the available close/cancel onboarding action to remove it from the active queue. This records the closed attempt rather than permanently banning the club or contact email. A future interested response can start a new attempt."
+      },
+      {
+        "title": "Keep access decisions separate",
+        "body": "Closing unactivated onboarding is different from ending/removing an active club. Active clubs have their own access and rate controls. Saved settings should show their saved state until edited; review any destructive confirmation carefully."
+      },
+      {
+        "title": "Check delivery and commercial status",
+        "body": "Email Delivery shows delivery status; queued is not the same as received. Access/rate settings can support complimentary arrangements. Payment collection and corporate tiers are deferred, and no automatic charge should be promised."
+      }
+    ],
+    "sort_order": 200,
+    "active": true
+  }
+};
 function guideCapabilityForCurrentProduct(capability){
-  const item={...capability};
-  const staff=canUsePlayersWorkspace();
-  const playerPlanTarget=!isPlayerUser()&&staff?'players':'myplan';
-  const feedbackTarget=staff?'players':'howwetrain';
-  // Keep database identities, audiences and progress; update the visible copy in app.js.
-  // This also replaces legacy tutorial text without requiring a catalogue migration.
-  const copy={
-    whole_process:{
-      title:'The whole Club Batting process',
-      purpose:'One club approach. A plan for every batter.',
-      short_explanation:'Agree how your club wants to bat. Turn that into How We Bat, individual Player Plans and personalised How We Train plans. Use innings and training feedback to keep improving.',
-      target_tab:'guide',
-      tutorial:[
-        {title:'Register people and assign access',body:'People can sign up at any stage. Everyone who plays joins as a Player; non-playing staff use their own sign-up route. The Club Admin assigns club roles in People & Sign-up and selects workshop participants in the Workshop. Registration alone gives no access to other players or unfinished setup.',target_tab:isAdmin()?'permissions':'guide'},
-        {title:'Agree the batting philosophy',body:'The Philosophy Lead and nominated coaches share their views in the Batting Philosophy Workshop, then settle the club’s approach.',target_tab:'workshop'},
-        {title:'Create How We Bat',body:'Club Batting turns that philosophy into How We Bat: the club’s guide to its batting approach. The Philosophy Lead reviews and confirms it.',target_tab:'howwebat'},
-        {title:'Set the Player Plan questions',body:'How We Bat generates the prompts for individual Player Plans. The Philosophy Lead refines and confirms them; the Club Admin checks the club look before the Lead publishes.',target_tab:'plan'},
-        
-        {title:'Publish, then start Player Plans',body:'The five preparation steps prepare the club’s approach and questions. Registered players see a waiting message until publication, when their ready-to-start email is queued. Player Plans, training and feedback are the continuing part of the process.',target_tab:playerPlanTarget},
-        {title:'Set Player Plan dates',body:'The Club Admin sets due dates for the format plans each Playing Group needs. Other formats stay optional.',target_tab:'players',focus:'plan_dates'},
-        {title:'Build a Player Plan',body:'Each batter chooses their shots, when to use them and how to build an innings. Complete Core, then the formats you play.',target_tab:playerPlanTarget},
-        {title:'Train the plan',body:'The completed plan generates personalised How We Train suggestions. Practise your shots and decisions so you can commit when the right ball arrives.',target_tab:'howwetrain'},
-        {title:'Learn from innings and training',body:'Players reflect on innings; coaches add match and training feedback. Compare the whole innings and the dismissal ball with the Player Plan, separating decision from execution.',target_tab:feedbackTarget},
-        {title:'Agree what comes next',body:'Discuss what worked and what needs practice. Use Coach Conversations to record what you agreed. A review date is optional; mark Discussed / Actioned when finished.',target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})}
-      ]
-    },
-    philosophy_workshop:{
-      title:'Run the Batting Philosophy Workshop',
-      purpose:'Agree how your club wants to bat.',
-      short_explanation:'The Philosophy Lead and nominated coaches shape the club’s batting philosophy together. Their decisions become the foundation for How We Bat.',
-      target_tab:'workshop',
-      tutorial:[
-        {title:'Choose the Lead and contributors',body:'The Club Admin appoints the Philosophy Lead and invites coaches or other contributors. The Lead is responsible for the final philosophy.'},
-        {title:'Start with independent views',body:'Each contributor answers the Workshop questions before comparing responses. Give different cricket perspectives room to be heard.'},
-        {title:'Agree the club approach',body:'The Philosophy Lead reviews the contributions, resolves differences and chooses the final philosophy.'},
-        {title:'Turn it into How We Bat',body:'Use the agreed philosophy to generate the club’s How We Bat guide.',target_tab:'howwebat'}
-      ]
-    },
-    how_we_bat:{
-      title:isPhilosophyLead()||isAdmin()?'Create How We Bat':'Understand How We Bat',
-      purpose:'Make the club’s approach clear.',
-      short_explanation:'Club Batting turns the agreed philosophy into How We Bat: a shared guide to the club’s batting approach. The Philosophy Lead reviews and confirms it.',
-      target_tab:'howwebat',
-      tutorial:[
-        {title:'Build from the agreed philosophy',body:'Club Batting generates How We Bat from the final Workshop decisions.'},
-        {title:'Make the messages useful',body:'The Philosophy Lead reviews the messages for each format and refines the wording. Keep them clear enough to use in a match.'},
-        {title:'Confirm How We Bat',body:'Confirm the guide for this round. It will shape the questions each batter uses to build a Player Plan.'},
-        {title:'Revisit when the club changes',body:'A new season or a change of direction can call for a new Workshop round. The club can review its approach and publish an updated system.'}
-      ]
-    },
-    player_plan_structure:{
-      title:'Set the Player Plan questions',
-      purpose:'Help every batter make the plan their own.',
-      short_explanation:'How We Bat generates the prompts players use to build their own Player Plans. The Philosophy Lead can edit the exact questions before confirming them.',
-      target_tab:'plan',
-      tutorial:[
-        {title:'Generate the questions',body:'Club Batting uses How We Bat to create Core and format questions for each Player Plan.'},
-        {title:'Refine the wording',body:'The Philosophy Lead checks that the prompts help batters describe their strengths, scoring options, risks and reset cues.'},
-        {title:'Confirm the questions',body:'Confirm them for this round, then return to Club Home. This saves the questions; publishing opens them to players.',target_tab:'dashboard'},
-        {title:'Check the club look',body:'The Club Admin checks the logo and colours, or chooses Keep this look & continue. This happens just before publication.',target_tab:'dashboard'},
-        {title:'Publish and notify players',body:'Once the club look is confirmed, the Philosophy Lead selects Publish & notify players. Players can then build their plans and receive the readiness email.',target_tab:'plan'}
-      ]
-    },
-    plan_dates:{
-      title:'Set Player Plan dates',
-      purpose:'Make the next step clear for each Playing Group.',
-      short_explanation:'The Club Admin sets due dates for the format plans each Playing Group needs. Other formats stay optional.',
-      target_tab:'players',
-      tutorial:[
-        {title:'Start after publication',body:'Once the club’s system is live, the Club Admin opens Player Plan dates from Players.',target_tab:'players',focus:'plan_dates'},
-        {title:'Choose the group and formats',body:'Set a due date for each format the Playing Group should complete. T20, Limited Overs and Long Form remain available to everyone.'},
-        {title:'Leave optional formats undated',body:'Players can still complete these plans if they choose.'},
-        {title:'Check progress',body:'Use the incomplete and overdue views to see who needs a reminder.'}
-      ]
-    },
-    player_plan:{
-      title:'Build a Player Plan',
-      purpose:'Choose your shots. Know when to commit.',
-      short_explanation:'Turn the club’s approach into your own plan: your shots, when to use them and how you’ll build an innings.',
-      target_tab:playerPlanTarget,
-      tutorial:[
-        {title:'Start with Core',body:'Choose the shots you trust, the balls you’ll leave or defend, and the cues that help you reset.',target_tab:playerPlanTarget},
-        {title:'Plan for the formats you play',body:'Answer the format prompts using your strengths and likely match situations. Due dates show which plans your Playing Group needs; other formats are optional.'},
-        {title:'Turn your plan into practice',body:'Complete Core and a format to unlock personalised How We Train suggestions for that format.',target_tab:'howwetrain'},
-        {title:'Keep your plan useful',body:'Return to My Player Plan to review your choices. Player Home points you to your next plan, training or reflection task.',...(isPlayerUser()?{target_tab:'playerhome'}:{})}
-      ]
-    },
-    how_we_train:{
-      title:'Use How We Train',
-      purpose:'Practise your plan. Commit when the ball is there.',
-      short_explanation:'Your Player Plan generates personalised How We Train suggestions. Practise your chosen shots and decisions so you can trust them in a match.',
-      target_tab:'howwetrain',
-      tutorial:[
-        {title:'Start with your Player Plan',body:'Complete Core and a format. How We Train then builds practice suggestions around your own game.',target_tab:playerPlanTarget},
-        {title:'Choose a useful focus',body:'Use your plan and recent feedback to pick what needs practice: a scoring shot, leaving well, taking a single or recognising the right ball.'},
-        {title:'Practise the decision and the skill',body:'Recreate the balls and situations you’ll face. Recognise the opportunity, commit to your choice and practise executing it.'},
-        {title:'Recognise preparation and commitment',body:'A dismissal alone does not make the choice wrong. Support the commitment, discuss decision and execution separately, and choose useful practice.'},
-        {title:'Review Coach Conversations',body:'Your Coach Conversations in How We Train hold current observations, discussion notes and agreed training work. Review dates are optional. Add a progress note or mark Discussed / Actioned when finished; completed conversations move into Past conversations.',target_tab:'howwetrain'}
-      ]
-    },
-    feedback_loop:{
-      title:"Player and coach feedback",
-      purpose:"Learn from the innings, not just the dismissal.",
-      short_explanation:"Record match or training observations, then use Coach Conversations to discuss them and agree what happens next. General coaching notes do not require an innings reflection.",
-      target_tab:feedbackTarget,
-      tutorial:[
-        {"title": "Add an observation", "body": "In Players, open the player’s Coach Conversations and choose Add match observation or Add training observation. Coaches with edit access can add observations; the original author can edit their own observation.",target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
-        {"title": "Choose whether it concerns the Player Plan", "body": "For a general note, select This isn’t about their Player Plan. The player can read it immediately without an innings reflection. For plan-related match feedback, the player records their own view before seeing the coach’s answers. Training observations remain immediately visible."},
-        {"title": "Compare decisions and execution", "body": "For plan-related feedback, consider the whole innings and the dismissal ball separately. Recognise preparation and commitment, even when execution falls short. Use different perspectives to start a useful conversation."},
-        {"title": "Flag a conversation when needed", "body": "Select Requires a coaching conversation, add a training focus, or set an optional review date. These feed the same Coach Conversations filter and player alerts. A plain note stays Current without automatically requesting a conversation."},
-        {"title": "Record what happens next", "body": "Open Add note / mark Discussed or Actioned to record the discussion, keep it open with an optional review date, or complete it. Any coach with edit access can follow it through, even if another coach wrote the observation."}
-      ]
-    },
-    coach_conversations:{
-      title:"Coach Conversations",
-      purpose:"Discuss the evidence and agree the next step.",
-      short_explanation:"One place for observations that need discussion, agreed actions and review dates. Coaches use Players → Coach Conversations; players find their shared conversations in How We Train.",
-      target_tab:feedbackTarget,
-      tutorial:[
-        {"title": "Find conversations needing attention", "body": "In Players, choose Coach Conversations from Show players, or use the compact reminder’s View button. This combines requested conversations, open follow-ups and feedback patterns, counting each player once. The reminder disappears when none need attention or when the filter is already selected.",target_tab:feedbackTarget,...(staff?{focus:'coach_conversations'}:{})},
-        {"title": "Open one shared conversation", "body": "Select Open on the player’s highlighted card. The Coach Conversations page keeps the observation, related discussion prompts, author’s edit button and shared progress notes together. Ordinary notes remain Current even when no alert is requested."},
-        {"title": "Add notes or agree an action", "body": "Use Add note / mark Discussed or Actioned to record what happened. For a feedback pattern without an existing action, Agree a next step records a training action. Players can add progress to shared actions in How We Train; coaches need edit access to change them."},
-        {"title": "Use a review date only when useful", "body": "Review dates start blank and are optional. A date can be added, changed or removed while the conversation is open. A date flags the item for coach and player; it is highlighted when due. Clearing a date removes that reminder, while any separate training focus or conversation request remains active."},
-        {"title": "Complete it and keep the history", "body": "Choose Discussed / Actioned or Close — no further action needed, and record a short note. This clears that conversation’s alerts for coach and player and moves the thread into collapsed Past conversations. Other unresolved conversations remain. Reading an unread note clears its bell badge only; it does not complete the conversation."}
-      ]
-    }
-  };
-  if(copy[item.capability_key])Object.assign(item,copy[item.capability_key]);
-  else if(Array.isArray(item.tutorial))item.tutorial=item.tutorial.map(step=>({...step}));
-  const currentLabel=value=>typeof value==='string'?value.replace(/\b(?:Batting )?Philosophy Workshop\b/g,'Batting Philosophy Workshop').replace(/\bMy Batting\b/g,'Player Home'):value;
-  for(const field of ['title','purpose','short_explanation'])item[field]=currentLabel(item[field]);
-  if(Array.isArray(item.tutorial))item.tutorial=item.tutorial.map(step=>({...step,title:currentLabel(step.title),body:currentLabel(step.body)}));
-  return item;
+  const source=CLUB_BATTING_HELP[capability.capability_key];
+  if(!source)return {...capability,tutorial:(capability.tutorial||[]).map(step=>({...step}))};
+  const resolve=target=>target==='$player_plan'?(!isPlayerUser()&&canUsePlayersWorkspace()?'players':'myplan'):target==='$feedback'||target==='$training'?(canUsePlayersWorkspace()?'players':'howwetrain'):target;
+  return {...capability,title:source.title,purpose:source.purpose,short_explanation:source.short_explanation,
+    target_tab:resolve(source.target_tab),tutorial:source.tutorial.map(step=>{
+      const result={...step};if(result.target_tab)result.target_tab=resolve(result.target_tab);
+      if(result.focus==='coach_conversations'&&result.target_tab!=='players')delete result.focus;
+      return result;
+    })};
 }
+// END GENERATED HELP CATALOGUE
 
 function guideMessagesHtml(messages=[],emptyText='Ask anything about how Club Batting works at your club.'){
   const visible=guideVisibleMessages(messages);
@@ -3094,6 +3747,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">I’d rather speak to someone</button><p class="help">Request a conversation with the Club Batting team. Your question and Guide conversation go with it.</p><div id="guideHandoffBox" hidden><label for="guideHandoffReason">What would you like to discuss?</label><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
     </section>
   <h2 class="guide-process-heading" id="guideProcessHeading">Help & Tutorials · Explore the process</h2>
+  <div class="field"><label for="guideTopicSearch">Find help</label><input id="guideTopicSearch" type="search" placeholder="Search topics, e.g. non-playing, reset or review date"><small id="guideTopicSearchStatus" role="status"></small></div>
   <div class="guide-layout${isOverview?' guide-is-overview':''}">
     <nav class="guide-topic-list" aria-label="Help topics in process order">
       ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${c.capability_key!=='whole_process'&&progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
@@ -3110,6 +3764,15 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   </div>`;
 
   await renderGuideInterventionInto(document.getElementById('guideInterventionSlot'));
+  document.getElementById('guideTopicSearch').oninput=()=>{
+    const query=document.getElementById('guideTopicSearch').value.trim().toLowerCase();let count=0;
+    document.querySelector('.guide-topic-list').querySelectorAll('[data-guide-topic]').forEach(button=>{
+      const topic=all.find(c=>c.capability_key===button.dataset.guideTopic);
+      const searchable=[topic?.title,topic?.short_explanation,...(topic?.tutorial||[]).flatMap(step=>[step.title,step.body])].join(' ').toLowerCase();
+      button.hidden=!!query&&!searchable.includes(query);if(!button.hidden)count++;
+    });
+    document.getElementById('guideTopicSearchStatus').textContent=query?`${count} topic${count===1?'':'s'} found`:'';
+  };
   document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;return renderClubBattingGuide({revealTutorial:true});});
   document.querySelectorAll('[data-guide-target]').forEach(b=>b.onclick=()=>guideGoToTarget(b.dataset.guideTarget,b.dataset.guideFocus||''));
   document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,selectedFocus));
