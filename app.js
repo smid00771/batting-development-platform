@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.24 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.25 — coach and player video wording
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.24';
+const APP_UI_VERSION='0.8.62.25';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -9545,14 +9545,15 @@ function normaliseCoachingYouTubeUrl(raw){
   if(stamp!==undefined&&!/^([0-9]{1,7}|[0-9]{1,4}h([0-9]{1,4}m)?([0-9]{1,4}s)?|[0-9]{1,4}m([0-9]{1,4}s)?|[0-9]{1,7}s)$/.test(stamp))throw new Error('Use YouTube Share > Start at for a valid video start time.');
   return `https://www.youtube.com/watch?v=${videoId}${stamp===undefined?'':`&t=${stamp}`}`;
 }
-function coachingVideoFields(prefix,video=null){
+function coachingVideoFields(prefix,video=null,{playerRequest=false}={}){
+  const example=playerRequest?'my footwork against the short ball':'let’s review your footwork against the short ball';
   return `<fieldset style="border:1px solid #dce1ed;border-radius:12px;padding:16px;margin:16px 0"><legend>YouTube link (optional)</legend><p class="help">Upload your video to YouTube first, then paste its link here. Club Batting does not upload or store video files.</p>
     <div class="field"><label for="${prefix}VideoUrl">YouTube video link</label><input type="url" id="${prefix}VideoUrl" maxlength="2048" placeholder="https://youtu.be/…" value="${esc(video?.url||'')}"><p class="help">Use YouTube’s Share link. “Start at” can take someone straight to the moment you want to discuss.</p></div>
-    <div class="field"><label for="${prefix}VideoNote">What should we look at? (optional)</label><textarea id="${prefix}VideoNote" maxlength="500" rows="2" placeholder="e.g. Watch 0:35–0:45 — my footwork against the short ball">${esc(video?.note||'')}</textarea></div>
+    <div class="field"><label for="${prefix}VideoNote">What should we look at? (optional)</label><textarea id="${prefix}VideoNote" maxlength="500" rows="2" placeholder="e.g. Watch 0:35–0:45 — ${esc(example)}">${esc(video?.note||'')}</textarea></div>
 <details style="margin:12px 0"><summary>How do I share just one ball or shot?</summary>
       <ol><li><strong>For a separate short video:</strong> trim a copy of your own footage on your phone or computer. Include a few seconds before the ball and just after the shot. Upload that short video to YouTube, choose Unlisted, then copy its Share link.</li>
       <li><strong>For a moment in a longer YouTube video:</strong> pause just before the ball, choose Share, turn on Start at (or the displayed time on your phone), then Copy link. Paste it above.</li>
-      <li><strong>Tell us what to watch:</strong> for example, “Watch 2:14–2:24 — my footwork against the short ball.”</li></ol>
+      <li><strong>Tell us what to watch:</strong> for example, “Watch 2:14–2:24 — ${esc(example)}.”</li></ol>
       <p class="help">A start-time link starts at that moment; it does not stop after the shot or hide the rest of the video. To share only that ball, use a separately trimmed video. If Start at is unavailable, paste the normal link and put the start and finish times in your note.</p>
     </details>
     <p class="help">The video opens on YouTube. An unlisted video can be viewed and shared by anyone with its link. Only share footage you have permission to share.</p>
@@ -9619,7 +9620,7 @@ async function renderCoachConversationRequestForm(){
     <div class="field"><label for="coachRequestMessage">What would you like to discuss?</label><textarea id="coachRequestMessage" rows="3" maxlength="500" placeholder="A short explanation is enough."></textarea></div>
     <div class="field"><label for="coachRequestSearch">Find someone in your club (optional)</label><input type="search" id="coachRequestSearch" placeholder="Search by name"></div>
     <div class="field"><label for="coachRequestPerson">Who would you like to speak with?</label><select id="coachRequestPerson"></select><p class="help" id="coachRequestPeopleStatus"></p></div>
-    ${coachingVideoFields('coachRequest')}
+    ${coachingVideoFields('coachRequest',null,{playerRequest:true})}
     <p class="help">Shared with your preferred person and club staff who already have access to your coaching records. Choosing a teammate gives them access to this conversation only. With no preference, the authorised coaching team can pick it up.</p>
     <div class="btnrow"><button class="btn" id="saveCoachRequest">Request conversation</button><button class="btn ghost" id="cancelCoachRequest">Cancel</button><span id="coachRequestStatus" role="status"></span></div>
   </section>`;
