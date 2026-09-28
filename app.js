@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.25 — coach and player video wording
+// Club Batting 0.8.62.26 — coach innings-note example
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.25';
+const APP_UI_VERSION='0.8.62.26';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -10307,7 +10307,7 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
       <div class="field"><label>Opposition <span>optional</span></label><input id="staffMatchOpposition" maxlength="160" value="${esc(match?.opposition||'')}"></div>
       <div class="field"><label>Score <span>optional</span></label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}"></div>
     </fieldset>
-    <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" ${sharedReadonly?'disabled':''} maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Pulled a short ball; caught on the boundary"></div>
+    <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" ${sharedReadonly?'disabled':''} maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Caught at point driving on the up; the plan was to wait for a fuller ball."></div>
     ${observationPurposeField(feedback)}
     ${coachingVideoFields('staffObservation',action?.video)}
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","The approach moved away from the plan"]],feedback?.batting_to_plan||'mostly')}</div>
