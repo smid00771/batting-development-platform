@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.23 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.24 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.23';
+const APP_UI_VERSION='0.8.62.24';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1469,7 +1469,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(routeClub===club.id){
-    if(['playerhome','myplan','howwebat','howwetrain','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
+    if(['playerhome','myplan','howwebat','howwetrain','conversations','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
       if(routeTab==='myplan')builderSection='core';
     }
@@ -1764,6 +1764,7 @@ function canOpenClubTab(tab){
   if(tab==='plan')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead());
   if(tab==='howwebat')return howWeBatVersions.length>0||(!clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()));
   if(tab==='myplan')return isPlayerUser();
+  if(tab==='conversations')return !!(session&&membership&&club);
   if(tab==='howwetrain')return true;
   return tab==='guide';
 }
@@ -2002,7 +2003,7 @@ async function savePhilosophyResponseBeforeNavigation(){
 let myCoachingUpdates={clubId:null,userId:null,updates:[],error:'',loaded:false};
 let coachingUpdatesSequence=0,coachingNoteObserver=null,pendingCoachingUpdate=null;
 const coachingSeenPending=new Set();
-function coachingUpdateScopeMatches(state=myCoachingUpdates){return state.clubId===club?.id&&state.userId===session?.user?.id&&!!myPlayer&&isPlayerUser();}
+function coachingUpdateScopeMatches(state=myCoachingUpdates){return state.clubId===club?.id&&state.userId===session?.user?.id&&!!membership&&!!club;}
 
 function renderCoachingUpdatesMenu(){
   const host=document.getElementById('coachingUpdatesHost');if(!host)return;
@@ -2013,24 +2014,26 @@ function renderCoachingUpdatesMenu(){
       <svg width="18" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
       Coaching ${rows.length?`<span class="coaching-unread-badge">${rows.length}</span>`:''}<span class="account-menu-chevron" aria-hidden="true">⌄</span>
     </summary><div class="account-menu-popover coaching-updates-popover"><strong>Coaching updates</strong>
-      <div role="status" aria-live="polite" class="account-access-status">${state.error?'Updates could not be checked. Try again.':!state.loaded?'Checking for new notes…':rows.length?`${rows.length} unread coaching note${rows.length===1?'':'s'}`:'You’re up to date.'}</div>
-      ${rows.map(u=>`<button type="button" class="account-menu-action" data-open-coaching-update="${esc(u.source_key)}">${esc(u.author_name)} · ${u.source_kind==='match'?'Match observation':'Training observation'}<small>${esc(formatDateShort(u.changed_at))} · ${u.can_open?'View note':'Add your reflection to view'}</small></button>`).join('')}
+      <div role="status" aria-live="polite" class="account-access-status">${state.error?'Updates could not be checked. Try again.':!state.loaded?'Checking for new notes…':rows.length?`${rows.length} unread coaching update${rows.length===1?'':'s'}`:'You’re up to date.'}</div>
+      ${rows.map(u=>`<button type="button" class="account-menu-action" data-open-coaching-update="${esc(u.source_key)}">${esc(u.author_name)} · ${u.source_kind==='conversation'?'Coach Conversation':u.source_kind==='match'?'Match observation':'Training observation'}<small>${esc(formatDateShort(u.changed_at))} · ${u.can_open?'View note':'Add your reflection to view'}</small></button>`).join('')}
+      <button type="button" class="account-menu-action" id="openMyConversations">Open Coach Conversations</button>
       <button type="button" class="account-menu-action" id="checkCoachingUpdates">Check for updates</button>
     </div></details>`;
   document.getElementById('coachingUpdatesToggle').onclick=()=>{void refreshMyCoachingUpdates();};
+  document.getElementById('openMyConversations').onclick=async()=>{if(!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;document.getElementById('coachingUpdatesMenu').open=false;currentTab='conversations';await renderTab();};
   document.getElementById('checkCoachingUpdates').onclick=()=>refreshMyCoachingUpdates();
   host.querySelectorAll('[data-open-coaching-update]').forEach(button=>button.onclick=async()=>{
     const update=myCoachingUpdates.updates.find(u=>u.source_key===button.dataset.openCoachingUpdate);
     if(!update||!coachingUpdateScopeMatches()||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
     pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
     document.getElementById('coachingUpdatesMenu').open=false;
-    currentTab='howwetrain';howWeTrainReflectionEditId=update.source_kind==='match'&&!update.can_open?update.match_id:null;
+    currentTab=update.source_kind==='conversation'?'conversations':'howwetrain';howWeTrainReflectionEditId=update.source_kind==='match'&&!update.can_open?update.match_id:null;
     await renderTab();
   });
 }
 
 async function refreshMyCoachingUpdates(){
-  if(!document.getElementById('coachingUpdatesHost')||!myPlayer||!isPlayerUser())return;
+  if(!document.getElementById('coachingUpdatesHost')||!membership||!club||!session?.user)return;
   const clubId=club.id,userId=session?.user?.id,sequence=++coachingUpdatesSequence;
   if(!coachingUpdateScopeMatches())myCoachingUpdates={clubId,userId,updates:[],error:'',loaded:false};
   renderCoachingUpdatesMenu();
@@ -2046,11 +2049,11 @@ async function refreshMyCoachingUpdates(){
 }
 
 function coachingNoteElement(update){
-  return document.querySelector(update.source_kind==='match'?`[data-coach-feedback-id="${update.source_id}"]`:`[data-training-observation-id="${update.source_id}"]`);
+  return document.querySelector(update.source_kind==='conversation'?`[data-coaching-action-card="${update.source_id}"]`:update.source_kind==='match'?`[data-coach-feedback-id="${update.source_id}"]`:`[data-training-observation-id="${update.source_id}"]`);
 }
 async function acknowledgeCoachingUpdate(update){
   const note=coachingNoteElement(update);
-  if(currentTab!=='howwetrain'||!coachingUpdateScopeMatches()||!note||note.dataset.coachingNoteUpdatedAt!==update.changed_at)return;
+  if(!['howwetrain','conversations'].includes(currentTab)||!coachingUpdateScopeMatches()||!note||note.dataset.coachingNoteUpdatedAt!==update.changed_at)return;
   const scope=myCoachingUpdates,key=`${scope.clubId}:${scope.userId}:${update.source_key}:${update.changed_at}`;
   if(coachingSeenPending.has(key))return;
   coachingSeenPending.add(key);
@@ -2067,10 +2070,10 @@ async function acknowledgeCoachingUpdate(update){
 
 function watchVisibleCoachingNotes(){
   coachingNoteObserver?.disconnect();coachingNoteObserver=null;
-  if(currentTab!=='howwetrain'||!coachingUpdateScopeMatches()||typeof IntersectionObserver==='undefined')return;
+  if(!['howwetrain','conversations'].includes(currentTab)||!coachingUpdateScopeMatches()||typeof IntersectionObserver==='undefined')return;
   const scope=myCoachingUpdates;
   coachingNoteObserver=new IntersectionObserver(entries=>{
-    if(!coachingUpdateScopeMatches(scope)||currentTab!=='howwetrain')return;
+    if(!coachingUpdateScopeMatches(scope)||!['howwetrain','conversations'].includes(currentTab))return;
     for(const entry of entries){
       if(!entry.isIntersecting)continue;
       const update=myCoachingUpdates.updates.find(u=>coachingNoteElement(u)===entry.target);
@@ -2095,7 +2098,7 @@ function coachingHistoryHtml(items,kind,limit,renderItem){
 async function revealPendingCoachingUpdate(){
   watchVisibleCoachingNotes();
   const update=pendingCoachingUpdate;
-  if(!update||!coachingUpdateScopeMatches(update)||currentTab!=='howwetrain')return;
+  if(!update||!coachingUpdateScopeMatches(update)||!['howwetrain','conversations'].includes(currentTab))return;
   const history=document.getElementById('trainingFeedbackLoop');if(history)history.open=true;
   const note=coachingNoteElement(update);
   if(note){
@@ -2227,7 +2230,7 @@ function renderShell(){
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <button class="btn secondary" id="openClubHelp" type="button" aria-label="Ask the Club Batting Guide and explore tutorials">Ask the Guide</button>
-          ${isPlayerUser()&&myPlayer?'<div id="coachingUpdatesHost"></div>':''}
+          <div id="coachingUpdatesHost"></div>
           ${accountMenuHtml({allowJoin:true,allowInvolvement:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
@@ -2716,6 +2719,7 @@ function renderTab(){
     howwebat:renderPublishedHowWeBat,
     myplan:renderMyPlan,
     howwetrain:renderHowWeTrain,
+    conversations:renderCoachConversations,
     guide:renderClubBattingGuide
   };
   try{
@@ -2770,7 +2774,7 @@ async function openClubBattingGuideTopic(capabilityKey='whole_process',{focus='t
 }
 
 function guideTargetLabel(tab){
-  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',howwetrain:'How We Train'}[tab]||'Open area');
+  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',howwetrain:'How We Train',conversations:'Coach Conversations'}[tab]||'Open area');
 }
 
 function guideTargetUnavailableReason(tab,focus=''){
@@ -2816,7 +2820,7 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
-const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "how_we_train", "feedback_loop", "coach_conversations", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
+const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "how_we_train", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
 
 function guideTopicNumber(key){
   const index=GUIDE_TOPIC_ORDER.indexOf(key);
@@ -3406,6 +3410,10 @@ const CLUB_BATTING_HELP = {
         "body": "For plan-related feedback, consider the whole innings and the dismissal ball separately. Recognise preparation and commitment, even when execution falls short. Use different perspectives to start a useful conversation."
       },
       {
+        "title": "Attach a video when useful",
+        "body": "Both Match and Training Observation forms have an optional YouTube video link and What should we look at? note. Use a Share link, with Start at if useful. Plan-related match video waits for the player’s independent reflection; general notes and training videos are visible immediately."
+      },
+      {
         "title": "Flag a conversation when needed",
         "body": "Select Needs a coaching conversation, add a training focus, or set an optional review date. These feed the same Coach Conversations filter and player alerts. A plain note stays Current without automatically requesting a conversation."
       },
@@ -3430,7 +3438,7 @@ const CLUB_BATTING_HELP = {
   "coach_conversations": {
     "title": "Coach Conversations",
     "purpose": "Discuss the evidence and agree the next step.",
-    "short_explanation": "One place for observations that need discussion, agreed actions and review dates. Coaches use Players → Coach Conversations; players find their shared conversations in How We Train.",
+    "short_explanation": "One shared conversation for observations, player requests, discussion notes and optional review dates. Open Coaching beside Account for your conversations; authorised staff can also use the Players filter.",
     "tutorial": [
       {
         "title": "Find conversations needing attention",
@@ -3444,7 +3452,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Add notes or agree an action",
-        "body": "Use Add note / mark Discussed or Actioned to record what happened. For a feedback pattern without an existing action, Agree a next step records a training action. Players can add progress to shared actions in How We Train; coaches need edit access to change them."
+        "body": "Use Add note / mark Discussed or Actioned to record what happened. For a feedback pattern without an existing action, Agree a next step records a training action. Players can update their own threads. Authorised staff need edit access; a preferred club member can update only the player request shared with them."
       },
       {
         "title": "Use a review date only when useful",
@@ -3468,12 +3476,107 @@ const CLUB_BATTING_HELP = {
     "sort_order": 160,
     "active": true
   },
+  "request_conversation": {
+    "capability_key": "request_conversation",
+    "title": "Request a Coach Conversation",
+    "purpose": "Ask for help from someone in your club.",
+    "short_explanation": "Players can start a conversation, choose a preferred club member and optionally attach a YouTube clip. The request joins the existing coaching workflow.",
+    "target_tab": "conversations",
+    "tutorial": [
+      {
+        "title": "Start with your question",
+        "body": "Use Request a Coach Conversation on Player Home or How We Train, or open Coaching beside Account > Open Coach Conversations. You can request help before completing your Player Plan and before the club publishes its setup. Say what you would like to discuss.",
+        "target_tab": "conversations"
+      },
+      {
+        "title": "Choose a preferred person, or no preference",
+        "body": "Search current registered club members and choose a coach, captain, administrator or teammate. Playing/non-playing involvement and coaching roles do not restrict this list. No preference sends it to the authorised coaching team. Searching keeps your selected person selected."
+      },
+      {
+        "title": "Add a clip if it helps",
+        "body": "Paste an optional YouTube video link and a short note about what to look at. YouTube Share > Start at can include the exact moment. A link is optional; your message is enough."
+      },
+      {
+        "title": "Know who can see it",
+        "body": "Your preferred person and club staff who already have access to your coaching records can read the request. A selected teammate gets only that conversation and its attached video, not your full Player Plan or other notes. It is not a private message hidden from authorised club staff."
+      },
+      {
+        "title": "Pick up a request or say you are unavailable",
+        "body": "The preferred person opens Coaching > Open Coach Conversations and chooses I can help, or adds a progress note. I’m unavailable leaves the same request open for the authorised coaching team and records the response for the player. A person without wider access loses access to the thread after declining."
+      },
+      {
+        "title": "Follow through in the same conversation",
+        "body": "Use Add note / mark Discussed or Actioned to share progress, set/change/clear an optional review date, or complete the discussion. A player can choose Withdraw my request if it is no longer needed. Closed conversations remain in collapsed Past; open requests also put the player in the staff Coach Conversations filter."
+      }
+    ],
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 165,
+    "active": true
+  },
+  "youtube_video": {
+    "capability_key": "youtube_video",
+    "title": "Use video in a Coach Conversation",
+    "purpose": "Share a link to footage hosted on YouTube.",
+    "short_explanation": "Attach a YouTube link to a coach’s Match or Training Observation, or to a player’s conversation request. Keep the discussion and agreed action in Club Batting.",
+    "target_tab": "conversations",
+    "tutorial": [
+      {
+        "title": "Put the video on YouTube first",
+        "body": "Videos are uploaded to YouTube, not Club Batting. Club Batting stores only a YouTube link and optional note; it does not upload, host, analyse or edit video files. Use footage you have permission to share. YouTube controls whether the viewer can watch it."
+      },
+      {
+        "title": "Copy a link to the useful moment",
+        "body": "For a longer video, pause just before the ball. Select YouTube Share, turn on Start at (or the displayed time on a phone), then Copy link and paste it into Club Batting. In What should we look at?, write e.g. “Watch 2:14–2:24 — my footwork against the short ball.” If the time option is unavailable, use the normal link and include both times in your note."
+      },
+      {
+        "title": "Share only one ball or shot",
+        "body": "Trim a copy of your own footage in your phone/computer video editor, from a few seconds before the delivery to just after the shot. Keep the original. Upload the short copy to YouTube as Unlisted, copy its Share link, and paste it into the observation or request. Only use footage you have permission to share."
+      },
+      {
+        "title": "A start time is not an end time",
+        "body": "A timestamp link starts at the chosen moment; it does not automatically stop after the shot or restrict access to the rest of the video. If you want to share only that ball, upload a separately trimmed copy or ask the footage owner for one. Club Batting does not trim the original YouTube video."
+      },
+      {
+        "title": "Attach it to the right record",
+        "body": "Coaches with edit access add the video to a Match or Training Observation. The author can edit or remove that link through Edit my observation. Players can attach a video when they create a Coach Conversation request. Save once to keep the record and video together."
+      },
+      {
+        "title": "Keep the independent reflection",
+        "body": "For a plan-related Match Observation, the player adds their own reflection before the coach’s video becomes available. General match notes and training observations do not require that reflection. A video on a player’s own request is shared immediately."
+      },
+      {
+        "title": "Open YouTube and return to the discussion",
+        "body": "Open video on YouTube opens a separate tab. Watch there, then return to Club Batting to add discussion/progress notes or mark Discussed / Actioned. No automatic video assessment or YouTube comment import occurs."
+      },
+      {
+        "title": "Understand unlisted links",
+        "body": "An unlisted YouTube video can be viewed and shared by anyone with its link. Club Batting’s permissions cannot stop someone forwarding that link. A private video requires the viewer to have YouTube access. If a video is private, deleted or unavailable, its owner must resolve access on YouTube."
+      }
+    ],
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 166,
+    "active": true
+  },
   "notifications": {
     "capability_key": "notifications",
     "title": "Read coaching updates and reviews",
     "purpose": "Notice what is new and what still needs attention.",
     "short_explanation": "Unread notes and open conversations are different: reading clears the badge; completion clears the work.",
-    "target_tab": "howwetrain",
+    "target_tab": "conversations",
     "audience": [
       "admin",
       "head_coach",
@@ -3485,7 +3588,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Look beside Account",
-        "body": "A player’s coaching bell shows unread coaching notes in the current club. It checks when the app opens and when returning to the browser tab/window. This is an in-app badge, not a phone push notification."
+        "body": "The Coaching bell beside Account shows unread observations for players and unread conversation requests or updates for their participants and authorised staff. Non-playing admins and selected teammates can use it too. It checks on opening the app and returning to the browser tab/window. It is an in-app badge, not a phone push notification."
       },
       {
         "title": "Open the note",
@@ -3493,12 +3596,12 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Keep the conversation open until dealt with",
-        "body": "Reading clears that note’s unread badge only. An open conversation, training focus or dated review remains until it is completed or its relevant reminder is removed. The player sees shared conversations in How We Train.",
-        "target_tab": "howwetrain"
+        "body": "Reading clears that update’s unread badge only. A conversation stays Current until explicitly completed or withdrawn. Open Coaching > Open Coach Conversations for your own threads and requests to you; players also see their own notes in How We Train.",
+        "target_tab": "conversations"
       },
       {
         "title": "Complete it together",
-        "body": "The player or a coach with edit access can add progress on a shared action. Discussed / Actioned or Close clears that thread’s coach/player alerts and keeps the history in Past conversations. Another unresolved item can still leave the player in the filter."
+        "body": "The player, staff with edit access or a selected request participant can add progress to the shared thread. Discussed / Actioned or Close clears that thread’s alerts and keeps its history in Past conversations. Reading or accepting a request does not complete it."
       },
       {
         "title": "Check the latest state",
@@ -9331,14 +9434,14 @@ function feedbackEntryValues(form){
   ]));
 }
 function captureFeedbackEntryBaseline(){
-  for(const id of ['myReflectionForm','staffDevelopmentForm','coachingActionForm','coachingReviewForm']){
+  for(const id of ['myReflectionForm','staffDevelopmentForm','coachingActionForm','coachingReviewForm','coachRequestForm']){
     const form=document.getElementById(id);
     if(form&&!feedbackEntryBaselines.has(form))feedbackEntryBaselines.set(form,feedbackEntryValues(form));
   }
 }
 function confirmLeaveFeedbackEntry(){
   if(typeof coachingActionSavePending!=='undefined'&&coachingActionSavePending){alert('Your agreed action is still saving. Please wait before leaving.');return false;}
-  const dirty=['myReflectionForm','staffDevelopmentForm','coachingActionForm','coachingReviewForm'].some(id=>{
+  const dirty=['myReflectionForm','staffDevelopmentForm','coachingActionForm','coachingReviewForm','coachRequestForm'].some(id=>{
     const form=document.getElementById(id);
     return form&&feedbackEntryBaselines.has(form)&&feedbackEntryBaselines.get(form)!==feedbackEntryValues(form);
   });
@@ -9427,6 +9530,144 @@ function coachingReviewDateDefault(){
   const date=new Date();date.setDate(date.getDate()+7);
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
+// Shared conversation request and optional video controls.
+function normaliseCoachingYouTubeUrl(raw){
+  const text=String(raw||'').trim();if(!text)return '';
+  if(text.length>2048||/[\s\x00-\x1f\x7f]/.test(text))throw new Error('Paste a valid YouTube video link.');
+  let videoId,query='',match=text.match(/^https?:\/\/(?:www\.|m\.)?youtube\.com\/watch\?([^#]*)(?:#.*)?$/i);
+  if(match){query=match[1];videoId=query.match(/(?:^|&)v=([A-Za-z0-9_-]{11})(?:&|$)/)?.[1];}
+  else{
+    match=text.match(/^https?:\/\/(?:www\.)?youtu\.be\/([A-Za-z0-9_-]{11})\/?(?:\?([^#]*))?(?:#.*)?$/i)||text.match(/^https?:\/\/(?:www\.|m\.)?youtube\.com\/(?:shorts|live|embed)\/([A-Za-z0-9_-]{11})\/?(?:\?([^#]*))?(?:#.*)?$/i);
+    if(match){videoId=match[1];query=match[2]||'';}
+  }
+  if(!videoId)throw new Error('Use a YouTube watch, share, Shorts or live-video link.');
+  const stamp=query.match(/(?:^|&)(?:t|start)=([^&]*)/)?.[1]??text.match(/#t=([^&]*)$/)?.[1];
+  if(stamp!==undefined&&!/^([0-9]{1,7}|[0-9]{1,4}h([0-9]{1,4}m)?([0-9]{1,4}s)?|[0-9]{1,4}m([0-9]{1,4}s)?|[0-9]{1,7}s)$/.test(stamp))throw new Error('Use YouTube Share > Start at for a valid video start time.');
+  return `https://www.youtube.com/watch?v=${videoId}${stamp===undefined?'':`&t=${stamp}`}`;
+}
+function coachingVideoFields(prefix,video=null){
+  return `<fieldset style="border:1px solid #dce1ed;border-radius:12px;padding:16px;margin:16px 0"><legend>YouTube link (optional)</legend><p class="help">Upload your video to YouTube first, then paste its link here. Club Batting does not upload or store video files.</p>
+    <div class="field"><label for="${prefix}VideoUrl">YouTube video link</label><input type="url" id="${prefix}VideoUrl" maxlength="2048" placeholder="https://youtu.be/…" value="${esc(video?.url||'')}"><p class="help">Use YouTube’s Share link. “Start at” can take someone straight to the moment you want to discuss.</p></div>
+    <div class="field"><label for="${prefix}VideoNote">What should we look at? (optional)</label><textarea id="${prefix}VideoNote" maxlength="500" rows="2" placeholder="e.g. Watch 0:35–0:45 — my footwork against the short ball">${esc(video?.note||'')}</textarea></div>
+<details style="margin:12px 0"><summary>How do I share just one ball or shot?</summary>
+      <ol><li><strong>For a separate short video:</strong> trim a copy of your own footage on your phone or computer. Include a few seconds before the ball and just after the shot. Upload that short video to YouTube, choose Unlisted, then copy its Share link.</li>
+      <li><strong>For a moment in a longer YouTube video:</strong> pause just before the ball, choose Share, turn on Start at (or the displayed time on your phone), then Copy link. Paste it above.</li>
+      <li><strong>Tell us what to watch:</strong> for example, “Watch 2:14–2:24 — my footwork against the short ball.”</li></ol>
+      <p class="help">A start-time link starts at that moment; it does not stop after the shot or hide the rest of the video. To share only that ball, use a separately trimmed video. If Start at is unavailable, paste the normal link and put the start and finish times in your note.</p>
+    </details>
+    <p class="help">The video opens on YouTube. An unlisted video can be viewed and shared by anyone with its link. Only share footage you have permission to share.</p>
+  </fieldset>`;
+}
+function coachingVideoValues(prefix){
+  const video_url=normaliseCoachingYouTubeUrl(val(`${prefix}VideoUrl`)),video_note=val(`${prefix}VideoNote`);
+  if(video_note&&!video_url)throw new Error('Add the YouTube link for your video note, or leave both blank.');
+  return {video_url,video_note};
+}
+function renderCoachingVideo(video){
+  if(!video?.url)return '';
+  let url;try{url=normaliseCoachingYouTubeUrl(video.url);}catch{return '';}
+  return `<div class="notice compact coaching-video" style="margin:12px 0"><strong>Video to discuss</strong>${video.note?`<p>${esc(video.note)}</p>`:''}<p><a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open video on YouTube ↗</a></p><small>Opens in a new tab. Keep the conversation and agreed next steps here.</small></div>`;
+}
+function conversationRequestDetails(a){
+  if(!a.is_player_request)return '';
+  const who=a.preferred_user_id&&a.preferred_available!==false?a.preferred_name||'Club member':'Coaching team';
+  return `<div class="notice compact"><strong>${a.is_own_request?'Your request':`Request from ${esc(a.player_name||a.recorded_by_name||'a player')}`}</strong><p>Preferred person: ${esc(who)}${a.request_state==='accepted'?' · Picked up':a.preferred_user_id&&a.preferred_available!==false?' · Awaiting response':' · Open to the authorised coaching team'}</p></div>`;
+}
+function conversationRecipientButtons(a){
+  if(!a.is_player_request||!a.is_preferred_person||a.status!=='open')return '';
+  return `<div class="btnrow" style="margin:12px 0">${a.request_state==='pending'?`<button class="btn secondary" data-respond-coach-request="${esc(a.id)}" data-response="accept">I can help</button>`:''}<button class="btn ghost" data-respond-coach-request="${esc(a.id)}" data-response="unavailable">I’m unavailable</button><span role="status" data-request-response-status="${esc(a.id)}"></span></div>`;
+}
+function bindConversationRecipientControls(feedback,onSaved){
+  document.querySelectorAll('[data-respond-coach-request]').forEach(button=>{
+    let requestId=null;
+    button.onclick=async()=>{
+      if(coachingActionSavePending||!confirmLeaveFeedbackEntry())return;
+      const action=feedback.coaching_actions.find(a=>a.id===button.dataset.respondCoachRequest&&a.is_preferred_person&&a.status==='open');if(!action)return;
+      const response=button.dataset.response;
+      if(response==='unavailable'&&!confirm('Let the player know you’re unavailable? This stays open for the authorised coaching team.'))return;
+      const status=document.querySelector(`[data-request-response-status="${action.id}"]`);
+      const targetClub=club.id,targetUser=session.user.id;
+      requestId ||= globalThis.crypto.randomUUID();coachingActionSavePending=true;button.disabled=true;status.textContent='Saving…';
+      try{
+        const {error}=await supabase.rpc('respond_to_coach_request',{p_action_id:action.id,p_expected_revision:action.revision,p_request_id:requestId,p_response:response});if(error)throw error;
+        coachingActionSavePending=false;status.textContent='Saved.';
+        if(club?.id!==targetClub||session?.user?.id!==targetUser)return;
+        await onSaved();await refreshMyCoachingUpdates();
+      }catch(error){status.textContent=error?.message||'Could not confirm the save. Try again.';button.disabled=false;}
+      finally{coachingActionSavePending=false;}
+    };
+  });
+}
+let conversationPageSequence=0;
+async function openCoachConversationRequest(){
+  if(!myPlayer||!isPlayerUser()||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
+  currentTab='conversations';await renderTab();
+  if(currentTab==='conversations')await renderCoachConversationRequestForm();
+}
+async function renderCoachConversationRequestForm(){
+  const host=document.getElementById('coachRequestFormHost');if(!host||!myPlayer||!isPlayerUser()||!confirmLeaveFeedbackEntry())return;
+  const clubId=club.id,userId=session.user.id,playerId=myPlayer.id;
+  const current=()=>club?.id===clubId&&session?.user?.id===userId&&myPlayer?.id===playerId&&document.getElementById('coachRequestFormHost')===host&&currentTab==='conversations';
+  host.innerHTML='<p role="status">Loading people in your club…</p>';
+  let people;
+  try{
+    const {data,error}=await supabase.rpc('get_conversation_people',{p_club_id:clubId});if(error)throw error;
+    if(!current())return;people=Array.isArray(data?.people)?data.people:[];
+  }catch(error){if(current()){host.innerHTML=`<div class="notice">The club’s people could not load. <button class="btn ghost" id="retryConversationPeople">Try again</button></div>`;document.getElementById('retryConversationPeople').onclick=renderCoachConversationRequestForm;}return;}
+  host.innerHTML=`<section class="card development-entry-form" id="coachRequestForm"><h2>Request a Coach Conversation</h2>
+    <p>Ask about something you want to work on. You can choose a coach, captain, administrator or teammate.</p>
+    <div class="field"><label for="coachRequestMessage">What would you like to discuss?</label><textarea id="coachRequestMessage" rows="3" maxlength="500" placeholder="A short explanation is enough."></textarea></div>
+    <div class="field"><label for="coachRequestSearch">Find someone in your club (optional)</label><input type="search" id="coachRequestSearch" placeholder="Search by name"></div>
+    <div class="field"><label for="coachRequestPerson">Who would you like to speak with?</label><select id="coachRequestPerson"></select><p class="help" id="coachRequestPeopleStatus"></p></div>
+    ${coachingVideoFields('coachRequest')}
+    <p class="help">Shared with your preferred person and club staff who already have access to your coaching records. Choosing a teammate gives them access to this conversation only. With no preference, the authorised coaching team can pick it up.</p>
+    <div class="btnrow"><button class="btn" id="saveCoachRequest">Request conversation</button><button class="btn ghost" id="cancelCoachRequest">Cancel</button><span id="coachRequestStatus" role="status"></span></div>
+  </section>`;
+  const picker=document.getElementById('coachRequestPerson');
+  const drawPeople=()=>{
+    const selected=picker.value||'',query=val('coachRequestSearch').toLowerCase();
+    const matches=people.filter(p=>p.user_id===selected||!query||p.display_name.toLowerCase().includes(query));
+    picker.innerHTML='<option value="">No preference — coaching team</option>'+matches.map(p=>`<option value="${esc(p.user_id)}" ${p.user_id===selected?'selected':''}>${esc(p.display_name)}</option>`).join('');picker.value=selected;
+    document.getElementById('coachRequestPeopleStatus').textContent=query?`${matches.length} people shown. Your selected person stays selected while searching.`:'';
+  };
+  drawPeople();document.getElementById('coachRequestSearch').oninput=drawPeople;
+  const form=document.getElementById('coachRequestForm');captureFeedbackEntryBaseline();form.scrollIntoView({behavior:'smooth',block:'start'});
+  document.getElementById('cancelCoachRequest').onclick=()=>{if(confirmLeaveFeedbackEntry())host.innerHTML='';};
+  let requestId=null,requestPayload=null;
+  document.getElementById('saveCoachRequest').onclick=async()=>{
+    if(coachingActionSavePending||!current())return;
+    const status=document.getElementById('coachRequestStatus');
+    let video;try{video=coachingVideoValues('coachRequest');}catch(error){status.textContent=error.message;return;}
+    const message=val('coachRequestMessage');if(!message){status.textContent='Say what you would like to discuss.';return;}
+    const args={p_club_id:clubId,p_message:message,p_preferred_user_id:picker.value||null,p_video_url:video.video_url,p_video_note:video.video_note};
+    const payload=JSON.stringify(args);if(payload!==requestPayload){requestId=globalThis.crypto.randomUUID();requestPayload=payload;}
+    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
+    try{
+      const {error}=await supabase.rpc('request_my_coach_conversation',{...args,p_request_id:requestId});if(error)throw error;
+      feedbackEntryBaselines.set(form,feedbackEntryValues(form));status.textContent='Requested.';coachingActionSavePending=false;
+      if(!current())return;
+      try{await renderCoachConversations();await refreshMyCoachingUpdates();}catch{status.textContent='Request saved. Reload to see the latest conversation.';}
+    }catch(error){status.textContent=error?.message||'Could not confirm the save. Your request is still here; try again.';restore();}
+    finally{coachingActionSavePending=false;}
+  };
+}
+async function renderCoachConversations(){
+  const page=document.getElementById('page'),clubId=club.id,userId=session.user.id,sequence=++conversationPageSequence;
+  const current=()=>currentTab==='conversations'&&club?.id===clubId&&session?.user?.id===userId&&conversationPageSequence===sequence;
+  page.innerHTML='<p class="splash">Loading Coach Conversations…</p>';
+  try{
+    const [inbox,own]=await Promise.all([supabase.rpc('get_my_coach_conversations',{p_club_id:clubId}),myPlayer&&isPlayerUser()?loadDevelopmentFeedback(myPlayer.id).catch(()=>null):Promise.resolve(null)]);
+    if(!current())return;if(inbox.error)throw inbox.error;
+    const feedback={matches:own?.matches||[],training_observations:own?.training_observations||[],coaching_actions:inbox.data?.actions||[]};
+    page.innerHTML=`<section class="card"><div class="section-label">Your club</div><h1>Coach Conversations</h1><p>Your conversations and requests to you appear here.${canUsePlayersWorkspace()?' Player requests also appear in the Players coaching filter.':''}</p><div class="btnrow">${myPlayer&&isPlayerUser()?'<button class="btn" id="newCoachRequest">Request a Coach Conversation</button>':''}<button class="btn ghost" id="refreshCoachConversations">Refresh conversations</button></div></section><div id="coachRequestFormHost"></div>${renderCoachingActions(feedback,{playerMode:true,includeObservations:true})}`;
+    document.getElementById('newCoachRequest')?.addEventListener('click',renderCoachConversationRequestForm);
+    document.getElementById('refreshCoachConversations').onclick=()=>{if(confirmLeaveFeedbackEntry())return renderCoachConversations();};
+    bindCoachingActionControls(feedback,renderCoachConversations);
+    document.querySelectorAll('[data-edit-my-reflection]').forEach(button=>button.onclick=()=>openPlayerHomeAction({tab:'howwetrain',matchId:button.dataset.editMyReflection,anchor:'myReflectionForm'}));
+    await revealPendingCoachingUpdate();watchVisibleCoachingNotes();
+  }catch(error){if(current())page.innerHTML=`<section class="card notice"><h1>Coach Conversations</h1><p>${esc(error?.message||'Could not load conversations.')}</p><button class="btn ghost" id="retryCoachConversations">Try again</button></section>`;document.getElementById('retryCoachConversations')?.addEventListener('click',renderCoachConversations);}
+}
+
 let coachingActionSavePending=false;
 
 function coachingSignalAction(signal,actions=[]){
@@ -9479,9 +9720,12 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
     const source=includeObservations?(match?renderDevelopmentMatchCard({...match,coach_feedback:[{...note,followup_status:a.status}]},{playerMode,staffCanEdit}):training?renderTrainingObservationCard(training,{staffCanEdit}):''):'';
     const hiddenPlan=playerMode&&match&&!match.player_reflection&&note?.plan_related!==false;
     const isTask=!!(note?.next_training_focus||training?.next_training_focus)||(!a.match_feedback_id&&!a.training_observation_id);
-    return `<article class="training-observation-card" data-coaching-action-card="${esc(a.id)}" style="margin-top:12px">
+    return `<article class="training-observation-card" data-coaching-action-card="${esc(a.id)}" data-coaching-note-updated-at="${esc(a.updated_at||'')}" style="margin-top:12px">
       <div class="section-label">${a.status==='open'?(due?'Review due':a.follow_up_requested===false?'Current note':'Conversation open'):a.status==='completed'?'Discussed / Actioned':'Closed'}${a.review_on?` · Review ${esc(formatDateShort(a.review_on))}`:' · No review date'}</div>
+      ${conversationRequestDetails(a)}
       ${source||`<h3>${esc(a.task)}</h3>`}
+      ${!hiddenPlan?renderCoachingVideo(a.video):''}
+      ${conversationRecipientButtons(a)}
       ${source&&isTask&&(hiddenPlan||a.task!==(note?.next_training_focus||training?.next_training_focus))?`<p><strong>Agreed action:</strong> ${esc(a.task)}</p>`:''}
       ${reasons.length?`<div class="notice compact"><strong>Worth discussing</strong>${reasons.map(r=>`<p data-coach-signal-card="${esc(r.key)}">${esc(r.title)} · ${esc(r.summary)}</p>`).join('')}</div>`:''}
       <p class="help">Recorded by ${esc(a.recorded_by_name||'Club coaching team')}${a.status==='open'?' · Stays current until marked Discussed / Actioned.':''}</p>
@@ -9527,6 +9771,7 @@ function openCoachingConversationForm(signal,outcome,host,onSaved){
 }
 
 function bindCoachingActionControls(feedback,onSaved){
+  bindConversationRecipientControls(feedback,onSaved);
   document.querySelectorAll('[data-review-coaching-action]').forEach(button=>button.onclick=()=>{
     if(coachingActionSavePending||!confirmLeaveFeedbackEntry())return;
     const action=(feedback?.coaching_actions||[]).find(a=>a.id===button.dataset.reviewCoachingAction&&a.can_review&&a.status==='open');
@@ -9535,7 +9780,7 @@ function bindCoachingActionControls(feedback,onSaved){
     document.getElementById('coachingActionForm')?.remove();
     const host=[...document.querySelectorAll('[data-coaching-review-slot]')].find(el=>el.dataset.coachingReviewSlot===action.id);if(!host)return;
     const form=document.createElement('div');form.id='coachingReviewForm';form.className='development-entry-form';
-    form.innerHTML=`<div class="field"><label for="coachingReviewOutcome">What happens next?</label><select id="coachingReviewOutcome"><option value="continue">Keep open — add a note or change review date</option><option value="completed">Discussed / Actioned — complete this conversation</option><option value="stopped">Close — no further action needed</option></select></div><div class="field"><label for="coachingReviewNote">Discussion / progress note</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What did you discuss or do? What happens next?"></textarea></div><div class="field" id="coachingNextReviewField"><label for="coachingNextReviewDate">Review date (optional)</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value="${esc(action.review_on||'')}"></div><p class="help">Your update is shared with the player and authorised coaching team.</p><div class="btnrow"><button class="btn secondary" id="saveCoachingReview">Save review</button><button class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
+    form.innerHTML=`<div class="field"><label for="coachingReviewOutcome">What happens next?</label><select id="coachingReviewOutcome"><option value="continue">Keep open — add a note or change review date</option><option value="completed">Discussed / Actioned — complete this conversation</option><option value="stopped">${action.is_own_request?'Withdraw my request':'Close — no further action needed'}</option></select></div><div class="field"><label for="coachingReviewNote">Discussion / progress note</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What did you discuss or do? What happens next?"></textarea></div><div class="field" id="coachingNextReviewField"><label for="coachingNextReviewDate">Review date (optional)</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value="${esc(action.review_on||'')}"></div><p class="help">Your update is shared with the player${action.is_player_request?', the preferred person':''} and authorised coaching team.</p><div class="btnrow"><button class="btn secondary" id="saveCoachingReview">Save review</button><button class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
     host.appendChild(form);captureFeedbackEntryBaseline();
     const targetClub=club?.id,targetUser=session?.user?.id;
     const stillCurrent=()=>club?.id===targetClub&&session?.user?.id===targetUser&&document.getElementById('coachingReviewForm')===form;
@@ -9809,6 +10054,7 @@ async function renderHowWeTrain(){
   const isCurrent=()=>sequence===howWeTrainRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab===tabAtStart;
   if(!workspacePlayerPlansPublished()){
     renderClubPublicationGate('How We Train');
+    if(myPlayer&&isPlayerUser()){const section=document.createElement('section');section.className='card';section.innerHTML='<button class="btn secondary" id="requestBeforePublication">Request a Coach Conversation</button>';page.appendChild(section);document.getElementById('requestBeforePublication').onclick=openCoachConversationRequest;}
     return;
   }
 
@@ -9890,6 +10136,7 @@ async function renderHowWeTrain(){
   </section>
 
   ${feedbackError?'<section class="card notice" role="status"><strong>Feedback could not be loaded.</strong><p>Your saved Player Plan is still available. Try again to load your reflections and training observations.</p><button class="btn ghost" id="retryTrainingFeedback">Try again</button></section>':''}
+  ${myPlayer&&isPlayerUser()?'<section class="card"><button class="btn secondary" id="requestConversationFromTraining">Request a Coach Conversation</button></section>':''}
   ${myPlayer?renderCoachingActions(feedback,{playerMode:true,includeObservations:true}):''}
   ${playerTop}
   ${renderClubTrainingPrinciples()}
@@ -9898,6 +10145,7 @@ async function renderHowWeTrain(){
 
   captureFeedbackEntryBaseline();
   bindCoachingActionControls(feedback,()=>renderHowWeTrain());
+  document.getElementById('requestConversationFromTraining')?.addEventListener('click',openCoachConversationRequest);
   document.getElementById('retryTrainingFeedback')?.addEventListener('click',async()=>{if(confirmLeaveFeedbackEntry())await renderHowWeTrain();});
   if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;if(b.dataset.planSection)builderSection=b.dataset.planSection;currentTab=b.dataset.go;renderTab();});
@@ -9993,6 +10241,7 @@ function wireObservationSave(player,kind,onSaved){
       observation_type:document.querySelector('input[name="staffObservationType"]:checked')?.value,
       next_training_focus:val('staffTrainingNextFocus'),note:val('staffTrainingNote')
     };
+    try{Object.assign(values,coachingVideoValues('staffObservation'));}catch(error){status.textContent=error.message;return;}
     values.plan_related=!general?.checked;
     values.needs_conversation=!!document.getElementById('staffObservationConversation')?.checked;
     if(!values.plan_related&&!values.note&&!values.next_training_focus){status.textContent='Add a coaching note or training focus.';return;}
@@ -10028,6 +10277,7 @@ function renderStaffTrainingObservationForm(player,data={},observationId=null){
     <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${esc(observation?.observed_on||todayIso())}"></div>
     <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}" ${observation?.format_keys?.includes(k)?'checked':''}><span>${esc(l)}</span></label>`).join('')}</div></div>
     ${observationPurposeField(observation)}
+    ${coachingVideoFields('staffObservation',action?.video)}
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],observation?.training_to_plan||'mostly')}</div>
     <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),observation?.observation_type||'right_shots_right_balls')}</div></div>
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffTrainingNextFocus" maxlength="240" placeholder="One useful focus is enough" value="${esc(observation?.next_training_focus||'')}" ${closed?'disabled':''}></div>
@@ -10058,13 +10308,14 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
     </fieldset>
     <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" ${sharedReadonly?'disabled':''} maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Pulled a short ball; caught on the boundary"></div>
     ${observationPurposeField(feedback)}
+    ${coachingVideoFields('staffObservation',action?.video)}
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","The approach moved away from the plan"]],feedback?.batting_to_plan||'mostly')}</div>
     <div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],feedback?.dismissal_classification||'not_applicable')}</div>
     <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${feedback?.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div>
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" value="${esc(feedback?.next_training_focus||'')}" ${closed?'disabled':''} maxlength="240" placeholder="One useful focus is enough"></div>
     ${observationReviewField(action)}
     ${observationConversationField(feedback?.needs_conversation)}
-    <p class="help">The training focus is shared straight away. For Player Plan observations, the match answers and note wait for the player’s reflection.</p>
+    <p class="help">The training focus is shared straight away. For Player Plan observations, the match answers, note and video wait for the player’s reflection.</p>
     ${closed?'<p class="notice">This follow-up is closed. You can correct the observation; add a new observation for a new follow-up.</p>':''}
     ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
     <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
@@ -11700,6 +11951,7 @@ async function renderPlayerHome(){
   const stillCurrent=()=>sequence===playerHomeRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab==='playerhome'&&document.getElementById('page')===page;
   if(!workspacePlayerPlansPublished()){
     renderClubPublicationGate('Player Home');
+    if(myPlayer&&isPlayerUser()){const section=document.createElement('section');section.className='card';section.innerHTML='<button class="btn secondary" id="requestBeforePublication">Request a Coach Conversation</button>';page.appendChild(section);document.getElementById('requestBeforePublication').onclick=openCoachConversationRequest;}
     return;
   }
   if(!myPlayer){
@@ -11734,6 +11986,7 @@ async function renderPlayerHome(){
   <div class="club-home-secondary" aria-label="Your batting tools">
     <button class="club-home-link" id="playerHomePlan">My Player Plan</button>
     ${plan.ready.length?'<button class="club-home-link" id="playerHomeTraining">How We Train</button>':''}
+    <button class="club-home-link" id="requestConversationFromHome">Request a Coach Conversation</button>
     <button class="club-home-link" id="playerHomeReflection">Reflect on an innings</button>
     <button class="club-home-link" id="playerHomePhilosophy">Read How We Bat</button>
   </div>
@@ -11742,6 +11995,7 @@ async function renderPlayerHome(){
   document.getElementById('playerHomeNext').onclick=()=>openPlayerHomeAction(next);
   document.getElementById('playerHomePlan').onclick=()=>openPlayerHomeAction({tab:'myplan'});
   document.getElementById('playerHomeTraining')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain'}));
+  document.getElementById('requestConversationFromHome').onclick=openCoachConversationRequest;
   document.getElementById('playerHomeReflection').onclick=()=>openPlayerHomeAction({tab:'howwetrain',matchId:'new',anchor:'myReflectionForm'});
   document.getElementById('playerHomePhilosophy').onclick=()=>openPlayerHomeAction({tab:'howwebat'});
   document.getElementById('retryPlayerHome')?.addEventListener('click',renderPlayerHome);
