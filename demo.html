@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.26 — coach innings-note example
+// Club Batting 0.8.62.28 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.26';
+const APP_UI_VERSION='0.8.62.28';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -5178,27 +5178,34 @@ async function savePhilosophyResponseBeforeNavigation(){
 }
 
 
-let myCoachingUpdates={clubId:null,userId:null,updates:[],error:'',loaded:false};
+let myCoachingUpdates={clubId:null,userId:null,updates:[],openRequestCount:0,error:'',loaded:false};
 let coachingUpdatesSequence=0,coachingNoteObserver=null,pendingCoachingUpdate=null;
 const coachingSeenPending=new Set();
 function coachingUpdateScopeMatches(state=myCoachingUpdates){return state.clubId===club?.id&&state.userId===session?.user?.id&&!!membership&&!!club;}
 
 function renderCoachingUpdatesMenu(){
   const host=document.getElementById('coachingUpdatesHost');if(!host)return;
-  const wasOpen=!!document.getElementById('coachingUpdatesMenu')?.open;
-  const state=myCoachingUpdates,rows=coachingUpdateScopeMatches(state)?state.updates:[];
-  host.innerHTML=`<details class="account-menu" id="coachingUpdatesMenu" ${wasOpen?'open':''}>
-    <summary class="btn ghost" id="coachingUpdatesToggle" style="min-height:44px" aria-label="Coaching updates${rows.length?`: ${rows.length} unread`:''}">
+  const state=myCoachingUpdates,scoped=coachingUpdateScopeMatches(state);
+  const rows=scoped?state.updates:[],openRequestCount=scoped?state.openRequestCount||0:0;
+  host.hidden=!rows.length&&!openRequestCount;
+  if(host.hidden){const menu=document.getElementById('coachingUpdatesMenu');if(menu)menu.open=false;}
+  // Keep the native details/summary attached during a click. Replacing them
+  // here cancels the browser's opening action and discards keyboard focus.
+  if(!document.getElementById('coachingUpdatesMenu'))host.innerHTML=`<details class="account-menu" id="coachingUpdatesMenu">
+    <summary class="btn ghost" id="coachingUpdatesToggle" style="min-height:44px"></summary>
+    <div class="account-menu-popover coaching-updates-popover"></div></details>`;
+  const toggle=document.getElementById('coachingUpdatesToggle');
+  toggle.setAttribute('aria-label',`Coaching updates${rows.length?`: ${rows.length} unread`:''}`);
+  toggle.innerHTML=`
       <svg width="18" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
-      Coaching ${rows.length?`<span class="coaching-unread-badge">${rows.length}</span>`:''}<span class="account-menu-chevron" aria-hidden="true">⌄</span>
-    </summary><div class="account-menu-popover coaching-updates-popover"><strong>Coaching updates</strong>
-      <div role="status" aria-live="polite" class="account-access-status">${state.error?'Updates could not be checked. Try again.':!state.loaded?'Checking for new notes…':rows.length?`${rows.length} unread coaching update${rows.length===1?'':'s'}`:'You’re up to date.'}</div>
+      Coaching ${rows.length?`<span class="coaching-unread-badge">${rows.length}</span>`:''}<span class="account-menu-chevron" aria-hidden="true">⌄</span>`;
+  host.querySelector('.coaching-updates-popover').innerHTML=`<strong>Coaching updates</strong>
+      <div role="status" aria-live="polite" class="account-access-status">${state.error?'Updates could not be checked. Try again.':!state.loaded?'Checking for new notes…':rows.length?`${rows.length} unread coaching update${rows.length===1?'':'s'}`:openRequestCount?`${openRequestCount} open conversation request${openRequestCount===1?'':'s'}`:'You’re up to date.'}</div>
       ${rows.map(u=>`<button type="button" class="account-menu-action" data-open-coaching-update="${esc(u.source_key)}">${esc(u.author_name)} · ${u.source_kind==='conversation'?'Coach Conversation':u.source_kind==='match'?'Match observation':'Training observation'}<small>${esc(formatDateShort(u.changed_at))} · ${u.can_open?'View note':'Add your reflection to view'}</small></button>`).join('')}
       <button type="button" class="account-menu-action" id="openMyConversations">Open Coach Conversations</button>
-      <button type="button" class="account-menu-action" id="checkCoachingUpdates">Check for updates</button>
-    </div></details>`;
-  document.getElementById('coachingUpdatesToggle').onclick=()=>{void refreshMyCoachingUpdates();};
-  document.getElementById('openMyConversations').onclick=async()=>{if(!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;document.getElementById('coachingUpdatesMenu').open=false;currentTab='conversations';await renderTab();};
+      <button type="button" class="account-menu-action" id="checkCoachingUpdates">Check for updates</button>`;
+  toggle.onclick=()=>{if(!toggle.closest('details').open)void refreshMyCoachingUpdates();};
+  document.getElementById('openMyConversations').onclick=openCoachConversations;
   document.getElementById('checkCoachingUpdates').onclick=()=>refreshMyCoachingUpdates();
   host.querySelectorAll('[data-open-coaching-update]').forEach(button=>button.onclick=async()=>{
     const update=myCoachingUpdates.updates.find(u=>u.source_key===button.dataset.openCoachingUpdate);
@@ -5210,19 +5217,31 @@ function renderCoachingUpdatesMenu(){
   });
 }
 
+async function openCoachConversations(){
+  if(!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
+  const alerts=document.getElementById('coachingUpdatesMenu');if(alerts)alerts.open=false;
+  const account=document.getElementById('accountCoaching')?.closest('details');if(account)account.open=false;
+  currentTab='conversations';await renderTab();
+}
+
 async function refreshMyCoachingUpdates(){
   if(!document.getElementById('coachingUpdatesHost')||!membership||!club||!session?.user)return;
   const clubId=club.id,userId=session?.user?.id,sequence=++coachingUpdatesSequence;
-  if(!coachingUpdateScopeMatches())myCoachingUpdates={clubId,userId,updates:[],error:'',loaded:false};
+  if(!coachingUpdateScopeMatches())myCoachingUpdates={clubId,userId,updates:[],openRequestCount:0,error:'',loaded:false};
   renderCoachingUpdatesMenu();
-  try{
-    const {data,error}=await supabase.rpc('get_my_coaching_updates',{p_club_id:clubId});if(error)throw error;
-    if(club?.id!==clubId||session?.user?.id!==userId||sequence!==coachingUpdatesSequence)return;
-    myCoachingUpdates={clubId,userId,updates:Array.isArray(data?.updates)?data.updates:[],error:'',loaded:true};
-  }catch(error){
-    if(club?.id!==clubId||session?.user?.id!==userId||sequence!==coachingUpdatesSequence)return;
-    myCoachingUpdates={...myCoachingUpdates,error:error?.message||'Could not check updates',loaded:true};
-  }
+  // Read both through existing scoped RPCs. Read requests remain reachable
+  // until completed; unread observations retain their existing alert behaviour.
+  const results=await Promise.allSettled([
+    supabase.rpc('get_my_coaching_updates',{p_club_id:clubId}),
+    supabase.rpc('get_my_coach_conversations',{p_club_id:clubId})
+  ]);
+  if(club?.id!==clubId||session?.user?.id!==userId||sequence!==coachingUpdatesSequence)return;
+  const [updates,inbox]=results.map(result=>result.status==='fulfilled'?result.value:{error:result.reason});
+  const errors=[updates.error,inbox.error].filter(Boolean);
+  myCoachingUpdates={...myCoachingUpdates,clubId,userId,
+    updates:updates.error?myCoachingUpdates.updates:Array.isArray(updates.data?.updates)?updates.data.updates:[],
+    openRequestCount:inbox.error?myCoachingUpdates.openRequestCount||0:(inbox.data?.actions||[]).filter(a=>a.is_player_request&&a.status==='open').length,
+    error:errors.map(error=>error?.message||'Could not check updates').join(' '),loaded:true};
   renderCoachingUpdatesMenu();watchVisibleCoachingNotes();
 }
 
@@ -5302,6 +5321,7 @@ function accountMenuStyles(){
     .club-help-feature .btn{font-size:14px;min-height:44px}
     @media(max-width:700px){.club-help-feature{align-items:stretch;flex-direction:column;padding:20px}.club-help-feature .btnrow{display:grid;grid-template-columns:1fr 1fr}.shell .nav button[data-tab="guide"]{margin-left:0}}
     .account-controls{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+    #coachingUpdatesHost[hidden]{display:none!important}
     .coaching-unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 5px;border-radius:14px;background:#c51f32;color:white;font-size:12px;font-weight:800;box-sizing:border-box}
     .coaching-updates-popover{width:min(310px,85vw);max-height:65vh;overflow:auto;box-sizing:border-box}
     .coaching-updates-popover .account-menu-action{line-height:1.4;white-space:normal}
@@ -5345,7 +5365,7 @@ function contextSwitcherHtml(id,options){
   </label>`;
 }
 
-function accountMenuHtml({allowJoin=true,allowInvolvement=false,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
+function accountMenuHtml({allowJoin=true,allowInvolvement=false,allowCoaching=false,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
   const email=session?.user?.email||'';
   const name=userProfile?.display_name||session?.user?.user_metadata?.display_name||'Your account';
   return `<div class="account-controls"><details class="account-menu">
@@ -5355,6 +5375,7 @@ function accountMenuHtml({allowJoin=true,allowInvolvement=false,outId='out',join
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
       ${allowInvolvement?'<button class="account-menu-action" id="accountInvolvement" type="button">Your involvement</button>':''}
+      ${allowCoaching?'<button class="account-menu-action" id="accountCoaching" type="button">Coach Conversations</button>':''}
       <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
       <small class="account-menu-version">Club Batting v${APP_UI_VERSION}</small>
@@ -5408,8 +5429,8 @@ function renderShell(){
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <button class="btn secondary" id="openClubHelp" type="button" aria-label="Ask the Club Batting Guide and explore tutorials">Ask the Guide</button>
-          <div id="coachingUpdatesHost"></div>
-          ${accountMenuHtml({allowJoin:true,allowInvolvement:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
+          <div id="coachingUpdatesHost" hidden></div>
+          ${accountMenuHtml({allowJoin:true,allowInvolvement:true,allowCoaching:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
     </header>
@@ -5420,6 +5441,7 @@ function renderShell(){
   void refreshMyCoachingUpdates();
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
+  document.getElementById('accountCoaching').onclick=openCoachConversations;
   document.getElementById('accountInvolvement').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderFirstIdentitySetup({editing:true});};
   document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process',{focus:'chat'});
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
@@ -6616,7 +6638,7 @@ const CLUB_BATTING_HELP = {
   "coach_conversations": {
     "title": "Coach Conversations",
     "purpose": "Discuss the evidence and agree the next step.",
-    "short_explanation": "One shared conversation for observations, player requests, discussion notes and optional review dates. Open Coaching beside Account for your conversations; authorised staff can also use the Players filter.",
+    "short_explanation": "One shared conversation for observations, player requests, discussion notes and optional review dates. Use Account > Coach Conversations at any time; authorised staff can also use the Players filter. Coaching beside Account appears only for unread updates or an open request.",
     "tutorial": [
       {
         "title": "Find conversations needing attention",
@@ -6663,7 +6685,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Start with your question",
-        "body": "Use Request a Coach Conversation on Player Home or How We Train, or open Coaching beside Account > Open Coach Conversations. You can request help before completing your Player Plan and before the club publishes its setup. Say what you would like to discuss.",
+        "body": "Use Request a Coach Conversation on Player Home or How We Train, or choose Account > Coach Conversations. You do not need the Coaching alert button to make your first request. You can request help before completing your Player Plan and before the club publishes its setup. Say what you would like to discuss.",
         "target_tab": "conversations"
       },
       {
@@ -6680,7 +6702,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Pick up a request or say you are unavailable",
-        "body": "The preferred person opens Coaching > Open Coach Conversations and chooses I can help, or adds a progress note. I’m unavailable leaves the same request open for the authorised coaching team and records the response for the player. A person without wider access loses access to the thread after declining."
+        "body": "The preferred person receives a Coaching alert. Open Coaching > Open Coach Conversations and choose I can help, or add a progress note. The button stays available while the request is open, even after it has been read. I’m unavailable leaves the same request open for the authorised coaching team and records the response for the player. A person without wider access loses access to the thread after declining."
       },
       {
         "title": "Follow through in the same conversation",
@@ -6766,7 +6788,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Look beside Account",
-        "body": "The Coaching bell beside Account shows unread observations for players and unread conversation requests or updates for their participants and authorised staff. Non-playing admins and selected teammates can use it too. It checks on opening the app and returning to the browser tab/window. It is an in-app badge, not a phone push notification."
+        "body": "The Coaching bell beside Account appears only when you have an unread coaching update or an open conversation request. Its number counts unread updates. It appears for the selected person, including non-playing members and teammates, and authorised staff. It checks on opening the app and returning to the browser tab/window. It is an in-app badge, not a phone push notification."
       },
       {
         "title": "Open the note",
@@ -6774,7 +6796,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Keep the conversation open until dealt with",
-        "body": "Reading clears that update’s unread badge only. A conversation stays Current until explicitly completed or withdrawn. Open Coaching > Open Coach Conversations for your own threads and requests to you; players also see their own notes in How We Train.",
+        "body": "Reading clears the unread number; an open request keeps Coaching visible until completed, withdrawn or no longer assigned to you. The button disappears when there are no unread updates or open requests. Account > Coach Conversations remains available for current and past conversations. Players also see their own notes in How We Train.",
         "target_tab": "conversations"
       },
       {
@@ -12837,6 +12859,10 @@ async function renderCoachConversations(){
   try{
     const [inbox,own]=await Promise.all([supabase.rpc('get_my_coach_conversations',{p_club_id:clubId}),myPlayer&&isPlayerUser()?loadDevelopmentFeedback(myPlayer.id).catch(()=>null):Promise.resolve(null)]);
     if(!current())return;if(inbox.error)throw inbox.error;
+    if(coachingUpdateScopeMatches()){
+      myCoachingUpdates={...myCoachingUpdates,openRequestCount:(inbox.data?.actions||[]).filter(a=>a.is_player_request&&a.status==='open').length};
+      renderCoachingUpdatesMenu();
+    }
     const feedback={matches:own?.matches||[],training_observations:own?.training_observations||[],coaching_actions:inbox.data?.actions||[]};
     page.innerHTML=`<section class="card"><div class="section-label">Your club</div><h1>Coach Conversations</h1><p>Your conversations and requests to you appear here.${canUsePlayersWorkspace()?' Player requests also appear in the Players coaching filter.':''}</p><div class="btnrow">${myPlayer&&isPlayerUser()?'<button class="btn" id="newCoachRequest">Request a Coach Conversation</button>':''}<button class="btn ghost" id="refreshCoachConversations">Refresh conversations</button></div></section><div id="coachRequestFormHost"></div>${renderCoachingActions(feedback,{playerMode:true,includeObservations:true})}`;
     document.getElementById('newCoachRequest')?.addEventListener('click',renderCoachConversationRequestForm);
