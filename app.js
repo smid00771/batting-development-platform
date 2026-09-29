@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.30 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.31 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.30';
+const APP_UI_VERSION='0.8.62.31';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -969,6 +969,7 @@ async function boot(){
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
   window.addEventListener('popstate',handleAppNavigationHistory);
+  window.addEventListener('beforeunload',event=>{if(weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -1805,7 +1806,7 @@ function canOpenClubTab(tab){
   if(tab==='dashboard')return canUseClubHome();
   if(['playerhome','innings'].includes(tab))return isPlayerUser();
   if(['permissions','groups'].includes(tab))return isAdmin();
-  if(['players','feedback'].includes(tab))return canUsePlayersWorkspace();
+  if(['players','feedback','training_preparation'].includes(tab))return canUsePlayersWorkspace();
   if(tab==='workshop_preview')return !!workshopPreview&&workshopPreview.clubId===club?.id&&workshopPreview.userId===session?.user?.id;
   if(tab==='workshop')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()||canContributePhilosophy());
   if(['identity','dimensions','formats','preview','submitted_response'].includes(tab))return !clubSetupUnavailableReason(tab)&&(isPhilosophyLead()||canContributePhilosophy());
@@ -2617,6 +2618,7 @@ function clubNavigationRoute(){
     route.assignments={source,search,target};
   }
   if(currentTab==='innings'){const {season,format,openId,editId}=ensureMyInningsState();route.innings={season,format,openId,editId};}
+  if(currentTab==='training_preparation')route.trainingPreparation={group:ensureTrainingPreparationState().group};
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
   if(currentTab==='workshop_preview'&&workshopPreview){
@@ -2700,6 +2702,7 @@ function restoreClubNavigationState(route){
     playersWorkspaceDevelopmentMatchId=null;
   }
   if(currentTab==='innings'){const state=ensureMyInningsState(),saved=route.innings||{};Object.assign(state,{season:saved.season==='all'||/^\d{4}$/.test(saved.season||'')?saved.season:null,format:FORMATS.some(([k])=>k===saved.format)?saved.format:'',openId:typeof saved.openId==='string'?saved.openId:null,editId:typeof saved.editId==='string'?saved.editId:null});}
+  if(currentTab==='training_preparation')restoreTrainingPreparationState(route.trainingPreparation||{});
   if(currentTab==='myplan')builderSection=route.planSection||'core';
   if(currentTab==='groups'){
     const state=ensurePlayingGroupsView();
@@ -2799,6 +2802,7 @@ function renderTab(){
     innings:renderMyInnings,
     groups:renderPlayingGroups,
     players:renderPlayersWorkspace,
+    training_preparation:renderTrainingPreparation,
     feedback:renderFeedbackWorkspace,
     workshop:renderWorkshop,
     workshop_preview:renderWorkshopPreview,
@@ -2913,7 +2917,7 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
-const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "how_we_train", "my_innings", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
+const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "current_focus", "how_we_train", "training_preparation", "my_innings", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
 
 function guideTopicNumber(key){
   const index=GUIDE_TOPIC_ORDER.indexOf(key);
@@ -2948,8 +2952,8 @@ const CLUB_BATTING_HELP = {
   "whole_process": {
     "capability_key": "whole_process",
     "title": "The whole Club Batting process",
-    "purpose": "One club approach. Each batter’s own game.",
-    "short_explanation": "Register people, agree How We Bat, publish the questions, then build Player Plans, practise and keep Coach Conversations useful.",
+    "purpose": "Help your club turn its batting philosophy into what players prepare, practise, do and learn each week.",
+    "short_explanation": "Agree How We Bat, build Player Plans, choose current focuses, practise, play and review the next step together.",
     "target_tab": "guide",
     "audience": [
       "admin",
@@ -2976,12 +2980,12 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Build and train individual plans",
-        "body": "After publication, each batter completes Core and the priority formats for their Playing Groups. Core plus a completed format unlocks that format’s personalised How We Train. All three format tabs remain available.",
+        "body": "After publication, each batter completes Core and the priority formats for their Playing Groups. Core plus a completed format unlocks that format’s personalised How We Train. Choose up to two current focuses from existing plan answers, coaching conversations or innings reflections.",
         "target_tab": "$player_plan"
       },
       {
         "title": "Keep learning together",
-        "body": "Record match or training observations. Coach Conversations combines discussion requests, agreed actions and review dates. Dates are optional; record what happened and mark Discussed / Actioned when finished.",
+        "body": "Review match and training evidence, recognising decisions and execution as well as results. Choose Keep working on this, Adjust the focus or Discuss it. A coach’s proposed focus needs the player’s acceptance. Use the same Coach Conversation for discussion and optional review dates.",
         "target_tab": "$feedback",
         "focus": "coach_conversations"
       }
@@ -3436,7 +3440,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Review and keep improving",
-        "body": "Use View my plan to read your answers together. Edit your own plan as your game develops. Coaches with edit access can also work on it; Club Batting does not automatically change your answers because of a coaching observation."
+        "body": "Use View my plan to read your answers together. Your current focus can refer to a saved answer without duplicating the whole plan. Changing a focus or reviewing an innings does not rewrite plan answers. Edit your Player Plan deliberately when your approach changes."
       },
       {
         "title": "Train once the foundation is ready",
@@ -3447,11 +3451,63 @@ const CLUB_BATTING_HELP = {
     "sort_order": 130,
     "active": true
   },
+  "current_focus": {
+    "capability_key": "current_focus",
+    "title": "Choose and review your current focus",
+    "purpose": "Keep the next useful practice priority in view.",
+    "short_explanation": "Choose up to two priorities from saved plan answers, coaching conversations or innings reflections. The same current focuses appear on Player Home, How We Train and innings review.",
+    "target_tab": "$training",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 135,
+    "active": true,
+    "tutorial": [
+      {
+        "title": "Start with an existing record",
+        "body": "On Player Home or How We Train, choose Choose a focus or Add a second focus. Select a saved Player Plan answer, coaching conversation or your own innings reflection. The source fills in the wording for you to refine. You can have up to two current focuses in total, across all formats.",
+        "target_tab": "$training"
+      },
+      {
+        "title": "Choose a useful focus",
+        "body": "Keep the wording specific enough to practise, such as “Commit to my scoring options against spin.” The source label identifies where it came from, including the format when relevant. An optional category helps coaches find shared training themes. Choosing or changing a focus does not alter the original record."
+      },
+      {
+        "title": "Agree a coach’s proposal",
+        "body": "A coach with edit access uses Suggest a focus or Suggest a change. Choose Accept suggestion to make it active, or Decline to leave your current focus unchanged. Pending suggestions do not replace active focuses. Your own choice is marked Chosen by you; an accepted coach suggestion is marked Agreed with that coach."
+      },
+      {
+        "title": "Use the same focus through the week",
+        "body": "Your accepted focuses appear on Player Home, How We Train and innings review. Coaches with existing player access can include them in Training preparation. Keep using the same record so you do not have to copy the priority between screens."
+      },
+      {
+        "title": "Keep working on this",
+        "body": "After practice or an innings, choose Keep working on this, then Save next step when the focus is still useful. Add what you learned about the decision, execution or preparation. A good decision can remain worth practising even after a low score or dismissal."
+      },
+      {
+        "title": "Adjust the focus deliberately",
+        "body": "Choose Adjust the focus to refine the next practice priority, then Save next step. Coach-proposed changes wait for Accept suggestion. To change a current focus directly, players use Change focus; coaches use Suggest a change. The Player Plan and original coaching note remain unchanged."
+      },
+      {
+        "title": "Discuss it in the existing conversation",
+        "body": "Choose Discuss it, then Save next step when you need help deciding what comes next. This uses Coach Conversations and its existing alerts. An open linked conversation is reused. Plan-related coach feedback still waits for the player’s independent reflection. A preferred conversation participant gains no wider focus access."
+      },
+      {
+        "title": "Finish a focus without closing its conversation",
+        "body": "Choose Finish this focus when it is no longer a current practice priority. Its history remains available. This does not mark a linked conversation Discussed / Actioned or clear its review date; complete that conversation separately when it has been dealt with."
+      }
+    ]
+  },
   "how_we_train": {
     "capability_key": "how_we_train",
     "title": "Use How We Train",
     "purpose": "Practise the shot and the decision.",
-    "short_explanation": "Combine your club principles, personal plan and agreed coaching work.",
+    "short_explanation": "Bring your current focuses, personal plan and shared coaching work into the next practice.",
     "target_tab": "$training",
     "audience": [
       "admin",
@@ -3469,15 +3525,15 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Choose useful work",
-        "body": "Practise your trusted scoring options, recognising the right ball, reliable singles, leaving/defending and your Reset. Mix deliveries and situations so practice trains the decision as well as execution."
+        "body": "Start with your current focuses, shared with Player Home and innings review. Choose up to two priorities from existing records. Practise recognising the right ball as well as executing the shot. A focus keeps a useful priority visible; it does not complete unfinished Player Plan sections."
       },
       {
         "title": "Keep agreed coaching work visible",
-        "body": "Coach Conversations holds current observations, agreed training actions and progress notes. A coach’s one thing to train appears in the player’s How We Train. Dates are optional; general shared notes remain available even before the plan is finished."
+        "body": "Coach Conversations holds observations, training actions and progress notes. A coach’s one thing to train remains available in How We Train. A proposed current focus needs the player’s acceptance before it becomes active. Dates are optional; shared work remains available before the plan is finished."
       },
       {
         "title": "Reflect and review",
-        "body": "Open My Innings from How We Train or Player Home to see the season and record a reflection. Plan-related match feedback waits for your independent view; a general note does not. Use Coach Conversations to add progress notes or mark Discussed / Actioned."
+        "body": "Open My Innings to reflect independently before reading plan-related coach feedback. Review a focus with Keep working on this, Adjust the focus or Discuss it, then Save next step. Discuss it uses Coach Conversations and its alerts. Finish this focus does not mark a conversation Discussed / Actioned."
       },
       {
         "title": "Back preparation and commitment",
@@ -3486,6 +3542,48 @@ const CLUB_BATTING_HELP = {
     ],
     "sort_order": 140,
     "active": true
+  },
+  "training_preparation": {
+    "capability_key": "training_preparation",
+    "title": "Prepare for training with your Playing Group",
+    "purpose": "See useful priorities before the next session.",
+    "short_explanation": "Choose a Playing Group and bring current focuses, conversations needing attention and review dates together for players you already have permission to view.",
+    "target_tab": "training_preparation",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain"
+    ],
+    "sort_order": 142,
+    "active": true,
+    "tutorial": [
+      {
+        "title": "Open Training preparation",
+        "body": "Open Training preparation from Players. This is a preparation view of existing player work; it does not assign players to groups or create a separate training plan.",
+        "target_tab": "training_preparation"
+      },
+      {
+        "title": "Choose the Playing Group",
+        "body": "Choose All accessible players, Currently unassigned or an active Playing Group. A player appears once in the selected view. Only players within your existing access are included; a group may contain other players you cannot see. Refresh and browser Back keep your selected group."
+      },
+      {
+        "title": "Read current priorities and reviews",
+        "body": "See each player’s accepted current focuses, open conversations and reviews due or overdue. Choose Open training & focus or Open conversation to continue in the existing screen. A player without a chosen current focus is shown without an invented priority. Training preparation itself does not edit player records."
+      },
+      {
+        "title": "Look for work players can share",
+        "body": "Shared training themes shows a category when at least two visible players have chosen that category for an active focus. It uses selected categories, not an AI judgement or matching words; Other is excluded. Read each focus before planning: a shared theme does not mean an identical technique or Player Plan."
+      },
+      {
+        "title": "Propose and agree a useful change",
+        "body": "Use Open training & focus to see the player’s work. Staff with edit access can Suggest a focus or Suggest a change there; view-only access stays read-only. The player uses Accept suggestion before it becomes active. Keep up to two current focuses across all formats and follow up in the existing Coach Conversation."
+      },
+      {
+        "title": "Keep the loop connected",
+        "body": "After practice or an innings, use Keep working on this, Adjust the focus or Discuss it. Completing a conversation and retiring a focus are separate actions. Refresh for the latest saved information; this view does not promise instant cross-device updates."
+      }
+    ]
   },
   "my_innings": {
     "capability_key": "my_innings",
@@ -3523,7 +3621,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Read feedback and open the conversation",
-        "body": "Open a row for your full reflection and its coaching notes. Plan-related coach assessments and video stay hidden until you submit your own reflection; general notes are immediately available. Open Coach Conversation continues the existing thread, including notes and review dates. Request a new conversation separately when you want help."
+        "body": "Open a row for your reflection, current focuses and coaching notes. Plan-related assessments and video stay hidden until your own reflection is saved; general notes are immediately available. Review a focus with Keep working on this, Adjust the focus or Discuss it. Open Coach Conversation continues the existing thread."
       },
       {
         "title": "Keep your place",
@@ -3560,7 +3658,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Record what happens next",
-        "body": "Open Add note / mark Discussed or Actioned to record the discussion, keep it open with an optional review date, or complete it. Any coach with edit access can follow it through, even if another coach wrote the observation."
+        "body": "Use Keep working on this, Adjust the focus or Discuss it to connect the review to practice. Discuss it continues or opens a Coach Conversation. A coach’s focus proposal needs player acceptance. Record discussion progress and use Discussed / Actioned only when that conversation has been dealt with."
       }
     ],
     "capability_key": "feedback_loop",
@@ -3593,7 +3691,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Add notes or agree an action",
-        "body": "Use Add note / mark Discussed or Actioned to record what happened. For a feedback pattern without an existing action, Agree a next step records a training action. Players can update their own threads. Authorised staff need edit access; a preferred club member can update only the player request shared with them."
+        "body": "Use Add note / mark Discussed or Actioned to record progress. Review a current focus with Keep working on this, Adjust the focus or Discuss it. Staff need edit access to propose a focus; the player accepts it. A preferred club member’s access to one request does not grant wider access to the player or their focuses."
       },
       {
         "title": "Use a review date only when useful",
@@ -3601,7 +3699,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Complete it and keep the history",
-        "body": "Choose Discussed / Actioned or Close — no further action needed, and record a short note. This clears that conversation’s alerts for coach and player and moves the thread into collapsed Past conversations. Other unresolved conversations remain. Reading an unread note clears its bell badge only; it does not complete the conversation."
+        "body": "Choose Discussed / Actioned or Close — no further action needed, and record a short note. This clears that conversation’s alerts and keeps the thread in Past. Reading a note clears only its unread badge. Retiring a current focus does not close its conversation; completing a conversation does not retire its focus."
       }
     ],
     "capability_key": "coach_conversations",
@@ -9584,6 +9682,7 @@ function captureFeedbackEntryBaseline(){
   }
 }
 function confirmLeaveFeedbackEntry(){
+  if(!confirmLeaveWeeklyLoop())return false;
   if(typeof coachingActionSavePending!=='undefined'&&coachingActionSavePending){alert('Your changes are still saving. Please wait before leaving.');return false;}
   const dirty=['myReflectionForm','staffDevelopmentForm','coachingActionForm','coachingReviewForm','coachRequestForm'].some(id=>{
     const form=document.getElementById(id);
@@ -9885,6 +9984,7 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
       <p class="help">Recorded by ${esc(a.recorded_by_name||'Club coaching team')}${a.status==='open'?' · Stays current until marked Discussed / Actioned.':''}</p>
       ${a.status==='open'&&a.can_review?`<button class="btn secondary" data-review-coaching-action="${esc(a.id)}">Add note / mark Discussed or Actioned</button>`:''}
       <div data-coaching-review-slot="${esc(a.id)}"></div>
+      ${a.can_access_focus===true||a.player_id===myPlayer?.id||currentTab==='players'&&(playersWorkspaceData?.players||[]).some(p=>p.id===a.player_id)?`<div style="margin-top:12px"><button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button><div id="conversationFocus-${esc(a.id)}"></div></div>`:''}
       ${a.reviews?.length?`<details style="margin-top:10px"><summary>Notes and updates (${a.reviews.length})</summary>${a.reviews.map(r=>`<p><strong>${Number(r.revision)===1?'Recorded':r.outcome==='continue'?'Update':r.outcome==='completed'?'Discussed / Actioned':'Closed'} · ${esc(formatDateShort(r.reviewed_at))}</strong><br>${esc(r.note)}<br><small>${esc(r.reviewed_by_name||'Club member')}${r.next_review_on?` · Review ${esc(formatDateShort(r.next_review_on))}`:''}</small></p>`).join('')}</details>`:''}
     </article>`;
   };
@@ -9908,6 +10008,7 @@ function openCoachingConversationForm(signal,outcome,host,onSaved){
   document.getElementById('cancelCoachingAction').onclick=()=>{if(confirmLeaveFeedbackEntry())form.remove();};
   document.getElementById('saveCoachingAction').onclick=async()=>{
     if(coachingActionSavePending)return;
+    if(!confirmLeaveWeeklyLoop())return;
     const task=document.getElementById('coachingActionTask').value.trim();
     const reviewOn=needsAction?document.getElementById('coachingActionReviewDate').value||null:null;
     const status=document.getElementById('coachingActionStatus');const button=document.getElementById('saveCoachingAction');
@@ -9924,8 +10025,30 @@ function openCoachingConversationForm(signal,outcome,host,onSaved){
   };
 }
 
+async function openWeeklyLoopConversation(playerId,actionId){
+  if(!await saveClubEditsBeforeNavigation())return;
+  if(playerId===myPlayer?.id){await openCoachConversations();}
+  else if(canUsePlayersWorkspace()){
+    resetPlayersWorkspaceForClub();playersWorkspaceSelectedId=playerId;playersWorkspaceSection='development';
+    playersWorkspaceLocalRaw=null;playersWorkspaceDevelopmentMode=null;playersWorkspaceDevelopmentMatchId=null;
+    currentTab='players';await renderTab();
+  }else return;
+  const card=[...document.querySelectorAll('[data-coaching-action-card]')].find(el=>el.dataset.coachingActionCard===actionId);
+  for(let details=card?.closest('details');details;details=details.parentElement?.closest('details'))details.open=true;
+  card?.scrollIntoView({block:'center'});watchVisibleCoachingNotes();
+}
+
 function bindCoachingActionControls(feedback,onSaved){
   bindConversationRecipientControls(feedback,onSaved);
+  document.querySelectorAll('[data-open-focus-review]').forEach(button=>button.onclick=async()=>{
+    if(!confirmLeaveFeedbackEntry())return;
+    const action=(feedback?.coaching_actions||[]).find(a=>a.id===button.dataset.openFocusReview);
+    if(!action)return;
+    const host=document.getElementById('conversationFocus-'+action.id);
+    const match=(feedback.matches||[]).find(m=>(m.coach_feedback||[]).some(f=>f.id===action.match_feedback_id));
+    const reviewReady=action.focus_review_ready!==false&&!(action.player_id===myPlayer?.id&&match&&!match.player_reflection&&(match.coach_feedback||[]).some(f=>f.id===action.match_feedback_id&&f.plan_related!==false));
+    await mountWeeklyLoop(host,{playerId:action.player_id,context:'conversation',actionId:action.id,reviewReady,readOnly:action.status!=='open',onSaved:async()=>{await refreshMyCoachingUpdates();}});
+  });
   document.querySelectorAll('[data-review-coaching-action]').forEach(button=>button.onclick=()=>{
     if(coachingActionSavePending||!confirmLeaveFeedbackEntry())return;
     const action=(feedback?.coaching_actions||[]).find(a=>a.id===button.dataset.reviewCoachingAction&&a.can_review&&a.status==='open');
@@ -9943,6 +10066,7 @@ function bindCoachingActionControls(feedback,onSaved){
     document.getElementById('cancelCoachingReview').onclick=()=>{if(confirmLeaveFeedbackEntry())form.remove();};
     document.getElementById('saveCoachingReview').onclick=async()=>{
       if(coachingActionSavePending||!stillCurrent())return;
+      if(!confirmLeaveWeeklyLoop())return;
       const outcome=document.getElementById('coachingReviewOutcome').value;
       const note=document.getElementById('coachingReviewNote').value.trim();
       const reviewOn=outcome==='continue'?document.getElementById('coachingNextReviewDate').value||null:null;
@@ -10261,6 +10385,7 @@ function renderInningsRows(matches){
     </tr>${open?`<tr class="innings-detail" id="innings-detail-${esc(m.id)}"><td colspan="7">
       <div class="btnrow" style="margin-bottom:12px"><button class="btn secondary" data-innings-edit="${esc(m.id)}">Edit innings${m.player_reflection?' & reflection':''}</button></div>
       ${renderDevelopmentMatchCard(m,{playerMode:true,showReflectionAction:false})}
+      ${renderWeeklyLoopShell('inningsFocus-'+m.id)}
       ${locked?`<p class="help">Your score and notes are saved. Add the two reflection answers before comparing with plan-related coaching feedback.</p><button class="btn secondary" data-innings-edit="${esc(m.id)}">Add my reflection</button>`:''}
       ${visible.filter(f=>f.video||f.action_id).map(f=>`<div class="notice compact" style="margin-top:12px"><strong>${esc(f.author_name||'Coach / Captain')}</strong>${f.video?renderCoachingVideo(f.video):''}${f.action_id?`<button class="btn ghost" data-innings-conversation="${esc(f.action_id)}">Open Coach Conversation</button>`:''}</div>`).join('')}
     </td></tr>`:''}`;
@@ -10284,7 +10409,7 @@ async function renderMyInnings({refresh=true,message=''}={}){
   const rows=inningsInView(all,state);
   page.innerHTML=`${myInningsStyles()}<section class="card"><div class="innings-heading"><div><div class="section-label">Player Home</div><h1>My Innings</h1><p>Your season in one place: scores, notes, video and coaching feedback.</p></div><div class="btnrow"><button class="btn" id="addMyInnings">Add an innings</button><button class="btn ghost" id="inningsBackHome">Player Home</button></div></div><p class="help">An innings can include a good shot, a useful decision or a dismissal. Adding an entry does not request a Coach Conversation.</p><button class="btn ghost compact-btn" id="myInningsHelp">Show me how</button></section>
     ${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
-    ${state.editId?renderMyReflectionForm(editMatch,{innings:true}):''}
+    ${state.editId?renderWeeklyLoopShell('inningsEditFocus')+renderMyReflectionForm(editMatch,{innings:true}):''}
     <section class="card"><div class="innings-filters"><div class="field"><label for="inningsSeason">Season · July–June</label><select id="inningsSeason"><option value="all" ${state.season==='all'?'selected':''}>All seasons</option>${years.map(y=>`<option value="${y}" ${state.season===y?'selected':''}>${inningsSeasonLabel(y)}</option>`).join('')}</select></div><div class="field"><label for="inningsFormat">Format</label><select id="inningsFormat"><option value="">All formats</option>${FORMATS.map(([k,l])=>`<option value="${k}" ${state.format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div><button class="btn ghost" id="refreshMyInnings">Refresh</button></div>
     <div class="innings-count" role="status">${rows.length} innings shown</div>
     ${rows.length?`<table class="innings-table"><caption class="sr-only">Your recorded innings</caption><thead><tr><th class="innings-date" scope="col">Date</th><th class="innings-opposition" scope="col">Opposition</th><th class="innings-format" scope="col">Format</th><th class="innings-score" scope="col">Score</th><th class="innings-note" scope="col">My note</th><th class="innings-video" scope="col">Video</th><th class="innings-open" scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody>${renderInningsRows(rows)}</tbody></table>`:`<div class="innings-empty"><h2>${all.length?'No innings match these filters.':'Your season starts here.'}</h2><p>${all.length?'Choose another season or format, or select All seasons.':'Add an innings when it is useful. Match observations already recorded by your coaches will also appear here.'}</p></div>`}
@@ -10303,6 +10428,10 @@ async function renderMyInnings({refresh=true,message=''}={}){
     document.getElementById('cancelMyReflection').onclick=()=>change(()=>{state.editId=null;});
     bindMyInningsSave(editMatch,state,current);
   }
+  if(state.editId)await mountWeeklyLoop(document.getElementById('inningsEditFocus'),{playerId:myPlayer.id,context:'innings',matchId:editMatch?.id||null,reviewReady:false,allowManage:false,readOnly:true,compact:true,title:'Your current focus · bring it into your reflection'});
+  const opened=rows.find(m=>m.id===state.openId);
+  if(opened&&current())await mountWeeklyLoop(document.getElementById('inningsFocus-'+opened.id),{playerId:myPlayer.id,context:'innings',matchId:opened.id,reviewReady:!!opened.player_reflection});
+  if(!current())return;
   recordAppNavigation(clubNavigationRoute());
   await revealPendingCoachingUpdate();watchVisibleCoachingNotes();
 }
@@ -10310,6 +10439,7 @@ function bindMyInningsSave(match,state,current){
   const form=document.getElementById('myReflectionForm');let requestId=null,lastPayload=null,separateConfirmed=null;
   document.getElementById('saveMyReflection').onclick=async()=>{
     if(coachingActionSavePending||!current())return;
+    if(!confirmLeaveWeeklyLoop())return;
     const status=document.getElementById('myReflectionStatus');
     const batting=document.querySelector('input[name="myBattingToPlan"]:checked')?.value,dismissal=document.querySelector('input[name="myDismissalClass"]:checked')?.value;
     const extra={main_issue:val('reflectionMainIssue')||null,next_training_focus:val('reflectionNextFocus'),note:val('reflectionNote')};
@@ -10423,6 +10553,8 @@ async function renderHowWeTrain(){
   </section>
 
   ${feedbackError?'<section class="card notice" role="status"><strong>Feedback could not be loaded.</strong><p>Your saved Player Plan is still available. Try again to load your reflections and training observations.</p><button class="btn ghost" id="retryTrainingFeedback">Try again</button></section>':''}
+  ${myPlayer&&isPlayerUser()?renderWeeklyLoopShell('howWeTrainFocus'):''}
+  ${canUsePlayersWorkspace()?'<section class="card"><button class="btn secondary" id="openPreparationFromTraining">Training preparation · Playing Groups</button></section>':''}
   ${myPlayer&&isPlayerUser()?'<section class="card"><button class="btn secondary" id="requestConversationFromTraining">Request a Coach Conversation</button></section>':''}
   ${myPlayer?renderCoachingActions(feedback,{playerMode:true,includeObservations:true}):''}
   ${playerTop}
@@ -10432,6 +10564,9 @@ async function renderHowWeTrain(){
 
   captureFeedbackEntryBaseline();
   bindCoachingActionControls(feedback,()=>renderHowWeTrain());
+  document.getElementById('openPreparationFromTraining')?.addEventListener('click',()=>openTrainingPreparation());
+  if(myPlayer&&isPlayerUser())await mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training'});
+  if(!isCurrent())return;
   document.getElementById('requestConversationFromTraining')?.addEventListener('click',openCoachConversationRequest);
   document.getElementById('retryTrainingFeedback')?.addEventListener('click',async()=>{if(confirmLeaveFeedbackEntry())await renderHowWeTrain();});
   if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
@@ -10469,6 +10604,7 @@ function wireObservationSave(player,kind,onSaved){
   let requestId=null,requestPayload=null;
   button.onclick=async()=>{
     if(coachingActionSavePending||button.disabled||!stillCurrent())return;
+    if(!confirmLeaveWeeklyLoop())return;
     const status=document.getElementById('staffDevelopmentStatus');
     const values=kind==='match'?{
       match_id:form.dataset.matchId||null,match_updated_at:form.dataset.matchUpdatedAt||null,
@@ -11582,6 +11718,7 @@ function renderPlayersWorkspaceList(){
     <div>
       <div class="section-label">${esc(role)} workspace</div>
       <h2>Players</h2>
+      <button class="btn secondary" id="openTrainingPreparation">Training preparation</button>
       <div class="help">${plansPublished?'Find your players, open their plans and follow up on coaching conversations.':'Register people, assign club roles and organise Playing Groups while the club prepares its setup. Player Plans open after publication.'} Filter by Playing Group or search by name.</div>
       <div class="btnrow compact" style="margin-top:8px"><span class="help" id="workspaceRegisteredCount"><strong>${players.length}</strong> ${isAdmin()?'registered':'accessible'} player${players.length===1?'':'s'}</span>${players.length?`<button type="button" class="workspace-text-link" id="workspaceShowAllPlayers">${playersWorkspaceShowAll?'Hide player list':'Show all players'}</button>`:''}${query||playersWorkspaceGroupFilter?'<button type="button" class="workspace-text-link" id="workspaceClearSelection">Clear selection</button>':''}</div>
     </div>
@@ -11618,6 +11755,7 @@ function renderPlayersWorkspaceList(){
 
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
+  document.getElementById('openTrainingPreparation')?.addEventListener('click',()=>openTrainingPreparation());
   document.getElementById('showCoachConversations')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;playersWorkspaceSearch='';playersWorkspaceGroupFilter='__discussion__';renderPlayersWorkspaceList();});
   document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
   document.getElementById('managePeopleFromPlayers')?.addEventListener('click',()=>{currentTab='permissions';renderTab();});
@@ -12085,6 +12223,7 @@ async function renderPlayersWorkspacePlayer(){
 
   <div class="workspace-player-tabs">${sectionTabs}</div>
 
+  ${['summary','training'].includes(playersWorkspaceSection)?renderWeeklyLoopShell('workspacePlayerFocus'):''}
   ${playersWorkspaceSection==='training'?renderWorkspacePlayerDiscussionPanel(player):''}
   ${body}`;
 
@@ -12129,6 +12268,7 @@ async function renderPlayersWorkspacePlayer(){
       queueWorkspacePlayerPlanAutosave();
     });
   }
+  if(['summary','training'].includes(playersWorkspaceSection))await mountWeeklyLoop(document.getElementById('workspacePlayerFocus'),{playerId:player.id,context:'training'});
 }
 /* ---------------- PLAYER HOME ---------------- */
 
@@ -12225,6 +12365,7 @@ async function renderPlayerHome(){
     <div class="btnrow" style="margin-top:18px"><button class="btn" id="playerHomeNext">${esc(next.label)}</button></div>
   </section>
   ${loadNote?`<div class="notice compact" role="status" style="margin-top:14px">${!rolloutOk?'Your club’s required formats and due dates could not be checked. ':''}${!feedbackOk?'Your latest feedback could not be loaded. ':feedback.coaching_actions_error?'Shared training actions could not be loaded. ':''}You can keep using your saved plan.<button class="club-home-link" id="retryPlayerHome" type="button" style="margin-left:12px">Try again</button></div>`:''}
+  ${renderWeeklyLoopShell('playerHomeFocus')}
   ${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.follow_up_requested!==false)?`<section class="card notice" role="status"><strong>${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.review_on&&a.review_on<=todayIso())?'Coach Conversation review due':'You have a Coach Conversation'}</strong><p>Open Coach Conversations in How We Train to see the note, any agreed practice and the optional review date.</p><button class="btn secondary" id="playerHomeActionAlert">Open How We Train</button></section>`:''}
   <section class="card"><div class="section-label">Your season</div><h2>My Innings</h2><p>Keep your scores, notes and video together. Open an innings to reflect or read its coaching feedback.</p><div class="btnrow"><button class="btn secondary" id="playerHomeInnings">Open My Innings</button><button class="btn ghost" id="playerHomeAddInnings">Add an innings</button></div></section>
   <div class="club-home-secondary" aria-label="Your batting tools">
@@ -12242,8 +12383,302 @@ async function renderPlayerHome(){
   document.getElementById('playerHomeInnings').onclick=()=>openMyInnings();
   document.getElementById('playerHomeAddInnings').onclick=()=>openMyInnings({add:true});
   document.getElementById('playerHomePhilosophy').onclick=()=>openPlayerHomeAction({tab:'howwebat'});
-  document.getElementById('retryPlayerHome')?.addEventListener('click',renderPlayerHome);
+  document.getElementById('retryPlayerHome')?.addEventListener('click',()=>{if(confirmLeaveFeedbackEntry())return renderPlayerHome();});
+  await mountWeeklyLoop(document.getElementById('playerHomeFocus'),{playerId,context:'home'});
 }
+
+// BEGIN WEEKLY LOOP MODULES
+// BEGIN WEEKLY LOOP — one saved focus shared by preparation, practice and review.
+const weeklyLoopMounts=new Set();
+let weeklyLoopMountNumber=0;
+let weeklyLoopSaveBusy=false;
+function weeklyLoopSavePending(){return weeklyLoopSaveBusy;}
+
+function weeklyLoopScope(){return `${club?.id||''}:${session?.user?.id||''}`;}
+function weeklyLoopIsCurrent(state){
+  return state.scope===weeklyLoopScope()&&state.host&&document.documentElement.contains(state.host)&&state.host.dataset.weeklyLoopMount===String(state.id);
+}
+function weeklyLoopFormValue(form){
+  return JSON.stringify([...form.querySelectorAll('input,textarea,select')].map(field=>[field.id,field.value,!!field.checked]));
+}
+function weeklyLoopHasUnsavedChanges(){
+  for(const state of weeklyLoopMounts){
+    if(!weeklyLoopIsCurrent(state)){weeklyLoopMounts.delete(state);continue;}
+    if(state.form&&state.formBaseline!==weeklyLoopFormValue(state.form))return true;
+  }
+  return false;
+}
+function confirmLeaveWeeklyLoop(){
+  if(weeklyLoopSaveBusy){alert('Your current focus is still saving. Please wait before leaving.');return false;}
+  return !weeklyLoopHasUnsavedChanges()||confirm('You have an unsaved focus or next step. Leave without saving it? Choose Cancel to keep editing.');
+}
+function weeklyLoopSourceLabel(item){
+  const snapshot=item?.source_snapshot||{};
+  if(item?.label)return String(item.label);
+  if(snapshot.label)return String(snapshot.label);
+  if(item?.source_kind==='plan'){
+    const [section,key]=String(item.source_key||'').split(':');
+    const question=typeof QUESTION_LIBRARY!=='undefined'?QUESTION_LIBRARY[key]:null;
+    const format=section==='core'?'Core':typeof formatLabel==='function'?formatLabel(section):'Player Plan';
+    return ['Player Plan',format,question?.label].filter(Boolean).join(' · ');
+  }
+  return item?.source_kind==='reflection'?'Your innings reflection':item?.source_kind==='conversation'?'Coach Conversation':'Saved player focus';
+}
+function weeklyLoopText(item){
+  const text=String(item?.focus_text||'');
+  // Earlier plan answers may be returned as their answer object. Display the
+  // player's words, never JSON or internal question identifiers.
+  try{const answer=JSON.parse(text);if(answer&&Array.isArray(answer.choices))return [...answer.choices,answer.comment].filter(Boolean).join(' · ');}catch{}
+  return text;
+}
+function weeklyLoopAgreed(item){return !!item?.accepted_by&&!!item?.chosen_by&&item.accepted_by!==item.chosen_by;}
+function weeklyLoopAgreementLabel(item,own=false){return weeklyLoopAgreed(item)?`Agreed with ${item.chosen_by_name||'the coach'}`:own?'Chosen by you':'Chosen by the player';}
+function weeklyLoopDecisionLabel(decision){return ({keep:'Keep working on this',adjust:'Adjust the focus',discuss:'Discuss it',choose:'Focus chosen',propose:'Focus suggested',accept:'Suggestion accepted',decline:'Suggestion declined',retire:'Focus finished'})[decision]||'Next step';}
+function weeklyLoopDate(date){return date&&typeof formatDateShort==='function'?formatDateShort(date):String(date||'').slice(0,10);}
+function weeklyLoopStyles(){return `<style>
+  .weekly-loop{margin:16px 0}.weekly-loop-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.weekly-loop-heading h2{margin:6px 0}.weekly-focus-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:14px 0}.weekly-focus-card{border:1px solid #dce1ed;border-left:4px solid var(--primary,#252f78);border-radius:12px;padding:16px;overflow-wrap:anywhere}.weekly-focus-card h3{margin:6px 0 10px;font-size:18px;line-height:1.4}.weekly-focus-card .help{margin:5px 0}.weekly-focus-status{font-size:12px;font-weight:700;color:#176967}.weekly-focus-proposal{border-left-color:#b67d16;background:#fffaf0}.weekly-focus-proposal .weekly-focus-status{color:#805909}.weekly-loop .btn{min-height:44px}.weekly-loop .btnrow{flex-wrap:wrap;gap:8px}.weekly-loop-empty{padding:10px 0}.weekly-loop-form{border:1px solid #dce1ed;border-radius:12px;padding:16px;margin-top:14px;background:#f8f9fd}.weekly-loop-form textarea,.weekly-loop-form select{max-width:100%;width:100%}.weekly-loop-form .field{margin-bottom:14px}.weekly-loop-choice{border:0;padding:0;margin:12px 0}.weekly-loop-choice legend{font-weight:700;margin-bottom:10px}.weekly-loop-source{font-size:12px;color:var(--muted,#606b81)}.weekly-loop-review-history p{border-top:1px solid #e5e8f1;padding-top:10px}.weekly-loop-status:empty{display:none}.weekly-loop-readonly{margin:8px 0}.weekly-loop-readonly .weekly-focus-list{margin:8px 0}
+  @media(max-width:600px){.weekly-loop .btnrow .btn{flex:1 1 auto}.weekly-loop-heading{display:block}.weekly-loop-form{padding:12px}.weekly-loop-heading .btn{margin-top:10px}}
+  </style>`;}
+function renderWeeklyLoopShell(id){return `<div id="${esc(id)}" class="weekly-loop-host" aria-live="polite"></div>`;}
+function renderWeeklyLoopSnapshot(bundle,{compact=false}={}){
+  const active=Array.isArray(bundle?.active)?bundle.active:[];
+  return `<div class="weekly-loop-readonly"><div class="weekly-focus-list">${active.map(f=>`<article class="weekly-focus-card"><div class="weekly-focus-status">${weeklyLoopAgreed(f)?'Agreed focus':'Current focus'}</div><h3>${esc(weeklyLoopText(f))}</h3>${compact?'':`<p class="weekly-loop-source">${esc(weeklyLoopSourceLabel(f))}</p>`}</article>`).join('')}</div>${active.length?'':'<p class="help">No current focus chosen yet.</p>'}</div>`;
+}
+function weeklyLoopContext(state){
+  if(state.options.matchId)return {context_kind:'innings',context_id:state.options.matchId};
+  if(state.options.actionId)return {context_kind:'conversation',context_id:state.options.actionId};
+  return null;
+}
+function weeklyLoopReviewAllowed(state){
+  if(!weeklyLoopContext(state)||state.options.readOnly||state.options.allowReview===false)return false;
+  if(state.options.reviewReady===false||(state.options.matchId&&state.options.hasReflection===false))return false;
+  return !!state.bundle?.can_review;
+}
+function renderWeeklyLoopHistory(bundle,context){
+  const history=(bundle?.history||[]).filter(h=>!context||(h.context_kind===context.context_kind&&h.context_id===context.context_id));
+  const past=!context?bundle?.past||[]:[];
+  if(!history.length&&!past.length)return '';
+  const title=context?`Next steps from this ${context.context_kind==='innings'?'innings':'conversation'}`:'Focus history';
+  const rows=history.map(h=>`<p><strong>${esc(weeklyLoopDecisionLabel(h.decision))}</strong> · ${esc(weeklyLoopDate(h.created_at||h.reviewed_at))}${h.focus_text?`<br>${esc(h.focus_text)}`:''}${h.new_focus_text?`<br>${h.focus_text?'Next focus: ':''}${esc(h.new_focus_text)}`:''}${h.note?`<br>${esc(h.note)}`:''}${h.recorded_by_name||h.actor_name?`<br><small>${esc(h.recorded_by_name||h.actor_name)}</small>`:''}</p>`).join('');
+  const records=past.length?`<h3>Previous focuses</h3>${past.map(f=>`<p><strong>${esc(weeklyLoopText(f))}</strong><br><small>${esc(({retired:'Finished',replaced:'Replaced',declined:'Suggestion declined'})[f.status]||'Previous focus')} · ${esc(weeklyLoopDate(f.updated_at||f.created_at))}<br>${esc(weeklyLoopSourceLabel(f))}</small></p>`).join('')}`:'';
+  return `<details class="weekly-loop-review-history"><summary>${title} (${history.length||past.length})</summary>${records}${records&&rows?'<h3>Updates and notes</h3>':''}${rows}</details>`;
+}
+function drawWeeklyLoop(state){
+  if(!weeklyLoopIsCurrent(state))return;
+  state.form=null;state.formBaseline=null;
+  const b=state.bundle,active=b.active||[],proposals=b.proposals||[],own=!!b.is_owner;
+  const context=weeklyLoopContext(state),locked=!!context&&(state.options.reviewReady===false||state.options.hasReflection===false);
+  const canChange=!locked&&!state.options.readOnly&&state.options.allowManage!==false&&(own||b.can_propose),review=weeklyLoopReviewAllowed(state);
+  const title=state.options.title||'Current focus';
+  const card=f=>`<article class="weekly-focus-card" data-weekly-focus="${esc(f.id)}"><div class="weekly-focus-status">${esc(weeklyLoopAgreementLabel(f,own))}</div><h3>${esc(weeklyLoopText(f))}</h3><p class="weekly-loop-source">${esc(weeklyLoopSourceLabel(f))}</p>${canChange?`<div class="btnrow"><button class="btn ghost" data-weekly-adjust="${esc(f.id)}">${own?'Change focus':'Suggest a change'}</button>${own?`<button class="btn ghost" data-weekly-retire="${esc(f.id)}">Finish this focus</button>`:''}</div>`:''}</article>`;
+  state.host.innerHTML=`${weeklyLoopStyles()}<section class="card weekly-loop" aria-labelledby="weekly-loop-title-${state.id}"><div class="weekly-loop-heading"><div><div class="section-label">Plan · Train · Play · Review</div><h2 id="weekly-loop-title-${state.id}">${esc(title)}</h2><p class="help">${state.options.compact?'The same priorities follow through to How We Train and innings review.':'Keep one or two priorities in view. Your saved focus appears on Player Home, How We Train and innings review.'}</p></div>${canChange&&active.length<2?`<button class="btn secondary" data-weekly-add>${active.length?'Add a second focus':own?'Choose a focus':'Suggest a focus'}</button>`:''}</div>
+  <div class="weekly-loop-status notice compact" data-weekly-status role="status">${esc(state.message||'')}${state.savedActionId&&typeof openWeeklyLoopConversation==='function'?`<div class="btnrow"><button class="btn secondary" data-weekly-open-conversation>Open Coach Conversation</button></div>`:''}</div>
+  ${active.length?`<div class="weekly-focus-list">${active.map(card).join('')}</div>`:`<div class="weekly-loop-empty"><p>No current focus chosen yet.</p><p class="help">Choose something already in ${own?'your':'the player’s'} Player Plan, reflection or Coach Conversation. ${own?'You can choose your own priority and accept a coach’s suggestion.':'Suggestions become current when the player accepts them.'}</p></div>`}
+  ${proposals.length?`<div class="weekly-focus-list">${proposals.map(p=>`<article class="weekly-focus-card weekly-focus-proposal"><div class="weekly-focus-status">${own?'A suggestion for you':'Awaiting the player’s agreement'}</div><h3>${esc(weeklyLoopText(p))}</h3><p class="weekly-loop-source">${esc(weeklyLoopSourceLabel(p))}</p>${p.replace_focus_id?`<p class="help">Suggested replacement for a current focus. The current focus stays in place until accepted.</p>`:''}${own&&canChange?`${active.length>=2&&!p.replace_focus_id?'<p class="help">Finish one current focus before accepting this additional suggestion.</p>':''}<div class="btnrow"><button class="btn secondary" data-weekly-accept="${esc(p.id)}" ${active.length>=2&&!p.replace_focus_id?'disabled':''}>Accept suggestion</button><button class="btn ghost" data-weekly-decline="${esc(p.id)}">Decline</button></div>`:''}</article>`).join('')}</div>`:''}
+  ${review&&active.length?`<fieldset class="weekly-loop-choice"><legend>What will you take into the next session?</legend><p class="help">Recognise the decision, preparation and commitment as well as the result.</p><div class="btnrow">${['keep','adjust','discuss'].map(d=>`<button class="btn ${d==='keep'?'secondary':'ghost'}" data-weekly-decision="${d}">${weeklyLoopDecisionLabel(d)}</button>`).join('')}</div></fieldset>`:''}
+  ${context&&(state.options.reviewReady===false||state.options.hasReflection===false)?`<p class="help">${own?'Record your independent innings reflection first':'The player needs to record their independent innings reflection first'}, then choose what to carry into the next session.</p>`:''}
+  ${renderWeeklyLoopHistory(b,context)}<div data-weekly-form-slot></div></section>`;
+  state.host.querySelector('[data-weekly-open-conversation]')?.addEventListener('click',()=>{if(confirmLeaveFeedbackEntry())return openWeeklyLoopConversation(state.options.playerId,state.savedActionId);});
+  state.host.querySelector('[data-weekly-add]')?.addEventListener('click',()=>openWeeklyLoopForm(state,{op:own?'choose':'propose'}));
+  for(const [attr,op] of [['adjust','adjust'],['retire','retire'],['accept','accept'],['decline','decline']])state.host.querySelectorAll(`[data-weekly-${attr}]`).forEach(button=>button.onclick=()=>openWeeklyLoopForm(state,{op,focusId:button.dataset[`weekly${attr[0].toUpperCase()+attr.slice(1)}`]}));
+  state.host.querySelectorAll('[data-weekly-decision]').forEach(button=>button.onclick=()=>openWeeklyLoopForm(state,{op:'review',decision:button.dataset.weeklyDecision}));
+}
+async function mountWeeklyLoop(host,options={}){
+  if(typeof host==='string')host=document.getElementById(host);
+  if(!host||!options.playerId)return null;
+  const state={host,options,scope:weeklyLoopScope(),id:++weeklyLoopMountNumber,bundle:null,form:null,formBaseline:null,requestId:null,requestPayload:null,message:'',sequence:0};
+  host.dataset.weeklyLoopMount=String(state.id);weeklyLoopMounts.add(state);
+  for(const prior of weeklyLoopMounts)if(!weeklyLoopIsCurrent(prior))weeklyLoopMounts.delete(prior);
+  await loadWeeklyLoop(state);return state;
+}
+async function loadWeeklyLoop(state){
+  if(!weeklyLoopIsCurrent(state))return;
+  const sequence=++state.sequence;state.host.innerHTML='<section class="card weekly-loop"><p role="status">Loading current focus…</p></section>';
+  try{
+    const {data,error}=await supabase.rpc('get_player_current_focus',{p_player_id:state.options.playerId});
+    if(!weeklyLoopIsCurrent(state)||sequence!==state.sequence)return;
+    if(error)throw error;if(!data||typeof data!=='object')throw new Error('Please try again.');
+    state.bundle={...data,active:Array.isArray(data.active)?data.active:[],proposals:Array.isArray(data.proposals)?data.proposals:[],candidates:Array.isArray(data.candidates)?data.candidates:[],history:Array.isArray(data.history)?data.history:[],past:Array.isArray(data.past)?data.past:[]};drawWeeklyLoop(state);
+  }catch(error){if(weeklyLoopIsCurrent(state)&&sequence===state.sequence){state.host.innerHTML=`<section class="card weekly-loop notice"><h2>Current focus</h2>${state.message?`<p role="status">${esc(state.message)}</p>`:''}<p>The current focus could not be loaded. Saved priorities have not changed.</p><p class="help">${esc(error?.message||'Check your connection and try again.')}</p><button class="btn ghost" data-weekly-retry>Try again</button></section>`;state.host.querySelector('[data-weekly-retry]').onclick=()=>loadWeeklyLoop(state);}}
+}
+function openWeeklyLoopForm(state,{op,focusId=null,decision=null}={}){
+  if(!weeklyLoopIsCurrent(state)||weeklyLoopSaveBusy||coachingActionSavePending||!confirmLeaveFeedbackEntry())return;
+  for(const other of weeklyLoopMounts)if(other!==state&&other.form&&weeklyLoopIsCurrent(other))drawWeeklyLoop(other);
+  const b=state.bundle,active=b.active||[],proposal=(b.proposals||[]).find(f=>f.id===focusId),focus=active.find(f=>f.id===focusId)||active[0];
+  const changing=['choose','propose','adjust'].includes(op)||(op==='review'&&decision==='adjust');
+  const candidates=b.candidates||[],own=!!b.is_owner,formId=`weekly-loop-form-${state.id}`;
+  const heading=op==='review'?weeklyLoopDecisionLabel(decision):({choose:'Choose your current focus',propose:'Suggest a focus',adjust:own?'Change your current focus':'Suggest a change',retire:'Finish this focus',accept:'Accept this suggestion',decline:'Decline this suggestion'})[op];
+  const target=proposal||focus;
+  const slot=state.host.querySelector('[data-weekly-form-slot]');
+  slot.innerHTML=`<div class="weekly-loop-form" id="${formId}"><h3>${esc(heading)}</h3>
+  ${op==='review'&&active.length>1?`<div class="field"><label for="${formId}-focus">Which current focus?</label><select id="${formId}-focus" data-weekly-review-focus>${active.map(f=>`<option value="${esc(f.id)}">${esc(weeklyLoopText(f))}</option>`).join('')}</select></div>`:target&&!['choose','propose'].includes(op)?`<p><strong>${esc(weeklyLoopText(target))}</strong></p>`:''}
+  ${changing?`<div class="field"><label for="${formId}-source">Choose from the saved plan or conversations</label><select id="${formId}-source" data-weekly-source><option value="">Choose a saved priority…</option>${candidates.map((c,i)=>`<option value="${i}">${esc(weeklyLoopSourceLabel(c))} — ${esc(weeklyLoopText(c))}</option>`).join('')}</select>${candidates.length?'':'<p class="help">There are no saved priorities available yet. Add a Player Plan answer, an innings reflection or a training focus in a Coach Conversation, then return here.</p>'}</div><div class="field"><label for="${formId}-text">Focus for the next sessions</label><textarea id="${formId}-text" data-weekly-text rows="3" maxlength="240" placeholder="Choose a saved priority above."></textarea><p class="help">The saved wording is filled in for you. Refine it if a more specific practice goal has been agreed.</p></div><div class="field"><label for="${formId}-theme">Training theme (optional)</label><select id="${formId}-theme" data-weekly-theme>${[['other','No shared theme'],['decision','Decision making'],['execution','Execution'],['strike_rotation','Strike rotation'],['scoring','Scoring options'],['pressure','Handling pressure'],['preparation','Preparation']].map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select><p class="help">Helps coaches spot shared practice themes. Choose only a theme that fits.</p></div>`:''}
+  ${op==='review'?`<p class="help">${decision==='keep'?'The focus stays current. Record what you learnt or what went well.':decision==='adjust'?own?'This updates your chosen focus and records the decision against this review.':'The current focus stays in place while the player considers your suggestion.':'This uses the existing Coach Conversation when available. Your focus remains current while you discuss it.'}</p>`:op==='retire'?'<p class="help">This removes the focus from current priorities. Its saved history stays available.</p>':op==='decline'?'<p class="help">Your current focus stays the same.</p>':changing?`<p class="help">${own?'Your choice appears across your batting tools.':'The player will be asked to accept the suggestion before it becomes current.'}</p>`:''}
+  <div class="field"><label for="${formId}-note">${op==='review'?'What did you learn or agree?':'Note'} <span>(optional)</span></label><textarea id="${formId}-note" data-weekly-note maxlength="500" rows="2" placeholder="A useful decision, committed practice or something to discuss…"></textarea></div>
+  <div class="btnrow"><button class="btn secondary" data-weekly-save ${changing&&!candidates.length?'disabled':''}>${op==='review'?'Save next step':op==='accept'?'Accept suggestion':op==='decline'?'Decline suggestion':op==='retire'?'Finish focus':own?'Save focus':'Send suggestion'}</button><button class="btn ghost" data-weekly-cancel>Cancel</button></div><p class="weekly-loop-status" data-weekly-form-status role="status"></p></div>`;
+  state.form=slot.querySelector('.weekly-loop-form');state.formBaseline=weeklyLoopFormValue(state.form);state.requestId=null;state.requestPayload=null;
+  const form=state.form,source=form.querySelector('[data-weekly-source]'),text=form.querySelector('[data-weekly-text]');
+  if(source)source.onchange=()=>{const item=candidates[Number(source.value)];if(source.value!==''&&item){text.value=weeklyLoopText(item);form.querySelector('[data-weekly-theme]').value=item.theme_key||'other';}else text.value='';};
+  form.querySelector('[data-weekly-cancel]').onclick=()=>{if(confirmLeaveWeeklyLoop()){state.form=null;state.formBaseline=null;slot.innerHTML='';}};
+  form.querySelector('[data-weekly-save]').onclick=async()=>{
+    if(!weeklyLoopIsCurrent(state)||state.form!==form||weeklyLoopSaveBusy||coachingActionSavePending)return;
+    const status=form.querySelector('[data-weekly-form-status]'),selected=candidates[Number(source?.value)],id=form.querySelector('[data-weekly-review-focus]')?.value||focusId||focus?.id;
+    const values={op:op==='adjust'?(own?'choose':'propose'):op,note:form.querySelector('[data-weekly-note]').value.trim()};
+    if(values.note.length>500){status.textContent='Keep your note to 500 characters or fewer.';return;}
+    if(op==='review'){values.decision=decision;values.focus_id=id;Object.assign(values,weeklyLoopContext(state));}
+    else if(['accept','decline','retire'].includes(op))values.focus_id=focusId;
+    if(changing){
+      Object.assign(values,weeklyLoopContext(state)||{});
+      if(!source||source.value===''||!selected){status.textContent='Choose a saved priority first.';return;}
+      const focusText=text.value.trim();if(!focusText){status.textContent='Add a short, specific focus.';return;}if(focusText.length>240){status.textContent='Shorten this to one useful priority, using 240 characters or fewer.';return;}
+      Object.assign(values,{source_kind:selected.source_kind,source_id:selected.source_id||null,source_key:selected.source_key||null,focus_text:focusText,theme_key:form.querySelector('[data-weekly-theme]').value||'other'});
+      if(op==='adjust'||(op==='review'&&decision==='adjust'))values.replace_focus_id=id;
+    }
+    await saveWeeklyLoop(state,values,form,status);
+  };
+  form.scrollIntoView({block:'nearest'});
+}
+async function saveWeeklyLoop(state,values,form,status){
+  const args={p_player_id:state.options.playerId,p_expected_revision:state.bundle.revision,p_values:values};
+  const payload=JSON.stringify(args);if(payload!==state.requestPayload){state.requestId=globalThis.crypto.randomUUID();state.requestPayload=payload;}
+  weeklyLoopSaveBusy=true;coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
+  try{
+    const {data,error}=await supabase.rpc('save_player_focus',{...args,p_request_id:state.requestId});if(error)throw error;
+    state.savedActionId=data?.action_id||null;
+    state.formBaseline=weeklyLoopFormValue(form);state.form=null;state.message=values.op==='review'?(values.decision==='adjust'&&!state.bundle.is_owner?'Next step saved. The player can accept your suggested focus.':values.decision==='discuss'?'Next step saved. Continue in Coach Conversations.':'Next step saved.'):(values.op==='propose'?'Suggestion saved for the player to consider.':values.op==='accept'?'Suggestion accepted. Your current focus is updated.':values.op==='decline'?'Suggestion declined. Your current focus stays the same.':values.op==='retire'?'Focus finished. Its history has been kept.':'Current focus saved.');
+    if(!weeklyLoopIsCurrent(state))return;
+    await Promise.all([...weeklyLoopMounts].filter(other=>weeklyLoopIsCurrent(other)&&other.options.playerId===state.options.playerId&&!other.form).map(loadWeeklyLoop));
+    if(weeklyLoopIsCurrent(state)&&typeof state.options.onSaved==='function')await state.options.onSaved(values);
+    if(typeof refreshMyCoachingUpdates==='function')await refreshMyCoachingUpdates();
+  }catch(error){if(weeklyLoopIsCurrent(state)&&state.form===form){status.textContent=error?.message||'Could not confirm the save. Your entry is still here; try again.';restore();}else if(weeklyLoopIsCurrent(state)){const target=state.host.querySelector('[data-weekly-status]');if(target)target.textContent='Saved. Refresh this page to see all the latest updates.';}}
+  finally{weeklyLoopSaveBusy=false;coachingActionSavePending=false;}
+}
+// END WEEKLY LOOP
+
+// BEGIN TRAINING PREPARATION — one view of existing, permission-scoped player work.
+let trainingPreparationState={scope:'',group:''};
+let trainingPreparationCache=null;
+let trainingPreparationSequence=0;
+const TRAINING_PREPARATION_THEMES={decision:'Decision making',execution:'Execution',strike_rotation:'Strike rotation',scoring:'Scoring options',pressure:'Handling pressure',preparation:'Preparation'};
+function ensureTrainingPreparationState(){
+  const scope=`${club?.id||''}:${session?.user?.id||''}`;
+  if(trainingPreparationState.scope!==scope){trainingPreparationState={scope,group:''};trainingPreparationCache=null;}
+  return trainingPreparationState;
+}
+function restoreTrainingPreparationState(saved={}){
+  const state=ensureTrainingPreparationState();
+  state.group=typeof saved?.group==='string'?saved.group:'';
+  return state;
+}
+function trainingPreparationPlayers(data,state=ensureTrainingPreparationState()){
+  return (data?.players||[]).filter(player=>!state.group||(state.group==='__unassigned__'?!(player.group_ids||[]).length:(player.group_ids||[]).includes(state.group)))
+    .sort((a,b)=>String(a.display_name||'').localeCompare(String(b.display_name||''))||String(a.player_id).localeCompare(String(b.player_id)));
+}
+function trainingPreparationSharedThemes(players){
+  // Use only the category explicitly saved with a current focus. Similar words
+  // do not establish a shared coaching need, and "other" is not a useful theme.
+  const buckets=new Map();
+  for(const player of players)for(const focus of player.focuses||[]){
+    const label=TRAINING_PREPARATION_THEMES[focus.theme_key];if(!label)continue;
+    if(!buckets.has(focus.theme_key))buckets.set(focus.theme_key,{key:focus.theme_key,label,players:new Map()});
+    buckets.get(focus.theme_key).players.set(player.player_id,player.display_name||'Player');
+  }
+  return [...buckets.values()].filter(theme=>theme.players.size>1).map(theme=>({...theme,players:[...theme.players.values()]}))
+    .sort((a,b)=>b.players.length-a.players.length||a.label.localeCompare(b.label));
+}
+function trainingPreparationOpenConversations(player){
+  return (player.conversations||[]).filter(action=>action.status==='open'&&action.follow_up_requested!==false)
+    .sort((a,b)=>String(a.review_on||'9999-12-31').localeCompare(String(b.review_on||'9999-12-31'))||String(a.id).localeCompare(String(b.id)));
+}
+function trainingPreparationReviewLabel(action,today=todayIso()){
+  const date=String(action.review_on||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return 'No review date';
+  return date<today?`Review overdue · ${formatDateShort(date)}`:date===today?'Review due today':`Review ${formatDateShort(date)}`;
+}
+function trainingPreparationStyles(){return `<style>
+  .prep-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}.prep-heading h1{margin:6px 0}.prep-filter-row{display:flex;align-items:end;gap:16px;flex-wrap:wrap}.prep-filter-row .field{flex:1;max-width:420px;margin:0;min-width:200px}.prep-summary{display:flex;gap:8px 20px;flex-wrap:wrap;font-size:14px;margin:18px 0 0;color:var(--muted)}.prep-summary strong{color:var(--ink)}
+  .prep-theme-list{display:flex;flex-wrap:wrap;gap:10px}.prep-theme{border:1px solid #dce1ed;border-radius:10px;padding:12px 14px;flex:1;min-width:180px}.prep-theme strong{display:block}.prep-theme p{font-size:13px;margin:7px 0 0;overflow-wrap:anywhere}.prep-theme-count{font-weight:400;color:var(--muted)}
+  .prep-table{width:100%;border-collapse:collapse;table-layout:fixed}.prep-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 10px}.prep-table td{padding:18px 10px;border-top:1px solid #dce1ed;vertical-align:top;overflow-wrap:anywhere}.prep-table th:first-child{width:24%}.prep-table th:nth-child(2){width:38%}.prep-table h3{font-size:17px;margin:0 0 8px}.prep-table .btn{min-height:44px;padding:9px 12px}.prep-groups{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 12px}.prep-focus-list{margin:0;padding-left:20px}.prep-focus-list li+li{margin-top:12px}.prep-focus-list small{display:block;color:var(--muted);margin-top:5px}.prep-empty-focus{margin:0;color:var(--muted)}.prep-conversation{margin-bottom:12px}.prep-conversation:last-child{margin-bottom:0}.prep-conversation p{font-size:14px;margin:5px 0 8px}.prep-review{font-size:12px;color:var(--muted)}.prep-review-due{font-weight:700;color:#8b4214}.prep-more>summary{cursor:pointer;min-height:36px;font-weight:700;font-size:13px}.prep-access{font-size:12px;color:var(--muted);margin:8px 0}.prep-empty{padding:20px 0}
+  @media(max-width:700px){.prep-table,.prep-table tbody,.prep-table tr,.prep-table td{display:block}.prep-table thead{display:none}.prep-table tr{border-top:1px solid #dce1ed;padding:18px 0}.prep-table td{border:0;padding:0 0 16px}.prep-table td:last-child{padding-bottom:0}.prep-table td[data-prep-label]::before{content:attr(data-prep-label);display:block;font-weight:700;font-size:12px;color:var(--muted);margin-bottom:9px}.prep-heading .btnrow{width:100%}.prep-table h3{font-size:19px}.prep-filter-row .field{max-width:none}.prep-theme{min-width:160px}.prep-summary{gap:8px 16px}}
+</style>`;}
+async function openTrainingPreparation({group=null}={}){
+  if(!canUsePlayersWorkspace()||!await saveClubEditsBeforeNavigation())return;
+  const state=ensureTrainingPreparationState();
+  if(group!==null)state.group=String(group);
+  else if(currentTab==='players'){
+    const selected=playersWorkspaceGroupFilter;
+    state.group=selected==='__unassigned__'||(playersWorkspaceData?.groups||[]).some(g=>g.id===selected)?selected:'';
+  }
+  currentTab='training_preparation';return renderTab();
+}
+async function openTrainingPreparationPlayer(playerId,section='training',actionId=null){
+  // Resolve the visible row before leaving. The destination RPC checks access
+  // again so an old tab cannot retain rights removed since it was loaded.
+  if(!canUsePlayersWorkspace()||!trainingPreparationCache?.players.some(p=>p.player_id===playerId)||!await saveClubEditsBeforeNavigation())return;
+  resetPlayersWorkspaceForClub();playersWorkspaceSelectedId=playerId;playersWorkspaceSection=section;
+  playersWorkspaceLocalRaw=null;playersWorkspaceDevelopmentMode=null;playersWorkspaceDevelopmentMatchId=null;staffObservationEditId=null;
+  currentTab='players';await renderTab();
+  if(actionId&&currentTab==='players'&&playersWorkspaceSelectedId===playerId&&playersWorkspaceSection===section){
+    requestAnimationFrame(()=>[...document.querySelectorAll('[data-coaching-action-card]')].find(card=>card.dataset.coachingActionCard===actionId)?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
+}
+function renderTrainingPreparationConversation(action,playerId){
+  const due=!!action.review_on&&String(action.review_on).slice(0,10)<=todayIso();
+  return `<div class="prep-conversation"><div class="prep-review ${due?'prep-review-due':''}">${esc(trainingPreparationReviewLabel(action))}</div><p>${esc(action.task||'Coach Conversation')}</p><button type="button" class="btn ghost" data-prep-conversation="${esc(action.id)}" data-prep-player="${esc(playerId)}">Open conversation</button></div>`;
+}
+function renderTrainingPreparationRows(players){
+  return players.map(player=>{
+    const focuses=player.focuses||[],actions=trainingPreparationOpenConversations(player);
+    return `<tr data-prep-player-row="${esc(player.player_id)}"><td><h3>${esc(player.display_name||'Player')}</h3><div class="prep-groups">${(player.groups||[]).length?player.groups.map(group=>`<span class="workspace-group-pill">${esc(group.name)}</span>`).join(''):'<span class="workspace-group-pill">Currently unassigned</span>'}</div><button type="button" class="btn ghost" data-prep-training="${esc(player.player_id)}">Open training & focus</button>${player.can_write===false?'<p class="prep-access">View access</p>':''}</td>
+      <td data-prep-label="Current focus">${focuses.length?`<ol class="prep-focus-list">${focuses.map(focus=>`<li>${esc(focus.focus_text)}<small>${esc(typeof weeklyLoopAgreementLabel==='function'?weeklyLoopAgreementLabel(focus,false):focus.accepted_by&&focus.chosen_by&&focus.accepted_by!==focus.chosen_by?'Agreed with coach':'Chosen by the player')}</small>${TRAINING_PREPARATION_THEMES[focus.theme_key]?`<small>${esc(TRAINING_PREPARATION_THEMES[focus.theme_key])}</small>`:''}</li>`).join('')}</ol>`:'<p class="prep-empty-focus">No current focus chosen.</p><p class="help">Open the player’s training to choose a focus together.</p>'}</td>
+      <td data-prep-label="Conversations & reviews">${actions.length?`${actions.slice(0,2).map(action=>renderTrainingPreparationConversation(action,player.player_id)).join('')}${actions.length>2?`<details class="prep-more"><summary>${actions.length-2} more open ${actions.length-2===1?'conversation':'conversations'}</summary>${actions.slice(2).map(action=>renderTrainingPreparationConversation(action,player.player_id)).join('')}</details>`:''}`:'<p class="prep-empty-focus">No open coaching follow-up.</p>'}</td></tr>`;
+  }).join('');
+}
+async function renderTrainingPreparation({refresh=true}={}){
+  const page=document.getElementById('page'),state=ensureTrainingPreparationState(),scope=state.scope,sequence=++trainingPreparationSequence;
+  const current=()=>currentTab==='training_preparation'&&ensureTrainingPreparationState().scope===scope&&sequence===trainingPreparationSequence&&document.getElementById('page')===page;
+  if(!page)return;
+  if(!canUsePlayersWorkspace()){trainingPreparationCache=null;page.innerHTML='<section class="card"><h1>Training preparation</h1><p>Your Club Admin can assign a coaching role and access to the players you work with.</p></section>';return;}
+  if(refresh||!trainingPreparationCache){
+    page.innerHTML='<p class="splash" role="status">Loading training preparation…</p>';
+    try{
+      const {data,error}=await supabase.rpc('get_training_preparation',{p_club_id:club.id});
+      if(!current())return;if(error)throw error;
+      trainingPreparationCache={groups:Array.isArray(data?.groups)?data.groups:[],players:Array.isArray(data?.players)?data.players:[]};
+    }catch(error){
+      if(current()){
+        trainingPreparationCache=null;
+        page.innerHTML=`<section class="card notice"><h1>Training preparation</h1><p>Training preparation could not load.</p><p class="help">${esc(error?.message||'Check your connection and try again.')}</p><div class="btnrow"><button type="button" class="btn" id="retryTrainingPreparation">Try again</button><button type="button" class="btn ghost" id="trainingPreparationBack">Back to Players</button></div></section>`;
+        document.getElementById('retryTrainingPreparation').onclick=()=>renderTrainingPreparation();
+        document.getElementById('trainingPreparationBack').onclick=async()=>{if(await saveClubEditsBeforeNavigation()){currentTab='players';playersWorkspaceSelectedId=null;return renderTab();}};
+      }
+      return;
+    }
+  }
+  if(!current())return;
+  const data=trainingPreparationCache;
+  const missingGroup=!!state.group&&state.group!=='__unassigned__'&&!data.groups.some(g=>g.id===state.group);
+  if(missingGroup)state.group='';
+  const players=trainingPreparationPlayers(data,state),themes=trainingPreparationSharedThemes(players),actions=players.flatMap(trainingPreparationOpenConversations);
+  const due=actions.filter(action=>action.review_on&&String(action.review_on).slice(0,10)<=todayIso()).length,withFocus=players.filter(player=>player.focuses?.length).length;
+  page.innerHTML=`${trainingPreparationStyles()}<section class="card"><div class="prep-heading"><div><div class="section-label">Before training</div><h1>Training preparation</h1><p>Bring each player’s focus into this session, and pick up conversations that need attention.</p></div><div class="btnrow"><button type="button" class="btn ghost" id="trainingPreparationBack">Back to Players</button><button type="button" class="btn ghost" id="trainingPreparationHelp">Show me how</button></div></div><p class="help">Only players and coaching records you already have access to are shown. A Playing Group may include other players outside your access.</p></section>
+    <section class="card">${missingGroup?'<p class="notice" role="status">That Playing Group is no longer available. Your accessible players are shown.</p>':''}<div class="prep-filter-row"><div class="field"><label for="trainingPreparationGroup">Playing Group</label><select id="trainingPreparationGroup"><option value="" ${!state.group?'selected':''}>All accessible players</option><option value="__unassigned__" ${state.group==='__unassigned__'?'selected':''}>Currently unassigned</option>${data.groups.map(group=>`<option value="${esc(group.id)}" ${group.id===state.group?'selected':''}>${esc(group.name)}</option>`).join('')}</select></div><button type="button" class="btn ghost" id="refreshTrainingPreparation">Refresh</button></div><div class="prep-summary" role="status"><span><strong>${players.length}</strong> accessible ${players.length===1?'player':'players'} shown</span><span><strong>${withFocus}</strong> with a current focus</span><span><strong>${actions.length}</strong> open ${actions.length===1?'conversation':'conversations'}</span><span><strong>${due}</strong> ${due===1?'review':'reviews'} due</span></div></section>
+    ${themes.length?`<section class="card"><h2>Shared training themes</h2><p class="help">These players have chosen the same focus category. Open their individual focuses when planning the activity.</p><div class="prep-theme-list">${themes.map(theme=>`<article class="prep-theme" data-prep-theme="${esc(theme.key)}"><strong>${esc(theme.label)} <span class="prep-theme-count">· ${theme.players.length} players</span></strong><p>${theme.players.map(esc).join(', ')}</p></article>`).join('')}</div></section>`:''}
+    <section class="card">${players.length?`<table class="prep-table"><caption class="sr-only">Current focus, conversations and reviews for accessible players</caption><thead><tr><th scope="col">Player</th><th scope="col">Current focus</th><th scope="col">Conversations & reviews</th></tr></thead><tbody>${renderTrainingPreparationRows(players)}</tbody></table>`:`<div class="prep-empty"><h2>${data.players.length?'No accessible players in this selection.':'No players are available to you yet.'}</h2><p>${data.players.length?'Choose another Playing Group or All accessible players.':'Your Club Admin can check player registration and your player access in People & Sign-up.'}</p></div>`}</section>`;
+  document.getElementById('trainingPreparationGroup').onchange=async event=>{
+    const chosen=event?.target?.value??document.getElementById('trainingPreparationGroup').value;
+    if(!await saveClubEditsBeforeNavigation()){document.getElementById('trainingPreparationGroup').value=state.group;return;}
+    state.group=chosen;return renderTrainingPreparation({refresh:false});
+  };
+  document.getElementById('refreshTrainingPreparation').onclick=async()=>{if(await saveClubEditsBeforeNavigation())return renderTrainingPreparation();};
+  document.getElementById('trainingPreparationBack').onclick=async()=>{if(await saveClubEditsBeforeNavigation()){currentTab='players';playersWorkspaceSelectedId=null;return renderTab();}};
+  document.getElementById('trainingPreparationHelp').onclick=()=>openClubBattingGuideTopic('training_preparation');
+  document.querySelectorAll('[data-prep-training]').forEach(button=>button.onclick=()=>openTrainingPreparationPlayer(button.dataset.prepTraining));
+  document.querySelectorAll('[data-prep-conversation]').forEach(button=>button.onclick=()=>openTrainingPreparationPlayer(button.dataset.prepPlayer,'development',button.dataset.prepConversation));
+  recordAppNavigation(clubNavigationRoute());
+}
+// END TRAINING PREPARATION
+// END WEEKLY LOOP MODULES
 
 /* ---------------- GUIDED PLAYER PLAN ---------------- */
 
