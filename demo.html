@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.28 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.30 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.28';
+const APP_UI_VERSION='0.8.62.30';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -4319,7 +4319,53 @@ function authEntryLinks(){
   return '<p class="help"><a href="./">Club Batting home</a> · <a href="./demo.html?stage=help">Explore the tutorials</a></p>';
 }
 
+// Keep only a short-lived club invitation in this tab. Never store email,
+// passwords or auth tokens here, and never resume/join a club automatically.
+const CLUB_SIGNUP_RETURN_KEY='club-batting-signup-return-v1';
+let pendingClubSignupEntry=null;
+function clubSignupEntryFromUrl(){
+  const params=new URLSearchParams(location.search);
+  if(['trial','lead','prospect','payment','admin_invite','philosophy_invite','lead_handover','close_invitation','platform','club','tab'].some(key=>params.has(key)))return null;
+  if(params.has('player_join'))return params.get('player_join').trim()?{kind:'player',token:params.get('player_join')}:null;
+  if(params.has('join'))return params.get('join').trim()?{kind:'code',token:params.get('join'),involvement:params.get('involvement')==='coach_captain'?'coach_captain':''}:null;
+  return null;
+}
+function forgetClubSignupEntry(){
+  pendingClubSignupEntry=null;
+  try{fixtureSessionStorage.removeItem(CLUB_SIGNUP_RETURN_KEY);}catch{/* storage unavailable */}
+}
+function rememberClubSignupEntry(clubName=''){
+  if(session)return;
+  const entry=clubSignupEntryFromUrl();if(!entry)return;
+  pendingClubSignupEntry={...entry,clubName:String(clubName||''),savedAt:Date.now()};
+  try{fixtureSessionStorage.setItem(CLUB_SIGNUP_RETURN_KEY,JSON.stringify(pendingClubSignupEntry));}catch{/* in-memory fallback */}
+}
+function clubSignupReturnEntry(){
+  if(session)return null;
+  const current=clubSignupEntryFromUrl();if(current)return current;
+  // Another explicit destination, even an incomplete invitation, wins over a saved one.
+  const params=new URLSearchParams(location.search);
+  if([...params.keys()].some(key=>!['signin','password_setup','code'].includes(key)))return null;
+  let entry=pendingClubSignupEntry;
+  try{entry=entry||JSON.parse(fixtureSessionStorage.getItem(CLUB_SIGNUP_RETURN_KEY)||'null');}catch{/* bad/unavailable storage */}
+  const age=Date.now()-Number(entry?.savedAt);
+  if(!entry||!['player','code'].includes(entry.kind)||typeof entry.token!=='string'||!entry.token.trim()||!Number.isFinite(age)||age<0||age>2*60*60*1000){forgetClubSignupEntry();return null;}
+  return entry;
+}
+function clubSignupReturnHtml(){
+  const params=new URLSearchParams(location.search);
+  if(['trial','lead','prospect','payment','admin_invite','philosophy_invite','lead_handover','close_invitation','platform','club','tab'].some(key=>params.has(key)))return '';
+  const entry=clubSignupReturnEntry();
+  if(!entry)return '<p class="help"><strong>Joining a club for the first time?</strong> Open the player or non-playing staff sign-up link your club shared, or scan its QR code. Create your account there before using password help.</p>';
+  const target=new URL(location.pathname,location.origin);
+  target.searchParams.set(entry.kind==='player'?'player_join':'join',entry.token);
+  if(entry.kind==='code'&&entry.involvement==='coach_captain')target.searchParams.set('involvement','coach_captain');
+  const label=entry.kind==='player'?'Start player sign-up':entry.involvement==='coach_captain'?'Start non-playing staff sign-up':'Start club sign-up';
+  return `<div class="notice" id="clubSignupReturn"><strong>New to Club Batting?</strong><p>Create your account while joining ${esc(entry.clubName||'your club')}. You do not need an existing password.</p><a class="btn secondary" id="returnToClubSignup" href="${esc(target.href)}">${label}</a></div>`;
+}
+
 function renderJoinAccountEntry(){
+  rememberClubSignupEntry();
   const params=new URLSearchParams(location.search);
   const staffRoute=params.get('involvement')==='coach_captain';
   const passwordUrl=new URL(location.href);passwordUrl.searchParams.set('signin','1');
@@ -4360,6 +4406,7 @@ function renderLogin(msg=''){
     <h1>${platform?'Platform Admin sign-in':'Welcome back.'}</h1>
     <p>Sign in with your email and password. Your club and access stay with your account.</p>
     ${msg?`<div class="notice">${esc(msg)}</div>`:''}
+    ${!platform&&!trialEntry?clubSignupReturnHtml():''}
     <form id="passwordSignIn">
       <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required></div>
       <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
@@ -4396,7 +4443,8 @@ function renderLogin(msg=''){
 
 function renderPasswordReset(email=''){
   app.innerHTML=`<div class="login"><div class="section-label">Your account</div><h1>Set or reset your password.</h1>
-    <p>Use your existing account email. We’ll send one secure link so you can choose a password.</p>
+    ${clubSignupReturnHtml()}
+    <p>Already registered with Club Batting? Use your existing account email to choose a password. This does not create a new account.</p>
     <form id="passwordResetForm"><div class="field"><label for="resetEmail">Email</label><input id="resetEmail" type="email" autocomplete="email" value="${esc(email)}" required></div>
     <button class="btn secondary" id="requestReset" type="submit">Send password setup link</button></form>
     <div id="resetStatus" class="help" role="status" aria-live="polite"></div>
@@ -4412,7 +4460,7 @@ function renderPasswordReset(email=''){
     try{
       const {error}=await supabase.auth.resetPasswordForEmail(val('resetEmail'),{redirectTo:target.href});
       if(error)throw error;
-      status.textContent='If an account exists for that email, a password setup link is on its way. Check your inbox and junk folder.';
+      status.textContent='If an account exists for that email, a password setup link is on its way. Check your inbox and junk folder. If you have not registered yet, use your club’s sign-up link first.';
     }catch(error){status.textContent=error.message||'The link could not be requested. Please try again.';}
     finally{button.disabled=false;}
   };
@@ -4647,7 +4695,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(routeClub===club.id){
-    if(['playerhome','myplan','howwebat','howwetrain','conversations','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
+    if(['playerhome','innings','myplan','howwebat','howwetrain','conversations','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
       if(routeTab==='myplan')builderSection='core';
     }
@@ -4933,7 +4981,7 @@ function clubSetupUnavailableReason(tab){
 function canOpenClubTab(tab){
   if(['account_involvement','join_club'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
-  if(tab==='playerhome')return isPlayerUser();
+  if(['playerhome','innings'].includes(tab))return isPlayerUser();
   if(['permissions','groups'].includes(tab))return isAdmin();
   if(['players','feedback'].includes(tab))return canUsePlayersWorkspace();
   if(tab==='workshop_preview')return !!workshopPreview&&workshopPreview.clubId===club?.id&&workshopPreview.userId===session?.user?.id;
@@ -5212,7 +5260,9 @@ function renderCoachingUpdatesMenu(){
     if(!update||!coachingUpdateScopeMatches()||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
     pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
     document.getElementById('coachingUpdatesMenu').open=false;
-    currentTab=update.source_kind==='conversation'?'conversations':'howwetrain';howWeTrainReflectionEditId=update.source_kind==='match'&&!update.can_open?update.match_id:null;
+    currentTab=update.source_kind==='conversation'?'conversations':update.source_kind==='match'?'innings':'howwetrain';
+    if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=update.can_open?null:update.match_id;}
+    howWeTrainReflectionEditId=null;
     await renderTab();
   });
 }
@@ -5250,7 +5300,7 @@ function coachingNoteElement(update){
 }
 async function acknowledgeCoachingUpdate(update){
   const note=coachingNoteElement(update);
-  if(!['howwetrain','conversations'].includes(currentTab)||!coachingUpdateScopeMatches()||!note||note.dataset.coachingNoteUpdatedAt!==update.changed_at)return;
+  if(!['howwetrain','conversations','innings'].includes(currentTab)||!coachingUpdateScopeMatches()||!note||note.dataset.coachingNoteUpdatedAt!==update.changed_at)return;
   const scope=myCoachingUpdates,key=`${scope.clubId}:${scope.userId}:${update.source_key}:${update.changed_at}`;
   if(coachingSeenPending.has(key))return;
   coachingSeenPending.add(key);
@@ -5267,10 +5317,10 @@ async function acknowledgeCoachingUpdate(update){
 
 function watchVisibleCoachingNotes(){
   coachingNoteObserver?.disconnect();coachingNoteObserver=null;
-  if(!['howwetrain','conversations'].includes(currentTab)||!coachingUpdateScopeMatches()||typeof IntersectionObserver==='undefined')return;
+  if(!['howwetrain','conversations','innings'].includes(currentTab)||!coachingUpdateScopeMatches()||typeof IntersectionObserver==='undefined')return;
   const scope=myCoachingUpdates;
   coachingNoteObserver=new IntersectionObserver(entries=>{
-    if(!coachingUpdateScopeMatches(scope)||!['howwetrain','conversations'].includes(currentTab))return;
+    if(!coachingUpdateScopeMatches(scope)||!['howwetrain','conversations','innings'].includes(currentTab))return;
     for(const entry of entries){
       if(!entry.isIntersecting)continue;
       const update=myCoachingUpdates.updates.find(u=>coachingNoteElement(u)===entry.target);
@@ -5295,7 +5345,7 @@ function coachingHistoryHtml(items,kind,limit,renderItem){
 async function revealPendingCoachingUpdate(){
   watchVisibleCoachingNotes();
   const update=pendingCoachingUpdate;
-  if(!update||!coachingUpdateScopeMatches(update)||!['howwetrain','conversations'].includes(currentTab))return;
+  if(!update||!coachingUpdateScopeMatches(update)||!['howwetrain','conversations','innings'].includes(currentTab))return;
   const history=document.getElementById('trainingFeedbackLoop');if(history)history.open=true;
   const note=coachingNoteElement(update);
   if(note){
@@ -5396,6 +5446,7 @@ function renderShell(){
     nav.push(['playerhome','Player Home','player']);
     if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','player']);
     nav.push(['myplan','My Player Plan','player']);
+    nav.push(['innings','My Innings','player']);
     nav.push(['howwetrain','How We Train','player']);
   }else if(!canUseClubHome()){
     if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','player']);
@@ -5503,12 +5554,14 @@ function renderShell(){
 
 async function renderPlayerJoinRoute(token){
   if(!String(token||'').trim()){
+    forgetClubSignupEntry();
     app.innerHTML=`<div class="login"><div class="section-label">Player sign-up</div><h1>This player sign-up link is incomplete.</h1><p>Ask your club for the full player sign-up link, then open it again.</p><p>Already registered? <a href="./app.html?signin=1">Sign in to your account</a>.</p></div>`;
     return;
   }
   const {data:info,error}=await supabase.rpc('get_public_player_join',{p_token:token});
 
   if(error || !info){
+    forgetClubSignupEntry();
     app.innerHTML=`<div class="login">
       <div class="section-label">Player sign-up</div>
       <h1>This player link is no longer valid.</h1>
@@ -5518,6 +5571,7 @@ async function renderPlayerJoinRoute(token){
   }
 
   if(!info.open){
+    forgetClubSignupEntry();
     app.innerHTML=`<div class="login" style="max-width:650px">
       <div class="section-label">${esc(info.club_name)}</div>
       <h1>Player sign-up is currently closed.</h1>
@@ -5528,27 +5582,36 @@ async function renderPlayerJoinRoute(token){
   }
 
   if(!session){
+    rememberClubSignupEntry(info.club_name);
     app.innerHTML=`<div class="login" style="max-width:650px">
       <div class="section-label">Player sign-up</div>
       <h1>Join ${esc(info.club_name)}</h1>
       <p>This link registers you as a <strong>Player</strong>. If you are also a captain or coach, the Club Admin can add those permissions afterwards.</p>
       ${info.plans_ready===false?'<div class="notice">You can register now. Your club is preparing its setup; we’ll email you when Player Plans are ready. Assigned workshop and setup roles can take part before then.</div>':''}
-      <p>Already have an account? <a href="./app.html?player_join=${encodeURIComponent(token)}&signin=1">Sign in with your password</a>.</p>
-      <div class="field"><label>Your email</label><input id="playerJoinEmail" type="email" placeholder="you@example.com"></div>
-      <button class="btn secondary" id="playerJoinSignIn">Send secure sign-in link</button>
-      <div id="playerJoinStatus" class="help"></div>
+      <p><strong>New to Club Batting?</strong> Enter your email to create your account. We’ll send a secure link to bring you back here to finish joining. You do not need a password yet.</p>
+      <form id="playerJoinAccountForm">
+        <div class="field"><label for="playerJoinEmail">Your email</label><input id="playerJoinEmail" type="email" autocomplete="email" placeholder="you@example.com" required></div>
+        <button class="btn secondary" id="playerJoinSignIn" type="submit">Email my sign-up link</button>
+      </form>
+      <div id="playerJoinStatus" class="help" role="status" aria-live="polite"></div>
+      <p class="help">Already registered? <a href="./app.html?player_join=${encodeURIComponent(token)}&signin=1">Sign in with your password</a>. The email link above also works for an existing account.</p>
     </div>`;
 
-    document.getElementById('playerJoinSignIn').onclick=async()=>{
+    document.getElementById('playerJoinAccountForm').onsubmit=async event=>{
+      event.preventDefault();
+      const button=document.getElementById('playerJoinSignIn');
+      if(button.disabled)return;
       const email=val('playerJoinEmail');
       const st=document.getElementById('playerJoinStatus');
       if(!email){st.textContent='Enter your email address.';return;}
-      st.textContent='Sending…';
-      const {error:e}=await supabase.auth.signInWithOtp({
-        email,
-        options:{emailRedirectTo:redirectUrl()}
-      });
-      st.textContent=e?e.message:'Check your email and tap the secure sign-in link. It will bring you straight back here.';
+      button.disabled=true;st.textContent='Sending…';authActionInFlight=true;
+      try{
+        const target=new URL(location.pathname,location.origin);target.searchParams.set('player_join',token);
+        const {error}=await supabase.auth.signInWithOtp({email,options:{emailRedirectTo:target.href,shouldCreateUser:true}});
+        if(error)throw error;
+        st.textContent='Check your email and tap the secure sign-up link. It will bring you back here to enter your name and finish joining your club.';
+      }catch(error){st.textContent=error.message||'The sign-up link could not be requested. Please try again.';}
+      finally{authActionInFlight=false;button.disabled=false;}
     };
     return;
   }
@@ -5582,6 +5645,7 @@ async function renderPlayerJoinRoute(token){
 
     fixtureLocalStorage.setItem('bdp-context','club');
     fixtureLocalStorage.setItem('bdp-club-id',clubId);
+    forgetClubSignupEntry();
     history.replaceState({},'',location.pathname);
     currentTab='myplan';
     await loadPlatformContext();
@@ -5656,6 +5720,7 @@ async function renderJoinByCode(joinCode){
   wireRoleCards();
 
   document.getElementById('cancelJoinLink').onclick=async()=>{
+    forgetClubSignupEntry();
     history.replaceState({},'',location.pathname);
     await loadContext();
   };
@@ -5675,6 +5740,7 @@ async function renderJoinByCode(joinCode){
 
     fixtureLocalStorage.setItem('bdp-context','club');
     fixtureLocalStorage.setItem('bdp-club-id',data);
+    forgetClubSignupEntry();
     history.replaceState({},'',location.pathname);
     await loadContext();
   };
@@ -5728,6 +5794,7 @@ function clubNavigationRoute(){
     const {source,search,target}=ensurePlayingGroupsView();
     route.assignments={source,search,target};
   }
+  if(currentTab==='innings'){const {season,format,openId,editId}=ensureMyInningsState();route.innings={season,format,openId,editId};}
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
   if(currentTab==='workshop_preview'&&workshopPreview){
@@ -5742,7 +5809,7 @@ function platformNavigationRoute(){
   return {scope:'platform',view:platformView,prospectId:platformSelectedProspectId,onboardingId:platformSelectedOnboardingId};
 }
 function appNavigationKey(route){
-  return JSON.stringify([route.scope,route.clubId,route.tab,route.playerId,route.playerId?route.playerSection:null,route.planSection,route.previewKey,route.view,route.prospectId,route.onboardingId]);
+  return JSON.stringify([route.scope,route.clubId,route.tab,route.playerId,route.playerId?route.playerSection:null,route.planSection,route.innings?.editId,route.previewKey,route.view,route.prospectId,route.onboardingId]);
 }
 function validAppNavigationMarker(marker){
   return !!(marker?.version===1&&marker.userId===session?.user?.id&&typeof marker.trail==='string'&&Number.isInteger(marker.index)&&marker.index>=0&&
@@ -5810,6 +5877,7 @@ function restoreClubNavigationState(route){
     playersWorkspaceDevelopmentMode=null;
     playersWorkspaceDevelopmentMatchId=null;
   }
+  if(currentTab==='innings'){const state=ensureMyInningsState(),saved=route.innings||{};Object.assign(state,{season:saved.season==='all'||/^\d{4}$/.test(saved.season||'')?saved.season:null,format:FORMATS.some(([k])=>k===saved.format)?saved.format:'',openId:typeof saved.openId==='string'?saved.openId:null,editId:typeof saved.editId==='string'?saved.editId:null});}
   if(currentTab==='myplan')builderSection=route.planSection||'core';
   if(currentTab==='groups'){
     const state=ensurePlayingGroupsView();
@@ -5892,6 +5960,8 @@ function renderTab(){
   }
   const arrived=()=>{
     if(scrollOnArrival&&`${club?.id}:${currentTab}`===route){
+      const inningsFocus=currentTab==='innings'?(document.getElementById('myReflectionForm')||document.getElementById('innings-detail-'+ensureMyInningsState().openId)):null;
+      if(inningsFocus){inningsFocus.setAttribute('tabindex','-1');inningsFocus.focus({preventScroll:true});inningsFocus.scrollIntoView({block:'start'});bindWorkshopReturn();return;}
       window.scrollTo?.({top:0,left:0,behavior:'instant'});
       const heading=document.getElementById('page')?.querySelector('h1')||document.getElementById('page')?.querySelector('h2');
       if(heading){heading.setAttribute('tabindex','-1');heading.focus({preventScroll:true});}
@@ -5904,6 +5974,7 @@ function renderTab(){
     join_club:renderJoinAnotherClub,
     dashboard:renderClubDashboard,
     playerhome:renderPlayerHome,
+    innings:renderMyInnings,
     groups:renderPlayingGroups,
     players:renderPlayersWorkspace,
     feedback:renderFeedbackWorkspace,
@@ -5974,7 +6045,7 @@ async function openClubBattingGuideTopic(capabilityKey='whole_process',{focus='t
 }
 
 function guideTargetLabel(tab){
-  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',howwetrain:'How We Train',conversations:'Coach Conversations'}[tab]||'Open area');
+  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',innings:'My Innings',howwetrain:'How We Train',conversations:'Coach Conversations'}[tab]||'Open area');
 }
 
 function guideTargetUnavailableReason(tab,focus=''){
@@ -6020,7 +6091,7 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
-const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "how_we_train", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
+const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "how_we_train", "my_innings", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
 
 function guideTopicNumber(key){
   const index=GUIDE_TOPIC_ORDER.indexOf(key);
@@ -6154,6 +6225,10 @@ const CLUB_BATTING_HELP = {
         "title": "Share the player link",
         "body": "Club Admin opens People & Sign-up and uses Copy WhatsApp message, Copy player sign-up link or the QR code. Share the complete generated link; an empty player_join= link is not usable. A playing coach or captain uses the player route.",
         "target_tab": "permissions"
+      },
+      {
+        "title": "Create a new player account from the club link",
+        "body": "The player link and QR open Join [club name]. Enter your email and choose Email my sign-up link; no password is needed. Open the email, then enter your name to finish joining. Existing members can sign in with their password. If you reach password help before registering, choose Start player sign-up or reopen the original club link or QR. Password reset cannot create a new account."
       },
       {
         "title": "Use the staff route for non-players",
@@ -6580,7 +6655,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Reflect and review",
-        "body": "Record your own innings reflection when prompted. Genuine plan-related match feedback stays independent until you add your view; a general note does not require that reflection. Use Add note / mark Discussed or Actioned to record progress or finish shared work."
+        "body": "Open My Innings from How We Train or Player Home to see the season and record a reflection. Plan-related match feedback waits for your independent view; a general note does not. Use Coach Conversations to add progress notes or mark Discussed / Actioned."
       },
       {
         "title": "Back preparation and commitment",
@@ -6590,6 +6665,50 @@ const CLUB_BATTING_HELP = {
     "sort_order": 140,
     "active": true
   },
+  "my_innings": {
+    "capability_key": "my_innings",
+    "title": "Track your season in My Innings",
+    "purpose": "Your innings, notes and video in one place.",
+    "short_explanation": "Open My Innings from Player Home or the main navigation. See one row per recorded innings, filter by season or format, and open a row for your reflection and coaching feedback.",
+    "target_tab": "$innings",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 145,
+    "active": true,
+    "tutorial": [
+      {
+        "title": "See the season together",
+        "body": "My Innings shows Date, Opposition, Format, Score, My note and Video in one compact list. Seasons run July–June; choose All seasons to see older entries. Each recorded innings appears once, with all its linked coach observations underneath. On a phone, the same information is arranged in compact rows.",
+        "target_tab": "$innings"
+      },
+      {
+        "title": "Add an innings or update the existing row",
+        "body": "Choose Add an innings and enter the date and format. Opposition, score (such as 34 or 34*), a short note and a YouTube link are optional. If a coach already recorded this innings, open that row and choose Edit innings. Your note and reflection attach to that same record. Coach-recorded match details are read-only; ask the author to correct them."
+      },
+      {
+        "title": "Save now, reflect when ready",
+        "body": "Save innings works without a reflection. Open Reflect on this innings when useful and answer both questions to record your independent view. You can edit your own entry later. Logging a score, note or video alone does not reveal plan-related coaching assessments and does not create a coaching request or alert."
+      },
+      {
+        "title": "Use video for useful moments",
+        "body": "Paste an optional YouTube Share link for a good shot, a decision or a dismissal. Use Start at, or write the start and finish times in What should we look at? To share only one ball, upload a separately trimmed clip to YouTube. Club Batting stores links and notes, never video files. Only club staff with existing access to your player record can read your entry."
+      },
+      {
+        "title": "Read feedback and open the conversation",
+        "body": "Open a row for your full reflection and its coaching notes. Plan-related coach assessments and video stay hidden until you submit your own reflection; general notes are immediately available. Open Coach Conversation continues the existing thread, including notes and review dates. Request a new conversation separately when you want help."
+      },
+      {
+        "title": "Keep your place",
+        "body": "Refresh loads the latest saved innings while keeping the chosen season and format. Browser Back returns through app screens. Save changes before leaving; an unsaved form asks before discarding work. Entries are manual: there are no automatic score imports, averages or leaderboards."
+      }
+    ]
+  },
   "feedback_loop": {
     "title": "Player and coach feedback",
     "purpose": "Learn from the innings, not just the dismissal.",
@@ -6597,7 +6716,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Add an observation",
-        "body": "In Players, open the player’s Coach Conversations and choose Add match observation or Add training observation. Coaches with edit access can add observations; the original author can edit their own observation.",
+        "body": "In Players, open the player’s Coach Conversations and choose Add match observation or Add training observation. For a match already recorded, select the existing innings so the reflection and coaching notes stay together. Coaches with edit access can add observations; only the original author edits an observation.",
         "target_tab": "$feedback",
         "focus": "coach_conversations"
       },
@@ -6722,9 +6841,9 @@ const CLUB_BATTING_HELP = {
   },
   "youtube_video": {
     "capability_key": "youtube_video",
-    "title": "Use video in a Coach Conversation",
+    "title": "Use YouTube video links",
     "purpose": "Share a link to footage hosted on YouTube.",
-    "short_explanation": "Attach a YouTube link to a coach’s Match or Training Observation, or to a player’s conversation request. Keep the discussion and agreed action in Club Batting.",
+    "short_explanation": "Attach a YouTube link to a coach’s Match or Training Observation, a player’s conversation request, or a My Innings entry. Video stays on YouTube; notes and discussion stay in Club Batting.",
     "target_tab": "conversations",
     "tutorial": [
       {
@@ -6737,7 +6856,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Share only one ball or shot",
-        "body": "Trim a copy of your own footage in your phone/computer video editor, from a few seconds before the delivery to just after the shot. Keep the original. Upload the short copy to YouTube as Unlisted, copy its Share link, and paste it into the observation or request. Only use footage you have permission to share."
+        "body": "Trim a copy of your own footage in your phone/computer video editor, from a few seconds before the delivery to just after the shot. Keep the original. Upload the short copy to YouTube as Unlisted, copy its Share link, and paste it into the observation, request or My Innings entry. Only use footage you have permission to share."
       },
       {
         "title": "A start time is not an end time",
@@ -6745,11 +6864,11 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Attach it to the right record",
-        "body": "Coaches with edit access add the video to a Match or Training Observation. The author can edit or remove that link through Edit my observation. Players can attach a video when they create a Coach Conversation request. Save once to keep the record and video together."
+        "body": "Coaches with edit access add video to a Match or Training Observation and can edit their own observation. Players can add a video to a conversation request, or add/edit/remove a link through My Innings → Open → Edit innings. An innings video does not automatically request a conversation."
       },
       {
         "title": "Keep the independent reflection",
-        "body": "For a plan-related Match Observation, the player adds their own reflection before the coach’s video becomes available. General match notes and training observations do not require that reflection. A video on a player’s own request is shared immediately."
+        "body": "For plan-related Match Observations, the player adds their own reflection before seeing the coach’s assessment or video. General notes and training videos are immediately visible. A player’s own innings video is available to staff with existing player access; a preferred conversation partner gains no extra player-record access."
       },
       {
         "title": "Open YouTube and return to the discussion",
@@ -6836,7 +6955,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Use Back and refresh",
-        "body": "Browser Back/Forward follows app screens visited in the current session; refresh reloads the current screen and data. Back at the start of your app history can still leave the site. Workshop previews also have Back to Workshop."
+        "body": "Browser Back/Forward follows app screens visited in the current session; refresh reloads the current screen and data. My Innings keeps its season, format and open entry. Back at the start of app history can still leave the site. Workshop previews also have Back to Workshop."
       },
       {
         "title": "Protect work when moving",
@@ -6927,7 +7046,7 @@ const CLUB_BATTING_HELP = {
 function guideCapabilityForCurrentProduct(capability){
   const source=CLUB_BATTING_HELP[capability.capability_key];
   if(!source)return {...capability,tutorial:(capability.tutorial||[]).map(step=>({...step}))};
-  const resolve=target=>target==='$player_plan'?(!isPlayerUser()&&canUsePlayersWorkspace()?'players':'myplan'):target==='$feedback'||target==='$training'?(canUsePlayersWorkspace()?'players':'howwetrain'):target;
+  const resolve=target=>target==='$innings'?(isPlayerUser()?'innings':'players'):target==='$player_plan'?(!isPlayerUser()&&canUsePlayersWorkspace()?'players':'myplan'):target==='$feedback'||target==='$training'?(canUsePlayersWorkspace()?'players':'howwetrain'):target;
   return {...capability,title:source.title,purpose:source.purpose,short_explanation:source.short_explanation,
     target_tab:resolve(source.target_tab),tutorial:source.tutorial.map(step=>{
       const result={...step};if(result.target_tab)result.target_tab=resolve(result.target_tab);
@@ -12590,7 +12709,7 @@ function developmentViewBlock(title,view,author=''){
   </div>`;
 }
 
-function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false}={}){
+function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false,showReflectionAction=true}={}){
   const coaches=Array.isArray(match.coach_feedback)?match.coach_feedback:[];
   const latestCoach=coaches.find(f=>f.plan_related!==false)||null;
   const alignment=developmentAlignment(match.player_reflection,latestCoach);
@@ -12600,12 +12719,15 @@ function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false}=
     <div class="development-match-head"><div><div class="section-label">${esc(matchMetaLine(match))}</div><h3>${esc(match.dismissal_summary||'Match observation')}</h3></div>
       ${reflectionNeeded?'<span class="alignment-badge discuss">REFLECTION NEEDED</span>':alignment?`<span class="alignment-badge ${alignment.key}">${esc(alignment.label)}</span>`:''}</div>
     ${reflectionNeeded?'<div class="reflection-needed-copy"><strong>A coach has reviewed this innings against your Player Plan.</strong><span>Add your own reflection to see their plan answers. General coaching notes below can be read straight away.</span></div>':''}
+    ${match.coach_innings_note?`<p><strong>Coach’s innings note:</strong> ${esc(match.coach_innings_note)}</p>`:''}
+    ${renderInningsVideo(match.player_video)}
+    ${match.player_note&&match.player_note!==match.dismissal_summary?`<p><strong>Player’s innings note:</strong> ${esc(match.player_note)}</p>`:''}
     <div class="development-compare-grid">
       ${match.player_reflection?developmentViewBlock('PLAYER VIEW',match.player_reflection):!playerMode&&latestCoach?developmentViewBlock('PLAYER VIEW',null):''}
       ${visible.map(f=>developmentViewBlock(f.plan_related===false?'COACHING NOTE':'COACH VIEW',f,f.author_name||'Coach / Captain')).join('')}
     </div>
     <div class="development-actions">
-      ${playerMode&&(latestCoach||match.player_reflection||!coaches.length)?`<button class="btn ${reflectionNeeded?'secondary':'ghost'}" data-edit-my-reflection="${match.id}">${match.player_reflection?'Edit my reflection':'Add my reflection'}</button>`:''}
+      ${showReflectionAction&&playerMode&&(latestCoach||match.player_reflection||!coaches.length)?`<button class="btn ${reflectionNeeded?'secondary':'ghost'}" data-edit-my-reflection="${match.id}">${match.player_reflection?'Edit my reflection':'Add my reflection'}</button>`:''}
       ${staffCanEdit?`<button class="btn ghost" data-add-coach-feedback="${match.id}">Add coaching feedback</button>${coaches.filter(f=>f.author_user_id===session?.user?.id).map(f=>`<button class="btn secondary" data-edit-coach-feedback="${esc(f.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`).join('')}`:''}
     </div></article>`;
 }
@@ -12640,7 +12762,7 @@ function captureFeedbackEntryBaseline(){
   }
 }
 function confirmLeaveFeedbackEntry(){
-  if(typeof coachingActionSavePending!=='undefined'&&coachingActionSavePending){alert('Your agreed action is still saving. Please wait before leaving.');return false;}
+  if(typeof coachingActionSavePending!=='undefined'&&coachingActionSavePending){alert('Your changes are still saving. Please wait before leaving.');return false;}
   const dirty=['myReflectionForm','staffDevelopmentForm','coachingActionForm','coachingReviewForm','coachRequestForm'].some(id=>{
     const form=document.getElementById(id);
     return form&&feedbackEntryBaselines.has(form)&&feedbackEntryBaselines.get(form)!==feedbackEntryValues(form);
@@ -12648,21 +12770,25 @@ function confirmLeaveFeedbackEntry(){
   return !dirty||confirm('You have an unsaved reflection, observation or agreed action. Leave without saving it? Choose Cancel to keep editing.');
 }
 
-function renderMyReflectionForm(match=null){
+function renderMyReflectionForm(match=null,{innings=false}={}){
   const r=match?.player_reflection||{};
   const format=match?.format_key||publishedEnabledFormats()[0]?.[0]||'limited_overs';
+  const formats=innings?FORMATS:publishedEnabledFormats(),locked=innings&&match&&match.can_edit_details===false;
+  const readOnly=locked?'disabled':'';
   return `<section class="card development-entry-form" id="myReflectionForm">
     <div class="development-form-head">
-      <div><div class="section-label">Player reflection</div><h2>${match?'Update this innings':'Reflect on an innings'}</h2><div class="help">Give yourself credit for your preparation and commitment. Review the innings overall, then the dismissal ball: one choice need not describe the whole innings. Did that ball and situation suit your shot? How well did you execute it? Getting out alone does not make either wrong. Choose useful practice, without judgement.</div></div>
+      <div><div class="section-label">${innings?'My Innings':'Player reflection'}</div><h2>${match?'Update this innings':innings?'Add an innings':'Reflect on an innings'}</h2>${innings?'<p>Save the match details now. Your own note, video and reflection are optional.</p>':''}<div class="help">Give yourself credit for your preparation and commitment. Review the innings overall, then the dismissal ball: one choice need not describe the whole innings. Did that ball and situation suit your shot? How well did you execute it? Getting out alone does not make either wrong. Choose useful practice, without judgement.</div></div>
     </div>
     <div class="development-match-fields">
-      <div class="field"><label>Date</label><input id="reflectionDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
-      <div class="field"><label>Format</label><select id="reflectionFormat">${publishedEnabledFormats().map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
-      <div class="field"><label>Opposition <span>optional</span></label><input id="reflectionOpposition" maxlength="160" value="${esc(match?.opposition||'')}" placeholder="e.g. Merewether"></div>
-      <div class="field"><label>Score <span>optional</span></label><input id="reflectionScore" maxlength="80" value="${esc(match?.score_text||'')}" placeholder="e.g. 34 or 34*"></div>
+      <div class="field"><label for="reflectionDate">Date</label><input id="reflectionDate" ${readOnly} type="date" value="${esc(match?.match_date||todayIso())}"></div>
+      <div class="field"><label for="reflectionFormat">Format</label><select id="reflectionFormat" ${readOnly}>${formats.map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+      <div class="field"><label>Opposition <span>optional</span></label><input id="reflectionOpposition" ${readOnly} maxlength="160" value="${esc(match?.opposition||'')}" placeholder="e.g. Merewether"></div>
+      <div class="field"><label>Score <span>optional</span></label><input id="reflectionScore" ${readOnly} maxlength="80" value="${esc(match?.score_text||'')}" placeholder="e.g. 34 or 34*"></div>
     </div>
-    <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="reflectionDismissal" maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Pulled a short ball; caught on the boundary"></div>
+    ${locked?'<p class="help">Your coach recorded the match details above. You can add or edit your own note, video and reflection below.</p>':''}
+    <div class="field"><label for="reflectionDismissal">My innings note <span>optional</span></label><input id="reflectionDismissal" maxlength="300" value="${esc((innings?match?.player_note:match?.dismissal_summary)||'')}" placeholder="e.g. Pulled a short ball; caught on the boundary"></div>
 
+    ${innings?coachingVideoFields('innings',match?.player_video,{playerRequest:true})+`<details class="innings-reflection-options" id="inningsReflectionPanel" ${match?.player_reflection||(match?.coach_feedback||[]).some(f=>f.reflection_required)?'open':''}><summary>${match?.player_reflection?'My reflection':'Reflect on this innings (optional)'}</summary><p class="help">Choose both answers to record your independent view. A score or note alone does not unlock plan-related coaching feedback.</p>`:''}
     <div class="development-question"><label>In the innings overall, did I bat to my Player Plan?</label>${radioChoiceHtml('myBattingToPlan',[["yes","Yes","Overall, my approach matched my plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","My approach moved away from my plan"]],r.batting_to_plan||'')}</div>
     <div class="development-question"><label>On the dismissal ball, how did my choice fit my plan?</label>${radioChoiceHtml('myDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; I identified an execution detail to practise"],["outside_plan","Decision outside plan","The option for this ball was outside my plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],r.dismissal_classification||'')}</div>
     <div class="development-question"><label>Main issue <span>optional</span></label>
@@ -12670,7 +12796,8 @@ function renderMyReflectionForm(match=null){
     </div>
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="reflectionNextFocus" maxlength="240" value="${esc(r.next_training_focus||'')}" placeholder="One useful focus is enough"></div>
     <div class="field"><label>Anything else? <span>optional</span></label><textarea id="reflectionNote" maxlength="500" rows="3" placeholder="Short note only if it adds something useful">${esc(r.note||'')}</textarea></div>
-    <div class="btnrow"><button class="btn secondary" id="saveMyReflection">Save reflection</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus"></span></div>
+    ${innings?'</details>':''}
+    <div class="btnrow"><button class="btn secondary" id="saveMyReflection">${innings?'Save innings':'Save reflection'}</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus" role="status"></span></div>
   </section>`;
 }
 
@@ -12868,7 +12995,7 @@ async function renderCoachConversations(){
     document.getElementById('newCoachRequest')?.addEventListener('click',renderCoachConversationRequestForm);
     document.getElementById('refreshCoachConversations').onclick=()=>{if(confirmLeaveFeedbackEntry())return renderCoachConversations();};
     bindCoachingActionControls(feedback,renderCoachConversations);
-    document.querySelectorAll('[data-edit-my-reflection]').forEach(button=>button.onclick=()=>openPlayerHomeAction({tab:'howwetrain',matchId:button.dataset.editMyReflection,anchor:'myReflectionForm'}));
+    document.querySelectorAll('[data-edit-my-reflection]').forEach(button=>button.onclick=()=>openMyInnings({matchId:button.dataset.editMyReflection,edit:true}));
     await revealPendingCoachingUpdate();watchVisibleCoachingNotes();
   }catch(error){if(current())page.innerHTML=`<section class="card notice"><h1>Coach Conversations</h1><p>${esc(error?.message||'Could not load conversations.')}</p><button class="btn ghost" id="retryCoachConversations">Try again</button></section>`;document.getElementById('retryCoachConversations')?.addEventListener('click',renderCoachConversations);}
 }
@@ -13016,16 +13143,18 @@ function bindCoachingActionControls(feedback,onSaved){
 
 async function loadDevelopmentFeedback(playerId){
   if(!playerId)return {matches:[],training_observations:[],external_training_evidence:[],coaching_actions:[]};
-  const [feedbackResponse,actionResponse,contextResponse]=await Promise.all([
+  const [feedbackResponse,actionResponse,contextResponse,inningsResponse]=await Promise.all([
     Promise.resolve(supabase.rpc('get_development_feedback_for_player',{p_player_id:playerId})).catch(error=>({error})),
     Promise.resolve(supabase.rpc('get_player_coaching_actions',{p_player_id:playerId})).catch(error=>({error})),
-    Promise.resolve(supabase.rpc('get_coach_observation_context',{p_player_id:playerId})).catch(error=>({error}))
+    Promise.resolve(supabase.rpc('get_coach_observation_context',{p_player_id:playerId})).catch(error=>({error})),
+    Promise.resolve(supabase.rpc('get_player_innings_details',{p_player_id:playerId})).catch(error=>({error}))
   ]);
   const {data,error}=feedbackResponse;
   if(error){const failure=new Error(error.message||'Feedback could not load');failure.sharedActions={coaching_actions:Array.isArray(actionResponse.data?.actions)?actionResponse.data.actions:[],coaching_actions_error:actionResponse.error?.message||''};throw failure;}
   return {
     ...(data||{}),
-    matches:(Array.isArray(data?.matches)?data.matches:[]).map(m=>{const context=contextResponse.data?.matches?.find(c=>c.id===m.id);return {...m,...context,edit_context:context,coach_feedback:(m.coach_feedback||[]).map(f=>({...f,...(contextResponse.data?.feedback?.find(x=>x.id===f.id)||{})}))};}),
+    matches:(Array.isArray(data?.matches)?data.matches:[]).map(m=>{const context=contextResponse.data?.matches?.find(c=>c.id===m.id);return {...m,...context,...(inningsResponse.data?.matches?.find(x=>x.id===m.id)||{}),edit_context:context,coach_feedback:(m.coach_feedback||[]).map(f=>({...f,...(contextResponse.data?.feedback?.find(x=>x.id===f.id)||{})}))};}),
+    innings_details_error:inningsResponse.error?.message||'',
     observation_edit_error:contextResponse.error?.message||'',
     training_observations:Array.isArray(contextResponse.data?.training_observations)?contextResponse.data.training_observations:Array.isArray(data?.training_observations)?data.training_observations:[],
     external_training_evidence:Array.isArray(data?.external_training_evidence)?data.external_training_evidence:[],
@@ -13253,7 +13382,144 @@ function playerReflectionNeededMatches(feedback){
 }
 
 let howWeTrainRenderSequence=0;
+// BEGIN MY INNINGS — season view of existing match records, no parallel log.
+let myInningsState={scope:'',season:null,format:'',openId:null,editId:null};
+let myInningsCache=null;
+let myInningsSequence=0;
+function ensureMyInningsState(){
+  const scope=`${club?.id||''}:${session?.user?.id||''}`;
+  if(myInningsState.scope!==scope){myInningsState={scope,season:null,format:'',openId:null,editId:null};myInningsCache=null;}
+  return myInningsState;
+}
+function inningsSeason(date){
+  const parts=String(date||'').match(/^(\d{4})-(\d{2})-\d{2}$/);
+  return parts?String(Number(parts[1])-(Number(parts[2])<7?1:0)):null;
+}
+function inningsSeasonLabel(year){return `${year}/${String(Number(year)+1).slice(-2)}`;}
+function inningsInView(matches,state){
+  return matches.filter(m=>(state.season==='all'||inningsSeason(m.match_date)===state.season)&&(!state.format||m.format_key===state.format))
+    .sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))||String(b.created_at).localeCompare(String(a.created_at))||String(a.id).localeCompare(String(b.id)));
+}
+function inningsVideoLink(video,label='Watch ↗'){
+  if(!video?.url)return '';
+  let url;try{url=normaliseCoachingYouTubeUrl(video.url);}catch{return '';}
+  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(label==='Watch ↗'?'Watch innings video on YouTube':label)}">${esc(label)}</a>`;
+}
+function renderInningsVideo(video){
+  const link=inningsVideoLink(video,'Open innings video on YouTube ↗');
+  return link?`<div class="notice compact"><strong>Player’s innings video</strong>${video.note?`<p>${esc(video.note)}</p>`:''}<p>${link}</p></div>`:'';
+}
+function myInningsStyles(){return `<style>
+  .innings-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}.innings-heading h1{margin:6px 0}
+  .innings-filters{display:flex;align-items:end;flex-wrap:wrap;gap:16px}.innings-filters .field{margin:0;min-width:170px;flex:1}.innings-count{padding:12px 0;color:var(--muted)}
+  .innings-table{width:100%;border-collapse:collapse;table-layout:fixed}.innings-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 8px}.innings-table td{padding:14px 8px;border-top:1px solid #dce1ed;vertical-align:top;overflow-wrap:anywhere}
+  .innings-table .innings-date{width:13%}.innings-table .innings-opposition{width:18%}.innings-table .innings-format{width:13%}.innings-table .innings-score{width:9%;font-weight:700}.innings-table .innings-note{width:25%}.innings-table .innings-video{width:10%}.innings-table .innings-open{width:12%;text-align:right}
+  .innings-note-preview{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.innings-table small{display:block;color:var(--muted);font-size:12px;margin-top:5px}.innings-table .btn{min-height:44px;padding:8px 12px}.innings-detail td{padding:12px 0 20px}.innings-detail .development-match-card{margin:0}.innings-empty{padding:28px 8px}.innings-reflection-options{margin:18px 0;border:1px solid #dce1ed;border-radius:12px;padding:16px}.innings-reflection-options>summary{cursor:pointer;font-weight:700;min-height:32px}
+  @media(max-width:650px){.innings-table,.innings-table tbody{display:block}.innings-table thead{display:none}.innings-table .innings-row{display:grid;grid-template-columns:1fr 1.5fr auto;border-top:1px solid #dce1ed;padding:12px 0;gap:4px 12px}.innings-table .innings-row td{border:0;padding:3px 0;width:auto;text-align:left}.innings-table .innings-date{grid-column:1;font-size:13px}.innings-table .innings-opposition{grid-column:2;font-weight:700}.innings-table .innings-score{grid-column:3;text-align:right!important}.innings-table .innings-format{grid-column:1;grid-row:2;font-size:12px;color:var(--muted)}.innings-table .innings-note{grid-column:2;grid-row:2 / span 2}.innings-table .innings-video{grid-column:1;grid-row:3;font-size:13px}.innings-table .innings-open{grid-column:3;grid-row:2 / span 2}.innings-detail,.innings-detail td{display:block;width:100%}.innings-detail td{border:0}.innings-heading .btnrow{width:100%}.innings-filters .field{min-width:135px}}
+</style>`;}
+async function openMyInnings({matchId=null,edit=false,add=false}={}){
+  if(!canOpenClubTab('innings')||!await saveClubEditsBeforeNavigation())return;
+  const state=ensureMyInningsState();state.openId=matchId;state.editId=add?'new':edit?matchId:null;
+  if(matchId)state.season='all';
+  currentTab='innings';await renderTab();
+  if(state.editId)requestAnimationFrame(()=>document.getElementById('myReflectionForm')?.scrollIntoView({block:'start'}));
+}
+function renderInningsRows(matches){
+  const state=ensureMyInningsState();
+  return matches.map(m=>{
+    const open=state.openId===m.id,coaches=m.coach_feedback||[],locked=coaches.some(f=>f.reflection_required);
+    const note=m.player_note||m.player_reflection?.note||'';
+    const visible=coaches.filter(f=>!f.reflection_required);
+    return `<tr class="innings-row" data-innings-row="${esc(m.id)}">
+      <td class="innings-date">${esc(formatDateShort(m.match_date))}</td><td class="innings-opposition">${esc(m.opposition||'Opposition not recorded')}</td>
+      <td class="innings-format">${esc(formatLabel(m.format_key))}</td><td class="innings-score">${esc(m.score_text||'—')}</td>
+      <td class="innings-note"><span class="innings-note-preview">${esc(note||'—')}</span>${coaches.length?`<small>${coaches.length} coaching ${coaches.length===1?'note':'notes'}${locked?' · add your reflection to compare':''}</small>`:''}</td>
+      <td class="innings-video">${inningsVideoLink(m.player_video)||'—'}</td>
+      <td class="innings-open"><button type="button" class="btn ghost" data-innings-open="${esc(m.id)}" aria-expanded="${open}" aria-controls="innings-detail-${esc(m.id)}">${open?'Close':'Open'}</button></td>
+    </tr>${open?`<tr class="innings-detail" id="innings-detail-${esc(m.id)}"><td colspan="7">
+      <div class="btnrow" style="margin-bottom:12px"><button class="btn secondary" data-innings-edit="${esc(m.id)}">Edit innings${m.player_reflection?' & reflection':''}</button></div>
+      ${renderDevelopmentMatchCard(m,{playerMode:true,showReflectionAction:false})}
+      ${locked?`<p class="help">Your score and notes are saved. Add the two reflection answers before comparing with plan-related coaching feedback.</p><button class="btn secondary" data-innings-edit="${esc(m.id)}">Add my reflection</button>`:''}
+      ${visible.filter(f=>f.video||f.action_id).map(f=>`<div class="notice compact" style="margin-top:12px"><strong>${esc(f.author_name||'Coach / Captain')}</strong>${f.video?renderCoachingVideo(f.video):''}${f.action_id?`<button class="btn ghost" data-innings-conversation="${esc(f.action_id)}">Open Coach Conversation</button>`:''}</div>`).join('')}
+    </td></tr>`:''}`;
+  }).join('');
+}
+async function renderMyInnings({refresh=true,message=''}={}){
+  const page=document.getElementById('page'),state=ensureMyInningsState(),scope=state.scope,sequence=++myInningsSequence;
+  const current=()=>currentTab==='innings'&&ensureMyInningsState().scope===scope&&sequence===myInningsSequence&&page===document.getElementById('page');
+  if(!myPlayer||!isPlayerUser()){page.innerHTML='<section class="card"><h1>My Innings</h1><p>A player registration is needed to keep an innings record.</p></section>';return;}
+  if(refresh||!myInningsCache){
+    page.innerHTML='<p class="splash">Loading your innings…</p>';
+    try{const {data,error}=await supabase.rpc('get_my_innings',{p_club_id:club.id});if(!current())return;if(error)throw error;myInningsCache={matches:Array.isArray(data?.matches)?data.matches:[]};}
+    catch(error){if(current()){page.innerHTML=`<section class="card notice"><h1>My Innings</h1>${message?`<p class="notice" role="status">${esc(message)}</p>`:''}<p>Your innings list could not be loaded. Your saved records are still there.</p><p class="help">${esc(error?.message||'Check your connection and try again.')}</p><button class="btn" id="retryMyInnings">Try again</button><button class="btn ghost" id="inningsBackHome">Player Home</button></section>`;document.getElementById('retryMyInnings').onclick=()=>renderMyInnings();document.getElementById('inningsBackHome').onclick=()=>openPlayerHomeAction({tab:'playerhome'});}return;}
+  }
+  if(!current())return;
+  const all=myInningsCache.matches,currentSeason=inningsSeason(todayIso()),years=[...new Set([currentSeason,...all.map(m=>inningsSeason(m.match_date))].filter(Boolean))].sort().reverse();
+  if(state.season===null)state.season=currentSeason;
+  if(state.season!=='all'&&!years.includes(state.season))state.season=currentSeason;
+  const editMatch=all.find(m=>m.id===state.editId)||null;
+  if(state.editId&&state.editId!=='new'&&!editMatch){state.editId=null;message='That innings is no longer available. The current list is shown below.';}
+  const rows=inningsInView(all,state);
+  page.innerHTML=`${myInningsStyles()}<section class="card"><div class="innings-heading"><div><div class="section-label">Player Home</div><h1>My Innings</h1><p>Your season in one place: scores, notes, video and coaching feedback.</p></div><div class="btnrow"><button class="btn" id="addMyInnings">Add an innings</button><button class="btn ghost" id="inningsBackHome">Player Home</button></div></div><p class="help">An innings can include a good shot, a useful decision or a dismissal. Adding an entry does not request a Coach Conversation.</p><button class="btn ghost compact-btn" id="myInningsHelp">Show me how</button></section>
+    ${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
+    ${state.editId?renderMyReflectionForm(editMatch,{innings:true}):''}
+    <section class="card"><div class="innings-filters"><div class="field"><label for="inningsSeason">Season · July–June</label><select id="inningsSeason"><option value="all" ${state.season==='all'?'selected':''}>All seasons</option>${years.map(y=>`<option value="${y}" ${state.season===y?'selected':''}>${inningsSeasonLabel(y)}</option>`).join('')}</select></div><div class="field"><label for="inningsFormat">Format</label><select id="inningsFormat"><option value="">All formats</option>${FORMATS.map(([k,l])=>`<option value="${k}" ${state.format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div><button class="btn ghost" id="refreshMyInnings">Refresh</button></div>
+    <div class="innings-count" role="status">${rows.length} innings shown</div>
+    ${rows.length?`<table class="innings-table"><caption class="sr-only">Your recorded innings</caption><thead><tr><th class="innings-date" scope="col">Date</th><th class="innings-opposition" scope="col">Opposition</th><th class="innings-format" scope="col">Format</th><th class="innings-score" scope="col">Score</th><th class="innings-note" scope="col">My note</th><th class="innings-video" scope="col">Video</th><th class="innings-open" scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody>${renderInningsRows(rows)}</tbody></table>`:`<div class="innings-empty"><h2>${all.length?'No innings match these filters.':'Your season starts here.'}</h2><p>${all.length?'Choose another season or format, or select All seasons.':'Add an innings when it is useful. Match observations already recorded by your coaches will also appear here.'}</p></div>`}
+    <p class="help">Scores are recorded as entered, including not-outs (for example, 34*). Notes and videos can be read by club staff who already have access to your player record.</p></section>`;
+  const change=async(fn)=>{if(!confirmLeaveFeedbackEntry())return false;fn();await renderMyInnings({refresh:false});return true;};
+  document.getElementById('inningsBackHome').onclick=()=>openPlayerHomeAction({tab:'playerhome'});
+  document.getElementById('myInningsHelp').onclick=()=>openClubBattingGuideTopic('my_innings');
+  document.getElementById('addMyInnings').onclick=async()=>{if(await change(()=>{state.editId='new';state.openId=null;}))document.getElementById('myReflectionForm')?.scrollIntoView({block:'start'});};
+  document.getElementById('refreshMyInnings').onclick=()=>{if(confirmLeaveFeedbackEntry())return renderMyInnings();};
+  for(const [id,key] of [['inningsSeason','season'],['inningsFormat','format']])document.getElementById(id).onchange=async e=>{const value=e.target.value;if(!await change(()=>{state[key]=value;state.editId=null;state.openId=null;}))e.target.value=state[key];};
+  page.querySelectorAll('[data-innings-open]').forEach(b=>b.onclick=()=>change(()=>{state.openId=state.openId===b.dataset.inningsOpen?null:b.dataset.inningsOpen;state.editId=null;}));
+  page.querySelectorAll('[data-innings-edit]').forEach(b=>b.onclick=async()=>{if(await change(()=>{state.editId=b.dataset.inningsEdit;}))document.getElementById('myReflectionForm')?.scrollIntoView({block:'start'});});
+  page.querySelectorAll('[data-innings-conversation]').forEach(b=>b.onclick=async()=>{await openCoachConversations();if(currentTab!=='conversations')return;const card=document.querySelector(`[data-coaching-action-card="${b.dataset.inningsConversation}"]`);for(let d=card?.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;card?.scrollIntoView({block:'center'});watchVisibleCoachingNotes();});
+  if(state.editId){
+    wireQuickChoices(page);captureFeedbackEntryBaseline();
+    document.getElementById('cancelMyReflection').onclick=()=>change(()=>{state.editId=null;});
+    bindMyInningsSave(editMatch,state,current);
+  }
+  recordAppNavigation(clubNavigationRoute());
+  await revealPendingCoachingUpdate();watchVisibleCoachingNotes();
+}
+function bindMyInningsSave(match,state,current){
+  const form=document.getElementById('myReflectionForm');let requestId=null,lastPayload=null,separateConfirmed=null;
+  document.getElementById('saveMyReflection').onclick=async()=>{
+    if(coachingActionSavePending||!current())return;
+    const status=document.getElementById('myReflectionStatus');
+    const batting=document.querySelector('input[name="myBattingToPlan"]:checked')?.value,dismissal=document.querySelector('input[name="myDismissalClass"]:checked')?.value;
+    const extra={main_issue:val('reflectionMainIssue')||null,next_training_focus:val('reflectionNextFocus'),note:val('reflectionNote')};
+    if((batting||dismissal||Object.values(extra).some(Boolean))&&(!batting||!dismissal)){status.textContent='Choose both reflection answers to save a reflection. For a quick innings entry, leave the reflection section blank.';document.getElementById('inningsReflectionPanel').open=true;return;}
+    let video;try{video=coachingVideoValues('innings');}catch(error){status.textContent=error.message;return;}
+    if(!val('reflectionDate')){status.textContent='Choose the match date.';return;}
+    const values={match_date:val('reflectionDate'),format_key:val('reflectionFormat'),opposition:val('reflectionOpposition'),score_text:val('reflectionScore'),player_note:val('reflectionDismissal'),...video,reflection:batting&&dismissal?{batting_to_plan:batting,dismissal_classification:dismissal,...extra}:null};
+    const candidateKey=JSON.stringify([values.match_date,values.format_key,values.opposition.trim().toLowerCase()]);
+    const candidates=!match?(myInningsCache?.matches||[]).filter(m=>m.match_date===values.match_date&&m.format_key===values.format_key&&String(m.opposition||'').trim().toLowerCase()===values.opposition.trim().toLowerCase()):[];
+    if(candidates.length&&separateConfirmed!==candidateKey){
+      status.innerHTML=`<div class="notice"><p>An innings with these match details is already recorded. Open it to add your notes, or save a separate innings if you batted twice.</p>${candidates.map(m=>`<button class="btn ghost" data-existing-innings="${esc(m.id)}">Open existing innings${m.score_text?' · '+esc(m.score_text):''}</button>`).join('')}<button class="btn secondary" id="saveSeparateInnings">Save as a separate innings</button></div>`;
+      status.querySelectorAll('[data-existing-innings]').forEach(b=>b.onclick=()=>openMyInnings({matchId:b.dataset.existingInnings,edit:true}));
+      document.getElementById('saveSeparateInnings').onclick=()=>{separateConfirmed=candidateKey;document.getElementById('saveMyReflection').onclick();};return;
+    }
+    const args={p_club_id:club.id,p_match_id:match?.id||null,p_expected_updated_at:match?.updated_at||null,p_expected_reflection_at:match?.player_reflection?.updated_at||null,p_values:values};
+    const payload=JSON.stringify(args);if(payload!==lastPayload){requestId=globalThis.crypto.randomUUID();lastPayload=payload;}
+    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
+    try{
+      const {data,error}=await supabase.rpc('save_my_innings',{...args,p_request_id:requestId});if(error)throw error;
+      feedbackEntryBaselines.set(form,feedbackEntryValues(form));coachingActionSavePending=false;if(!current())return;
+      state.editId=null;state.openId=data.match_id;state.season=inningsSeason(values.match_date);state.format='';
+      await renderMyInnings({message:values.reflection?'Innings and reflection saved.':'Innings saved. You can add a reflection whenever you are ready.'});
+      await refreshMyCoachingUpdates();
+    }catch(error){if(current()){status.textContent=error?.message||'Could not confirm the save. Your entry is still here; try again.';restore();}}
+    finally{coachingActionSavePending=false;}
+  };
+}
+// END MY INNINGS
+
+
 async function renderHowWeTrain(){
+  if(howWeTrainReflectionEditId&&isPlayerUser()){const target=howWeTrainReflectionEditId;howWeTrainReflectionEditId=null;return openMyInnings({matchId:target==='new'?null:target,edit:target!=='new',add:target==='new'});}
   const page=document.getElementById('page');
   const sequence=++howWeTrainRenderSequence,clubId=club?.id,playerId=myPlayer?.id,tabAtStart=currentTab;
   const isCurrent=()=>sequence===howWeTrainRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab===tabAtStart;
@@ -13319,13 +13585,7 @@ async function renderHowWeTrain(){
     formatAccordions=enabled.map(([format])=>renderPlayerTrainingFormatAccordion(format,raw,feedback)).join('');
     const reflectionNeeded=playerReflectionNeededMatches(feedback);
     const historyCount=(feedback.matches?.length||0)+(feedback.training_observations?.length||0)+(feedback.external_training_evidence?.length||0);
-    const ownReflections=feedback.matches.filter(m=>!(m.coach_feedback||[]).length&&m.player_reflection);
-    feedbackAccordion=`<details class="card train-simple-accordion" id="trainingFeedbackLoop" ${howWeTrainReflectionEditId!==null?'open':''}>
-      <summary><strong>Your innings reflections</strong> · ${ownReflections.length} personal records</summary><div class="train-simple-body">
-      <div class="feedback-player-actions"><button class="btn secondary" id="newMyReflection">Reflect on an innings</button></div>
-      ${howWeTrainReflectionEditId!==null?renderMyReflectionForm(editMatch):''}
-      ${coachingHistoryHtml(ownReflections,'match',8,m=>renderDevelopmentMatchCard(m,{playerMode:true}))}
-      ${renderExternalTrainingEvidenceSection(feedback.external_training_evidence)}</div></details>`;
+    feedbackAccordion=`<section class="card" id="trainingFeedbackLoop"><h2>My Innings</h2><p>See your season in one place, including scores, reflections, video and coaching feedback.</p><button class="btn secondary" id="openInningsFromTraining">Open My Innings</button>${renderExternalTrainingEvidenceSection(feedback.external_training_evidence)}</section>`;
 
   }else{
     playerTop=`<section class="card train-staff-intro"><div class="section-label">Club-wide guide</div><h2>How the club trains its batting philosophy.</h2><p>Players with a Player Plan get a personalised version of these principles. Use the format sections below when planning or observing training.</p></section>`;
@@ -13355,54 +13615,8 @@ async function renderHowWeTrain(){
   if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;if(b.dataset.planSection)builderSection=b.dataset.planSection;currentTab=b.dataset.go;renderTab();});
 
-  const rerenderHowWeTrainAt=async(targetId)=>{
-    await renderHowWeTrain();
-    requestAnimationFrame(()=>document.getElementById(targetId)?.scrollIntoView({behavior:'smooth',block:'start'}));
-  };
-
-  if(document.getElementById('newMyReflection'))document.getElementById('newMyReflection').onclick=async()=>{
-    if(!confirmLeaveFeedbackEntry())return;
-    howWeTrainReflectionEditId='new';
-    await rerenderHowWeTrainAt('myReflectionForm');
-  };
-  page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=async()=>{
-    if(!confirmLeaveFeedbackEntry())return;
-    howWeTrainReflectionEditId=b.dataset.editMyReflection;
-    await rerenderHowWeTrainAt('myReflectionForm');
-  });
-  if(document.getElementById('cancelMyReflection'))document.getElementById('cancelMyReflection').onclick=async()=>{
-    if(!confirmLeaveFeedbackEntry())return;
-    howWeTrainReflectionEditId=null;
-    await rerenderHowWeTrainAt('trainingFeedbackLoop');
-  };
-
-  wireQuickChoices(page);
-
-  if(document.getElementById('saveMyReflection'))document.getElementById('saveMyReflection').onclick=async()=>{
-    const st=document.getElementById('myReflectionStatus');
-    const btn=document.getElementById('saveMyReflection');
-    const batting=document.querySelector('input[name="myBattingToPlan"]:checked')?.value;
-    const dismissal=document.querySelector('input[name="myDismissalClass"]:checked')?.value;
-    if(!batting||!dismissal){st.textContent='Choose the two quick reflection answers first.';return;}
-    btn.disabled=true;btn.textContent='Saving…';st.textContent='';
-    const {error}=await supabase.rpc('save_my_match_reflection',{
-      p_club_id:club.id,
-      p_match_id:howWeTrainReflectionEditId==='new'?null:howWeTrainReflectionEditId,
-      p_match_date:val('reflectionDate')||null,
-      p_opposition:val('reflectionOpposition'),
-      p_format_key:document.getElementById('reflectionFormat').value,
-      p_score_text:val('reflectionScore'),
-      p_dismissal_summary:val('reflectionDismissal'),
-      p_batting_to_plan:batting,
-      p_dismissal_classification:dismissal,
-      p_main_issue:document.getElementById('reflectionMainIssue').value||null,
-      p_next_training_focus:val('reflectionNextFocus'),
-      p_note:val('reflectionNote')
-    });
-    if(error){btn.disabled=false;btn.textContent='Save reflection';st.textContent=error.message;return;}
-    howWeTrainReflectionEditId=null;
-    await rerenderHowWeTrainAt('trainingFeedbackLoop');
-  };
+  document.getElementById('openInningsFromTraining')?.addEventListener('click',()=>openMyInnings());
+  page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=()=>openMyInnings({matchId:b.dataset.editMyReflection,edit:true}));
   await revealPendingCoachingUpdate();
 }
 
@@ -13530,6 +13744,7 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
 
 function renderStaffDevelopmentBody(player,canEdit,data){
   return `<div class="staff-development-shell">
+    ${data.innings_details_error?'<div class="notice" role="status">Player innings notes and video could not load. Refresh to try again.</div>':''}
     <section class="card development-overview" id="developmentOverview">
       <div class="development-loop-head">
         <div><div class="section-label">Coaching</div><h2>Coach Conversations</h2><div class="help">Record an observation, add discussion notes and agree the next step here.</div></div>
@@ -15124,7 +15339,7 @@ function playerHomeNextAction(raw,rollout,feedback,today=todayIso()){
   const dueAction=actions.find(x=>x.review_on&&String(x.review_on).slice(0,10)<=today);
   if(dueAction)return {kind:'review',heading:'Review your Coach Conversation',copy:'Your agreed review date has arrived. Record what changed, then decide the next step with your coach or captain.',label:'Review the agreed action',tab:'howwetrain',anchor:'sharedCoachingActions',focus:dueAction.task,meta:`Review due ${niceDate(dueAction.review_on)}`};
   const reflection=playerReflectionNeededMatches(feedback).slice().sort((a,b)=>String(b.match_date||'').localeCompare(String(a.match_date||'')))[0];
-  if(reflection)return {kind:'reflection',heading:'Reflect on your latest innings',copy:'Record your own view first. You can then compare it with the coaching feedback and choose what to practise next.',label:'Add your innings reflection',tab:'howwetrain',anchor:'myReflectionForm',matchId:reflection.id,meta:[formatLabel(reflection.format_key),reflection.opposition,formatDateShort(reflection.match_date)].filter(Boolean).join(' · ')};
+  if(reflection)return {kind:'reflection',heading:'Reflect on your latest innings',copy:'Record your own view first. You can then compare it with the coaching feedback and choose what to practise next.',label:'Add your innings reflection',tab:'innings',anchor:'myReflectionForm',matchId:reflection.id,meta:[formatLabel(reflection.format_key),reflection.opposition,formatDateShort(reflection.match_date)].filter(Boolean).join(' · ')};
   if(actions.length){
     const next=actions[0];
     return {kind:'training',heading:'Your Coach Conversations',copy:'Open the coaching note and any agreed practice in How We Train. Add an update when you have discussed or actioned it.',label:'Open How We Train',tab:'howwetrain',anchor:'sharedCoachingActions',focus:next.task,meta:next.review_on?`Review on ${niceDate(next.review_on)}`:''};
@@ -15142,6 +15357,7 @@ async function openPlayerHomeAction(action){
   const clubId=club?.id;
   if(action.section)builderSection=action.section;
   if(action.tab==='howwetrain')howWeTrainReflectionEditId=action.matchId||null;
+  if(action.tab==='innings'){const state=ensureMyInningsState();state.editId=action.matchId||null;state.openId=action.matchId||null;if(action.matchId){state.season='all';state.format='';}}
   currentTab=action.tab;
   fixtureLocalStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   await renderTab();
@@ -15188,11 +15404,11 @@ async function renderPlayerHome(){
   </section>
   ${loadNote?`<div class="notice compact" role="status" style="margin-top:14px">${!rolloutOk?'Your club’s required formats and due dates could not be checked. ':''}${!feedbackOk?'Your latest feedback could not be loaded. ':feedback.coaching_actions_error?'Shared training actions could not be loaded. ':''}You can keep using your saved plan.<button class="club-home-link" id="retryPlayerHome" type="button" style="margin-left:12px">Try again</button></div>`:''}
   ${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.follow_up_requested!==false)?`<section class="card notice" role="status"><strong>${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.review_on&&a.review_on<=todayIso())?'Coach Conversation review due':'You have a Coach Conversation'}</strong><p>Open Coach Conversations in How We Train to see the note, any agreed practice and the optional review date.</p><button class="btn secondary" id="playerHomeActionAlert">Open How We Train</button></section>`:''}
+  <section class="card"><div class="section-label">Your season</div><h2>My Innings</h2><p>Keep your scores, notes and video together. Open an innings to reflect or read its coaching feedback.</p><div class="btnrow"><button class="btn secondary" id="playerHomeInnings">Open My Innings</button><button class="btn ghost" id="playerHomeAddInnings">Add an innings</button></div></section>
   <div class="club-home-secondary" aria-label="Your batting tools">
     <button class="club-home-link" id="playerHomePlan">My Player Plan</button>
     ${plan.ready.length?'<button class="club-home-link" id="playerHomeTraining">How We Train</button>':''}
     <button class="club-home-link" id="requestConversationFromHome">Request a Coach Conversation</button>
-    <button class="club-home-link" id="playerHomeReflection">Reflect on an innings</button>
     <button class="club-home-link" id="playerHomePhilosophy">Read How We Bat</button>
   </div>
   ${plan.ready.length?`<p class="help" style="margin-top:18px">Training ready for ${esc(plan.ready.map(x=>x.label).join(' and '))}.${rolloutOk&&!plan.pendingRequired.length?' Your required plan questions are complete.':''}</p>`:''}`;
@@ -15201,7 +15417,8 @@ async function renderPlayerHome(){
   document.getElementById('playerHomePlan').onclick=()=>openPlayerHomeAction({tab:'myplan'});
   document.getElementById('playerHomeTraining')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain'}));
   document.getElementById('requestConversationFromHome').onclick=openCoachConversationRequest;
-  document.getElementById('playerHomeReflection').onclick=()=>openPlayerHomeAction({tab:'howwetrain',matchId:'new',anchor:'myReflectionForm'});
+  document.getElementById('playerHomeInnings').onclick=()=>openMyInnings();
+  document.getElementById('playerHomeAddInnings').onclick=()=>openMyInnings({add:true});
   document.getElementById('playerHomePhilosophy').onclick=()=>openPlayerHomeAction({tab:'howwebat'});
   document.getElementById('retryPlayerHome')?.addEventListener('click',renderPlayerHome);
 }
@@ -18321,7 +18538,8 @@ const demoStages=[
   {key:'questions',label:'Player Plan questions',tab:'plan',role:'admin',hint:'These confirmed questions come from How We Bat. They help each batter make the club’s approach their own.'},
   {key:'players',label:'Players and plan dates',tab:'players',role:'admin',hint:'Alex has a complete plan, Jordan has completed Core, and Taylor is unassigned. Filter the list or manage groups and plan dates.'},
   {key:'plan',label:'An example Player Plan',tab:'myplan',role:'player',hint:'You are Alex Morgan. Open View my plan, explore each format or try changing an answer.'},
-  {key:'training',label:'How We Train',tab:'howwetrain',role:'player',hint:'Alex’s completed plan produces these training suggestions. Open the innings reflections and agreed coaching action.'},
+  {key:'innings',label:'My Innings · season record',tab:'innings',role:'player',hint:'You are Alex Morgan. See scores, notes and coaching feedback together, filter the season or format, and add an innings with an optional YouTube link. Nothing is sent.'},
+  {key:'training',label:'How We Train',tab:'howwetrain',role:'player',hint:'Alex’s completed plan produces these training suggestions. Open My Innings for the season record, or review an agreed coaching action.'},
   {key:'feedback',label:'Feedback and Coach Conversations',tab:'players',role:'coach',hint:'You are Casey Reid, a coach. Compare Alex’s reflections with coaching feedback, or add a training observation.'},
   {key:'requests',label:'Player requests a conversation',tab:'conversations',role:'player',hint:'You are Alex. Request a conversation with any club member and optionally paste a YouTube link. This is fictional demo data; nothing is sent.'},
   {key:'recipient',label:'Teammate receives a request',tab:'conversations',role:'player',userId:'user-taylor',hint:'Taylor has no coaching access. Alex’s request lets Taylor read and update just this conversation. Try I can help, or I’m unavailable.'},
@@ -18425,7 +18643,8 @@ demoSeedClub=function(){
   for(const [playerId,feedback] of Object.entries(fixtureRows.feedback)){
     feedback.coaching_actions=[];
     for(const match of feedback.matches){
-      match.updated_at=match.created_at;
+      match.updated_at=match.created_at;match.created_by=match.player_reflection?fixtureRows.players.find(p=>p.id===playerId)?.user_id:'user-coach';
+      match.player_note=match.player_reflection?match.dismissal_summary:'';match.player_video=null;
       for(const note of match.coach_feedback){
         Object.assign(note,{id:match.id+'-coach',author_user_id:'user-coach',updated_at:note.created_at,plan_related:true,needs_conversation:true});
         feedback.coaching_actions.push(demoAction(playerId,'match',note,fixtureDay(7),match));
@@ -18436,6 +18655,10 @@ demoSeedClub=function(){
       feedback.coaching_actions.push(demoAction(playerId,'training',note,fixtureDay()));
     }
   }
+  const alex=fixtureRows.feedback['player-alex'];
+  alex.matches.push({id:'alex-quick',match_date:fixtureDay(-1),format_key:'t20',opposition:'Bay Example CC',score_text:'42*',player_note:'Kept finding singles and finished strongly.',dismissal_summary:'Kept finding singles and finished strongly.',created_by:'user-alex',created_at:fixtureNow(),updated_at:fixtureNow(),player_reflection:null,player_video:null,coach_feedback:[]});
+  const previousYear=Number(fixtureDay().slice(0,4))-1;
+  alex.matches.push({id:'alex-last-season',match_date:`${previousYear}-07-01`,format_key:'limited_overs',opposition:'Wests Example CC',score_text:'26',player_note:'A useful partnership after two early wickets.',dismissal_summary:'A useful partnership after two early wickets.',created_by:'user-alex',created_at:fixtureNow(),updated_at:fixtureNow(),player_reflection:null,player_video:null,coach_feedback:[]});
   const past=fixtureRows.feedback['player-alex'].coaching_actions.find(a=>a.match_feedback_id==='alex-dots-coach');
   Object.assign(past,{status:'completed',review_on:null,reviews:[{id:'past-review',outcome:'completed',note:'Discussed at training; Alex has practised the reset.',reviewed_by_name:'Sam Taylor',reviewed_at:fixtureNow(),revision:2}],revision:2});
   fixtureRows.feedback['player-alex'].coaching_actions.push({...demoAction('player-alex','request',{id:'example-request',author_user_id:'user-alex',author_name:'Alex Morgan',needs_conversation:true},null),
@@ -18528,6 +18751,30 @@ window.__fixtureRpc=async(name,args={})=>{
  const ok=data=>({data:fixtureClone(data),error:null}),fail=message=>({data:null,error:{message}});
  const userId=session?.user?.id;
  switch(name){
+ case 'get_player_innings_details':return ok({matches:(fixtureRows.feedback[args.p_player_id]?.matches||[]).map(m=>({id:m.id,player_note:m.player_note||'',player_video:m.player_video||null}))});
+ case 'get_my_innings':{
+   if(!myPlayer)return fail('An active player registration is required');
+   const feedback=fixtureRows.feedback[myPlayer.id]||demoEmptyFeedback();
+   return ok({matches:feedback.matches.map(m=>({...m,can_edit_details:m.created_by===userId,player_note:m.player_note||'',dismissal_summary:m.player_note||'',player_video:m.player_video||null,
+     coach_feedback:m.coach_feedback.map(f=>{
+       const a=feedback.coaching_actions.find(a=>a.match_feedback_id===f.id);
+       if(f.plan_related!==false&&!m.player_reflection)return {id:f.id,author_name:f.author_name,plan_related:true,reflection_required:true,followup_status:a?.status};
+       return {...f,action_id:a?.id,video:a?demoConversationView(a).video:null,followup_status:a?.status};
+     })}))});
+ }
+ case 'save_my_innings':{
+   if(!myPlayer)return fail('An active player registration is required');
+   if(demoReceipts.has(args.p_request_id))return ok(demoReceipts.get(args.p_request_id));
+   const feedback=fixtureRows.feedback[myPlayer.id],v=args.p_values;
+   let m=feedback.matches.find(m=>m.id===args.p_match_id);
+   if(args.p_match_id&&!m)return fail('That innings is not attached to your account');
+   if(m&&(m.updated_at!==args.p_expected_updated_at||(m.player_reflection?.updated_at||null)!==args.p_expected_reflection_at))return fail('This innings has changed. Reload before editing');
+   if(!m){m={id:demoId('innings'),created_by:userId,created_at:fixtureNow(),coach_feedback:[],player_reflection:null};feedback.matches.unshift(m);}
+   Object.assign(m,{match_date:v.match_date,format_key:v.format_key,opposition:v.opposition,score_text:v.score_text,player_note:v.player_note,player_video:v.video_url?{url:normaliseCoachingYouTubeUrl(v.video_url),note:v.video_note}:null,updated_at:fixtureNow()});
+   if(m.created_by===userId)m.dismissal_summary=v.player_note;
+   if(v.reflection&&JSON.stringify(v.reflection)!==JSON.stringify(m.player_reflection?Object.fromEntries(Object.entries(m.player_reflection).filter(([k])=>k!=='updated_at')):null))m.player_reflection={...v.reflection,updated_at:fixtureNow()};
+   const result={match_id:m.id};demoReceipts.set(args.p_request_id,result);return ok(result);
+ }
  case 'get_player_coaching_actions':return ok({actions:(fixtureRows.feedback[args.p_player_id]?.coaching_actions||[]).filter(a=>demoPlayerAccess(a.player_id).view).map(demoConversationView)});
  case 'get_conversation_people':return ok({people:fixtureRows.club_memberships.filter(m=>m.club_id===club.id&&m.user_id!==userId).map(m=>({user_id:m.user_id,display_name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name||'Club member'}))});
  case 'get_my_coach_conversations':return ok({actions:demoInbox()});
@@ -18716,7 +18963,7 @@ async function demoNavigate(key,{reset=false}={}){
   demoNavigationBusy=true;
   try{
     if(!reset&&!await saveClubEditsBeforeNavigation())return;
-    if(reset){demoSeedClub();}else fixtureResetGlobals();
+    if(reset){demoSeedClub();myInningsCache=null;myInningsState={scope:'',season:null,format:'',openId:null,editId:null};}else fixtureResetGlobals();
     const stage=demoStages.find(s=>s.key===key)||demoStages[0];demoCurrentStage=stage.key;
     demoSetPreparation(!!stage.preparing);
     document.querySelectorAll('dialog').forEach(dialog=>dialog.remove());
