@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.31 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.32 — observation form layout
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.31';
+const APP_UI_VERSION='0.8.62.32';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -13829,18 +13829,18 @@ function renderStaffTrainingObservationForm(player,data={},observationId=null){
   const editError=observation&&(data.coaching_actions_error||data.observation_edit_error);
   return `<section class="card development-entry-form" id="staffDevelopmentForm" data-observation-id="${esc(observation?.id||'')}" data-observation-updated-at="${esc(observation?.updated_at||'')}" data-action-revision="${action?.revision||''}" data-action-closed="${closed}" data-original-focus="${esc(action?.status==='open'?observation?.next_training_focus||'':'')}" data-original-review="${esc(action?.review_on||'')}">
     <div class="development-form-head"><div><div class="section-label">Training observation</div><h2>${observation?'Edit your training observation.':'Record what you noticed.'}</h2><div class="help">Notice how the player recognises the right ball and commits to their chosen shot. Record decision and execution details that will help them practise. Leave the format unticked for general/Core practice.</div></div></div>
-    <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${esc(observation?.observed_on||todayIso())}"></div>
-    <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}" ${observation?.format_keys?.includes(k)?'checked':''}><span>${esc(l)}</span></label>`).join('')}</div></div>
     ${observationPurposeField(observation)}
-    ${coachingVideoFields('staffObservation',action?.video)}
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],observation?.training_to_plan||'mostly')}</div>
     <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),observation?.observation_type||'right_shots_right_balls')}</div></div>
+    <div class="field"><label>Short note <span>optional</span></label><textarea id="staffTrainingNote" maxlength="500" rows="3" placeholder="Only add detail if it helps the player">${esc(observation?.note||'')}</textarea></div>
+    <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${esc(observation?.observed_on||todayIso())}"></div>
+    <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}" ${observation?.format_keys?.includes(k)?'checked':''}><span>${esc(l)}</span></label>`).join('')}</div></div>
+    ${coachingVideoFields('staffObservation',action?.video)}
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffTrainingNextFocus" maxlength="240" placeholder="One useful focus is enough" value="${esc(observation?.next_training_focus||'')}" ${closed?'disabled':''}></div>
     ${observationReviewField(action)}
     ${observationConversationField(observation?.needs_conversation)}
     ${closed?'<p class="notice">This follow-up is closed. You can correct the observation; add a new observation for a new follow-up.</p>':''}
     ${editError?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
-    <div class="field"><label>Short note <span>optional</span></label><textarea id="staffTrainingNote" maxlength="500" rows="3" placeholder="Only add detail if it helps the player">${esc(observation?.note||'')}</textarea></div>
     <div class="btnrow"><button class="btn secondary" id="saveTrainingObservation" ${editError?'disabled':''}>${observation?'Save changes':'Save observation'}</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
   </section>`;
 }
@@ -13855,25 +13855,25 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
   const format=match?.format_key||publishedEnabledFormats()[0]?.[0]||'limited_overs';
   return `<section class="card development-entry-form" id="staffDevelopmentForm" data-match-id="${esc(match?.id||'')}" data-match-updated-at="${esc(match?.edit_context?.updated_at||'')}" data-observation-id="${esc(feedback?.id||'')}" data-observation-updated-at="${esc(feedback?.updated_at||'')}" data-action-revision="${action?.revision||''}" data-action-closed="${closed}" data-original-focus="${esc(action?.status==='open'?feedback?.next_training_focus||'':'')}" data-original-review="${esc(action?.review_on||'')}">
     <div class="development-form-head"><div><div class="section-label">Match observation</div><h2>${feedback?'Edit your match observation':match?'Add your view to this innings':'Record what you noticed in the innings'}</h2><div class="help">Recognise the player’s preparation and full commitment, even when execution falls short. Review the innings overall and the dismissal ball separately: a player can follow their plan overall, then move outside it for one ball. Consider shot choice and execution separately too. Agree useful practice without judgement.</div></div></div>
-    ${sharedReadonly?'<p class="help">These innings details were recorded by someone else and stay as saved. You can add or edit your own observation below.</p>':''}<fieldset class="development-match-fields" style="border:0;padding:0;margin:0" ${sharedReadonly?'disabled':''}>
+    ${observationPurposeField(feedback)}
+    <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","The approach moved away from the plan"]],feedback?.batting_to_plan||'mostly')}</div>
+    <div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],feedback?.dismissal_classification||'not_applicable')}</div>
+    <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${feedback?.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div>
+    <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
+    ${sharedReadonly?'<p class="help">These innings details were recorded by someone else and stay as saved. You can add or edit your own observation above.</p>':''}<fieldset class="development-match-fields" style="border:0;padding:0;margin:0" ${sharedReadonly?'disabled':''}>
       <div class="field"><label>Date</label><input id="staffMatchDate" type="date" value="${esc(match?.match_date||todayIso())}"></div>
       <div class="field"><label>Format</label><select id="staffMatchFormat">${publishedEnabledFormats().map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
       <div class="field"><label>Opposition <span>optional</span></label><input id="staffMatchOpposition" maxlength="160" value="${esc(match?.opposition||'')}"></div>
       <div class="field"><label>Score <span>optional</span></label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}"></div>
     </fieldset>
     <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" ${sharedReadonly?'disabled':''} maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Caught at point driving on the up; the plan was to wait for a fuller ball."></div>
-    ${observationPurposeField(feedback)}
     ${coachingVideoFields('staffObservation',action?.video)}
-    <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","The approach moved away from the plan"]],feedback?.batting_to_plan||'mostly')}</div>
-    <div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],feedback?.dismissal_classification||'not_applicable')}</div>
-    <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${feedback?.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div>
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" value="${esc(feedback?.next_training_focus||'')}" ${closed?'disabled':''} maxlength="240" placeholder="One useful focus is enough"></div>
     ${observationReviewField(action)}
     ${observationConversationField(feedback?.needs_conversation)}
     <p class="help">The training focus is shared straight away. For Player Plan observations, the match answers, note and video wait for the player’s reflection.</p>
     ${closed?'<p class="notice">This follow-up is closed. You can correct the observation; add a new observation for a new follow-up.</p>':''}
     ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
-    <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
     <div class="btnrow"><button class="btn secondary" id="saveStaffMatchFeedback" ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'disabled':''}>${feedback?'Save changes':'Save observation'}</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
   </section>`;
 }
