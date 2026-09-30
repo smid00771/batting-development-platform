@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.44 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.45 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.44';
+const APP_UI_VERSION='0.8.62.45';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -4147,7 +4147,7 @@ async function boot(){
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
   window.addEventListener('popstate',handleAppNavigationHistory);
-  window.addEventListener('beforeunload',event=>{if(weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -4696,7 +4696,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(routeClub===club.id){
-    if(['playerhome','innings','myplan','howwebat','howwetrain','conversations','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
+    if(['playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
       if(routeTab==='myplan')builderSection='core';
     }
@@ -4991,7 +4991,7 @@ function canOpenClubTab(tab){
   if(tab==='plan')return !clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead());
   if(tab==='howwebat')return howWeBatVersions.length>0||(!clubSetupUnavailableReason(tab)&&(isAdmin()||isPhilosophyLead()));
   if(tab==='myplan')return isPlayerUser();
-  if(tab==='conversations')return !!(session&&membership&&club);
+  if(['conversations','make_your_call'].includes(tab))return !!(session&&membership&&club);
   if(tab==='howwetrain')return true;
   return tab==='guide';
 }
@@ -5115,6 +5115,7 @@ async function saveClubEditsBeforeNavigation(){
   if(!await savePlayerPlanStructureBeforeNavigation())return false;
   if(!await saveHowWeBatBeforeNavigation())return false;
   if(!confirmLeaveWorkshopSetup())return false;
+  if(!confirmLeaveMakeYourCall())return false;
   return confirmLeaveFeedbackEntry();
 }
 function contributionLocked(){
@@ -5441,6 +5442,7 @@ function renderShell(){
   const nav=[];
   if(canUseClubHome())nav.push(['dashboard','Club Home','club']);
   if(canUsePlayersWorkspace())nav.push(['players','Players','club']);
+  if(session&&membership&&club)nav.push(['make_your_call','Make your call','club']);
 
   // Keep daily player tools easy to reach, including for playing club staff.
   if(isPlayerUser()){
@@ -5797,6 +5799,7 @@ function clubNavigationRoute(){
     route.assignments={source,search,target};
   }
   if(currentTab==='innings'){const {season,format,openId,editId}=ensureMyInningsState();route.innings={season,format,openId,editId};}
+  if(currentTab==='make_your_call'){const {week,season}=ensureMakeYourCallState();route.makeYourCall={week,season};}
   if(currentTab==='training_preparation')route.trainingPreparation={group:ensureTrainingPreparationState().group};
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
@@ -5869,6 +5872,7 @@ function restoreClubNavigationState(route){
   if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
   const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
   currentTab=canOpenClubTab(tab)?tab:canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  if(currentTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=route.makeYourCall?.week||null;s.season=route.makeYourCall?.season||null;}
   if(currentTab==='players'){
     resetPlayersWorkspaceForClub();
     playersWorkspaceSelectedId=route.playerId||null;
@@ -5978,7 +5982,7 @@ function renderTab(){
     join_club:renderJoinAnotherClub,
     dashboard:renderClubDashboard,
     playerhome:renderPlayerHome,
-    innings:renderMyInnings,
+    innings:renderMyInnings,make_your_call:renderMakeYourCall,
     groups:renderPlayingGroups,
     players:renderPlayersWorkspace,
     training_preparation:renderTrainingPreparation,
@@ -6050,7 +6054,7 @@ async function openClubBattingGuideTopic(capabilityKey='whole_process',{focus='t
 }
 
 function guideTargetLabel(tab){
-  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',innings:'My Innings',howwetrain:'How We Train',conversations:'Coach Conversations'}[tab]||'Open area');
+  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',innings:'My Innings',make_your_call:'Make your call',howwetrain:'How We Train',conversations:'Coach Conversations'}[tab]||'Open area');
 }
 
 function guideTargetUnavailableReason(tab,focus=''){
@@ -6096,7 +6100,7 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
-const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "current_focus", "how_we_train", "training_preparation", "my_innings", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
+const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "current_focus", "how_we_train", "training_preparation", "my_innings", "make_your_call", "weekly_engagement", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline"];
 
 function guideTopicNumber(key){
   const index=GUIDE_TOPIC_ORDER.indexOf(key);
@@ -6829,6 +6833,116 @@ const CLUB_BATTING_HELP = {
       {
         "title": "Keep your place without extra work",
         "body": "Save preparation saves the bowler details, shots, reasons and training choices together. Adding a shot to the form does not save it. Add to My Player Plan is a separate action that saves directly to your plan. Refresh reloads saved data; save before leaving. Navigation warns about unsaved work. My Innings opens with rows collapsed. Use the app before or after cricket—no training-time phone use or essay is required."
+      }
+    ]
+  },
+  "make_your_call": {
+    "capability_key": "make_your_call",
+    "title": "Make your call",
+    "purpose": "Share a prediction and enjoy a club game around the cricket.",
+    "short_explanation": "An optional club game with named predictions, confirmed results, visible reward rules and one shared weekly discussion. Private match preparation stays private.",
+    "target_tab": "make_your_call",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 146,
+    "active": true,
+    "tutorial": [
+      {
+        "title": "Set up the club game once",
+        "body": "Club Admin opens Club setup & result permissions, chooses enabled, timezone and season start, then Save club setup. Name each reward: weekly game, season points, Most club calls beaten, You believed in them, Wildest call forfeit and weekly engagement. How to claim the engagement prize is optional and club-specific. Blank prize means Recognition only; blank claim condition adds no condition. Members see the descriptions and criteria."
+      },
+      {
+        "title": "Make a private prediction or enter the club game",
+        "body": "In Prepare for a match, My score prediction is optional and private. Select Enter Make your call and Save preparation to publish an entry. This shares your name, prediction, match date, format and opposition with current club members; confirmed results and game statistics follow. Your match-ups, shot explanations, Player Plan and coaching records are not made public by entering. The checkbox starts unchecked."
+      },
+      {
+        "title": "Understand when calls lock",
+        "body": "Your published prediction and match details freeze when you enter. Peer voting closes at midnight at the start of the nominated match date in the club’s configured timezone, enforced by the server. Enter and vote before that date begins. The match date comes from your preparation; there is no fixture import. One player can have one entry for a date and format."
+      },
+      {
+        "title": "Make one named vote",
+        "body": "Current club members, including non-playing staff, can estimate runs on another player’s entry with Make my call. Your name appears beside your estimate. You cannot vote on your own entry. Update my vote changes your one vote before voting closes. The range is 0–999, a technical limit rather than an expectation of ability. Votes stay locked after the cutoff."
+      },
+      {
+        "title": "Read the club estimate",
+        "body": "At least three peer votes are needed. Their median, rounded up when needed, becomes the club estimate. The player’s own prediction is separate. Fewer than three means no qualifying estimate or competitive awards. There is no manual baseline or captain’s fallback. The median reduces an isolated extreme vote’s effect; a coordinated majority can still move it. Named votes remain visible."
+      },
+      {
+        "title": "Confirm the result",
+        "body": "Admin or granted staff with existing edit access use Save official result after voting closes. Nobody records their own result, even Admin; another authorised scorer is needed. Enter runs and not-out status, Did not bat or Match cancelled. The result flows into My Innings without player re-entry. Personal edits cannot change it. Save correction needs a reason. A scoring grant does not widen player access."
+      },
+      {
+        "title": "Score the weekly game and season points",
+        "body": "For a qualifying played result, points are the official runs above the locked club estimate, with a minimum of zero. An estimate of 20 and result of 35 earns 15 points; 20 or fewer earns zero. The weekly game winner has the biggest single-innings margin. Season points add those positive margins across eligible innings. Ties share honours; there are no deductions."
+      },
+      {
+        "title": "Count the club calls you beat",
+        "body": "The Most club calls beaten season award adds one whenever an eligible official innings score is greater than the club estimate. Equality does not count. Entries without a qualifying estimate, unconfirmed results, Did not bat and cancelled matches do not score. Totals include participation context; these are club-game results, not ratings of batting ability or evidence of following a Player Plan."
+      },
+      {
+        "title": "Find You believed in them",
+        "body": "Your vote must be above the median of the other votes, with at least two others, and the official result must reach or exceed your prediction. The largest positive gap above that other-vote median wins for the week. For example, others’ median 20, your vote 35 and result 40 gives a gap of 15. You do not need to predict the exact result. Ties share honours."
+      },
+      {
+        "title": "Find the Wildest call",
+        "body": "The Wildest call is the named vote furthest from the official score on a qualifying entry that week. Absolute difference counts over- and under-predictions equally: 70 against 20 and 5 against 55 both miss by 50. Joint largest gaps share the result. Read the club’s stated forfeit or Recognition only description. This is playful recognition, not proof of cheating or an automatic debt. If every prediction is exact, there is no Wildest call forfeit."
+      },
+      {
+        "title": "Keep corrections and the club discussion clear",
+        "body": "Save correction records its reason and recalculates affected points and awards. Post to this week adds a short named comment to the club discussion. Authors can remove their own messages, members can report one and Admin can moderate. Discussion does not reveal private player records, and posting more comments earns no engagement credit."
+      },
+      {
+        "title": "Know what is optional and visible",
+        "body": "Entering Make your call is optional. Members can join the game and discussion without gaining coaching access. A club week runs Monday to Sunday in its timezone. Reward descriptions are saved for each weekly round; later settings changes apply to new rounds. Missed weeks do not remove previous results. The app sends no new competition email or reminder sequence."
+      }
+    ]
+  },
+  "weekly_engagement": {
+    "capability_key": "weekly_engagement",
+    "title": "Weekly engagement award",
+    "purpose": "Recognise useful preparation, a training check-in and a review that leads to a next step.",
+    "short_explanation": "Qualify through two different recorded activities out of three in a club week. The award is separate from score predictions and does not measure batting improvement.",
+    "target_tab": "make_your_call",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 147,
+    "active": true,
+    "tutorial": [
+      {
+        "title": "Choose whether to share your award",
+        "body": "Choose Share my engagement awards with the club on your Weekly engagement card to publish only awards, your name and award-history counts. This is separate from the score game. Each club names its prize and may set a claim condition or leave it blank. For example, a club might say Must be at the pub on Friday to claim. The digital award is earned through the activities regardless of attendance; the club handles collection. Private player content is not published."
+      },
+      {
+        "title": "Complete two different categories",
+        "body": "Qualify with two of Prepare, Training check-in, and Review and continue. Credit belongs to the Monday–Sunday club-local week when the qualifying record is saved, not necessarily match week. Each category counts once. Page opens, repeated saves, time spent, votes, reactions and comments do not count. The award recognises saved engagement, not ability, effort or improved batting."
+      },
+      {
+        "title": "Prepare with a useful cricket intention",
+        "body": "Save preparation for a match within the next 14 days, before midnight starts its nominated date in the club timezone, with a bowler and real scoring choices. An empty entry or prediction alone does not qualify. Use the plan you trust; no invented edit is needed. The same preparation cannot earn fresh credit in a later week. Credit is for the week of saving."
+      },
+      {
+        "title": "Make a short training check-in",
+        "body": "In How We Train, choose a current focus or saved plan answer for Training check-in. Pick Worked on it, Changed my approach or Couldn’t this week, then Keep working on this, Revisit my focus or Speak with someone. Save check-in records that intention only; use your focus or Coach Conversations to make the change or request. It is private and self-reported. Couldn’t this week can count as reconsideration, never proof of practice. Notes are optional."
+      },
+      {
+        "title": "Review and choose what happens next",
+        "body": "Save your independent innings reflection, then deliberately choose Keep working on this, Adjust the focus or Discuss it in the existing innings focus review. Save the next step within 14 days of the innings. The system checks both records; automatic coaching flags do not count as your decision. Credit belongs to the week of that saved next step. Each innings can qualify once. Completing a focus does not close a conversation."
+      },
+      {
+        "title": "Return without catching up on missed weeks",
+        "body": "If injured, not selected or the match is cancelled, do not invent an innings reflection. Useful preparation and a training check-in can supply the two categories. A missed week removes no previous progress and creates no streak penalty. Historical records are not backfilled into awards. Choose the next useful action when you return."
       }
     ]
   },
@@ -10477,7 +10591,9 @@ function howWeBatBannerCandidates(format){
     });
   }
 
-  // Initial score order, then apply a modest overlap penalty so three banners
+  
+
+// Initial score order, then apply a modest overlap penalty so three banners
   // do not all win because of the same shared dimension.
   const remaining=rows.sort((a,b)=>b.score-a.score);
   const ordered=[];
@@ -12885,6 +13001,7 @@ function captureFeedbackEntryBaseline(){
   }
 }
 function confirmLeaveFeedbackEntry(){
+  if(!confirmLeaveEngagement())return false;
   if(!confirmLeaveWeeklyLoop())return false;
   if(typeof coachingActionSavePending!=='undefined'&&coachingActionSavePending){alert('Your changes are still saving. Please wait before leaving.');return false;}
   const dirty=['myReflectionForm','staffDevelopmentForm','coachingActionForm','coachingReviewForm','coachRequestForm'].some(id=>{
@@ -13605,7 +13722,7 @@ function renderPreparationConversation(record){
   return `<div class="notice compact" data-prep-conversation><strong>Coach Conversation · ${esc(preparationConversationLabel(record.coaching_action_status))}</strong><p>Your flagged shots, reasons and training selections are shared with your permitted coaches. Changes to this outside-plan preparation bring the same conversation back for review. Removing shots does not close it automatically.</p><button type="button" class="btn secondary" data-innings-conversation="${esc(record.coaching_action_id)}">Open Coach Conversation</button></div>`;
 }
 function preparationSaveMessage(values,data){
-  const base=values.action==='prepare'?'Preparation saved. Return to this entry after the game.':matchPreparationStatus(values.action)+' saved. No batting reflection needed.';
+  const base=(values.action==='prepare'?'Preparation saved. Return to this entry after the game.':matchPreparationStatus(values.action)+' saved. No batting reflection needed.')+(data.call_entry_id?' Your Make your call entry is saved on the club board.':values.predicted_runs!=null?' Your score prediction stays private.':'');
   if(!data.coaching_action_id)return base;
   if(data.already_saved)return base+' Your earlier save and its linked Coach Conversation were confirmed; no duplicate was created.';
   if(data.coaching_action_reopened)return base+' Your Coach Conversation was reopened for the changed outside-plan preparation.';
@@ -13618,7 +13735,7 @@ function renderPreparationDetails(record){
   const prep=record.preparation||{},reviews=record.review?.matchups||[],contest=record.personal_contest||{},played=record.status==='played';
   const matchups=(prep.matchups||[]).map(m=>{const review=reviews.find(r=>r.id===m.id);return `<article class="innings-prep-summary"><h3>${esc(m.bowler)}</h3><dl>${m.expect?`<dt>What I expected</dt><dd>${esc(m.expect)}</dd>`:''}${m.options?`<dt>My scoring options</dt><dd>${renderPreparationScoringSummary(m)}</dd>`:''}${m.avoid?`<dt>Watch out for</dt><dd>${esc(m.avoid)}</dd>`:''}</dl>${m.training_focus===true?'<p class="help">Selected as a training focus for this match.</p>':''}${played&&review?.decision?`<p><strong>After the game:</strong> ${esc(MATCH_PREPARATION_DECISIONS[review.decision]||'')}</p>${review.decision!=='not_faced'&&review.note?`<p>${esc(review.note)}</p>`:''}`:played&&review?.note?`<p><strong>After the game:</strong> ${esc(review.note)}</p>`:''}</article>`;}).join('');
   const fielders=(prep.fielders||[]).map(f=>`<p><strong>${esc(f.name)}</strong>${f.tags?.length?' · '+f.tags.map(t=>esc(MATCH_PREPARATION_FIELDER_TAGS[t]||t)).join(' · '):''}${f.note?`<br>${esc(f.note)}`:''}</p>`).join('');
-  return `<section class="innings-prep-details"><h2>Before the game</h2><p class="innings-prep-private">Your preparation${record.locked_at?' · kept as you recorded it before the innings':''}. Selected training match-ups and the outside-plan shots, reasons and training selections flagged in Coach Conversations are shared with coaches who can access your player records.</p><p class="help">${esc(formatDateShort(record.match_date))} · ${esc(record.opposition||'Opposition not recorded')} · ${esc(formatLabel(record.format_key))}</p>${renderPreparationConversation(record)}${prep.focus_note?`<div class="innings-prep-summary"><strong>My focus for this match</strong><p>${esc(prep.focus_note)}</p></div>`:''}${matchups?`<h3>Match-ups</h3>${matchups}`:''}${fielders?`<div class="innings-prep-summary"><h3>Fielders to watch</h3>${fielders}</div>`:''}${contest.bowler?`<div class="innings-prep-summary"><h3>Who would I hate to get out to?</h3><p>${esc(contest.bowler)}</p>${played&&contest.result?`<p>Did they get me out? <strong>${esc(({yes:'Yes',no:'No',not_faced:'Didn’t face them'})[contest.result]||'')}</strong></p>`:''}</div>`:''}</section>`;
+  return `<section class="innings-prep-details"><h2>Before the game</h2><p class="innings-prep-private">Your preparation${record.locked_at?' · kept as you recorded it before the innings':''}. Selected training match-ups and the outside-plan shots, reasons and training selections flagged in Coach Conversations are shared with coaches who can access your player records.</p><p class="help">${esc(formatDateShort(record.match_date))} · ${esc(record.opposition||'Opposition not recorded')} · ${esc(formatLabel(record.format_key))}</p>${renderPreparationConversation(record)}${record.call_entry?`<div class="notice compact"><strong>Make your call · ${esc(record.call_entry.predicted_runs)} predicted</strong><p>Shared with the club. ${preparationOfficialScore(record)?'Official result: '+esc(preparationOfficialScore(record))+'.':preparationOfficialStatus(record)?esc(matchPreparationStatus(preparationOfficialStatus(record)))+'. No batting reflection needed.':'Official result pending.'}</p></div>`:record.predicted_runs!=null?`<p><strong>My private score prediction:</strong> ${esc(record.predicted_runs)}</p>`:''}${prep.focus_note?`<div class="innings-prep-summary"><strong>My focus for this match</strong><p>${esc(prep.focus_note)}</p></div>`:''}${matchups?`<h3>Match-ups</h3>${matchups}`:''}${fielders?`<div class="innings-prep-summary"><h3>Fielders to watch</h3>${fielders}</div>`:''}${contest.bowler?`<div class="innings-prep-summary"><h3>Who would I hate to get out to?</h3><p>${esc(contest.bowler)}</p>${played&&contest.result?`<p>Did they get me out? <strong>${esc(({yes:'Yes',no:'No',not_faced:'Didn’t face them'})[contest.result]||'')}</strong></p>`:''}</div>`:''}</section>`;
 }
 async function openMyInnings({matchId=null,edit=false,add=false,prepare=false}={}){
   if(!canOpenClubTab('innings')||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
@@ -13632,9 +13749,9 @@ function renderInningsRows(matches){
   return matches.map(m=>{
     const open=state.openId===m.id,prep=m.preparation_record,coaches=m.coach_feedback||[],locked=coaches.some(f=>f.reflection_required),visible=coaches.filter(f=>!f.reflection_required);
     const preparationOnly=m.preparation_only,canPrepare=preparationOnly&&!m.missing_match;
-    const score=preparationOnly?matchPreparationStatus(prep?.status):m.score_text||'—';
+    const score=preparationOfficialScore(prep)||(preparationOfficialStatus(prep)?matchPreparationStatus(preparationOfficialStatus(prep)):null)||(preparationOnly?matchPreparationStatus(prep?.status):m.score_text||'—');
     return `<tr class="innings-row" data-innings-row="${esc(m.id)}"><td class="innings-date" title="${esc(formatDateShort(m.match_date))}">${esc(inningsCompactDate(m.match_date,state.season==='all'))}</td><td class="innings-opposition" title="${esc(m.opposition||'Opposition not recorded')}">${esc(m.opposition||'Not recorded')}</td><td class="innings-format" title="${esc(formatLabel(m.format_key))}">${esc(inningsCompactFormat(m.format_key))}</td><td class="innings-score" title="${esc(score)}">${esc(score)}</td><td class="innings-open"><button type="button" class="btn ghost" data-innings-open="${esc(m.id)}" aria-expanded="${open}" aria-controls="innings-detail-${esc(m.id)}">${open?'Close':'View'}</button></td></tr>
-    ${open?`<tr class="innings-detail" id="innings-detail-${esc(m.id)}"><td colspan="5"><div class="btnrow innings-edit-actions">${canPrepare?`<button class="btn secondary" data-preparation-edit="${esc(prep.id)}">Edit preparation</button>${prep.status==='planned'?`<button class="btn" data-preparation-record="${esc(prep.id)}">Add my innings</button>`:''}`:!preparationOnly?`<button class="btn secondary" data-innings-edit="${esc(m.id)}">Edit innings${m.player_reflection?' & reflection':''}</button>`:''}</div>${renderPreparationDetails(prep)}${preparationOnly?m.missing_match?'<p class="notice">The linked innings details could not be loaded. Refresh to try again.</p>':prep.status!=='planned'?`<p class="notice">${esc(score)}. No batting reflection needed. You can change the status in Edit preparation.</p>`:'':`<h2>After the game</h2>${renderDevelopmentMatchCard(m,{playerMode:true,showReflectionAction:false})}${renderWeeklyLoopShell('inningsFocus-'+m.id)}${locked?'<p class="help">Your score and notes are saved. Add the two reflection answers before comparing with plan-related coaching feedback.</p><button class="btn secondary" data-innings-edit="'+esc(m.id)+'">Add my reflection</button>':''}${visible.filter(f=>f.video||f.action_id).map(f=>`<div class="notice compact" style="margin-top:12px"><strong>${esc(f.author_name||'Coach / Captain')}</strong>${f.video?renderCoachingVideo(f.video):''}${f.action_id?`<button class="btn ghost" data-innings-conversation="${esc(f.action_id)}">Open Coach Conversation</button>`:''}</div>`).join('')}`}</td></tr>`:''}`;
+    ${open?`<tr class="innings-detail" id="innings-detail-${esc(m.id)}"><td colspan="5"><div class="btnrow innings-edit-actions">${canPrepare?`<button class="btn secondary" data-preparation-edit="${esc(prep.id)}">Edit preparation</button>${prep.status==='planned'&&!['did_not_bat','cancelled'].includes(preparationOfficialStatus(prep))?`<button class="btn" data-preparation-record="${esc(prep.id)}">Add my innings</button>`:''}`:!preparationOnly?`<button class="btn secondary" data-innings-edit="${esc(m.id)}">Edit innings${m.player_reflection?' & reflection':''}</button>`:''}</div>${renderPreparationDetails(prep)}${preparationOnly?m.missing_match?'<p class="notice">The linked innings details could not be loaded. Refresh to try again.</p>':prep.status!=='planned'?`<p class="notice">${esc(score)}. No batting reflection needed. You can change the status in Edit preparation.</p>`:'':`<h2>After the game</h2>${renderDevelopmentMatchCard(m,{playerMode:true,showReflectionAction:false})}${renderWeeklyLoopShell('inningsFocus-'+m.id)}${locked?'<p class="help">Your score and notes are saved. Add the two reflection answers before comparing with plan-related coaching feedback.</p><button class="btn secondary" data-innings-edit="'+esc(m.id)+'">Add my reflection</button>':''}${visible.filter(f=>f.video||f.action_id).map(f=>`<div class="notice compact" style="margin-top:12px"><strong>${esc(f.author_name||'Coach / Captain')}</strong>${f.video?renderCoachingVideo(f.video):''}${f.action_id?`<button class="btn ghost" data-innings-conversation="${esc(f.action_id)}">Open Coach Conversation</button>`:''}</div>`).join('')}`}</td></tr>`:''}`;
   }).join('');
 }
 function preparationUuid(){return globalThis.crypto.randomUUID();}
@@ -13643,10 +13760,18 @@ function cloneMatchPreparation(record){
 }
 function preparationMatchupFields(m={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-matchup="${esc(m.id)}"><div class="field"><label for="prep-${esc(m.id)}-bowler">Bowler <span>name or description</span></label><input id="prep-${esc(m.id)}-bowler" data-prep-field="bowler" maxlength="100" value="${esc(m.bowler||'')}" placeholder="e.g. Sam — opening bowler"></div><div class="field"><label for="prep-${esc(m.id)}-expect">What to expect <span>optional</span></label><input id="prep-${esc(m.id)}-expect" data-prep-field="expect" maxlength="200" value="${esc(m.expect||'')}" placeholder="Right-arm seam; moves it away"></div><div class="field"><label id="prep-${esc(m.id)}-scoring-label">My scoring options <span>optional</span></label><div data-prep-scoring-choices role="group" aria-labelledby="prep-${esc(m.id)}-scoring-label"><p class="help">Loading your saved scoring options…</p></div><input type="hidden" id="prep-${esc(m.id)}-options" data-prep-field="options" value="${esc(m.options||'')}"><p class="help">Filled buttons with a tick are selected. Selecting a shot does not change your Player Plan or show it has been practised.</p>${renderPreparationExtraShotFields(m)}</div><div data-prep-training-fallback><div class="field" data-prep-training-field><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" data-prep-training-focus ${m.training_focus===true?'checked':''} style="width:auto;margin:0">Make this a training focus for this week</label><p class="help">Save preparation to show this match-up, including its selected scoring options, in How We Train through the match date and share it with coaches who can access your player records. Training selection is separate from any automatic Coach Conversation for an outside-plan shot.</p></div></div><div class="field"><label for="prep-${esc(m.id)}-avoid">Watch out for <span>optional</span></label><input id="prep-${esc(m.id)}-avoid" data-prep-field="avoid" maxlength="200" value="${esc(m.avoid||'')}" placeholder="Reaching for the drive outside off"></div><button type="button" class="btn ghost" data-prep-remove>Remove bowler</button></article>`;}
 function preparationFielderFields(f={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-fielder="${esc(f.id)}"><div class="field"><label for="prep-${esc(f.id)}-name">Fielder or position</label><input id="prep-${esc(f.id)}-name" data-prep-field="name" maxlength="100" value="${esc(f.name||'')}" placeholder="e.g. Alex at cover"></div><div class="innings-prep-tags">${Object.entries(MATCH_PREPARATION_FIELDER_TAGS).map(([key,label])=>`<label><input type="checkbox" data-prep-tag="${key}" ${(f.tags||[]).includes(key)?'checked':''}>${esc(label)}</label>`).join('')}</div><div class="field"><label for="prep-${esc(f.id)}-note">Short note <span>optional</span></label><input id="prep-${esc(f.id)}-note" data-prep-field="note" maxlength="200" value="${esc(f.note||'')}" placeholder="Be clear on the single"></div><button type="button" class="btn ghost" data-prep-remove>Remove fielder</button></article>`;}
+function preparationOfficialStatus(record){const status=record?.call_entry?.result?.status;return ['played','did_not_bat','cancelled'].includes(status)?status:null;}
+function preparationOfficialResult(record){return record?.call_entry?.result?.status==='played'?record.call_entry.result:null;}
+function preparationOfficialScore(record){const r=preparationOfficialResult(record);return r?String(r.runs)+(r.not_out?'*':''):null;}
+function renderPreparationCall(record){const published=record?.call_entry;return `<section class="innings-prep-section" id="prepCallPanel" style="border:2px solid #394698;background:#f5f6ff"><h3>Make your call · optional</h3><label for="prepPredictedRuns">My score prediction <span>optional · private until you enter</span></label><input id="prepPredictedRuns" type="number" min="0" max="999" step="1" inputmode="numeric" value="${record?.predicted_runs??published?.predicted_runs??''}" ${published?'disabled':''}><p class="help">Whole runs, 0–999. A prediction is just a bit of fun; it does not replace your batting plan.</p>${published?`<p><strong>You’re in Make your call.</strong> Your prediction and match details are fixed. Your preparation can still change.</p><button type="button" class="btn secondary" id="prepOpenCall">View the club board</button>`:`<label style="display:flex;align-items:center;gap:10px;min-height:48px;font-weight:700"><input id="prepEnterCall" type="checkbox" disabled style="width:auto">Enter Make your call</label><p class="help">Back yourself and get the club involved. Enter for the weekly honours and your club’s prizes. This is optional and starts unchecked.</p><p class="help">On Save preparation, entering shares your name, match date, opposition, format, prediction and later official result with club members. These public details freeze on entry. Your match-ups, shot explanations and private notes are not posted here. Existing coaching sharing is unchanged.</p>`}<div id="prepCallAvailability" role="status">${published?'':'Checking your club’s game…'}</div><p class="help">Your prediction and entry save with Save preparation. Voting closes at midnight at the start of your nominated match date, in the club timezone.</p></section>`;}
+async function loadPreparationCall(record,current){const host=document.getElementById('prepCallAvailability'),checkbox=document.getElementById('prepEnterCall');if(!host)return;const form=document.getElementById('myReflectionForm');const stillHere=()=>current()&&document.getElementById('myReflectionForm')===form&&document.getElementById('prepCallAvailability')===host;try{const {data,error}=await supabase.rpc('get_make_your_call',{p_club_id:club.id,p_week_start:null,p_season:null});if(error)throw error;if(!data?.settings)throw new Error('Club setup could not be confirmed.');if(!stillHere())return;const render=()=>{if(!stillHere())return;form.preparationCallSettings=data.settings;const enabled=data.settings.enabled&&data.settings.timezone;form.preparationCallEnabled=!!enabled;if(checkbox)checkbox.disabled=!enabled;host.innerHTML=enabled?`<p class="help">Club time: ${esc(data.settings.timezone)}. Weekly points winner: ${esc(callRewardText(data.settings.rewards,'weekly_points'))}. Season points: ${esc(callRewardText(data.settings.rewards,'season_points'))}.</p>`:'<p class="help">The club game is not enabled yet. You can keep a private prediction.</p>';if(record?.call_entry)document.getElementById('prepOpenCall').onclick=()=>openMakeYourCall();syncPreparationCall(record);};form.preparationCallRender=render;flushPreparationLoadedData(form);}catch(error){if(!stillHere())return;const render=()=>{if(!stillHere())return;form.preparationCallEnabled=false;if(checkbox)checkbox.disabled=true;host.innerHTML='<p class="help">The club game could not be checked. A private prediction can still be saved.</p><button type="button" class="btn ghost" id="retryPrepCall">Try again</button>';document.getElementById('retryPrepCall').onclick=()=>loadPreparationCall(record,current);};form.preparationCallRender=render;flushPreparationLoadedData(form);}}
+function syncPreparationCall(record){const form=document.getElementById('myReflectionForm'),planned=val('prepStatus')==='planned',panel=document.getElementById('prepCallPanel'),check=document.getElementById('prepEnterCall');if(panel)panel.hidden=!planned;if(check)check.disabled=!planned||form?.preparationCallEnabled!==true;if(record?.call_entry)for(const id of ['prepDate','prepFormat','prepOpposition','prepPredictedRuns']){const f=document.getElementById(id);if(f)f.disabled=true;}}
+function preparationPredictionValues(form){const text=String(document.getElementById('prepPredictedRuns')?.value||'').trim(),enter=document.getElementById('prepEnterCall')?.checked===true;if(text&&!/^\d+$/.test(text)||text&&Number(text)>999)throw new Error('Enter a whole-run prediction from 0 to 999, or leave it blank.');if(enter&&!text)throw new Error('Add your score prediction before entering Make your call.');if(enter&&form.preparationCallEnabled!==true)throw new Error('Load your club’s Make your call setup before entering.');return {predicted_runs:text?Number(text):null,enter_make_your_call:enter};}
 function renderPreparationForm(record=null){
   const p=record?.preparation||{},contest=record?.personal_contest||{},previous=(myInningsCache?.preparations||[]).filter(r=>r.id!==record?.id&&((r.preparation?.matchups||[]).length||(r.preparation?.fielders||[]).length||r.personal_contest?.bowler));
   return `<section class="card development-entry-form" id="myReflectionForm"><div class="section-label">My Innings · before the game</div><h2>${record?'Edit preparation':'Prepare for a match'}</h2><p class="help">Start early enough to shape your training this week. Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving an upcoming match with any selected added shot outside your saved Player Plan flags a Coach Conversation. It shares the bowler, shot, reason, training selection and match date, opposition and format—even if training focus is off. Changed outside-plan preparation brings the same conversation back for review. Other preparation stays private.</p>${renderPreparationConversation(record)}<div class="development-match-fields"><div class="field"><label for="prepDate">Date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div></div>
     <details class="innings-prep-section innings-matchups" id="prepMatchupsSection" open><summary>Match-ups <span class="help">· optional</span></summary><p class="help">One useful match-up is enough. Apply your Player Plan to this bowler, then adapt to the ball and situation.</p><div id="prepScoringStatus" role="status"><p class="help">Loading your saved scoring options…</p></div><div id="prepMatchups">${(p.matchups||[]).map(preparationMatchupFields).join('')}</div><button type="button" class="btn" id="addPrepMatchup">Add a bowler</button></details>
+    ${renderPreparationCall(record)}
     ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Playing the same team again? Copy the bowlers into this match preparation.</summary><p class="help">Choose a previous entry to bring across its bowlers, scoring shots, shot explanations, fielders to watch and personal contest. Review them for this match. Date, result, reflections and any earlier match focus note will not be copied. Choose any training focuses again for this match.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Copy into this preparation</button></details>`:''}
     <details class="innings-prep-section" id="prepFieldersSection"><summary>Fielders to watch · optional</summary><div id="prepFielders">${(p.fielders||[]).map(preparationFielderFields).join('')}</div><button type="button" class="btn secondary" id="addPrepFielder">Add a fielder</button></details>
     <details class="innings-prep-section"><summary>A personal contest · optional</summary><label for="prepContest">Who would you hate to get out to?</label><input id="prepContest" maxlength="100" value="${esc(contest.bowler||'')}" placeholder="A name or description"><p class="help">Just for you. Make the right decision for the team, whoever is bowling.</p></details><input type="hidden" data-prep-legacy-focus value="${esc(p.focus_note||'')}"><div class="btnrow"><button class="btn" id="saveMyReflection">Save preparation</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus" role="status"></span></div></section>`;
@@ -13658,8 +13783,10 @@ function renderPreparationReview(record){
   return `<details class="innings-reflection-options" id="prepReviewPanel"><summary>Review my match-ups · optional</summary><p class="help">Compare your approach with what happened. Adapting to the situation can be the right decision. These answers are separate from your independent innings reflection below.</p>${matchups.map(m=>{const r=review.find(row=>row.id===m.id)||{};return `<article class="innings-prep-card" data-prep-review="${esc(m.id)}"><h3>${esc(m.bowler)}</h3>${m.expect?`<p><strong>Expected:</strong> ${esc(m.expect)}</p>`:''}${m.options?`<p><strong>My scoring options:</strong> ${esc(m.options)}</p>`:''}${m.avoid?`<p><strong>Watch out for:</strong> ${esc(m.avoid)}</p>`:''}<div data-prep-review-questions ${r.decision==='not_faced'?'hidden':''}>${radioChoiceHtml('prepReview-'+m.id,Object.entries(MATCH_PREPARATION_DECISIONS).map(([k,l])=>[k,l,'']),r.decision||'')}<div data-prep-review-note ${r.decision==='not_faced'?'hidden':''}><label for="prep-review-note-${esc(m.id)}">Short note <span>optional</span></label><textarea id="prep-review-note-${esc(m.id)}" data-prep-review-text maxlength="300" rows="2">${esc(r.note||'')}</textarea></div></div><p data-prep-not-faced ${r.decision==='not_faced'?'':'hidden'}>Didn’t face this bowler — no match-up reflection needed.</p><button class="btn ghost" type="button" data-prep-clear-review>Clear answer / undo</button></article>`;}).join('')}${contest.bowler?`<article class="innings-prep-card"><h3>You named ${esc(contest.bowler)}</h3><p>Did they get you out?</p>${radioChoiceHtml('prepContestResult',[['yes','Yes',''],['no','No',''],['not_faced','Didn’t face them','']],contest.result||'')}<button class="btn ghost" type="button" id="clearPrepContest">Clear answer</button></article>`:''}</details>`;
 }
 function renderPreparedInningsForm(record,match=null){
-  const seed=match||{match_date:record.match_date,format_key:record.format_key,opposition:record.opposition};
+  const seed={...(match||{match_date:record.match_date,format_key:record.format_key,opposition:record.opposition}),...(record.call_entry?{match_date:record.match_date,format_key:record.format_key,opposition:record.opposition}:{}),...(preparationOfficialScore(record)?{score_text:preparationOfficialScore(record)}:{})};
   let html=renderMyReflectionForm(seed,{innings:true});
+  if(preparationOfficialScore(record))html=html.replace('id="reflectionScore"','id="reflectionScore" readonly aria-describedby="officialInningsScore"').replace('<div class="development-match-fields">','<p class="notice compact" id="officialInningsScore">Your authorised Make your call score is shown here. Ask an authorised scorer to correct it. Your own notes and independent reflection stay editable.</p><div class="development-match-fields">');
+  if(record.call_entry)html=html.replace('id="reflectionDate"','id="reflectionDate" readonly').replace('id="reflectionFormat"','id="reflectionFormat" disabled').replace('id="reflectionOpposition"','id="reflectionOpposition" readonly').replace('<div class="development-match-fields">','<p class="help" id="publishedInningsIdentity">The date, opposition and format belong to your published Make your call entry and stay fixed. Your innings notes and reflection remain yours to edit.</p><div class="development-match-fields">');
   if(!match)html=html.replace('Update this innings','Add my innings');
   return html.replace('<div class="development-match-fields">',`${renderPreparationDetails(record)}<div class="development-match-fields">`).replace('<details class="innings-reflection-options" id="inningsReflectionPanel"',`${renderPreparationReview(record)}<details class="innings-reflection-options" id="inningsReflectionPanel"`);
 }
@@ -13696,7 +13823,7 @@ async function renderMyInnings({refresh=true,message=''}={}){
   page.querySelectorAll('[data-innings-open]').forEach(b=>b.onclick=()=>change(()=>{state.openId=state.openId===b.dataset.inningsOpen?null:b.dataset.inningsOpen;state.editId=null;}));
   for(const [attr,key,prefix] of [['data-innings-edit','inningsEdit',''],['data-preparation-edit','preparationEdit','prepare:'],['data-preparation-record','preparationRecord','record:']])page.querySelectorAll('['+attr+']').forEach(b=>b.onclick=async()=>{if(await change(()=>{state.editId=prefix+b.dataset[key];state.openId=null;}))document.getElementById('myReflectionForm')?.scrollIntoView({block:'start'});});
   page.querySelectorAll('[data-innings-conversation]').forEach(b=>b.onclick=async()=>{await openCoachConversations();if(currentTab!=='conversations')return;const card=document.querySelector(`[data-coaching-action-card="${b.dataset.inningsConversation}"]`);for(let d=card?.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;card?.scrollIntoView({block:'center'});watchVisibleCoachingNotes();});
-  if(state.editId){wireQuickChoices(page);captureFeedbackEntryBaseline();document.getElementById('cancelMyReflection').onclick=()=>change(()=>{state.editId=null;});if(edit.planning){bindPreparationForm(edit.record,state,current);await loadPreparationFocus(current);}else{wirePreparationReviews();bindMyInningsSave(edit.match,state,current,edit.record);await mountWeeklyLoop(document.getElementById('inningsEditFocus'),{playerId:myPlayer.id,context:'innings',matchId:edit.match?.id||null,reviewReady:false,allowManage:false,readOnly:true,compact:true,title:'Your current focus · bring it into your reflection'});}}
+  if(state.editId){wireQuickChoices(page);captureFeedbackEntryBaseline();document.getElementById('cancelMyReflection').onclick=()=>change(()=>{state.editId=null;});if(edit.planning){bindPreparationForm(edit.record,state,current);await Promise.all([loadPreparationFocus(current),loadPreparationCall(edit.record,current)]);}else{wirePreparationReviews();bindMyInningsSave(edit.match,state,current,edit.record);await mountWeeklyLoop(document.getElementById('inningsEditFocus'),{playerId:myPlayer.id,context:'innings',matchId:edit.match?.id||null,reviewReady:false,allowManage:false,readOnly:true,compact:true,title:'Your current focus · bring it into your reflection'});}}
   const opened=rows.find(m=>m.id===state.openId);if(opened&&!opened.preparation_only&&current())await mountWeeklyLoop(document.getElementById('inningsFocus-'+opened.id),{playerId:myPlayer.id,context:'innings',matchId:opened.id,reviewReady:!!opened.player_reflection});
   if(!current())return;recordAppNavigation(clubNavigationRoute());await revealPendingCoachingUpdate();watchVisibleCoachingNotes();
 }
@@ -13717,7 +13844,7 @@ function preparationValues(){
   const mayNeedReview=matchups.some(m=>m.extra_shots.filter(shot=>preparationShotSelected(m.options,shot)).length>=1);
   if(status==='planned'&&mayNeedReview&&preparationScoringState.get(form)?.status!=='ready')throw new Error('Load your saved Player Plan options before saving these shots so you can see whether a Coach Conversation will be flagged. Wait for loading to finish, or choose Try loading again.');
   if(status==='planned'&&mayNeedReview){preparationScoringCatalogue();validatePreparationShotReasons(form,matchups);}
-  return {action:status==='planned'?'prepare':status,...(status==='planned'?{auto_coaching_review:true,coaching_review_version:2}:{}),match_date:val('prepDate'),format_key:val('prepFormat'),opposition:val('prepOpposition'),preparation:{matchups,fielders,focus_note:String(form.querySelector('[data-prep-legacy-focus]')?.value||'')},personal_contest:{bowler:val('prepContest'),result:null}};
+  return {action:status==='planned'?'prepare':status,...(status==='planned'?{auto_coaching_review:true,coaching_review_version:2,...preparationPredictionValues(form)}:{}),match_date:val('prepDate'),format_key:val('prepFormat'),opposition:val('prepOpposition'),preparation:{matchups,fielders,focus_note:String(form.querySelector('[data-prep-legacy-focus]')?.value||'')},personal_contest:{bowler:val('prepContest'),result:null}};
 }
 // Read structured selected choices only. Whole answers, comments and focus_text
 // can contain unrelated prose and must never become scoring-option suggestions.
@@ -13792,6 +13919,7 @@ function refreshPreparationScoringChoices(form=document.getElementById('myReflec
 }
 function flushPreparationLoadedData(form){
   const state=preparationScoringState.get(form);
+  if(!coachingActionSavePending&&form?.preparationCallRender){const render=form.preparationCallRender;form.preparationCallRender=null;render();}
   if(!coachingActionSavePending&&state?.renderLoaded){const render=state.renderLoaded;state.renderLoaded=null;render();}
 }
 function wirePreparationRows(){
@@ -13819,7 +13947,8 @@ function bindPreparationForm(record,state,current){
   const form=document.getElementById('myReflectionForm'),status=document.getElementById('myReflectionStatus');let requestId=null,lastPayload=null,uncertainCommand=null;
   preparationScoringState.set(form,{status:'loading',candidates:[]});
   document.getElementById('prepFormat').onchange=()=>refreshPreparationScoringChoices(form);
-  document.getElementById('prepStatus').onchange=()=>refreshPreparationScoringChoices(form);
+  document.getElementById('prepStatus').onchange=()=>{refreshPreparationScoringChoices(form);syncPreparationCall(record);};
+  syncPreparationCall(record);
   form.preparationConversation=record?.coaching_action_id?{id:record.coaching_action_id,status:record.coaching_action_status}:null;
   wirePreparationRows();
   for(const [button,host,selector,render,label] of [['addPrepMatchup','prepMatchups','[data-prep-matchup]',preparationMatchupFields,'bowlers'],['addPrepFielder','prepFielders','[data-prep-fielder]',preparationFielderFields,'fielders']])document.getElementById(button).onclick=()=>{
@@ -13856,7 +13985,7 @@ function bindPreparationForm(record,state,current){
     try{
       const {data,error}=await supabase.rpc('save_my_match_preparation',{...command.args,p_request_id:command.requestId});if(error)throw error;if(!data?.preparation_id||!Number.isInteger(data.revision))throw new Error('Could not confirm the save. Your preparation is still here; try again.');
       if(uncertainCommand&&JSON.stringify(command.args)!==payload){
-        record={...(record||{}),id:data.preparation_id,revision:data.revision,status:data.status,match_id:data.match_id||null,coaching_action_id:data.coaching_action_id||null,coaching_action_status:data.coaching_action_status||null};form.preparationConversation=data.coaching_action_id?{id:data.coaching_action_id,status:data.coaching_action_status}:null;state.editId='prepare:'+data.preparation_id;uncertainCommand=null;requestId=null;lastPayload=null;coachingActionSavePending=false;if(!current())return;restore();recordAppNavigation(clubNavigationRoute());feedbackEntryBaselines.set(form,'confirmed-save-with-latest-edits');refreshPreparationScoringChoices(form);status.textContent='Previous save confirmed. Your latest edits are still here. Choose Save preparation to update that same entry.';return;
+        record={...(record||{}),id:data.preparation_id,revision:data.revision,status:data.status,match_id:data.match_id||null,coaching_action_id:data.coaching_action_id||null,coaching_action_status:data.coaching_action_status||null};form.preparationConversation=data.coaching_action_id?{id:data.coaching_action_id,status:data.coaching_action_status}:null;if(data.call_entry_id){record.call_entry={id:data.call_entry_id,predicted_runs:data.predicted_runs??values.predicted_runs};record.predicted_runs=data.predicted_runs??values.predicted_runs;for(const [id,value]of [['prepDate',values.match_date],['prepFormat',values.format_key],['prepOpposition',values.opposition],['prepPredictedRuns',record.predicted_runs]]){const f=document.getElementById(id);if(f){f.value=value;f.disabled=true;}}const callWrapper=document.createElement('div');callWrapper.innerHTML=renderPreparationCall(record);document.getElementById('prepCallPanel').replaceWith(callWrapper.children[0]);loadPreparationCall(record,current);}state.editId='prepare:'+data.preparation_id;uncertainCommand=null;requestId=null;lastPayload=null;coachingActionSavePending=false;if(!current())return;restore();recordAppNavigation(clubNavigationRoute());feedbackEntryBaselines.set(form,'confirmed-save-with-latest-edits');refreshPreparationScoringChoices(form);status.textContent='Previous save confirmed. Your latest edits are still here. Choose Save preparation to update that same entry.';return;
       }
       uncertainCommand=null;feedbackEntryBaselines.set(form,feedbackEntryValues(form));coachingActionSavePending=false;if(!current())return;
       state.editId=null;state.openId=data.match_id||data.preparation_id;state.season=inningsSeason(values.match_date);state.format='';
@@ -13874,7 +14003,7 @@ function bindPreparationForm(record,state,current){
         }
       }
     }
-    finally{coachingActionSavePending=false;if(document.getElementById('myReflectionForm')===form)restore();flushPreparationLoadedData(form);}
+    finally{coachingActionSavePending=false;if(document.getElementById('myReflectionForm')===form)restore();flushPreparationLoadedData(form);if(document.getElementById('myReflectionForm')===form)syncPreparationCall(record);}
   };
 }
 async function loadPreparationFocus(current,{refreshCatalogue=false,revealRequiredReason=false}={}){
@@ -14262,6 +14391,54 @@ async function adoptPreparationShot(shot,form){
 }
 // END SCORING PLAN ADOPTION
 
+// BEGIN MAKE YOUR CALL — explicit club sharing, independent of private preparation.
+let makeYourCallState={scope:'',week:null,season:null};
+let makeYourCallCache=null,makeYourCallSequence=0,makeYourCallSaving=false;
+const makeYourCallCommands=new Map();
+const CALL_REWARD_LABELS={weekly_points:'Weekly points winner',season_points:'Season points champion',season_beats:'Most club calls beaten',believer:'You believed in them',wildest:'Wildest call forfeit',engagement:'Weekly engagement award',engagement_claim:'How to claim the engagement prize'};
+function ensureMakeYourCallState(){const scope=`${club?.id||''}:${session?.user?.id||''}`;if(makeYourCallState.scope!==scope){makeYourCallState={scope,week:null,season:null};makeYourCallCache=null;makeYourCallCommands.clear();}return makeYourCallState;}
+function makeYourCallFormState(form){return JSON.stringify([...form.querySelectorAll('input,textarea,select')].map(f=>[f.id,f.value,!!f.checked]));}
+function makeYourCallHasUnsavedChanges(){return currentTab==='make_your_call'&&[...document.querySelectorAll('[data-call-form]')].some(f=>f.callBaseline!==makeYourCallFormState(f));}
+function makeYourCallSavePending(){return makeYourCallSaving||makeYourCallCommands.size>0;}
+function confirmLeaveMakeYourCall(){if(makeYourCallSavePending()){alert('Please confirm the pending Make your call save before leaving.');return false;}return !makeYourCallHasUnsavedChanges()||confirm('Leave your unsaved Make your call changes? Choose Cancel to keep editing.');}
+async function openMakeYourCall({week=null}={}){if(!canOpenClubTab('make_your_call')||!await saveClubEditsBeforeNavigation())return;const s=ensureMakeYourCallState();if(week)s.week=week;currentTab='make_your_call';await renderTab();}
+function callNumber(value,max,label){const text=String(value??'').trim();if(!/^\d+$/.test(text)||Number(text)>max)throw new Error(`${label}: enter a whole number from 0 to ${max}.`);return Number(text);}
+function callRewardText(rewards,key){return String(rewards?.[key]||'').trim()||(key==='engagement_claim'?'No extra claim condition':'Recognition only');}
+function callDateTime(value,zone){try{return new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short',timeZone:zone||'UTC'}).format(new Date(value));}catch{return String(value||'');}}
+function callVoteSliderMaximum(runs){return Math.min(999,Math.max(200,Math.ceil((Number(runs)||0)/50)*50));}
+function callResultText(result){return result?.status==='played'?`${result.runs}${result.not_out?'*':''}`:({pending:'Awaiting official result',did_not_bat:'Did not bat',cancelled:'Cancelled'})[result?.status]||'Awaiting official result';}
+function renderCallRewards(rewards){return `<dl class="call-rewards">${Object.entries(CALL_REWARD_LABELS).map(([key,label])=>`<div><dt>${esc(label)}</dt><dd>${esc(callRewardText(rewards,key))}</dd></div>`).join('')}</dl>`;}
+function callWeeklyWinners(calls,key){const eligible=calls.filter(c=>c.result?.status==='played'&&c.club_call!=null&&!c.voting_open);if(key==='points'){const best=Math.max(0,...eligible.map(c=>Number(c.points)||0));return best>0?eligible.filter(c=>Number(c.points)===best).map(c=>({name:c.name,detail:`${best} points · ${c.opposition||'match'}`})):[];}const field=key==='wildest'?'wildest_calls':'believers',metric=key==='wildest'?'error':'gap';const rows=eligible.flatMap(c=>(c[field]||[]).map(v=>({...v,player_name:c.name})));const best=Math.max(0,...rows.map(r=>Number(r[metric])||0));return rows.filter(r=>best>0&&Number(r[metric])===best).map(r=>({name:r.name,detail:key==='wildest'?`${r.runs} for ${r.player_name} · ${r.error} away`:`${r.runs} for ${r.player_name} · ${r.gap} above the others`}));}
+function renderCallHonours(data){return `<section class="card"><h2>This week’s honours</h2><div class="call-awards">${[['points','Weekly points winner','weekly_points'],['believer','You believed in them','believer'],['wildest','Wildest call','wildest']].map(([key,label,reward])=>{const rows=callWeeklyWinners(data.calls||[],key);return `<article><h3>${label}</h3>${rows.length?rows.map(r=>`<p><strong>${esc(r.name)}</strong><br><span class="help">${esc(r.detail)}</span></p>`).join(''):'<p class="help">Waiting for qualifying official results.</p>'}<p class="help">${esc(callRewardText(data.rewards,reward))}</p></article>`;}).join('')}</div><p class="help">Ties share the honour. Results can be corrected; honours update with them.</p></section>`;}
+function renderCallCard(c,data){const id=String(c.id),result=c.result||{status:'pending',revision:0},mine=c.my_vote,zone=c.timezone||data.settings?.timezone;return `<article class="card call-entry" data-call-entry="${esc(id)}"><div class="call-entry-head"><div><h2>${esc(c.name)}${c.own?' · You':''}</h2><p>${esc(formatDateShort(c.match_date))} · ${esc(c.opposition||'Opposition not recorded')} · ${esc(formatLabel(c.format_key))}</p></div><div class="call-score"><span>My call</span><strong>${esc(c.predicted_runs)}</strong></div><div class="call-score"><span>Club call</span><strong>${c.club_call==null?'—':esc(c.club_call)}</strong><small>${c.vote_count||0} ${c.vote_count===1?'vote':'votes'}</small></div></div><p class="help">${c.voting_open?'Votes close':'Voting closed'} ${esc(callDateTime(c.cutoff_at,zone))} (${esc(zone||'club time')}). ${c.club_call==null?'At least three peer votes are needed. No qualifying club estimate yet.':'Median peer vote, rounded up.'}</p>
+${c.own?`<p class="help">Your published call is fixed. You cannot vote on your own entry. Your match-ups, notes and shot explanations are not on this board.</p>${c.preparation_id?`<button class="btn ghost" type="button" data-call-preparation="${esc(c.preparation_id)}">View my preparation</button>`:''}`:c.voting_open?`<form data-call-form="vote-${esc(id)}" id="callVoteForm-${esc(id)}"><label for="callVoteRange-${esc(id)}">Your named prediction for ${esc(c.name)}</label><input id="callVoteRange-${esc(id)}" class="call-vote-slider" type="range" min="0" max="${callVoteSliderMaximum(mine?.runs)}" step="1" value="${mine?.runs??0}" aria-describedby="callVoteHelp-${esc(id)}"><label for="callVote-${esc(id)}" class="help">Runs · drag the slider or type your call</label><div class="btnrow"><input id="callVote-${esc(id)}" type="number" min="0" max="999" step="1" inputmode="numeric" value="${mine?.runs??''}" aria-describedby="callVoteHelp-${esc(id)}"><button class="btn" type="submit">${mine?'Update my vote':'Make my call'}</button></div><p class="help" id="callVoteHelp-${esc(id)}">Whole runs, 0–999. Your name and vote are visible to club members. You can change it until the deadline.</p><p class="status" data-call-status role="status"></p></form>`:mine?`<p>Your vote: <strong>${esc(mine.runs)}</strong></p>`:''}
+<details class="call-votes"><summary>See the named votes (${c.vote_count||0})</summary>${(c.votes||[]).length?`<ul>${c.votes.map(v=>`<li><strong>${esc(v.name)}</strong> · ${esc(v.runs)}</li>`).join('')}</ul>`:'<p class="help">No votes yet.</p>'}</details><div class="notice compact"><strong>Official result: ${esc(callResultText(result))}</strong>${result.status==='played'?`<p>${c.club_call==null?'No competition points: fewer than three peer votes.':`${esc(c.points||0)} points${c.beat_club?' · Beat the club call':''}.`}</p>`:''}${result.recorded_by?`<p class="help">Recorded by ${esc(result.recorded_by)}</p>`:''}</div>
+${c.own?'<p class="help">Another authorised scorer must record your official result, including if you are a Club Admin.</p>':''}${c.can_record_result&&!c.voting_open?`<details class="call-result"><summary>${result.status==='pending'?'Record official result':'Correct official result'}</summary><form data-call-form="result-${esc(id)}" id="callResultForm-${esc(id)}"><p class="help">Only an authorised result earns game points. This official score also appears in the player’s My Innings; it does not complete their reflection.</p><label for="callResultStatus-${esc(id)}">Result</label><select id="callResultStatus-${esc(id)}">${[['played','Batted'],['did_not_bat','Did not bat / not selected'],['cancelled','Cancelled']].map(([key,label])=>`<option value="${key}" ${result.status===key?'selected':''}>${label}</option>`).join('')}</select><div data-call-result-runs><label for="callRuns-${esc(id)}">Runs</label><input id="callRuns-${esc(id)}" type="number" min="0" max="9999" step="1" inputmode="numeric" value="${result.runs??''}"><label class="call-check"><input type="checkbox" id="callNotOut-${esc(id)}" ${result.not_out?'checked':''}> Not out</label></div>${result.status!=='pending'?`<label for="callCorrection-${esc(id)}">Reason for correction · required</label><input id="callCorrection-${esc(id)}" maxlength="300" placeholder="e.g. Scorebook corrected">`:''}<button type="submit" class="btn">${result.status==='pending'?'Save official result':'Save correction'}</button><p class="status" data-call-status role="status"></p></form></details>`:''}</article>`;}
+function renderCallSettings(data){if(!data.can_manage)return '';const s=data.settings||{},rewards=s.rewards||{};let suggested='Australia/Sydney';try{suggested=Intl.DateTimeFormat().resolvedOptions().timeZone||suggested;}catch{}return `<details class="card call-settings" ${!s.timezone?'open':''}><summary>Club setup & result permissions</summary><form data-call-form="settings" id="callSettingsForm"><p>Set this once for your club. Existing published entries keep their deadline; reward descriptions are fixed for a weekly round once it starts.</p><label class="call-check"><input type="checkbox" id="callEnabled" ${s.enabled?'checked':''}> Enable Make your call</label><label for="callTimezone">Club timezone</label><input id="callTimezone" value="${esc(s.timezone||suggested)}" placeholder="Australia/Sydney" required><p class="help">Use the timezone where your club plays. Entries and votes close at midnight at the start of the player’s nominated match date.</p><label for="callSeasonMonth">Season starts</label><select id="callSeasonMonth">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${(s.season_start_month||7)===i+1?'selected':''}>${new Intl.DateTimeFormat('en',{month:'long',timeZone:'UTC'}).format(new Date(Date.UTC(2020,i,1)))}</option>`).join('')}</select><h3>Your club’s prizes & forfeits</h3><p class="help">Describe each separately. Leave blank for recognition only. No payments or automatic debts are created.</p>${Object.entries(CALL_REWARD_LABELS).map(([key,label])=>`<label for="callReward-${key}">${label}</label><input id="callReward-${key}" maxlength="300" value="${esc(rewards[key]||'')}" placeholder="${key==='engagement_claim'?'e.g. Must be at the pub on Friday to claim':'Recognition only'}">`).join('')}<button type="submit" class="btn">Save club setup</button><p class="status" data-call-status role="status"></p></form><h3>Record competition results</h3><p class="help">Club Admins can record results. Granting this permission to a Captain, Coach or Head Coach also requires their existing edit access to each player; it never grants extra player access.</p>${(data.members||[]).filter(m=>['captain','coach','head_coach','admin','lead_admin'].includes(m.permission_role)).map(m=>`<form data-call-form="grant-${esc(m.user_id)}" id="callGrantForm-${esc(m.user_id)}"><label class="call-check"><input type="checkbox" id="callGrant-${esc(m.user_id)}" ${m.can_record_results?'checked':''} ${['admin','lead_admin'].includes(m.permission_role)?'disabled':''}> ${esc(m.name)} · ${esc(String(m.permission_role).replaceAll('_',' '))}</label>${['admin','lead_admin'].includes(m.permission_role)?'<p class="help">Included with Club Admin access.</p>':'<button class="btn secondary" type="submit">Save permission</button><p class="status" data-call-status role="status"></p>'}</form>`).join('')||'<p class="help">No eligible staff to grant yet.</p>'}</details>`;}
+function renderCallSeason(data){const rows=data.season_rows||[],maxPoints=Math.max(0,...rows.map(r=>Number(r.points)||0)),maxBeats=Math.max(0,...rows.map(r=>Number(r.beat_count)||0));return `<section class="card"><h2>Season game totals</h2><p class="help">A club game, not a ranking of batting ability. More entries mean more opportunities. Ties share honours.</p><p><strong>Points champion:</strong> ${maxPoints?rows.filter(r=>r.points===maxPoints).map(r=>esc(r.name)).join(' · '):'Awaiting qualifying results'}<br><span class="help">${esc(callRewardText(data.settings?.rewards,'season_points'))}</span></p><p><strong>Most club calls beaten:</strong> ${maxBeats?rows.filter(r=>r.beat_count===maxBeats).map(r=>esc(r.name)).join(' · '):'Awaiting qualifying results'}<br><span class="help">${esc(callRewardText(data.settings?.rewards,'season_beats'))}</span></p><div class="call-table-wrap"><table class="call-table"><thead><tr><th>Player</th><th>Points</th><th>Beat the call</th><th>Counted innings / entries</th></tr></thead><tbody>${rows.map(r=>`<tr><th>${esc(r.name)}</th><td>${esc(r.points||0)}</td><td>${esc(r.beat_count||0)}</td><td>${esc(r.innings||0)} / ${esc(r.entries||0)}</td></tr>`).join('')||'<tr><td colspan="4">No entries this season.</td></tr>'}</tbody></table></div></section>`;}
+function renderCallEngagementAwards(bundle){if(!bundle)return '';return `<section class="card" id="callSharedEngagement"><h2>This week’s engagement awards</h2><p>Two different activities: prepare, check in on training, or review and choose a next step. No score prediction is required.</p>${(bundle.awards||[]).length?`<ul>${bundle.awards.map(a=>`<li><strong>${esc(a.name)}</strong> ✓${a.season_awards!=null?` · ${esc(a.season_awards)} this season`:''}</li>`).join('')}</ul>`:'<p class="help">No shared awards for this week yet. Players choose separately whether to share an earned award.</p>'}<p><strong>Club reward:</strong> ${esc(bundle.reward_text||'Recognition only')}</p>${bundle.claim_text?`<p><strong>To claim:</strong> ${esc(bundle.claim_text)}</p>`:''}<p class="help">Your club handles prize collection. Only opted-in award winners appear here; individual preparation, check-ins and reflections are not shared. Recorded engagement is not proof of practice or improved batting.</p></section>`;}
+function renderCallMessages(data){return `<section class="card"><h2>The weekly club conversation</h2><p class="help">One thread for this round. Keep it friendly. Everyone here is a member of your club; private preparation and coaching stay in their own spaces.</p><div class="call-messages">${(data.messages||[]).map(m=>`<article><strong>${esc(m.name)}</strong><p class="call-message-body">${esc(m.body)}</p><span class="help">${esc(callDateTime(m.created_at,data.settings?.timezone))}</span><div class="btnrow">${m.can_delete?`<button class="btn ghost" type="button" data-call-delete="${esc(m.id)}">Remove</button>`:''}${m.reported?'<span class="help">Reported to Club Admin</span>':`<button class="btn ghost" type="button" data-call-report="${esc(m.id)}">Report</button>`}</div></article>`).join('')||'<p class="help">No messages yet. Make the first call.</p>'}</div><form data-call-form="message" id="callMessageForm"><label for="callMessage">Your message</label><textarea id="callMessage" maxlength="500" rows="2" placeholder="Back a teammate. Keep the banter kind."></textarea><button class="btn" type="submit">Post to this week</button><p class="status" data-call-status role="status"></p></form>${data.can_manage&&(data.reports||[]).length?`<details><summary>Reported messages (${data.reports.length})</summary>${data.reports.map(r=>`<p><strong>${esc(r.reporter_name)}</strong>: ${esc(r.reason)} <button class="btn ghost" data-call-delete="${esc(r.message_id)}">Remove reported message</button></p>`).join('')}</details>`:''}</section>`;}
+function callStyles(){return `<style>.call-entry-head,.call-awards{display:flex;gap:20px;flex-wrap:wrap}.call-entry-head>div:first-child{flex:1 1 230px}.call-score{min-width:76px;text-align:center}.call-score span,.call-score small{display:block;font-size:12px}.call-score strong{display:block;font-size:32px}.call-entry form,.call-settings form{margin:16px 0}.call-entry input[type=number]{max-width:130px}.call-entry .call-vote-slider{display:block;width:100%;max-width:500px;min-height:44px;margin:8px 0;accent-color:#26327c}.call-entry label,.call-settings label{display:block;margin-top:12px;font-weight:700}.call-check{display:flex!important;align-items:center;gap:10px;min-height:44px}.call-check input{width:auto!important}.call-votes,.call-result{margin:16px 0}.call-result summary,.call-settings>summary{font-weight:700;cursor:pointer;min-height:44px}.call-awards article{flex:1 1 180px;background:#f5f6fd;padding:16px;border-radius:12px}.call-rewards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.call-rewards dt{font-weight:700}.call-rewards dd{margin:4px 0}.call-table-wrap{overflow:auto}.call-table{width:100%;border-collapse:collapse;text-align:left}.call-table td,.call-table th{padding:12px 8px;border-bottom:1px solid #e1e5f0}.call-message-body{white-space:pre-wrap;overflow-wrap:anywhere}.call-messages article{border-bottom:1px solid #e1e5f0;padding:14px 0}.call-page .btn{min-height:44px}.call-page .btnrow{flex-wrap:wrap}.call-page [hidden]{display:none!important}.call-filters{display:flex;gap:16px;flex-wrap:wrap}.call-filters label{display:block;font-weight:700}.call-prep-invitation{border:2px solid #394698;background:#f5f6ff}.call-prep-invitation label{display:block}.call-prep-invitation .call-check{font-size:17px;font-weight:700}</style>`;}
+function captureCallDrafts(){const drafts=new Map();for(const form of document.querySelectorAll('[data-call-form]'))if(form.callBaseline!==makeYourCallFormState(form))drafts.set(form.dataset.callForm,[...form.querySelectorAll('input,textarea,select')].map(f=>({id:f.id,value:f.value,checked:f.checked})));return drafts;}
+async function renderMakeYourCall({message='',drafts=null}={}){const page=document.getElementById('page'),state=ensureMakeYourCallState(),scope=state.scope,sequence=++makeYourCallSequence;const current=()=>currentTab==='make_your_call'&&ensureMakeYourCallState().scope===scope&&sequence===makeYourCallSequence&&document.getElementById('page')===page;page.innerHTML='<p class="splash">Loading Make your call…</p>';try{const {data,error}=await supabase.rpc('get_make_your_call',{p_club_id:club.id,p_week_start:state.week,p_season:state.season});if(error)throw error;if(!data?.settings||!Array.isArray(data.calls))throw new Error('The club board could not be confirmed.');if(!current())return;makeYourCallCache=data;state.week=data.week_start;state.season=data.season;
+const weeks=[...new Set([data.week_start,...(data.weeks||[])])].sort().reverse(),seasons=[...new Set([Number(data.season),...weeks.map(w=>Number(w.slice(0,4))-(Number(w.slice(5,7))<(data.settings.season_start_month||7)?1:0))])].sort((a,b)=>b-a);
+page.innerHTML=`${callStyles()}<div class="call-page"><section class="card"><div class="section-label">${esc(club.name||'Your club')} · Optional club game</div><h1>Make your call</h1><p>Back yourself. Back a teammate. Bring your plan into the week.</p><p class="help">Make your own score prediction in Prepare for a match, then choose whether to enter. Club members can vote and join in without sharing private batting preparation.</p><div class="btnrow">${isPlayerUser()?'<button class="btn" id="callPrepare">Prepare & make my call</button>':''}<button class="btn ghost" id="callRefresh">Refresh</button></div><p id="callPageStatus" role="status">${esc(message)}</p></section>${renderCallSettings(data)}${!data.settings.enabled?'<section class="card notice"><h2>Make your call is not enabled yet.</h2><p>Your club’s Admin can set the timezone, choose any rewards and enable it here. Private match predictions remain available in My Innings.</p></section>':`<section class="card"><div class="call-filters"><div><label for="callWeek">Week starting</label><select id="callWeek">${weeks.map(w=>`<option value="${esc(w)}" ${w===state.week?'selected':''}>${esc(formatDateShort(w))}</option>`).join('')}</select></div><div><label for="callSeason">Season</label><select id="callSeason">${seasons.map(s=>`<option value="${s}" ${s===Number(state.season)?'selected':''}>${s}/${String(s+1).slice(-2)}</option>`).join('')}</select></div></div><details><summary>Prizes, forfeits & how it works</summary>${renderCallRewards(data.rewards)}<p>Three or more peer votes make the club call: their median, rounded up. Your own prediction is separate. Votes close at midnight starting your nominated match date in ${esc(data.settings.timezone)}.</p><p>Batting points = official runs above the club call, never below zero. This week’s largest single-innings margin wins; season points add up. Beating the club call also counts towards the separate season total.</p><p><strong>You believed in them:</strong> predict more than the median of at least two other voters, and see the player reach your prediction. The largest gap wins. <strong>Wildest call:</strong> the named vote furthest from the official score, whether too high or too low. Ties share honours.</p><p>Did not bat, not selected or cancelled? No points or penalty. Game statistics are not a measure of batting ability. Review your decisions honestly, whatever the score.</p></details></section>${(data.calls||[]).map(c=>renderCallCard(c,data)).join('')||'<section class="card"><h2>No calls for this week yet.</h2><p>Players can enter from their saved match preparation before the match-date deadline.</p></section>'}${renderCallHonours(data)}${renderCallEngagementAwards(data.engagement)}${renderCallSeason(data)}${renderCallMessages(data)}`}${myPlayer&&isPlayerUser()&&typeof renderEngagementShell==='function'?renderEngagementShell('callEngagement'):''}</div>`;
+for(const form of page.querySelectorAll('[data-call-form]')){form.callBaseline=makeYourCallFormState(form);for(const draft of drafts?.get(form.dataset.callForm)||[]){const f=document.getElementById(draft.id);if(f&&form.contains(f)){f.value=draft.value;if('checked'in f)f.checked=draft.checked;}}}
+bindMakeYourCall(data,current);recordAppNavigation(clubNavigationRoute());if(myPlayer&&isPlayerUser()&&typeof mountEngagement==='function')await mountEngagement(document.getElementById('callEngagement'),{clubId:club.id});
+}catch(error){if(current()){page.innerHTML=`<section class="card"><h1>Make your call</h1><p>${esc(error?.message||'Could not load the board.')}</p><button class="btn" id="callRetry">Try again</button></section>`;document.getElementById('callRetry').onclick=()=>renderMakeYourCall({message,drafts});}}}
+async function saveCallMutation(form,rpc,values,current,success){if(makeYourCallSaving||!current())return;const key=form?.dataset.callForm||rpc;if(makeYourCallCommands.size&&!makeYourCallCommands.has(key)){alert('Confirm the pending save first.');return;}const status=form?.querySelector('[data-call-status]')||document.getElementById('callPageStatus');let command=makeYourCallCommands.get(key);if(!command)command={rpc,args:{p_club_id:club.id,p_request_id:preparationUuid(),p_values:values}};makeYourCallCommands.set(key,command);makeYourCallSaving=true;const controls=[...document.querySelectorAll('.call-page input,.call-page textarea,.call-page select,.call-page button')].map(f=>[f,f.disabled]);controls.forEach(([f])=>f.disabled=true);if(status)status.textContent='Saving…';try{const {data,error}=await supabase.rpc(command.rpc,command.args);if(error)throw error;if(data?.ok!==true)throw new Error('Could not confirm the save.');makeYourCallCommands.delete(key);if(!current())return;const drafts=captureCallDrafts();drafts.delete(key);await renderMakeYourCall({message:data.already_saved?'Previous save confirmed. '+success:success,drafts});}catch(error){if(definiteInningsSaveFailure(error)){makeYourCallCommands.delete(key);}if(current()&&status){status.textContent=(error?.message||'Could not confirm the save.')+(makeYourCallCommands.has(key)?' Retry the same save to confirm it; these fields stay locked until then.':' Your changes are still here. Refresh the board to load any newer revision, then try again.');if(makeYourCallCommands.has(key)&&!form){status.insertAdjacentHTML('beforeend','<button type="button" class="btn secondary" id="retryCallAction">Confirm previous action</button>');document.getElementById('retryCallAction').onclick=()=>saveCallMutation(null,rpc,null,current,success);}}}finally{makeYourCallSaving=false;for(const [f,disabled]of controls)if(document.documentElement.contains(f))f.disabled=disabled;if(makeYourCallCommands.has(key)&&form){for(const f of form.querySelectorAll('input,textarea,select'))f.disabled=true;}}}
+function bindMakeYourCall(data,current){const page=document.getElementById('page');const submit=(id,rpc,values,success)=>{const form=document.getElementById(id);if(!form)return;form.onsubmit=async e=>{e.preventDefault();if(makeYourCallSaving)return;let value;try{value=makeYourCallCommands.has(form.dataset.callForm)?null:values();}catch(error){form.querySelector('[data-call-status]').textContent=error.message;return;}return saveCallMutation(form,rpc,value,current,success);};};
+document.getElementById('callPrepare')?.addEventListener('click',()=>openMyInnings({prepare:true}));document.getElementById('callRefresh').onclick=()=>{if(!makeYourCallSavePending())return renderMakeYourCall({drafts:captureCallDrafts()});};
+for(const [id,key]of [['callWeek','week'],['callSeason','season']])document.getElementById(id)?.addEventListener('change',async e=>{const state=ensureMakeYourCallState(),value=e.target.value;if(!confirmLeaveMakeYourCall()){e.target.value=state[key];return;}state[key]=key==='season'?Number(value):value;await renderMakeYourCall();});
+submit('callSettingsForm','save_make_your_call_settings',()=>{const timezone=val('callTimezone');try{new Intl.DateTimeFormat(undefined,{timeZone:timezone});}catch{throw new Error('Enter a valid club timezone, for example Australia/Sydney.');}return {expected_revision:data.settings.revision||0,enabled:document.getElementById('callEnabled').checked,timezone,season_start_month:Number(val('callSeasonMonth')),rewards:Object.fromEntries(Object.keys(CALL_REWARD_LABELS).map(k=>[k,val('callReward-'+k)]))};},'Club setup saved.');
+for(const m of data.members||[])submit('callGrantForm-'+m.user_id,'save_make_your_call_settings',()=>({action:'grant',user_id:m.user_id,allowed:document.getElementById('callGrant-'+m.user_id).checked}),'Result permission saved.');
+for(const c of data.calls||[]){const slider=document.getElementById('callVoteRange-'+c.id),numeric=document.getElementById('callVote-'+c.id);if(slider&&numeric){slider.oninput=()=>{numeric.value=slider.value;};numeric.oninput=()=>{const value=String(numeric.value).trim();if(/^\d+$/.test(value)&&Number(value)<=999){slider.setAttribute('max',String(callVoteSliderMaximum(value)));slider.value=value;}};}submit('callVoteForm-'+c.id,'save_make_your_call_vote',()=>({entry_id:c.id,runs:callNumber(val('callVote-'+c.id),999,'Your vote'),expected_revision:c.my_vote?.revision||0}),'Your named vote is saved.');submit('callResultForm-'+c.id,'save_make_your_call_result',()=>{const status=val('callResultStatus-'+c.id),reason=val('callCorrection-'+c.id);if(c.result?.status!=='pending'&&!reason)throw new Error('Add the reason for correcting this result.');return {entry_id:c.id,expected_revision:c.result?.revision||0,status,runs:status==='played'?callNumber(val('callRuns-'+c.id),9999,'Official runs'):null,not_out:status==='played'&&document.getElementById('callNotOut-'+c.id).checked,reason};},'Official result saved. Game totals and the player’s My Innings use this result.');const resultStatus=document.getElementById('callResultStatus-'+c.id);if(resultStatus){const sync=()=>{document.getElementById('callResultForm-'+c.id).querySelector('[data-call-result-runs]').hidden=resultStatus.value!=='played';};resultStatus.onchange=sync;sync();}}
+submit('callMessageForm','save_make_your_call_message',()=>{const body=val('callMessage');if(!body)throw new Error('Write a short message first.');return {action:'post',week_start:data.week_start,body};},'Posted to this week’s club conversation.');
+page.querySelectorAll('[data-call-preparation]').forEach(b=>b.onclick=async()=>{if(!await saveClubEditsBeforeNavigation())return;const s=ensureMyInningsState();s.season='all';s.editId=null;s.openId=b.dataset.callPreparation;currentTab='innings';await renderTab();const prep=myInningsCache?.preparations?.find(p=>p.id===b.dataset.callPreparation);if(prep?.match_id&&s.openId!==prep.match_id){s.openId=prep.match_id;await renderMyInnings({refresh:false});}});
+page.querySelectorAll('[data-call-delete]').forEach(b=>b.onclick=()=>{if(!confirm('Remove this message from the club conversation?'))return;return saveCallMutation(null,'save_make_your_call_message',{action:'delete',message_id:b.dataset.callDelete},current,'Message removed.');});
+page.querySelectorAll('[data-call-report]').forEach(b=>b.onclick=()=>{const reason=prompt('Why should Club Admin review this message?');if(!reason?.trim())return;return saveCallMutation(null,'save_make_your_call_message',{action:'report',message_id:b.dataset.callReport,reason:reason.trim().slice(0,300)},current,'Reported to Club Admin.');});}
+// END MAKE YOUR CALL
+
 
 async function renderHowWeTrain(){
   if(howWeTrainReflectionEditId&&isPlayerUser()){const target=howWeTrainReflectionEditId;howWeTrainReflectionEditId=null;return openMyInnings({matchId:target==='new'?null:target,edit:target!=='new',add:target==='new'});}
@@ -14347,7 +14524,7 @@ async function renderHowWeTrain(){
   </section>
 
   ${feedbackError?'<section class="card notice" role="status"><strong>Feedback could not be loaded.</strong><p>Your saved Player Plan is still available. Try again to load your reflections and training observations.</p><button class="btn ghost" id="retryTrainingFeedback">Try again</button></section>':''}
-  ${myPlayer&&isPlayerUser()?renderWeeklyLoopShell('howWeTrainFocus'):''}
+  ${myPlayer&&isPlayerUser()?renderWeeklyLoopShell('howWeTrainFocus')+renderEngagementShell('howWeTrainEngagement'):''}
   ${canUsePlayersWorkspace()?'<section class="card"><button class="btn secondary" id="openPreparationFromTraining">Training preparation · Playing Groups</button></section>':''}
   ${myPlayer&&isPlayerUser()?'<section class="card"><button class="btn secondary" id="requestConversationFromTraining">Request a Coach Conversation</button></section>':''}
   ${myPlayer?renderCoachingActions(feedback,{playerMode:true,includeObservations:true}):''}
@@ -14359,7 +14536,7 @@ async function renderHowWeTrain(){
   captureFeedbackEntryBaseline();
   bindCoachingActionControls(feedback,()=>renderHowWeTrain());
   document.getElementById('openPreparationFromTraining')?.addEventListener('click',()=>openTrainingPreparation());
-  if(myPlayer&&isPlayerUser())await Promise.all([mountMatchTrainingFocus(document.getElementById('howWeTrainMatchFocus')),mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training'})]);
+  if(myPlayer&&isPlayerUser())await Promise.all([mountMatchTrainingFocus(document.getElementById('howWeTrainMatchFocus')),mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training'}),mountEngagement(document.getElementById('howWeTrainEngagement'),{clubId,training:true})]);
   if(!isCurrent())return;
   document.getElementById('requestConversationFromTraining')?.addEventListener('click',openCoachConversationRequest);
   document.getElementById('retryTrainingFeedback')?.addEventListener('click',async()=>{if(confirmLeaveFeedbackEntry())await renderHowWeTrain();});
@@ -16164,6 +16341,7 @@ async function renderPlayerHome(){
   </section>
   ${loadNote?`<div class="notice compact" role="status" style="margin-top:14px">${!rolloutOk?'Your club’s required formats and due dates could not be checked. ':''}${!feedbackOk?'Your latest feedback could not be loaded. ':feedback.coaching_actions_error?'Shared training actions could not be loaded. ':''}You can keep using your saved plan.<button class="club-home-link" id="retryPlayerHome" type="button" style="margin-left:12px">Try again</button></div>`:''}
   ${renderWeeklyLoopShell('playerHomeFocus')}
+  ${renderEngagementShell('playerHomeEngagement')}
   ${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.follow_up_requested!==false)?`<section class="card notice" role="status"><strong>${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.review_on&&a.review_on<=todayIso())?'Coach Conversation review due':'You have a Coach Conversation'}</strong><p>Open Coach Conversations in How We Train to see the note, any agreed practice and the optional review date.</p><button class="btn secondary" id="playerHomeActionAlert">Open How We Train</button></section>`:''}
   <section class="card"><div class="section-label">Your season</div><h2>My Innings</h2><p>Prepare for a match, then keep your innings, notes, video and reflection together.</p><div class="btnrow"><button class="btn secondary" id="playerHomeInnings">Open My Innings</button><button class="btn ghost" id="playerHomeAddInnings">Add an innings</button></div></section>
   <div class="club-home-secondary" aria-label="Your batting tools">
@@ -16182,7 +16360,7 @@ async function renderPlayerHome(){
   document.getElementById('playerHomeAddInnings').onclick=()=>openMyInnings({add:true});
   document.getElementById('playerHomePhilosophy').onclick=()=>openPlayerHomeAction({tab:'howwebat'});
   document.getElementById('retryPlayerHome')?.addEventListener('click',()=>{if(confirmLeaveFeedbackEntry())return renderPlayerHome();});
-  await mountWeeklyLoop(document.getElementById('playerHomeFocus'),{playerId,context:'home'});
+  await Promise.all([mountWeeklyLoop(document.getElementById('playerHomeFocus'),{playerId,context:'home'}),mountEngagement(document.getElementById('playerHomeEngagement'),{clubId})]);
 }
 
 // BEGIN WEEKLY LOOP MODULES
@@ -19497,6 +19675,61 @@ async function renderPlatformSettings(){
 }
 
 
+
+
+
+
+
+// BEGIN WEEKLY ENGAGEMENT — saved actions, never clicks or time online.
+const engagementMounts=new Set();
+let engagementMountNumber=0;
+function engagementScope(){return `${club?.id||''}:${session?.user?.id||''}`;}
+function engagementCurrent(s){return s.scope===engagementScope()&&document.documentElement.contains(s.host)&&s.host.dataset.engagementMount===String(s.id);}
+function engagementSavePending(){return [...engagementMounts].some(s=>engagementCurrent(s)&&(s.busy||s.uncertain));}
+function engagementFormValue(form){return form?JSON.stringify([...form.querySelectorAll('input,select,textarea')].map(x=>[x.name,x.value,x.checked])):'';}
+function engagementHasUnsavedChanges(){return [...engagementMounts].some(s=>engagementCurrent(s)&&s.form&&s.baseline!==engagementFormValue(s.form));}
+function confirmLeaveEngagement(){if(engagementSavePending()){alert('Your check-in is still saving. Please wait.');return false;}return !engagementHasUnsavedChanges()||confirm('Leave without saving your training check-in?');}
+function renderEngagementShell(id){return `<div id="${esc(id)}" class="engagement-host" aria-live="polite"></div>`;}
+function engagementRequestId(){return typeof crypto?.randomUUID==='function'?crypto.randomUUID():newRequestId();}
+function engagementCandidateKey(c){return `${c.kind}:${c.id||''}:${c.key||''}`;}
+function engagementStyles(){return `<style>.engagement-card{margin:16px 0;padding:18px;border:1px solid #dce1ed;border-radius:14px;background:#fff}.engagement-card h2{margin:3px 0 8px}.engagement-credit-list{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.engagement-credit{padding:7px 10px;border-radius:18px;background:#f0f2f8;font-size:13px}.engagement-credit.done{background:#e4f5ed;color:#126448;font-weight:700}.engagement-checkin{border-top:1px solid #e4e7ef;margin-top:16px;padding-top:14px}.engagement-checkin select,.engagement-checkin textarea{display:block;width:100%;max-width:100%;margin:7px 0 14px}.engagement-checkin fieldset{border:0;padding:0;margin:12px 0}.engagement-checkin legend{font-weight:700}.engagement-radios{display:flex;flex-wrap:wrap;gap:8px}.engagement-radios label{display:flex;align-items:center;gap:7px;padding:10px;border:1px solid #dce1ed;border-radius:9px;cursor:pointer}.engagement-radios label:has(input:checked){background:#e9edff;border-color:#283785}.engagement-sharing{display:flex;align-items:flex-start;gap:9px;margin:12px 0}.engagement-status{margin:8px 0}.engagement-card .btn{min-height:44px}.engagement-card summary{cursor:pointer;font-weight:700}.engagement-saved{color:#176448;font-weight:700}</style>`;}
+function engagementRender(s){
+ const b=s.bundle,categories=b.categories||[],training=b.training_checkin,candidates=b.candidates||[];
+ const chosen=candidates.findIndex(c=>c.kind===training?.source_kind&&(c.id||null)===(training?.source_id||null)&&(c.key||null)===(training?.source_key||null));
+ const radios=(name,values,selected)=>`<div class="engagement-radios">${values.map(([v,label])=>`<label><input type="radio" name="${name}" value="${v}" ${v===selected?'checked':''} required>${label}</label>`).join('')}</div>`;
+ s.host.innerHTML=engagementStyles()+`<section class="engagement-card"><div class="eyebrow">YOUR WEEK</div><h2>Weekly engagement ${b.earned?'✓':''}</h2>${b.configured?`<p>${b.earned?'<strong>Award earned.</strong>':`<strong>${Number(b.count)||0} of 3 activities.</strong>`} Two different activities earn this week’s award.</p><div class="engagement-credit-list">${[['prepare','Prepare'],['training','Training check-in'],['review','Review and continue']].map(([k,l])=>`<span class="engagement-credit ${categories.includes(k)?'done':''}">${categories.includes(k)?'✓ ':''}${l}</span>`).join('')}</div><p class="help">Week beginning ${esc(b.week_start)} · ${esc(b.timezone)}. ${Number(b.season_awards)||0} awards this season.</p><p><strong>Club reward:</strong> ${esc(b.reward_text||'Recognition only')}</p>${b.claim_text?`<p class="help"><strong>To claim:</strong> ${esc(b.claim_text)} Your club handles collection; earning the award does not confirm attendance or prize collection.</p>`:''}<label class="engagement-sharing"><input type="checkbox" data-engagement-share ${b.shared?'checked':''}><span>Share my engagement awards with the club<br><small>Only your name and awards are shared. Your answers and coaching notes keep their existing access.</small></span></label><details><summary>What counts?</summary><p>Prepare: save a bowler match-up and a scoring option from your plan, or an explained additional shot, before the match day and within the next two weeks.</p><p>Training: check in on a saved focus or plan answer and choose a next step. This is your report, not proof of practice. “Couldn’t this week” can count as thoughtful engagement.</p><p>Review: save your independent innings reflection and choose Keep, Adjust or Discuss within two weeks of the innings.</p><p>Each activity counts once per week. Re-saving the same preparation or innings does not earn it again. Votes, comments, page opens and time online do not count. A missed week never removes an earlier award.</p></details>${s.options.training?`<form class="engagement-checkin"><h3>Training check-in</h3><p class="help">A quick, honest check-in on your focus. Self-reported; no phone needed at training.</p>${candidates.length?`<label>Choose a current focus or saved plan answer<select name="source" required><option value="">Choose…</option>${candidates.map((c,i)=>`<option value="${i}" ${chosen===i?'selected':''}>${esc(c.kind==='focus'?'Current focus: ':'Player Plan: ')}${esc(c.text)}</option>`).join('')}</select></label><fieldset><legend>What happened?</legend>${radios('status',[['worked','Worked on it'],['changed','Changed my approach'],['couldnt','Couldn’t this week']],training?.status)}</fieldset><fieldset><legend>What next?</legend>${radios('next_step',[['keep','Keep working on this'],['adjust','Revisit my focus'],['discuss','Speak with someone']],training?.next_step)}</fieldset><label>Optional note<textarea name="note" maxlength="300" rows="2" placeholder="A useful detail, if needed">${esc(training?.note||'')}</textarea></label><p class="help">This records your next step. Use your current focus or Coach Conversations to make a change or request a conversation.</p><button class="btn ${training?'secondary':'primary'}" type="submit">${training?'Saved ✓':'Save check-in'}</button><span data-engagement-form-state class="help"></span>`:'<p>Choose a current focus or save a Player Plan answer first. Your existing focus controls are on this page.</p>'}</form>`:''}<details style="margin-top:12px"><summary>My award history</summary>${(b.history||[]).filter(h=>h.earned).map(h=>`<p>✓ Week beginning ${esc(h.week_start)}</p>`).join('')||'<p>Your earned awards will appear here.</p>'}</details>`:'<p class="help">Your club can enable weekly engagement and choose its rewards from Make your call settings. Your normal plans, preparation and coaching remain available.</p>'}<div class="engagement-status" role="status" data-engagement-status></div></section>`;
+ s.form=s.host.querySelector('form');s.baseline=engagementFormValue(s.form);
+ const share=s.host.querySelector('[data-engagement-share]');
+ if(share)share.addEventListener('change',()=>engagementSave(s,'sharing',{shared:share.checked}));
+ if(s.form){s.form.addEventListener('submit',e=>{e.preventDefault();const source=s.form.elements.source;if(!source||source.value==='')return;const c=candidates[Number(source.value)];if(!c)return;engagementSave(s,'training',{source_kind:c.kind,source_id:c.id||null,source_key:c.key||null,status:s.form.elements.status.value,next_step:s.form.elements.next_step.value,note:s.form.elements.note.value.trim()});});s.form.addEventListener('input',()=>{const button=s.form.querySelector('button[type="submit"]');if(button){const dirty=s.baseline!==engagementFormValue(s.form);button.textContent=dirty?'Save check-in':training?'Saved ✓':'Save check-in';button.classList.toggle('primary',dirty||!training);button.classList.toggle('secondary',!dirty&&!!training);}});}
+}
+async function mountEngagement(host,options={}){
+ if(typeof host==='string')host=document.getElementById(host);if(!host)return;
+ const s={host,options,scope:engagementScope(),id:++engagementMountNumber,busy:false,bundle:null,form:null,request:null};host.dataset.engagementMount=String(s.id);engagementMounts.add(s);
+ for(const old of engagementMounts)if(!engagementCurrent(old))engagementMounts.delete(old);
+ host.innerHTML='<p class="help">Loading your weekly engagement…</p>';
+ try{const {data,error}=await supabase.rpc('get_my_engagement',{p_club_id:options.clubId||club?.id});if(error)throw error;if(!engagementCurrent(s))return;s.bundle=data;engagementRender(s);}catch(e){if(!engagementCurrent(s))return;host.innerHTML=`<p class="help">${esc(e.message||'Weekly engagement could not load.')}</p><button class="btn secondary" data-engagement-retry>Try again</button>`;host.querySelector('button').onclick=()=>mountEngagement(host,options);}
+}
+async function engagementSave(s,op,values){
+ if(!engagementCurrent(s)||s.busy)return;
+ if(s.uncertain){op=s.request.op;values=s.request.values;}
+ const draftSource=s.form?.querySelector('[name="source"]');const draftSourceKey=draftSource&&draftSource.value!==''&&s.bundle.candidates?.[Number(draftSource.value)]?engagementCandidateKey(s.bundle.candidates[Number(draftSource.value)]):null;
+ const draft=s.form?{sourceKey:draftSourceKey,fields:[...s.form.querySelectorAll('input,select,textarea')].map(x=>({name:x.name,value:x.value,checked:x.checked,type:x.type})),baseline:s.baseline}:null;
+ const key=JSON.stringify({op,values,revision:op==='sharing'?s.bundle.sharing_revision:s.bundle.training_checkin?.revision||0});if(s.request?.key!==key)s.request={key,id:engagementRequestId(),op,values};
+ s.busy=true;const controls=[...s.host.querySelectorAll('input,select,textarea,button')],states=controls.map(c=>s.controlStates?.has(c)?s.controlStates.get(c):c.disabled);if(!s.controlStates)s.controlStates=new Map();controls.forEach((c,i)=>{s.controlStates.set(c,states[i]);c.disabled=true;});const status=s.host.querySelector('[data-engagement-status]');if(status)status.textContent='Saving…';
+ try{
+ const args={p_club_id:s.options.clubId||club?.id,p_expected_revision:op==='sharing'?s.bundle.sharing_revision:s.bundle.training_checkin?.revision||0,p_request_id:s.request.id};
+ const {data,error}=await supabase.rpc(op==='sharing'?'set_my_engagement_sharing':'save_my_training_checkin',op==='sharing'?{...args,p_shared:values.shared}:{...args,p_values:values});if(error)throw error;
+ if(!data||data.player_id!==s.bundle.player_id||!Array.isArray(data.categories))throw new Error('The save could not be confirmed.');
+ if(!engagementCurrent(s))return;s.bundle=data;s.request=null;s.uncertain=false;engagementRender(s);
+ if(op==='sharing'&&draft&&s.form){s.missingDraftSource=false;for(const field of draft.fields){const items=[...s.form.querySelectorAll('input,select,textarea')].filter(x=>x.name===field.name);for(const x of items){if(field.type==='radio'){if(x.value===field.value)x.checked=field.checked;}else{x.value=field.value;x.checked=field.checked;}}}const source=s.form.querySelector('[name="source"]');if(source&&draft.sourceKey){const index=(data.candidates||[]).findIndex(c=>engagementCandidateKey(c)===draft.sourceKey);source.value=index<0?'':String(index);if(index<0)s.missingDraftSource=true;}s.baseline=draft.baseline;const b=s.form.querySelector('button[type="submit"]');if(b&&s.baseline!==engagementFormValue(s.form)){b.textContent='Save check-in';b.classList.add('primary');b.classList.remove('secondary');}}s.host.querySelector('[data-engagement-status]').textContent=op==='sharing'?(s.missingDraftSource?'Sharing preference saved. Your previous focus is no longer available; choose a current source. Your other check-in entries are retained.':'Sharing preference saved.'):'Training check-in saved. This records your engagement, not verified practice.';
+ if(typeof s.options.onSaved==='function')s.options.onSaved(data);
+ }catch(e){if(!engagementCurrent(s))return;const definite=typeof e.code==='string'&&(/^[0-9A-Z]{5}$/.test(e.code)||e.code.startsWith('PGRST'));s.uncertain=!definite;if(definite)s.request=null;if(status){status.textContent=s.uncertain?'The save could not be confirmed. Keep this page open and retry the same save.':e.message||'Could not save. Your entries remain here; try again.';if(s.uncertain){const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='Retry save';retry.onclick=()=>engagementSave(s,op,values);status.appendChild(retry);}}if(op==='sharing'&&definite){const share=s.host.querySelector('[data-engagement-share]');if(share)share.checked=!!s.bundle.shared;}}
+ finally{s.busy=false;if(engagementCurrent(s)&&!s.uncertain){controls.forEach((c,i)=>c.disabled=states[i]);s.controlStates=null;}}
+}
+// END WEEKLY ENGAGEMENT
+
+
 // Local data adapter adapted from the existing Club Batting example fixtures.
 let fixtureRows={};
 let fixtureCurrent;
@@ -20365,6 +20598,221 @@ window.__fixtureRpc=async(name,args={})=>{
     const result={preparation_id:next.id,match_id:next.match_id,revision:next.revision,status:next.status,already_saved:false,coaching_action_id:coaching.action?.id||null,coaching_action_status:coaching.action?.status||null,coaching_action_created:coaching.created,coaching_action_updated:!!coaching.updated,coaching_action_reopened:!!coaching.reopened};
     receipts[key]={fingerprint,result};return ok(result);
   }catch(error){return {data:null,error:{message:error.message,...(error.code?{code:error.code}:{}),...(error.details?{details:error.details}:{})}};}
+};
+
+// Make your call and engagement use the same production UI against these
+// fictional, in-memory records. Nothing below is loaded by the live app.
+function demoCallNow(){return fixtureRows.call_clock||fixtureNow();}
+function demoCallDay(offset=0){
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:fixtureRows.make_your_call?.settings?.timezone||'Australia/Sydney',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(demoCallNow()));
+  const part=name=>parts.find(p=>p.type===name).value,date=new Date(`${part('year')}-${part('month')}-${part('day')}T12:00:00Z`);date.setUTCDate(date.getUTCDate()+offset);return date.toISOString().slice(0,10);
+}
+function demoCallWeek(date=demoCallDay()){const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10);}
+function demoCallSeason(date=demoCallDay()){return Number(date.slice(0,4))-(Number(date.slice(5,7))<(fixtureRows.make_your_call?.settings.season_start_month||7)?1:0);}
+function demoCallMember(){
+  if(club?.archived_at||!session?.user?.id||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===session.user.id))throw Error('Club membership is required.');
+  return fixtureRows.club_memberships.find(m=>m.club_id===club.id&&m.user_id===session.user.id);
+}
+function demoEngagementStore(playerId){
+  fixtureRows.engagement??={};return fixtureRows.engagement[playerId]??={shared:false,sharing_revision:0,credits:[],checkins:[],receipts:{}};
+}
+function demoEngagementCredit(playerId,category,sourceId,week=demoCallWeek()){
+  const store=demoEngagementStore(playerId);
+  if(!store.credits.some(c=>c.category===category&&c.source_id===sourceId))store.credits.push({category,source_id:sourceId,week_start:week});
+}
+function demoEngagementCandidates(playerId){
+  const focuses=demoFocusStore(playerId).rows.filter(f=>f.status==='active').map(f=>({kind:'focus',id:f.id,key:null,text:f.focus_text}));
+  const answers=demoFocusCandidates(playerId).filter(c=>c.source_kind==='plan').map(c=>({kind:'plan',id:null,key:c.source_key,text:c.focus_text}));
+  return [...focuses,...answers];
+}
+function demoEngagementBundle(playerId){
+  const store=demoEngagementStore(playerId),week=demoCallWeek(),categories=[...new Set(store.credits.filter(c=>c.week_start===week).map(c=>c.category))];
+  const history=[...new Set(store.credits.map(c=>c.week_start))].sort().reverse().map(week_start=>{const count=new Set(store.credits.filter(c=>c.week_start===week_start).map(c=>c.category)).size;return {week_start,count,earned:count>=2};});
+  return {player_id:playerId,configured:!!fixtureRows.make_your_call?.settings.enabled,week_start:week,timezone:'Australia/Sydney',season:demoCallSeason(),shared:store.shared,sharing_revision:store.sharing_revision,categories,count:categories.length,earned:categories.length>=2,season_awards:history.filter(w=>w.earned&&demoCallSeason(w.week_start)===demoCallSeason()).length,reward_text:(fixtureRows.make_your_call?.rounds?.[week]||fixtureRows.make_your_call?.settings?.rewards)?.engagement||'Your club chooses the reward.',claim_text:(fixtureRows.make_your_call?.rounds?.[week]||fixtureRows.make_your_call?.settings?.rewards)?.engagement_claim||'',history,training_checkin:store.checkins.find(c=>c.week_start===week)||null,candidates:demoEngagementCandidates(playerId)};
+}
+function demoEngagementBoard(week=demoCallWeek()){
+  return {week_start:week,awards:fixtureRows.players.filter(p=>p.active!==false&&demoEngagementStore(p.id).shared).flatMap(p=>{
+    const bundle=demoEngagementBundle(p.id),award=bundle.history.find(w=>w.week_start===week&&w.earned);return award?[{player_id:p.id,name:p.display_name,week_start:week,season_awards:bundle.season_awards}]:[];
+  }),reward_text:(fixtureRows.make_your_call?.rounds?.[week]||fixtureRows.make_your_call?.settings?.rewards)?.engagement||'Your club chooses the reward.',claim_text:(fixtureRows.make_your_call?.rounds?.[week]||fixtureRows.make_your_call?.settings?.rewards)?.engagement_claim||''};
+}
+const demoPreEngagementRpc=window.__fixtureRpc;
+window.__fixtureRpc=async(name,args={})=>{
+  const ok=data=>({data:fixtureClone(data),error:null});
+  try{
+    if(['get_my_engagement','save_my_training_checkin','set_my_engagement_sharing'].includes(name)){
+      const player=demoMatchPreparationOwner(args.p_club_id),store=demoEngagementStore(player.id);
+      if(name==='get_my_engagement')return ok(demoEngagementBundle(player.id));
+      if(!demoMatchPreparationUuid.test(args.p_request_id))throw Error('A valid save request is required.');
+      const fingerprint=JSON.stringify({name,args}),receipt=store.receipts[args.p_request_id];
+      if(receipt){if(receipt.fingerprint!==fingerprint)throw Error('This request was already used for different changes.');return ok(receipt.result);}
+      if(name==='set_my_engagement_sharing'){
+        if(args.p_expected_revision!==store.sharing_revision)throw Error('Your sharing choice has changed. Reload and try again.');
+        if(typeof args.p_shared!=='boolean')throw Error('Choose whether to share your engagement award.');
+        store.shared=args.p_shared;store.sharing_revision++;
+      }else{
+        const values=args.p_values||{},week=demoCallWeek(),prior=store.checkins.find(c=>c.week_start===week);
+        if(args.p_expected_revision!==(prior?.revision||0))throw Error('This training check-in has changed. Reload and try again.');
+        const candidate=demoEngagementCandidates(player.id).find(c=>c.kind===values.source_kind&&(c.kind==='focus'?c.id===values.source_id:c.key===values.source_key));
+        if(!candidate)throw Error('Choose one of your current focuses or saved plan answers.');
+        if(!['worked','changed','couldnt'].includes(values.status)||!['keep','adjust','discuss'].includes(values.next_step))throw Error('Choose a training check-in and next step.');
+        const note=String(values.note||'').trim();if(note.length>300)throw Error('Keep the note to 300 characters.');
+        const record={id:prior?.id||demoId('training-checkin'),week_start:week,revision:(prior?.revision||0)+1,source_kind:candidate.kind,source_id:candidate.id,source_key:candidate.key,source_text:candidate.text,status:values.status,next_step:values.next_step,note,created_at:prior?.created_at||demoCallNow(),updated_at:demoCallNow()};
+        if(prior)Object.assign(prior,record);else store.checkins.push(record);
+        demoEngagementCredit(player.id,'training',record.id);
+      }
+      const result=demoEngagementBundle(player.id);store.receipts[args.p_request_id]={fingerprint,result};return ok(result);
+    }
+    const result=await demoPreEngagementRpc(name,args);
+    if(!result.error&&name==='save_my_match_preparation'&&args.p_values?.action==='prepare'&&!result.data?.already_saved){
+      const prep=fixtureRows.match_preparations.find(p=>p.id===result.data.preparation_id);
+      if(prep&&prep.match_date>demoCallDay()&&prep.match_date<=demoCallDay(14)){const raw=fixtureRows.player_plan_workflows.find(w=>w.player_id===prep.player_id)?.raw_answers||{},groups=preparationScoringChoices(preparationPlanCandidatesForRaw(raw),prep.format_key),known=[...groups.core,...groups.format,...groups.other].map(row=>row.label);if(prep.preparation.matchups.some(m=>m.bowler?.trim()&&(known.some(shot=>preparationShotSelected(m.options,shot))||(m.extra_shot_notes||[]).some(note=>preparationShotSelected(m.options,note.shot)&&preparationReasonHasText(note.reason)))))demoEngagementCredit(prep.player_id,'prepare',prep.id);}
+    }
+    if(!result.error&&name==='save_player_focus'&&args.p_values?.op==='review'&&args.p_values.context_kind==='innings'&&myPlayer?.id===args.p_player_id&&!result.data?.already_saved){const match=fixtureRows.feedback[args.p_player_id]?.matches.find(m=>m.id===args.p_values.context_id);if(match?.player_reflection&&match.match_date>=demoCallDay(-14)&&match.match_date<=demoCallDay())demoEngagementCredit(args.p_player_id,'review',args.p_values.context_id);}
+    return result;
+  }catch(error){return {data:null,error:{code:'P0001',message:error.message}};}
+};
+
+function demoCallMidnight(date){
+  const zone=fixtureRows.make_your_call?.settings.timezone||'Australia/Sydney';let guess=Date.parse(date+'T00:00:00Z');
+  for(let i=0;i<3;i++){
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(guess));
+    const p=k=>parts.find(v=>v.type===k).value,local=Date.parse(`${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}Z`);
+    guess+=Date.parse(date+'T00:00:00Z')-local;
+  }
+  return new Date(guess).toISOString();
+}
+function demoCallMedian(numbers){const sorted=[...numbers].sort((a,b)=>a-b),n=sorted.length;return n?Math.ceil(n%2?sorted[(n-1)/2]:(sorted[n/2-1]+sorted[n/2])/2):null;}
+function demoCallCanRecord(entry){
+  const member=demoCallMember();if(fixtureRows.players.find(p=>p.id===entry.player_id)?.user_id===session.user.id)return false;return member.permission_role==='admin'||(fixtureRows.make_your_call.grants.includes(member.user_id)&&['captain','coach','head_coach'].includes(member.permission_role)&&demoPlayerAccess(entry.player_id).edit);
+}
+function demoCallEntryView(entry){
+  const state=fixtureRows.make_your_call,player=fixtureRows.players.find(p=>p.id===entry.player_id),votes=entry.votes.map(v=>({...v,name:fixtureRows.user_profiles.find(p=>p.user_id===v.user_id)?.display_name||'Club member'}));
+  const clubCall=votes.length>=3?demoCallMedian(votes.map(v=>v.runs)):null,closed=new Date(demoCallNow())>=new Date(entry.cutoff_at),eligible=closed&&entry.result.status==='played'&&clubCall!==null;
+  return {id:entry.id,player_id:entry.player_id,name:player?.display_name||'Club player',preparation_id:player?.user_id===session.user.id?entry.preparation_id:null,predicted_runs:entry.predicted_runs,match_date:entry.match_date,format_key:entry.format_key,opposition:entry.opposition,timezone:entry.timezone||'Australia/Sydney',cutoff_at:entry.cutoff_at,voting_open:state.settings.enabled&&!closed,own:player?.user_id===session.user.id,my_vote:votes.find(v=>v.user_id===session.user.id)||null,votes,vote_count:votes.length,club_call:clubCall,result:fixtureClone(entry.result),can_record_result:demoCallCanRecord(entry),points:eligible?Math.max(entry.result.runs-clubCall,0):0,beat_club:eligible&&entry.result.runs>clubCall,wildest_calls:eligible?votes.map(v=>({...v,error:Math.abs(v.runs-entry.result.runs)})):[],believers:eligible?votes.flatMap(v=>{const rest=demoCallMedian(votes.filter(o=>o.user_id!==v.user_id).map(o=>o.runs));return v.runs>rest&&entry.result.runs>=v.runs?[{...v,rest_call:rest,gap:v.runs-rest}]:[];}):[],revision:entry.revision};
+}
+function demoCallRound(week){
+  const state=fixtureRows.make_your_call;return state.rounds[week]??=fixtureClone(state.settings.rewards);
+}
+function demoCallBoard(args){
+  demoCallMember();demoSeedMakeYourCall();const state=fixtureRows.make_your_call,week=demoCallWeek(args.p_week_start||demoCallDay()),season=args.p_season??demoCallSeason(),admin=membership.permission_role==='admin';
+  const views=state.entries.map(demoCallEntryView),seasonRows=fixtureRows.players.flatMap(p=>{
+    const entries=state.entries.filter(e=>e.player_id===p.id&&e.season===season),rows=views.filter(e=>entries.some(o=>o.id===e.id));if(!entries.length)return [];
+    return [{player_id:p.id,name:p.display_name,points:rows.reduce((sum,r)=>sum+r.points,0),beat_count:rows.filter(r=>r.beat_club).length,innings:rows.filter(r=>r.result.status==='played'&&r.club_call!==null&&!r.voting_open).length,entries:entries.length}];
+  });
+  return {settings:fixtureClone(state.settings),can_manage:admin,server_now:demoCallNow(),week_start:week,season,weeks:[...new Set([demoCallWeek(),...state.entries.map(e=>e.week_start),...state.messages.map(m=>m.week_start)])].sort().reverse(),rewards:fixtureClone(state.rounds[week]||state.settings.rewards),calls:views.filter(v=>state.entries.find(e=>e.id===v.id).week_start===week),season_rows:seasonRows,messages:state.messages.filter(m=>m.week_start===week&&!m.deleted).map(m=>({id:m.id,user_id:m.user_id,name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name||'Club member',body:m.body,created_at:m.created_at,can_delete:admin||m.user_id===session.user.id,reported:state.reports.some(r=>r.message_id===m.id&&r.reporter_id===session.user.id)})),members:admin?fixtureRows.club_memberships.map(m=>({user_id:m.user_id,name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name,permission_role:m.permission_role,can_record_results:m.permission_role==='admin'||state.grants.includes(m.user_id)})):[],reports:admin?state.reports.map(r=>({...r,reporter_name:fixtureRows.user_profiles.find(p=>p.user_id===r.reporter_id)?.display_name||'Club member'})):[],engagement:demoEngagementBoard(week)};
+}
+function demoSeedMakeYourCall(){
+  const state=fixtureRows.make_your_call;if(state.seeded)return;state.seeded=true;demoSeedMatchPreparations();
+  const make=(playerId,date,format,prediction,runs,votes,status='played')=>{
+    const preparationId=crypto.randomUUID(),entryId=crypto.randomUUID(),matchId=status==='played'?demoId('call-match'):null,player=fixtureRows.players.find(p=>p.id===playerId);
+    const record={id:preparationId,player_id:playerId,club_id:club.id,revision:1,match_id:matchId,status:status==='pending'?'planned':status,match_date:date,format_key:format,opposition:'Lakes Example CC',preparation:{matchups:[],fielders:[],focus_note:''},review:{matchups:[]},personal_contest:{bowler:'',result:null},predicted_runs:prediction,call_entry:{id:entryId,predicted_runs:prediction,cutoff_at:demoCallMidnight(date)},created_at:demoCallNow(),updated_at:demoCallNow(),locked_at:status==='played'?demoCallNow():null};
+    fixtureRows.match_preparations.push(record);
+    if(matchId)fixtureRows.feedback[playerId].matches.unshift({id:matchId,match_date:date,format_key:format,opposition:record.opposition,score_text:String(runs),player_note:'Fictional innings for the club prediction example.',dismissal_summary:'Fictional innings for the club prediction example.',player_video:null,player_reflection:null,coach_feedback:[],created_by:player.user_id,created_at:demoCallNow(),updated_at:demoCallNow()});
+    const entry={id:entryId,player_id:playerId,preparation_id:preparationId,predicted_runs:prediction,match_date:date,format_key:format,opposition:record.opposition,cutoff_at:record.call_entry.cutoff_at,week_start:demoCallWeek(date),season:demoCallSeason(date),votes:votes.map(([user_id,runs])=>({user_id,runs,revision:1})),result:{status,runs:status==='played'?runs:null,not_out:false,revision:status==='pending'?0:1,recorded_by:status==='pending'?null:'Sam Taylor',updated_at:status==='pending'?null:demoCallNow()},revision:1};
+    state.entries.push(entry);demoCallRound(entry.week_start);return entry;
+  };
+  make('player-alex',demoCallDay(),'limited_overs',30,65,[['user-admin',40],['user-coach',60],['user-jordan',40],['user-taylor',150]]);
+  make('player-jordan',demoCallDay(),'limited_overs',25,43,[['user-admin',25],['user-coach',30],['user-alex',35]]);
+  make('player-taylor',demoCallDay(),'t20',20,null,[['user-admin',20],['user-coach',25],['user-alex',30]],'pending');
+  make('player-jordan',demoCallDay(3),'t20',35,null,[['user-admin',40],['user-coach',45],['user-taylor',50]],'pending');
+  make('player-alex',demoCallDay(-7),'limited_overs',30,61,[['user-admin',40],['user-coach',40],['user-jordan',40]]);
+  make('player-jordan',demoCallDay(-7),'limited_overs',20,32,[['user-admin',25],['user-coach',25],['user-alex',25]]);
+  state.messages.push({id:demoId('call-message'),week_start:demoCallWeek(),user_id:'user-taylor',body:'I said 150 for Alex. The optimism was real. The prediction needs work.',created_at:demoCallNow(),deleted:false},{id:demoId('call-message'),week_start:demoCallWeek(),user_id:'user-coach',body:'Backed Alex for 60 and they made 65. I am absolutely mentioning this on Friday.',created_at:demoCallNow(),deleted:false});
+}
+const demoBeforeCallSeed=demoSeedClub;
+demoSeedClub=function(){
+  demoBeforeCallSeed();fixtureRows.engagement={};fixtureRows.make_your_call={seeded:false,settings:{enabled:true,timezone:'Australia/Sydney',season_start_month:7,rewards:{weekly_points:'Club sponsor meal voucher',season_points:'Season presentation award',season_beats:'Most times beating the club award',believer:'Friday night bragging rights',wildest:'The club chooses a lighthearted forfeit',engagement:'Two activities earns weekly recognition',engagement_claim:'Must be at the pub on Friday to claim.'},revision:1},entries:[],messages:[],reports:[],grants:['user-coach'],rounds:{},receipts:{}};
+  demoEngagementCredit('player-alex','prepare','example-preparation');
+  demoEngagementCredit('player-jordan','prepare','example-jordan-preparation');demoEngagementCredit('player-jordan','review','example-jordan-review');demoEngagementStore('player-jordan').shared=true;demoSeedMakeYourCall();
+};
+demoStages.splice(demoStages.findIndex(s=>s.key==='help'),0,
+  {key:'make_your_call',label:'Make your call · player and club banter',tab:'make_your_call',role:'player',hint:'Fictional club competition. Alex can predict a teammate’s score, join the weekly chat and return to match preparation. Official results are recorded by permitted staff. Private tactics and engagement answers stay private.'},
+  {key:'make_your_call_staff',label:'Make your call · staff results and rewards',tab:'make_your_call',role:'admin',hint:'Sam can record the pending example result, correct a score with a reason, set club reward descriptions and grant result-recording permission. Nothing is sent or saved outside this demo.'});
+const demoPreCallRpc=window.__fixtureRpc;
+window.__fixtureRpc=async(name,args={})=>{
+  const ok=data=>({data:fixtureClone(data),error:null});
+  try{
+    if(name==='get_make_your_call'){if(args.p_club_id!==club.id)throw Error('Club membership is required.');return ok(demoCallBoard(args));}
+    if(name==='get_my_match_preparations'){
+      const result=await demoPreCallRpc(name,args);if(!result.error)result.data.preparations=result.data.preparations.map(p=>({...p,predicted_runs:p.predicted_runs??null,call_entry:p.call_entry?{...p.call_entry,result:fixtureClone(fixtureRows.make_your_call.entries.find(e=>e.id===p.call_entry.id)?.result||null)}:null}));return result;
+    }
+    if(name==='save_my_match_preparation'){
+      const player=demoMatchPreparationOwner(args.p_club_id),values=args.p_values||{},existing=fixtureRows.match_preparations.find(p=>p.id===args.p_preparation_id),state=fixtureRows.make_your_call;
+      const receipt=fixtureRows.match_preparation_receipts?.[session.user.id+':'+args.p_request_id];
+      if(receipt)return demoPreCallRpc(name,args);
+      const prediction=Object.hasOwn(values,'predicted_runs')?values.predicted_runs:existing?.predicted_runs??null;
+      if(Object.hasOwn(values,'predicted_runs')&&(values.action!=='prepare'||prediction!==null&&(!Number.isInteger(prediction)||prediction<0||prediction>999)))throw Error('Choose a prediction from 0 to 999 runs.');
+      if(Object.hasOwn(values,'enter_make_your_call')&&(values.action!=='prepare'||typeof values.enter_make_your_call!=='boolean'))throw Error('Choose whether to enter Make your call.');
+      if(existing?.call_entry&&['predicted_runs','match_date','format_key','opposition'].some(k=>Object.hasOwn(values,k)&&values[k]!==existing[k]))throw Error('The published prediction and match details are locked. You can still edit your preparation.');
+      const official=existing?.call_entry?state.entries.find(e=>e.id===existing.call_entry.id)?.result:null;if(values.action==='played'&&values.innings&&official?.status==='played'&&values.innings.score_text!==String(official.runs)+(official.not_out?'*':''))throw Error('Use the official club score for this entered innings.');
+      const publish=values.enter_make_your_call===true&&!existing?.call_entry;
+      if(publish){
+        if(!state.settings.enabled||!state.settings.timezone)throw Error('Your club has not enabled Make your call.');
+        if(prediction===null)throw Error('Add your predicted score before entering Make your call.');
+        if(new Date(demoCallMidnight(values.match_date||existing?.match_date))<=new Date(demoCallNow()))throw Error('Entries close at midnight before the nominated match date.');
+        if(state.entries.some(e=>e.player_id===player.id&&e.match_date===(values.match_date||existing?.match_date)&&e.format_key===(values.format_key||existing?.format_key)))throw Error('You already have a public entry for this date and format.');
+      }
+      const result=await demoPreCallRpc(name,args);if(result.error)return result;
+      const prep=fixtureRows.match_preparations.find(p=>p.id===result.data.preparation_id);if(values.action==='prepare')prep.predicted_runs=prediction;
+      if(publish){
+        const id=crypto.randomUUID(),cutoff=demoCallMidnight(prep.match_date);prep.call_entry={id,predicted_runs:prediction,cutoff_at:cutoff};
+        state.entries.push({id,player_id:player.id,preparation_id:prep.id,predicted_runs:prediction,match_date:prep.match_date,format_key:prep.format_key,opposition:prep.opposition,cutoff_at:cutoff,week_start:demoCallWeek(prep.match_date),season:demoCallSeason(prep.match_date),votes:[],result:{status:'pending',runs:null,not_out:false,revision:0,recorded_by:null,updated_at:null},revision:1});demoCallRound(demoCallWeek(prep.match_date));
+      }
+      Object.assign(result.data,{predicted_runs:prep.predicted_runs??null,call_entry_id:prep.call_entry?.id||null,call_entry:prep.call_entry?{...prep.call_entry,result:fixtureClone(state.entries.find(e=>e.id===prep.call_entry.id)?.result||null)}:null});
+      const saved=fixtureRows.match_preparation_receipts?.[session.user.id+':'+args.p_request_id];if(saved)Object.assign(saved.result,result.data);return result;
+    }
+    if(name==='save_my_innings'&&args.p_match_id){const linked=fixtureRows.match_preparations.find(p=>p.match_id===args.p_match_id&&p.call_entry),official=linked?fixtureRows.make_your_call.entries.find(e=>e.id===linked.call_entry.id)?.result:null;if(official?.status==='played'&&Object.hasOwn(args.p_values||{},'score_text')&&args.p_values.score_text!==String(official.runs)+(official.not_out?'*':''))throw Error('The official club result controls this innings score.');}
+    if(!['save_make_your_call_settings','save_make_your_call_vote','save_make_your_call_result','save_make_your_call_message'].includes(name))return demoPreCallRpc(name,args);
+    const member=demoCallMember();if(args.p_club_id!==club.id)throw Error('Club membership is required.');
+    const state=fixtureRows.make_your_call,v=args.p_values||{},admin=member.permission_role==='admin';
+    if(!demoMatchPreparationUuid.test(args.p_request_id))throw Error('A valid save request is required.');
+    if(name==='save_make_your_call_settings'&&!admin)throw Error('Only Club Admin can change competition settings.');
+    const entry=v.entry_id?state.entries.find(e=>e.id===v.entry_id):null;
+    if(['save_make_your_call_vote','save_make_your_call_result'].includes(name)&&!entry)throw Error('That public entry is not available.');
+    if(name==='save_make_your_call_result'&&!demoCallCanRecord(entry))throw Error('You do not have permission to record this player’s competition result.');
+    const key=session.user.id+':'+args.p_request_id,fingerprint=JSON.stringify({name,args}),receipt=state.receipts[key];
+    if(receipt){if(receipt.fingerprint!==fingerprint)throw Error('This request was already used for different changes.');return ok({...receipt.result,already_saved:true});}
+    let extra={};
+    if(name==='save_make_your_call_settings'){
+      if(v.action==='grant'){
+        const target=fixtureRows.club_memberships.find(m=>m.user_id===v.user_id&&['captain','coach','head_coach','admin'].includes(m.permission_role));if(!target||typeof v.allowed!=='boolean')throw Error('Choose a current captain or coach.');
+        state.grants=state.grants.filter(id=>id!==v.user_id);if(v.allowed)state.grants.push(v.user_id);
+      }else{
+        if(v.expected_revision!==state.settings.revision)throw Error('Competition settings have changed. Reload and try again.');
+        try{new Intl.DateTimeFormat('en',{timeZone:v.timezone}).format();}catch{throw Error('Choose a valid time zone.');}
+        if(typeof v.enabled!=='boolean'||!Number.isInteger(v.season_start_month)||v.season_start_month<1||v.season_start_month>12)throw Error('Check the competition settings.');
+        const keys=['weekly_points','season_points','season_beats','believer','wildest','engagement','engagement_claim'];if(Object.entries(v.rewards||{}).some(([k,value])=>!keys.includes(k)||typeof value!=='string'||value.length>300))throw Error('Check the reward descriptions.');
+        state.settings={enabled:v.enabled,timezone:v.timezone,season_start_month:v.season_start_month,rewards:fixtureClone(v.rewards||{}),revision:state.settings.revision+1};
+      }
+    }else if(name==='save_make_your_call_vote'){
+      if(!state.settings.enabled)throw Error('Make your call is disabled.');
+      if(fixtureRows.players.find(p=>p.id===entry.player_id)?.user_id===session.user.id)throw Error('You cannot vote on your own call.');
+      if(new Date(demoCallNow())>=new Date(entry.cutoff_at))throw Error('Voting has closed for this entry.');
+      const prior=entry.votes.find(vote=>vote.user_id===session.user.id);
+      if(v.expected_revision!==(prior?.revision||0))throw Error('Your estimate has changed. Reload before saving.');
+      if(!Number.isInteger(v.runs)||v.runs<0||v.runs>999)throw Error('Choose a score from 0 to 999.');
+      const vote={user_id:session.user.id,runs:v.runs,revision:(prior?.revision||0)+1};if(prior)Object.assign(prior,vote);else entry.votes.push(vote);extra={revision:vote.revision};
+    }else if(name==='save_make_your_call_result'){
+      if(new Date(demoCallNow())<new Date(entry.cutoff_at))throw Error('Record the result after the entry deadline.');
+      if(v.expected_revision!==entry.result.revision)throw Error('This competition result has changed. Reload before saving.');
+      if(!['played','did_not_bat','cancelled'].includes(v.status)||v.status==='played'&&(!Number.isInteger(v.runs)||v.runs<0||v.runs>9999))throw Error('Check the innings result.');
+      if(entry.result.revision>0&&!String(v.reason||'').trim())throw Error('Add a reason for correcting this result.');
+      if(String(v.reason||'').length>300)throw Error('Keep the correction reason to 300 characters.');
+      state.result_history??=[];state.result_history.push({entry_id:entry.id,previous:fixtureClone(entry.result),reason:v.reason||'',user_id:session.user.id});
+      entry.result={status:v.status,runs:v.status==='played'?v.runs:null,not_out:v.status==='played'&&v.not_out===true,revision:entry.result.revision+1,recorded_by:userProfile.display_name,updated_at:demoCallNow()};const prep=fixtureRows.match_preparations.find(p=>p.id===entry.preparation_id),match=fixtureRows.feedback[entry.player_id]?.matches.find(m=>m.id===prep?.match_id);if(match&&entry.result.status==='played'){match.score_text=String(entry.result.runs)+(entry.result.not_out?'*':'');match.updated_at=demoCallNow();}extra={revision:entry.result.revision,result:fixtureClone(entry.result)};
+    }else{
+      if(v.action==='post'){
+        if(!state.settings.enabled)throw Error('Make your call is disabled.');const body=String(v.body||'').trim();if(!body||body.length>500)throw Error('Write a message of 1 to 500 characters.');
+        const week=demoCallWeek(v.week_start||demoCallDay());demoCallRound(week);state.messages.push({id:demoId('call-message'),week_start:week,user_id:session.user.id,body,created_at:demoCallNow(),deleted:false});
+      }else{
+        const message=state.messages.find(m=>m.id===v.message_id&&!m.deleted);if(!message)throw Error('That message is no longer available.');
+        if(v.action==='delete'){if(!admin&&message.user_id!==session.user.id)throw Error('You cannot remove this message.');message.deleted=true;}
+        else if(v.action==='report'){const reason=String(v.reason||'').trim();if(!reason||reason.length>300)throw Error('Add a short reason for reporting the message.');if(!state.reports.some(r=>r.message_id===message.id&&r.reporter_id===session.user.id))state.reports.push({id:demoId('call-report'),message_id:message.id,reporter_id:session.user.id,reason,created_at:demoCallNow()});}
+        else throw Error('Choose a message action.');
+      }
+    }
+    const result={ok:true,...extra,already_saved:false};state.receipts[key]={fingerprint,result};return ok(result);
+  }catch(error){return {data:null,error:{code:'P0001',message:error.message}};}
 };
 
 function demoDecorate(){
