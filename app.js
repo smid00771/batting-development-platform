@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.33 — observation form order
+// Club Batting 0.8.62.34 — Match conversation after comment
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.33';
+const APP_UI_VERSION='0.8.62.34';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -10684,12 +10684,12 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
       <div class="field"><label>Score <span>optional</span></label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}"></div>
     </fieldset>
     <div class="field"><label>Dismissal / innings note <span>optional</span></label><input id="staffMatchDismissal" ${sharedReadonly?'disabled':''} maxlength="300" value="${esc(match?.dismissal_summary||'')}" placeholder="e.g. Caught at point driving on the up; the plan was to wait for a fuller ball."></div>
-    ${observationConversationField(feedback?.needs_conversation)}
     ${observationPurposeField(feedback)}
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","The approach moved away from the plan"]],feedback?.batting_to_plan||'mostly')}</div>
     <div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],feedback?.dismissal_classification||'not_applicable')}</div>
     <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${feedback?.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div>
     <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
+    ${observationConversationField(feedback?.needs_conversation)}
     ${coachingVideoFields('staffObservation',action?.video)}
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" value="${esc(feedback?.next_training_focus||'')}" ${closed?'disabled':''} maxlength="240" placeholder="One useful focus is enough"></div>
     ${observationReviewField(action)}
