@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.41 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.42 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.41';
+const APP_UI_VERSION='0.8.62.42';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3441,7 +3441,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Review and keep improving",
-        "body": "Use View my plan to read your answers together. Changing a focus or reviewing an innings does not rewrite plan answers. In a match-up, Add to My Player Plan deliberately adds a named shot to Core → My trusted scoring options. It preserves your other answers. If your club has not published a suitable trusted-shots question, use Open My Player Plan instead. Edit your plan deliberately when your approach changes."
+        "body": "Use View my plan to read your answers together. Changing a focus or reviewing an innings does not rewrite plan answers. Add to My Player Plan in a match-up immediately saves a trusted shot to Core → My trusted scoring options and preserves other answers. The match preparation itself still needs Save preparation. If your club has no suitable published question, use Open My Player Plan instead. Adding a shot does not prove practice."
       },
       {
         "title": "Train once the foundation is ready",
@@ -3570,7 +3570,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Read current priorities and reviews",
-        "body": "See accepted focuses, selected match-up cues, open conversations and reviews due. Outside-plan conversations show the number of shots and whether training focus is unselected. Several shots carry the strongest caution. Open conversation shows each bowler, shot and the player’s optional reason. Read it before judging readiness: no tick does not mean no practice. Match-up training cues leave this view after their match date or once played, cancelled or marked Did not bat."
+        "body": "See accepted focuses, selected match-up cues, open conversations and reviews due. Outside-plan conversations show the number of shots and whether training focus is unselected. Several shots carry the strongest caution. Open conversation shows each bowler, shot and the player’s reason. Read it before judging readiness: no tick does not mean no practice. Match-up training cues leave this view after their match date or once played, cancelled or marked Did not bat."
       },
       {
         "title": "Look for work players can share",
@@ -3614,11 +3614,11 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Choose scoring options deliberately",
-        "body": "Tap saved-plan shot buttons; colour and a tick show selection. Use Add another scoring shot to name an extra option. Its blue panel offers a training tick, an optional reason and Add to My Player Plan for a trusted shot. Adding to Core does not prove practice. Saving upcoming preparation with any selected added shot outside the saved plan flags a Coach Conversation. No training tick gets a stronger caution; multiple outside-plan shots get the strongest. Coaches can read your reason."
+        "body": "Tap saved-plan shot buttons. Under Add another scoring shot, type a name: Add shot to preparation appears, adds it to the draft, then hides. Give each selected extra shot still outside your saved plan a reason in Why are you choosing this shot? Training selection does not waive it. Deselecting the shot or successfully adding it to your saved Player Plan removes that requirement. Any outside-plan shot flags a conversation when you Save preparation."
       },
       {
         "title": "Note fielders and an optional personal contest",
-        "body": "Fielders to watch accepts names or positions, tags and notes. Personal contest optionally names someone you would hate to get out to. These and match-up reviews remain private. Selected training match-ups are shared with permitted coaches. An outside-plan conversation shares only the flagged bowler and shot names, each optional reason, training-focus choices, and date, format and opposition. Other preparation notes stay private."
+        "body": "Fielders to watch accepts names or positions, tags and notes. Personal contest optionally names someone you would hate to get out to. These and match-up reviews remain private. Selected training match-ups are shared with permitted coaches. An outside-plan conversation shares only the flagged bowler and shot names, each reason, training-focus choices, and date, format and opposition. Other preparation notes stay private."
       },
       {
         "title": "Use previous preparation deliberately",
@@ -3626,7 +3626,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Turn preparation into your innings",
-        "body": "Choose View on the upcoming entry, then Add my innings. Record what happened on that same entry, or select an existing innings to avoid a duplicate. The original preparation and selected training cues are kept. These cues leave How We Train after the match date on your device, or when you record the innings, Did not bat or Match cancelled. Unplayed entries need no batting reflection; you can change them back to Upcoming."
+        "body": "Choose View, then Add my innings. Record what happened on that entry or link an existing innings to avoid a duplicate. Preparation stays with it. Recording an innings, Did not bat or Match cancelled removes active training cues and does not require new reasons for old shots. Existing history may have no reason. Changing an unplayed entry back to Upcoming checks reasons when you save again."
       },
       {
         "title": "Add an innings without preparing first",
@@ -3650,7 +3650,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Keep your place without extra work",
-        "body": "Refresh reloads saved data with the current season, format and expanded entry. Choosing My Innings in navigation starts with rows collapsed. Save before leaving; unsaved work asks before it is discarded. Use the app when useful before or after cricket—no training-time phone use, daily streak or essay is required. Scores remain manual, without imports, averages or leaderboards."
+        "body": "Save preparation saves the bowler details, shots, reasons and training choices together. Adding a shot to the form does not save it. Add to My Player Plan is a separate action that saves directly to your plan. Refresh reloads saved data; save before leaving. Navigation warns about unsaved work. My Innings opens with rows collapsed. Use the app before or after cricket—no training-time phone use or essay is required."
       }
     ]
   },
@@ -3706,7 +3706,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Find conversations needing attention",
-        "body": "In Players, select Coach Conversations from Show players or the reminder’s View button. Requests, follow-ups and feedback patterns count each player once. Saving an upcoming match-up with any selected added shot outside the saved plan raises a conversation in this same list, filter and Coaching alert. Its card shows the shots, optional player reasons and training choices. Several outside-plan shots get the strongest caution; no training tick alone does not prove no practice.",
+        "body": "In Players, select Coach Conversations from Show players or the reminder’s View button. Requests, follow-ups and feedback patterns count each player once. Saving an upcoming match-up with any selected added shot outside the saved plan raises a conversation in this same list, filter and Coaching alert. Its card shows the shots, player reasons and training choices. Several outside-plan shots get the strongest caution; no training tick alone does not prove no practice.",
         "target_tab": "$feedback",
         "focus": "coach_conversations"
       },
@@ -10424,7 +10424,7 @@ function inningsCompactFormat(key){return ({limited_overs:'LO',long_form:'Long',
 function preparationConversationLabel(status){return ({open:'Open',completed:'Actioned / Discussed',stopped:'Closed'})[status]||'Saved';}
 function renderPreparationConversation(record){
   if(!record?.coaching_action_id)return '';
-  return `<div class="notice compact" data-prep-conversation><strong>Coach Conversation · ${esc(preparationConversationLabel(record.coaching_action_status))}</strong><p>Your flagged shots, optional reasons and training selections are shared with your permitted coaches. Changes to this outside-plan preparation bring the same conversation back for review. Removing shots does not close it automatically.</p><button type="button" class="btn secondary" data-innings-conversation="${esc(record.coaching_action_id)}">Open Coach Conversation</button></div>`;
+  return `<div class="notice compact" data-prep-conversation><strong>Coach Conversation · ${esc(preparationConversationLabel(record.coaching_action_status))}</strong><p>Your flagged shots, reasons and training selections are shared with your permitted coaches. Changes to this outside-plan preparation bring the same conversation back for review. Removing shots does not close it automatically.</p><button type="button" class="btn secondary" data-innings-conversation="${esc(record.coaching_action_id)}">Open Coach Conversation</button></div>`;
 }
 function preparationSaveMessage(values,data){
   const base=values.action==='prepare'?'Preparation saved. Return to this entry after the game.':matchPreparationStatus(values.action)+' saved. No batting reflection needed.';
@@ -10467,7 +10467,7 @@ function preparationMatchupFields(m={id:preparationUuid()}){return `<article cla
 function preparationFielderFields(f={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-fielder="${esc(f.id)}"><div class="field"><label for="prep-${esc(f.id)}-name">Fielder or position</label><input id="prep-${esc(f.id)}-name" data-prep-field="name" maxlength="100" value="${esc(f.name||'')}" placeholder="e.g. Alex at cover"></div><div class="innings-prep-tags">${Object.entries(MATCH_PREPARATION_FIELDER_TAGS).map(([key,label])=>`<label><input type="checkbox" data-prep-tag="${key}" ${(f.tags||[]).includes(key)?'checked':''}>${esc(label)}</label>`).join('')}</div><div class="field"><label for="prep-${esc(f.id)}-note">Short note <span>optional</span></label><input id="prep-${esc(f.id)}-note" data-prep-field="note" maxlength="200" value="${esc(f.note||'')}" placeholder="Be clear on the single"></div><button type="button" class="btn ghost" data-prep-remove>Remove fielder</button></article>`;}
 function renderPreparationForm(record=null){
   const p=record?.preparation||{},contest=record?.personal_contest||{},previous=(myInningsCache?.preparations||[]).filter(r=>r.id!==record?.id&&((r.preparation?.matchups||[]).length||(r.preparation?.fielders||[]).length||r.preparation?.focus_note||r.personal_contest?.bowler));
-  return `<section class="card development-entry-form" id="myReflectionForm"><div class="section-label">My Innings · before the game</div><h2>${record?'Edit preparation':'Prepare for a match'}</h2><p class="help">Start early enough to shape your training this week. Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving an upcoming match with any selected added shot outside your saved Player Plan flags a Coach Conversation. It shares the bowler, shot, optional reason, training selection and match date, opposition and format—even if training focus is off. Changed outside-plan preparation brings the same conversation back for review. Other preparation stays private.</p>${renderPreparationConversation(record)}<div class="development-match-fields"><div class="field"><label for="prepDate">Date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div></div>
+  return `<section class="card development-entry-form" id="myReflectionForm"><div class="section-label">My Innings · before the game</div><h2>${record?'Edit preparation':'Prepare for a match'}</h2><p class="help">Start early enough to shape your training this week. Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving an upcoming match with any selected added shot outside your saved Player Plan flags a Coach Conversation. It shares the bowler, shot, reason, training selection and match date, opposition and format—even if training focus is off. Changed outside-plan preparation brings the same conversation back for review. Other preparation stays private.</p>${renderPreparationConversation(record)}<div class="development-match-fields"><div class="field"><label for="prepDate">Date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div></div>
     ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Use previous preparation</summary><p class="help">Choose an entry, then copy its preparation. Date, result and reflections will not be copied. Choose any training focuses again for this match.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Use this preparation</button></details>`:''}
     <div id="prepCurrentFocus"><p class="help">Loading your current focus…</p></div><div class="field"><label for="prepFocus">My focus for this match <span>optional</span></label><input id="prepFocus" maxlength="240" value="${esc(p.focus_note||'')}" placeholder="Use a current focus or add a short cue"></div>
     <details class="innings-prep-section" id="prepMatchupsSection"><summary>Match-ups · optional</summary><p class="help">One useful match-up is enough. Apply your Player Plan to this bowler, then adapt to the ball and situation.</p><div id="prepMatchups">${(p.matchups||[]).map(preparationMatchupFields).join('')}</div><button type="button" class="btn secondary" id="addPrepMatchup">Add a bowler</button></details>
@@ -10507,7 +10507,7 @@ async function renderMyInnings({refresh=true,message=''}={}){
   if(state.season===null)state.season=currentSeason;if(state.season!=='all'&&!years.includes(state.season))state.season=currentSeason;
   let edit=preparationEditContext();if(edit.missing||edit.planning&&edit.record?.locked_at){state.editId=null;edit=preparationEditContext();message='That entry has changed. The current saved list is shown below.';}
   const rows=inningsInView(all,state);
-  page.innerHTML=`${myInningsStyles()}<section class="card"><div class="innings-heading"><div><div class="section-label">Player Home</div><h1>My Innings</h1><p>Prepare before the game. Keep your innings and learning together afterwards.</p></div><div class="btnrow"><button class="btn" id="prepareMyMatch">Prepare for a match</button><button class="btn secondary" id="addMyInnings">Add an innings</button><button class="btn ghost" id="inningsBackHome">Player Home</button></div></div><p class="help">Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving any selected added shot outside your saved Player Plan in an upcoming match-up flags a Coach Conversation, sharing the bowler, shot, optional reason, training selection and match details. Other preparation stays private. Existing innings notes, video and reflections keep their usual staff access.</p><button class="btn ghost compact-btn" id="myInningsHelp">Show me how</button></section>${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
+  page.innerHTML=`${myInningsStyles()}<section class="card"><div class="innings-heading"><div><div class="section-label">Player Home</div><h1>My Innings</h1><p>Prepare before the game. Keep your innings and learning together afterwards.</p></div><div class="btnrow"><button class="btn" id="prepareMyMatch">Prepare for a match</button><button class="btn secondary" id="addMyInnings">Add an innings</button><button class="btn ghost" id="inningsBackHome">Player Home</button></div></div><p class="help">Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving any selected added shot outside your saved Player Plan in an upcoming match-up flags a Coach Conversation, sharing the bowler, shot, reason, training selection and match details. Other preparation stays private. Existing innings notes, video and reflections keep their usual staff access.</p><button class="btn ghost compact-btn" id="myInningsHelp">Show me how</button></section>${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
     ${state.editId?edit.planning?renderPreparationForm(edit.record):renderWeeklyLoopShell('inningsEditFocus')+(edit.record?renderPreparedInningsForm(edit.record,edit.match):renderMyReflectionForm(edit.match,{innings:true})):''}
     <section class="card"><div class="innings-filters"><div class="field"><label for="inningsSeason">Season · July–June</label><select id="inningsSeason"><option value="all" ${state.season==='all'?'selected':''}>All seasons</option>${years.map(y=>`<option value="${y}" ${state.season===y?'selected':''}>${inningsSeasonLabel(y)}</option>`).join('')}</select></div><div class="field"><label for="inningsFormat">Format</label><select id="inningsFormat"><option value="">All formats</option>${FORMATS.map(([k,l])=>`<option value="${k}" ${state.format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div><button class="btn ghost" id="refreshMyInnings">Refresh</button></div><div class="innings-count" role="status">${rows.length} ${rows.length===1?'entry':'entries'} shown</div>${rows.length?`<table class="innings-table"><caption class="sr-only">Your match preparation and recorded innings</caption><thead><tr><th class="innings-date" scope="col">Date</th><th class="innings-opposition" scope="col">Opposition</th><th class="innings-format" scope="col">Format</th><th class="innings-score" scope="col">Score / status</th><th class="innings-open" scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody>${renderInningsRows(rows)}</tbody></table>`:`<div class="innings-empty"><h2>${all.length?'No innings match these filters.':'Your season starts here.'}</h2><p>${all.length?'Choose another season or format, or select All seasons.':'Prepare for a match, or add an innings afterwards. Match observations already recorded by your coaches will also appear here.'}</p></div>`}<p class="help">Scores are recorded as entered, including not-outs (for example, 34*). LO = Limited Overs; Long = Long-form.</p></section>`;
   const change=async(fn)=>{if(!confirmLeaveFeedbackEntry())return false;fn();await renderMyInnings({refresh:false});return true;};
@@ -10529,7 +10529,7 @@ function preparationValues(){
   const read=(node,key)=>String(node.querySelector(`[data-prep-field="${key}"]`)?.value||'').trim();
   const matchups=[...form.querySelectorAll('[data-prep-matchup]')].map(node=>({id:node.dataset.prepMatchup,bowler:read(node,'bowler'),expect:read(node,'expect'),options:read(node,'options'),avoid:read(node,'avoid'),training_focus:node.querySelector('[data-prep-training-focus]')?.checked===true,extra_shots:preparationExtraShots(node),extra_shot_notes:preparationExtraShotNotes(node).map(note=>({...note,reason:note.reason.trim()}))})).filter(m=>m.bowler||m.expect||m.options||m.avoid||m.training_focus||m.extra_shots.length);
   const fielders=[...form.querySelectorAll('[data-prep-fielder]')].map(node=>({id:node.dataset.prepFielder,name:read(node,'name'),tags:[...node.querySelectorAll('[data-prep-tag]')].filter(t=>t.checked).map(t=>t.dataset.prepTag),note:read(node,'note')})).filter(f=>f.name||f.tags.length||f.note);
-  if([...form.querySelectorAll('[data-prep-new-shot]')].some(input=>String(input.value||'').trim()))throw new Error('Choose Use this shot to include the additional shot name, or clear it before saving.');
+  if([...form.querySelectorAll('[data-prep-new-shot]')].some(input=>String(input.value||'').trim()))throw new Error('Choose Add shot to preparation to include the additional shot name, or clear it before saving.');
   if([...form.querySelectorAll('[data-prep-earlier-text]')].some(input=>input.validity?.valid===false))throw new Error('Shorten the earlier scoring note before saving.');
   if(matchups.some(m=>m.extra_shot_notes.some(note=>note.reason.length>300)))throw new Error('Keep each shot reason within 300 characters.');
   if(matchups.some(m=>!m.bowler))throw new Error('Give each match-up a bowler name or description, or remove it.');
@@ -10539,7 +10539,7 @@ function preparationValues(){
   const status=val('prepStatus');
   const mayNeedReview=matchups.some(m=>m.extra_shots.filter(shot=>preparationShotSelected(m.options,shot)).length>=1);
   if(status==='planned'&&mayNeedReview&&preparationScoringState.get(form)?.status!=='ready')throw new Error('Load your saved Player Plan options before saving these shots so you can see whether a Coach Conversation will be flagged. Wait for loading to finish, or choose Try loading again.');
-  if(status==='planned'&&mayNeedReview)preparationScoringCatalogue();
+  if(status==='planned'&&mayNeedReview){preparationScoringCatalogue();validatePreparationShotReasons(form,matchups);}
   return {action:status==='planned'?'prepare':status,...(status==='planned'?{auto_coaching_review:true,coaching_review_version:2}:{}),match_date:val('prepDate'),format_key:val('prepFormat'),opposition:val('prepOpposition'),preparation:{matchups,fielders,focus_note:val('prepFocus')},personal_contest:{bowler:val('prepContest'),result:null}};
 }
 // Read structured selected choices only. Whole answers, comments and focus_text
@@ -10623,6 +10623,7 @@ function wirePreparationRows(){
   wirePreparationScoringAdoption(form);
   refreshPreparationScoringChoices(form);
 }
+function requiredPreparationReasonError(error){try{if(JSON.parse(error?.details||'{}').code==='required_outside_shot_reason')return true;}catch{}return String(error?.message||'').startsWith('Add a reason for choosing ');}
 function definiteInningsSaveFailure(error){return ['P0001','P0002','22023','23503','23505','23514','42501','40001','40P01'].includes(String(error?.code||''));}
 function revealNewPreparationBowler(card,form){
   const field=card?.querySelector('[data-prep-field="bowler"]')?.closest('.field');
@@ -10663,10 +10664,17 @@ function bindPreparationForm(record,state,current){
   });
   document.getElementById('saveMyReflection').onclick=async()=>{
     if(coachingActionSavePending||!current()||!confirmLeaveWeeklyLoop())return;
-    let values;try{values=preparationValues();}catch(error){status.textContent=error.message;return;}
-    const args={p_club_id:club.id,p_preparation_id:record?.id||null,p_expected_revision:record?.revision??null,p_values:values};
-    const payload=JSON.stringify(args);if(payload!==lastPayload){lastPayload=payload;requestId=preparationUuid();}
-    const command=uncertainCommand||{args,requestId};
+    let values,args,payload,command;
+    if(uncertainCommand){
+      // Resolve the original receipt even if the latest draft now has a missing reason.
+      command=uncertainCommand;values=command.args.p_values;
+      payload=feedbackEntryValues(form)===command.formSnapshot?JSON.stringify(command.args):null;
+    }else{
+      try{values=preparationValues();}catch(error){status.textContent=error.message;return;}
+      args={p_club_id:club.id,p_preparation_id:record?.id||null,p_expected_revision:record?.revision??null,p_values:values};
+      payload=JSON.stringify(args);if(payload!==lastPayload){lastPayload=payload;requestId=preparationUuid();}
+      command={args,requestId,formSnapshot:feedbackEntryValues(form)};
+    }
     coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
     try{
       const {data,error}=await supabase.rpc('save_my_match_preparation',{...command.args,p_request_id:command.requestId});if(error)throw error;if(!data?.preparation_id||!Number.isInteger(data.revision))throw new Error('Could not confirm the save. Your preparation is still here; try again.');
@@ -10676,17 +10684,40 @@ function bindPreparationForm(record,state,current){
       uncertainCommand=null;feedbackEntryBaselines.set(form,feedbackEntryValues(form));coachingActionSavePending=false;if(!current())return;
       state.editId=null;state.openId=data.match_id||data.preparation_id;state.season=inningsSeason(values.match_date);state.format='';
       await renderMyInnings({message:preparationSaveMessage(values,data)});await refreshMyCoachingUpdates();
-    }catch(error){uncertainCommand=definiteInningsSaveFailure(error)?null:command;if(current()){if(uncertainCommand)feedbackEntryBaselines.set(form,'save-outcome-unconfirmed');status.textContent=(error?.message||'Could not confirm the save. Your preparation is still here; try again.')+(uncertainCommand?' Retry Save preparation to confirm the previous save before saving any further edits.':'');restore();}}
-    finally{coachingActionSavePending=false;flushPreparationLoadedData(form);}
+    }catch(error){
+      uncertainCommand=definiteInningsSaveFailure(error)?null:command;
+      if(current()){
+        if(uncertainCommand)feedbackEntryBaselines.set(form,'save-outcome-unconfirmed');
+        status.textContent=(error?.message||'Could not confirm the save. Your preparation is still here; try again.')+(uncertainCommand?' Retry Save preparation to confirm the previous save before saving any further edits.':'');
+        if(requiredPreparationReasonError(error)){
+          uncertainCommand=null;form.preparationReasonValidationAttempted=true;
+          status.textContent='Checking your latest saved Player Plan. Your preparation is still here…';
+          await loadPreparationFocus(current,{refreshCatalogue:true,revealRequiredReason:true});
+          if(current()){status.textContent=preparationScoringState.get(form)?.status==='ready'?error.message+' Your saved plan options have been refreshed.':error.message+' Your saved plan options could not be refreshed; choose Try loading again.';}
+        }
+      }
+    }
+    finally{coachingActionSavePending=false;if(document.getElementById('myReflectionForm')===form)restore();flushPreparationLoadedData(form);}
   };
 }
-async function loadPreparationFocus(current){
+async function loadPreparationFocus(current,{refreshCatalogue=false,revealRequiredReason=false}={}){
   const host=document.getElementById('prepCurrentFocus'),form=document.getElementById('myReflectionForm'),scope=ensureMyInningsState().scope;
   const stillHere=()=>current()&&scope===ensureMyInningsState().scope&&document.getElementById('prepCurrentFocus')===host&&document.getElementById('myReflectionForm')===form;
   const state=preparationScoringState.get(form)||{status:'loading',candidates:[]};preparationScoringState.set(form,state);
   const renderWhenReady=render=>{state.renderLoaded=()=>{if(stillHere())render();};flushPreparationLoadedData(form);};
   const load=async()=>{const sequence=(state.sequence||0)+1;state.sequence=sequence;state.status='loading';state.renderLoaded=null;refreshPreparationScoringChoices(form);try{
-    const {data,error}=await supabase.rpc('get_player_current_focus',{p_player_id:myPlayer.id});if(!stillHere()||state.sequence!==sequence)return;if(error)throw error;
+    const results=await Promise.all([
+      supabase.rpc('get_player_current_focus',{p_player_id:myPlayer.id}),
+      ...(refreshCatalogue?[
+        supabase.from('player_plan_structure_versions').select('*').eq('club_id',club.id).order('philosophy_version',{ascending:false}).limit(1).maybeSingle(),
+        supabase.from('how_we_bat_versions').select('*').eq('club_id',club.id).order('philosophy_version',{ascending:false}).limit(1).maybeSingle(),
+        supabase.from('how_we_bat_drafts').select('*').eq('club_id',club.id).maybeSingle(),
+        supabase.from('philosophy_profiles').select('*').eq('club_id',club.id).maybeSingle()
+      ]:[])
+    ]);
+    if(!stillHere()||state.sequence!==sequence)return;for(const result of results)if(result.error)throw result.error;
+    const {data}=results[0];
+    if(refreshCatalogue){playerPlanStructureVersions=results[1].data?[results[1].data]:[];howWeBatVersions=results[2].data?[results[2].data]:[];howWeBatDraft=results[3].data||null;publishedProfile=results[4].data||{};}
     if(!Array.isArray(data?.active)||!Array.isArray(data?.candidates))throw new Error('Saved plan choices could not be loaded.');
     preparationScoringCatalogue();
     const active=data.active;state.status='ready';state.candidates=data.candidates;
@@ -10694,6 +10725,7 @@ async function loadPreparationFocus(current){
       host.innerHTML=active.length?`<details class="innings-prep-section"><summary>Use a current focus</summary>${active.map((focus,i)=>`<p>${esc(weeklyLoopText(focus))}</p><button class="btn ghost" type="button" data-prep-use-focus="${i}">Use this focus</button>`).join('')}</details>`:'<p class="help">No current focus chosen. A short match cue is optional.</p>';
       host.querySelectorAll('[data-prep-use-focus]').forEach(b=>b.onclick=()=>{if(coachingActionSavePending)return;const input=document.getElementById('prepFocus'),text=weeklyLoopText(active[Number(b.dataset.prepUseFocus)]).slice(0,240);if(input.value&&input.value!==text&&!confirm('Replace your match focus with this current focus?'))return;input.value=text;});
       refreshPreparationScoringChoices(form);
+      if(revealRequiredReason){const missing=[...form.querySelectorAll('[data-prep-shot-reason]')].find(editor=>editor.getAttribute('aria-invalid')==='true');revealPreparationReason(missing,form);}
     });
   }catch(error){if(stillHere()&&state.sequence===sequence){state.status='error';state.candidates=[];renderWhenReady(()=>{host.innerHTML='<p class="help">Your current focus and saved scoring options could not be loaded. You can still write your preparation.</p><button class="btn ghost" type="button" id="retryPrepFocus">Try loading again</button>';document.getElementById('retryPrepFocus').onclick=load;refreshPreparationScoringChoices(form);});}}};
   await load();
@@ -10842,12 +10874,32 @@ function preparationExtraShotNotes(card){
   if(store)store.value=JSON.stringify(notes);
   return notes;
 }
+function preparationReasonHasText(value){return /[^\s\u0085]/u.test(String(value||''));}
+function revealPreparationReason(editor,form){
+  if(!editor||document.getElementById('myReflectionForm')!==form)return;
+  for(let details=editor.closest('details');details;details=details.parentElement?.closest('details'))details.open=true;
+  const field=editor.closest('.field')||editor;
+  const offset=(document.querySelector('.nav')?.getBoundingClientRect?.()?.height||0)+(document.getElementById('demoToolbar')?.getBoundingClientRect?.()?.height||0)+18;
+  field.style.scrollMarginTop=offset+'px';editor.focus({preventScroll:true});field.scrollIntoView({block:'start',behavior:'auto'});
+}
+function validatePreparationShotReasons(form,matchups){
+  const state=preparationScoringState.get(form),groups=preparationScoringChoices(state?.candidates||[],form.querySelector('#prepFormat')?.value||'limited_overs');
+  const known=new Set([...groups.core,...groups.format,...groups.other].map(row=>scoringShotKey(row.label)));
+  for(const matchup of matchups){
+    const shot=matchup.extra_shots.find(name=>preparationShotSelected(matchup.options,name)&&!known.has(scoringShotKey(name))&&!preparationReasonHasText(matchup.extra_shot_notes.find(note=>scoringShotKey(note.shot)===scoringShotKey(name))?.reason));
+    if(!shot)continue;
+    form.preparationReasonValidationAttempted=true;refreshPreparationScoringChoices(form);
+    const card=[...form.querySelectorAll('[data-prep-matchup]')].find(node=>node.dataset.prepMatchup===matchup.id),editor=[...(card?.querySelectorAll('[data-prep-shot-reason]')||[])].find(node=>scoringShotKey(node.dataset.prepShotReason)===scoringShotKey(shot));
+    revealPreparationReason(editor,form);
+    throw new Error('Add a reason for choosing "'+shot+'" outside your saved Player Plan before saving preparation.');
+  }
+}
 function preparationShotSelected(text,shot){return String(text||'').split(/\r\n|\n|\r/).some(line=>scoringShotKey(line)===scoringShotKey(shot));}
 function preparationToggleExtraShot(text,shot){
   const value=String(text||'');
   return preparationShotSelected(value,shot)?value.split(/\r\n|\n|\r/).filter(line=>scoringShotKey(line)!==scoringShotKey(shot)).join('\n'):value+(value&&!/[\r\n]$/.test(value)?'\n':'')+shot;
 }
-function renderPreparationExtraShotFields(matchup){return `<input type="hidden" data-prep-extra-shots value="${esc(JSON.stringify(matchup.extra_shots||[]))}"><input type="hidden" data-prep-extra-shot-notes value="${esc(JSON.stringify(matchup.extra_shot_notes||[]))}"><div data-prep-extra-shot-list></div><details class="innings-extra-shot innings-add-shot"><summary><span aria-hidden="true">＋</span> Add another scoring shot</summary><label for="prep-${esc(matchup.id)}-new-shot">Shot name</label><input id="prep-${esc(matchup.id)}-new-shot" data-prep-new-shot maxlength="80" placeholder="e.g. Late cut"><button type="button" class="btn secondary" data-prep-use-shot>Use this shot</button></details><div data-prep-earlier-note></div>`;}
+function renderPreparationExtraShotFields(matchup){return `<input type="hidden" data-prep-extra-shots value="${esc(JSON.stringify(matchup.extra_shots||[]))}"><input type="hidden" data-prep-extra-shot-notes value="${esc(JSON.stringify(matchup.extra_shot_notes||[]))}"><div data-prep-extra-shot-list></div><details class="innings-extra-shot innings-add-shot"><summary><span aria-hidden="true">＋</span> Add another scoring shot</summary><label for="prep-${esc(matchup.id)}-new-shot">Shot name</label><input id="prep-${esc(matchup.id)}-new-shot" data-prep-new-shot maxlength="80" placeholder="e.g. Late cut"><button type="button" class="btn secondary" data-prep-use-shot hidden disabled>Add shot to preparation</button><p class="help">Changes save with Save preparation.</p></details><p class="help" data-prep-draft-status role="status"></p><div data-prep-earlier-note></div>`;}
 function renderPreparationScoringSummary(matchup){
   const extra=new Set((Array.isArray(matchup.extra_shots)?matchup.extra_shots:[]).map(scoringShotKey));
   const lines=String(matchup.options||'').split(/\r\n|\n|\r/).map(line=>line.trim()).filter(Boolean);
@@ -10902,15 +10954,19 @@ function refreshPreparationExtraShots(card,state,groups,form){
   const focusedTrainingControl=trainingField?.contains(document.activeElement)?document.activeElement:null;
   if(trainingField&&fallback){trainingField.remove();fallback.appendChild(trainingField);}
   const unlisted=ready?extras.filter(shot=>preparationShotSelected(input.value,shot)&&!known.has(scoringShotKey(shot))):[];
+  const reasonRequired=form.querySelector('#prepStatus')?.value==='planned';
   const conversation=form.preparationConversation,trainingSelected=card.querySelector('[data-prep-training-focus]')?.checked===true;
-  const coachingCopy=form.querySelector('#prepStatus')?.value!=='planned'?'No new Coach Conversation is flagged for a cancelled match or a match where you did not bat.':conversation?'Saving changed outside-plan shots, reasons, training selections or match context updates this Coach Conversation and brings it back for review, including after it was actioned. An unchanged save does not alert coaches again.':'Saving flags a Coach Conversation and shares this bowler’s name, each selected outside-plan shot, your optional reason, training selection, match date, opposition and format with your permitted coaches—even if training focus is off.';
-  const warning=unlisted.length?`<div class="notice compact innings-scoring-warning"><div ${unlisted.length>1?'data-prep-multiple-shots-warning':''} data-prep-outside-shots-warning role="status" style="background:${!trainingSelected&&unlisted.length>1?'#fff0eb':'#fff4d6'};color:#573b00;border-left:4px solid ${!trainingSelected&&unlisted.length>1?'#b43b20':'#b56a00'};border-radius:8px;padding:12px;margin-bottom:16px"><strong>${unlisted.length>1?'Several shots outside your Player Plan':'A shot outside your Player Plan'}</strong>${unlisted.length>1?'<p>Are these trusted shots, or new options you need to practise?</p>':''}<p style="margin:6px 0 0">${trainingSelected?'Selected for training — discuss whether this is a trusted option or needs practice.':'Not selected for training — your coaches will see this as a higher-priority review.'}</p><p data-prep-coaching-disclosure style="margin:8px 0 0">${esc(coachingCopy)}</p></div>${unlisted.map((shot,index)=>{const reason=notes.find(note=>scoringShotKey(note.shot)===scoringShotKey(shot))?.reason||'',reasonId='prep-'+card.dataset.prepMatchup+'-shot-reason-'+index;return `<div><strong>${esc(shot)}</strong><p>This shot isn’t one of your selected Player Plan options. If this is a trusted shot, consider adding it to your Player Plan.</p>${eligible?`<p class="help">Adds this shot to Core → My trusted scoring options.</p><button type="button" class="btn secondary" data-prep-adopt-shot="${esc(shot)}">Add to My Player Plan</button>`:'<p class="help">Your club’s current questions do not offer this as an editable Core choice.</p><button type="button" class="btn ghost" data-prep-open-plan>Open My Player Plan</button>'}<div class="field"><label for="${esc(reasonId)}">Why are you choosing this shot? <span>optional</span></label><textarea id="${esc(reasonId)}" data-prep-shot-reason="${esc(shot)}" maxlength="300" rows="2" placeholder="Worked on it with Tommy at The Shed this week">${esc(reason)}</textarea><p class="help">Or: “Have practised it and will add it to my Player Plan.” Your reason is shared with your permitted coaches when this outside-plan shot is saved.</p></div></div>`;}).join('')}<p style="margin:16px 0 8px"><strong>${unlisted.length===1?'If you haven’t practised this shot much, consider making it a training focus this week.':'If you haven’t practised these shots much, consider making this match-up a training focus this week.'}</strong></p><div data-prep-training-inline></div></div>`:'';
+  const coachingCopy=form.querySelector('#prepStatus')?.value!=='planned'?'No new Coach Conversation is flagged for a cancelled match or a match where you did not bat.':conversation?'Saving changed outside-plan shots, reasons, training selections or match context updates this Coach Conversation and brings it back for review, including after it was actioned. An unchanged save does not alert coaches again.':'Saving flags a Coach Conversation and shares this bowler’s name, each selected outside-plan shot, your reason, training selection, match date, opposition and format with your permitted coaches—even if training focus is off.';
+  const warning=unlisted.length?`<div class="notice compact innings-scoring-warning"><div ${unlisted.length>1?'data-prep-multiple-shots-warning':''} data-prep-outside-shots-warning role="status" style="background:${!trainingSelected&&unlisted.length>1?'#fff0eb':'#fff4d6'};color:#573b00;border-left:4px solid ${!trainingSelected&&unlisted.length>1?'#b43b20':'#b56a00'};border-radius:8px;padding:12px;margin-bottom:16px"><strong>${unlisted.length>1?'Several shots outside your Player Plan':'A shot outside your Player Plan'}</strong>${unlisted.length>1?'<p>Are these trusted shots, or new options you need to practise?</p>':''}<p style="margin:6px 0 0">${trainingSelected?'Selected for training — discuss whether this is a trusted option or needs practice.':'Not selected for training — your coaches will see this as a higher-priority review.'}</p><p data-prep-coaching-disclosure style="margin:8px 0 0">${esc(coachingCopy)}</p></div>${unlisted.map((shot,index)=>{const reason=notes.find(note=>scoringShotKey(note.shot)===scoringShotKey(shot))?.reason||'',reasonId='prep-'+card.dataset.prepMatchup+'-shot-reason-'+index,missing=reasonRequired&&form.preparationReasonValidationAttempted&&!preparationReasonHasText(reason);return `<div><strong>${esc(shot)}</strong><p>This shot isn’t one of your selected Player Plan options. If this is a trusted shot, consider adding it to your Player Plan.</p>${eligible?`<p class="help">Saves this shot immediately to Core → My trusted scoring options. Your preparation changes still need Save preparation.</p><button type="button" class="btn secondary" data-prep-adopt-shot="${esc(shot)}">Add to My Player Plan</button>`:'<p class="help">Your club’s current questions do not offer this as an editable Core choice.</p><button type="button" class="btn ghost" data-prep-open-plan>Open My Player Plan</button>'}<div class="field"><label for="${esc(reasonId)}">Why are you choosing this shot? <span>${reasonRequired?'required':'optional for this match status'}</span></label><textarea id="${esc(reasonId)}" data-prep-shot-reason="${esc(shot)}" ${reasonRequired?'required aria-required="true"':''} aria-invalid="${missing?'true':'false'}" aria-describedby="${esc(reasonId)}-error" maxlength="300" rows="2" placeholder="Worked on it with Tommy at The Shed this week">${esc(reason)}</textarea><p id="${esc(reasonId)}-error" data-prep-reason-error role="alert" ${missing?'':'hidden'} style="color:#a62d20">Add a short explanation for choosing this shot outside your Player Plan.</p><p class="help">Or: “Have practised it and will add it to my Player Plan.” Your reason is shared with your permitted coaches when this outside-plan shot is saved.</p></div></div>`;}).join('')}<p style="margin:16px 0 8px"><strong>${unlisted.length===1?'If you haven’t practised this shot much, consider making it a training focus this week.':'If you haven’t practised these shots much, consider making this match-up a training focus this week.'}</strong></p><div data-prep-training-inline></div><p class="help">Changes save with Save preparation.</p></div>`:'';
   host.innerHTML=(shownExtras.length?`<p class="innings-scoring-group">Shots added for this match-up</p><div class="innings-scoring-buttons">${shownExtras.map(shot=>`<button type="button" class="btn secondary" data-prep-extra-shot="${esc(shot)}" aria-pressed="${preparationShotSelected(input.value,shot)}">${preparationShotSelected(input.value,shot)?'<span aria-hidden="true">✓ </span>':''}${esc(shot)}</button>`).join('')}</div>`:'')+warning+(!ready?extras.filter(shot=>preparationShotSelected(input.value,shot)).map(shot=>`<p class="help">${esc(shot)} · ${state.status==='error'?'Could not compare with your saved Player Plan. Try loading your plan options again.':'Checking your saved Player Plan…'}</p>`).join(''):'');
   const inline=host.querySelector('[data-prep-training-inline]');
   if(trainingField&&inline){trainingField.remove();inline.appendChild(trainingField);}
   if(focusedTrainingControl)focusedTrainingControl.focus({preventScroll:true});
   const trainingControl=card.querySelector('[data-prep-training-focus]');if(trainingControl)trainingControl.onchange=()=>refreshPreparationScoringChoices(form);
-  host.querySelectorAll('[data-prep-shot-reason]').forEach(editor=>editor.oninput=()=>preparationExtraShotNotes(card));
+  host.querySelectorAll('[data-prep-shot-reason]').forEach(editor=>editor.oninput=()=>{
+    preparationExtraShotNotes(card);const missing=reasonRequired&&form.preparationReasonValidationAttempted&&!preparationReasonHasText(editor.value);
+    editor.setAttribute('aria-invalid',missing?'true':'false');const error=editor.closest('.field')?.querySelector('[data-prep-reason-error]');if(error)error.hidden=!missing;
+  });
   if(activeReason){const editor=[...host.querySelectorAll('[data-prep-shot-reason]')].find(e=>scoringShotKey(e.dataset.prepShotReason)===activeReason.key);if(editor){editor.focus({preventScroll:true});editor.setSelectionRange?.(activeReason.start,activeReason.end);}}
   host.querySelectorAll('[data-prep-extra-shot]').forEach(button=>button.onclick=()=>{
     if(coachingActionSavePending||document.getElementById('myReflectionForm')!==form)return;
@@ -10938,17 +10994,24 @@ function refreshPreparationExtraShots(card,state,groups,form){
 function wirePreparationScoringAdoption(form){
   form.querySelectorAll('[data-prep-matchup]').forEach(card=>{
     const button=card.querySelector('[data-prep-use-shot]'),input=card.querySelector('[data-prep-new-shot]');if(!button||!input)return;
+    const syncAdd=()=>{const empty=!String(input.value||'').trim();button.hidden=empty;button.disabled=empty||coachingActionSavePending;};
+    input.oninput=syncAdd;syncAdd();
     button.onclick=()=>{
       if(coachingActionSavePending||document.getElementById('myReflectionForm')!==form)return;
       const shot=String(input.value||'').trim(),status=form.querySelector('#myReflectionStatus');
       if(!syncPreparationEarlierNote(card)){status.textContent='Shorten the earlier scoring note before adding another shot.';return;}
-      if(!shot||shot.length>80||/[\r\n]/.test(shot)){status.textContent='Add one short shot name, up to 80 characters.';input.focus();return;}
+      if(!shot){syncAdd();return;}
+      if(shot.length>80||/[\r\n]/.test(shot)){status.textContent='Add one short shot name, up to 80 characters.';input.focus();return;}
       const extras=preparationExtraShots(card),existing=extras.find(s=>scoringShotKey(s)===scoringShotKey(shot)),label=existing||shot;
       if(!existing&&extras.length>=8){status.textContent='Use at most eight additional shots in one match-up.';return;}
       const chosen=card.querySelector('[data-prep-field="options"]'),next=preparationShotSelected(chosen.value,label)?chosen.value:preparationToggleExtraShot(chosen.value,label);
       if(next.length>240){status.textContent='Keep selected scoring options within 240 characters. Remove an option before adding another.';return;}
       if(!existing){extras.push(shot);card.querySelector('[data-prep-extra-shots]').value=JSON.stringify(extras);}
-      chosen.value=next;input.value='';status.textContent='';refreshPreparationScoringChoices(form);
+      chosen.value=next;input.value='';syncAdd();status.textContent='';refreshPreparationScoringChoices(form);
+      const details=input.closest('details');if(details)details.open=false;
+      const added=card.querySelector('[data-prep-draft-status]');if(added)added.textContent=label+' added to this draft. Changes save with Save preparation.';
+      const editor=[...card.querySelectorAll('[data-prep-shot-reason]')].find(node=>scoringShotKey(node.dataset.prepShotReason)===scoringShotKey(label));
+      if(editor)revealPreparationReason(editor,form);else [...card.querySelectorAll('[data-prep-scoring-choice],[data-prep-extra-shot]')].find(node=>scoringShotKey(node.dataset.prepScoringChoice||node.dataset.prepExtraShot)===scoringShotKey(label))?.focus({preventScroll:true});
     };
     input.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();button.onclick();}};
   });
