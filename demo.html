@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.37 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.38 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.37';
+const APP_UI_VERSION='0.8.62.38';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -6132,7 +6132,7 @@ const CLUB_BATTING_HELP = {
     "capability_key": "whole_process",
     "title": "The whole Club Batting process",
     "purpose": "Help your club turn its batting philosophy into what players prepare, practise, do and learn each week.",
-    "short_explanation": "Agree How We Bat, build Player Plans, choose current focuses, practise, prepare for a match and review the next step together.",
+    "short_explanation": "Agree How We Bat, build Player Plans, prepare early for a match, practise useful priorities and review the next step together.",
     "target_tab": "guide",
     "audience": [
       "admin",
@@ -6164,7 +6164,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Keep learning together",
-        "body": "Use My Innings before and after a match: optional preparation becomes the same season entry, then record the innings and reflect. Recognise decisions and execution as well as results. Choose Keep working on this, Adjust the focus or Discuss it when useful. Coach-proposed focuses need player acceptance; discussion stays in Coach Conversations.",
+        "body": "Use My Innings early enough for match preparation to guide the week’s practice. Optional preparation becomes the same season entry, then record the innings and reflect. Recognise decisions and execution as well as results. Choose Keep working on this, Adjust the focus or Discuss it when useful. Coach-proposed focuses need player acceptance; discussion stays in Coach Conversations.",
         "target_tab": "$feedback",
         "focus": "coach_conversations"
       }
@@ -6606,7 +6606,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Start with Core",
-        "body": "Open My Player Plan. Describe your strengths and trusted shots, your Danger signs and your Reset. Completing Core builds the foundation; it does not complete all three format plans.",
+        "body": "Open My Player Plan. Describe your strengths and trusted shots, your Danger signs and your Reset. Completing Core builds the foundation; it does not complete all three format plans. A trusted shot deliberately added from a match-up appears as a checked option in Core and can be deselected later. This does not confirm that you have practised it or complete other unanswered questions.",
         "target_tab": "$player_plan"
       },
       {
@@ -6619,7 +6619,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Review and keep improving",
-        "body": "Use View my plan to read your answers together. Your current focus can refer to a saved answer without duplicating the whole plan. Changing a focus or reviewing an innings does not rewrite plan answers. Edit your Player Plan deliberately when your approach changes."
+        "body": "Use View my plan to read your answers together. Changing a focus or reviewing an innings does not rewrite plan answers. In a match-up, Add to My Player Plan deliberately adds a named shot to Core → My trusted scoring options. It preserves your other answers. If your club has not published a suitable trusted-shots question, use Open My Player Plan instead. Edit your plan deliberately when your approach changes."
       },
       {
         "title": "Train once the foundation is ready",
@@ -6662,7 +6662,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Use the same focus through the week",
-        "body": "Your accepted focuses appear on Player Home, How We Train and innings review. Coaches with existing access can include them in Training preparation. In match preparation, Use this focus copies an optional snapshot into that match; it does not change your shared current focuses or create a second focus to complete."
+        "body": "Your accepted focuses appear on Player Home, How We Train and innings review. Coaches with existing access can include them in Training preparation. In match preparation, Use this focus copies an optional snapshot into that match. A match-up marked for training appears separately in How We Train and is shared with coaches who can access you. It does not replace either of your ongoing current focuses."
       },
       {
         "title": "Keep working on this",
@@ -6686,7 +6686,7 @@ const CLUB_BATTING_HELP = {
     "capability_key": "how_we_train",
     "title": "Use How We Train",
     "purpose": "Practise the shot and the decision.",
-    "short_explanation": "Bring your current focuses, personal plan and shared coaching work into the next practice.",
+    "short_explanation": "Bring current focuses, selected match-up training cues, your personal plan and shared coaching work into the next practice.",
     "target_tab": "$training",
     "audience": [
       "admin",
@@ -6699,16 +6699,16 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Open your personal training view",
-        "body": "How We Train uses your own Player Plan. A coach opens the player’s Training Plan from Players. Core plus the chosen completed format is needed for that format’s personalised suggestions.",
+        "body": "How We Train uses your own Player Plan. Core plus the chosen completed format is needed for that format’s personalised suggestions. Match-ups you select for training in My Innings appear prominently before your ongoing focuses. They are also visible to coaches who already have access to you, in Training preparation and your Training Plan. Unselected preparation, fielders, personal contests and match-up reviews remain private.",
         "target_tab": "$training"
       },
       {
         "title": "Choose useful work",
-        "body": "Start with your current focuses, shared with Player Home and innings review. Choose up to two priorities from existing records. Practise recognising the right ball as well as executing the shot. A focus keeps a useful priority visible; it does not complete unfinished Player Plan sections."
+        "body": "Prepare early enough to guide practice. In a match-up, tick Make this a training focus for this week, then Save preparation. Training views show the selected cues through the match date on the viewing device. Recording the innings, Did not bat or Match cancelled also removes them. Your View preparation button opens the original entry; its history remains. This tick does not alter your Player Plan, replace your two ongoing focuses or record practice as completed."
       },
       {
         "title": "Keep agreed coaching work visible",
-        "body": "Coach Conversations holds observations, training actions and progress notes. A coach’s one thing to train remains available in How We Train. A proposed current focus needs the player’s acceptance before it becomes active. Dates are optional; shared work remains available before the plan is finished."
+        "body": "Your ongoing current focuses remain available alongside shared coaching work. Coach Conversations holds observations, training actions and progress notes; a coach’s one thing to train remains available here. A proposed current focus needs your acceptance before it becomes active. Dates are optional for conversations; shared work remains available before the plan is finished."
       },
       {
         "title": "Reflect and review",
@@ -6716,7 +6716,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Back preparation and commitment",
-        "body": "A well-chosen shot can still end in a wicket. Discuss decision and execution separately. Support the player’s confidence and enjoyment, and agree one useful next step rather than changing their plan automatically."
+        "body": "A well-chosen shot can still end in a wicket. Discuss decision and execution separately. A shot deliberately added to your Player Plan from a match-up becomes part of the saved plan used by personalised How We Train; this does not prove readiness or automatically create an ongoing focus. Support confidence and enjoyment, and agree useful practice."
       }
     ],
     "sort_order": 140,
@@ -6726,7 +6726,7 @@ const CLUB_BATTING_HELP = {
     "capability_key": "training_preparation",
     "title": "Prepare for training with your Playing Group",
     "purpose": "See useful priorities before the next session.",
-    "short_explanation": "Choose a Playing Group and bring current focuses, conversations needing attention and review dates together for players you already have permission to view.",
+    "short_explanation": "Choose a Playing Group and bring current focuses, selected match-up training cues, conversations and review dates together for players you already have permission to view.",
     "target_tab": "training_preparation",
     "audience": [
       "admin",
@@ -6748,7 +6748,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Read current priorities and reviews",
-        "body": "See each player’s accepted current focuses, open conversations and reviews due or overdue. Choose Open training & focus or Open conversation to continue in the existing screen. A player without a chosen current focus is shown without an invented priority. Training preparation itself does not edit player records."
+        "body": "See each player’s accepted current focuses, selected match-up training cues, open conversations and reviews due or overdue. Choose Open training & focus or Open conversation to continue. Match-up cues stay separate from ongoing focuses and disappear after their match date on your device, or when the match is recorded, cancelled or marked Did not bat. You cannot open the player’s private preparation or edit their selections here."
       },
       {
         "title": "Look for work players can share",
@@ -6767,8 +6767,8 @@ const CLUB_BATTING_HELP = {
   "my_innings": {
     "capability_key": "my_innings",
     "title": "Track your season in My Innings",
-    "purpose": "Prepare for a match, then keep the innings and what you learned together.",
-    "short_explanation": "My Innings shows one compact row per match entry. Prepare beforehand with optional match-ups and fielders to watch, or add the innings afterwards. Choose View for the saved preparation, innings, video and reflection.",
+    "purpose": "Prepare early enough to guide practice, then keep the innings and what you learned together.",
+    "short_explanation": "My Innings shows one compact row per match entry. Prepare early, optionally carry match-up cues into How We Train, or add the innings afterwards. Choose View for saved preparation, innings, video and reflection.",
     "target_tab": "$innings",
     "audience": [
       "admin",
@@ -6788,23 +6788,23 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Prepare before a match",
-        "body": "Choose Prepare for a match. Enter the date and format; opposition is optional. You can use a current focus as a snapshot for this match without changing the shared focus. Match-ups, Fielders to watch and Personal contest are optional expandable sections. Save preparation keeps one upcoming entry; there is no preparation reminder or completion target."
+        "body": "Choose Prepare for a match early enough to inform training that week. Enter the date and format; opposition is optional. You can use a current focus as a snapshot without changing it. Match-ups, Fielders to watch and Personal contest are optional. Tick Make this a training focus for this week on a useful match-up, then Save preparation: its cues appear in How We Train and are shared with coaches who can access you. There is no reminder or completion target."
       },
       {
-        "title": "Make a useful match-up",
-        "body": "Add a bowler and what to expect. Choose individual scoring-option buttons from your saved Player Plan: trusted shots plus relevant scoring choices for this format. Resets and danger answers are not offered. Select more than one if useful, and add a short cue or another option in the text field. This does not change your Player Plan or confirm what you have practised. Keep cues brief and adapt to the ball and situation."
+        "title": "Choose scoring options deliberately",
+        "body": "Tap scoring-option buttons from your saved Player Plan; selected shots have a filled colour and tick. The text box under Add another scoring shot is only for naming an extra shot: enter it and choose Use this shot. If that named shot is not selected in your plan, a notice offers Add to My Player Plan, which deliberately adds it to Core → My trusted scoring options. Resets and danger answers are not scoring choices."
       },
       {
         "title": "Note fielders and an optional personal contest",
-        "body": "Fielders to watch accepts a name or position, tags such as Strong arm or Quick pickup, and an optional short note. Personal contest lets you name someone you would hate to get out to. All saved preparation and the personal contest are private to you, including after the innings; they are not a club scouting database or a coaching alert."
+        "body": "Fielders to watch accepts a name or position, tags such as Strong arm or Quick pickup, and an optional note. Personal contest lets you name someone you would hate to get out to. Fielders, contests, match-up reviews and unselected preparation remain private. Only match-ups you mark for training are shared with coaches who already have access to you, alongside the match date, format and opposition. Selecting one does not create a coaching alert."
       },
       {
         "title": "Use previous preparation deliberately",
-        "body": "Choose Use previous preparation, select an earlier entry and apply it when useful. Review the copied match-ups, fielders, focus note and optional contest before saving. This copies preparation only, with fresh match-up identities; it does not copy the old match date, innings result or reflections. Existing typed work is not silently replaced."
+        "body": "Choose Use previous preparation, select an earlier entry and apply it when useful. Review the copied match-ups, fielders, focus note and optional contest before saving. Training-focus ticks are cleared: select them again if useful for this match. Copying gives match-ups fresh identities; it does not copy the old match date, innings result or reflections. Existing typed work is not silently replaced."
       },
       {
         "title": "Turn preparation into your innings",
-        "body": "Choose View on the upcoming entry, then Add my innings. Record what happened on that same season entry. If this innings is already recorded, select that existing record instead of creating a duplicate. The original preparation is kept when the innings is saved. Did not bat and Match cancelled need no batting reflection; you can change an unplayed entry back to Upcoming."
+        "body": "Choose View on the upcoming entry, then Add my innings. Record what happened on that same entry, or select an existing innings to avoid a duplicate. The original preparation and selected training cues are kept. These cues leave How We Train after the match date on your device, or when you record the innings, Did not bat or Match cancelled. Unplayed entries need no batting reflection; you can change them back to Upcoming."
       },
       {
         "title": "Add an innings without preparing first",
@@ -6820,11 +6820,11 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Keep useful video with the innings",
-        "body": "Add an optional YouTube Share link for a good shot, decision or dismissal. Use Start at, or note start and finish times in What should we look at? Sharing only one ball requires a separately trimmed clip on YouTube. Club Batting stores links and notes, never video files. Existing staff access applies to your recorded innings; preparation and match-up reviews remain private."
+        "body": "Add an optional YouTube Share link for a good shot, decision or dismissal. Use Start at, or note start and finish times in What should we look at? Sharing only one ball requires a separately trimmed clip on YouTube. Club Batting stores links and notes, never video files. Existing staff access applies to recorded innings. Marked training match-ups are shared with permitted coaches; unselected preparation and match-up reviews remain private."
       },
       {
         "title": "View what happened and choose the next step",
-        "body": "View shows the saved pre-game and post-game details together. Use Edit preparation before recording the innings; afterwards, Edit innings updates your innings and optional match-up review while preserving the original preparation. Keep working on this, Adjust the focus or Discuss it uses existing current focuses and Coach Conversations. Finishing a focus does not close its conversation."
+        "body": "View combines saved preparation and innings details, with one scoring-shot list. Added here identifies a shot entered for that match-up; it does not mean the shot is still outside your Player Plan. Use Edit preparation before recording the innings; afterwards, Edit innings preserves the original preparation. Use current-focus actions or Coach Conversations to agree the next step. Finishing a focus does not close its conversation."
       },
       {
         "title": "Keep your place without extra work",
@@ -13572,7 +13572,7 @@ function mergeMyInnings(matches,preparations){
 function myInningsStyles(){return `<style>
   .innings-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}.innings-heading h1{margin:6px 0}
   .innings-filters{display:flex;align-items:end;flex-wrap:wrap;gap:16px}.innings-filters .field{margin:0;min-width:170px;flex:1}.innings-count{padding:12px 0;color:var(--muted)}
-  .innings-table{width:100%;border-collapse:collapse;table-layout:fixed}.innings-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 8px}.innings-table td{padding:10px 8px;border-top:1px solid #dce1ed;vertical-align:middle}.innings-table .innings-date{width:18%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-opposition{width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.innings-table .innings-format{width:15%}.innings-table .innings-score{width:19%;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-open{width:14%;text-align:right}.innings-table .btn{min-height:44px;padding:8px 12px}.innings-detail td{padding:12px 0 20px}.innings-detail .development-match-card{margin:0}.innings-empty{padding:28px 8px}.innings-reflection-options,.innings-prep-section{margin:16px 0;border:1px solid #dce1ed;border-radius:12px;padding:14px}.innings-reflection-options>summary,.innings-prep-section>summary{cursor:pointer;font-weight:700;min-height:32px}.innings-prep-card{border:1px solid #dce1ed;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-card h3{margin:4px 0 12px}.innings-prep-card .field{margin:10px 0}.innings-prep-card .btnrow,.innings-prep-section .btnrow{flex-wrap:wrap}.innings-prep-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.innings-prep-summary{background:#f7f8fc;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-summary dl{margin:0}.innings-prep-summary dt{font-weight:700;margin-top:10px}.innings-prep-summary dd{margin:4px 0 10px;white-space:pre-wrap}.innings-prep-tags{display:flex;flex-wrap:wrap;gap:10px}.innings-prep-tags label{display:flex;align-items:center;gap:7px;min-height:44px}.innings-prep-tags input{width:auto}.innings-prep-card input,.innings-prep-card textarea{max-width:100%;box-sizing:border-box}.innings-prep-card [hidden]{display:none!important}.innings-prep-private{font-size:12px;color:var(--muted)}.innings-scoring-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}.innings-scoring-buttons .btn{min-height:44px;white-space:normal;text-align:left}.innings-scoring-buttons .btn[aria-pressed="true"]{background:var(--primary,#26327c);color:#fff;border-color:var(--primary,#26327c)}.innings-scoring-group{font-size:12px;font-weight:700;margin:10px 0 4px}.innings-reuse{margin:12px 0}.innings-edit-actions{margin-bottom:12px;flex-wrap:wrap}
+  .innings-table{width:100%;border-collapse:collapse;table-layout:fixed}.innings-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 8px}.innings-table td{padding:10px 8px;border-top:1px solid #dce1ed;vertical-align:middle}.innings-table .innings-date{width:18%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-opposition{width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.innings-table .innings-format{width:15%}.innings-table .innings-score{width:19%;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-open{width:14%;text-align:right}.innings-table .btn{min-height:44px;padding:8px 12px}.innings-detail td{padding:12px 0 20px}.innings-detail .development-match-card{margin:0}.innings-empty{padding:28px 8px}.innings-reflection-options,.innings-prep-section{margin:16px 0;border:1px solid #dce1ed;border-radius:12px;padding:14px}.innings-reflection-options>summary,.innings-prep-section>summary{cursor:pointer;font-weight:700;min-height:32px}.innings-prep-card{border:1px solid #dce1ed;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-card h3{margin:4px 0 12px}.innings-prep-card .field{margin:10px 0}.innings-prep-card .btnrow,.innings-prep-section .btnrow{flex-wrap:wrap}.innings-prep-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.innings-prep-summary{background:#f7f8fc;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-summary dl{margin:0}.innings-prep-summary dt{font-weight:700;margin-top:10px}.innings-prep-summary dd{margin:4px 0 10px;white-space:pre-wrap}.innings-prep-tags{display:flex;flex-wrap:wrap;gap:10px}.innings-prep-tags label{display:flex;align-items:center;gap:7px;min-height:44px}.innings-prep-tags input{width:auto}.innings-prep-card input,.innings-prep-card textarea{max-width:100%;box-sizing:border-box}.innings-prep-card [hidden]{display:none!important}.innings-prep-private{font-size:12px;color:var(--muted)}.innings-scoring-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}.innings-scoring-buttons .btn{min-height:44px;white-space:normal;text-align:left}.innings-scoring-buttons .btn[aria-pressed="true"]{background:var(--primary,#26327c);color:#fff;border-color:var(--primary,#26327c)}.innings-extra-shot{margin:10px 0}.innings-extra-shot summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700}.innings-extra-shot input{margin:8px 0}.innings-scoring-summary{padding-left:22px;margin:8px 0}.innings-scoring-summary li{margin:6px 0}.innings-extra-shot-label{font-size:11px;color:var(--muted,#606b81);border:1px solid #dce1ed;border-radius:9px;padding:2px 6px;white-space:nowrap}.innings-scoring-group{font-size:12px;font-weight:700;margin:10px 0 4px}.innings-reuse{margin:12px 0}.innings-edit-actions{margin-bottom:12px;flex-wrap:wrap}
   @media(max-width:650px){.innings-table th{font-size:10px;padding:8px 3px}.innings-table td{font-size:12px;padding:8px 3px}.innings-table .innings-date{width:17%}.innings-table .innings-opposition{width:28%}.innings-table .innings-format{width:11%}.innings-table .innings-score{width:24%;font-size:11px}.innings-table .innings-open{width:20%}.innings-table .innings-open .btn{padding:8px;min-width:48px;font-size:12px}.innings-heading .btnrow{width:100%;flex-wrap:wrap}.innings-filters .field{min-width:120px}.innings-prep-grid{grid-template-columns:1fr}.innings-detail td{font-size:14px}.innings-prep-section{padding:12px}.innings-prep-card{padding:12px}.innings-table .innings-detail td{white-space:normal}}
 </style>`;}
 function inningsCompactDate(date,includeYear=false){const parts=String(date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return parts?`${Number(parts[3])}/${Number(parts[2])}${includeYear?'/'+parts[1].slice(-2):''}`:formatDateShort(date);}
@@ -13580,9 +13580,9 @@ function inningsCompactFormat(key){return ({limited_overs:'LO',long_form:'Long',
 function renderPreparationDetails(record){
   if(!record)return '';
   const prep=record.preparation||{},reviews=record.review?.matchups||[],contest=record.personal_contest||{},played=record.status==='played';
-  const matchups=(prep.matchups||[]).map(m=>{const review=reviews.find(r=>r.id===m.id);return `<article class="innings-prep-summary"><h3>${esc(m.bowler)}</h3><dl>${m.expect?`<dt>What I expected</dt><dd>${esc(m.expect)}</dd>`:''}${m.options?`<dt>My scoring options</dt><dd>${esc(m.options)}</dd>`:''}${m.avoid?`<dt>Watch out for</dt><dd>${esc(m.avoid)}</dd>`:''}</dl>${played&&review?.decision?`<p><strong>After the game:</strong> ${esc(MATCH_PREPARATION_DECISIONS[review.decision]||'')}</p>${review.decision!=='not_faced'&&review.note?`<p>${esc(review.note)}</p>`:''}`:played&&review?.note?`<p><strong>After the game:</strong> ${esc(review.note)}</p>`:''}</article>`;}).join('');
+  const matchups=(prep.matchups||[]).map(m=>{const review=reviews.find(r=>r.id===m.id);return `<article class="innings-prep-summary"><h3>${esc(m.bowler)}</h3><dl>${m.expect?`<dt>What I expected</dt><dd>${esc(m.expect)}</dd>`:''}${m.options?`<dt>My scoring options</dt><dd>${renderPreparationScoringSummary(m)}</dd>`:''}${m.avoid?`<dt>Watch out for</dt><dd>${esc(m.avoid)}</dd>`:''}</dl>${m.training_focus===true?'<p class="help">Selected as a training focus for this match.</p>':''}${played&&review?.decision?`<p><strong>After the game:</strong> ${esc(MATCH_PREPARATION_DECISIONS[review.decision]||'')}</p>${review.decision!=='not_faced'&&review.note?`<p>${esc(review.note)}</p>`:''}`:played&&review?.note?`<p><strong>After the game:</strong> ${esc(review.note)}</p>`:''}</article>`;}).join('');
   const fielders=(prep.fielders||[]).map(f=>`<p><strong>${esc(f.name)}</strong>${f.tags?.length?' · '+f.tags.map(t=>esc(MATCH_PREPARATION_FIELDER_TAGS[t]||t)).join(' · '):''}${f.note?`<br>${esc(f.note)}`:''}</p>`).join('');
-  return `<section class="innings-prep-details"><h2>Before the game</h2><p class="innings-prep-private">Your private preparation${record.locked_at?' · kept as you recorded it before the innings':''}.</p><p class="help">${esc(formatDateShort(record.match_date))} · ${esc(record.opposition||'Opposition not recorded')} · ${esc(formatLabel(record.format_key))}</p>${prep.focus_note?`<div class="innings-prep-summary"><strong>My focus for this match</strong><p>${esc(prep.focus_note)}</p></div>`:''}${matchups?`<h3>Match-ups</h3>${matchups}`:''}${fielders?`<div class="innings-prep-summary"><h3>Fielders to watch</h3>${fielders}</div>`:''}${contest.bowler?`<div class="innings-prep-summary"><h3>Who would I hate to get out to?</h3><p>${esc(contest.bowler)}</p>${played&&contest.result?`<p>Did they get me out? <strong>${esc(({yes:'Yes',no:'No',not_faced:'Didn’t face them'})[contest.result]||'')}</strong></p>`:''}</div>`:''}</section>`;
+  return `<section class="innings-prep-details"><h2>Before the game</h2><p class="innings-prep-private">Your preparation${record.locked_at?' · kept as you recorded it before the innings':''}. Only selected training match-ups are shared with coaches who can access your player records.</p><p class="help">${esc(formatDateShort(record.match_date))} · ${esc(record.opposition||'Opposition not recorded')} · ${esc(formatLabel(record.format_key))}</p>${prep.focus_note?`<div class="innings-prep-summary"><strong>My focus for this match</strong><p>${esc(prep.focus_note)}</p></div>`:''}${matchups?`<h3>Match-ups</h3>${matchups}`:''}${fielders?`<div class="innings-prep-summary"><h3>Fielders to watch</h3>${fielders}</div>`:''}${contest.bowler?`<div class="innings-prep-summary"><h3>Who would I hate to get out to?</h3><p>${esc(contest.bowler)}</p>${played&&contest.result?`<p>Did they get me out? <strong>${esc(({yes:'Yes',no:'No',not_faced:'Didn’t face them'})[contest.result]||'')}</strong></p>`:''}</div>`:''}</section>`;
 }
 async function openMyInnings({matchId=null,edit=false,add=false,prepare=false}={}){
   if(!canOpenClubTab('innings')||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
@@ -13603,14 +13603,14 @@ function renderInningsRows(matches){
 }
 function preparationUuid(){return globalThis.crypto.randomUUID();}
 function cloneMatchPreparation(record){
-  return {preparation:{focus_note:record.preparation?.focus_note||'',matchups:(record.preparation?.matchups||[]).map(m=>({...m,id:preparationUuid()})),fielders:(record.preparation?.fielders||[]).map(f=>({...f,id:preparationUuid(),tags:[...(f.tags||[])]}))},personal_contest:{bowler:record.personal_contest?.bowler||'',result:null}};
+  return {preparation:{focus_note:record.preparation?.focus_note||'',matchups:(record.preparation?.matchups||[]).map(m=>({...m,id:preparationUuid(),training_focus:false})),fielders:(record.preparation?.fielders||[]).map(f=>({...f,id:preparationUuid(),tags:[...(f.tags||[])]}))},personal_contest:{bowler:record.personal_contest?.bowler||'',result:null}};
 }
-function preparationMatchupFields(m={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-matchup="${esc(m.id)}"><div class="field"><label for="prep-${esc(m.id)}-bowler">Bowler <span>name or description</span></label><input id="prep-${esc(m.id)}-bowler" data-prep-field="bowler" maxlength="100" value="${esc(m.bowler||'')}" placeholder="e.g. Sam — opening bowler"></div><div class="field"><label for="prep-${esc(m.id)}-expect">What to expect <span>optional</span></label><input id="prep-${esc(m.id)}-expect" data-prep-field="expect" maxlength="200" value="${esc(m.expect||'')}" placeholder="Right-arm seam; moves it away"></div><div class="field"><label id="prep-${esc(m.id)}-scoring-label">My scoring options <span>optional</span></label><div data-prep-scoring-choices role="group" aria-labelledby="prep-${esc(m.id)}-scoring-label"><p class="help">Loading your saved scoring options…</p></div><label for="prep-${esc(m.id)}-options">Selected options / short cue</label><textarea id="prep-${esc(m.id)}-options" data-prep-field="options" maxlength="240" rows="2" placeholder="Choose above, or add a short cue or another option">${esc(m.options||'')}</textarea><p class="help">Buttons show individual options saved in your Player Plan, not evidence of practice. Choosing or typing here does not change your Player Plan.</p></div><div class="field"><label for="prep-${esc(m.id)}-avoid">Watch out for <span>optional</span></label><input id="prep-${esc(m.id)}-avoid" data-prep-field="avoid" maxlength="200" value="${esc(m.avoid||'')}" placeholder="Reaching for the drive outside off"></div><button type="button" class="btn ghost" data-prep-remove>Remove bowler</button></article>`;}
+function preparationMatchupFields(m={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-matchup="${esc(m.id)}"><div class="field"><label for="prep-${esc(m.id)}-bowler">Bowler <span>name or description</span></label><input id="prep-${esc(m.id)}-bowler" data-prep-field="bowler" maxlength="100" value="${esc(m.bowler||'')}" placeholder="e.g. Sam — opening bowler"></div><div class="field"><label for="prep-${esc(m.id)}-expect">What to expect <span>optional</span></label><input id="prep-${esc(m.id)}-expect" data-prep-field="expect" maxlength="200" value="${esc(m.expect||'')}" placeholder="Right-arm seam; moves it away"></div><div class="field"><label id="prep-${esc(m.id)}-scoring-label">My scoring options <span>optional</span></label><div data-prep-scoring-choices role="group" aria-labelledby="prep-${esc(m.id)}-scoring-label"><p class="help">Loading your saved scoring options…</p></div><input type="hidden" id="prep-${esc(m.id)}-options" data-prep-field="options" value="${esc(m.options||'')}"><p class="help">Filled buttons with a tick are selected. Selecting a shot does not change your Player Plan or show it has been practised.</p>${renderPreparationExtraShotFields(m)}</div><div class="field"><label for="prep-${esc(m.id)}-avoid">Watch out for <span>optional</span></label><input id="prep-${esc(m.id)}-avoid" data-prep-field="avoid" maxlength="200" value="${esc(m.avoid||'')}" placeholder="Reaching for the drive outside off"></div><div class="field"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" data-prep-training-focus ${m.training_focus===true?'checked':''} style="width:auto;margin:0">Make this a training focus for this week</label><p class="help">Save preparation to show this in How We Train through the match date and share this match-up with coaches who can access your player records. Unselected preparation stays private.</p></div><button type="button" class="btn ghost" data-prep-remove>Remove bowler</button></article>`;}
 function preparationFielderFields(f={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-fielder="${esc(f.id)}"><div class="field"><label for="prep-${esc(f.id)}-name">Fielder or position</label><input id="prep-${esc(f.id)}-name" data-prep-field="name" maxlength="100" value="${esc(f.name||'')}" placeholder="e.g. Alex at cover"></div><div class="innings-prep-tags">${Object.entries(MATCH_PREPARATION_FIELDER_TAGS).map(([key,label])=>`<label><input type="checkbox" data-prep-tag="${key}" ${(f.tags||[]).includes(key)?'checked':''}>${esc(label)}</label>`).join('')}</div><div class="field"><label for="prep-${esc(f.id)}-note">Short note <span>optional</span></label><input id="prep-${esc(f.id)}-note" data-prep-field="note" maxlength="200" value="${esc(f.note||'')}" placeholder="Be clear on the single"></div><button type="button" class="btn ghost" data-prep-remove>Remove fielder</button></article>`;}
 function renderPreparationForm(record=null){
   const p=record?.preparation||{},contest=record?.personal_contest||{},previous=(myInningsCache?.preparations||[]).filter(r=>r.id!==record?.id&&((r.preparation?.matchups||[]).length||(r.preparation?.fielders||[]).length||r.preparation?.focus_note||r.personal_contest?.bowler));
-  return `<section class="card development-entry-form" id="myReflectionForm"><div class="section-label">My Innings · before the game</div><h2>${record?'Edit preparation':'Prepare for a match'}</h2><p class="help">Keep it brief. Match-ups and fielders are optional, and this preparation stays private to you.</p><div class="development-match-fields"><div class="field"><label for="prepDate">Date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div></div>
-    ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Use previous preparation</summary><p class="help">Choose an entry, then copy its preparation. Date, result and reflections will not be copied.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Use this preparation</button></details>`:''}
+  return `<section class="card development-entry-form" id="myReflectionForm"><div class="section-label">My Innings · before the game</div><h2>${record?'Edit preparation':'Prepare for a match'}</h2><p class="help">Start early enough to shape your training this week. Preparation is optional. Only match-ups you select as training focuses are shared with coaches who can access your player records.</p><div class="development-match-fields"><div class="field"><label for="prepDate">Date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div></div>
+    ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Use previous preparation</summary><p class="help">Choose an entry, then copy its preparation. Date, result and reflections will not be copied. Choose any training focuses again for this match.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Use this preparation</button></details>`:''}
     <div id="prepCurrentFocus"><p class="help">Loading your current focus…</p></div><div class="field"><label for="prepFocus">My focus for this match <span>optional</span></label><input id="prepFocus" maxlength="240" value="${esc(p.focus_note||'')}" placeholder="Use a current focus or add a short cue"></div>
     <details class="innings-prep-section" id="prepMatchupsSection"><summary>Match-ups · optional</summary><p class="help">One useful match-up is enough. Apply your Player Plan to this bowler, then adapt to the ball and situation.</p><div id="prepMatchups">${(p.matchups||[]).map(preparationMatchupFields).join('')}</div><button type="button" class="btn secondary" id="addPrepMatchup">Add a bowler</button></details>
     <details class="innings-prep-section" id="prepFieldersSection"><summary>Fielders to watch · optional</summary><div id="prepFielders">${(p.fielders||[]).map(preparationFielderFields).join('')}</div><button type="button" class="btn secondary" id="addPrepFielder">Add a fielder</button></details>
@@ -13649,7 +13649,7 @@ async function renderMyInnings({refresh=true,message=''}={}){
   if(state.season===null)state.season=currentSeason;if(state.season!=='all'&&!years.includes(state.season))state.season=currentSeason;
   let edit=preparationEditContext();if(edit.missing||edit.planning&&edit.record?.locked_at){state.editId=null;edit=preparationEditContext();message='That entry has changed. The current saved list is shown below.';}
   const rows=inningsInView(all,state);
-  page.innerHTML=`${myInningsStyles()}<section class="card"><div class="innings-heading"><div><div class="section-label">Player Home</div><h1>My Innings</h1><p>Prepare before the game. Keep your innings and learning together afterwards.</p></div><div class="btnrow"><button class="btn" id="prepareMyMatch">Prepare for a match</button><button class="btn secondary" id="addMyInnings">Add an innings</button><button class="btn ghost" id="inningsBackHome">Player Home</button></div></div><p class="help">Preparation is optional and private to you. Existing innings notes, video and reflections keep their usual staff access. Adding an entry does not request a Coach Conversation.</p><button class="btn ghost compact-btn" id="myInningsHelp">Show me how</button></section>${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
+  page.innerHTML=`${myInningsStyles()}<section class="card"><div class="innings-heading"><div><div class="section-label">Player Home</div><h1>My Innings</h1><p>Prepare before the game. Keep your innings and learning together afterwards.</p></div><div class="btnrow"><button class="btn" id="prepareMyMatch">Prepare for a match</button><button class="btn secondary" id="addMyInnings">Add an innings</button><button class="btn ghost" id="inningsBackHome">Player Home</button></div></div><p class="help">Preparation is optional. Selected training match-ups are shared with coaches who can access your player records; other preparation stays private. Existing innings notes, video and reflections keep their usual staff access. Adding an entry does not request a Coach Conversation.</p><button class="btn ghost compact-btn" id="myInningsHelp">Show me how</button></section>${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
     ${state.editId?edit.planning?renderPreparationForm(edit.record):renderWeeklyLoopShell('inningsEditFocus')+(edit.record?renderPreparedInningsForm(edit.record,edit.match):renderMyReflectionForm(edit.match,{innings:true})):''}
     <section class="card"><div class="innings-filters"><div class="field"><label for="inningsSeason">Season · July–June</label><select id="inningsSeason"><option value="all" ${state.season==='all'?'selected':''}>All seasons</option>${years.map(y=>`<option value="${y}" ${state.season===y?'selected':''}>${inningsSeasonLabel(y)}</option>`).join('')}</select></div><div class="field"><label for="inningsFormat">Format</label><select id="inningsFormat"><option value="">All formats</option>${FORMATS.map(([k,l])=>`<option value="${k}" ${state.format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div><button class="btn ghost" id="refreshMyInnings">Refresh</button></div><div class="innings-count" role="status">${rows.length} ${rows.length===1?'entry':'entries'} shown</div>${rows.length?`<table class="innings-table"><caption class="sr-only">Your match preparation and recorded innings</caption><thead><tr><th class="innings-date" scope="col">Date</th><th class="innings-opposition" scope="col">Opposition</th><th class="innings-format" scope="col">Format</th><th class="innings-score" scope="col">Score / status</th><th class="innings-open" scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody>${renderInningsRows(rows)}</tbody></table>`:`<div class="innings-empty"><h2>${all.length?'No innings match these filters.':'Your season starts here.'}</h2><p>${all.length?'Choose another season or format, or select All seasons.':'Prepare for a match, or add an innings afterwards. Match observations already recorded by your coaches will also appear here.'}</p></div>`}<p class="help">Scores are recorded as entered, including not-outs (for example, 34*). LO = Limited Overs; Long = Long-form.</p></section>`;
   const change=async(fn)=>{if(!confirmLeaveFeedbackEntry())return false;fn();await renderMyInnings({refresh:false});return true;};
@@ -13667,10 +13667,14 @@ async function renderMyInnings({refresh=true,message=''}={}){
 }
 function preparationValues(){
   const form=document.getElementById('myReflectionForm');
+  validatePreparationEarlierNotes(form);
   const read=(node,key)=>String(node.querySelector(`[data-prep-field="${key}"]`)?.value||'').trim();
-  const matchups=[...form.querySelectorAll('[data-prep-matchup]')].map(node=>({id:node.dataset.prepMatchup,bowler:read(node,'bowler'),expect:read(node,'expect'),options:read(node,'options'),avoid:read(node,'avoid')})).filter(m=>m.bowler||m.expect||m.options||m.avoid);
+  const matchups=[...form.querySelectorAll('[data-prep-matchup]')].map(node=>({id:node.dataset.prepMatchup,bowler:read(node,'bowler'),expect:read(node,'expect'),options:read(node,'options'),avoid:read(node,'avoid'),training_focus:node.querySelector('[data-prep-training-focus]')?.checked===true,extra_shots:preparationExtraShots(node)})).filter(m=>m.bowler||m.expect||m.options||m.avoid||m.training_focus||m.extra_shots.length);
   const fielders=[...form.querySelectorAll('[data-prep-fielder]')].map(node=>({id:node.dataset.prepFielder,name:read(node,'name'),tags:[...node.querySelectorAll('[data-prep-tag]')].filter(t=>t.checked).map(t=>t.dataset.prepTag),note:read(node,'note')})).filter(f=>f.name||f.tags.length||f.note);
+  if([...form.querySelectorAll('[data-prep-new-shot]')].some(input=>String(input.value||'').trim()))throw new Error('Choose Use this shot to include the additional shot name, or clear it before saving.');
+  if([...form.querySelectorAll('[data-prep-earlier-text]')].some(input=>input.validity?.valid===false))throw new Error('Shorten the earlier scoring note before saving.');
   if(matchups.some(m=>!m.bowler))throw new Error('Give each match-up a bowler name or description, or remove it.');
+  if(matchups.some(m=>m.training_focus&&!m.expect&&!m.options&&!m.avoid))throw new Error('Add what to expect, a scoring option or a watch-out cue before making this a training focus.');
   if(fielders.some(f=>!f.name))throw new Error('Give each fielder a name or position, or remove it.');
   if(!val('prepDate'))throw new Error('Choose the match date.');
   const status=val('prepStatus');
@@ -13691,48 +13695,52 @@ function preparationScoringChoices(candidates,formatKey){
     const group=section==='core'?'core':section===formatKey?'format':'other';
     for(const value of Array.isArray(snapshot.answer?.choices)?snapshot.answer.choices:[]){
       if(typeof value!=='string')continue;
-      const label=value.trim(),key=label.toLocaleLowerCase();
+      const label=value.trim(),key=scoringShotKey(label);
       if(!label||label.length>240||/[\r\n]/.test(label)||seen[group].has(key))continue;
       seen[group].add(key);groups[group].push({label,section});
     }
   }
   // Core comes first, then only additional choices for the selected format.
-  groups.format=groups.format.filter(row=>!seen.core.has(row.label.toLocaleLowerCase()));
-  const available=new Set([...groups.core,...groups.format].map(row=>row.label.toLocaleLowerCase()));
-  groups.other=groups.other.filter(row=>!available.has(row.label.toLocaleLowerCase()));
+  groups.format=groups.format.filter(row=>!seen.core.has(scoringShotKey(row.label)));
+  const available=new Set([...groups.core,...groups.format].map(row=>scoringShotKey(row.label)));
+  groups.other=groups.other.filter(row=>!available.has(scoringShotKey(row.label)));
   return groups;
 }
 function preparationHasScoringChoice(text,label){
-  const wanted=label.toLocaleLowerCase();
+  const wanted=scoringShotKey(label);
   // Exact whole lines can be toggled. This does not infer shots from free prose
   // or split older combined answers into new options; all other text is kept.
-  return String(text||'').split(/\r\n|\n|\r/).some(line=>line.trim().toLocaleLowerCase()===wanted);
+  return String(text||'').split(/\r\n|\n|\r/).some(line=>scoringShotKey(line)===wanted);
 }
 function preparationToggleScoringChoice(text,label){
   const raw=String(text||'');
-  if(preparationHasScoringChoice(raw,label))return raw.split(/\r\n|\n|\r/).filter(line=>line.trim().toLocaleLowerCase()!==label.toLocaleLowerCase()).join('\n');
+  if(preparationHasScoringChoice(raw,label))return raw.split(/\r\n|\n|\r/).filter(line=>scoringShotKey(line)!==scoringShotKey(label)).join('\n');
   return raw+(raw&&!/[\r\n]$/.test(raw)?'\n':'')+label;
 }
 function refreshPreparationScoringChoices(form=document.getElementById('myReflectionForm')){
   if(!form||coachingActionSavePending)return;
+  const wasClean=feedbackEntryBaselines.has(form)&&feedbackEntryBaselines.get(form)===feedbackEntryValues(form);
   const state=preparationScoringState.get(form)||{status:'loading'},formatKey=form.querySelector('#prepFormat')?.value||'limited_overs';
   const groups=state.status==='ready'?preparationScoringChoices(state.candidates,formatKey):null;
   form.querySelectorAll('[data-prep-matchup]').forEach(card=>{
     const host=card.querySelector('[data-prep-scoring-choices]'),input=card.querySelector('[data-prep-field="options"]');
     if(!host||!input)return;
-    if(state.status!=='ready'){host.innerHTML=`<p class="help">${state.status==='error'?'Saved scoring options could not be loaded. Your entered text is unchanged; choose Try loading again to retry.':'Loading your saved scoring options…'}</p>`;return;}
+    if(state.status!=='ready'){host.innerHTML=`<p class="help">${state.status==='error'?'Saved scoring options could not be loaded. Your selected options are retained; choose Try loading again to retry.':'Loading your saved scoring options…'}</p>`;refreshPreparationExtraShots(card,state,groups,form);return;}
     const retained=groups.other.filter(row=>preparationHasScoringChoice(input.value,row.label));
-    const renderGroup=(label,rows)=>rows.length?`<p class="innings-scoring-group">${esc(label)}</p><div class="innings-scoring-buttons">${rows.map(row=>`<button type="button" class="btn secondary" data-prep-scoring-choice="${esc(row.label)}" aria-pressed="${preparationHasScoringChoice(input.value,row.label)}">${esc(row.label)}</button>`).join('')}</div>`:'';
-    host.innerHTML=renderGroup('My trusted options · Core',groups.core)+renderGroup('My scoring options · '+formatLabel(formatKey),groups.format)+renderGroup('Kept from another format · remove if not useful here',retained)||'<p class="help">No individual scoring options are saved for Core or this format. You can still add a short cue below.</p>';
+    const renderGroup=(label,rows)=>rows.length?`<p class="innings-scoring-group">${esc(label)}</p><div class="innings-scoring-buttons">${rows.map(row=>`<button type="button" class="btn secondary" data-prep-scoring-choice="${esc(row.label)}" aria-pressed="${preparationHasScoringChoice(input.value,row.label)}">${preparationHasScoringChoice(input.value,row.label)?'<span aria-hidden="true">✓ </span>':''}${esc(row.label)}</button>`).join('')}</div>`:'';
+    host.innerHTML=renderGroup('My trusted options · Core',groups.core)+renderGroup('My scoring options · '+formatLabel(formatKey),groups.format)+renderGroup('Kept from another format · remove if not useful here',retained)||'<p class="help">No individual scoring options are saved for Core or this format. You can add another scoring shot below.</p>';
     host.querySelectorAll('[data-prep-scoring-choice]').forEach(button=>button.onclick=()=>{
       if(coachingActionSavePending||document.getElementById('myReflectionForm')!==form)return;
-      const updated=preparationToggleScoringChoice(input.value,button.dataset.prepScoringChoice),status=form.querySelector('#myReflectionStatus');
-      if(updated.length>240){if(status)status.textContent='Keep scoring options and the short cue within 240 characters. Shorten the text before adding another option.';input.focus();return;}
+      const status=form.querySelector('#myReflectionStatus');if(!syncPreparationEarlierNote(card)){status.textContent='Shorten the earlier scoring note before changing selected shots.';return;}
+      const updated=preparationToggleScoringChoice(input.value,button.dataset.prepScoringChoice);
+      if(updated.length>240){if(status)status.textContent='Keep scoring options within 240 characters. Remove an option or shorten the earlier note before adding another.';button.focus();return;}
       input.value=updated;if(status)status.textContent='';refreshPreparationScoringChoices(form);
       const next=[...host.querySelectorAll('[data-prep-scoring-choice]')].find(b=>b.dataset.prepScoringChoice===button.dataset.prepScoringChoice);(next||input).focus();
     });
     input.oninput=()=>refreshPreparationScoringChoices(form);
+    refreshPreparationExtraShots(card,state,groups,form);
   });
+  if(wasClean)feedbackEntryBaselines.set(form,feedbackEntryValues(form));
 }
 function flushPreparationLoadedData(form){
   const state=preparationScoringState.get(form);
@@ -13741,6 +13749,7 @@ function flushPreparationLoadedData(form){
 function wirePreparationRows(){
   const form=document.getElementById('myReflectionForm');
   form?.querySelectorAll('[data-prep-remove]').forEach(b=>b.onclick=()=>{if(coachingActionSavePending)return;b.closest('.innings-prep-card')?.remove();});
+  wirePreparationScoringAdoption(form);
   refreshPreparationScoringChoices(form);
 }
 function definiteInningsSaveFailure(error){return ['P0001','P0002','22023','23503','23505','23514','42501','40001','40P01'].includes(String(error?.code||''));}
@@ -13866,7 +13875,219 @@ function bindMyInningsSave(match,state,current,preparation=null){
     finally{coachingActionSavePending=false;}
   };
 }
+// A saved match-up is the single source of these selected, temporary training cues.
+// This never changes ongoing focus state, practice evidence or the Player Plan.
+let matchTrainingFocusMount=null;
+function activeMatchTrainingPreparations(records,localDate=todayIso()){
+  return (Array.isArray(records)?records:[]).filter(record=>record?.status==='planned'&&/^\d{4}-\d{2}-\d{2}$/.test(record.match_date)&&record.match_date>=localDate)
+    .map(record=>({...record,training_matchups:(Array.isArray(record.preparation?.matchups)?record.preparation.matchups:[]).filter(m=>m.training_focus===true&&String(m.bowler||'').trim()&&['expect','options','avoid'].some(key=>String(m[key]||'').trim()))}))
+    .filter(record=>record.training_matchups.length)
+    .sort((a,b)=>a.match_date.localeCompare(b.match_date)||String(a.id).localeCompare(String(b.id)));
+}
+function renderMatchTrainingFocusShell(id='howWeTrainMatchFocus'){return `<div id="${esc(id)}"><section class="card" role="status"><p>Loading match training focuses…</p></section></div>`;}
+function renderMatchTrainingFocus(records,{isOwner=true}={}){
+  const active=activeMatchTrainingPreparations(records);
+  if(!active.length)return '';
+  return `<style>.match-training-focus{border-left:5px solid var(--primary,#26327c);background:#f4f5ff;overflow-wrap:anywhere}.match-training-focus h2{margin:6px 0}.match-training-focus .match-training-cue{border-top:1px solid #d9deef;padding-top:12px;margin-top:12px}.match-training-focus .match-training-cue h3{margin:0 0 8px}.match-training-focus .match-training-cue p{white-space:pre-wrap;margin:8px 0}.match-training-focus .btn{min-height:44px}</style>${active.map(record=>`<section class="card match-training-focus"><div class="section-label">${isOwner?'Shared with your coaches · selected by you':'Selected by the player · shared training focus'}</div><h2>Training focus for this match</h2><p><strong>${esc(record.opposition||'Opposition not recorded')}</strong> · ${esc(formatDateShort(record.match_date))} · ${esc(formatLabel(record.format_key))}</p>${record.training_matchups.map(m=>`<article class="match-training-cue"><h3>${esc(m.bowler)}</h3>${m.options?`<div><strong>${isOwner?'My':'Player’s'} scoring options:</strong>${renderPreparationScoringSummary(m)}</div>`:''}${m.expect?`<p><strong>What to expect:</strong> ${esc(m.expect)}</p>`:''}${m.avoid?`<p><strong>Watch out for:</strong> ${esc(m.avoid)}</p>`:''}</article>`).join('')}<p class="help">Shown through ${esc(formatDateShort(record.match_date))} using your device’s local date, while this match is upcoming. ${isOwner?'Afterwards, your preparation stays in My Innings. This is separate from your ongoing focuses.':'This is separate from the player’s ongoing focuses. Other match preparation remains private.'}</p>${isOwner?`<button type="button" class="btn secondary" data-match-training-view="${esc(record.match_id||record.id)}">View preparation</button>`:''}</section>`).join('')}`;
+}
+async function mountMatchTrainingFocus(host,{playerId=myPlayer?.id,isOwner=true,canStillView=()=>true}={}){
+  matchTrainingFocusMount?.dispose();
+  if(!host||!playerId)return;
+  const hasAccess=()=>canStillView()&&(isOwner?myPlayer?.id===playerId&&isPlayerUser():canUsePlayersWorkspace());
+  if(!hasAccess()){host.innerHTML='';return;}
+  const clubId=club?.id,userId=session?.user?.id,tab=currentTab;
+  let records=null,errorText='',sequence=0,timer=null,disposed=false;
+  const current=()=>!disposed&&club?.id===clubId&&session?.user?.id===userId&&currentTab===tab&&document.getElementById(host.id)===host&&hasAccess();
+  const dispose=()=>{disposed=true;++sequence;clearTimeout(timer);window.removeEventListener('focus',foreground);document.removeEventListener?.('visibilitychange',foreground);if(document.getElementById(host.id)===host)host.innerHTML='';if(matchTrainingFocusMount?.host===host)matchTrainingFocusMount=null;};
+  const render=()=>{
+    if(!current()){dispose();return;}
+    const body=records?renderMatchTrainingFocus(records,{isOwner}):'';
+    host.innerHTML=body+(errorText?`<section class="card notice" role="status"><strong>Match training focuses could not be refreshed.</strong><p>Saved match preparation is unchanged.${records?' The last loaded choices are shown above if their match dates are still current.':''}</p><p class="help">${esc(errorText)}</p><button type="button" class="btn secondary" data-match-training-retry>Try again</button></section>`:records?'':'<section class="card" role="status"><p>Loading match training focuses…</p></section>');
+    host.querySelectorAll('[data-match-training-view]').forEach(button=>button.onclick=()=>openMyInnings({matchId:button.dataset.matchTrainingView}));
+    host.querySelector('[data-match-training-retry]')?.addEventListener('click',load);
+  };
+  const schedule=()=>{
+    clearTimeout(timer);if(!current()){dispose();return;}
+    const now=new Date(),next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+    timer=setTimeout(()=>{if(!current()){dispose();return;}render();schedule();},Math.max(1,next.getTime()-now.getTime()+50));
+  };
+  const load=async()=>{
+    if(!current()){dispose();return;}
+    const request=++sequence;errorText='';render();
+    try{
+      const {data,error}=await supabase.rpc(isOwner?'get_my_match_preparations':'get_player_match_training_focus',isOwner?{p_club_id:clubId}:{p_player_id:playerId});
+      if(!current()){dispose();return;}if(request!==sequence)return;
+      if(error)throw error;
+      if(data?.player_id!==playerId||!Array.isArray(data?.preparations))throw new Error('Saved match training focuses could not be confirmed.');
+      records=data.preparations;
+    }catch(error){if(!current()){dispose();return;}if(request!==sequence)return;if(!isOwner||String(error?.code||'')==='42501')records=null;errorText=error?.message||'Check your connection and try again.';}
+    if(current()&&request===sequence){render();schedule();}
+  };
+  function foreground(){if(document.visibilityState==='hidden'||document.hidden)return;if(!current()){dispose();return;}render();schedule();return load();}
+  matchTrainingFocusMount={host,dispose};
+  window.addEventListener('focus',foreground);document.addEventListener('visibilitychange',foreground);
+  schedule();await load();
+}
 // END MY INNINGS
+
+// BEGIN SCORING PLAN ADOPTION — explicit shots, deliberate changes to the player’s own plan.
+function scoringShotKey(value){return String(value||'').trim().replace(/\s+/g,' ').toLocaleLowerCase();}
+function preparationExtraShots(card){
+  const value=JSON.parse(card.querySelector('[data-prep-extra-shots]')?.value||'[]');
+  if(!Array.isArray(value))throw new Error('Check the additional scoring shots.');
+  return value;
+}
+function preparationShotSelected(text,shot){return String(text||'').split(/\r\n|\n|\r/).some(line=>scoringShotKey(line)===scoringShotKey(shot));}
+function preparationToggleExtraShot(text,shot){
+  const value=String(text||'');
+  return preparationShotSelected(value,shot)?value.split(/\r\n|\n|\r/).filter(line=>scoringShotKey(line)!==scoringShotKey(shot)).join('\n'):value+(value&&!/[\r\n]$/.test(value)?'\n':'')+shot;
+}
+function renderPreparationExtraShotFields(matchup){return `<input type="hidden" data-prep-extra-shots value="${esc(JSON.stringify(matchup.extra_shots||[]))}"><div data-prep-extra-shot-list></div><details class="innings-extra-shot"><summary>Add another scoring shot</summary><label for="prep-${esc(matchup.id)}-new-shot">Shot name</label><input id="prep-${esc(matchup.id)}-new-shot" data-prep-new-shot maxlength="80" placeholder="e.g. Late cut"><button type="button" class="btn secondary" data-prep-use-shot>Use this shot</button></details><div data-prep-earlier-note></div>`;}
+function renderPreparationScoringSummary(matchup){
+  const extra=new Set((Array.isArray(matchup.extra_shots)?matchup.extra_shots:[]).map(scoringShotKey));
+  const lines=String(matchup.options||'').split(/\r\n|\n|\r/).map(line=>line.trim()).filter(Boolean);
+  return lines.length?`<ul class="innings-scoring-summary" style="padding-left:22px;margin:8px 0">${lines.map(line=>`<li>${esc(line)}${extra.has(scoringShotKey(line))?' <small class="innings-extra-shot-label" style="font-size:11px;color:var(--muted,#606b81);border:1px solid #dce1ed;border-radius:9px;padding:2px 6px;white-space:nowrap">Added here</small>':''}</li>`).join('')}</ul>`:'';
+}
+function playerPlanChoiceOptions(section,key,spec,answer){
+  const options=[...(spec.options||[])];
+  if(section==='core'&&key==='core_strengths'&&spec.response_type!=='text'){
+    for(const value of Array.isArray(answer?.choices)?answer.choices:[])if(typeof value==='string'&&value.trim()&&!options.includes(value))options.push(value);
+  }
+  return options;
+}
+function preparationAdoptionCoreQuestion(){
+  // A generated fallback must not silently create a question the club did not publish.
+  const actual=playerPlanStructureVersions?.[0]?.snapshot?.core;
+  const question=Array.isArray(actual)?actual.find(q=>q.id==='core_strengths'&&q.active!==false&&q.response_type!=='text'):null;
+  return workspacePlayerPlansPublished()&&question?question:null;
+}
+function preparationPlanCandidatesForRaw(raw){
+  const candidates=[];
+  for(const section of ['core',...FORMATS.map(([key])=>key)]){
+    const answers=section==='core'?raw.core||{}:raw.formats?.[section]||{};
+    for(const [question_id,answer] of Object.entries(answers))candidates.push({source_kind:'plan',source_id:null,source_key:section+':'+question_id,source_snapshot:{section,question_id,answer:structuredClone(answer)}});
+  }
+  return candidates;
+}
+function syncPreparationEarlierNote(card){
+  const editor=card.querySelector('[data-prep-earlier-text]'),input=card.querySelector('[data-prep-field="options"]');
+  if(!editor||!input||!editor.preparationRecognizedShots)return true;
+  const lines=String(input.value||'').split(/\r\n|\n|\r/),selected=lines.filter(line=>line.trim()&&editor.preparationRecognizedShots.has(scoringShotKey(line)));
+  const currentNote=lines.filter(line=>line.trim()&&!editor.preparationRecognizedShots.has(scoringShotKey(line))).join('\n');
+  const next=editor.value===currentNote?String(input.value||''):[...selected,editor.value].filter(Boolean).join('\n');
+  const invalid=next.length>240;editor.dataset.prepInvalid=invalid?'true':'false';editor.setCustomValidity?.(invalid?'Keep scoring options and the earlier note within 240 characters.':'');
+  if(invalid)return false;
+  input.value=next;return true;
+}
+function validatePreparationEarlierNotes(form){
+  for(const card of form.querySelectorAll('[data-prep-matchup]'))if(!syncPreparationEarlierNote(card))throw new Error('Keep scoring options and the earlier note within 240 characters. Shorten the note or remove an option.');
+}
+function refreshPreparationExtraShots(card,state,groups,form){
+  const host=card.querySelector('[data-prep-extra-shot-list]'),input=card.querySelector('[data-prep-field="options"]');
+  if(!host||!input)return;
+  const extras=preparationExtraShots(card),known=new Set(groups?[...groups.core,...groups.format,...groups.other].map(row=>scoringShotKey(row.label)):[]),ready=state.status==='ready';
+  const eligible=!!preparationAdoptionCoreQuestion();
+  const alreadyShown=new Set(groups?[...groups.core,...groups.format,...groups.other.filter(row=>preparationShotSelected(input.value,row.label))].map(row=>scoringShotKey(row.label)):[]);
+  const shownExtras=extras.filter(shot=>!alreadyShown.has(scoringShotKey(shot)));
+  host.innerHTML=shownExtras.length?`<p class="innings-scoring-group">Shots added for this match-up</p><div class="innings-scoring-buttons">${shownExtras.map(shot=>`<button type="button" class="btn secondary" data-prep-extra-shot="${esc(shot)}" aria-pressed="${preparationShotSelected(input.value,shot)}">${preparationShotSelected(input.value,shot)?'<span aria-hidden="true">✓ </span>':''}${esc(shot)}</button>`).join('')}</div>${extras.filter(shot=>preparationShotSelected(input.value,shot)).map(shot=>ready?(known.has(scoringShotKey(shot))?'':`<div class="notice compact innings-scoring-warning"><strong>${esc(shot)}</strong><p>This shot isn’t one of your selected Player Plan options. If this is a trusted shot, consider adding it to your Player Plan.</p>${eligible?`<p class="help">Adds this shot to Core → My trusted scoring options.</p><button type="button" class="btn secondary" data-prep-adopt-shot="${esc(shot)}">Add to My Player Plan</button>`:'<p class="help">Your club’s current questions do not offer this as an editable Core choice.</p><button type="button" class="btn ghost" data-prep-open-plan>Open My Player Plan</button>'}</div>`):`<p class="help">${esc(shot)} · ${state.status==='error'?'Could not compare with your saved Player Plan. Try loading your plan options again.':'Checking your saved Player Plan…'}</p>`).join('')}`:'';
+  host.querySelectorAll('[data-prep-extra-shot]').forEach(button=>button.onclick=()=>{
+    if(coachingActionSavePending||document.getElementById('myReflectionForm')!==form)return;
+    const status=form.querySelector('#myReflectionStatus');if(!syncPreparationEarlierNote(card)){status.textContent='Shorten the earlier scoring note before changing selected shots.';return;}
+    const next=preparationToggleExtraShot(input.value,button.dataset.prepExtraShot);
+    if(next.length>240){status.textContent='Keep selected scoring options within 240 characters. Remove an option before adding another.';return;}
+    input.value=next;status.textContent='';refreshPreparationScoringChoices(form);
+    [...host.querySelectorAll('[data-prep-extra-shot]')].find(b=>b.dataset.prepExtraShot===button.dataset.prepExtraShot)?.focus();
+  });
+  host.querySelectorAll('[data-prep-adopt-shot]').forEach(button=>button.onclick=()=>adoptPreparationShot(button.dataset.prepAdoptShot,form));
+  host.querySelector('[data-prep-open-plan]')?.addEventListener('click',()=>openPlayerHomeAction({tab:'myplan',section:'core'}));
+  const earlier=card.querySelector('[data-prep-earlier-note]');
+  if(!earlier)return;
+  const recognized=new Set([...known,...extras.map(scoringShotKey)]);
+  const lines=String(input.value||'').split(/\r\n|\n|\r/),unrecognized=ready?lines.filter(line=>line.trim()&&!recognized.has(scoringShotKey(line))).join('\n'):'';
+  if(!ready){earlier.innerHTML=input.value?'<p class="help">Saved scoring choices and earlier notes are retained while your plan options load.</p>':'';return;}
+  const existing=earlier.querySelector('[data-prep-earlier-text]');
+  if(existing&&(document.activeElement===existing||existing.dataset.prepInvalid==='true'))return;
+  earlier.innerHTML=unrecognized?`<details class="innings-extra-shot"><summary>Earlier scoring note</summary><p class="help">Kept from your existing preparation. This note is not treated as a new shot.</p><textarea data-prep-earlier-text rows="2" maxlength="240">${esc(unrecognized)}</textarea></details>`:'';
+  const editor=earlier.querySelector('[data-prep-earlier-text]');
+  if(editor){editor.preparationRecognizedShots=recognized;editor.oninput=()=>{
+    form.querySelector('#myReflectionStatus').textContent=syncPreparationEarlierNote(card)?'':'Keep scoring options and the earlier note within 240 characters.';
+  };}
+}
+function wirePreparationScoringAdoption(form){
+  form.querySelectorAll('[data-prep-matchup]').forEach(card=>{
+    const button=card.querySelector('[data-prep-use-shot]'),input=card.querySelector('[data-prep-new-shot]');if(!button||!input)return;
+    button.onclick=()=>{
+      if(coachingActionSavePending||document.getElementById('myReflectionForm')!==form)return;
+      const shot=String(input.value||'').trim(),status=form.querySelector('#myReflectionStatus');
+      if(!syncPreparationEarlierNote(card)){status.textContent='Shorten the earlier scoring note before adding another shot.';return;}
+      if(!shot||shot.length>80||/[\r\n]/.test(shot)){status.textContent='Add one short shot name, up to 80 characters.';input.focus();return;}
+      const extras=preparationExtraShots(card),existing=extras.find(s=>scoringShotKey(s)===scoringShotKey(shot)),label=existing||shot;
+      if(!existing&&extras.length>=8){status.textContent='Use at most eight additional shots in one match-up.';return;}
+      const chosen=card.querySelector('[data-prep-field="options"]'),next=preparationShotSelected(chosen.value,label)?chosen.value:preparationToggleExtraShot(chosen.value,label);
+      if(next.length>240){status.textContent='Keep selected scoring options within 240 characters. Remove an option before adding another.';return;}
+      if(!existing){extras.push(shot);card.querySelector('[data-prep-extra-shots]').value=JSON.stringify(extras);}
+      chosen.value=next;input.value='';status.textContent='';refreshPreparationScoringChoices(form);
+    };
+    input.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();button.onclick();}};
+  });
+}
+async function persistPreparationShot(shot,current){
+  await playerPlanSaveQueue;
+  if(!current())throw new Error('The player account changed. Reopen this preparation before trying again.');
+  if(localRaw||playerPlanAutosaveTimer){if(await savePlayerPlanProgressSilently()===false)throw new Error('Your earlier Player Plan changes could not save. Retry those changes before adding this shot.');}
+  if(!current())throw new Error('The player account changed. Reopen this preparation before trying again.');
+  const playerId=myPlayer.id;
+  const task=playerPlanSaveQueue.then(async()=>{
+    for(let attempt=0;attempt<2;attempt++){
+      if(!current())throw new Error('The player account changed. Reopen this preparation before trying again.');
+      if(!preparationAdoptionCoreQuestion())throw new Error('The current Player Plan no longer offers this Core choice. Open My Player Plan to review it.');
+      const catalogue=await supabase.from('player_plan_structure_versions').select('snapshot,philosophy_version').eq('club_id',club.id).order('philosophy_version',{ascending:false}).limit(1).maybeSingle();
+      if(catalogue.error)throw catalogue.error;
+      if(!current())throw new Error('The player account changed. Reopen this preparation before trying again.');
+      if(!catalogue.data?.snapshot||JSON.stringify(catalogue.data.snapshot)!==JSON.stringify(playerPlanStructureVersions?.[0]?.snapshot))throw new Error('The club’s Player Plan questions changed. Save this preparation, then refresh before adding the shot.');
+      const latest=await supabase.from('player_plan_workflows').select().eq('player_id',playerId).maybeSingle();if(latest.error)throw latest.error;
+      if(!current())throw new Error('The player account changed. Reopen this preparation before trying again.');
+      const row=latest.data;
+      if(row&&row.player_id!==playerId)throw new Error('The current Player Plan could not be confirmed.');
+      const raw=structuredClone(row?.raw_answers||{core:{},formats:{}});raw.core??={};raw.formats??={};
+      const answer=raw.core.core_strengths||{choices:[],comment:''},choices=Array.isArray(answer.choices)?[...answer.choices]:[];
+      if(choices.some(value=>scoringShotKey(value)===scoringShotKey(shot)))return {row,alreadySaved:true};
+      raw.core.core_strengths={...answer,choices:[...choices,shot]};
+      const timestamp=new Date(Math.max(Date.now(),(Date.parse(row?.updated_at)||0)+1)).toISOString();
+      const fields={raw_answers:raw,curated_draft:curate(raw),section_status:automaticSectionStatusForRaw(raw,row?.section_status||{}),updated_at:timestamp};
+      let saved;
+      if(row){
+        if(!row.id)throw new Error('The saved Player Plan could not be identified. Reopen My Player Plan and try again.');
+        let query=supabase.from('player_plan_workflows').update(fields).eq('id',row.id);
+        query=row.updated_at?query.eq('updated_at',row.updated_at):query.is('updated_at',null);
+        saved=await query.select().maybeSingle();
+      }else saved=await supabase.from('player_plan_workflows').insert({player_id:playerId,...fields,status:'in_progress',submitted_at:null}).select().single();
+      if(!row&&saved.error?.code==='23505'&&attempt===0)continue;
+      if(saved.error)throw saved.error;
+      if(!saved.data)throw new Error('Your Player Plan changed or is currently read-only. Nothing was overwritten. Try again to check the latest plan.');
+      if(saved.data.player_id!==playerId||!saved.data.raw_answers?.core?.core_strengths?.choices?.some(value=>scoringShotKey(value)===scoringShotKey(shot)))throw new Error('The shot addition could not be confirmed. Try Add to My Player Plan again to check the saved plan.');
+      return {row:saved.data,alreadySaved:false};
+    }
+    throw new Error('Your Player Plan changed. Try again to check the latest plan.');
+  });
+  playerPlanSaveQueue=task.then(()=>undefined,()=>undefined);
+  return await task;
+}
+async function adoptPreparationShot(shot,form){
+  if(coachingActionSavePending||document.getElementById('myReflectionForm')!==form||!myPlayer||!isPlayerUser())return;
+  const state=preparationScoringState.get(form);if(state?.status!=='ready'||!preparationAdoptionCoreQuestion())return;
+  const playerId=myPlayer.id,clubId=club?.id,userId=session?.user?.id;
+  const current=()=>club?.id===clubId&&myPlayer?.id===playerId&&session?.user?.id===userId&&isPlayerUser()&&document.getElementById('myReflectionForm')===form;
+  const status=form.querySelector('#myReflectionStatus');try{validatePreparationEarlierNotes(form);}catch(error){status.textContent=error.message;return;}coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Adding the shot to your Player Plan…';
+  try{
+    const saved=await persistPreparationShot(shot,current);if(!current())return;
+    workflow=saved.row;localRaw=null;
+    state.candidates=[...(state.candidates||[]).filter(c=>c.source_kind!=='plan'),...preparationPlanCandidatesForRaw(saved.row.raw_answers)];
+    status.textContent=saved.alreadySaved?'This shot is already in your Player Plan. Your preparation is still here; save it when ready.':'Added to My Player Plan. Your preparation is still here; save it when ready.';
+  }catch(error){if(current())status.textContent=(error?.message||'Could not confirm the Player Plan change.')+' Your preparation is still here. Retry Add to My Player Plan to check before adding again.';}
+  finally{coachingActionSavePending=false;if(current()){restore();refreshPreparationScoringChoices(form);flushPreparationLoadedData(form);}}
+}
+// END SCORING PLAN ADOPTION
 
 
 async function renderHowWeTrain(){
@@ -13876,7 +14097,7 @@ async function renderHowWeTrain(){
   const isCurrent=()=>sequence===howWeTrainRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab===tabAtStart;
   if(!workspacePlayerPlansPublished()){
     renderClubPublicationGate('How We Train');
-    if(myPlayer&&isPlayerUser()){const section=document.createElement('section');section.className='card';section.innerHTML='<button class="btn secondary" id="requestBeforePublication">Request a Coach Conversation</button>';page.appendChild(section);document.getElementById('requestBeforePublication').onclick=openCoachConversationRequest;}
+    if(myPlayer&&isPlayerUser()){page.insertAdjacentHTML('afterbegin',renderMatchTrainingFocusShell());const section=document.createElement('section');section.className='card';section.innerHTML='<button class="btn secondary" id="requestBeforePublication">Request a Coach Conversation</button>';page.appendChild(section);document.getElementById('requestBeforePublication').onclick=openCoachConversationRequest;await mountMatchTrainingFocus(document.getElementById('howWeTrainMatchFocus'));}
     return;
   }
 
@@ -13944,6 +14165,7 @@ async function renderHowWeTrain(){
   }
 
   page.innerHTML=`<div class="guide-context-bar"><span><strong>How We Train</strong> · Turn the Player Plan into deliberate practice, then let match and training feedback shape what comes next.</span><button type="button" class="btn ghost compact-btn" id="howWeTrainGuideLink">Show me how</button></div>
+  ${myPlayer&&isPlayerUser()?renderMatchTrainingFocusShell():''}
   <section class="card train-hero simple">
     <div class="section-label">How We Train</div>
     <h1>Train the game you want to take into the middle.</h1>
@@ -13964,7 +14186,7 @@ async function renderHowWeTrain(){
   captureFeedbackEntryBaseline();
   bindCoachingActionControls(feedback,()=>renderHowWeTrain());
   document.getElementById('openPreparationFromTraining')?.addEventListener('click',()=>openTrainingPreparation());
-  if(myPlayer&&isPlayerUser())await mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training'});
+  if(myPlayer&&isPlayerUser())await Promise.all([mountMatchTrainingFocus(document.getElementById('howWeTrainMatchFocus')),mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training'})]);
   if(!isCurrent())return;
   document.getElementById('requestConversationFromTraining')?.addEventListener('click',openCoachConversationRequest);
   document.getElementById('retryTrainingFeedback')?.addEventListener('click',async()=>{if(confirmLeaveFeedbackEntry())await renderHowWeTrain();});
@@ -15278,7 +15500,7 @@ function renderWorkspaceQuestion(section,spec,raw,editable){
   return `<div class="question">
     <div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div>
     <div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div>
-    <div class="option-grid">${(spec.options||[]).map((o,i)=>{
+    <div class="option-grid">${playerPlanChoiceOptions(section,spec.id,spec,a).map((o,i)=>{
       const id=`staff_${section}_${spec.id}_${i}`;
       return `<label class="option-chip">
         <input type="checkbox" id="${esc(id)}" data-workspace-answer-section="${section}" data-workspace-answer-key="${esc(spec.id)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}>
@@ -15622,6 +15844,7 @@ async function renderPlayersWorkspacePlayer(){
 
   <div class="workspace-player-tabs">${sectionTabs}</div>
 
+  ${playersWorkspaceSection==='training'?renderMatchTrainingFocusShell('workspaceMatchTrainingFocus'):''}
   ${['summary','training'].includes(playersWorkspaceSection)?renderWeeklyLoopShell('workspacePlayerFocus'):''}
   ${playersWorkspaceSection==='training'?renderWorkspacePlayerDiscussionPanel(player):''}
   ${body}`;
@@ -15667,7 +15890,10 @@ async function renderPlayersWorkspacePlayer(){
       queueWorkspacePlayerPlanAutosave();
     });
   }
-  if(['summary','training'].includes(playersWorkspaceSection))await mountWeeklyLoop(document.getElementById('workspacePlayerFocus'),{playerId:player.id,context:'training'});
+  if(['summary','training'].includes(playersWorkspaceSection))await Promise.all([
+    mountWeeklyLoop(document.getElementById('workspacePlayerFocus'),{playerId:player.id,context:'training'}),
+    playersWorkspaceSection==='training'?mountMatchTrainingFocus(document.getElementById('workspaceMatchTrainingFocus'),{playerId:player.id,isOwner:false,canStillView:()=>playersWorkspaceSelectedId===player.id&&playersWorkspaceSection==='training'&&!!workspaceSelectedPlayer()}):Promise.resolve()
+  ]);
 }
 /* ---------------- PLAYER HOME ---------------- */
 
@@ -15958,6 +16184,7 @@ async function saveWeeklyLoop(state,values,form,status){
 let trainingPreparationState={scope:'',group:''};
 let trainingPreparationCache=null;
 let trainingPreparationSequence=0;
+let trainingPreparationExpiryMount=null;
 const TRAINING_PREPARATION_THEMES={decision:'Decision making',execution:'Execution',strike_rotation:'Strike rotation',scoring:'Scoring options',pressure:'Handling pressure',preparation:'Preparation'};
 function ensureTrainingPreparationState(){
   const scope=`${club?.id||''}:${session?.user?.id||''}`;
@@ -15994,10 +16221,42 @@ function trainingPreparationReviewLabel(action,today=todayIso()){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return 'No review date';
   return date<today?`Review overdue · ${formatDateShort(date)}`:date===today?'Review due today':`Review ${formatDateShort(date)}`;
 }
+function trainingPreparationMatchFocuses(player){
+  return activeMatchTrainingPreparations(player.match_training_focus||[]);
+}
+function trainingPreparationHasFocus(player){return !!player.focuses?.length||trainingPreparationMatchFocuses(player).length>0;}
+function renderTrainingPreparationFocuses(player){
+  const focuses=player.focuses||[],matches=trainingPreparationMatchFocuses(player);
+  const ongoing=focuses.length?`<ol class="prep-focus-list">${focuses.map(focus=>`<li>${esc(focus.focus_text)}<small>${esc(typeof weeklyLoopAgreementLabel==='function'?weeklyLoopAgreementLabel(focus,false):focus.accepted_by&&focus.chosen_by&&focus.accepted_by!==focus.chosen_by?'Agreed with coach':'Chosen by the player')}</small>${TRAINING_PREPARATION_THEMES[focus.theme_key]?`<small>${esc(TRAINING_PREPARATION_THEMES[focus.theme_key])}</small>`:''}</li>`).join('')}</ol>`:'<p class="prep-empty-focus">No current focus chosen.</p><p class="help">Open the player’s training to choose a focus together.</p>';
+  return `${ongoing}${matches.map(match=>`<section class="prep-match-focus"><h4>Training focus for this match</h4><p class="prep-match-date">${esc(formatDateShort(match.match_date))} · ${esc(match.opposition||'Opposition not recorded')} · ${esc(formatLabel(match.format_key))}</p>${match.training_matchups.map(cue=>`<div class="prep-match-cue"><strong>${esc(cue.bowler)}</strong>${cue.options?`<div class="prep-match-options"><b>Scoring options:</b>${renderPreparationScoringSummary(cue)}</div>`:''}${cue.expect?`<p><b>What to expect:</b> ${esc(cue.expect)}</p>`:''}${cue.avoid?`<p><b>Watch out for:</b> ${esc(cue.avoid)}</p>`:''}</div>`).join('')}<p class="help">Selected by the player · shown through this match date on your device.</p></section>`).join('')}`;
+}
+function mountTrainingPreparationExpiry(page,scope,sequence){
+  trainingPreparationExpiryMount?.dispose();
+  const anchor=document.getElementById('trainingPreparationFocusCount');
+  if(!anchor)return;
+  let timer=null,disposed=false;
+  const current=()=>!disposed&&currentTab==='training_preparation'&&ensureTrainingPreparationState().scope===scope&&sequence===trainingPreparationSequence&&document.getElementById('page')===page&&document.getElementById('trainingPreparationFocusCount')===anchor&&canUsePlayersWorkspace();
+  const dispose=()=>{disposed=true;clearTimeout(timer);window.removeEventListener?.('focus',foreground);document.removeEventListener?.('visibilitychange',foreground);if(trainingPreparationExpiryMount?.anchor===anchor)trainingPreparationExpiryMount=null;};
+  const refresh=()=>{
+    if(!current()){dispose();return;}
+    const players=trainingPreparationPlayers(trainingPreparationCache),byId=new Map(players.map(player=>[player.player_id,player]));
+    page.querySelectorAll('[data-prep-focus-player]').forEach(cell=>{const player=byId.get(cell.dataset.prepFocusPlayer);if(player)cell.innerHTML=renderTrainingPreparationFocuses(player);});
+    anchor.textContent=String(players.filter(trainingPreparationHasFocus).length);
+  };
+  const schedule=()=>{
+    clearTimeout(timer);if(!current()){dispose();return;}
+    const now=new Date(),next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+    timer=setTimeout(()=>{refresh();schedule();},Math.max(1,next.getTime()-now.getTime()+50));
+  };
+  function foreground(){if(document.visibilityState==='hidden'||document.hidden)return;refresh();schedule();}
+  trainingPreparationExpiryMount={anchor,dispose};
+  window.addEventListener?.('focus',foreground);document.addEventListener?.('visibilitychange',foreground);schedule();
+}
 function trainingPreparationStyles(){return `<style>
   .prep-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}.prep-heading h1{margin:6px 0}.prep-filter-row{display:flex;align-items:end;gap:16px;flex-wrap:wrap}.prep-filter-row .field{flex:1;max-width:420px;margin:0;min-width:200px}.prep-summary{display:flex;gap:8px 20px;flex-wrap:wrap;font-size:14px;margin:18px 0 0;color:var(--muted)}.prep-summary strong{color:var(--ink)}
   .prep-theme-list{display:flex;flex-wrap:wrap;gap:10px}.prep-theme{border:1px solid #dce1ed;border-radius:10px;padding:12px 14px;flex:1;min-width:180px}.prep-theme strong{display:block}.prep-theme p{font-size:13px;margin:7px 0 0;overflow-wrap:anywhere}.prep-theme-count{font-weight:400;color:var(--muted)}
   .prep-table{width:100%;border-collapse:collapse;table-layout:fixed}.prep-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 10px}.prep-table td{padding:18px 10px;border-top:1px solid #dce1ed;vertical-align:top;overflow-wrap:anywhere}.prep-table th:first-child{width:24%}.prep-table th:nth-child(2){width:38%}.prep-table h3{font-size:17px;margin:0 0 8px}.prep-table .btn{min-height:44px;padding:9px 12px}.prep-groups{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 12px}.prep-focus-list{margin:0;padding-left:20px}.prep-focus-list li+li{margin-top:12px}.prep-focus-list small{display:block;color:var(--muted);margin-top:5px}.prep-empty-focus{margin:0;color:var(--muted)}.prep-conversation{margin-bottom:12px}.prep-conversation:last-child{margin-bottom:0}.prep-conversation p{font-size:14px;margin:5px 0 8px}.prep-review{font-size:12px;color:var(--muted)}.prep-review-due{font-weight:700;color:#8b4214}.prep-more>summary{cursor:pointer;min-height:36px;font-weight:700;font-size:13px}.prep-access{font-size:12px;color:var(--muted);margin:8px 0}.prep-empty{padding:20px 0}
+  .prep-match-focus{border-left:3px solid var(--primary,#26327c);background:#f4f5ff;border-radius:8px;padding:12px;margin-top:16px}.prep-match-focus h4{margin:0 0 7px;font-size:14px}.prep-match-focus p{margin:6px 0;font-size:13px;white-space:pre-wrap}.prep-match-date{color:var(--muted)}.prep-match-cue+.prep-match-cue{border-top:1px solid #dce1ed;margin-top:10px;padding-top:10px}.prep-match-cue strong{font-size:14px}.prep-match-options{font-size:13px;margin:6px 0}.prep-match-options ul{margin:6px 0;padding-left:18px}.prep-match-options li+li{margin-top:4px}.prep-match-options .innings-extra-shot-label{display:inline-block;border-radius:8px;padding:1px 5px;background:#e4e8fa;color:var(--muted);font-size:11px}
   @media(max-width:700px){.prep-table,.prep-table tbody,.prep-table tr,.prep-table td{display:block}.prep-table thead{display:none}.prep-table tr{border-top:1px solid #dce1ed;padding:18px 0}.prep-table td{border:0;padding:0 0 16px}.prep-table td:last-child{padding-bottom:0}.prep-table td[data-prep-label]::before{content:attr(data-prep-label);display:block;font-weight:700;font-size:12px;color:var(--muted);margin-bottom:9px}.prep-heading .btnrow{width:100%}.prep-table h3{font-size:19px}.prep-filter-row .field{max-width:none}.prep-theme{min-width:160px}.prep-summary{gap:8px 16px}}
 </style>`;}
 async function openTrainingPreparation({group=null}={}){
@@ -16027,13 +16286,14 @@ function renderTrainingPreparationConversation(action,playerId){
 }
 function renderTrainingPreparationRows(players){
   return players.map(player=>{
-    const focuses=player.focuses||[],actions=trainingPreparationOpenConversations(player);
+    const actions=trainingPreparationOpenConversations(player);
     return `<tr data-prep-player-row="${esc(player.player_id)}"><td><h3>${esc(player.display_name||'Player')}</h3><div class="prep-groups">${(player.groups||[]).length?player.groups.map(group=>`<span class="workspace-group-pill">${esc(group.name)}</span>`).join(''):'<span class="workspace-group-pill">Currently unassigned</span>'}</div><button type="button" class="btn ghost" data-prep-training="${esc(player.player_id)}">Open training & focus</button>${player.can_write===false?'<p class="prep-access">View access</p>':''}</td>
-      <td data-prep-label="Current focus">${focuses.length?`<ol class="prep-focus-list">${focuses.map(focus=>`<li>${esc(focus.focus_text)}<small>${esc(typeof weeklyLoopAgreementLabel==='function'?weeklyLoopAgreementLabel(focus,false):focus.accepted_by&&focus.chosen_by&&focus.accepted_by!==focus.chosen_by?'Agreed with coach':'Chosen by the player')}</small>${TRAINING_PREPARATION_THEMES[focus.theme_key]?`<small>${esc(TRAINING_PREPARATION_THEMES[focus.theme_key])}</small>`:''}</li>`).join('')}</ol>`:'<p class="prep-empty-focus">No current focus chosen.</p><p class="help">Open the player’s training to choose a focus together.</p>'}</td>
+      <td data-prep-label="Current focus" data-prep-focus-player="${esc(player.player_id)}">${renderTrainingPreparationFocuses(player)}</td>
       <td data-prep-label="Conversations & reviews">${actions.length?`${actions.slice(0,2).map(action=>renderTrainingPreparationConversation(action,player.player_id)).join('')}${actions.length>2?`<details class="prep-more"><summary>${actions.length-2} more open ${actions.length-2===1?'conversation':'conversations'}</summary>${actions.slice(2).map(action=>renderTrainingPreparationConversation(action,player.player_id)).join('')}</details>`:''}`:'<p class="prep-empty-focus">No open coaching follow-up.</p>'}</td></tr>`;
   }).join('');
 }
 async function renderTrainingPreparation({refresh=true}={}){
+  trainingPreparationExpiryMount?.dispose();
   const page=document.getElementById('page'),state=ensureTrainingPreparationState(),scope=state.scope,sequence=++trainingPreparationSequence;
   const current=()=>currentTab==='training_preparation'&&ensureTrainingPreparationState().scope===scope&&sequence===trainingPreparationSequence&&document.getElementById('page')===page;
   if(!page)return;
@@ -16059,9 +16319,9 @@ async function renderTrainingPreparation({refresh=true}={}){
   const missingGroup=!!state.group&&state.group!=='__unassigned__'&&!data.groups.some(g=>g.id===state.group);
   if(missingGroup)state.group='';
   const players=trainingPreparationPlayers(data,state),themes=trainingPreparationSharedThemes(players),actions=players.flatMap(trainingPreparationOpenConversations);
-  const due=actions.filter(action=>action.review_on&&String(action.review_on).slice(0,10)<=todayIso()).length,withFocus=players.filter(player=>player.focuses?.length).length;
+  const due=actions.filter(action=>action.review_on&&String(action.review_on).slice(0,10)<=todayIso()).length,withFocus=players.filter(trainingPreparationHasFocus).length;
   page.innerHTML=`${trainingPreparationStyles()}<section class="card"><div class="prep-heading"><div><div class="section-label">Before training</div><h1>Training preparation</h1><p>Bring each player’s focus into this session, and pick up conversations that need attention.</p></div><div class="btnrow"><button type="button" class="btn ghost" id="trainingPreparationBack">Back to Players</button><button type="button" class="btn ghost" id="trainingPreparationHelp">Show me how</button></div></div><p class="help">Only players and coaching records you already have access to are shown. A Playing Group may include other players outside your access.</p></section>
-    <section class="card">${missingGroup?'<p class="notice" role="status">That Playing Group is no longer available. Your accessible players are shown.</p>':''}<div class="prep-filter-row"><div class="field"><label for="trainingPreparationGroup">Playing Group</label><select id="trainingPreparationGroup"><option value="" ${!state.group?'selected':''}>All accessible players</option><option value="__unassigned__" ${state.group==='__unassigned__'?'selected':''}>Currently unassigned</option>${data.groups.map(group=>`<option value="${esc(group.id)}" ${group.id===state.group?'selected':''}>${esc(group.name)}</option>`).join('')}</select></div><button type="button" class="btn ghost" id="refreshTrainingPreparation">Refresh</button></div><div class="prep-summary" role="status"><span><strong>${players.length}</strong> accessible ${players.length===1?'player':'players'} shown</span><span><strong>${withFocus}</strong> with a current focus</span><span><strong>${actions.length}</strong> open ${actions.length===1?'conversation':'conversations'}</span><span><strong>${due}</strong> ${due===1?'review':'reviews'} due</span></div></section>
+    <section class="card">${missingGroup?'<p class="notice" role="status">That Playing Group is no longer available. Your accessible players are shown.</p>':''}<div class="prep-filter-row"><div class="field"><label for="trainingPreparationGroup">Playing Group</label><select id="trainingPreparationGroup"><option value="" ${!state.group?'selected':''}>All accessible players</option><option value="__unassigned__" ${state.group==='__unassigned__'?'selected':''}>Currently unassigned</option>${data.groups.map(group=>`<option value="${esc(group.id)}" ${group.id===state.group?'selected':''}>${esc(group.name)}</option>`).join('')}</select></div><button type="button" class="btn ghost" id="refreshTrainingPreparation">Refresh</button></div><div class="prep-summary" role="status"><span><strong>${players.length}</strong> accessible ${players.length===1?'player':'players'} shown</span><span><strong id="trainingPreparationFocusCount">${withFocus}</strong> with an ongoing or match focus</span><span><strong>${actions.length}</strong> open ${actions.length===1?'conversation':'conversations'}</span><span><strong>${due}</strong> ${due===1?'review':'reviews'} due</span></div></section>
     ${themes.length?`<section class="card"><h2>Shared training themes</h2><p class="help">These players have chosen the same focus category. Open their individual focuses when planning the activity.</p><div class="prep-theme-list">${themes.map(theme=>`<article class="prep-theme" data-prep-theme="${esc(theme.key)}"><strong>${esc(theme.label)} <span class="prep-theme-count">· ${theme.players.length} players</span></strong><p>${theme.players.map(esc).join(', ')}</p></article>`).join('')}</div></section>`:''}
     <section class="card">${players.length?`<table class="prep-table"><caption class="sr-only">Current focus, conversations and reviews for accessible players</caption><thead><tr><th scope="col">Player</th><th scope="col">Current focus</th><th scope="col">Conversations & reviews</th></tr></thead><tbody>${renderTrainingPreparationRows(players)}</tbody></table>`:`<div class="prep-empty"><h2>${data.players.length?'No accessible players in this selection.':'No players are available to you yet.'}</h2><p>${data.players.length?'Choose another Playing Group or All accessible players.':'Your Club Admin can check player registration and your player access in People & Sign-up.'}</p></div>`}</section>`;
   document.getElementById('trainingPreparationGroup').onchange=async event=>{
@@ -16074,6 +16334,7 @@ async function renderTrainingPreparation({refresh=true}={}){
   document.getElementById('trainingPreparationHelp').onclick=()=>openClubBattingGuideTopic('training_preparation');
   document.querySelectorAll('[data-prep-training]').forEach(button=>button.onclick=()=>openTrainingPreparationPlayer(button.dataset.prepTraining));
   document.querySelectorAll('[data-prep-conversation]').forEach(button=>button.onclick=()=>openTrainingPreparationPlayer(button.dataset.prepPlayer,'development',button.dataset.prepConversation));
+  mountTrainingPreparationExpiry(page,scope,sequence);
   recordAppNavigation(clubNavigationRoute());
 }
 // END TRAINING PREPARATION
@@ -16630,7 +16891,7 @@ function renderQuestion(section,key,spec){
   if(spec.response_type==='text'){
     return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Write the response that best describes your game.')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Your response…">${esc(a.comment||'')}</textarea></div></div>`;
   }
-  return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${(spec.options||[]).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment player-own-answer"><div class="player-own-answer-copy"><strong>Can’t see your answer?</strong><span>Add your own option or useful detail. It is saved with your Player Plan, and de-identified player-added answers help the club see where these choices could be better.</span></div><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Add your own answer…">${esc(a.comment||'')}</textarea></div></div>`;
+  return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${playerPlanChoiceOptions(section,key,spec,a).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment player-own-answer"><div class="player-own-answer-copy"><strong>Can’t see your answer?</strong><span>Add your own option or useful detail. It is saved with your Player Plan, and de-identified player-added answers help the club see where these choices could be better.</span></div><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Add your own answer…">${esc(a.comment||'')}</textarea></div></div>`;
 }
 
 let localRaw=null;
@@ -19195,10 +19456,10 @@ const demoStages=[
   {key:'players',label:'Players and plan dates',tab:'players',role:'admin',hint:'Alex has a complete plan, Jordan has completed Core, and Taylor is unassigned. Filter the list or manage groups and plan dates.'},
   {key:'plan',label:'An example Player Plan',tab:'myplan',role:'player',hint:'You are Alex Morgan. Open View my plan, explore each format or try changing an answer.'},
   {key:'focus',label:'Player Home · current focus',tab:'playerhome',role:'player',hint:'Alex has chosen a focus from their Player Plan. Casey has suggested a change; it only replaces Alex’s focus when Alex accepts. The same focus appears in How We Train and innings review.'},
-  {key:'training_preparation',label:'Prepare for training · coach view',tab:'training_preparation',role:'coach',hint:'Select a Playing Group to see current focuses, open Coach Conversations and review dates. Shared themes come from the explicit focus themes, within Casey’s existing player access.'},
-  {key:'match_preparation',label:'My Innings · prepare and review',tab:'innings',role:'player',hint:'You are Alex Morgan. Prepare for a fictional match with optional bowlers and fielders, then record the innings and review those match-ups in the same season entry. Preparation and the personal contest are private; all data stays in this demo.'},
+  {key:'training_preparation',label:'Prepare for training · coach view',tab:'training_preparation',role:'coach',hint:'Select a Playing Group to see current focuses, selected match-up training cues, open Coach Conversations and review dates. Unselected match preparation stays private. Shared themes come from the explicit focus themes, within Casey’s existing player access.'},
+  {key:'match_preparation',label:'My Innings · prepare and review',tab:'innings',role:'player',hint:'You are Alex Morgan. Start early in the week: prepare for a fictional match, mark a match-up as a training focus and save it. The selected cue appears in How We Train and is shared with coaches who can access your player record through the match date. Then record and review the innings in this same entry. All data stays in this demo.'},
   {key:'innings',label:'My Innings · season record',tab:'innings',role:'player',hint:'You are Alex Morgan. See scores, notes and coaching feedback together, filter the season or format, and add an innings with an optional YouTube link. Nothing is sent.'},
-  {key:'training',label:'How We Train',tab:'howwetrain',role:'player',hint:'Alex’s chosen current focus appears alongside training suggestions from their plan. Review an innings or Coach Conversation to keep working, adjust the focus or discuss it.'},
+  {key:'training',label:'How We Train',tab:'howwetrain',role:'player',hint:'Alex’s selected match-up training cue is shared with permitted coaches until the local match date has passed, alongside the separate ongoing current focus and plan suggestions. View preparation to change it. Selecting a cue does not record practice or change a Player Plan.'},
   {key:'feedback',label:'Feedback and Coach Conversations',tab:'players',role:'coach',hint:'You are Casey Reid, a coach. Compare Alex’s reflections with coaching feedback, or add a training observation.'},
   {key:'requests',label:'Player requests a conversation',tab:'conversations',role:'player',hint:'You are Alex. Request a conversation with any club member and optionally paste a YouTube link. This is fictional demo data; nothing is sent.'},
   {key:'recipient',label:'Teammate receives a request',tab:'conversations',role:'player',userId:'user-taylor',hint:'Taylor has no coaching access. Alex’s request lets Taylor read and update just this conversation. Try I can help, or I’m unavailable.'},
@@ -19261,7 +19522,7 @@ function demoSeedClub(){
     player_playing_groups:players.map((p,index)=>({player_id:p.id,playing_group_id:fixtureGroups[index].id,club_id:club.id})),
     player_plan_requirements:fixtureGroups.map((g,index)=>({id:'requirement-'+index,club_id:club.id,format_key:'limited_overs',playing_group_id:g.id,due_date:fixtureDay(14),target_type:'playing_group',active:true})),
     club_batting_guide_capabilities:GUIDE_TOPIC_ORDER.map(capability_key=>({capability_key,active:true,audience:capability_key==='plan_dates'?['admin']:['admin','head_coach','coach','captain','player'],tutorial:[]})),club_batting_guide_progress:[],
-    player_plan_workflows:players.map((p,index)=>({player_id:p.id,club_id:club.id,raw_answers:answersFor(index),curated_draft:{},section_status:{},updated_at:fixtureNow()})),feedback:{}
+    player_plan_workflows:players.map((p,index)=>({id:'workflow-'+p.id,player_id:p.id,club_id:club.id,raw_answers:answersFor(index),curated_draft:{},section_status:{},updated_at:fixtureNow()})),feedback:{}
   };
   const match=(id,days,score,opposition,summary,alignment,classification,note,coachNote)=>({id,match_date:fixtureDay(days),created_at:fixtureDay(days)+'T16:00:00Z',format_key:'limited_overs',opposition,score_text:score,dismissal_summary:summary,
     player_reflection:{batting_to_plan:alignment,dismissal_classification:classification,main_issue:classification==='plan_execution'?'execution':'decision',note,next_training_focus:classification==='plan_execution'?'Practise my pull against mixed lengths, keeping its direction controlled.':'Read the ball before choosing my shot; keep the single in play.',updated_at:fixtureDay(days)+'T17:00:00Z'},
@@ -19294,7 +19555,7 @@ demoSeedClub=function(){
   fixtureRows.players.push({id:'player-taylor',club_id:club.id,user_id:'user-taylor',display_name:'Taylor Brooks',active:true});
   fixtureRows.user_profiles.push({user_id:'user-taylor',display_name:'Taylor Brooks'});
   fixtureRows.club_memberships.push({club_id:club.id,user_id:'user-taylor',permission_role:'player',involvement:'player'});
-  fixtureRows.player_plan_workflows.push({player_id:'player-taylor',club_id:club.id,raw_answers:{core:{},formats:{}},curated_draft:{},section_status:{},updated_at:fixtureNow()});
+  fixtureRows.player_plan_workflows.push({id:'workflow-player-taylor',player_id:'player-taylor',club_id:club.id,raw_answers:{core:{},formats:{}},curated_draft:{},section_status:{},updated_at:fixtureNow()});
   fixtureRows.feedback['player-taylor']=demoEmptyFeedback();
   // Jordan has completed Core; the assigned Limited Overs section still needs work.
   const jordan=fixtureRows.player_plan_workflows.find(w=>w.player_id==='player-jordan');jordan.raw_answers.formats={};
@@ -19335,15 +19596,30 @@ function demoAction(playerId,kind,note,reviewOn,match=null){
 }
 const demoOriginalRead=fixtureReadRows;
 fixtureReadRows=function(table){return demoOriginalRead(table)||[];};
+// The fixture mirrors the existing plan surface's player and coaching permissions.
+function demoWorkflowAccess(row,write=false){
+  const player=fixtureRows.players.find(p=>p.id===row?.player_id&&p.club_id===club.id&&p.active!==false),userId=session?.user?.id;
+  if(!player||!userId||club.archived_at||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===userId)||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===player.user_id))return false;
+  return player.user_id===userId||(write?demoPlayerAccess(player.id).edit:demoPlayerAccess(player.id).view);
+}
 // Apply read filters and only mutate the isolated fixture tables.
 window.__fixtureFrom=table=>{
   const state={filters:[],single:false,mutation:null,orders:[],limit:null};
   const query={select(){return this;},eq(k,v){state.filters.push(r=>r[k]===v);return this;},neq(k,v){state.filters.push(r=>r[k]!==v);return this;},in(k,vs){state.filters.push(r=>vs.includes(r[k]));return this;},is(k,v){state.filters.push(r=>r[k]===v);return this;},order(k,o={}){state.orders.push([k,o.ascending!==false]);return this;},limit(n){state.limit=n;return this;},range(){return this;},maybeSingle(){state.single=true;return this;},single(){state.single=true;return this;},upsert(data){state.mutation=['upsert',data];return this;},insert(data){state.mutation=['insert',data];return this;},update(data){state.mutation=['update',data];return this;},delete(){state.mutation=['delete'];return this;},then(resolve,reject){
-    let rows=fixtureReadRows(table).filter(r=>r&&state.filters.every(fn=>fn(r)));
+    const fail=(code,message)=>Promise.resolve({data:null,error:{code,message}}).then(resolve,reject);
+    let rows=fixtureReadRows(table).filter(r=>r&&state.filters.every(fn=>fn(r))&&(table!=='player_plan_workflows'||demoWorkflowAccess(r,!!state.mutation)));
     if(state.mutation){
       const [action,data]=state.mutation;
       if(!['philosophy_contributions','player_plan_workflows','philosophy_workshops','philosophy_contributors'].includes(table))return Promise.resolve(window.__fixtureUnsupported(table+' '+action)).then(resolve,reject);
       const target=table==='philosophy_workshops'?[workshop]:(fixtureRows[table]??=[]);
+      if(table==='player_plan_workflows'){
+        if(action==='update'&&rows.some(row=>!demoWorkflowAccess({...row,...data},true)))return fail('42501','You cannot update this Player Plan.');
+        if(['insert','upsert'].includes(action)){
+          const values=Array.isArray(data)?data:[data];
+          if(values.some(value=>!demoWorkflowAccess(value,true)))return fail('42501','You cannot update this Player Plan.');
+          if(action==='insert'&&(values.some(value=>target.some(row=>row.player_id===value.player_id))||new Set(values.map(value=>value.player_id)).size!==values.length))return fail('23505','A Player Plan already exists for this player.');
+        }
+      }
       if(action==='update')rows.forEach(r=>Object.assign(r,fixtureClone(data)));
       else if(action==='delete')fixtureRows[table]=target.filter(r=>!rows.includes(r));
       else {
@@ -19704,14 +19980,15 @@ window.__fixtureRpc=async(name,args={})=>{
     if(name==='get_player_current_focus')return ok(demoFocusView(args.p_player_id));
     if(name==='save_player_focus')return ok(demoSaveFocus(args));
     if(name==='get_training_preparation'){
-      if(args.p_club_id!==club.id||!['admin','head_coach','coach','captain'].includes(membership.permission_role))throw Error('Training preparation is available to authorised club staff.');
-      return ok({groups:fixtureGroups.filter(g=>g.active).map(g=>({id:g.id,name:g.name})),players:fixtureWorkspacePlayers().map(p=>({player_id:p.id,display_name:p.display_name,group_ids:p.groups.map(g=>g.id),groups:p.groups.map(g=>({id:g.id,name:g.name})),focuses:demoFocusView(p.id).active,can_write:p.can_edit,conversations:(fixtureRows.feedback[p.id]?.coaching_actions||[]).filter(a=>a.status==='open'&&a.follow_up_requested&&demoFocusSourceVisible(p.id,'conversation',a.id)).map(a=>({id:a.id,task:a.task,source_kind:a.match_feedback_id?'match':a.training_observation_id?'training':'conversation',review_on:a.review_on,status:a.status,player_id:p.id}))}))});
+      if(args.p_club_id!==club.id||club.archived_at||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===session?.user?.id&&['admin','head_coach','coach','captain'].includes(m.permission_role)))throw Error('Training preparation is available to authorised club staff.');
+      return ok({groups:fixtureGroups.filter(g=>g.active).map(g=>({id:g.id,name:g.name})),players:fixtureWorkspacePlayers().filter(p=>fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===p.user_id)).map(p=>({player_id:p.id,display_name:p.display_name,group_ids:p.groups.map(g=>g.id),groups:p.groups.map(g=>({id:g.id,name:g.name})),focuses:demoFocusView(p.id).active,match_training_focus:demoPlayerMatchTrainingFocus(p.id).preparations,can_write:p.can_edit,conversations:(fixtureRows.feedback[p.id]?.coaching_actions||[]).filter(a=>a.status==='open'&&a.follow_up_requested&&demoFocusSourceVisible(p.id,'conversation',a.id)).map(a=>({id:a.id,task:a.task,source_kind:a.match_feedback_id?'match':a.training_observation_id?'training':'conversation',review_on:a.review_on,status:a.status,player_id:p.id}))}))});
     }
     return demoPreLoopRpc(name,args);
   }catch(error){return {data:null,error:{message:error.message}};}
 };
 
-// Match preparation is private, fictional data stored only in this page's memory.
+// Match preparation is fictional data stored only in this page's memory.
+// Only explicitly selected training cues are shared with permitted staff.
 // It does not create an actual innings until the player records a played match.
 const demoMatchPreparationUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const demoMatchPreparationTags=new Set(['quick_pickup','strong_arm','accurate_throw','safe_hands','quick_across_ground']);
@@ -19722,6 +19999,18 @@ function demoMatchPreparationOwner(clubId){
   if(clubId!==club.id||club.archived_at||!member||!player)throw Error('An active player registration in this club is required.');
   return player;
 }
+function demoPlayerMatchTrainingFocus(playerId){
+  const player=fixtureRows.players.find(p=>p.id===playerId&&p.club_id===club.id&&p.active!==false),userId=session?.user?.id;
+  const member=id=>fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===id);
+  if(!userId||club.archived_at||!player||!member(userId)||!member(player.user_id)||!demoPlayerAccess(playerId).view)throw Error('You do not have access to this player’s match training focus.');
+  const preparations=(fixtureRows.match_preparations||[]).filter(p=>p.player_id===playerId&&p.club_id===club.id&&p.status==='planned').map(p=>({
+    id:p.id,status:p.status,match_date:p.match_date,format_key:p.format_key,opposition:p.opposition,
+    preparation:{matchups:(p.preparation?.matchups||[]).filter(m=>m.training_focus===true&&String(m.bowler||'').trim()&&['expect','options','avoid'].some(key=>String(m[key]||'').trim())).map(m=>({
+      id:m.id,bowler:m.bowler,expect:m.expect,options:m.options,avoid:m.avoid,training_focus:true,extra_shots:(m.extra_shots||[]).filter(shot=>String(m.options||'').split(/[\r\n]+/).some(line=>line.trim().replace(/\s+/g,' ').toLocaleLowerCase()===shot.trim().replace(/\s+/g,' ').toLocaleLowerCase()))
+    }))}
+  })).filter(p=>p.preparation.matchups.length);
+  return {player_id:playerId,preparations};
+}
 function demoMatchPreparationText(value,max,label){
   if(value!==undefined&&value!==null&&typeof value!=='string')throw Error(label+' must be text.');
   const text=String(value??'').trim();if(text.length>max)throw Error(label+' is too long.');return text;
@@ -19730,7 +20019,22 @@ function demoMatchPreparationData(value={}){
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Check the preparation details.');
   const rows=(key,max)=>{const list=value[key]??[];if(!Array.isArray(list)||list.length>max)throw Error('Use at most '+max+' '+key+'.');return list;};
   const ids=new Set(),id=row=>{if(!row||!demoMatchPreparationUuid.test(row.id)||ids.has(row.id))throw Error('Each preparation item needs its own valid ID.');ids.add(row.id);return row.id;};
-  const matchups=rows('matchups',8).map(row=>({id:id(row),bowler:demoMatchPreparationText(row.bowler,100,'Bowler'),expect:demoMatchPreparationText(row.expect,200,'What to expect'),options:demoMatchPreparationText(row.options,240,'Scoring options'),avoid:demoMatchPreparationText(row.avoid,200,'Watch out for')}));
+  const matchups=rows('matchups',8).map(row=>{
+    const result={id:id(row),bowler:demoMatchPreparationText(row.bowler,100,'Bowler'),expect:demoMatchPreparationText(row.expect,200,'What to expect'),options:demoMatchPreparationText(row.options,240,'Scoring options'),avoid:demoMatchPreparationText(row.avoid,200,'Watch out for')};
+    if(Object.prototype.hasOwnProperty.call(row,'training_focus')){
+      if(typeof row.training_focus!=='boolean')throw Error('Choose whether this match-up is a training focus.');
+      result.training_focus=row.training_focus;
+    }
+    if(Object.prototype.hasOwnProperty.call(row,'extra_shots')){
+      const extra=row.extra_shots;
+      if(!Array.isArray(extra)||extra.length>8||extra.some(shot=>typeof shot!=='string'||!shot.trim()||shot.length>80||/[\r\n]/.test(shot)))throw Error('Use up to eight short, single-line scoring shot names.');
+      const normalized=extra.map(shot=>shot.trim().replace(/\s+/g,' ').toLocaleLowerCase());
+      if(new Set(normalized).size!==normalized.length)throw Error('Each additional scoring shot must be different.');
+      result.extra_shots=[...extra];
+    }
+    if(result.training_focus===true&&!result.expect&&!result.options&&!result.avoid)throw Error('Add what to expect, a scoring option or what to avoid before making this a training focus.');
+    return result;
+  });
   if(matchups.some(row=>!row.bowler))throw Error('Add a name or description for each bowler.');
   const fielders=rows('fielders',8).map(row=>{
     const result={id:id(row),name:demoMatchPreparationText(row.name,100,'Fielder'),tags:row.tags??[],note:demoMatchPreparationText(row.note,200,'Fielder note')};
@@ -19761,18 +20065,19 @@ function demoSeedMatchPreparations(){
   const now=fixtureNow(),base={player_id:'player-alex',club_id:club.id,revision:1,created_at:now,updated_at:now};
   fixtureRows.match_preparations.push({...base,id:'9ad7c44e-01fd-4e65-8d55-28c39d705ea1',match_id:null,status:'planned',match_date:fixtureDay(3),format_key:'limited_overs',opposition:'Riverside Example CC',locked_at:null,
     preparation:{focus_note:'Read the ball, trust my scoring options.',matchups:[
-      {id:'9ad7c44e-01fd-4e65-8d55-28c39d705eb1',bowler:'Robin — opening bowler',expect:'Right-arm seam; moves it away.',options:'Straight drive when full; controlled pull when short.',avoid:'Reaching for a drive outside off.'},
-      {id:'9ad7c44e-01fd-4e65-8d55-28c39d705eb2',bowler:'Jamie — left-arm spin',expect:'Floats it up; changes pace.',options:'Use the single to long-on; use my feet to the right length.',avoid:'Deciding on the big shot before reading the ball.'}],
+      {id:'9ad7c44e-01fd-4e65-8d55-28c39d705eb1',bowler:'Robin — opening bowler',expect:'Right-arm seam; moves it away.',options:'Straight drive when full; controlled pull when short.',avoid:'Reaching for a drive outside off.',training_focus:true},
+      {id:'9ad7c44e-01fd-4e65-8d55-28c39d705eb2',bowler:'Jamie — left-arm spin',expect:'Floats it up; changes pace.',options:'Use the single to long-on; use my feet to the right length.',avoid:'Deciding on the big shot before reading the ball.',training_focus:false}],
       fielders:[{id:'9ad7c44e-01fd-4e65-8d55-28c39d705ec1',name:'Drew at cover',tags:['quick_pickup','strong_arm'],note:'Be clear on the single.'}]},review:{matchups:[]},personal_contest:{bowler:'Robin',result:null}});
   fixtureRows.match_preparations.push({...base,id:'9ad7c44e-01fd-4e65-8d55-28c39d705ea2',match_id:'alex-quick',status:'played',match_date:fixtureDay(-1),format_key:'t20',opposition:'Bay Example CC',locked_at:now,
-    preparation:{focus_note:'Keep a single available when my boundary ball is not there.',matchups:[{id:'9ad7c44e-01fd-4e65-8d55-28c39d705eb3',bowler:'Morgan — off-spin',expect:'Flat and straight with cover back.',options:'Push to long-on for one; punish the short ball.',avoid:'Forcing a lofted shot after dot balls.'}],fielders:[]},
+    preparation:{focus_note:'Keep a single available when my boundary ball is not there.',matchups:[{id:'9ad7c44e-01fd-4e65-8d55-28c39d705eb3',bowler:'Morgan — off-spin',expect:'Flat and straight with cover back.',options:'Push to long-on for one; punish the short ball.',avoid:'Forcing a lofted shot after dot balls.',training_focus:true}],fielders:[]},
     review:{matchups:[{id:'9ad7c44e-01fd-4e65-8d55-28c39d705eb3',decision:'adapted',note:'They brought long-on up, so I used the gap at cover.'}]},personal_contest:{bowler:'Morgan',result:'no'}});
 }
 const demoPreMatchPreparationRpc=window.__fixtureRpc;
 window.__fixtureRpc=async(name,args={})=>{
-  if(!['get_my_match_preparations','save_my_match_preparation'].includes(name))return demoPreMatchPreparationRpc(name,args);
+  if(!['get_my_match_preparations','save_my_match_preparation','get_player_match_training_focus'].includes(name))return demoPreMatchPreparationRpc(name,args);
   const ok=data=>({data:fixtureClone(data),error:null});
   try{
+    if(name==='get_player_match_training_focus')return ok(demoPlayerMatchTrainingFocus(args.p_player_id));
     const player=demoMatchPreparationOwner(args.p_club_id),userId=session.user.id;
     const all=fixtureRows.match_preparations??=[];
     if(name==='get_my_match_preparations')return ok({player_id:player.id,preparations:all.filter(p=>p.player_id===player.id&&p.club_id===club.id)});
@@ -19884,7 +20189,7 @@ async function demoNavigate(key,{reset=false}={}){
     if(reset){demoSeedClub();myInningsCache=null;myInningsState={scope:'',season:null,format:'',openId:null,editId:null};}else fixtureResetGlobals();
     const stage=demoStages.find(s=>s.key===key)||demoStages[0];demoCurrentStage=stage.key;
     demoSetPreparation(!!stage.preparing);
-    if(stage.key==='match_preparation'){demoSeedMatchPreparations();myInningsCache=null;}
+    if(['match_preparation','training','training_preparation','feedback'].includes(stage.key)){demoSeedMatchPreparations();myInningsCache=null;}
     document.querySelectorAll('dialog').forEach(dialog=>dialog.remove());
     document.getElementById('demoStage').value=stage.key;
     const stageURL=new URL(location.href);stageURL.searchParams.set('stage',stage.key);history.replaceState(history.state,'',stageURL.pathname+stageURL.search+stageURL.hash);
