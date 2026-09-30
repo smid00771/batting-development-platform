@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.36 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.37 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.36';
+const APP_UI_VERSION='0.8.62.37';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -6792,7 +6792,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Make a useful match-up",
-        "body": "Add a bowler’s name or a description such as “left-arm opener”, what to expect, your scoring options and what to watch out for. Use brief cues you can remember. Draw on your Player Plan where helpful, and adapt to the ball, field and match situation. You do not need a plan for every bowler."
+        "body": "Add a bowler and what to expect. Choose individual scoring-option buttons from your saved Player Plan: trusted shots plus relevant scoring choices for this format. Resets and danger answers are not offered. Select more than one if useful, and add a short cue or another option in the text field. This does not change your Player Plan or confirm what you have practised. Keep cues brief and adapt to the ball and situation."
       },
       {
         "title": "Note fielders and an optional personal contest",
@@ -13535,6 +13535,7 @@ let howWeTrainRenderSequence=0;
 let myInningsState={scope:'',season:null,format:'',openId:null,editId:null};
 let myInningsCache=null;
 let myInningsSequence=0;
+const preparationScoringState=new WeakMap();
 function ensureMyInningsState(){
   const scope=`${club?.id||''}:${session?.user?.id||''}`;
   if(myInningsState.scope!==scope){myInningsState={scope,season:null,format:'',openId:null,editId:null};myInningsCache=null;}
@@ -13571,7 +13572,7 @@ function mergeMyInnings(matches,preparations){
 function myInningsStyles(){return `<style>
   .innings-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}.innings-heading h1{margin:6px 0}
   .innings-filters{display:flex;align-items:end;flex-wrap:wrap;gap:16px}.innings-filters .field{margin:0;min-width:170px;flex:1}.innings-count{padding:12px 0;color:var(--muted)}
-  .innings-table{width:100%;border-collapse:collapse;table-layout:fixed}.innings-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 8px}.innings-table td{padding:10px 8px;border-top:1px solid #dce1ed;vertical-align:middle}.innings-table .innings-date{width:18%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-opposition{width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.innings-table .innings-format{width:15%}.innings-table .innings-score{width:19%;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-open{width:14%;text-align:right}.innings-table .btn{min-height:44px;padding:8px 12px}.innings-detail td{padding:12px 0 20px}.innings-detail .development-match-card{margin:0}.innings-empty{padding:28px 8px}.innings-reflection-options,.innings-prep-section{margin:16px 0;border:1px solid #dce1ed;border-radius:12px;padding:14px}.innings-reflection-options>summary,.innings-prep-section>summary{cursor:pointer;font-weight:700;min-height:32px}.innings-prep-card{border:1px solid #dce1ed;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-card h3{margin:4px 0 12px}.innings-prep-card .field{margin:10px 0}.innings-prep-card .btnrow,.innings-prep-section .btnrow{flex-wrap:wrap}.innings-prep-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.innings-prep-summary{background:#f7f8fc;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-summary dl{margin:0}.innings-prep-summary dt{font-weight:700;margin-top:10px}.innings-prep-summary dd{margin:4px 0 10px;white-space:pre-wrap}.innings-prep-tags{display:flex;flex-wrap:wrap;gap:10px}.innings-prep-tags label{display:flex;align-items:center;gap:7px;min-height:44px}.innings-prep-tags input{width:auto}.innings-prep-card input,.innings-prep-card textarea{max-width:100%;box-sizing:border-box}.innings-prep-card [hidden]{display:none!important}.innings-prep-private{font-size:12px;color:var(--muted)}.innings-reuse{margin:12px 0}.innings-edit-actions{margin-bottom:12px;flex-wrap:wrap}
+  .innings-table{width:100%;border-collapse:collapse;table-layout:fixed}.innings-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 8px}.innings-table td{padding:10px 8px;border-top:1px solid #dce1ed;vertical-align:middle}.innings-table .innings-date{width:18%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-opposition{width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.innings-table .innings-format{width:15%}.innings-table .innings-score{width:19%;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.innings-table .innings-open{width:14%;text-align:right}.innings-table .btn{min-height:44px;padding:8px 12px}.innings-detail td{padding:12px 0 20px}.innings-detail .development-match-card{margin:0}.innings-empty{padding:28px 8px}.innings-reflection-options,.innings-prep-section{margin:16px 0;border:1px solid #dce1ed;border-radius:12px;padding:14px}.innings-reflection-options>summary,.innings-prep-section>summary{cursor:pointer;font-weight:700;min-height:32px}.innings-prep-card{border:1px solid #dce1ed;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-card h3{margin:4px 0 12px}.innings-prep-card .field{margin:10px 0}.innings-prep-card .btnrow,.innings-prep-section .btnrow{flex-wrap:wrap}.innings-prep-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.innings-prep-summary{background:#f7f8fc;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.innings-prep-summary dl{margin:0}.innings-prep-summary dt{font-weight:700;margin-top:10px}.innings-prep-summary dd{margin:4px 0 10px;white-space:pre-wrap}.innings-prep-tags{display:flex;flex-wrap:wrap;gap:10px}.innings-prep-tags label{display:flex;align-items:center;gap:7px;min-height:44px}.innings-prep-tags input{width:auto}.innings-prep-card input,.innings-prep-card textarea{max-width:100%;box-sizing:border-box}.innings-prep-card [hidden]{display:none!important}.innings-prep-private{font-size:12px;color:var(--muted)}.innings-scoring-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}.innings-scoring-buttons .btn{min-height:44px;white-space:normal;text-align:left}.innings-scoring-buttons .btn[aria-pressed="true"]{background:var(--primary,#26327c);color:#fff;border-color:var(--primary,#26327c)}.innings-scoring-group{font-size:12px;font-weight:700;margin:10px 0 4px}.innings-reuse{margin:12px 0}.innings-edit-actions{margin-bottom:12px;flex-wrap:wrap}
   @media(max-width:650px){.innings-table th{font-size:10px;padding:8px 3px}.innings-table td{font-size:12px;padding:8px 3px}.innings-table .innings-date{width:17%}.innings-table .innings-opposition{width:28%}.innings-table .innings-format{width:11%}.innings-table .innings-score{width:24%;font-size:11px}.innings-table .innings-open{width:20%}.innings-table .innings-open .btn{padding:8px;min-width:48px;font-size:12px}.innings-heading .btnrow{width:100%;flex-wrap:wrap}.innings-filters .field{min-width:120px}.innings-prep-grid{grid-template-columns:1fr}.innings-detail td{font-size:14px}.innings-prep-section{padding:12px}.innings-prep-card{padding:12px}.innings-table .innings-detail td{white-space:normal}}
 </style>`;}
 function inningsCompactDate(date,includeYear=false){const parts=String(date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return parts?`${Number(parts[3])}/${Number(parts[2])}${includeYear?'/'+parts[1].slice(-2):''}`:formatDateShort(date);}
@@ -13604,7 +13605,7 @@ function preparationUuid(){return globalThis.crypto.randomUUID();}
 function cloneMatchPreparation(record){
   return {preparation:{focus_note:record.preparation?.focus_note||'',matchups:(record.preparation?.matchups||[]).map(m=>({...m,id:preparationUuid()})),fielders:(record.preparation?.fielders||[]).map(f=>({...f,id:preparationUuid(),tags:[...(f.tags||[])]}))},personal_contest:{bowler:record.personal_contest?.bowler||'',result:null}};
 }
-function preparationMatchupFields(m={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-matchup="${esc(m.id)}"><div class="field"><label for="prep-${esc(m.id)}-bowler">Bowler <span>name or description</span></label><input id="prep-${esc(m.id)}-bowler" data-prep-field="bowler" maxlength="100" value="${esc(m.bowler||'')}" placeholder="e.g. Sam — opening bowler"></div><div class="field"><label for="prep-${esc(m.id)}-expect">What to expect <span>optional</span></label><input id="prep-${esc(m.id)}-expect" data-prep-field="expect" maxlength="200" value="${esc(m.expect||'')}" placeholder="Right-arm seam; moves it away"></div><div class="field"><label for="prep-${esc(m.id)}-options">My scoring options <span>optional</span></label><input id="prep-${esc(m.id)}-options" data-prep-field="options" maxlength="240" list="prepSavedAnswers" value="${esc(m.options||'')}" placeholder="Type or choose a saved Player Plan answer"></div><div class="field"><label for="prep-${esc(m.id)}-avoid">Watch out for <span>optional</span></label><input id="prep-${esc(m.id)}-avoid" data-prep-field="avoid" maxlength="200" value="${esc(m.avoid||'')}" placeholder="Reaching for the drive outside off"></div><button type="button" class="btn ghost" data-prep-remove>Remove bowler</button></article>`;}
+function preparationMatchupFields(m={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-matchup="${esc(m.id)}"><div class="field"><label for="prep-${esc(m.id)}-bowler">Bowler <span>name or description</span></label><input id="prep-${esc(m.id)}-bowler" data-prep-field="bowler" maxlength="100" value="${esc(m.bowler||'')}" placeholder="e.g. Sam — opening bowler"></div><div class="field"><label for="prep-${esc(m.id)}-expect">What to expect <span>optional</span></label><input id="prep-${esc(m.id)}-expect" data-prep-field="expect" maxlength="200" value="${esc(m.expect||'')}" placeholder="Right-arm seam; moves it away"></div><div class="field"><label id="prep-${esc(m.id)}-scoring-label">My scoring options <span>optional</span></label><div data-prep-scoring-choices role="group" aria-labelledby="prep-${esc(m.id)}-scoring-label"><p class="help">Loading your saved scoring options…</p></div><label for="prep-${esc(m.id)}-options">Selected options / short cue</label><textarea id="prep-${esc(m.id)}-options" data-prep-field="options" maxlength="240" rows="2" placeholder="Choose above, or add a short cue or another option">${esc(m.options||'')}</textarea><p class="help">Buttons show individual options saved in your Player Plan, not evidence of practice. Choosing or typing here does not change your Player Plan.</p></div><div class="field"><label for="prep-${esc(m.id)}-avoid">Watch out for <span>optional</span></label><input id="prep-${esc(m.id)}-avoid" data-prep-field="avoid" maxlength="200" value="${esc(m.avoid||'')}" placeholder="Reaching for the drive outside off"></div><button type="button" class="btn ghost" data-prep-remove>Remove bowler</button></article>`;}
 function preparationFielderFields(f={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-fielder="${esc(f.id)}"><div class="field"><label for="prep-${esc(f.id)}-name">Fielder or position</label><input id="prep-${esc(f.id)}-name" data-prep-field="name" maxlength="100" value="${esc(f.name||'')}" placeholder="e.g. Alex at cover"></div><div class="innings-prep-tags">${Object.entries(MATCH_PREPARATION_FIELDER_TAGS).map(([key,label])=>`<label><input type="checkbox" data-prep-tag="${key}" ${(f.tags||[]).includes(key)?'checked':''}>${esc(label)}</label>`).join('')}</div><div class="field"><label for="prep-${esc(f.id)}-note">Short note <span>optional</span></label><input id="prep-${esc(f.id)}-note" data-prep-field="note" maxlength="200" value="${esc(f.note||'')}" placeholder="Be clear on the single"></div><button type="button" class="btn ghost" data-prep-remove>Remove fielder</button></article>`;}
 function renderPreparationForm(record=null){
   const p=record?.preparation||{},contest=record?.personal_contest||{},previous=(myInningsCache?.preparations||[]).filter(r=>r.id!==record?.id&&((r.preparation?.matchups||[]).length||(r.preparation?.fielders||[]).length||r.preparation?.focus_note||r.personal_contest?.bowler));
@@ -13613,7 +13614,7 @@ function renderPreparationForm(record=null){
     <div id="prepCurrentFocus"><p class="help">Loading your current focus…</p></div><div class="field"><label for="prepFocus">My focus for this match <span>optional</span></label><input id="prepFocus" maxlength="240" value="${esc(p.focus_note||'')}" placeholder="Use a current focus or add a short cue"></div>
     <details class="innings-prep-section" id="prepMatchupsSection"><summary>Match-ups · optional</summary><p class="help">One useful match-up is enough. Apply your Player Plan to this bowler, then adapt to the ball and situation.</p><div id="prepMatchups">${(p.matchups||[]).map(preparationMatchupFields).join('')}</div><button type="button" class="btn secondary" id="addPrepMatchup">Add a bowler</button></details>
     <details class="innings-prep-section" id="prepFieldersSection"><summary>Fielders to watch · optional</summary><div id="prepFielders">${(p.fielders||[]).map(preparationFielderFields).join('')}</div><button type="button" class="btn secondary" id="addPrepFielder">Add a fielder</button></details>
-    <details class="innings-prep-section"><summary>A personal contest · optional</summary><label for="prepContest">Who would you hate to get out to?</label><input id="prepContest" maxlength="100" value="${esc(contest.bowler||'')}" placeholder="A name or description"><p class="help">Just for you. Make the right decision for the team, whoever is bowling.</p></details><datalist id="prepSavedAnswers"></datalist><div class="btnrow"><button class="btn" id="saveMyReflection">Save preparation</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus" role="status"></span></div></section>`;
+    <details class="innings-prep-section"><summary>A personal contest · optional</summary><label for="prepContest">Who would you hate to get out to?</label><input id="prepContest" maxlength="100" value="${esc(contest.bowler||'')}" placeholder="A name or description"><p class="help">Just for you. Make the right decision for the team, whoever is bowling.</p></details><div class="btnrow"><button class="btn" id="saveMyReflection">Save preparation</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus" role="status"></span></div></section>`;
 }
 function renderPreparationReview(record){
   if(!record)return '';
@@ -13675,13 +13676,78 @@ function preparationValues(){
   const status=val('prepStatus');
   return {action:status==='planned'?'prepare':status,match_date:val('prepDate'),format_key:val('prepFormat'),opposition:val('prepOpposition'),preparation:{matchups,fielders,focus_note:val('prepFocus')},personal_contest:{bowler:val('prepContest'),result:null}};
 }
+// Read structured selected choices only. Whole answers, comments and focus_text
+// can contain unrelated prose and must never become scoring-option suggestions.
+function preparationScoringChoices(candidates,formatKey){
+  const groups={core:[],format:[],other:[]},seen={core:new Set(),format:new Set(),other:new Set()};
+  const scoringDimensions=new Set(['scoring_areas','strike_rotation','boundary_access']);
+  for(const candidate of Array.isArray(candidates)?candidates:[]){
+    if(candidate?.source_kind!=='plan')continue;
+    const snapshot=candidate.source_snapshot||{},section=snapshot.section,questionId=snapshot.question_id;
+    if(!['core','t20','limited_overs','long_form'].includes(section)||typeof questionId!=='string')continue;
+    const question=typeof playerPlanQuestionsFor==='function'?playerPlanQuestionsFor(section).find(q=>q.id===questionId):null;
+    if(!question||question.active===false||question.response_type==='text')continue;
+    if(section==='core'?questionId!=='core_strengths':!question||!scoringDimensions.has(question.source_dimension))continue;
+    const group=section==='core'?'core':section===formatKey?'format':'other';
+    for(const value of Array.isArray(snapshot.answer?.choices)?snapshot.answer.choices:[]){
+      if(typeof value!=='string')continue;
+      const label=value.trim(),key=label.toLocaleLowerCase();
+      if(!label||label.length>240||/[\r\n]/.test(label)||seen[group].has(key))continue;
+      seen[group].add(key);groups[group].push({label,section});
+    }
+  }
+  // Core comes first, then only additional choices for the selected format.
+  groups.format=groups.format.filter(row=>!seen.core.has(row.label.toLocaleLowerCase()));
+  const available=new Set([...groups.core,...groups.format].map(row=>row.label.toLocaleLowerCase()));
+  groups.other=groups.other.filter(row=>!available.has(row.label.toLocaleLowerCase()));
+  return groups;
+}
+function preparationHasScoringChoice(text,label){
+  const wanted=label.toLocaleLowerCase();
+  // Exact whole lines can be toggled. This does not infer shots from free prose
+  // or split older combined answers into new options; all other text is kept.
+  return String(text||'').split(/\r\n|\n|\r/).some(line=>line.trim().toLocaleLowerCase()===wanted);
+}
+function preparationToggleScoringChoice(text,label){
+  const raw=String(text||'');
+  if(preparationHasScoringChoice(raw,label))return raw.split(/\r\n|\n|\r/).filter(line=>line.trim().toLocaleLowerCase()!==label.toLocaleLowerCase()).join('\n');
+  return raw+(raw&&!/[\r\n]$/.test(raw)?'\n':'')+label;
+}
+function refreshPreparationScoringChoices(form=document.getElementById('myReflectionForm')){
+  if(!form||coachingActionSavePending)return;
+  const state=preparationScoringState.get(form)||{status:'loading'},formatKey=form.querySelector('#prepFormat')?.value||'limited_overs';
+  const groups=state.status==='ready'?preparationScoringChoices(state.candidates,formatKey):null;
+  form.querySelectorAll('[data-prep-matchup]').forEach(card=>{
+    const host=card.querySelector('[data-prep-scoring-choices]'),input=card.querySelector('[data-prep-field="options"]');
+    if(!host||!input)return;
+    if(state.status!=='ready'){host.innerHTML=`<p class="help">${state.status==='error'?'Saved scoring options could not be loaded. Your entered text is unchanged; choose Try loading again to retry.':'Loading your saved scoring options…'}</p>`;return;}
+    const retained=groups.other.filter(row=>preparationHasScoringChoice(input.value,row.label));
+    const renderGroup=(label,rows)=>rows.length?`<p class="innings-scoring-group">${esc(label)}</p><div class="innings-scoring-buttons">${rows.map(row=>`<button type="button" class="btn secondary" data-prep-scoring-choice="${esc(row.label)}" aria-pressed="${preparationHasScoringChoice(input.value,row.label)}">${esc(row.label)}</button>`).join('')}</div>`:'';
+    host.innerHTML=renderGroup('My trusted options · Core',groups.core)+renderGroup('My scoring options · '+formatLabel(formatKey),groups.format)+renderGroup('Kept from another format · remove if not useful here',retained)||'<p class="help">No individual scoring options are saved for Core or this format. You can still add a short cue below.</p>';
+    host.querySelectorAll('[data-prep-scoring-choice]').forEach(button=>button.onclick=()=>{
+      if(coachingActionSavePending||document.getElementById('myReflectionForm')!==form)return;
+      const updated=preparationToggleScoringChoice(input.value,button.dataset.prepScoringChoice),status=form.querySelector('#myReflectionStatus');
+      if(updated.length>240){if(status)status.textContent='Keep scoring options and the short cue within 240 characters. Shorten the text before adding another option.';input.focus();return;}
+      input.value=updated;if(status)status.textContent='';refreshPreparationScoringChoices(form);
+      const next=[...host.querySelectorAll('[data-prep-scoring-choice]')].find(b=>b.dataset.prepScoringChoice===button.dataset.prepScoringChoice);(next||input).focus();
+    });
+    input.oninput=()=>refreshPreparationScoringChoices(form);
+  });
+}
+function flushPreparationLoadedData(form){
+  const state=preparationScoringState.get(form);
+  if(!coachingActionSavePending&&state?.renderLoaded){const render=state.renderLoaded;state.renderLoaded=null;render();}
+}
 function wirePreparationRows(){
   const form=document.getElementById('myReflectionForm');
   form?.querySelectorAll('[data-prep-remove]').forEach(b=>b.onclick=()=>{if(coachingActionSavePending)return;b.closest('.innings-prep-card')?.remove();});
+  refreshPreparationScoringChoices(form);
 }
 function definiteInningsSaveFailure(error){return ['P0001','P0002','22023','23503','23505','23514','42501','40001','40P01'].includes(String(error?.code||''));}
 function bindPreparationForm(record,state,current){
   const form=document.getElementById('myReflectionForm'),status=document.getElementById('myReflectionStatus');let requestId=null,lastPayload=null,uncertainCommand=null;
+  preparationScoringState.set(form,{status:'loading',candidates:[]});
+  document.getElementById('prepFormat').onchange=()=>refreshPreparationScoringChoices(form);
   wirePreparationRows();
   for(const [button,host,selector,render,label] of [['addPrepMatchup','prepMatchups','[data-prep-matchup]',preparationMatchupFields,'bowlers'],['addPrepFielder','prepFielders','[data-prep-fielder]',preparationFielderFields,'fielders']])document.getElementById(button).onclick=()=>{if(coachingActionSavePending)return;const container=document.getElementById(host);if(container.querySelectorAll(selector).length>=8){status.textContent=`Keep this match to eight ${label} or fewer.`;return;}container.insertAdjacentHTML('beforeend',render());wirePreparationRows();const fields=container.querySelectorAll('input');fields[fields.length-1]?.focus();};
   document.getElementById('applyPrepReuse')?.addEventListener('click',()=>{
@@ -13708,18 +13774,24 @@ function bindPreparationForm(record,state,current){
       state.editId=null;state.openId=data.match_id||data.preparation_id;state.season=inningsSeason(values.match_date);state.format='';
       await renderMyInnings({message:values.action==='prepare'?'Preparation saved. Return to this entry after the game.':matchPreparationStatus(values.action)+' saved. No batting reflection needed.'});
     }catch(error){uncertainCommand=definiteInningsSaveFailure(error)?null:command;if(current()){if(uncertainCommand)feedbackEntryBaselines.set(form,'save-outcome-unconfirmed');status.textContent=(error?.message||'Could not confirm the save. Your preparation is still here; try again.')+(uncertainCommand?' Retry Save preparation to confirm the previous save before saving any further edits.':'');restore();}}
-    finally{coachingActionSavePending=false;}
+    finally{coachingActionSavePending=false;flushPreparationLoadedData(form);}
   };
 }
 async function loadPreparationFocus(current){
-  const host=document.getElementById('prepCurrentFocus'),scope=ensureMyInningsState().scope;
-  const stillHere=()=>current()&&scope===ensureMyInningsState().scope&&document.getElementById('prepCurrentFocus')===host;
-  const load=async()=>{try{const {data,error}=await supabase.rpc('get_player_current_focus',{p_player_id:myPlayer.id});if(!stillHere())return;if(error)throw error;
-    const active=Array.isArray(data?.active)?data.active:[];host.innerHTML=active.length?`<details class="innings-prep-section"><summary>Use a current focus</summary>${active.map((focus,i)=>`<p>${esc(weeklyLoopText(focus))}</p><button class="btn ghost" type="button" data-prep-use-focus="${i}">Use this focus</button>`).join('')}</details>`:'<p class="help">No current focus chosen. A short match cue is optional.</p>';
-    host.querySelectorAll('[data-prep-use-focus]').forEach(b=>b.onclick=()=>{if(coachingActionSavePending)return;const input=document.getElementById('prepFocus'),text=weeklyLoopText(active[Number(b.dataset.prepUseFocus)]).slice(0,240);if(input.value&&input.value!==text&&!confirm('Replace your match focus with this current focus?'))return;input.value=text;});
-    const candidates=(data?.candidates||[]).filter(c=>c.source_kind==='plan'&&String(c.focus_text||'').trim());
-    document.getElementById('prepSavedAnswers').innerHTML=candidates.map(c=>`<option value="${esc(weeklyLoopText(c).slice(0,240))}">${esc(weeklyLoopSourceLabel(c))}</option>`).join('');
-  }catch(error){if(stillHere()){host.innerHTML='<p class="help">Your current focus and saved answer suggestions could not be loaded. You can still write your preparation.</p><button class="btn ghost" type="button" id="retryPrepFocus">Try loading focus again</button>';document.getElementById('retryPrepFocus').onclick=load;}}};
+  const host=document.getElementById('prepCurrentFocus'),form=document.getElementById('myReflectionForm'),scope=ensureMyInningsState().scope;
+  const stillHere=()=>current()&&scope===ensureMyInningsState().scope&&document.getElementById('prepCurrentFocus')===host&&document.getElementById('myReflectionForm')===form;
+  const state=preparationScoringState.get(form)||{status:'loading',candidates:[]};preparationScoringState.set(form,state);
+  const renderWhenReady=render=>{state.renderLoaded=()=>{if(stillHere())render();};flushPreparationLoadedData(form);};
+  const load=async()=>{const sequence=(state.sequence||0)+1;state.sequence=sequence;state.status='loading';state.renderLoaded=null;refreshPreparationScoringChoices(form);try{
+    const {data,error}=await supabase.rpc('get_player_current_focus',{p_player_id:myPlayer.id});if(!stillHere()||state.sequence!==sequence)return;if(error)throw error;
+    if(!Array.isArray(data?.active)||!Array.isArray(data?.candidates))throw new Error('Saved plan choices could not be loaded.');
+    const active=data.active;state.status='ready';state.candidates=data.candidates;
+    renderWhenReady(()=>{
+      host.innerHTML=active.length?`<details class="innings-prep-section"><summary>Use a current focus</summary>${active.map((focus,i)=>`<p>${esc(weeklyLoopText(focus))}</p><button class="btn ghost" type="button" data-prep-use-focus="${i}">Use this focus</button>`).join('')}</details>`:'<p class="help">No current focus chosen. A short match cue is optional.</p>';
+      host.querySelectorAll('[data-prep-use-focus]').forEach(b=>b.onclick=()=>{if(coachingActionSavePending)return;const input=document.getElementById('prepFocus'),text=weeklyLoopText(active[Number(b.dataset.prepUseFocus)]).slice(0,240);if(input.value&&input.value!==text&&!confirm('Replace your match focus with this current focus?'))return;input.value=text;});
+      refreshPreparationScoringChoices(form);
+    });
+  }catch(error){if(stillHere()&&state.sequence===sequence){state.status='error';state.candidates=[];renderWhenReady(()=>{host.innerHTML='<p class="help">Your current focus and saved scoring options could not be loaded. You can still write your preparation.</p><button class="btn ghost" type="button" id="retryPrepFocus">Try loading again</button>';document.getElementById('retryPrepFocus').onclick=load;refreshPreparationScoringChoices(form);});}}};
   await load();
 }
 function wirePreparationReviews(){
