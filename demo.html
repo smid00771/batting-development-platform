@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.43 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.44 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.43';
+const APP_UI_VERSION='0.8.62.44';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -6788,7 +6788,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Prepare before a match",
-        "body": "Choose Prepare for a match early enough to guide training. Enter date, format, opposition and status. Match-ups is open directly below these details: start with Add a bowler. Use previous preparation is a secondary option below Match-ups. Fielders to watch and Personal contest remain optional. Tick Make this a training focus for this week on a useful match-up, then Save preparation to share its cues with permitted coaches. A training tick alone does not create a coaching alert."
+        "body": "Choose Prepare for a match early enough to guide training. Enter date, format, opposition and status. Match-ups is open directly below these details: start with Add a bowler. The copy option below Match-ups can reuse a previous entry. Fielders to watch and Personal contest remain optional. Tick Make this a training focus for this week on a useful match-up, then Save preparation to share its cues with permitted coaches. A training tick alone does not create a coaching alert."
       },
       {
         "title": "Choose scoring options deliberately",
@@ -6799,8 +6799,8 @@ const CLUB_BATTING_HELP = {
         "body": "Fielders to watch accepts names or positions, tags and notes. Personal contest optionally names someone you would hate to get out to. These and match-up reviews remain private. Selected training match-ups are shared with permitted coaches. An outside-plan conversation shares only the flagged bowler and shot names, each reason, training-focus choices, and date, format and opposition. Other preparation notes stay private."
       },
       {
-        "title": "Use previous preparation deliberately",
-        "body": "Below Match-ups, choose Use previous preparation and select an earlier entry when useful. Review the copied bowlers, shots, reasons, fielders and contest before saving. Training ticks are cleared; select them again if useful. The old date, innings result and reflections are not copied. Existing typed work is not silently replaced."
+        "title": "Copy previous match preparation",
+        "body": "Below Match-ups, open Playing the same team again? Copy the bowlers into this match preparation. Choose an earlier entry, then Copy into this preparation. This brings across bowlers, scoring shots, shot explanations, fielders and personal contest. Review them for this match. Date, result, reflections and the earlier focus note are not copied. Choose training focuses again. Existing typed work is not silently replaced."
       },
       {
         "title": "Turn preparation into your innings",
@@ -13647,7 +13647,7 @@ function renderPreparationForm(record=null){
   const p=record?.preparation||{},contest=record?.personal_contest||{},previous=(myInningsCache?.preparations||[]).filter(r=>r.id!==record?.id&&((r.preparation?.matchups||[]).length||(r.preparation?.fielders||[]).length||r.personal_contest?.bowler));
   return `<section class="card development-entry-form" id="myReflectionForm"><div class="section-label">My Innings · before the game</div><h2>${record?'Edit preparation':'Prepare for a match'}</h2><p class="help">Start early enough to shape your training this week. Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving an upcoming match with any selected added shot outside your saved Player Plan flags a Coach Conversation. It shares the bowler, shot, reason, training selection and match date, opposition and format—even if training focus is off. Changed outside-plan preparation brings the same conversation back for review. Other preparation stays private.</p>${renderPreparationConversation(record)}<div class="development-match-fields"><div class="field"><label for="prepDate">Date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div></div>
     <details class="innings-prep-section innings-matchups" id="prepMatchupsSection" open><summary>Match-ups <span class="help">· optional</span></summary><p class="help">One useful match-up is enough. Apply your Player Plan to this bowler, then adapt to the ball and situation.</p><div id="prepScoringStatus" role="status"><p class="help">Loading your saved scoring options…</p></div><div id="prepMatchups">${(p.matchups||[]).map(preparationMatchupFields).join('')}</div><button type="button" class="btn" id="addPrepMatchup">Add a bowler</button></details>
-    ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Use previous preparation</summary><p class="help">Choose an entry, then copy its preparation. Date, result, reflections and any earlier match focus note will not be copied. Choose any training focuses again for this match.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Use this preparation</button></details>`:''}
+    ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Playing the same team again? Copy the bowlers into this match preparation.</summary><p class="help">Choose a previous entry to bring across its bowlers, scoring shots, shot explanations, fielders to watch and personal contest. Review them for this match. Date, result, reflections and any earlier match focus note will not be copied. Choose any training focuses again for this match.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Copy into this preparation</button></details>`:''}
     <details class="innings-prep-section" id="prepFieldersSection"><summary>Fielders to watch · optional</summary><div id="prepFielders">${(p.fielders||[]).map(preparationFielderFields).join('')}</div><button type="button" class="btn secondary" id="addPrepFielder">Add a fielder</button></details>
     <details class="innings-prep-section"><summary>A personal contest · optional</summary><label for="prepContest">Who would you hate to get out to?</label><input id="prepContest" maxlength="100" value="${esc(contest.bowler||'')}" placeholder="A name or description"><p class="help">Just for you. Make the right decision for the team, whoever is bowling.</p></details><input type="hidden" data-prep-legacy-focus value="${esc(p.focus_note||'')}"><div class="btnrow"><button class="btn" id="saveMyReflection">Save preparation</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus" role="status"></span></div></section>`;
 }
