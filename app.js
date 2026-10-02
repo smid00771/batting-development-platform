@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.54 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.56 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.55';
+const APP_UI_VERSION='0.8.62.56';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3662,11 +3662,11 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Turn preparation into your innings",
-        "body": "Choose View, then Add my innings. Preparation, your innings and authorised staff observations use the same record. If a captain has already recorded it, it appears here without needing another innings. Use innings number to distinguish two innings against the same team on one date. Did not bat needs no invented reflection."
+        "body": "Choose View, then Add my innings. One preparation and one recorded innings for you on the same date, format and innings number appear together despite different opposition spelling. If several matches are possible, use Choose recorded innings, then Link existing innings. This saves the link before reflection; saving a uniquely matched innings also retains it. Original preparation stays unchanged. Use innings number for separate innings. Did not bat needs no invented reflection."
       },
       {
         "title": "Add an innings without preparing first",
-        "body": "Add an innings still works on its own. Date and format are required. Use the existing opposition and innings number to join that record. You can fill a blank score and correct a score you entered. A staff-recorded or official club score stays protected. Your own note, video and reflection stay editable. Staff retain their authorship; plan-related feedback waits for your independent reflection."
+        "body": "Add an innings still works on its own. Date and format are required. Capitalisation and extra spaces in the opposition name do not create another innings. If a possible existing innings has different wording, choose that innings rather than creating it again. You can fill a blank score and correct a score you entered; staff-recorded or official scores stay protected. Your note, video and reflection stay editable, while plan-related feedback waits for your independent reflection."
       },
       {
         "title": "Review only the bowlers you faced",
@@ -3690,7 +3690,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Read contributions on one shared innings",
-        "body": "Choose View on a compact row for your saved preparation, score, reflection and available coaching notes. Several staff members can contribute; each keeps their own authorship. A quick team review can be completed in more detail later. A Has no plan entry points you to your Player Plan. General notes remain immediately visible."
+        "body": "Choose View on a compact row for your saved preparation, score, reflection and available coaching notes. Several staff members can contribute; each keeps their own authorship. Once the preparation is linked, later contributions use that innings rather than its opposition spelling. Playing Group / grade filters the roster; it is not an innings identifier. A quick team review can be completed later. A Has no plan entry points you to your Player Plan. General notes remain immediately visible."
       }
     ]
   },
@@ -3855,7 +3855,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Add an observation",
-        "body": "In Players, open a player’s Coach Conversations and choose Add match observation or Add training observation. Team review beside Players provides a faster team table. Match entries with the same player, date, format, opposition and innings number share one innings. Choose an existing candidate if the opponent spelling differs. Staff need edit access; only the original author edits their contribution.",
+        "body": "In Players, open Coach Conversations and choose Add match observation or Add training observation. Team review beside Players offers a faster team table. Match entries use player, date, format, opposition and innings number. Opposition capitalisation and extra spaces are ignored; select an existing candidate if other wording differs. A unique matching preparation joins regardless of opposition spelling. Staff need edit access; each author edits only their contribution.",
         "target_tab": "$feedback",
         "focus": "coach_conversations"
       },
@@ -4209,7 +4209,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Continue the same innings",
-        "body": "A matching My Innings entry or Match Observation is reused. Different staff keep separate attributed assessments on that innings. When similar opposition text finds a possible match, select the existing innings explicitly. Saved reviews reopen stable records; editing does not create another team review or another innings. Comments, video and coaching follow-up details already added to your observation are retained."
+        "body": "Matching My Innings entries and Match Observations are reused. Opposition capitalisation and extra spaces are ignored; select an existing innings if other wording differs. A unique player preparation joins by player, date, format and innings number despite different opposition spelling. Playing Group / grade selects the roster, not a separate innings identity. Saved reviews reopen the same attributed assessments, keeping comments, video and follow-up details."
       },
       {
         "title": "Keep the player’s reflection independent",
@@ -10675,6 +10675,14 @@ const MATCH_PREPARATION_FIELDER_TAGS={quick_pickup:'Quick pickup',strong_arm:'St
 const MATCH_PREPARATION_DECISIONS={used:'Used my approach',adapted:'Adapted to the situation',away:'Went away from it',not_faced:'Didn’t face this bowler'};
 function matchPreparationStatus(status){return ({planned:'Upcoming',did_not_bat:'Did not bat',cancelled:'Match cancelled',played:'Played'})[status]||'Upcoming';}
 function preparationLinkedMatch(record){return record?.match_id||record?.resolved_match_id||null;}
+// Opposition is descriptive. The server resolves ownership and ambiguity; this
+// same-day suggestion must never use spelling to hide an existing innings.
+function sameInningsSlot(a,b){
+  return !!a&&!!b&&a.match_date===b.match_date&&a.format_key===b.format_key&&Number(a.innings_number||1)===Number(b.innings_number||1);
+}
+function inningsCandidateLabel(match){
+  return [match.opposition||'Opposition not recorded','innings '+Number(match.innings_number||1),match.participation_status==='did_not_bat'?'Did not bat':match.score_text||'Score not recorded'].join(' · ');
+}
 function bindCompletePlayerPlanButtons(host){
   host?.querySelectorAll('[data-complete-player-plan]').forEach(button=>button.onclick=async()=>{
     if(!isPlayerUser()||!confirmLeaveFeedbackEntry()||!await saveClubEditsBeforeNavigation())return;
@@ -10731,7 +10739,7 @@ function renderInningsRows(matches){
     const preparationOnly=m.preparation_only,dnb=m.participation_status==='did_not_bat',canPrepare=preparationOnly&&!m.missing_match;
     const score=preparationOfficialScore(prep)||(preparationOfficialStatus(prep)?matchPreparationStatus(preparationOfficialStatus(prep)):null)||(dnb?'Did not bat':preparationOnly?matchPreparationStatus(prep?.status):m.score_text||'—');
     return `<tr class="innings-row" data-innings-row="${esc(m.id)}"><td class="innings-date" title="${esc(formatDateShort(m.match_date))}">${esc(inningsCompactDate(m.match_date,state.season==='all'))}</td><td class="innings-opposition" title="${esc(m.opposition||'Opposition not recorded')}">${esc(m.opposition||'Not recorded')}${Number(m.innings_number||1)>1?' · innings '+esc(m.innings_number):''}</td><td class="innings-format" title="${esc(formatLabel(m.format_key))}">${esc(inningsCompactFormat(m.format_key))}</td><td class="innings-score" title="${esc(score)}">${esc(score)}</td><td class="innings-open"><button type="button" class="btn ghost" data-innings-open="${esc(m.id)}" aria-expanded="${open}" aria-controls="innings-detail-${esc(m.id)}">${open?'Close':'View'}</button></td></tr>
-    ${open?`<tr class="innings-detail" id="innings-detail-${esc(m.id)}"><td colspan="5"><div class="btnrow innings-edit-actions">${canPrepare?`<button class="btn secondary" data-preparation-edit="${esc(prep.id)}">Edit preparation</button>${prep.status==='planned'&&!['did_not_bat','cancelled'].includes(preparationOfficialStatus(prep))?`<button class="btn" data-preparation-record="${esc(prep.id)}">Add my innings</button>`:''}`:!preparationOnly&&!dnb?`<button class="btn secondary" data-innings-edit="${esc(m.id)}">Edit innings${m.player_reflection?' & reflection':''}</button>`:''}</div>${renderPreparationDetails(prep)}${preparationOnly?m.missing_match?'<p class="notice">The linked innings details could not be loaded. Refresh to try again.</p>':prep.status!=='planned'?`<p class="notice">${esc(score)}. No batting reflection needed. You can change the status in Edit preparation.</p>`:'':`<h2>After the game</h2>${renderDevelopmentMatchCard(m,{playerMode:true,showReflectionAction:false})}${dnb?'':renderWeeklyLoopShell('inningsFocus-'+m.id)}${locked&&!dnb?'<p class="help">Your score and notes are saved. Add the two reflection answers before comparing with plan-related coaching feedback.</p><button class="btn secondary" data-innings-edit="'+esc(m.id)+'">Add my reflection</button>':''}${visible.filter(f=>f.video||f.action_id).map(f=>`<div class="notice compact" style="margin-top:12px"><strong>${esc(f.author_name||'Coach / Captain')}</strong>${f.video?renderCoachingVideo(f.video):''}${f.action_id?`<button class="btn ghost" data-innings-conversation="${esc(f.action_id)}">Open Coach Conversation</button>`:''}</div>`).join('')}`}</td></tr>`:''}`;
+    ${open?`<tr class="innings-detail" id="innings-detail-${esc(m.id)}"><td colspan="5"><div class="btnrow innings-edit-actions">${canPrepare?`<button class="btn secondary" data-preparation-edit="${esc(prep.id)}">Edit preparation</button>${(prep.resolution_ambiguous||(prep.status==='planned'&&!['did_not_bat','cancelled'].includes(preparationOfficialStatus(prep))))?`<button class="btn" data-preparation-record="${esc(prep.id)}">${prep.resolution_ambiguous?'Choose recorded innings':'Add my innings'}</button>`:''}`:!preparationOnly&&!dnb?`<button class="btn secondary" data-innings-edit="${esc(m.id)}">Edit innings${m.player_reflection?' & reflection':''}</button>`:''}</div>${renderPreparationDetails(prep)}${preparationOnly?m.missing_match?'<p class="notice">The linked innings details could not be loaded. Refresh to try again.</p>':prep.status!=='planned'?`<p class="notice">${esc(score)}. No batting reflection needed. You can change the status in Edit preparation.</p>`:'':`<h2>After the game</h2>${renderDevelopmentMatchCard(m,{playerMode:true,showReflectionAction:false})}${dnb?'':renderWeeklyLoopShell('inningsFocus-'+m.id)}${locked&&!dnb?'<p class="help">Your score and notes are saved. Add the two reflection answers before comparing with plan-related coaching feedback.</p><button class="btn secondary" data-innings-edit="'+esc(m.id)+'">Add my reflection</button>':''}${visible.filter(f=>f.video||f.action_id).map(f=>`<div class="notice compact" style="margin-top:12px"><strong>${esc(f.author_name||'Coach / Captain')}</strong>${f.video?renderCoachingVideo(f.video):''}${f.action_id?`<button class="btn ghost" data-innings-conversation="${esc(f.action_id)}">Open Coach Conversation</button>`:''}</div>`).join('')}`}</td></tr>`:''}`;
   }).join('');
 }
 function preparationUuid(){return globalThis.crypto.randomUUID();}
@@ -10763,12 +10771,14 @@ function renderPreparationReview(record){
   return `<details class="innings-reflection-options" id="prepReviewPanel"><summary>Review my match-ups · optional</summary><p class="help">Compare your approach with what happened. Adapting to the situation can be the right decision. These answers are separate from your independent innings reflection below.</p>${matchups.map(m=>{const r=review.find(row=>row.id===m.id)||{};return `<article class="innings-prep-card" data-prep-review="${esc(m.id)}"><h3>${esc(m.bowler)}</h3>${m.expect?`<p><strong>Expected:</strong> ${esc(m.expect)}</p>`:''}${m.options?`<p><strong>My scoring options:</strong> ${esc(m.options)}</p>`:''}${m.avoid?`<p><strong>Watch out for:</strong> ${esc(m.avoid)}</p>`:''}<div data-prep-review-questions ${r.decision==='not_faced'?'hidden':''}>${radioChoiceHtml('prepReview-'+m.id,Object.entries(MATCH_PREPARATION_DECISIONS).map(([k,l])=>[k,l,'']),r.decision||'')}<div data-prep-review-note ${r.decision==='not_faced'?'hidden':''}><label for="prep-review-note-${esc(m.id)}">Short note <span>optional</span></label><textarea id="prep-review-note-${esc(m.id)}" data-prep-review-text maxlength="300" rows="2">${esc(r.note||'')}</textarea></div></div><p data-prep-not-faced ${r.decision==='not_faced'?'':'hidden'}>Didn’t face this bowler — no match-up reflection needed.</p><button class="btn ghost" type="button" data-prep-clear-review>Clear answer / undo</button></article>`;}).join('')}${contest.bowler?`<article class="innings-prep-card"><h3>You named ${esc(contest.bowler)}</h3><p>Did they get you out?</p>${radioChoiceHtml('prepContestResult',[['yes','Yes',''],['no','No',''],['not_faced','Didn’t face them','']],contest.result||'')}<button class="btn ghost" type="button" id="clearPrepContest">Clear answer</button></article>`:''}</details>`;
 }
 function renderPreparedInningsForm(record,match=null){
-  const seed={...(match||{match_date:record.match_date,format_key:record.format_key,opposition:record.opposition,innings_number:record.innings_number||1}),...(record.call_entry?{match_date:record.match_date,format_key:record.format_key,opposition:record.opposition,innings_number:record.innings_number||1}:{}),...(preparationOfficialScore(record)?{score_text:preparationOfficialScore(record)}:{})};
+  // Keep the actual innings' identity, notes and permissions. A published
+  // prediction retains its original preparation wording separately.
+  const seed={...(match||{match_date:record.match_date,format_key:record.format_key,opposition:record.opposition,innings_number:record.innings_number||1}),...(preparationOfficialScore(record)?{score_text:preparationOfficialScore(record)}:{})};
   let html=renderMyReflectionForm(seed,{innings:true});
   if(preparationOfficialScore(record))html=html.replace('id="reflectionScore"','id="reflectionScore" readonly aria-describedby="officialInningsScore"').replace('<div class="development-match-fields">','<p class="notice compact" id="officialInningsScore">Your authorised Make your prediction score is shown here. Ask an authorised scorer to correct it. Your own notes and independent reflection stay editable.</p><div class="development-match-fields">');
-  if(record.call_entry)html=html.replace('id="reflectionInningsNumber"','id="reflectionInningsNumber" readonly').replace('id="reflectionDate"','id="reflectionDate" readonly').replace('id="reflectionFormat"','id="reflectionFormat" disabled').replace('id="reflectionOpposition"','id="reflectionOpposition" readonly').replace('<div class="development-match-fields">','<p class="help" id="publishedInningsIdentity">The date, opposition and format belong to your published Make your prediction entry and stay fixed. Your innings notes and reflection remain yours to edit.</p><div class="development-match-fields">');
+  if(record.call_entry)html=html.replace('id="reflectionInningsNumber"','id="reflectionInningsNumber" readonly').replace('id="reflectionDate"','id="reflectionDate" readonly').replace('id="reflectionFormat"','id="reflectionFormat" disabled').replace('id="reflectionOpposition"','id="reflectionOpposition" readonly').replace('<div class="development-match-fields">','<p class="help" id="publishedInningsIdentity">'+(match?'The recorded innings details are kept here. Your original preparation and published prediction remain unchanged.':'The date, opposition and format belong to your published Make your prediction entry and stay fixed.')+' Your innings notes and reflection remain yours to edit.</p><div class="development-match-fields">');
   if(!match)html=html.replace('Update this innings','Add my innings');
-  return html.replace('<div class="development-match-fields">',`${renderPreparationDetails(record)}<div class="development-match-fields">`).replace('<details class="innings-reflection-options" id="inningsReflectionPanel"',`${renderPreparationReview(record)}<details class="innings-reflection-options" id="inningsReflectionPanel"`);
+  return html.replace('<div class="development-match-fields">',`${!match&&record.resolution_ambiguous?'<div id="preparationLinkChoice" role="status"></div>':''}${renderPreparationDetails(record)}<div class="development-match-fields">`).replace('<details class="innings-reflection-options" id="inningsReflectionPanel"',`${renderPreparationReview(record)}<details class="innings-reflection-options" id="inningsReflectionPanel"`);
 }
 function preparationEditContext(){
   const state=ensureMyInningsState(),edit=state.editId||'',records=myInningsCache?.preparations||[],matches=myInningsCache?.matches||[];
@@ -11036,15 +11046,39 @@ function expectedInningsSnapshot(values,original){
   return inningsCommittedSnapshot({...values,player_video:values.video_url?{url:values.video_url,note:values.video_note}:null,player_reflection:values.reflection||original?.player_reflection||null});
 }
 function bindMyInningsSave(match,state,current,preparation=null){
-  const form=document.getElementById('myReflectionForm');let requestId=null,lastPayload=null,separateConfirmed=null,uncertainCommand=null,saveConflict=null;
+  const form=document.getElementById('myReflectionForm');let requestId=null,lastPayload=null,uncertainCommand=null,saveConflict=null,pendingLinkCommand=null;
   const showSaveConflict=status=>{
     status.innerHTML='<div class="notice"><p>Your saved innings changed elsewhere after the previous save. Your current edits are still here. Copy any text you want to keep, then reload and review the latest saved version before saving.</p><button class="btn secondary" type="button" id="reloadSavedInnings">Reload saved innings</button></div>';
     document.getElementById('reloadSavedInnings').onclick=async()=>{if(coachingActionSavePending||!current()||!confirm('Reload the saved innings? This replaces the unsaved edits currently in this form. Choose Cancel to keep them here.'))return;state.editId=saveConflict.matchId;state.openId=null;await renderMyInnings();};
+  };
+  const showExistingInnings=(candidates,values)=>{
+    const status=document.getElementById('myReflectionStatus'),host=document.getElementById('preparationLinkChoice')||status;
+    host.innerHTML=`<div class="notice"><p>An innings is already recorded for this date, format and innings number. Opposition spelling does not create a separate innings. ${preparation?'Choose the correct innings to keep this preparation with its saved notes.':'Open the correct innings to add your notes.'} Only record another innings if you actually batted again.</p>${candidates.map(m=>{const linked=(myInningsCache.preparations||[]).some(p=>preparationLinkedMatch(p)===m.id&&p.id!==preparation?.id);return `<button type="button" class="btn ghost" data-existing-innings="${esc(m.id)}" ${preparation&&linked?'disabled':''}>${preparation?'Link existing innings':'Open existing innings'} · ${esc(inningsCandidateLabel(m))}${preparation&&linked?' · already linked to another preparation':''}</button>`;}).join('')}<button type="button" class="btn secondary" id="saveSeparateInnings">Save as a separate innings</button></div>`;
+    host.querySelectorAll('[data-existing-innings]').forEach(b=>b.onclick=async()=>{
+      if(coachingActionSavePending)return;
+      if(!preparation)return openMyInnings({matchId:b.dataset.existingInnings,edit:true});
+      const existing=myInningsCache.matches.find(m=>m.id===b.dataset.existingInnings);if(!existing||(myInningsCache.preparations||[]).some(p=>preparationLinkedMatch(p)===existing.id&&p.id!==preparation.id))return;
+      if(pendingLinkCommand&&pendingLinkCommand.p_values.match_id!==existing.id){status.textContent='The previous link could not be confirmed. Retry that same innings before choosing a different one.';return;}
+      if(!pendingLinkCommand&&!confirm('Link this preparation to the recorded innings? Its saved notes, video and reflection will be kept. Unsaved post-game text in this form will be replaced.'))return;
+      const command=pendingLinkCommand||{p_club_id:club.id,p_preparation_id:preparation.id,p_expected_revision:preparation.revision,p_request_id:preparationUuid(),p_values:{action:'link',match_id:existing.id}};
+      coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Linking preparation…';
+      try{
+        const {data,error}=await supabase.rpc('save_my_match_preparation',command);if(error)throw error;
+        if(data?.match_id!==existing.id||data?.preparation_id!==preparation.id||!Number.isInteger(data.revision))throw new Error('Could not confirm the link. Retry the same innings.');
+        pendingLinkCommand=null;feedbackEntryBaselines.set(form,feedbackEntryValues(form));coachingActionSavePending=false;if(!current())return;
+        state.editId=existing.participation_status==='did_not_bat'?null:existing.id;state.openId=existing.id;
+        await renderMyInnings({message:'Preparation linked to the recorded innings. Saved notes, video and reflections have been kept.'});
+      }catch(error){pendingLinkCommand=definiteInningsSaveFailure(error)?null:command;if(current()){status.textContent=(error?.message||'Could not confirm the link.')+(pendingLinkCommand?' Retry the same innings to confirm the link.':'');if(pendingLinkCommand)feedbackEntryBaselines.set(form,'link-outcome-unconfirmed');restore();}}
+      finally{coachingActionSavePending=false;}
+
+    });
+    host.querySelector('#saveSeparateInnings').onclick=()=>{const used=(myInningsCache?.matches||[]).filter(m=>m.match_date===values.match_date&&m.format_key===values.format_key).map(m=>Number(m.innings_number||1));const next=Math.max(...used,0)+1;if(next>10){status.textContent='Ten innings are already recorded for these match details. Open the appropriate existing innings.';return;}document.getElementById('reflectionInningsNumber').value=String(next);return document.getElementById('saveMyReflection').onclick();};
   };
   document.getElementById('saveMyReflection').onclick=async()=>{
     if(coachingActionSavePending||!current()||!confirmLeaveWeeklyLoop())return;
     const status=document.getElementById('myReflectionStatus');
     if(saveConflict){showSaveConflict(status);return;}
+    if(pendingLinkCommand){status.textContent='Retry the selected existing innings to confirm its link before saving other changes.';return;}
     const batting=document.querySelector('input[name="myBattingToPlan"]:checked')?.value,dismissal=document.querySelector('input[name="myDismissalClass"]:checked')?.value;
     const extra={main_issue:val('reflectionMainIssue')||null,next_training_focus:val('reflectionNextFocus'),note:val('reflectionNote')};
     if((batting||dismissal||Object.values(extra).some(Boolean))&&(!batting||!dismissal)){status.textContent='Choose both reflection answers to save a reflection. For a quick innings entry, leave the reflection section blank.';document.getElementById('inningsReflectionPanel').open=true;return;}
@@ -11052,23 +11086,8 @@ function bindMyInningsSave(match,state,current,preparation=null){
     if(!val('reflectionDate')){status.textContent='Choose the match date.';return;}
     const values={match_date:val('reflectionDate'),format_key:val('reflectionFormat'),opposition:val('reflectionOpposition'),innings_number:Number(val('reflectionInningsNumber')||1),score_text:val('reflectionScore'),player_note:val('reflectionDismissal'),...video,reflection:batting&&dismissal?{batting_to_plan:batting,dismissal_classification:dismissal,...extra}:null};
     if(!Number.isInteger(values.innings_number)||values.innings_number<1||values.innings_number>10){status.textContent='Choose an innings number from 1 to 10.';return;}
-    const candidateKey=JSON.stringify([values.match_date,values.format_key,values.opposition.trim().toLowerCase(),values.innings_number]);
-    const candidates=!match?(myInningsCache?.matches||[]).filter(m=>m.match_date===values.match_date&&m.format_key===values.format_key&&String(m.opposition||'').trim().toLowerCase()===values.opposition.trim().toLowerCase()&&Number(m.innings_number||1)===values.innings_number):[];
-    if(candidates.length&&separateConfirmed!==candidateKey){
-      status.innerHTML=`<div class="notice"><p>An innings with these match details is already recorded. ${preparation?'Choose one to review its saved notes before linking this preparation':'Open it to add your notes'}, or save a separate innings if you batted twice.</p>${candidates.map(m=>{const linked=(myInningsCache.preparations||[]).some(p=>preparationLinkedMatch(p)===m.id&&p.id!==preparation?.id);return `<button type="button" class="btn ghost" data-existing-innings="${esc(m.id)}" ${preparation&&linked?'disabled':''}>${preparation?'Link existing innings':'Open existing innings'}${m.score_text?' · '+esc(m.score_text):''}${preparation&&linked?' · already linked':''}</button>`;}).join('')}<button type="button" class="btn secondary" id="saveSeparateInnings">Save as a separate innings</button></div>`;
-      status.querySelectorAll('[data-existing-innings]').forEach(b=>b.onclick=async()=>{
-        if(coachingActionSavePending)return;
-        if(!preparation)return openMyInnings({matchId:b.dataset.existingInnings,edit:true});
-        const existing=myInningsCache.matches.find(m=>m.id===b.dataset.existingInnings);if(!existing||(myInningsCache.preparations||[]).some(p=>preparationLinkedMatch(p)===existing.id&&p.id!==preparation.id))return;
-        if(!confirm('Load this innings’ saved notes, video and reflection before linking? Unsaved post-game text in this form will be replaced. Your preparation stays as saved.'))return;
-        const replacement=document.createElement('div');replacement.innerHTML=renderPreparedInningsForm(preparation,existing);form.replaceWith(replacement.querySelector('#myReflectionForm'));const next=document.getElementById('myReflectionForm');wireQuickChoices(next);wirePreparationReviews();captureFeedbackEntryBaseline();
-        // Loading an existing innings is an explicit choice. Treat its pending link
-        // as unsaved even when none of the existing innings fields are changed.
-        feedbackEntryBaselines.set(next,'pending-preparation-link');
-        document.getElementById('cancelMyReflection').onclick=async()=>{if(!confirmLeaveFeedbackEntry())return;state.editId=null;await renderMyInnings({refresh:false});};bindMyInningsSave(existing,state,current,preparation);document.getElementById('myReflectionStatus').textContent='Existing innings loaded. Check the details, then Save innings to link your preparation.';
-      });
-      document.getElementById('saveSeparateInnings').onclick=()=>{const used=(myInningsCache?.matches||[]).filter(m=>m.match_date===values.match_date&&m.format_key===values.format_key&&String(m.opposition||'').trim().toLowerCase()===values.opposition.trim().toLowerCase()).map(m=>Number(m.innings_number||1));const next=Math.max(...used,0)+1;if(next>10){status.textContent='Ten innings are already recorded for these match details. Open the appropriate existing innings.';return;}document.getElementById('reflectionInningsNumber').value=String(next);separateConfirmed=null;return document.getElementById('saveMyReflection').onclick();};return;
-    }
+    const candidates=!match?(myInningsCache?.matches||[]).filter(m=>sameInningsSlot(m,values)):[];
+    if(candidates.length){showExistingInnings(candidates,values);return;}
     const args=preparation?{p_club_id:club.id,p_preparation_id:preparation.id,p_expected_revision:preparation.revision,p_values:{action:'played',innings_number:values.innings_number,...preparationReviewValues(preparation),innings:values,match_id:match?.id||null,expected_updated_at:match?.updated_at||null,expected_reflection_at:match?.player_reflection?.updated_at||null}}:{p_club_id:club.id,p_match_id:match?.id||null,p_expected_updated_at:match?.updated_at||null,p_expected_reflection_at:match?.player_reflection?.updated_at||null,p_values:values};
     const payload=JSON.stringify(args);if(payload!==lastPayload){requestId=preparationUuid();lastPayload=payload;}
     const command=uncertainCommand||{args,requestId,expectedSnapshot:expectedInningsSnapshot(values,match)};
@@ -11088,6 +11107,7 @@ function bindMyInningsSave(match,state,current,preparation=null){
     }catch(error){uncertainCommand=receiptConfirmed||!definiteInningsSaveFailure(error)?command:null;if(current()){if(uncertainCommand)feedbackEntryBaselines.set(form,'save-outcome-unconfirmed');status.textContent=(error?.message||'Could not confirm the save. Your entry is still here; try again.')+(uncertainCommand?' Retry Save innings to confirm the previous save before saving any further edits.':'');restore();}}
     finally{coachingActionSavePending=false;}
   };
+  if(!match&&preparation?.resolution_ambiguous){const candidates=(myInningsCache?.matches||[]).filter(m=>sameInningsSlot(m,preparation));if(candidates.length)showExistingInnings(candidates,preparation);}
 }
 // A saved match-up is the single source of these selected, temporary training cues.
 // This never changes ongoing focus state, practice evidence or the Player Plan.
