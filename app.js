@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.60 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.61 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.60';
+const APP_UI_VERSION='0.8.62.61';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3462,7 +3462,7 @@ const CLUB_BATTING_HELP = {
     "capability_key": "player_plan",
     "title": "Build and update your Player Plan",
     "purpose": "Choose your shots. Know when to commit.",
-    "short_explanation": "Build Core and the formats your club needs. Once complete, My Player Plan opens as your readable plan; choose Edit Player Plan to change answers.",
+    "short_explanation": "Build Core and the formats your club needs. Your completed plan opens as four expandable tiles: Core, T20, Limited Overs and Long Form. Use Edit Player Plan to change answers.",
     "target_tab": "$player_plan",
     "audience": [
       "admin",
@@ -3488,7 +3488,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Review and keep improving",
-        "body": "Once Core and your required formats are complete, My Player Plan opens as your saved answers together, without the questionnaire. Choose Edit Player Plan to change answers or complete another format, then Done editing to return. Changing a focus or reviewing an innings does not rewrite your plan. Add to My Player Plan in a match-up immediately saves a trusted shot to Core and preserves other answers; preparation still needs Save preparation. Adding a shot does not prove practice."
+        "body": "Once Core and required formats are complete, My Player Plan shows four collapsed tiles: Core, T20, Limited Overs and Long Form. Tap View to read a section; Close folds it away. Choose Edit Player Plan to change answers, then Done editing to return. Focus changes do not rewrite your plan. Add to My Player Plan in a match-up saves a trusted shot to Core and preserves other answers; preparation still needs Save preparation. Adding a shot does not prove practice."
       },
       {
         "title": "Train once the foundation is ready",
@@ -14411,7 +14411,7 @@ async function renderMyPlan(){
   if(planReadyToRead&&playerPlanEditScope!==planScope){
     document.getElementById('page').innerHTML=`${playerPlanJourneyStyles()}<section class="card player-plan-reader">
       <div class="plan-reader-tools"><span class="help">Required plan complete ✓</span><div><button type="button" class="btn secondary" id="editMyPlayerPlan">Edit Player Plan</button><button type="button" class="btn ghost" id="readPlanTraining">How We Train</button><button type="button" class="btn ghost" id="myPlanGuideLink">Help</button></div></div>
-      ${renderCuratedDraft(curate(rawForProgress),myPlayer.display_name,'My Player Plan')}
+      ${renderPlayerPlanTiles(curate(rawForProgress),myPlayer.display_name)}
     </section>`;
     document.getElementById('editMyPlayerPlan').onclick=()=>{playerPlanEditScope=planScope;renderMyPlan();};
     document.getElementById('readPlanTraining').onclick=()=>{currentTab='howwetrain';renderTab();};
@@ -14754,6 +14754,18 @@ function renderDraftPreview(){
     ? workflow.curated_draft
     : curate(rawAnswers());
   return renderCuratedDraft(curated);
+}
+
+function renderPlayerPlanTiles(curated,playerName){
+  const sections=[{key:'core',label:'Core',lines:curated.core||[]},...FORMATS.map(([key,label])=>({key,label,lines:curated.formats?.[key]?.lines||[]}))];
+  return `<style>
+    .plan-tile-plan{border:0!important;overflow:visible!important}.plan-tile-plan .plan-draft-head{border-radius:12px;margin-bottom:12px}.plan-tile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}.plan-section-tile{--tile-accent:#263579;--tile-tint:#f1f3ff;border:1px solid #dce2ef;border-left:4px solid var(--tile-accent);border-radius:12px;background:white;overflow:hidden;min-width:0;box-shadow:0 3px 10px #18275006}.plan-section-tile[data-plan-tile="t20"]{--tile-accent:#7751aa;--tile-tint:#f8f3ff}.plan-section-tile[data-plan-tile="limited_overs"]{--tile-accent:#117a79;--tile-tint:#edf9f7}.plan-section-tile[data-plan-tile="long_form"]{--tile-accent:#94611a;--tile-tint:#fff8ec}.plan-section-tile>summary{list-style:none;cursor:pointer;min-height:78px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--tile-tint);color:#142348}.plan-section-tile>summary::-webkit-details-marker{display:none}.plan-section-tile>summary strong{font-size:18px;line-height:1.25}.plan-tile-control{display:flex;align-items:center;gap:8px;color:var(--tile-accent);font-size:13px;font-weight:700;flex-shrink:0}.plan-tile-control svg{width:22px;height:22px;transition:transform .15s}.plan-tile-close{display:none}.plan-section-tile[open]>summary{border-bottom:1px solid #dce2ef}.plan-section-tile[open] .plan-tile-view{display:none}.plan-section-tile[open] .plan-tile-close{display:inline}.plan-section-tile[open] .plan-tile-control svg{transform:rotate(180deg)}.plan-section-tile>summary:hover{filter:brightness(.98)}.plan-section-tile>summary:focus-visible{outline:3px solid var(--tile-accent);outline-offset:-4px}.plan-tile-answers{padding:0 16px}.plan-tile-answer{padding:14px 0;overflow-wrap:anywhere}.plan-tile-answer+.plan-tile-answer{border-top:1px solid #e5e9f1}.plan-tile-question{margin:0 0 6px!important;color:#142348;font-size:13px!important;line-height:1.4;font-weight:700}.plan-tile-answer p{margin:0;color:#34435a;font-size:15px;line-height:1.55;white-space:pre-line}.plan-tile-empty{margin:0;padding:16px 0;color:#526078;font-size:14px}
+    @media(max-width:680px){.plan-tile-grid{grid-template-columns:1fr;gap:10px}.plan-section-tile>summary{min-height:70px;padding:14px}.plan-section-tile>summary strong{font-size:17px}.plan-tile-answers{padding:0 14px}}
+    @media(prefers-reduced-motion:reduce){.plan-tile-control svg{transition:none}}
+  </style><div class="plan-draft plan-tile-plan">
+    <div class="plan-draft-head"><div class="section-label" style="color:#fff;opacity:.75">My Player Plan</div><h2>${esc(playerName||'Player')}</h2></div>
+    <div class="plan-tile-grid">${sections.map(section=>`<details class="plan-section-tile" data-plan-tile="${esc(section.key)}"><summary><strong>${esc(section.label)}</strong><span class="plan-tile-control"><span class="plan-tile-view">View</span><span class="plan-tile-close">Close</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="plan-tile-answers">${section.lines.length?section.lines.map(line=>`<div class="plan-tile-answer"><h3 class="plan-tile-question">${esc(line.label)}</h3><p>${esc(line.value)}</p></div>`).join(''):'<p class="plan-tile-empty">No saved answers in this section yet.</p>'}</div></details>`).join('')}</div>
+  </div>`;
 }
 
 function renderCuratedDraft(curated,playerName=null,kicker='Draft Player Plan'){
