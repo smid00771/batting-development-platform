@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.67 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.68 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.67';
+const APP_UI_VERSION='0.8.62.68';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -2838,7 +2838,7 @@ function renderTab(){
   const arrived=()=>{
     if(scrollOnArrival&&`${club?.id}:${currentTab}`===route){
       const inningsFocus=currentTab==='innings'?(document.getElementById('myReflectionForm')||document.getElementById('innings-detail-'+ensureMyInningsState().openId)):null;
-      if(inningsFocus){inningsFocus.setAttribute('tabindex','-1');inningsFocus.focus({preventScroll:true});inningsFocus.scrollIntoView({block:'start'});bindWorkshopReturn();return;}
+      if(inningsFocus){if(inningsFocus.id==='myReflectionForm')revealMyInningsForm();else{inningsFocus.setAttribute('tabindex','-1');inningsFocus.focus({preventScroll:true});inningsFocus.scrollIntoView({block:'start'});}bindWorkshopReturn();return;}
       window.scrollTo?.({top:0,left:0,behavior:'instant'});
       const heading=document.getElementById('page')?.querySelector('h1')||document.getElementById('page')?.querySelector('h2');
       if(heading){heading.setAttribute('tabindex','-1');heading.focus({preventScroll:true});}
@@ -10903,12 +10903,27 @@ function renderPreparationDetails(record){
   const fielders=(prep.fielders||[]).map(f=>`<p><strong>${esc(f.name)}</strong>${f.tags?.length?' · '+f.tags.map(t=>esc(MATCH_PREPARATION_FIELDER_TAGS[t]||t)).join(' · '):''}${f.note?`<br>${esc(f.note)}`:''}</p>`).join('');
   return `<section class="innings-prep-details"><h2>Before the game</h2><p class="innings-prep-private">Your preparation${record.locked_at?' · kept as you recorded it before the innings':''}. Selected training match-ups and the outside-plan shots, reasons and training selections flagged in Coach Conversations are shared with coaches who can access your player records.</p><p class="help">${esc(formatDateShort(record.match_date))} · ${esc(record.opposition||'Opposition not recorded')} · ${esc(formatLabel(record.format_key))}</p>${renderPreparationConversation(record)}${record.call_entry?`<div class="notice compact"><strong>Make your prediction · ${esc(record.call_entry.predicted_runs)} predicted</strong><p>Entered on the club board. Predictions are revealed when the awards are released. ${preparationOfficialScore(record)?'Official result: '+esc(preparationOfficialScore(record))+'.':preparationOfficialStatus(record)?esc(matchPreparationStatus(preparationOfficialStatus(record)))+'. No batting reflection needed.':'Official result pending.'}</p></div>`:record.predicted_runs!=null?`<p><strong>My private score prediction:</strong> ${esc(record.predicted_runs)}</p>`:''}${prep.focus_note?`<div class="innings-prep-summary"><strong>My focus for this match</strong><p>${esc(prep.focus_note)}</p></div>`:''}${matchups?`<h3>Match-ups</h3>${matchups}`:''}${fielders?`<div class="innings-prep-summary"><h3>Fielders to watch</h3>${fielders}</div>`:''}${contest.bowler?`<div class="innings-prep-summary"><h3>Who would I hate to get out to?</h3><p>${esc(contest.bowler)}</p>${played&&contest.result?`<p>Did they get me out? <strong>${esc(({yes:'Yes',no:'No',not_faced:'Didn’t face them'})[contest.result]||'')}</strong></p>`:''}</div>`:''}</section>`;
 }
+function revealMyInningsForm(){
+  const form=document.getElementById('myReflectionForm');
+  if(!form)return;
+  requestAnimationFrame(()=>{
+    if(currentTab!=='innings'||document.getElementById('myReflectionForm')!==form)return;
+    // Keep the preparation heading below the sticky navigation, including the
+    // demo toolbar when present. Focus the heading without opening a keyboard.
+    const nav=document.querySelector('.nav'),style=nav&&typeof getComputedStyle==='function'?getComputedStyle(nav):null;
+    const offset=style&&['sticky','fixed'].includes(style.position)?Math.max(0,parseFloat(style.top)||0)+(nav.getBoundingClientRect?.().height||0):0;
+    form.style.scrollMarginTop=(offset+12)+'px';
+    form.scrollIntoView({block:'start',behavior:'instant'});
+    const heading=form.querySelector('h2');
+    if(heading){heading.setAttribute('tabindex','-1');heading.focus({preventScroll:true});}
+  });
+}
 async function openMyInnings({matchId=null,edit=false,add=false,prepare=false}={}){
   if(!canOpenClubTab('innings')||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
   const state=ensureMyInningsState();state.openId=matchId;state.editId=prepare?'prepare:new':add?'new':edit?matchId:null;
   if(matchId)state.season='all';
   currentTab='innings';await renderTab();
-  if(state.editId)requestAnimationFrame(()=>document.getElementById('myReflectionForm')?.scrollIntoView({block:'start'}));
+  if(state.editId)revealMyInningsForm();
 }
 function renderInningsRows(matches){
   const state=ensureMyInningsState();
@@ -10995,11 +11010,11 @@ async function renderMyInnings({refresh=true,message=''}={}){
   const change=async(fn)=>{if(!confirmLeaveFeedbackEntry())return false;fn();await renderMyInnings({refresh:false});return true;};
   document.getElementById('inningsBackHome').onclick=()=>openPlayerHomeAction({tab:'playerhome'});
   document.getElementById('myInningsHelp').onclick=()=>openClubBattingGuideTopic('my_innings');
-  for(const [id,value] of [['addMyInnings','new'],['prepareMyMatch','prepare:new']])document.getElementById(id).onclick=async()=>{if(await change(()=>{state.editId=value;state.openId=null;}))document.getElementById('myReflectionForm')?.scrollIntoView({block:'start'});};
+  for(const [id,value] of [['addMyInnings','new'],['prepareMyMatch','prepare:new']])document.getElementById(id).onclick=async()=>{if(await change(()=>{state.editId=value;state.openId=null;}))revealMyInningsForm();};
   document.getElementById('refreshMyInnings').onclick=()=>{if(confirmLeaveFeedbackEntry())return renderMyInnings();};
   for(const [id,key] of [['inningsSeason','season'],['inningsFormat','format']])document.getElementById(id).onchange=async e=>{const value=e.target.value;if(!await change(()=>{state[key]=value;state.editId=null;state.openId=null;}))e.target.value=state[key];};
   page.querySelectorAll('[data-innings-open]').forEach(b=>b.onclick=()=>change(()=>{state.openId=state.openId===b.dataset.inningsOpen?null:b.dataset.inningsOpen;state.editId=null;}));
-  for(const [attr,key,prefix] of [['data-innings-edit','inningsEdit',''],['data-preparation-edit','preparationEdit','prepare:'],['data-preparation-record','preparationRecord','record:']])page.querySelectorAll('['+attr+']').forEach(b=>b.onclick=async()=>{if(await change(()=>{state.editId=prefix+b.dataset[key];state.openId=null;}))document.getElementById('myReflectionForm')?.scrollIntoView({block:'start'});});
+  for(const [attr,key,prefix] of [['data-innings-edit','inningsEdit',''],['data-preparation-edit','preparationEdit','prepare:'],['data-preparation-record','preparationRecord','record:']])page.querySelectorAll('['+attr+']').forEach(b=>b.onclick=async()=>{if(await change(()=>{state.editId=prefix+b.dataset[key];state.openId=null;}))revealMyInningsForm();});
   page.querySelectorAll('[data-innings-conversation]').forEach(b=>b.onclick=async()=>{await openCoachConversations();if(currentTab!=='conversations')return;const card=document.querySelector(`[data-coaching-action-card="${b.dataset.inningsConversation}"]`);for(let d=card?.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;card?.scrollIntoView({block:'center'});watchVisibleCoachingNotes();});
   if(state.editId){wireQuickChoices(page);captureFeedbackEntryBaseline();document.getElementById('cancelMyReflection').onclick=()=>change(()=>{state.editId=null;});if(edit.planning){bindPreparationForm(edit.record,state,current);await Promise.all([loadPreparationFocus(current),loadPreparationCall(edit.record,current)]);}else{wirePreparationReviews();bindMyInningsSave(edit.match,state,current,edit.record);await mountWeeklyLoop(document.getElementById('inningsEditFocus'),{playerId:myPlayer.id,context:'innings',matchId:edit.match?.id||null,reviewReady:false,allowManage:false,readOnly:true,compact:true,title:'Your current focus · bring it into your reflection'});}}
   const opened=rows.find(m=>m.id===state.openId);if(opened&&!opened.preparation_only&&opened.participation_status!=='did_not_bat'&&current())await mountWeeklyLoop(document.getElementById('inningsFocus-'+opened.id),{playerId:myPlayer.id,context:'innings',matchId:opened.id,reviewReady:!!opened.player_reflection});
