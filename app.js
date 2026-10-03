@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.68 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.69 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.68';
+const APP_UI_VERSION='0.8.62.69';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -2229,7 +2229,11 @@ function accountMenuStyles(){
     .account-menu-action:hover{background:#f3f5fa}
     .account-menu-action.danger{color:#9f1d24}
     .account-menu-version{display:block;padding:8px 9px 2px;border-top:1px solid #edf0f6;font-size:11px;color:#667085}
-    @media(max-width:700px){.account-menu-popover{min-width:220px;max-width:min(280px,88vw)}}
+    @media(max-width:700px){
+      .header-actions{position:relative}
+      .header-actions .account-menu{position:static}
+      .header-actions .account-menu-popover{left:0;right:auto;min-width:0;width:min(280px,100%);max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}
+    }
   </style>`;
 }
 
