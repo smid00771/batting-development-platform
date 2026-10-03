@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.71 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.72 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.71';
+const APP_UI_VERSION='0.8.62.72';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3049,7 +3049,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Build and train individual plans",
-        "body": "After publication, each batter completes Core and the priority formats for their Playing Groups. Core plus a completed format unlocks that format’s personalised How We Train. Choose up to two current focuses from existing plan answers, coaching conversations or innings reflections.",
+        "body": "Player Home links to My Player Plan, How We Train, Prepare for a Match and My Innings. Its plan tile says Complete your Player Plan until required work is finished, then Edit your Player Plan. Each batter completes Core and the priority formats for their Playing Groups. Core plus a completed format unlocks personalised training for that format. Manage current focuses in How We Train.",
         "target_tab": "$player_plan"
       },
       {
@@ -3501,7 +3501,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Follow your next step",
-        "body": "Player Home and My Player Plan identify required or overdue formats from your Playing Groups. If unassigned, there is no group format priority. Ask Club Admin if your group membership is missing."
+        "body": "Choose Complete your Player Plan on Player Home to continue the required section, or open My Player Plan. Required or overdue formats come from your Playing Groups. If unassigned, there is no group format priority. Ask Club Admin if your group membership is missing."
       },
       {
         "title": "Complete formats in your own words",
@@ -3509,7 +3509,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Review and keep improving",
-        "body": "Once Core and required formats are complete, My Player Plan shows four collapsed tiles: Core, T20, Limited Overs and Long Form. Tap View to read a section; Close folds it away. Choose Edit Player Plan to change answers, then Done editing to return. Focus changes do not rewrite your plan. Add to My Player Plan in a match-up saves a trusted shot to Core and preserves other answers; preparation still needs Save preparation. Adding a shot does not prove practice."
+        "body": "Once Core and required formats are complete, My Player Plan shows four collapsed tiles: Core, T20, Limited Overs and Long Form. Tap View to read one; Close folds it away. Edit Player Plan changes answers; Done editing returns. Edit your Player Plan on Player Home opens the editor directly. Focus changes do not rewrite your plan. A trusted shot added from a match-up saves to Core but does not prove practice or complete unanswered questions. Save preparation separately."
       },
       {
         "title": "Train once the foundation is ready",
@@ -3524,7 +3524,7 @@ const CLUB_BATTING_HELP = {
     "capability_key": "current_focus",
     "title": "Choose and review your current focus",
     "purpose": "Keep the next useful practice priority in view.",
-    "short_explanation": "Choose up to two priorities from saved plan answers, coaching conversations or innings reflections. The same current focuses appear on Player Home, How We Train and innings review.",
+    "short_explanation": "Choose up to two priorities from saved plan answers, coaching conversations or innings reflections. Manage them in How We Train and use the same focuses during innings review.",
     "target_tab": "$training",
     "audience": [
       "admin",
@@ -3539,7 +3539,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Start with an existing record",
-        "body": "On Player Home or How We Train, choose Choose a focus or Add a second focus. Select a saved Player Plan answer, coaching conversation or your own innings reflection. The source fills in the wording for you to refine. You can have up to two current focuses in total, across all formats.",
+        "body": "In How We Train, choose Choose a focus or Add a second focus. Select a saved Player Plan answer, coaching conversation or your own innings reflection. The source fills in the wording for you to refine. You can have up to two current focuses in total, across all formats. Player Home links to How We Train rather than repeating these controls.",
         "target_tab": "$training"
       },
       {
@@ -3552,7 +3552,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Use the same focus through the week",
-        "body": "Your accepted focuses appear on Player Home, How We Train and innings review. Coaches with existing access can include them in Training preparation. Match preparation starts with bowler match-ups, without a separate focus field. A match-up marked for training appears separately in How We Train and is shared with coaches who can access you. It does not replace either of your ongoing current focuses."
+        "body": "Your accepted focuses appear in How We Train and innings review. Coaches with existing access can include them in Training preparation. Match preparation starts with bowler match-ups, without a separate focus field. A match-up marked for training appears separately in How We Train and is shared with coaches who can access you. It does not replace either of your ongoing current focuses."
       },
       {
         "title": "Keep working on this",
@@ -13940,20 +13940,19 @@ function playerHomeNextAction(raw,rollout,feedback,today=todayIso()){
 async function openPlayerHomeAction(action){
   if(!action||!canOpenClubTab(action.tab)||!await saveClubEditsBeforeNavigation())return;
   const clubId=club?.id;
+  if(action.tab==='myplan'&&action.edit)playerPlanEditScope=`${clubId}:${myPlayer?.id}`;
   if(action.section)builderSection=action.section;
   if(action.tab==='howwetrain')howWeTrainReflectionEditId=action.matchId||null;
   if(action.tab==='innings'){const state=ensureMyInningsState();state.editId=action.matchId||null;state.openId=action.matchId||null;if(action.matchId){state.season='all';state.format='';}}
   currentTab=action.tab;
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   await renderTab();
-  if(action.anchor&&club?.id===clubId&&currentTab===action.tab)requestAnimationFrame(()=>{const target=document.getElementById(action.anchor);for(let parent=target?.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;target?.scrollIntoView({behavior:'smooth',block:'start'});});
+  if(action.anchor&&club?.id===clubId&&currentTab===action.tab)requestAnimationFrame(()=>{const target=document.getElementById(action.anchor);if(target?.tagName==='DETAILS')target.open=true;for(let parent=target?.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;target?.scrollIntoView({behavior:'smooth',block:'start'});});
 }
 
 async function renderPlayerHome(){
   const page=document.getElementById('page');
-  const sequence=++playerHomeRenderSequence;
-  const clubId=club?.id;
-  const playerId=myPlayer?.id;
+  const sequence=++playerHomeRenderSequence,clubId=club?.id,playerId=myPlayer?.id;
   const stillCurrent=()=>sequence===playerHomeRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab==='playerhome'&&document.getElementById('page')===page;
   if(!workspacePlayerPlansPublished()){
     renderClubPublicationGate('Player Home');
@@ -13961,54 +13960,59 @@ async function renderPlayerHome(){
     return;
   }
   if(!myPlayer){
-    page.innerHTML='<section class="card"><div class="section-label">Player Home</div><h2>Your account needs a player profile.</h2><p>Ask the person coordinating Club Batting at your club to register you as a player. Your Player Plan and training will then appear here.</p></section>';
+    page.innerHTML='<section class="card"><div class="section-label">Player Home</div><h2>Your account needs a player profile.</h2><p>Ask the person coordinating Club Batting at your club to register you as a player.</p></section>';
     return;
   }
-  page.innerHTML='<div class="splash">Finding your next step…</div>';
-  const [rolloutResult,feedbackResult]=await Promise.allSettled([
-    supabase.rpc('get_my_player_plan_rollout',{p_club_id:clubId}),
-    loadDevelopmentFeedback(playerId)
-  ]);
-  if(!stillCurrent())return;
-  const rolloutOk=rolloutResult.status==='fulfilled'&&!rolloutResult.value.error;
-  const rollout=rolloutOk?rolloutResult.value.data||{}:{};
-  const feedbackOk=feedbackResult.status==='fulfilled';
-  const feedback=feedbackOk?feedbackResult.value:{matches:[],training_observations:[],external_training_evidence:[],coaching_actions:[],...(feedbackResult.reason?.sharedActions||{})};
-  myDevelopmentFeedback=feedbackOk?feedback:null;
-  const raw=localRaw||rawAnswers();
-  const plan=playerHomePlanState(raw,rollout);
-  const next=playerHomeNextAction(raw,rollout,feedback);
-  const loadNote=!rolloutOk||!feedbackOk||feedback.coaching_actions_error;
-  page.innerHTML=`${clubSetupStyles()}<section class="card club-home-next player-home-next">
-    <div class="section-label">Player Home · Your next step</div>
-    <h2>${esc(next.heading)}</h2>
-    <p>${esc(next.copy)}</p>
-    ${next.focus?`<div class="notice compact"><strong>${esc(next.focus)}</strong></div>`:''}
-    ${next.meta?`<p class="help">${esc(next.meta)}</p>`:''}
-    <div class="btnrow" style="margin-top:18px"><button class="btn" id="playerHomeNext">${esc(next.label)}</button></div>
-  </section>
-  ${loadNote?`<div class="notice compact" role="status" style="margin-top:14px">${!rolloutOk?'Your club’s required formats and due dates could not be checked. ':''}${!feedbackOk?'Your latest feedback could not be loaded. ':feedback.coaching_actions_error?'Shared training actions could not be loaded. ':''}You can keep using your saved plan.<button class="club-home-link" id="retryPlayerHome" type="button" style="margin-left:12px">Try again</button></div>`:''}
-  ${renderWeeklyLoopShell('playerHomeFocus')}
-  ${renderEngagementShell('playerHomeEngagement')}
-  ${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.follow_up_requested!==false)?`<section class="card notice" role="status"><strong>${(feedback.coaching_actions||[]).some(a=>a.status==='open'&&a.review_on&&a.review_on<=todayIso())?'Coach Conversation review due':'You have a Coach Conversation'}</strong><p>Open Coach Conversations in How We Train to see the note, any agreed practice and the optional review date.</p><button class="btn secondary" id="playerHomeActionAlert">Open How We Train</button></section>`:''}
-  <section class="card"><div class="section-label">Your season</div><h2>My Innings</h2><p>Prepare for a match, then keep your innings, notes, video and reflection together.</p><div class="btnrow"><button class="btn secondary" id="playerHomeInnings">Open My Innings</button><button class="btn ghost" id="playerHomeAddInnings">Add an innings</button></div></section>
-  <div class="club-home-secondary" aria-label="Your batting tools">
-    <button class="club-home-link" id="playerHomePlan">My Player Plan</button>
-    ${plan.ready.length?'<button class="club-home-link" id="playerHomeTraining">How We Train</button>':''}
-    <button class="club-home-link" id="requestConversationFromHome">Request a Coach Conversation</button>
-    <button class="club-home-link" id="playerHomePhilosophy">Read How We Bat</button>
-  </div>
-  ${plan.ready.length?`<p class="help" style="margin-top:18px">Training ready for ${esc(plan.ready.map(x=>x.label).join(' and '))}.${rolloutOk&&!plan.pendingRequired.length?' Your required plan questions are complete.':''}</p>`:''}`;
-  document.getElementById('playerHomeActionAlert')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain',anchor:'sharedCoachingActions'}));
-  document.getElementById('playerHomeNext').onclick=()=>openPlayerHomeAction(next);
+  const tiles=[
+    ['playerHomePlan','My Player Plan','The shots you trust and how you want to bat.','plan'],
+    ['playerHomeTraining','How We Train','Practise your plan and current focus.','train'],
+    ['playerHomePrepare','Prepare for a Match','Plan your approach to the opposition.','prepare'],
+    ['playerHomeInnings','My Innings','Review your innings and decide what comes next.','review']
+  ];
+  page.innerHTML=`<style>
+    .player-home-landing h1{margin:0;color:var(--primary);font-size:28px;line-height:1.2}
+    .player-home-landing h1:focus{outline:none}
+    .player-home-intro{margin:8px 0 18px;font-size:16px;line-height:1.5;max-width:46rem}
+    .player-home-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .player-home-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:160px;border:1px solid #ced6ee;border-radius:14px;padding:18px;text-align:left;color:var(--text,#172033);background:#eff3ff;font:inherit;cursor:pointer}
+    .player-home-tile[data-home-area="train"]{background:#eff8f4;border-color:#cce5d8}
+    .player-home-tile[data-home-area="prepare"]{background:#fff7eb;border-color:#edddc3}
+    .player-home-tile[data-home-area="review"]{background:#f5f2ff;border-color:#ddd5f0}
+    .player-home-tile strong{display:block;margin-right:16px;color:var(--primary,#202f78);font-size:20px;line-height:1.25}
+    .player-home-tile .player-home-tile-copy{display:block;margin-top:10px;font-size:15px;line-height:1.45}
+    .player-home-tile .player-home-tile-arrow{position:absolute;right:14px;top:17px;color:var(--primary,#202f78);font-size:20px;line-height:1}
+    .player-home-tile:hover{border-color:var(--primary,#202f78);box-shadow:0 2px 8px #17245f12}
+    .player-home-tile:focus-visible{outline:3px solid var(--primary,#202f78);outline-offset:3px}
+    .player-home-links{display:flex;gap:4px 18px;flex-wrap:wrap;margin-top:12px}
+    .player-home-links button{appearance:none;border:0;background:transparent;padding:6px 0;min-height:44px;color:var(--primary,#202f78);font:inherit;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+    @media(min-width:1050px){.player-home-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+    @media(max-width:620px){.player-home-tile{padding:14px;min-height:170px}.player-home-tile strong{font-size:18px}.player-home-tile .player-home-tile-copy{font-size:14px}.player-home-tile .player-home-tile-arrow{right:10px;top:14px}.player-home-intro{margin-bottom:14px}}
+  </style><section class="player-home-landing" aria-labelledby="playerHomeTitle">
+    <h1 id="playerHomeTitle">Player Home</h1>
+    <p class="player-home-intro">Your Player Plan guides how you train, prepare for a match and review your innings.</p>
+    <nav class="player-home-tiles" aria-label="Your batting tools">
+      ${tiles.map(([id,title,copy,area])=>`<button type="button" class="player-home-tile" id="${id}" data-home-area="${area}"><strong>${title}</strong><span class="player-home-tile-copy">${copy}</span><span class="player-home-tile-arrow" aria-hidden="true">→</span></button>`).join('')}
+    </nav>
+    <div class="player-home-links"><button type="button" id="playerHomePhilosophy">Read How We Bat</button><button type="button" id="requestConversationFromHome">Request a Coach Conversation</button></div>
+  </section>`;
   document.getElementById('playerHomePlan').onclick=()=>openPlayerHomeAction({tab:'myplan'});
-  document.getElementById('playerHomeTraining')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain'}));
-  document.getElementById('requestConversationFromHome').onclick=openCoachConversationRequest;
+  document.getElementById('playerHomeTraining').onclick=()=>openPlayerHomeAction({tab:'howwetrain'});
+  document.getElementById('playerHomePrepare').onclick=()=>openMyInnings({prepare:true});
   document.getElementById('playerHomeInnings').onclick=()=>openMyInnings();
-  document.getElementById('playerHomeAddInnings').onclick=()=>openMyInnings({add:true});
   document.getElementById('playerHomePhilosophy').onclick=()=>openPlayerHomeAction({tab:'howwebat'});
-  document.getElementById('retryPlayerHome')?.addEventListener('click',()=>{if(confirmLeaveFeedbackEntry())return renderPlayerHome();});
-  await Promise.all([mountWeeklyLoop(document.getElementById('playerHomeFocus'),{playerId,context:'home'}),mountEngagement(document.getElementById('playerHomeEngagement'),{clubId})]);
+  document.getElementById('requestConversationFromHome').onclick=openCoachConversationRequest;
+  // Only the plan tile needs current requirements. Keep the landing usable
+  // while loading and leave a neutral link if completion cannot be verified.
+  try{
+    const {data:rollout,error}=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:clubId});
+    if(!stillCurrent()||error||!rollout)return;
+    const raw=localRaw||rawAnswers(),state=playerHomePlanState(raw,rollout);
+    const complete=state.core.complete&&!state.pendingRequired.length&&state.ready.length>0;
+    const next=playerPlanNextStep(raw,rollout),button=document.getElementById('playerHomePlan');
+    button.querySelector('strong').textContent=complete?'Edit your Player Plan':'Complete your Player Plan';
+    button.querySelector('.player-home-tile-copy').textContent=complete?'Review your choices or update your approach.':'Choose the shots you trust and how you want to bat.';
+    button.onclick=()=>openPlayerHomeAction({tab:'myplan',edit:complete,section:complete?'core':next.section,anchor:!complete&&next.kind==='choose-format'?'playerPlanProgress':null});
+  }catch(_error){/* My Player Plan can check its requirements when opened. */}
 }
 
 // BEGIN WEEKLY LOOP MODULES
