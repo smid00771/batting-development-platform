@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.73 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.74 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.73';
+const APP_UI_VERSION='0.8.62.74';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3539,7 +3539,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Start with an existing record",
-        "body": "In How We Train, choose Choose a focus or Add a second focus. Select a saved Player Plan answer, coaching conversation or your own innings reflection. The source fills in the wording for you to refine. You can have up to two current focuses in total, across all formats. Player Home links to How We Train rather than repeating these controls.",
+        "body": "In How We Train, open the My Current Focus tile, then choose Choose a focus or Add a second focus. Select a saved Player Plan answer, coaching conversation or your own innings reflection. The source fills in the wording for you to refine. You can have up to two current focuses in total, across all formats. Player Home links to How We Train rather than repeating these controls.",
         "target_tab": "$training"
       },
       {
@@ -3552,7 +3552,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Use the same focus through the week",
-        "body": "Your accepted focuses appear in How We Train and innings review. Coaches with existing access can include them in Training preparation. Match preparation starts with bowler match-ups, without a separate focus field. A match-up marked for training appears separately in How We Train and is shared with coaches who can access you. It does not replace either of your ongoing current focuses."
+        "body": "Your accepted focuses appear inside My Current Focus in How We Train and in innings review. Coaches with existing access can include them in Training preparation. Match preparation starts with bowler match-ups, without a separate focus field. A match-up marked for training appears in For my next match in How We Train and is shared with coaches who can access you. It does not replace either of your ongoing current focuses."
       },
       {
         "title": "Keep working on this",
@@ -3576,7 +3576,7 @@ const CLUB_BATTING_HELP = {
     "capability_key": "how_we_train",
     "title": "Use How We Train",
     "purpose": "Practise the shot and the decision.",
-    "short_explanation": "Start with My current focus, highlighted match preparation and the open Training Check-in. Your format training plans follow, with coaching notes and supporting details below.",
+    "short_explanation": "Start with Training ideas from my plan. Open the coloured My Current Focus, For my next match or Training Check-in tile when needed. Coaching notes and supporting details are expandable below.",
     "target_tab": "$training",
     "audience": [
       "admin",
@@ -3589,16 +3589,16 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Open your personal training view",
-        "body": "How We Train starts with My current focus, then highlighted For my next match cues and Training Check-in, ready to use. Your format training plans follow; open one for personalised ideas once Core and that format are complete. Selected added shots outside your plan still raise a Coach Conversation when you save upcoming preparation. Shared cues keep existing coach access; fielders, personal contests and match-up reviews stay private.",
+        "body": "Start with Training ideas from my plan. Open a format for personalised ideas once Core and that format are complete. Below are tiles for My Current Focus, For my next match and Training Check-in. Select a tile to expand its controls; select it again to close. Opening another tile switches sections without discarding entries. Selected outside-plan shots still raise a Coach Conversation on saving preparation. Shared cues keep existing coach access; other preparation stays private.",
         "target_tab": "$training"
       },
       {
         "title": "Choose useful work",
-        "body": "Prepare early enough to guide practice. Tick Make this a training focus for this week, beside the match-up or inside its added-shot panel, then Save preparation. Cues appear through the match date on your device; recording the innings, Did not bat or Match cancelled removes them. View preparation keeps the history. The tick alone does not request a conversation, change your plan or ongoing focuses, or record practice as completed. No tick does not prove a shot is unpractised."
+        "body": "Prepare early enough to guide practice. Tick Make this a training focus for this week, then Save preparation. Open For my next match for those cues through the match date on your device. Recording the innings, Did not bat or Match cancelled removes them. View preparation keeps the history. The tick alone does not request a conversation, change your plan or ongoing focuses, or record completed practice. No tick does not prove a shot is unpractised."
       },
       {
         "title": "Keep agreed coaching work visible",
-        "body": "Open Coach notes & actions to see observations, training actions and notes. Its heading shows current notes and any reviews due. A coaching alert opens the relevant note. Use Ask a coach to request a conversation. Current focuses remain visible; Manage focus opens change/finish controls. A coach’s suggestion requires your acceptance. Shared work remains available before a plan is complete."
+        "body": "Open Coach notes & actions to see observations, training actions and notes. Its heading shows current notes and any reviews due. A coaching alert opens the relevant note. Ask a coach is beside the page heading. Open My Current Focus to see your priorities and coach suggestions; Manage focus opens change/finish controls. A coach’s suggestion requires your acceptance. Shared work remains available before a plan is complete."
       },
       {
         "title": "Reflect and review",
@@ -3868,7 +3868,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Make a short training check-in",
-        "body": "In How We Train, Training Check-in is open below your current focus and match cues. Choose a current focus or saved plan answer. Pick Worked on it, Changed my approach or Couldn’t this week, then Keep working on this, Revisit my focus or Speak with someone. Save check-in records that intention only; use your focus or Coach Conversations to make the change or request. It is private and self-reported. Couldn’t this week can count as reconsideration, never proof of practice. Notes are optional."
+        "body": "In How We Train, open the Training Check-in tile below Training ideas from my plan. Choose a current focus or saved plan answer. Pick Worked on it, Changed my approach or Couldn’t this week, then Keep working on this, Revisit my focus or Speak with someone. Save check-in records that intention only; use your focus or Coach Conversations to make the change or request. It is private and self-reported. Couldn’t this week can count as reconsideration, never proof of practice. Notes are optional."
       },
       {
         "title": "Review and choose what happens next",
@@ -11336,7 +11336,7 @@ function activeMatchTrainingPreparations(records,localDate=todayIso()){
 function renderMatchTrainingFocusShell(id='howWeTrainMatchFocus'){return `<div id="${esc(id)}"><section class="card" role="status"><p>Loading match training focuses…</p></section></div>`;}
 function renderMatchTrainingFocus(records,{isOwner=true,compact=false}={}){
   const active=activeMatchTrainingPreparations(records);
-  if(!active.length)return '';
+  if(!active.length)return compact&&isOwner?'<section class="card match-training-compact"><h2>For my next match</h2><p>No match-up training focuses selected yet.</p><button type="button" class="btn ghost" data-match-training-prepare>Prepare for a Match</button></section>':'';
   if(compact)return `<style>.match-training-compact{border-left:4px solid var(--primary,#26327c);background:#f4f5ff;overflow-wrap:anywhere}.match-training-compact h2{font-size:18px;margin:0 0 6px}.match-training-compact h3{font-size:15px;margin:8px 0 4px}.match-training-compact p{margin:4px 0}.match-training-compact details>summary{cursor:pointer;min-height:36px;display:flex;align-items:center;font-size:13px}.match-training-compact .match-training-row+.match-training-row{border-top:1px solid #d9deef;margin-top:10px;padding-top:6px}</style><section class="card match-training-compact"><h2>For my next match</h2>${active.map(record=>`<div class="match-training-row"><p class="help">${esc(record.opposition||'Upcoming match')} · ${esc(formatDateShort(record.match_date))}</p>${record.training_matchups.map(m=>`<article><h3>${esc(m.bowler)}</h3>${m.options?renderPreparationScoringSummary(m):''}${m.expect||m.avoid?`<details><summary>Bowler notes</summary>${m.expect?`<p><strong>Expect:</strong> ${esc(m.expect)}</p>`:''}${m.avoid?`<p><strong>Watch out:</strong> ${esc(m.avoid)}</p>`:''}</details>`:''}</article>`).join('')}<button type="button" class="btn ghost" data-match-training-view="${esc(record.match_id||record.id)}">View preparation</button></div>`).join('')}</section>`;
 
   return `<style>.match-training-focus{border-left:5px solid var(--primary,#26327c);background:#f4f5ff;overflow-wrap:anywhere}.match-training-focus h2{margin:6px 0}.match-training-focus .match-training-cue{border-top:1px solid #d9deef;padding-top:12px;margin-top:12px}.match-training-focus .match-training-cue h3{margin:0 0 8px}.match-training-focus .match-training-cue p{white-space:pre-wrap;margin:8px 0}.match-training-focus .btn{min-height:44px}</style>${active.map(record=>`<section class="card match-training-focus"><div class="section-label">${isOwner?'Shared with your coaches · selected by you':'Selected by the player · shared training focus'}</div><h2>Training focus for this match</h2><p><strong>${esc(record.opposition||'Opposition not recorded')}</strong> · ${esc(formatDateShort(record.match_date))} · ${esc(formatLabel(record.format_key))}</p>${record.training_matchups.map(m=>`<article class="match-training-cue"><h3>${esc(m.bowler)}</h3>${m.options?`<div><strong>${isOwner?'My':'Player’s'} scoring options:</strong>${renderPreparationScoringSummary(m)}</div>`:''}${m.expect?`<p><strong>What to expect:</strong> ${esc(m.expect)}</p>`:''}${m.avoid?`<p><strong>Watch out for:</strong> ${esc(m.avoid)}</p>`:''}</article>`).join('')}<p class="help">Shown through ${esc(formatDateShort(record.match_date))} using your device’s local date, while this match is upcoming. ${isOwner?'Afterwards, your preparation stays in My Innings. This is separate from your ongoing focuses.':'This is separate from the player’s ongoing focuses. Fielders, personal contests and match-up reviews remain private.'}</p>${isOwner?`<button type="button" class="btn secondary" data-match-training-view="${esc(record.match_id||record.id)}">View preparation</button>`:''}</section>`).join('')}`;
@@ -11355,6 +11355,7 @@ async function mountMatchTrainingFocus(host,{playerId=myPlayer?.id,isOwner=true,
     const body=records?renderMatchTrainingFocus(records,{isOwner,compact}):'';
     host.innerHTML=body+(errorText?`<section class="card notice" role="status"><strong>Match training focuses could not be refreshed.</strong><p>Saved match preparation is unchanged.${records?' The last loaded choices are shown above if their match dates are still current.':''}</p><p class="help">${esc(errorText)}</p><button type="button" class="btn secondary" data-match-training-retry>Try again</button></section>`:records?'':'<section class="card" role="status"><p>Loading match training focuses…</p></section>');
     host.querySelectorAll('[data-match-training-view]').forEach(button=>button.onclick=()=>openMyInnings({matchId:button.dataset.matchTrainingView}));
+    host.querySelector('[data-match-training-prepare]')?.addEventListener('click',()=>openMyInnings({prepare:true}));
     host.querySelector('[data-match-training-retry]')?.addEventListener('click',load);
   };
   const schedule=()=>{
@@ -12041,6 +12042,36 @@ async function loadCallResultDetail(){
 // END PREDICTION RESULTS
 
 
+function renderTrainingTools(){
+  const tools=[
+    ['focus','My Current Focus','Choose or manage your priorities.',renderWeeklyLoopShell('howWeTrainFocus')],
+    ['match','For my next match','Bring your preparation into practice.',renderMatchTrainingFocusShell()],
+    ['checkin','Training Check-in','Record how practice went.',renderEngagementShell('howWeTrainEngagement')]
+  ];
+  return `<div class="training-tool-tiles" id="trainingToolTiles" role="group" aria-label="Your training tools">${tools.map(([key,title,copy])=>`<button type="button" class="training-tool-tile" id="trainingTool-${key}" data-training-tool="${key}" aria-expanded="false" aria-controls="trainingPanel-${key}"><strong>${title}</strong><span>${copy}</span><b class="training-tool-toggle" aria-hidden="true">+</b></button>`).join('')}</div>${tools.map(([key,title,copy,body])=>`<section class="training-tool-panel" id="trainingPanel-${key}" aria-labelledby="trainingTool-${key}" hidden>${body}</section>`).join('')}`;
+}
+function bindTrainingTools(page){
+  const buttons=[...page.querySelectorAll('[data-training-tool]')];
+  buttons.forEach(button=>button.addEventListener('click',()=>{
+    const open=button.getAttribute('aria-expanded')!=='true';
+    buttons.forEach(other=>{
+      const selected=open&&other===button;
+      other.setAttribute('aria-expanded',String(selected));
+      other.querySelector('.training-tool-toggle').textContent=selected?'−':'+';
+      document.getElementById(other.getAttribute('aria-controls')).hidden=!selected;
+    });
+    // Keep the mounted controls and unsaved values when a tile closes.
+    if(open)requestAnimationFrame(()=>{
+      if(!page.contains(button)||button.getAttribute('aria-expanded')!=='true')return;
+      const panel=document.getElementById(button.getAttribute('aria-controls'));
+      if(panel.getBoundingClientRect().top>window.innerHeight-100){
+        const group=document.getElementById('trainingToolTiles');
+        group.style.scrollMarginTop=((document.querySelector('.nav')?.getBoundingClientRect().height||0)+12)+'px';
+        group.scrollIntoView({block:'start',behavior:'auto'});
+      }
+    });
+  }));
+}
 async function renderHowWeTrain(){
   if(howWeTrainReflectionEditId&&isPlayerUser()){const target=howWeTrainReflectionEditId;howWeTrainReflectionEditId=null;return openMyInnings({matchId:target==='new'?null:target,edit:target!=='new',add:target==='new'});}
   const page=document.getElementById('page');
@@ -12106,16 +12137,19 @@ async function renderHowWeTrain(){
   const coaching=myPlayer?`<details class="card training-disclosure" id="trainingCoachingNotes"><summary>Coach notes & actions <span>${feedback.coaching_actions_error?'Could not load':`${currentActions.length} current${dueActions.length?` · ${dueActions.length} due`:''}`}</span></summary>${renderCoachingActions(feedback,{playerMode:true,includeObservations:true})}</details>`:'';
   page.innerHTML=`<style>
   .training-page .card{margin:10px 0;padding:14px}.training-page h1{font-size:24px;margin:0}.training-page .training-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.training-links{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}.training-page .btn{min-height:44px;padding:9px 12px}.training-links .btn{font-size:13px}.training-disclosure>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:44px;font-weight:700;list-style:none}.training-disclosure>summary::-webkit-details-marker{display:none}.training-disclosure>summary:after{content:'+';font-size:22px;font-weight:400}.training-disclosure[open]>summary:after{content:'−'}.training-disclosure>summary>span{font-size:12px;font-weight:400;margin-left:auto}.training-disclosure #sharedCoachingActions{border:0;padding:0;margin:4px 0;box-shadow:none}.training-disclosure #sharedCoachingActions>h2,.training-disclosure #sharedCoachingActions>.section-label,.training-disclosure #sharedCoachingActions>.help{display:none}.training-page .train-format-accordion summary{padding:2px;min-height:44px}.training-page .train-format-accordion summary>div>span,.training-page .train-format-accordion summary .section-label,.training-page .train-accordion-state b{display:none}.training-page .train-format-accordion summary strong{font-size:16px}.training-page .train-accordion-state em{font-size:12px}.training-page .train-plan-reminder{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.training-page .train-plan-reminder strong{flex:1;font-size:14px}.training-page .train-format-accordion-list{gap:0}.training-page .training-section-title{font-size:16px;margin:14px 0 2px}.training-page details>summary:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
+  .training-page h1:focus{outline:none}.training-heading{margin:0 0 10px;flex-wrap:wrap}.training-heading h1{flex:1}.training-heading-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.training-page .training-heading-actions button{appearance:none;min-height:44px;border:0;background:transparent;padding:6px 8px;font:inherit;font-size:13px;font-weight:700;color:var(--primary,#202f78);text-decoration:underline;text-underline-offset:3px;cursor:pointer}.training-heading-actions button:focus-visible,.training-tool-tile:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
+  .training-tool-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.training-tool-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:88px;padding:12px;border:1px solid #cce5d8;border-radius:12px;background:#eff8f4;color:var(--text,#172033);text-align:left;font:inherit;cursor:pointer}.training-tool-tile[data-training-tool="match"]{background:#fff7eb;border-color:#edddc3}.training-tool-tile[data-training-tool="checkin"]{background:#eff3ff;border-color:#ced6ee}.training-tool-tile strong{margin-right:18px;font-size:17px;line-height:1.25;color:var(--primary,#202f78)}.training-tool-tile>span{margin-top:6px;font-size:14px;line-height:1.4}.training-tool-toggle{position:absolute;right:10px;top:10px;font-size:22px;line-height:1;font-weight:400;color:var(--primary,#202f78)}.training-tool-tile:hover,.training-tool-tile[aria-expanded="true"]{border-color:var(--primary,#202f78)}.training-tool-tile[aria-expanded="true"]{box-shadow:inset 0 0 0 1px var(--primary,#202f78)}.training-tool-panel[hidden]{display:none!important}.training-tool-panel{margin-bottom:12px}.training-tool-panel .weekly-loop,.training-tool-panel .engagement-training-priority,.training-tool-panel .match-training-compact{margin-top:0}.training-page .training-section-title{margin-top:0}.training-page .train-format-accordion-list+.training-tool-tiles{margin-top:12px}
+  @media(max-width:620px){.training-tool-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.training-tool-tile:last-child{grid-column:1/-1;min-height:76px}.training-heading-actions{gap:0}.training-page .training-heading-actions button{padding:6px}.training-page .training-heading h1{font-size:22px}}
   </style><div class="training-page">
-    <section class="card"><div class="training-heading"><h1>How We Train</h1><button type="button" class="btn ghost" id="howWeTrainGuideLink">Help</button></div><div class="training-links">${ownPlayer?'<button class="btn ghost" data-go="myplan">My Player Plan</button><button class="btn ghost" id="requestConversationFromTraining">Ask a coach</button>':''}${canUsePlayersWorkspace()?'<button class="btn ghost" id="openPreparationFromTraining">Prepare team training</button>':''}</div></section>
+    <header class="training-heading"><h1>How We Train</h1><div class="training-heading-actions">${ownPlayer?'<button type="button" id="requestConversationFromTraining">Ask a coach</button>':''}${canUsePlayersWorkspace()?'<button type="button" id="openPreparationFromTraining">Prepare team training</button>':''}<button type="button" id="howWeTrainGuideLink">Help</button></div></header>
+    <h2 class="training-section-title">${myPlayer?'Training ideas from my plan':'Club training ideas'}</h2>${playerTop}<div class="train-format-accordion-list">${formatAccordions}</div>
+    ${ownPlayer?renderTrainingTools():''}
     ${feedbackError?'<section class="card notice" role="status"><strong>Coaching notes could not load.</strong> <button class="btn ghost" id="retryTrainingFeedback">Try again</button></section>':''}
-    ${ownPlayer?renderWeeklyLoopShell('howWeTrainFocus')+renderMatchTrainingFocusShell()+renderEngagementShell('howWeTrainEngagement'):''}
-    ${playerTop}
-    <h2 class="training-section-title">${myPlayer?'Training ideas from my plan':'Club training ideas'}</h2><div class="train-format-accordion-list">${formatAccordions}</div>
     ${coaching}${renderClubTrainingPrinciples()}${feedbackAccordion}
   </div>`;
 
   captureFeedbackEntryBaseline();
+  bindTrainingTools(page);
   bindCoachingActionControls(feedback,()=>renderHowWeTrain());
   document.getElementById('openPreparationFromTraining')?.addEventListener('click',()=>openTrainingPreparation());
   if(myPlayer&&isPlayerUser())await Promise.all([mountMatchTrainingFocus(document.getElementById('howWeTrainMatchFocus'),{compact:true}),mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training',compact:true,title:'My current focus'}),mountEngagement(document.getElementById('howWeTrainEngagement'),{clubId,training:true,compact:true})]);
@@ -17451,7 +17485,7 @@ function engagementAwardProgress(b){
 }
 function engagementRender(s){
  const b=s.bundle,categories=b.categories||[],training=b.training_checkin,candidates=b.candidates||[],award=engagementAwardDetails(b);
- if(!b.configured){s.host.innerHTML='';s.form=null;s.baseline='';return;}
+ if(!b.configured){s.host.innerHTML=s.options.training?'<p class="help">Training Check-in is not available for this club yet.</p>':'';s.form=null;s.baseline='';return;}
  const chosen=candidates.findIndex(c=>c.kind===training?.source_kind&&(c.id||null)===(training?.source_id||null)&&(c.key||null)===(training?.source_key||null));
  const radios=(name,values,selected)=>`<div class="engagement-radios">${values.map(([v,label])=>`<label><input type="radio" name="${name}" value="${v}" ${v===selected?'checked':''} required>${label}</label>`).join('')}</div>`;
  const trainingHtml=s.options.training?`<form class="engagement-checkin"><h3>Training check-in</h3><p class="help">A quick, honest check-in on your focus. Self-reported; no phone needed at training.</p>${candidates.length?`<label>Choose a current focus or saved plan answer<select name="source" required><option value="">Choose…</option>${candidates.map((c,i)=>`<option value="${i}" ${chosen===i?'selected':''}>${esc(c.kind==='focus'?'Current focus: ':'Player Plan: ')}${esc(c.text)}</option>`).join('')}</select></label><fieldset><legend>What happened?</legend>${radios('status',[['worked','Worked on it'],['changed','Changed my approach'],['couldnt','Couldn’t this week']],training?.status)}</fieldset><fieldset><legend>What next?</legend>${radios('next_step',[['keep','Keep working on this'],['adjust','Revisit my focus'],['discuss','Speak with someone']],training?.next_step)}</fieldset><label>Optional note<textarea name="note" maxlength="300" rows="2" placeholder="A useful detail, if needed">${esc(training?.note||'')}</textarea></label><p class="help">This records your next step. Use your current focus or Coach Conversations to make a change or request a conversation.</p><button class="btn ${training?'secondary':'primary'}" type="submit">${training?'Saved ✓':'Save check-in'}</button><span data-engagement-form-state class="help"></span>`:'<p>Choose a current focus or save a Player Plan answer first. Your existing focus controls are on this page.</p>'}</form>`:'';
