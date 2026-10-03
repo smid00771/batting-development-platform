@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.70 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.71 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.70';
+const APP_UI_VERSION='0.8.62.71';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -2416,7 +2416,7 @@ function renderShell(){
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
     if(nextTab==='guide')guideSelectedCapabilityKey='whole_process';
     await renderTab();
-    if(nextTab==='guide')focusClubGuideArea('tutorials');
+    if(nextTab==='guide')focusClubGuideArea('page');
   });
   return renderTab();
 }
@@ -2906,7 +2906,7 @@ function guideAudienceKey(){
 function focusClubGuideArea(area='tutorials'){
   requestAnimationFrame(()=>{
     if(currentTab!=='guide')return;
-    const target=area==='chat'
+    const target=area==='page'?document.getElementById('guidePageTitle'):area==='chat'
       ?document.getElementById('demoGuideNote')||document.querySelector('.guide-chat-card')
       :guideSelectedCapabilityKey==='whole_process'?document.getElementById('guideProcessHeading'):document.querySelector('.guide-tutorial-card');
     if(!target)return;
@@ -2984,11 +2984,23 @@ function guideTopicNumber(key){
 function guideHelpStyles(){
   // Keep the reading order vertical even where the existing stylesheet uses two columns.
   return `<style>
-    .guide-chat-card{margin-top:18px;border:2px solid var(--primary);background:#f4f7ff}
-    .guide-chat-card h2{margin-top:4px}
-    .guide-chat-card>p{font-size:1rem;line-height:1.55;color:var(--text)}
-    .guide-chat-card .guide-chat-messages.is-empty{min-height:0}
-    .guide-process-heading{margin:28px 0 12px}
+    .guide-page-heading{margin:0 0 12px}
+    .guide-page-heading h1{margin:0;font-size:clamp(24px,3vw,30px);line-height:1.2;color:var(--primary)}
+    .guide-chat-card{margin-top:0;padding:16px;border:1px solid var(--line);background:#f4f7ff}
+    .guide-chat-card h2{margin:0 0 10px}
+    .guide-chat-card .guide-chat-messages{max-height:300px}
+    .guide-chat-card .guide-chat-messages.is-empty{display:none}
+    .guide-chat-card .guide-chat-compose{margin-top:10px;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+    .guide-chat-card .guide-chat-compose textarea{width:100%;min-width:0;min-height:68px;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit;font-size:16px;line-height:1.4;resize:vertical}
+    .guide-chat-card .btn{min-height:44px}
+    .guide-chat-card .guide-human-handoff{margin-top:8px;padding-top:0;border-top:0}
+    .guide-chat-card #guideHandoffBox{padding-top:8px}
+    .guide-chat-card #guideHandoffBox .help{margin:0 0 10px}
+    .guide-chat-card #guideHandoffBox textarea{box-sizing:border-box;min-height:68px;font-size:16px}
+    .guide-chat-card #guideHandoffBox .btnrow{margin-top:8px}
+    .guide-process-heading{margin:20px 0 8px;font-size:20px}
+    #guideTopicSearchStatus:empty{display:none}
+    @media(max-width:620px){.guide-chat-card .guide-chat-compose{grid-template-columns:minmax(0,1fr)}.guide-chat-card .guide-chat-compose .btn{width:auto;justify-self:end}}
     .guide-layout.guide-is-overview{grid-template-columns:minmax(0,1fr)}
     .guide-layout.guide-is-overview .guide-chat-card{grid-column:1}
     .guide-layout .guide-topic-list{display:flex;flex-direction:column;min-width:0;gap:8px}
@@ -4398,19 +4410,17 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
 
   await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'seen'});
 
-  page.innerHTML=`${guideHelpStyles()}<section class="card guide-hero">
-    <div><div class="section-label">Help & tutorials</div><h1>How Club Batting works</h1><p>Follow your club’s process below. Choose a guide to see how each stage works.</p></div>
-  </section>
+  page.innerHTML=`${guideHelpStyles()}<header class="guide-page-heading"><h1 id="guidePageTitle">Help & Tutorials</h1></header>
   <div id="guideInterventionSlot"></div>
-    <section class="card guide-chat-card">
-      <div class="section-label">Ask the Club Batting Guide</div><h2>A question? Ask it here.</h2><p>Get help with your next step, a feature or the whole process. The Guide replies here as you work.</p>
+    <section class="card guide-chat-card" aria-labelledby="guideChatTitle">
+      <h2 id="guideChatTitle">Ask the Guide</h2>
       <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
-      <div class="guide-chat-compose"><textarea id="guideQuestion" aria-label="Your question for the Club Batting Guide" rows="3" placeholder="e.g. How should we use Player Plan dates with our grades?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
+      <div class="guide-chat-compose"><textarea id="guideQuestion" aria-label="Your question for the Club Batting Guide" rows="2" placeholder="What would you like help with?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
       <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
-      <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">I’d rather speak to someone</button><p class="help">Request a conversation with the Club Batting team. Your question and Guide conversation go with it.</p><div id="guideHandoffBox" hidden><label for="guideHandoffReason">What would you like to discuss?</label><textarea id="guideHandoffReason" rows="2" placeholder="What would you like to discuss?"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
+      <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button" aria-controls="guideHandoffBox" aria-expanded="false">I’d rather speak to someone</button><div id="guideHandoffBox" hidden><p class="help">Your request and Guide conversation go to the Club Batting team.</p><label for="guideHandoffReason">What would you like to discuss?</label><textarea id="guideHandoffReason" rows="2"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
     </section>
-  <h2 class="guide-process-heading" id="guideProcessHeading">Help & Tutorials · Explore the process</h2>
-  <div class="field"><label for="guideTopicSearch">Find help</label><input id="guideTopicSearch" type="search" placeholder="Search topics, e.g. non-playing, reset or review date"><small id="guideTopicSearchStatus" role="status"></small></div>
+  <h2 class="guide-process-heading" id="guideProcessHeading">Tutorials</h2>
+  <div class="field"><input id="guideTopicSearch" type="search" aria-label="Search tutorials" placeholder="Search tutorials…"><small id="guideTopicSearchStatus" role="status"></small></div>
   <div class="guide-layout${isOverview?' guide-is-overview':''}">
     <nav class="guide-topic-list" aria-label="Help topics in process order">
       ${all.map(c=>{const number=guideTopicNumber(c.capability_key),active=c.capability_key===selected.capability_key;return `<button type="button" data-guide-topic="${esc(c.capability_key)}" aria-pressed="${active}" class="${active?'active ':''}${number===null?'guide-topic-overview':''}">${number===null?'':`<span class="guide-topic-number">${number}</span>`}<span class="guide-topic-copy"><strong>${c.capability_key==='whole_process'?'Overview · ':''}${esc(c.title)}</strong><span class="guide-topic-description">${esc(c.short_explanation)}</span>${c.capability_key!=='whole_process'&&progressMap.get(c.capability_key)?.state==='completed'?'<span class="guide-topic-complete">Tutorial read ✓</span>':''}</span></button>`;}).join('')}
@@ -4482,8 +4492,8 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   };
   document.getElementById('guideAsk').onclick=submitQuestion;
   document.getElementById('guideQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();submitQuestion();}});
-  document.getElementById('guideHumanHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=false;document.getElementById('guideHumanHandoff').hidden=true;};
-  document.getElementById('guideCancelHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=true;document.getElementById('guideHumanHandoff').hidden=false;};
+  document.getElementById('guideHumanHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=false;document.getElementById('guideHumanHandoff').hidden=true;document.getElementById('guideHumanHandoff').setAttribute('aria-expanded','true');document.getElementById('guideHandoffReason').focus();};
+  document.getElementById('guideCancelHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=true;const button=document.getElementById('guideHumanHandoff');button.hidden=false;button.setAttribute('aria-expanded','false');button.focus();};
   document.getElementById('guideSendHandoff').onclick=async()=>{
     const reason=val('guideHandoffReason');
     if(!reason){document.getElementById('guideHandoffReason').focus();return;}
