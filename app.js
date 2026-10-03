@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.72 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.73 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.72';
+const APP_UI_VERSION='0.8.62.73';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -13972,21 +13972,21 @@ async function renderPlayerHome(){
   page.innerHTML=`<style>
     .player-home-landing h1{margin:0;color:var(--primary);font-size:28px;line-height:1.2}
     .player-home-landing h1:focus{outline:none}
-    .player-home-intro{margin:8px 0 18px;font-size:16px;line-height:1.5;max-width:46rem}
-    .player-home-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-    .player-home-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:160px;border:1px solid #ced6ee;border-radius:14px;padding:18px;text-align:left;color:var(--text,#172033);background:#eff3ff;font:inherit;cursor:pointer}
+    .player-home-intro{margin:6px 0 12px;font-size:15px;line-height:1.4;max-width:46rem}
+    .player-home-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .player-home-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:88px;border:1px solid #ced6ee;border-radius:12px;padding:12px;text-align:left;color:var(--text,#172033);background:#eff3ff;font:inherit;cursor:pointer}
     .player-home-tile[data-home-area="train"]{background:#eff8f4;border-color:#cce5d8}
     .player-home-tile[data-home-area="prepare"]{background:#fff7eb;border-color:#edddc3}
     .player-home-tile[data-home-area="review"]{background:#f5f2ff;border-color:#ddd5f0}
     .player-home-tile strong{display:block;margin-right:16px;color:var(--primary,#202f78);font-size:20px;line-height:1.25}
-    .player-home-tile .player-home-tile-copy{display:block;margin-top:10px;font-size:15px;line-height:1.45}
-    .player-home-tile .player-home-tile-arrow{position:absolute;right:14px;top:17px;color:var(--primary,#202f78);font-size:20px;line-height:1}
+    .player-home-tile .player-home-tile-copy{display:block;margin-top:6px;font-size:15px;line-height:1.4}
+    .player-home-tile .player-home-tile-arrow{position:absolute;right:12px;top:13px;color:var(--primary,#202f78);font-size:20px;line-height:1}
     .player-home-tile:hover{border-color:var(--primary,#202f78);box-shadow:0 2px 8px #17245f12}
     .player-home-tile:focus-visible{outline:3px solid var(--primary,#202f78);outline-offset:3px}
-    .player-home-links{display:flex;gap:4px 18px;flex-wrap:wrap;margin-top:12px}
+    .player-home-links{display:flex;gap:0 18px;flex-wrap:wrap;margin-top:8px}
     .player-home-links button{appearance:none;border:0;background:transparent;padding:6px 0;min-height:44px;color:var(--primary,#202f78);font:inherit;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
     @media(min-width:1050px){.player-home-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
-    @media(max-width:620px){.player-home-tile{padding:14px;min-height:170px}.player-home-tile strong{font-size:18px}.player-home-tile .player-home-tile-copy{font-size:14px}.player-home-tile .player-home-tile-arrow{right:10px;top:14px}.player-home-intro{margin-bottom:14px}}
+    @media(max-width:620px){.player-home-tile strong{font-size:17px}.player-home-tile .player-home-tile-copy{font-size:14px}.player-home-tile .player-home-tile-arrow{right:10px;top:12px}}
   </style><section class="player-home-landing" aria-labelledby="playerHomeTitle">
     <h1 id="playerHomeTitle">Player Home</h1>
     <p class="player-home-intro">Your Player Plan guides how you train, prepare for a match and review your innings.</p>
