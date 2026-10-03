@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.75 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.76 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.75';
+const APP_UI_VERSION='0.8.62.76';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3573,7 +3573,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Review and keep improving",
-        "body": "Once Core and required formats are complete, My Player Plan shows four collapsed tiles: Core, T20, Limited Overs and Long Form. Tap View to read one; Close folds it away. Edit Player Plan changes answers; Done editing returns. Edit your Player Plan on Player Home opens the editor directly. Focus changes do not rewrite your plan. A trusted shot added from a match-up saves to Core but does not prove practice or complete unanswered questions. Save preparation separately."
+        "body": "Once Core and required formats are complete, My Player Plan shows collapsed Core, T20, Limited Overs and Long Form tiles. Staff opening a player’s Player Plan see the same tiles and completion status. Tap View to read one; Close folds it away. Edit Player Plan appears only with edit access; Done editing returns. Edit your Player Plan on Player Home opens the editor directly. Focus changes do not rewrite your plan. Save match preparation separately."
       },
       {
         "title": "Train once the foundation is ready",
@@ -3652,8 +3652,8 @@ const CLUB_BATTING_HELP = {
     ],
     "tutorial": [
       {
-        "title": "Open your personal training view",
-        "body": "Start with Training ideas from my plan. Open a format for personalised ideas once Core and that format are complete. Below are tiles for My Current Focus, For my next match and Training Check-in. Select a tile to expand its controls; select it again to close. Opening another tile switches sections without discarding entries. Selected outside-plan shots still raise a Coach Conversation on saving preparation. Shared cues keep existing coach access; other preparation stays private.",
+        "title": "Open the training view",
+        "body": "Training ideas from the Player Plan come first. Open a completed format for personalised ideas. Players then have My Current Focus, For my next match and Training Check-in tiles. Staff opening Training Plan from Players see the same order, with Current focus and For their next match tiles; they cannot submit a player’s check-in. Select a tile to expand it or close it. Switching tiles keeps unsaved entries. Coach notes & actions and club principles sit below.",
         "target_tab": "$training"
       },
       {
@@ -3710,7 +3710,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Propose and agree a useful change",
-        "body": "Use Open training & focus to see the player’s work. Staff with edit access can Suggest a focus or Suggest a change there; view-only access stays read-only. The player uses Accept suggestion before it becomes active. Keep up to two current focuses across all formats and follow up in the existing Coach Conversation."
+        "body": "Use Open training & focus to see plan-derived training ideas, then Current focus and For their next match. Staff with edit access can Suggest a focus or Suggest a change; view-only access stays read-only. The player uses Accept suggestion before it becomes active. Keep up to two current focuses across all formats and follow up in the existing Coach Conversation."
       },
       {
         "title": "Keep the loop connected",
@@ -10844,31 +10844,7 @@ function renderClubTrainingPrinciples(){
   </details>`;
 }
 
-function renderPlayerTrainingFormatAccordion(format,raw,feedback){
-  const coreProgress=sectionProgress('core',raw);
-  const formatProgress=sectionProgress(format,raw);
-  const ready=coreProgress.complete&&formatProgress.complete;
-  const label=formatLabel(format);
-  const cards=ready?[...coreTrainingCards(raw),...formatTrainingCards(raw,format)].slice(0,7):[];
-  const feedbackFocus=ready?trainingFocusForFormat(feedback,format):[];
-  const nextSection=coreProgress.complete?format:'core';
-  const nextLabel=coreProgress.complete?label:'Core';
-
-  return `<details class="card train-format-accordion ${ready?'ready':'locked'}">
-    <summary>
-      <div><div class="section-label">${esc(label)}</div><strong>${ready?`My ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?'Targeted from your completed Player Plan.':`Complete ${esc(nextLabel)} in My Player Plan to continue.`}</span></div>
-      <div class="train-accordion-state"><b>${ready?'TRAINING PLAN READY':'PLAYER PLAN NOT COMPLETE'}</b><em>Open ↓</em></div>
-    </summary>
-    <div class="train-simple-body">
-      ${ready?`
-        <div class="train-plan-lines">
-          ${cards.length?cards.map(c=>renderTrainingPlanCard(c,format)).join(''):'<div class="notice">Your Player Plan is complete, but there are no specific training cues to show yet.</div>'}
-        </div>
-        ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
-      `:`<div class="train-format-empty"><strong>Your ${esc(label)} training plan starts with your Player Plan.</strong><span>${coreProgress.complete?`Finish the ${esc(label)} questions to create your training plan.`:formatProgress.complete?`Your ${esc(label)} answers are complete. Finish Core to create your training plan.`:`Start with Core, then complete the ${esc(label)} questions. Your training plan will use those answers.`}</span><div class="btnrow"><button class="btn secondary" data-go="myplan" data-plan-section="${esc(nextSection)}">Complete ${esc(nextLabel)}</button></div></div>`}
-    </div>
-  </details>`;
-}
+function renderPlayerTrainingFormatAccordion(format,raw,feedback){return renderTrainingFormatAccordion(format,raw,feedback);}
 
 function renderClubTrainingFormatAccordion(format,snapshot){
   const formatData=snapshot?.formats?.[format];
@@ -11400,8 +11376,8 @@ function activeMatchTrainingPreparations(records,localDate=todayIso()){
 function renderMatchTrainingFocusShell(id='howWeTrainMatchFocus'){return `<div id="${esc(id)}"><section class="card" role="status"><p>Loading match training focuses…</p></section></div>`;}
 function renderMatchTrainingFocus(records,{isOwner=true,compact=false}={}){
   const active=activeMatchTrainingPreparations(records);
-  if(!active.length)return compact&&isOwner?'<section class="card match-training-compact"><h2>For my next match</h2><p>No match-up training focuses selected yet.</p><button type="button" class="btn ghost" data-match-training-prepare>Prepare for a Match</button></section>':'';
-  if(compact)return `<style>.match-training-compact{border-left:4px solid var(--primary,#26327c);background:#f4f5ff;overflow-wrap:anywhere}.match-training-compact h2{font-size:18px;margin:0 0 6px}.match-training-compact h3{font-size:15px;margin:8px 0 4px}.match-training-compact p{margin:4px 0}.match-training-compact details>summary{cursor:pointer;min-height:36px;display:flex;align-items:center;font-size:13px}.match-training-compact .match-training-row+.match-training-row{border-top:1px solid #d9deef;margin-top:10px;padding-top:6px}</style><section class="card match-training-compact"><h2>For my next match</h2>${active.map(record=>`<div class="match-training-row"><p class="help">${esc(record.opposition||'Upcoming match')} · ${esc(formatDateShort(record.match_date))}</p>${record.training_matchups.map(m=>`<article><h3>${esc(m.bowler)}</h3>${m.options?renderPreparationScoringSummary(m):''}${m.expect||m.avoid?`<details><summary>Bowler notes</summary>${m.expect?`<p><strong>Expect:</strong> ${esc(m.expect)}</p>`:''}${m.avoid?`<p><strong>Watch out:</strong> ${esc(m.avoid)}</p>`:''}</details>`:''}</article>`).join('')}<button type="button" class="btn ghost" data-match-training-view="${esc(record.match_id||record.id)}">View preparation</button></div>`).join('')}</section>`;
+  if(!active.length)return compact?`<section class="card match-training-compact"><h2>${isOwner?'For my next match':'For their next match'}</h2><p>No match-up training focuses selected yet.</p>${isOwner?'<button type="button" class="btn ghost" data-match-training-prepare>Prepare for a Match</button>':''}</section>`:'';
+  if(compact)return `<style>.match-training-compact{border-left:4px solid var(--primary,#26327c);background:#f4f5ff;overflow-wrap:anywhere}.match-training-compact h2{font-size:18px;margin:0 0 6px}.match-training-compact h3{font-size:15px;margin:8px 0 4px}.match-training-compact p{margin:4px 0}.match-training-compact details>summary{cursor:pointer;min-height:36px;display:flex;align-items:center;font-size:13px}.match-training-compact .match-training-row+.match-training-row{border-top:1px solid #d9deef;margin-top:10px;padding-top:6px}</style><section class="card match-training-compact"><h2>${isOwner?'For my next match':'For their next match'}</h2>${active.map(record=>`<div class="match-training-row"><p class="help">${esc(record.opposition||'Upcoming match')} · ${esc(formatDateShort(record.match_date))}</p>${record.training_matchups.map(m=>`<article><h3>${esc(m.bowler)}</h3>${m.options?renderPreparationScoringSummary(m):''}${m.expect||m.avoid?`<details><summary>Bowler notes</summary>${m.expect?`<p><strong>Expect:</strong> ${esc(m.expect)}</p>`:''}${m.avoid?`<p><strong>Watch out:</strong> ${esc(m.avoid)}</p>`:''}</details>`:''}</article>`).join('')}${isOwner?`<button type="button" class="btn ghost" data-match-training-view="${esc(record.match_id||record.id)}">View preparation</button>`:''}</div>`).join('')}</section>`;
 
   return `<style>.match-training-focus{border-left:5px solid var(--primary,#26327c);background:#f4f5ff;overflow-wrap:anywhere}.match-training-focus h2{margin:6px 0}.match-training-focus .match-training-cue{border-top:1px solid #d9deef;padding-top:12px;margin-top:12px}.match-training-focus .match-training-cue h3{margin:0 0 8px}.match-training-focus .match-training-cue p{white-space:pre-wrap;margin:8px 0}.match-training-focus .btn{min-height:44px}</style>${active.map(record=>`<section class="card match-training-focus"><div class="section-label">${isOwner?'Shared with your coaches · selected by you':'Selected by the player · shared training focus'}</div><h2>Training focus for this match</h2><p><strong>${esc(record.opposition||'Opposition not recorded')}</strong> · ${esc(formatDateShort(record.match_date))} · ${esc(formatLabel(record.format_key))}</p>${record.training_matchups.map(m=>`<article class="match-training-cue"><h3>${esc(m.bowler)}</h3>${m.options?`<div><strong>${isOwner?'My':'Player’s'} scoring options:</strong>${renderPreparationScoringSummary(m)}</div>`:''}${m.expect?`<p><strong>What to expect:</strong> ${esc(m.expect)}</p>`:''}${m.avoid?`<p><strong>Watch out for:</strong> ${esc(m.avoid)}</p>`:''}</article>`).join('')}<p class="help">Shown through ${esc(formatDateShort(record.match_date))} using your device’s local date, while this match is upcoming. ${isOwner?'Afterwards, your preparation stays in My Innings. This is separate from your ongoing focuses.':'This is separate from the player’s ongoing focuses. Fielders, personal contests and match-up reviews remain private.'}</p>${isOwner?`<button type="button" class="btn secondary" data-match-training-view="${esc(record.match_id||record.id)}">View preparation</button>`:''}</section>`).join('')}`;
 }
@@ -12107,13 +12083,24 @@ async function loadCallResultDetail(){
 // END PREDICTION RESULTS
 
 
-function renderTrainingTools(){
-  const tools=[
+// BEGIN SHARED TRAINING LAYOUT
+function trainingPageStyles(){return `<style>
+  .training-page .card{margin:10px 0;padding:14px}.training-page h1{font-size:24px;margin:0}.training-page .training-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.training-links{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}.training-page .btn{min-height:44px;padding:9px 12px}.training-links .btn{font-size:13px}.training-disclosure>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:44px;font-weight:700;list-style:none}.training-disclosure>summary::-webkit-details-marker{display:none}.training-disclosure>summary:after{content:'+';font-size:22px;font-weight:400}.training-disclosure[open]>summary:after{content:'−'}.training-disclosure>summary>span{font-size:12px;font-weight:400;margin-left:auto}.training-disclosure #sharedCoachingActions{border:0;padding:0;margin:4px 0;box-shadow:none}.training-disclosure #sharedCoachingActions>h2,.training-disclosure #sharedCoachingActions>.section-label,.training-disclosure #sharedCoachingActions>.help{display:none}.training-page .train-format-accordion summary{padding:2px;min-height:44px}.training-page .train-format-accordion summary>div>span,.training-page .train-format-accordion summary .section-label,.training-page .train-accordion-state b{display:none}.training-page .train-format-accordion summary strong{font-size:16px}.training-page .train-accordion-state em{font-size:12px}.training-page .train-plan-reminder{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.training-page .train-plan-reminder strong{flex:1;font-size:14px}.training-page .train-format-accordion-list{gap:0}.training-page .training-section-title{font-size:16px;margin:14px 0 2px}.training-page details>summary:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
+  .training-page h1:focus{outline:none}.training-heading{margin:0 0 10px;flex-wrap:wrap}.training-heading h1{flex:1}.training-heading-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.training-page .training-heading-actions button{appearance:none;min-height:44px;border:0;background:transparent;padding:6px 8px;font:inherit;font-size:13px;font-weight:700;color:var(--primary,#202f78);text-decoration:underline;text-underline-offset:3px;cursor:pointer}.training-heading-actions button:focus-visible,.training-tool-tile:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
+  .training-tool-tiles.staff-training-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.training-tool-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.training-tool-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:88px;padding:12px;border:1px solid #cce5d8;border-radius:12px;background:#eff8f4;color:var(--text,#172033);text-align:left;font:inherit;cursor:pointer}.training-tool-tile[data-training-tool="match"]{background:#fff7eb;border-color:#edddc3}.training-tool-tile[data-training-tool="checkin"]{background:#eff3ff;border-color:#ced6ee}.training-tool-tile strong{margin-right:18px;font-size:17px;line-height:1.25;color:var(--primary,#202f78)}.training-tool-tile>span{margin-top:6px;font-size:14px;line-height:1.4}.training-tool-toggle{position:absolute;right:10px;top:10px;font-size:22px;line-height:1;font-weight:400;color:var(--primary,#202f78)}.training-tool-tile:hover,.training-tool-tile[aria-expanded="true"]{border-color:var(--primary,#202f78)}.training-tool-tile[aria-expanded="true"]{box-shadow:inset 0 0 0 1px var(--primary,#202f78)}.training-tool-panel[hidden]{display:none!important}.training-tool-panel{margin-bottom:12px}.training-tool-panel .weekly-loop,.training-tool-panel .engagement-training-priority,.training-tool-panel .match-training-compact{margin-top:0}.training-page .training-section-title{margin-top:0}.training-page .train-format-accordion-list+.training-tool-tiles{margin-top:12px}
+  .training-tool-tile>.training-tool-status{font-size:12px;font-weight:700;line-height:1.3;margin-top:8px;color:#54627d}.training-tool-status[hidden]{display:none!important}.training-tool-status[data-tone="attention"]{color:#875000}.training-tool-status[data-tone="saved"]{color:#176448}
+  @media(max-width:620px){.training-tool-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.training-tool-tile:last-child:nth-child(odd){grid-column:1/-1;min-height:76px}.training-heading-actions{gap:0}.training-page .training-heading-actions button{padding:6px}.training-page .training-heading h1{font-size:22px}}
+  </style>`;}
+function renderTrainingTools({staff=false}={}){
+  const tools=staff?[
+    ['focus','Current focus','View or suggest a priority.',renderWeeklyLoopShell('workspacePlayerFocus')],
+    ['match','For their next match','Shared preparation for practice.',renderMatchTrainingFocusShell('workspaceMatchTrainingFocus')]
+  ]:[
     ['focus','My Current Focus','Choose or manage your priorities.',renderWeeklyLoopShell('howWeTrainFocus')],
     ['match','For my next match','Bring your preparation into practice.',renderMatchTrainingFocusShell()],
     ['checkin','Training Check-in','Record how practice went.',renderEngagementShell('howWeTrainEngagement')]
   ];
-  return `<div class="training-tool-tiles" id="trainingToolTiles" role="group" aria-label="Your training tools">${tools.map(([key,title,copy])=>`<button type="button" class="training-tool-tile" id="trainingTool-${key}" data-training-tool="${key}" aria-expanded="false" aria-controls="trainingPanel-${key}"><strong>${title}</strong><span>${copy}</span><span class="training-tool-status" data-training-tool-status role="status" hidden></span><b class="training-tool-toggle" aria-hidden="true">+</b></button>`).join('')}</div>${tools.map(([key,title,copy,body])=>`<section class="training-tool-panel" id="trainingPanel-${key}" aria-labelledby="trainingTool-${key}" hidden>${body}</section>`).join('')}`;
+  return `<div class="training-tool-tiles${staff?' staff-training-tools':''}" id="trainingToolTiles" role="group" aria-label="${staff?'Player training tools':'Your training tools'}">${tools.map(([key,title,copy])=>`<button type="button" class="training-tool-tile" id="trainingTool-${key}" data-training-tool="${key}" aria-expanded="false" aria-controls="trainingPanel-${key}"><strong>${title}</strong><span>${copy}</span><span class="training-tool-status" data-training-tool-status role="status" hidden></span><b class="training-tool-toggle" aria-hidden="true">+</b></button>`).join('')}</div>${tools.map(([key,title,copy,body])=>`<section class="training-tool-panel" id="trainingPanel-${key}" aria-labelledby="trainingTool-${key}" hidden>${body}</section>`).join('')}`;
 }
 function setTrainingToolStatus(page,key,state){
   const badge=page.querySelector(`#trainingTool-${key} [data-training-tool-status]`);if(!badge)return;
@@ -12143,6 +12130,42 @@ function bindTrainingTools(page){
     });
   }));
 }
+function renderTrainingFormatAccordion(format,raw,feedback,{player=null}={}){
+  const staff=!!player;
+  const coreProgress=sectionProgress('core',raw);
+  const formatProgress=sectionProgress(format,raw);
+  const ready=coreProgress.complete&&formatProgress.complete;
+  const label=formatLabel(format);
+  const cards=ready?[...coreTrainingCards(raw),...formatTrainingCards(raw,format)].slice(0,7):[];
+  const feedbackFocus=ready?trainingFocusForFormat(feedback,format,!staff||player.id===myPlayer?.id):[];
+  const nextSection=coreProgress.complete?format:'core';
+  const nextLabel=coreProgress.complete?label:'Core';
+
+  return `<details class="card train-format-accordion ${ready?'ready':'locked'}">
+    <summary>
+      <div><div class="section-label">${esc(label)}</div><strong>${staff?`${esc(label)} Training Plan`:ready?`My ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?`Targeted from ${staff?'the player’s':'your'} completed Player Plan.`:`Complete ${esc(nextLabel)} in ${staff?'the Player Plan':'My Player Plan'} to continue.`}</span></div>
+      <div class="train-accordion-state"><b>${ready?'TRAINING PLAN READY':'PLAYER PLAN NOT COMPLETE'}</b><em>Open ↓</em></div>
+    </summary>
+    <div class="train-simple-body">
+      ${ready?`
+        <div class="train-plan-lines">
+          ${cards.length?cards.map(c=>renderTrainingPlanCard(c,format)).join(''):'<div class="notice">Your Player Plan is complete, but there are no specific training cues to show yet.</div>'}
+        </div>
+        ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
+      `:`<div class="train-format-empty"><strong>${staff?'The player’s':'Your'} ${esc(label)} training plan starts with ${staff?'their':'your'} Player Plan.</strong><span>${coreProgress.complete?`Finish the ${esc(label)} questions to create your training plan.`:formatProgress.complete?`${staff?'Their':'Your'} ${esc(label)} answers are complete. Finish Core to create your training plan.`:`Start with Core, then complete the ${esc(label)} questions. ${staff?'Their':'Your'} training plan will use those answers.`}</span><div class="btnrow"><button class="btn secondary" ${staff?`data-workspace-section="${esc(nextSection)}"`:`data-go="myplan" data-plan-section="${esc(nextSection)}"`}>${staff?(player.can_edit?'Open':'View'):'Complete'} ${esc(nextLabel)}${staff?' Player Plan':''}</button></div></div>`}
+    </div>
+  </details>`;
+}
+
+function renderTrainingCoachNotes(feedback,{player=null}={}){
+  const staff=!!player;
+  const signals=staff?workspaceSignalsForPlayer(player.id):[];
+  const current=coachingConversationItems(feedback.coaching_actions||[],signals);
+  const due=current.filter(item=>item.reviewOn&&String(item.reviewOn)<=todayIso());
+  return `<details class="card training-disclosure" id="trainingCoachingNotes"><summary>Coach notes & actions <span>${feedback.coaching_actions_error?'Could not load':`${current.length} current${due.length?` · ${due.length} due`:''}`}</span></summary>${renderCoachingActions(feedback,{playerMode:!staff||player.id===myPlayer?.id,includeObservations:true,signals,compactMatchSources:staff})}</details>`;
+}
+// END SHARED TRAINING LAYOUT
+
 async function renderHowWeTrain(){
   if(howWeTrainReflectionEditId&&isPlayerUser()){const target=howWeTrainReflectionEditId;howWeTrainReflectionEditId=null;return openMyInnings({matchId:target==='new'?null:target,edit:target!=='new',add:target==='new'});}
   const page=document.getElementById('page');
@@ -12203,16 +12226,8 @@ async function renderHowWeTrain(){
   }
 
   const ownPlayer=myPlayer&&isPlayerUser();
-  const currentActions=(feedback.coaching_actions||[]).filter(a=>a.status==='open');
-  const dueActions=currentActions.filter(a=>a.review_on&&String(a.review_on)<=todayIso());
-  const coaching=myPlayer?`<details class="card training-disclosure" id="trainingCoachingNotes"><summary>Coach notes & actions <span>${feedback.coaching_actions_error?'Could not load':`${currentActions.length} current${dueActions.length?` · ${dueActions.length} due`:''}`}</span></summary>${renderCoachingActions(feedback,{playerMode:true,includeObservations:true})}</details>`:'';
-  page.innerHTML=`<style>
-  .training-page .card{margin:10px 0;padding:14px}.training-page h1{font-size:24px;margin:0}.training-page .training-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.training-links{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}.training-page .btn{min-height:44px;padding:9px 12px}.training-links .btn{font-size:13px}.training-disclosure>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:44px;font-weight:700;list-style:none}.training-disclosure>summary::-webkit-details-marker{display:none}.training-disclosure>summary:after{content:'+';font-size:22px;font-weight:400}.training-disclosure[open]>summary:after{content:'−'}.training-disclosure>summary>span{font-size:12px;font-weight:400;margin-left:auto}.training-disclosure #sharedCoachingActions{border:0;padding:0;margin:4px 0;box-shadow:none}.training-disclosure #sharedCoachingActions>h2,.training-disclosure #sharedCoachingActions>.section-label,.training-disclosure #sharedCoachingActions>.help{display:none}.training-page .train-format-accordion summary{padding:2px;min-height:44px}.training-page .train-format-accordion summary>div>span,.training-page .train-format-accordion summary .section-label,.training-page .train-accordion-state b{display:none}.training-page .train-format-accordion summary strong{font-size:16px}.training-page .train-accordion-state em{font-size:12px}.training-page .train-plan-reminder{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.training-page .train-plan-reminder strong{flex:1;font-size:14px}.training-page .train-format-accordion-list{gap:0}.training-page .training-section-title{font-size:16px;margin:14px 0 2px}.training-page details>summary:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
-  .training-page h1:focus{outline:none}.training-heading{margin:0 0 10px;flex-wrap:wrap}.training-heading h1{flex:1}.training-heading-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.training-page .training-heading-actions button{appearance:none;min-height:44px;border:0;background:transparent;padding:6px 8px;font:inherit;font-size:13px;font-weight:700;color:var(--primary,#202f78);text-decoration:underline;text-underline-offset:3px;cursor:pointer}.training-heading-actions button:focus-visible,.training-tool-tile:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
-  .training-tool-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.training-tool-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:88px;padding:12px;border:1px solid #cce5d8;border-radius:12px;background:#eff8f4;color:var(--text,#172033);text-align:left;font:inherit;cursor:pointer}.training-tool-tile[data-training-tool="match"]{background:#fff7eb;border-color:#edddc3}.training-tool-tile[data-training-tool="checkin"]{background:#eff3ff;border-color:#ced6ee}.training-tool-tile strong{margin-right:18px;font-size:17px;line-height:1.25;color:var(--primary,#202f78)}.training-tool-tile>span{margin-top:6px;font-size:14px;line-height:1.4}.training-tool-toggle{position:absolute;right:10px;top:10px;font-size:22px;line-height:1;font-weight:400;color:var(--primary,#202f78)}.training-tool-tile:hover,.training-tool-tile[aria-expanded="true"]{border-color:var(--primary,#202f78)}.training-tool-tile[aria-expanded="true"]{box-shadow:inset 0 0 0 1px var(--primary,#202f78)}.training-tool-panel[hidden]{display:none!important}.training-tool-panel{margin-bottom:12px}.training-tool-panel .weekly-loop,.training-tool-panel .engagement-training-priority,.training-tool-panel .match-training-compact{margin-top:0}.training-page .training-section-title{margin-top:0}.training-page .train-format-accordion-list+.training-tool-tiles{margin-top:12px}
-  .training-tool-tile>.training-tool-status{font-size:12px;font-weight:700;line-height:1.3;margin-top:8px;color:#54627d}.training-tool-status[hidden]{display:none!important}.training-tool-status[data-tone="attention"]{color:#875000}.training-tool-status[data-tone="saved"]{color:#176448}
-  @media(max-width:620px){.training-tool-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.training-tool-tile:last-child{grid-column:1/-1;min-height:76px}.training-heading-actions{gap:0}.training-page .training-heading-actions button{padding:6px}.training-page .training-heading h1{font-size:22px}}
-  </style><div class="training-page">
+  const coaching=myPlayer?renderTrainingCoachNotes(feedback):'';
+  page.innerHTML=`${trainingPageStyles()}<div class="training-page">
     <header class="training-heading"><h1>How We Train</h1><div class="training-heading-actions">${ownPlayer?'<button type="button" id="requestConversationFromTraining">Ask a coach</button>':''}${canUsePlayersWorkspace()?'<button type="button" id="openPreparationFromTraining">Prepare team training</button>':''}<button type="button" id="howWeTrainGuideLink">Help</button></div></header>
     <h2 class="training-section-title">${myPlayer?'Training ideas from my plan':'Club training ideas'}</h2>${playerTop}<div class="train-format-accordion-list">${formatAccordions}</div>
     ${ownPlayer?renderTrainingTools():''}
@@ -13713,49 +13728,42 @@ function queueWorkspacePlayerPlanAutosave(){
 }
 
 
-function renderStaffTrainingFormatAccordion(player,format,raw,feedback){
-  const coreProgress=sectionProgress('core',raw);
-  const formatProgress=sectionProgress(format,raw);
-  const ready=coreProgress.complete&&formatProgress.complete;
-  const label=formatLabel(format);
-  const cards=ready?[...coreTrainingCards(raw),...formatTrainingCards(raw,format)].slice(0,7):[];
-  const feedbackFocus=ready?trainingFocusForFormat(feedback,format,false):[];
-  const nextSection=coreProgress.complete?format:'core';
-  const nextLabel=coreProgress.complete?label:'Core';
-
-  return `<details class="card train-format-accordion ${ready?'ready':'locked'}">
-    <summary>
-      <div><div class="section-label">${esc(label)}</div><strong>${ready?`${esc(player.display_name||'Player')} · ${esc(label)} Training Plan`:`${esc(label)} Training Plan`}</strong><span>${ready?'Targeted from the player’s completed Player Plan.':`The ${esc(nextLabel)} Player Plan questions still need answers.`}</span></div>
-      <div class="train-accordion-state"><b>${ready?'TRAINING PLAN READY':'PLAYER PLAN NOT COMPLETE'}</b><em>Open ↓</em></div>
-    </summary>
-    <div class="train-simple-body">
-      ${ready?`
-        <div class="train-plan-lines">
-          ${cards.length?cards.map(c=>`<article><small>${esc(c.label)}</small>${c.title?`<h3>${esc(c.title)}</h3>`:''}<strong>${esc(c.value)}</strong><p>${esc(c.cue)}</p></article>`).join(''):'<div class="notice">The Player Plan is complete, but there are no specific training cues to show yet.</div>'}
-        </div>
-        ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
-      `:`<div class="train-format-empty"><strong>The ${esc(label)} training plan needs a completed Player Plan.</strong><span>${coreProgress.complete?`Finish the ${esc(label)} questions to generate training guidance.`:`Complete Core${formatProgress.complete?'':` and ${esc(label)}`} to generate training guidance.`}</span><div class="btnrow"><button class="btn secondary" data-workspace-section="${esc(nextSection)}">${player.can_edit?'Open':'View'} ${esc(nextLabel)} Player Plan</button></div></div>`}
-    </div>
-  </details>`;
+// BEGIN STAFF PLAYER PLAN READER
+// Reuse the player's plan reader and completion rules. Workspace requirements
+// are already grouped by format; they do not carry the rollout's required flag.
+function renderStaffPlayerPlanReader(player,raw,curated){
+  const plan=playerHomePlanState(raw,{
+    groups:player.groups||[],
+    requirements:[...workspaceRequirements(player).values()]
+  });
+  const status=!plan.core.complete
+    ?'Core still to complete'
+    :plan.pendingRequired.length
+      ?`Core complete · ${plan.pendingRequired.map(section=>section.label).join(', ')} still to complete`
+      :plan.ready.length
+        ?'Required plan complete ✓'
+        :'Core complete · Complete a format';
+  return `${playerPlanJourneyStyles()}<section class="card player-plan-reader workspace-plan-reader">
+    <div class="plan-reader-tools"><span class="help">${esc(status)}</span>${player.can_edit?'<div><button type="button" class="btn secondary" data-workspace-section="core">Edit Player Plan</button></div>':''}</div>
+    ${renderPlayerPlanTiles(curated,player.display_name,{title:'Player Plan'})}
+  </section>`;
 }
+function renderWorkspaceReaderHeader(player,groups){
+  const training=playersWorkspaceSection==='training';
+  return `<style>.workspace-reader-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}.workspace-reader-heading .btn{min-height:44px}.workspace-reader-identity{flex:1;min-width:0}.workspace-reader-heading h2{margin:0 0 4px;font-size:20px;overflow-wrap:anywhere}.workspace-reader-heading .workspace-player-groups{margin:0;display:flex;gap:4px;flex-wrap:wrap}.workspace-reader-heading .workspace-access-badge{font-size:10px;padding:4px 7px;flex-shrink:0}.workspace-reader-heading .workspace-reader-groups{display:flex;gap:4px;flex-wrap:wrap;flex:1}</style><header class="workspace-reader-heading"><button type="button" class="btn ghost" id="workspaceBackToPlayers">← Players</button>${training?`<div class="workspace-reader-identity"><h2>${esc(player.display_name||'Player')}</h2><div class="workspace-player-groups">${groups}</div></div>`:`<div class="workspace-reader-groups">${groups}</div>`}<span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span></header>`;
+}
+// END STAFF PLAYER PLAN READER
+
+function renderStaffTrainingFormatAccordion(player,format,raw,feedback){return renderTrainingFormatAccordion(format,raw,feedback,{player});}
 
 function renderStaffPlayerTrainingPlan(player,raw,feedback){
-  const enabled=publishedEnabledFormats();
-  const coreProgress=sectionProgress('core',raw);
-  const statuses=enabled.map(([format,label])=>({format,label,progress:sectionProgress(format,raw)}));
-  return `<section class="card workspace-training-head">
-    <div>
-      <div class="section-label">Training Plan</div>
-      <h2>${esc(player.display_name||'Player')}</h2>
-      <p>This is generated from the player’s completed Player Plan. Incomplete formats stay locked rather than producing generic advice.</p>
-    </div>
-    <div class="workspace-training-statuses">
-      <span class="${coreProgress.complete?'ready':'missing'}"><b>${coreProgress.complete?'✓':'!'}</b> Core</span>
-      ${statuses.map(x=>`<span class="${coreProgress.complete&&x.progress.complete?'ready':'missing'}"><b>${coreProgress.complete&&x.progress.complete?'✓':'!'}</b> ${esc(x.label)}</span>`).join('')}
-    </div>
-  </section>
-  ${renderClubTrainingPrinciples()}
-  <div class="train-format-accordion-list">${enabled.map(([format])=>renderStaffTrainingFormatAccordion(player,format,raw,feedback)).join('')}</div>`;
+  return `${trainingPageStyles()}<div class="training-page workspace-training-page">
+    <h2 class="training-section-title">Training ideas from their plan</h2>
+    <div class="train-format-accordion-list">${publishedEnabledFormats().map(([format])=>renderStaffTrainingFormatAccordion(player,format,raw,feedback)).join('')}</div>
+    ${renderTrainingTools({staff:true})}
+    ${renderTrainingCoachNotes(feedback,{player})}
+    ${renderClubTrainingPrinciples()}
+  </div>`;
 }
 
 function renderWorkspacePlayerDiscussionPanel(player){
@@ -13813,7 +13821,8 @@ async function renderPlayersWorkspacePlayer(){
   }
 
   if(club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!=='players'||playersWorkspaceSelectedId!==targetPlayer||playersWorkspaceSection!==targetSection||document.getElementById('page')!==page)return;
-  const sectionTabs=sections.map(([key,label])=>{
+  const visibleSections=['summary','training'].includes(playersWorkspaceSection)?sections.filter(([key])=>['summary','training','development'].includes(key)):sections;
+  const sectionTabs=visibleSections.map(([key,label])=>{
     if(key==='summary'||key==='training'||key==='development'){
       return `<button data-workspace-section="${key}" class="${playersWorkspaceSection===key?'active':''}">${esc(label)}</button>`;
     }
@@ -13839,27 +13848,7 @@ async function renderPlayersWorkspacePlayer(){
       ?player.workflow.curated_draft
       :curate(raw);
 
-    const progressCards=[['core','Core'],...publishedEnabledFormats()].map(([key,label])=>{
-      const state=workspaceSectionState(key,raw);
-      return `<div class="workspace-progress-card ${state.key} ${requiredSet.has(key)?'required':''}">
-        <strong>${esc(label)}</strong>
-        <span>${state.label}</span>
-        <small>${esc(workspaceRequirementText(player,key))}</small>
-      </div>`;
-    }).join('');
-
-    body=`<div class="workspace-summary-grid">
-      <section class="card">
-        <div class="section-label">Plan progress</div>
-        <h2>Core and format progress</h2>
-        <p class="help">${complete}/${total} currently required sections complete. Each format plan has its own progress below.</p>
-        <div class="workspace-progress-grid">${progressCards}</div>
-        <div class="help workspace-updated">${esc(workspaceUpdatedLabel(player))}</div>
-      </section>
-      <section class="card workspace-plan-preview">
-        ${renderCuratedDraft(curated,player.display_name,'Player Plan')}
-      </section>
-    </div>`;
+    body=renderStaffPlayerPlanReader(player,raw,curated);
   }else if(playersWorkspaceSection==='training'){
     body=developmentError
       ?`<section class="card"><div class="section-label">Training Plan</div><h2>This training plan could not load.</h2><div class="notice">${esc(developmentError)}</div></section>`
@@ -13932,7 +13921,7 @@ async function renderPlayersWorkspacePlayer(){
       </div>`;
   }
 
-  page.innerHTML=`${playersWorkspaceSection==='development'?`<header class="conversation-player-header"><button type="button" class="btn ghost" id="workspaceBackToPlayers">← Players</button><h2>${esc(player.display_name||'Player')}</h2><div class="conversation-player-links"><button type="button" class="btn ghost" data-workspace-section="summary">Player Plan</button><button type="button" class="btn ghost" data-workspace-section="training">Training Plan</button></div></header>`:`<section class="card workspace-player-header">
+  page.innerHTML=`${playersWorkspaceSection==='development'?`<header class="conversation-player-header"><button type="button" class="btn ghost" id="workspaceBackToPlayers">← Players</button><h2>${esc(player.display_name||'Player')}</h2><div class="conversation-player-links"><button type="button" class="btn ghost" data-workspace-section="summary">Player Plan</button><button type="button" class="btn ghost" data-workspace-section="training">Training Plan</button></div></header>`:plansPublished&&['summary','training'].includes(playersWorkspaceSection)?`${renderWorkspaceReaderHeader(player,groups)}<div class="workspace-player-tabs">${sectionTabs}</div>`:`<section class="card workspace-player-header">
     <div class="workspace-player-header-main">
       <button class="btn ghost" id="workspaceBackToPlayers">← Players</button>
       <div>
@@ -13949,9 +13938,6 @@ async function renderPlayersWorkspacePlayer(){
 
   <div class="workspace-player-tabs">${sectionTabs}</div>`}
 
-  ${playersWorkspaceSection==='training'?renderMatchTrainingFocusShell('workspaceMatchTrainingFocus'):''}
-  ${['summary','training'].includes(playersWorkspaceSection)?renderWeeklyLoopShell('workspacePlayerFocus'):''}
-  ${playersWorkspaceSection==='training'?renderWorkspacePlayerDiscussionPanel(player):''}
   ${body}`;
 
   bindCoachingActionControls(developmentData,async()=>{await refreshPlayersWorkspaceFeedback();await renderPlayersWorkspacePlayer();});
@@ -13995,10 +13981,23 @@ async function renderPlayersWorkspacePlayer(){
       queueWorkspacePlayerPlanAutosave();
     });
   }
-  if(['summary','training'].includes(playersWorkspaceSection))await Promise.all([
-    mountWeeklyLoop(document.getElementById('workspacePlayerFocus'),{playerId:player.id,context:'training'}),
-    playersWorkspaceSection==='training'?mountMatchTrainingFocus(document.getElementById('workspaceMatchTrainingFocus'),{playerId:player.id,isOwner:false,canStillView:()=>playersWorkspaceSelectedId===player.id&&playersWorkspaceSection==='training'&&!!workspaceSelectedPlayer()}):Promise.resolve()
-  ]);
+  if(playersWorkspaceSection==='training'&&!developmentError){
+    bindTrainingTools(page);
+    const trainingRoot=page.querySelector('.workspace-training-page');
+    const stillHere=()=>club?.id===targetClub&&session?.user?.id===targetUser&&currentTab==='players'&&playersWorkspaceSelectedId===targetPlayer&&playersWorkspaceSection==='training'&&page.querySelector('.workspace-training-page')===trainingRoot&&!!workspaceSelectedPlayer();
+    page.querySelectorAll('[data-staff-innings-source]').forEach(button=>button.onclick=async()=>{
+      const matchId=button.dataset.staffInningsSource;
+      if(!stillHere()||!(developmentData.matches||[]).some(match=>match.id===matchId)||!await saveClubEditsBeforeNavigation()||!stillHere())return;
+      playersWorkspaceSection='development';playersWorkspaceDevelopmentMode=null;playersWorkspaceDevelopmentMatchId=null;staffObservationEditId=null;
+      playersWorkspaceMatchOpenId=matchId;playersWorkspaceMatchFormat='';
+      await renderPlayersWorkspacePlayer();
+      if(club?.id===targetClub&&session?.user?.id===targetUser&&currentTab==='players'&&playersWorkspaceSelectedId===targetPlayer&&playersWorkspaceSection==='development')requestAnimationFrame(()=>document.getElementById('staff-innings-detail-'+matchId)?.scrollIntoView({block:'start'}));
+    });
+    await Promise.all([
+      mountWeeklyLoop(document.getElementById('workspacePlayerFocus'),{playerId:player.id,context:'training',compact:true,title:'Current focus',onStatus:state=>{if(stillHere())setTrainingToolStatus(page,'focus',state);}}),
+      mountMatchTrainingFocus(document.getElementById('workspaceMatchTrainingFocus'),{playerId:player.id,isOwner:false,compact:true,canStillView:stillHere})
+    ]);
+  }
 }
 /* ---------------- PLAYER HOME ---------------- */
 
@@ -15069,14 +15068,14 @@ function renderDraftPreview(){
   return renderCuratedDraft(curated);
 }
 
-function renderPlayerPlanTiles(curated,playerName){
+function renderPlayerPlanTiles(curated,playerName,{title='My Player Plan'}={}){
   const sections=[{key:'core',label:'Core',lines:curated.core||[]},...FORMATS.map(([key,label])=>({key,label,lines:curated.formats?.[key]?.lines||[]}))];
   return `<style>
     .plan-tile-plan{border:0!important;overflow:visible!important}.plan-tile-plan .plan-draft-head{border-radius:12px;margin-bottom:12px}.plan-tile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}.plan-section-tile{--tile-accent:#263579;--tile-tint:#f1f3ff;border:1px solid #dce2ef;border-left:4px solid var(--tile-accent);border-radius:12px;background:white;overflow:hidden;min-width:0;box-shadow:0 3px 10px #18275006}.plan-section-tile[data-plan-tile="t20"]{--tile-accent:#7751aa;--tile-tint:#f8f3ff}.plan-section-tile[data-plan-tile="limited_overs"]{--tile-accent:#117a79;--tile-tint:#edf9f7}.plan-section-tile[data-plan-tile="long_form"]{--tile-accent:#94611a;--tile-tint:#fff8ec}.plan-section-tile>summary{list-style:none;cursor:pointer;min-height:78px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--tile-tint);color:#142348}.plan-section-tile>summary::-webkit-details-marker{display:none}.plan-section-tile>summary strong{font-size:18px;line-height:1.25}.plan-tile-control{display:flex;align-items:center;gap:8px;color:var(--tile-accent);font-size:13px;font-weight:700;flex-shrink:0}.plan-tile-control svg{width:22px;height:22px;transition:transform .15s}.plan-tile-close{display:none}.plan-section-tile[open]>summary{border-bottom:1px solid #dce2ef}.plan-section-tile[open] .plan-tile-view{display:none}.plan-section-tile[open] .plan-tile-close{display:inline}.plan-section-tile[open] .plan-tile-control svg{transform:rotate(180deg)}.plan-section-tile>summary:hover{filter:brightness(.98)}.plan-section-tile>summary:focus-visible{outline:3px solid var(--tile-accent);outline-offset:-4px}.plan-tile-answers{padding:0 16px}.plan-tile-answer{padding:14px 0;overflow-wrap:anywhere}.plan-tile-answer+.plan-tile-answer{border-top:1px solid #e5e9f1}.plan-tile-question{margin:0 0 6px!important;color:#142348;font-size:13px!important;line-height:1.4;font-weight:700}.plan-tile-answer p{margin:0;color:#34435a;font-size:15px;line-height:1.55;white-space:pre-line}.plan-tile-empty{margin:0;padding:16px 0;color:#526078;font-size:14px}
     @media(max-width:680px){.plan-tile-grid{grid-template-columns:1fr;gap:10px}.plan-section-tile>summary{min-height:70px;padding:14px}.plan-section-tile>summary strong{font-size:17px}.plan-tile-answers{padding:0 14px}}
     @media(prefers-reduced-motion:reduce){.plan-tile-control svg{transition:none}}
   </style><div class="plan-draft plan-tile-plan">
-    <div class="plan-draft-head"><div class="section-label" style="color:#fff;opacity:.75">My Player Plan</div><h2>${esc(playerName||'Player')}</h2></div>
+    <div class="plan-draft-head"><div class="section-label" style="color:#fff;opacity:.75">${esc(title)}</div><h2>${esc(playerName||'Player')}</h2></div>
     <div class="plan-tile-grid">${sections.map(section=>`<details class="plan-section-tile" data-plan-tile="${esc(section.key)}"><summary><strong>${esc(section.label)}</strong><span class="plan-tile-control"><span class="plan-tile-view">View</span><span class="plan-tile-close">Close</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="plan-tile-answers">${section.lines.length?section.lines.map(line=>`<div class="plan-tile-answer"><h3 class="plan-tile-question">${esc(line.label)}</h3><p>${esc(line.value)}</p></div>`).join(''):'<p class="plan-tile-empty">No saved answers in this section yet.</p>'}</div></details>`).join('')}</div>
   </div>`;
 }
