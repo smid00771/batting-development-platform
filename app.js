@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.74 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.75 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.74';
+const APP_UI_VERSION='0.8.62.75';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -2188,6 +2188,72 @@ async function revealPendingCoachingUpdate(){
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refreshMyCoachingUpdates();});
 window.addEventListener?.('focus',()=>{void refreshMyCoachingUpdates();});
 
+// BEGIN CONTENT DISCLOSURES
+// One visual affordance for the app's content disclosures. Install once in the
+// signed-in shell; CSS automatically applies to later asynchronous renders.
+// Deliberately scoped: account menus, context switches, workflow stage buttons,
+// navigation links and ordinary action buttons are not content disclosures.
+// New content <details> can opt in with class="cb-disclosure".
+function disclosureStyles(){
+  const details=[
+    '#page details:is(.cb-disclosure,.setup-collapsible,.inactive-groups,.workshop-setup,.workshop-setup-review,.workshop-existing-invitations,.workshop-contribution-details,.workshop-maintenance,.workshop-about,.submitted-response-detail,.source-responses,.late-history-card,.late-history,.hwb-public-banner,.plan-player-ideas,.plan-removed-list,.train-simple-accordion,.train-format-accordion,.train-card-depth,.innings-reflection-options,.innings-prep-section,.innings-sharing,.innings-extra-shot,.weekly-loop-review-history,.weekly-focus-manage,.prep-more,.plan-progress-disclosure,.plan-reference-disclosure,.plan-preview-disclosure,.plan-section-tile,.match-review-import,.match-review-mapping,.engagement-progress-details)',
+    '#page details:is(#staffInningsHistory,#pastCoachingNotes,[data-conversation-history])',
+    '#page :is(.training-page,.call-page,.prediction-results,.match-training-compact,#sharedCoachingActions,.development-match-card,.engagement-card,.match-review-import) details:not(.account-menu)'
+  ];
+  const summary=details.map(selector=>selector+'>summary').join(',\n');
+  const opened=details.map(selector=>selector+'[open]>summary::after').join(',\n');
+  const marker=details.map(selector=>selector+'>summary::-webkit-details-marker').join(',\n');
+  const chevron=details.map(selector=>selector+'>summary::after').join(',\n');
+  const focus=details.map(selector=>selector+'>summary:focus-visible').join(',\n');
+  return `<style id="clubContentDisclosureStyles">
+    ${summary}{position:relative;box-sizing:border-box;list-style:none;cursor:pointer;padding-right:34px!important}
+    ${marker}{display:none}
+    ${chevron},#page .training-tool-tile::after{
+      content:'';position:absolute;display:block;box-sizing:border-box;
+      width:9px;height:9px;right:12px;top:50%;margin-top:-6px;
+      padding:0;border:0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+      border-radius:0;background:none;box-shadow:none;font-size:0;line-height:0;
+      transform:rotate(45deg);transform-origin:center;pointer-events:none;
+      transition:transform .15s ease;
+    }
+    ${opened},#page .training-tool-tile[aria-expanded="true"]::after{transform:rotate(225deg);margin-top:-2px}
+    ${focus},#page .training-tool-tile:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
+
+    /* Remove only the old, redundant controls; titles, counts and hints remain. */
+    #page .setup-collapsible>summary>.setup-collapsible-toggle,
+    #page .hwb-public-banner>summary>em,
+    #page .plan-player-ideas>summary>em,
+    #page .train-simple-accordion>summary>em,
+    #page .train-format-accordion>summary>.train-accordion-state>em,
+    #page .train-card-depth>summary>em,
+    #page .plan-section-tile>summary>.plan-tile-control,
+    #page .call-tally-summary>.call-tally-action,
+    #page .call-award-help-action>span[aria-hidden="true"],
+    #page .call-week-picker>summary>span[aria-hidden="true"],
+    #page .match-review-import>summary>span,
+    #page .innings-add-shot>summary>span[aria-hidden="true"],
+    #page .training-tool-tile>.training-tool-toggle{display:none!important}
+
+    /* A tile's body remains mounted; aria-expanded alone drives its chevron. */
+    #page .training-tool-tile{padding-right:34px}
+    #page .training-tool-tile::after{top:19px;margin-top:0}
+    #page .training-tool-tile[aria-expanded="true"]::after{margin-top:4px}
+
+    /* Training formats are compact rows, with the full title as a 44px target. */
+    #page .training-page .train-format-accordion{padding:0!important;margin:6px 0!important;border-radius:10px}
+    #page .training-page .train-format-accordion>summary{min-height:48px;padding:10px 34px 10px 12px!important;align-items:center;gap:8px}
+    #page .training-page .train-format-accordion>summary strong{font-size:15px;line-height:1.35;margin-top:0}
+    #page .training-page .train-format-accordion>summary>.train-accordion-state{display:none}
+    #page .training-page .train-format-accordion-list{margin-top:6px}
+    #page .training-page .train-format-accordion .train-simple-body{padding:12px}
+    @media(prefers-reduced-motion:reduce){${chevron},#page .training-tool-tile::after{transition:none}}
+  </style>`;
+}
+function installDisclosureUI(){
+  if(!document.getElementById('clubContentDisclosureStyles'))document.head.insertAdjacentHTML('beforeend',disclosureStyles());
+}
+// END CONTENT DISCLOSURES
+
 function accountMenuStyles(){
   return `<style>
     .shell .nav{flex-wrap:wrap}
@@ -2334,21 +2400,19 @@ function renderShell(){
 
   const contextOptions=[...allMemberships.map(m=>`<option value="club:${m.club_id}" ${m.club_id===club.id?'selected':''}>${esc(m.clubs?.name||'Club')}</option>`),platformRole?`<option value="platform">Platform Admin</option>`:''].join('');
 
-  app.innerHTML=`${accountMenuStyles()}<div class="shell">
-    <header class="hero">
+  app.innerHTML=`${accountMenuStyles()}<style>
+    .compact-club-header.hero{padding:10px 18px}.compact-club-header .topline{align-items:center;gap:12px}.compact-club-header .shell-brand-lockup{display:flex;align-items:center;gap:10px;min-width:0;flex:1}.compact-club-header .club-header-name{font-size:17px;font-weight:800;line-height:1.3;overflow-wrap:anywhere}.compact-club-header .shell-club-logo{width:36px;height:36px;min-width:36px;padding:3px;border-radius:7px}.compact-club-header .shell-club-logo img{width:100%;height:100%;object-fit:contain}.compact-club-header .header-actions{flex-shrink:0;gap:6px}.compact-club-header .header-actions>.btn{min-height:44px}.compact-club-header .context-switch{max-width:240px;min-height:44px}
+    @media(max-width:700px){.compact-club-header.hero{padding:10px 15px}.compact-club-header .topline{flex-wrap:wrap;gap:8px}.compact-club-header .shell-brand-lockup{flex-basis:100%}.compact-club-header .header-actions{width:100%;justify-content:flex-start}.compact-club-header .club-header-name{font-size:16px}.compact-club-header .context-switch{max-width:100%}}
+  </style><div class="shell">
+    <header class="hero compact-club-header">
       <div class="topline">
         <div class="shell-brand-lockup">
           ${club.logo_data_url?`<div class="shell-club-logo"><img src="${esc(club.logo_data_url)}" alt="${esc(club.name)} logo"></div>`:''}
-          <div>
-            <div class="k">${esc(club.name)}</div>
-            <h1>Club Batting</h1>
-            <p>${isAdmin()?'Build how your club bats, turn it into Player Plans, and connect those plans to training.':'Your club’s How We Bat becomes the framework for your Player Plan and How We Train.'}</p>
-          </div>
+          <div class="club-header-name">${esc(club.name)}</div>
         </div>
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
-          <button class="btn secondary" id="openClubHelp" type="button" aria-label="Ask the Club Batting Guide and explore tutorials">Ask the Guide</button>
           <div id="coachingUpdatesHost" hidden></div>
           ${accountMenuHtml({allowJoin:true,allowInvolvement:true,allowCoaching:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
@@ -2363,7 +2427,6 @@ function renderShell(){
   document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('accountCoaching').onclick=openCoachConversations;
   document.getElementById('accountInvolvement').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderFirstIdentitySetup({editing:true});};
-  document.getElementById('openClubHelp').onclick=()=>openClubBattingGuideTopic('whole_process',{focus:'chat'});
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
   document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;await renderPlatformConsole();});
   document.getElementById('retryAccountAccess')?.addEventListener('click',async()=>{
@@ -2821,6 +2884,7 @@ async function handleAppNavigationHistory(event){
 }
 
 function renderTab(){
+  installDisclosureUI();
   if(currentTab!=='myplan')playerPlanEditScope='';
   if(currentTab==='feedback'&&canUsePlayersWorkspace()){
     resetPlayersWorkspaceForClub();playersWorkspaceSelectedId=null;playersWorkspaceSection='summary';
@@ -3983,7 +4047,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Start with your question",
-        "body": "Use Request a Coach Conversation on Player Home or How We Train, or choose Account > Coach Conversations. You do not need the Coaching alert button to make your first request. You can request help before completing your Player Plan and before the club publishes its setup. Say what you would like to discuss.",
+        "body": "Use Request a Coach Conversation on Player Home, Ask a coach in How We Train, or Account > Coach Conversations. You do not need the Coaching alert button to make your first request. You can request help before completing your Player Plan and before the club publishes its setup. Say what you would like to discuss.",
         "target_tab": "conversations"
       },
       {
@@ -4142,7 +4206,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Get help in context",
-        "body": "Help & Tutorials is available beside the account/navigation controls. Choose a topic or ask the Club Batting Guide. Your question remains visible above the answer. The Guide explains the product; it does not carry out edits or book a prediction merely by saying so."
+        "body": "Open Help & Tutorials in the navigation. Choose a topic or ask the Club Batting Guide. Your question remains visible above the answer. The Guide explains the product; it does not carry out edits or book a prediction merely by saying so."
       }
     ],
     "sort_order": 180,
@@ -4236,7 +4300,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Choose the match and players",
-        "body": "Open Match review beside Players. Playing Group / grade is on the first line with match date, format, opposition and innings number. The permitted roster loads automatically as the match or grade changes. These reads save nothing. Only players you can edit are available; a coaching title alone does not grant access.",
+        "body": "Open Match review beside Players. For a new review, choose Playing Group / grade with match date, format, opposition and innings number. The permitted roster loads automatically as the match or grade changes. These reads save nothing. Only players you can edit are available; a coaching title alone does not grant access.",
         "target_tab": "team_review"
       },
       {
@@ -4281,7 +4345,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Find a saved review",
-        "body": "Saved match reviews is a separate section within Match review. Filter by grade, date, format or player to find earlier team entries. Only records within your existing permissions appear. Open a review to see its saved match and player rows; you do not need to reconstruct the match details to find it."
+        "body": "Saved match reviews is a separate section within Match review. Filter by grade, date, format or player to find earlier team entries. Open a review to see its saved match summary and player rows. The Innings selector still switches innings; choose Edit review to change player answers. Only records within your existing permissions appear."
       },
       {
         "title": "Edit the same saved match review",
@@ -9858,7 +9922,7 @@ function renderTrainingPlanCard(card,format){
     ${heading}
     <p class="train-card-cue">${esc(card.cue)}</p>
     <details class="train-card-depth">
-      <summary><span>Go deeper →</span><em>More detail</em></summary>
+      <summary><span>Go deeper</span><em>More detail</em></summary>
       <div class="train-card-depth-body">
         <div class="train-depth-block"><b>BUILD THE PRACTICE</b>${depth.ideas.map(x=>`<p>${esc(x)}</p>`).join('')}</div>
         <div class="train-depth-block success"><b>WHAT GOOD LOOKS LIKE</b><p>${esc(depth.success)}</p></div>
@@ -11455,8 +11519,9 @@ function teamReviewRequestId(){
   const bytes=new Uint8Array(16);if(!globalThis.crypto?.getRandomValues)throw new Error('Your browser needs a secure connection to save this review.');globalThis.crypto.getRandomValues(bytes);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;return [...bytes].map((b,i)=>([4,6,8,10].includes(i)?'-':'')+b.toString(16).padStart(2,'0')).join('');
 }
 function teamReviewStyles(){return `<style>
-  .team-review-heading{display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}.team-review-heading h1{margin:6px 0}.team-review-fields{display:grid;grid-template-columns:1.25fr 1fr 1.1fr 1.6fr .9fr;gap:12px}.team-review-fields .field{margin:0}.team-review-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-top:14px}.team-review-toolbar .field{flex:1;max-width:340px;margin:0}.team-review-status[hidden]{display:none!important}.team-review-status{min-height:1.4em;margin:10px 0 0;color:var(--muted)}.team-review-table{width:100%;border-collapse:collapse}.team-review-table th{text-align:left;font-size:12px;color:var(--muted);padding:10px 8px}.team-review-table td{border-top:1px solid #dce1ed;padding:12px 8px;vertical-align:top}.team-review-table th:first-child{width:20%}.team-review-table th:nth-child(2){width:46%}.team-review-player{font-weight:700}.team-review-meta{font-size:12px;color:var(--muted);margin-top:5px}.team-review-options{display:flex;gap:5px;flex-wrap:wrap}.team-review-option{font:inherit;font-weight:700;font-size:12px;border:1px solid #d6dcef;border-radius:8px;padding:8px 9px;min-height:44px;background:#fff;color:var(--ink);cursor:pointer}.team-review-option[aria-pressed=true]{background:var(--primary,#25327c);color:#fff;border-color:var(--primary,#25327c)}.team-review-option:focus-visible{outline:3px solid #899df2;outline-offset:2px}.team-review-option:disabled{cursor:default;opacity:.65}.team-review-table select{font:inherit;font-size:13px;min-height:44px;width:100%;max-width:330px}.team-review-row-status{font-size:12px;margin:7px 0 0;color:var(--muted)}.team-review-saved{color:#176455}.team-review-conflict{background:#fff5e8;border:1px solid #eed4aa;border-radius:8px;padding:10px;margin-top:10px;font-size:13px}.team-review-conflict p{margin:0 0 8px}.team-review-candidate{background:#f3f5fb;border-radius:8px;padding:10px;margin-bottom:10px}.team-review-candidate label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.team-review-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.team-review-actions .btn{font-size:12px;min-height:36px;padding:6px 9px}.team-review-footer{display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;bottom:0;background:#fff;border-top:1px solid #dce1ed;padding:14px 0;margin-top:10px}.team-review-footer .help{margin:0}.team-review-empty{padding:14px 0}.team-review-count{font-size:13px;color:var(--muted);margin:12px 0}.team-review-confirmed{border:1px solid #acd5c7;background:#effaf5;border-radius:12px;padding:14px;margin:0 0 16px}.team-review-history-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.team-review-history-table{width:100%;border-collapse:collapse;text-align:left}.team-review-history-table th,.team-review-history-table td{padding:12px 8px;border-bottom:1px solid #dce1ed;vertical-align:top}.team-review-history-actions{display:flex;gap:6px;flex-wrap:wrap}.team-review-delete-preview{border:2px solid #af3941;background:#fff8f8;border-radius:12px;padding:16px}.team-review-history-wrap{overflow:auto}.match-review-import{border-top:1px solid #dce1ed;padding-top:12px;margin-top:12px}.match-review-import summary{font-weight:700;cursor:pointer}.match-review-import .btnrow input{flex:1;min-width:220px}.match-review-mapping{margin:12px 0}.match-review-map-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin:8px 0}.match-review-score small{display:block;font-size:12px;color:var(--muted);max-width:190px;margin:4px 0}.match-review-confirm{display:flex;gap:6px;font-size:12px;margin-top:8px}.match-review-confirm input{width:auto}.match-review-score-label{display:none}
+  .team-review-heading{display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}.team-review-heading h1{margin:6px 0}.team-review-fields{display:grid;grid-template-columns:1.25fr 1fr 1.1fr 1.6fr .9fr;gap:12px}.team-review-fields .field{margin:0}.team-review-fields.saved{grid-template-columns:minmax(0,1fr) minmax(130px,180px);align-items:center}.team-review-match-summary{min-width:0;overflow-wrap:anywhere}.team-review-match-summary strong{font-size:18px}.team-review-match-summary .help{margin:4px 0 0}.team-review-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-top:14px}.team-review-toolbar .field{flex:1;max-width:340px;margin:0}.team-review-status[hidden]{display:none!important}.team-review-status{min-height:1.4em;margin:10px 0 0;color:var(--muted)}.team-review-table{width:100%;border-collapse:collapse}.team-review-table th{text-align:left;font-size:12px;color:var(--muted);padding:10px 8px}.team-review-table td{border-top:1px solid #dce1ed;padding:12px 8px;vertical-align:top}.team-review-table th:first-child{width:20%}.team-review-table th:nth-child(2){width:46%}.team-review-player{font-weight:700}.team-review-meta{font-size:12px;color:var(--muted);margin-top:5px}.team-review-options{display:flex;gap:5px;flex-wrap:wrap}.team-review-option{font:inherit;font-weight:700;font-size:12px;border:1px solid #d6dcef;border-radius:8px;padding:8px 9px;min-height:44px;background:#fff;color:var(--ink);cursor:pointer}.team-review-option[aria-pressed=true]{background:var(--primary,#25327c);color:#fff;border-color:var(--primary,#25327c)}.team-review-option:focus-visible{outline:3px solid #899df2;outline-offset:2px}.team-review-option:disabled{cursor:default;opacity:.65}.team-review-table select{font:inherit;font-size:13px;min-height:44px;width:100%;max-width:330px}.team-review-row-status{font-size:12px;margin:7px 0 0;color:var(--muted)}.team-review-saved{color:#176455}.team-review-conflict{background:#fff5e8;border:1px solid #eed4aa;border-radius:8px;padding:10px;margin-top:10px;font-size:13px}.team-review-conflict p{margin:0 0 8px}.team-review-candidate{background:#f3f5fb;border-radius:8px;padding:10px;margin-bottom:10px}.team-review-candidate label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.team-review-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.team-review-actions .btn{font-size:12px;min-height:36px;padding:6px 9px}.team-review-footer{display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;bottom:0;background:#fff;border-top:1px solid #dce1ed;padding:14px 0;margin-top:10px}.team-review-footer .help{margin:0}.team-review-empty{padding:14px 0}.team-review-count{font-size:13px;color:var(--muted);margin:12px 0}.team-review-confirmed{border:1px solid #acd5c7;background:#effaf5;border-radius:12px;padding:14px;margin:0 0 16px}.team-review-history-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.team-review-history-table{width:100%;border-collapse:collapse;text-align:left}.team-review-history-table th,.team-review-history-table td{padding:12px 8px;border-bottom:1px solid #dce1ed;vertical-align:top}.team-review-history-actions{display:flex;gap:6px;flex-wrap:wrap}.team-review-delete-preview{border:2px solid #af3941;background:#fff8f8;border-radius:12px;padding:16px}.team-review-history-wrap{overflow:auto}.match-review-import{border-top:1px solid #dce1ed;padding-top:12px;margin-top:12px}.match-review-import summary{font-weight:700;cursor:pointer}.match-review-import .btnrow input{flex:1;min-width:220px}.match-review-mapping{margin:12px 0}.match-review-map-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin:8px 0}.match-review-score small{display:block;font-size:12px;color:var(--muted);max-width:190px;margin:4px 0}.match-review-confirm{display:flex;gap:6px;font-size:12px;margin-top:8px}.match-review-confirm input{width:auto}.match-review-score-label{display:none}
   @media(max-width:760px){.team-review-fields{grid-template-columns:1fr 1fr}.team-review-fields .team-review-opposition{grid-column:1/-1}.team-review-table,.team-review-table tbody,.team-review-table tr,.team-review-table td{display:block}.team-review-table thead{display:none}.team-review-table tr{border-top:1px solid #dce1ed;padding:12px 0}.team-review-table td{border:0;padding:0 0 10px}.team-review-table td:last-child{padding-bottom:0}.team-review-table select{max-width:none}.team-review-player{font-size:17px}.team-review-options{gap:6px}.team-review-option{flex:1;min-width:54px}.team-review-footer{padding:12px 0}.team-review-footer .btn{flex:1}.match-review-score-label{display:inline;margin-right:8px;font-weight:600}.match-review-map-row{grid-template-columns:1fr}.match-review-score small{max-width:none}}
+  @media(max-width:600px){.team-review-fields.saved{grid-template-columns:minmax(0,1fr);gap:10px}.team-review-fields.saved>.field{max-width:180px;width:100%}}
 </style>`;}
 function teamReviewRowHtml(player){
   const s=ensureTeamReviewState(),base=teamReviewBase(player),draft=s.drafts[player.player_id],row=draft||base,name=player.display_name||player.name||'Player',locked=teamReviewControlsLocked()||!s.loaded||(!!s.sessionId&&!s.editReview)||s.removed.includes(player.player_id),suppressed=['did_not_bat','no_plan'].includes(row.batting_to_plan),candidates=player.candidates||[],saved=s.saved.includes(player.player_id)||(!draft&&!!row.batting_to_plan),baseLabel=TEAM_REVIEW_CHOICES.find(([value])=>value===base.batting_to_plan)?.[1]||'Not recorded';
@@ -11466,16 +11531,16 @@ function teamReviewSavedGroupName(review){return review?.group_scope==='legacy'?
 function teamReviewGradeOptions(s,placeholder=false){return `${s.sessionGroupScope==='legacy'?'<option value="__legacy__" selected>Grade not recorded</option>':''}${placeholder?'<option value="">Choose a grade</option>':'<option value="">All grades</option>'}<option value="__all__" ${s.group==='__all__'?'selected':''}>All players I can edit</option><option value="__unassigned__" ${s.group==='__unassigned__'?'selected':''}>Currently unassigned</option>${(s.groups||teamReviewCache?.groups||[]).map(g=>`<option value="${esc(g.id)}" ${g.id===s.group?'selected':''}>${esc(g.name)}</option>`).join('')}`;}
 function teamReviewIdentityReady(s){return /^\d{4}-\d{2}-\d{2}$/.test(s.match_date||'')&&!!s.opposition.trim()&&!!s.group;}
 function clearTeamReviewEntry(){const s=ensureTeamReviewState();if(teamReviewSavePending()){alert('Confirm the pending save before starting another review.');return;}if(teamReviewHasUnsavedChanges()&&!confirm('Discard these unsaved choices and start a new match review?'))return;const groups=s.groups;resetTeamReviewState();const next=ensureTeamReviewState();next.groups=groups;next.message='';renderTeamReview();}
-async function teamReviewMatchChanged(){const s=ensureTeamReviewState();if(teamReviewControlsLocked())return;const identity={match_date:document.getElementById('teamReviewDate').value,format_key:document.getElementById('teamReviewFormat').value,opposition:document.getElementById('teamReviewOpposition').value.trim(),innings_number:Number(document.getElementById('teamReviewInnings').value)||1};if(s.loaded&&JSON.stringify(identity)!==JSON.stringify(s.loaded)&&teamReviewHasUnsavedChanges()){s.message='Save or discard your current choices before choosing a different match.';renderTeamReviewContent();return;}Object.assign(s,identity);if(!teamReviewIdentityReady(s)){s.loaded=null;s.message='';renderTeamReviewContent();return;}if(JSON.stringify(identity)!==JSON.stringify(s.loaded)){s.loaded=identity;s.saved=[];s.selectedInnings={};s.sessionId=null;s.sessionRevision=null;s.sessionGroupScope=null;s.sessionGroupId=null;}await renderTeamReview();}
+async function teamReviewMatchChanged(){const s=ensureTeamReviewState();if(teamReviewControlsLocked()||s.sessionId)return;const identity={match_date:document.getElementById('teamReviewDate').value,format_key:document.getElementById('teamReviewFormat').value,opposition:document.getElementById('teamReviewOpposition').value.trim(),innings_number:Number(document.getElementById('teamReviewInnings').value)||1};if(s.loaded&&JSON.stringify(identity)!==JSON.stringify(s.loaded)&&teamReviewHasUnsavedChanges()){s.message='Save or discard your current choices before choosing a different match.';renderTeamReviewContent();return;}Object.assign(s,identity);if(!teamReviewIdentityReady(s)){s.loaded=null;s.message='';renderTeamReviewContent();return;}if(JSON.stringify(identity)!==JSON.stringify(s.loaded)){s.loaded=identity;s.saved=[];s.selectedInnings={};s.sessionId=null;s.sessionRevision=null;s.sessionGroupScope=null;s.sessionGroupId=null;}await renderTeamReview();}
 function renderTeamReviewContent(){
   const page=document.getElementById('page'),s=ensureTeamReviewState();if(!page||currentTab!=='team_review')return;
   if(!canUseTeamReview()){teamReviewCache=null;page.innerHTML='<section class="card"><h1>Match Review</h1><p>Your Club Admin can assign a coaching role and access to the players you work with.</p></section>';return;}
   if(s.view==='history'){renderTeamReviewHistoryContent();return;}
   s.leaveApproved=false;const locked=teamReviewControlsLocked(),identityLocked=locked||!!s.sessionId,rows=teamReviewRows(),showRows=!!s.group||!!s.loaded,dirty=Object.keys(s.drafts).length+s.removed.length+matchReviewImportCount(),loaded=s.loaded;
-  page.innerHTML=`${teamReviewStyles()}<section class="card"><div class="team-review-heading"><div><div class="section-label">Captain & coach workspace</div><h1>Match Review</h1><p>Choose a grade, complete the match details, then mark your team.</p></div><div class="btnrow"><button type="button" class="btn secondary" id="teamReviewHistory" ${locked?'disabled':''}>Saved match reviews</button><button type="button" class="btn ghost" id="teamReviewHelp">Show me how</button></div></div><p class="help">Choosing a grade or changing match details only loads players and existing observations. Nothing is written until you click <strong>Save match review</strong>.</p></section><section class="card">${s.sessionId&&!s.editReview&&!dirty?`<div class="team-review-confirmed"><strong>Match review saved ✓</strong><p>${s.reviewCanEdit?'Use Edit review to update these observations, or start a new review.':'This review was recorded by '+esc(s.sessionLabel||'another club member')+'. Their observations are shown here.'} Saved reviews remain available after clearing this form.</p>${s.reviewCanEdit?'<button type="button" class="btn" id="editSavedTeamReview">Edit review</button>':''}<button type="button" class="btn secondary" id="newSavedTeamReview">New match review</button></div>`:''}<div class="team-review-fields"><div class="field"><label for="teamReviewGroup">Playing Group / grade</label><select id="teamReviewGroup" ${identityLocked?'disabled':''}>${teamReviewGradeOptions(s,true)}</select></div><div class="field"><label for="teamReviewDate">Match start date</label><input type="date" id="teamReviewDate" value="${esc(s.match_date)}" ${identityLocked?'disabled':''}></div><div class="field"><label for="teamReviewFormat">Format</label><select id="teamReviewFormat" ${identityLocked?'disabled':''}>${FORMATS.map(([value,label])=>`<option value="${esc(value)}" ${s.format_key===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field team-review-opposition"><label for="teamReviewOpposition">Opposition</label><input id="teamReviewOpposition" maxlength="160" value="${esc(s.opposition)}" placeholder="Who did you play?" ${identityLocked?'disabled':''}></div><div class="field"><label for="teamReviewInnings">Innings</label><select id="teamReviewInnings" ${locked?'disabled':''}>${Array.from({length:10},(_,index)=>index+1).map(n=>`<option value="${n}" ${s.innings_number===n?'selected':''}>${n===1?'First innings':n===2?'Second innings':`Innings ${n}`}</option>`).join('')}</select></div></div><p class="team-review-status" id="teamReviewStatus" role="status" ${s.message?'':'hidden'}>${esc(s.message||'')}</p>${(!teamReviewCache&&!s.loading)||s.needsReload||Object.values(s.drafts).some(d=>d._conflict)?'<button type="button" class="btn secondary" id="retryTeamReviewLoad">Reload current observations</button>':''}${renderMatchReviewImporter()}</section>${showRows?`<section class="card"><h2>${loaded?`${esc(loaded.opposition)} · ${esc(formatDateShort(loaded.match_date))}`:'Players in this grade'}</h2><p class="help">${loaded?`${esc(formatLabel(loaded.format_key))} · innings ${loaded.innings_number}. `:'Complete the match details above to enable entry. '}Leaving a player blank makes no change. DNB is only for a player who did not bat, not an absent player.</p>${teamReviewCache?rows.length?`<table class="team-review-table" aria-label="Match observations"><thead><tr><th scope="col">Player</th><th scope="col">Batted to their plan?</th><th scope="col">Dismissal / details</th><th scope="col">Score</th></tr></thead><tbody>${rows.map(teamReviewRowHtml).join('')}</tbody></table>`:'<div class="team-review-empty"><p>No players with edit access in this selection. Choose another Playing Group, or ask your Club Admin to check your player access.</p></div>':`<p>${s.loading?'Loading players…':'Could not load players. Try again above.'}</p>`}${Object.entries(s.drafts).filter(([id])=>!teamReviewPlayer(id)).map(([id,draft])=>`<div class="team-review-conflict"><p>${esc(draft._conflict||'A changed player is no longer available.')}</p><button type="button" class="btn ghost" data-team-discard="${esc(id)}" ${locked?'disabled':''}>Discard unavailable player’s changes</button></div>`).join('')}<div class="team-review-footer"><button type="button" class="btn" id="saveTeamReview" ${s.saving||s.loading||(!dirty&&!s.pending)||!loaded||(s.sessionId&&!s.editReview)?'disabled':''}>${s.saving?'Saving…':s.pending?'Retry save':'Save match review'}</button><p class="help">${s.pending?'A save is awaiting confirmation. Retry checks the same request safely.':dirty?`Saves all review changes and selected scores.`:'No new choices to save.'}</p></div></section>`:''}`;
-  for(const id of ['teamReviewDate','teamReviewFormat','teamReviewOpposition'])document.getElementById(id).onchange=teamReviewMatchChanged;
+  page.innerHTML=`${teamReviewStyles()}<section class="card"><div class="team-review-heading"><div><div class="section-label">Captain & coach workspace</div><h1>Match Review</h1><p>Choose a grade, complete the match details, then mark your team.</p></div><div class="btnrow"><button type="button" class="btn secondary" id="teamReviewHistory" ${locked?'disabled':''}>Saved match reviews</button><button type="button" class="btn ghost" id="teamReviewHelp">Show me how</button></div></div><p class="help">Choosing a grade or changing match details only loads players and existing observations. Nothing is written until you click <strong>Save match review</strong>.</p></section><section class="card">${s.sessionId&&!s.editReview&&!dirty?`<div class="team-review-confirmed"><strong>Match review saved ✓</strong><p>${s.reviewCanEdit?'Use Edit review to update these observations, or start a new review.':'This review was recorded by '+esc(s.sessionLabel||'another club member')+'. Their observations are shown here.'} Saved reviews remain available after clearing this form.</p>${s.reviewCanEdit?'<button type="button" class="btn" id="editSavedTeamReview">Edit review</button>':''}<button type="button" class="btn secondary" id="newSavedTeamReview">New match review</button></div>`:''}<div class="team-review-fields${s.sessionId?' saved':''}">${s.sessionId?`<div class="team-review-match-summary" id="teamReviewMatchSummary"><strong>${esc(s.opposition)} · ${esc(formatDateShort(s.match_date))}</strong><p class="help">${esc(teamReviewSavedGroupName({group_scope:s.sessionGroupScope,group_name:(s.groups||[]).find(group=>group.id===s.sessionGroupId)?.name}))} · ${esc(formatLabel(s.format_key))}</p></div>`:`<div class="field"><label for="teamReviewGroup">Playing Group / grade</label><select id="teamReviewGroup" ${identityLocked?'disabled':''}>${teamReviewGradeOptions(s,true)}</select></div><div class="field"><label for="teamReviewDate">Match start date</label><input type="date" id="teamReviewDate" value="${esc(s.match_date)}" ${identityLocked?'disabled':''}></div><div class="field"><label for="teamReviewFormat">Format</label><select id="teamReviewFormat" ${identityLocked?'disabled':''}>${FORMATS.map(([value,label])=>`<option value="${esc(value)}" ${s.format_key===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field team-review-opposition"><label for="teamReviewOpposition">Opposition</label><input id="teamReviewOpposition" maxlength="160" value="${esc(s.opposition)}" placeholder="Who did you play?" ${identityLocked?'disabled':''}></div>`}<div class="field"><label for="teamReviewInnings">Innings</label><select id="teamReviewInnings" ${locked?'disabled':''}>${Array.from({length:10},(_,index)=>index+1).map(n=>`<option value="${n}" ${s.innings_number===n?'selected':''}>${n===1?'First innings':n===2?'Second innings':`Innings ${n}`}</option>`).join('')}</select></div></div><p class="team-review-status" id="teamReviewStatus" role="status" ${s.message?'':'hidden'}>${esc(s.message||'')}</p>${(!teamReviewCache&&!s.loading)||s.needsReload||Object.values(s.drafts).some(d=>d._conflict)?'<button type="button" class="btn secondary" id="retryTeamReviewLoad">Reload current observations</button>':''}${renderMatchReviewImporter()}</section>${showRows?`<section class="card"><h2>${s.sessionId?'Player observations':loaded?`${esc(loaded.opposition)} · ${esc(formatDateShort(loaded.match_date))}`:'Players in this grade'}</h2><p class="help">${s.sessionId?'':loaded?`${esc(formatLabel(loaded.format_key))} · innings ${loaded.innings_number}. `:'Complete the match details above to enable entry. '}Leaving a player blank makes no change. DNB is only for a player who did not bat, not an absent player.</p>${teamReviewCache?rows.length?`<table class="team-review-table" aria-label="Match observations"><thead><tr><th scope="col">Player</th><th scope="col">Batted to their plan?</th><th scope="col">Dismissal / details</th><th scope="col">Score</th></tr></thead><tbody>${rows.map(teamReviewRowHtml).join('')}</tbody></table>`:'<div class="team-review-empty"><p>No players with edit access in this selection. Choose another Playing Group, or ask your Club Admin to check your player access.</p></div>':`<p>${s.loading?'Loading players…':'Could not load players. Try again above.'}</p>`}${Object.entries(s.drafts).filter(([id])=>!teamReviewPlayer(id)).map(([id,draft])=>`<div class="team-review-conflict"><p>${esc(draft._conflict||'A changed player is no longer available.')}</p><button type="button" class="btn ghost" data-team-discard="${esc(id)}" ${locked?'disabled':''}>Discard unavailable player’s changes</button></div>`).join('')}<div class="team-review-footer"><button type="button" class="btn" id="saveTeamReview" ${s.saving||s.loading||(!dirty&&!s.pending)||!loaded||(s.sessionId&&!s.editReview)?'disabled':''}>${s.saving?'Saving…':s.pending?'Retry save':'Save match review'}</button><p class="help">${s.pending?'A save is awaiting confirmation. Retry checks the same request safely.':dirty?`Saves all review changes and selected scores.`:'No new choices to save.'}</p></div></section>`:''}`;
+  for(const id of ['teamReviewDate','teamReviewFormat','teamReviewOpposition']){const control=document.getElementById(id);if(control)control.onchange=teamReviewMatchChanged;}
   document.getElementById('teamReviewInnings').onchange=switchMatchReviewInnings;
-  document.getElementById('teamReviewGroup').onchange=async event=>{const next=event.target.value;if(teamReviewControlsLocked()||s.sessionId){event.target.value=s.group;return;}if(next!==s.group&&teamReviewHasUnsavedChanges()){if(!confirm('Changing grade starts a different match review. Discard the unsaved choices in this entry?')){event.target.value=s.group;return;}s.drafts={};s.removed=[];s.selectedInnings={};s.saved=[];s.importer=null;}s.group=next;matchReviewMapScores(false);if(teamReviewIdentityReady(s)){s.loaded=teamReviewIdentity(s);await renderTeamReview();}else{renderTeamReviewContent();recordAppNavigation(clubNavigationRoute());}};
+  const groupControl=document.getElementById('teamReviewGroup');if(groupControl)groupControl.onchange=async event=>{const next=event.target.value;if(teamReviewControlsLocked()||s.sessionId){event.target.value=s.group;return;}if(next!==s.group&&teamReviewHasUnsavedChanges()){if(!confirm('Changing grade starts a different match review. Discard the unsaved choices in this entry?')){event.target.value=s.group;return;}s.drafts={};s.removed=[];s.selectedInnings={};s.saved=[];s.importer=null;}s.group=next;matchReviewMapScores(false);if(teamReviewIdentityReady(s)){s.loaded=teamReviewIdentity(s);await renderTeamReview();}else{renderTeamReviewContent();recordAppNavigation(clubNavigationRoute());}};
   document.getElementById('retryTeamReviewLoad')?.addEventListener('click',()=>renderTeamReview());
   document.getElementById('saveTeamReview')?.addEventListener('click',()=>saveTeamReview());
   document.getElementById('editSavedTeamReview')?.addEventListener('click',()=>{s.editReview=true;s.message='Editing this saved review. Changes are saved only when you click Save match review.';renderTeamReviewContent();});document.getElementById('newSavedTeamReview')?.addEventListener('click',clearTeamReviewEntry);
@@ -12048,7 +12113,13 @@ function renderTrainingTools(){
     ['match','For my next match','Bring your preparation into practice.',renderMatchTrainingFocusShell()],
     ['checkin','Training Check-in','Record how practice went.',renderEngagementShell('howWeTrainEngagement')]
   ];
-  return `<div class="training-tool-tiles" id="trainingToolTiles" role="group" aria-label="Your training tools">${tools.map(([key,title,copy])=>`<button type="button" class="training-tool-tile" id="trainingTool-${key}" data-training-tool="${key}" aria-expanded="false" aria-controls="trainingPanel-${key}"><strong>${title}</strong><span>${copy}</span><b class="training-tool-toggle" aria-hidden="true">+</b></button>`).join('')}</div>${tools.map(([key,title,copy,body])=>`<section class="training-tool-panel" id="trainingPanel-${key}" aria-labelledby="trainingTool-${key}" hidden>${body}</section>`).join('')}`;
+  return `<div class="training-tool-tiles" id="trainingToolTiles" role="group" aria-label="Your training tools">${tools.map(([key,title,copy])=>`<button type="button" class="training-tool-tile" id="trainingTool-${key}" data-training-tool="${key}" aria-expanded="false" aria-controls="trainingPanel-${key}"><strong>${title}</strong><span>${copy}</span><span class="training-tool-status" data-training-tool-status role="status" hidden></span><b class="training-tool-toggle" aria-hidden="true">+</b></button>`).join('')}</div>${tools.map(([key,title,copy,body])=>`<section class="training-tool-panel" id="trainingPanel-${key}" aria-labelledby="trainingTool-${key}" hidden>${body}</section>`).join('')}`;
+}
+function setTrainingToolStatus(page,key,state){
+  const badge=page.querySelector(`#trainingTool-${key} [data-training-tool-status]`);if(!badge)return;
+  const label=state.status==='error'?'Could not load':state.status==='loading'?'Loading…':state.dirty?'Unsaved changes':key==='focus'&&state.proposals?`${state.proposals} coach suggestion${state.proposals===1?'':'s'}`:key==='checkin'&&state.configured&&state.saved?'Saved this week ✓':'';
+  badge.textContent=label;badge.hidden=!label;
+  badge.dataset.tone=state.status==='error'||state.dirty||key==='focus'&&state.proposals?'attention':key==='checkin'&&state.saved?'saved':'muted';
 }
 function bindTrainingTools(page){
   const buttons=[...page.querySelectorAll('[data-training-tool]')];
@@ -12139,6 +12210,7 @@ async function renderHowWeTrain(){
   .training-page .card{margin:10px 0;padding:14px}.training-page h1{font-size:24px;margin:0}.training-page .training-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.training-links{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}.training-page .btn{min-height:44px;padding:9px 12px}.training-links .btn{font-size:13px}.training-disclosure>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:44px;font-weight:700;list-style:none}.training-disclosure>summary::-webkit-details-marker{display:none}.training-disclosure>summary:after{content:'+';font-size:22px;font-weight:400}.training-disclosure[open]>summary:after{content:'−'}.training-disclosure>summary>span{font-size:12px;font-weight:400;margin-left:auto}.training-disclosure #sharedCoachingActions{border:0;padding:0;margin:4px 0;box-shadow:none}.training-disclosure #sharedCoachingActions>h2,.training-disclosure #sharedCoachingActions>.section-label,.training-disclosure #sharedCoachingActions>.help{display:none}.training-page .train-format-accordion summary{padding:2px;min-height:44px}.training-page .train-format-accordion summary>div>span,.training-page .train-format-accordion summary .section-label,.training-page .train-accordion-state b{display:none}.training-page .train-format-accordion summary strong{font-size:16px}.training-page .train-accordion-state em{font-size:12px}.training-page .train-plan-reminder{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.training-page .train-plan-reminder strong{flex:1;font-size:14px}.training-page .train-format-accordion-list{gap:0}.training-page .training-section-title{font-size:16px;margin:14px 0 2px}.training-page details>summary:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
   .training-page h1:focus{outline:none}.training-heading{margin:0 0 10px;flex-wrap:wrap}.training-heading h1{flex:1}.training-heading-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.training-page .training-heading-actions button{appearance:none;min-height:44px;border:0;background:transparent;padding:6px 8px;font:inherit;font-size:13px;font-weight:700;color:var(--primary,#202f78);text-decoration:underline;text-underline-offset:3px;cursor:pointer}.training-heading-actions button:focus-visible,.training-tool-tile:focus-visible{outline:3px solid #5572b4;outline-offset:3px}
   .training-tool-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.training-tool-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:88px;padding:12px;border:1px solid #cce5d8;border-radius:12px;background:#eff8f4;color:var(--text,#172033);text-align:left;font:inherit;cursor:pointer}.training-tool-tile[data-training-tool="match"]{background:#fff7eb;border-color:#edddc3}.training-tool-tile[data-training-tool="checkin"]{background:#eff3ff;border-color:#ced6ee}.training-tool-tile strong{margin-right:18px;font-size:17px;line-height:1.25;color:var(--primary,#202f78)}.training-tool-tile>span{margin-top:6px;font-size:14px;line-height:1.4}.training-tool-toggle{position:absolute;right:10px;top:10px;font-size:22px;line-height:1;font-weight:400;color:var(--primary,#202f78)}.training-tool-tile:hover,.training-tool-tile[aria-expanded="true"]{border-color:var(--primary,#202f78)}.training-tool-tile[aria-expanded="true"]{box-shadow:inset 0 0 0 1px var(--primary,#202f78)}.training-tool-panel[hidden]{display:none!important}.training-tool-panel{margin-bottom:12px}.training-tool-panel .weekly-loop,.training-tool-panel .engagement-training-priority,.training-tool-panel .match-training-compact{margin-top:0}.training-page .training-section-title{margin-top:0}.training-page .train-format-accordion-list+.training-tool-tiles{margin-top:12px}
+  .training-tool-tile>.training-tool-status{font-size:12px;font-weight:700;line-height:1.3;margin-top:8px;color:#54627d}.training-tool-status[hidden]{display:none!important}.training-tool-status[data-tone="attention"]{color:#875000}.training-tool-status[data-tone="saved"]{color:#176448}
   @media(max-width:620px){.training-tool-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.training-tool-tile:last-child{grid-column:1/-1;min-height:76px}.training-heading-actions{gap:0}.training-page .training-heading-actions button{padding:6px}.training-page .training-heading h1{font-size:22px}}
   </style><div class="training-page">
     <header class="training-heading"><h1>How We Train</h1><div class="training-heading-actions">${ownPlayer?'<button type="button" id="requestConversationFromTraining">Ask a coach</button>':''}${canUsePlayersWorkspace()?'<button type="button" id="openPreparationFromTraining">Prepare team training</button>':''}<button type="button" id="howWeTrainGuideLink">Help</button></div></header>
@@ -12152,7 +12224,7 @@ async function renderHowWeTrain(){
   bindTrainingTools(page);
   bindCoachingActionControls(feedback,()=>renderHowWeTrain());
   document.getElementById('openPreparationFromTraining')?.addEventListener('click',()=>openTrainingPreparation());
-  if(myPlayer&&isPlayerUser())await Promise.all([mountMatchTrainingFocus(document.getElementById('howWeTrainMatchFocus'),{compact:true}),mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training',compact:true,title:'My current focus'}),mountEngagement(document.getElementById('howWeTrainEngagement'),{clubId,training:true,compact:true})]);
+  if(myPlayer&&isPlayerUser())await Promise.all([mountMatchTrainingFocus(document.getElementById('howWeTrainMatchFocus'),{compact:true}),mountWeeklyLoop(document.getElementById('howWeTrainFocus'),{playerId,context:'training',compact:true,title:'My current focus',onStatus:state=>{if(isCurrent())setTrainingToolStatus(page,'focus',state);}}),mountEngagement(document.getElementById('howWeTrainEngagement'),{clubId,training:true,compact:true,onStatus:state=>{if(isCurrent())setTrainingToolStatus(page,'checkin',state);}})]);
   if(!isCurrent())return;
   document.getElementById('requestConversationFromTraining')?.addEventListener('click',openCoachConversationRequest);
   document.getElementById('retryTrainingFeedback')?.addEventListener('click',async()=>{if(confirmLeaveFeedbackEntry())await renderHowWeTrain();});
@@ -13200,6 +13272,7 @@ function bindWorkspaceAssignments(page,groups){
 function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assignmentGroups=[]}={}){
   const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
   const feedbackCount=workspaceFeedbackCount(player.id);
+  const conversationAlert=renderPlayerActionAlert(player.id,signals);
   const plansPublished=workspacePlayerPlansPublished();
   const planState=plansPublished?playerPlanDeadlineState(player):{firstOverdue:null,nextIncomplete:null};
   const overdue=planState.firstOverdue;
@@ -13251,7 +13324,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
     ${renderWorkspaceAssignment(player,assignmentGroups)}
-    ${renderPlayerActionAlert(player.id,signals)}
+    ${conversationAlert}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 3px">
       <div><strong style="font-size:12px;color:var(--navy2)">${esc(planHeadline)}</strong><span style="display:block;margin-top:2px;font-size:11px;color:var(--muted)">${esc(planDetail)}</span>${deadlineDetail?`<span style="display:block;margin-top:2px;font-size:11px;color:${overdue?'var(--accent,#D8232A);font-weight:700':'var(--muted)'}">${esc(deadlineDetail)}</span>`:''}${reminderMeta}</div>
       ${reminderAction}
@@ -13259,7 +13332,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
     <div class="workspace-roster-actions">
       <button class="workspace-text-link" data-open-workspace-player="${player.id}">${plansPublished?'Player Plan':'View player'}</button>
       ${plansPublished?`<button class="workspace-text-link" data-open-training-plan="${player.id}">Training Plan</button>`:'<button class="workspace-text-link" disabled title="Training guidance will be available after Player Plans open and the player completes their plan.">Training Plan</button>'}
-      <button class="workspace-text-link" data-open-player-feedback="${player.id}">Coach Conversations</button>
+      ${conversationAlert?'':`<button class="workspace-text-link" data-open-player-feedback="${player.id}">Coach Conversations</button>`}
       ${player.can_edit?`<button class="workspace-text-link add" data-quick-match-observation="${player.id}">+ Match observation</button>
       <button class="workspace-text-link add" data-quick-training-observation="${player.id}">+ Training observation</button>`:''}
     </div>
@@ -14126,6 +14199,9 @@ function renderWeeklyLoopHistory(bundle,context){
   const records=past.length?`<h3>Previous focuses</h3>${past.map(f=>`<p><strong>${esc(weeklyLoopText(f))}</strong><br><small>${esc(({retired:'Finished',replaced:'Replaced',declined:'Suggestion declined'})[f.status]||'Previous focus')} · ${esc(weeklyLoopDate(f.updated_at||f.created_at))}<br>${esc(weeklyLoopSourceLabel(f))}</small></p>`).join('')}`:'';
   return `<details class="weekly-loop-review-history"><summary>${title} (${history.length||past.length})</summary>${records}${records&&rows?'<h3>Updates and notes</h3>':''}${rows}</details>`;
 }
+function notifyWeeklyLoopStatus(state,status='ready'){
+  if(weeklyLoopIsCurrent(state)&&typeof state.options.onStatus==='function')state.options.onStatus({status,proposals:(state.bundle?.proposals||[]).length,dirty:!!state.form&&state.formBaseline!==weeklyLoopFormValue(state.form)});
+}
 function drawWeeklyLoop(state){
   if(!weeklyLoopIsCurrent(state))return;
   state.form=null;state.formBaseline=null;
@@ -14145,6 +14221,7 @@ function drawWeeklyLoop(state){
   state.host.querySelector('[data-weekly-add]')?.addEventListener('click',()=>openWeeklyLoopForm(state,{op:own?'choose':'propose'}));
   for(const [attr,op] of [['adjust','adjust'],['retire','retire'],['accept','accept'],['decline','decline']])state.host.querySelectorAll(`[data-weekly-${attr}]`).forEach(button=>button.onclick=()=>openWeeklyLoopForm(state,{op,focusId:button.dataset[`weekly${attr[0].toUpperCase()+attr.slice(1)}`]}));
   state.host.querySelectorAll('[data-weekly-decision]').forEach(button=>button.onclick=()=>openWeeklyLoopForm(state,{op:'review',decision:button.dataset.weeklyDecision}));
+  notifyWeeklyLoopStatus(state);
 }
 async function mountWeeklyLoop(host,options={}){
   if(typeof host==='string')host=document.getElementById(host);
@@ -14156,13 +14233,13 @@ async function mountWeeklyLoop(host,options={}){
 }
 async function loadWeeklyLoop(state){
   if(!weeklyLoopIsCurrent(state))return;
-  const sequence=++state.sequence;state.host.innerHTML='<section class="card weekly-loop"><p role="status">Loading current focus…</p></section>';
+  const sequence=++state.sequence;state.host.innerHTML='<section class="card weekly-loop"><p role="status">Loading current focus…</p></section>';notifyWeeklyLoopStatus(state,'loading');
   try{
     const {data,error}=await supabase.rpc('get_player_current_focus',{p_player_id:state.options.playerId});
     if(!weeklyLoopIsCurrent(state)||sequence!==state.sequence)return;
     if(error)throw error;if(!data||typeof data!=='object')throw new Error('Please try again.');
     state.bundle={...data,active:Array.isArray(data.active)?data.active:[],proposals:Array.isArray(data.proposals)?data.proposals:[],candidates:Array.isArray(data.candidates)?data.candidates:[],history:Array.isArray(data.history)?data.history:[],past:Array.isArray(data.past)?data.past:[]};drawWeeklyLoop(state);
-  }catch(error){if(weeklyLoopIsCurrent(state)&&sequence===state.sequence){state.host.innerHTML=`<section class="card weekly-loop notice"><h2>Current focus</h2>${state.message?`<p role="status">${esc(state.message)}</p>`:''}<p>The current focus could not be loaded. Saved priorities have not changed.</p><p class="help">${esc(error?.message||'Check your connection and try again.')}</p><button class="btn ghost" data-weekly-retry>Try again</button></section>`;state.host.querySelector('[data-weekly-retry]').onclick=()=>loadWeeklyLoop(state);}}
+  }catch(error){if(weeklyLoopIsCurrent(state)&&sequence===state.sequence){state.host.innerHTML=`<section class="card weekly-loop notice"><h2>Current focus</h2>${state.message?`<p role="status">${esc(state.message)}</p>`:''}<p>The current focus could not be loaded. Saved priorities have not changed.</p><p class="help">${esc(error?.message||'Check your connection and try again.')}</p><button class="btn ghost" data-weekly-retry>Try again</button></section>`;state.host.querySelector('[data-weekly-retry]').onclick=()=>loadWeeklyLoop(state);notifyWeeklyLoopStatus(state,'error');}}
 }
 function openWeeklyLoopForm(state,{op,focusId=null,decision=null}={}){
   if(!weeklyLoopIsCurrent(state)||weeklyLoopSaveBusy||coachingActionSavePending||!confirmLeaveFeedbackEntry())return;
@@ -14182,7 +14259,7 @@ function openWeeklyLoopForm(state,{op,focusId=null,decision=null}={}){
   state.form=slot.querySelector('.weekly-loop-form');state.formBaseline=weeklyLoopFormValue(state.form);state.requestId=null;state.requestPayload=null;
   const form=state.form,source=form.querySelector('[data-weekly-source]'),text=form.querySelector('[data-weekly-text]');
   if(source)source.onchange=()=>{const item=candidates[Number(source.value)];if(source.value!==''&&item){text.value=weeklyLoopText(item);form.querySelector('[data-weekly-theme]').value=item.theme_key||'other';}else text.value='';};
-  form.querySelector('[data-weekly-cancel]').onclick=()=>{if(confirmLeaveWeeklyLoop()){state.form=null;state.formBaseline=null;slot.innerHTML='';}};
+  form.querySelector('[data-weekly-cancel]').onclick=()=>{if(confirmLeaveWeeklyLoop()){state.form=null;state.formBaseline=null;slot.innerHTML='';notifyWeeklyLoopStatus(state);}};
   form.querySelector('[data-weekly-save]').onclick=async()=>{
     if(!weeklyLoopIsCurrent(state)||state.form!==form||weeklyLoopSaveBusy||coachingActionSavePending)return;
     const status=form.querySelector('[data-weekly-form-status]'),selected=candidates[Number(source?.value)],id=form.querySelector('[data-weekly-review-focus]')?.value||focusId||focus?.id;
@@ -14199,6 +14276,8 @@ function openWeeklyLoopForm(state,{op,focusId=null,decision=null}={}){
     }
     await saveWeeklyLoop(state,values,form,status);
   };
+  form.addEventListener('input',()=>notifyWeeklyLoopStatus(state));form.addEventListener('change',()=>notifyWeeklyLoopStatus(state));
+  notifyWeeklyLoopStatus(state);
   form.scrollIntoView({block:'nearest'});
 }
 async function saveWeeklyLoop(state,values,form,status){
@@ -17483,9 +17562,12 @@ function engagementAwardProgress(b){
  if(a.cadence!=='monthly')return `<p>${a.earned?'<strong>Award earned.</strong>':weekComplete?`<strong>This week’s activities are recorded.</strong> ${a.released===true?'Award results reflect your club’s latest release.':'They do not qualify for another award in this period.'}`:`<strong>${Number(b.count)||0} of 3 activities.</strong>`} ${weekComplete&&!a.earned?'':'Two different activities earn this week’s award.'}</p>`;
  return `<p>${weekComplete?'<strong>This week qualifies.</strong>':`<strong>${Number(b.count)||0} of 3 activities this week.</strong>`} Two different activities make a qualifying week.</p><p><strong>${a.earned?'Four-week award earned.':`${Number(a.qualifying_weeks)||0} of ${Number(a.required_weeks)||2} qualifying weeks in this four-week period.`}</strong> ${esc(a.period_start||'')} to ${esc(engagementAwardLastDay(a.period_end))}.</p>`;
 }
+function notifyEngagementStatus(s,status='ready'){
+ if(engagementCurrent(s)&&typeof s.options.onStatus==='function')s.options.onStatus({status,configured:!!s.bundle?.configured,saved:!!s.bundle?.training_checkin,dirty:!!s.form&&s.baseline!==engagementFormValue(s.form)});
+}
 function engagementRender(s){
  const b=s.bundle,categories=b.categories||[],training=b.training_checkin,candidates=b.candidates||[],award=engagementAwardDetails(b);
- if(!b.configured){s.host.innerHTML=s.options.training?'<p class="help">Training Check-in is not available for this club yet.</p>':'';s.form=null;s.baseline='';return;}
+ if(!b.configured){s.host.innerHTML=s.options.training?'<p class="help">Training Check-in is not available for this club yet.</p>':'';s.form=null;s.baseline='';notifyEngagementStatus(s);return;}
  const chosen=candidates.findIndex(c=>c.kind===training?.source_kind&&(c.id||null)===(training?.source_id||null)&&(c.key||null)===(training?.source_key||null));
  const radios=(name,values,selected)=>`<div class="engagement-radios">${values.map(([v,label])=>`<label><input type="radio" name="${name}" value="${v}" ${v===selected?'checked':''} required>${label}</label>`).join('')}</div>`;
  const trainingHtml=s.options.training?`<form class="engagement-checkin"><h3>Training check-in</h3><p class="help">A quick, honest check-in on your focus. Self-reported; no phone needed at training.</p>${candidates.length?`<label>Choose a current focus or saved plan answer<select name="source" required><option value="">Choose…</option>${candidates.map((c,i)=>`<option value="${i}" ${chosen===i?'selected':''}>${esc(c.kind==='focus'?'Current focus: ':'Player Plan: ')}${esc(c.text)}</option>`).join('')}</select></label><fieldset><legend>What happened?</legend>${radios('status',[['worked','Worked on it'],['changed','Changed my approach'],['couldnt','Couldn’t this week']],training?.status)}</fieldset><fieldset><legend>What next?</legend>${radios('next_step',[['keep','Keep working on this'],['adjust','Revisit my focus'],['discuss','Speak with someone']],training?.next_step)}</fieldset><label>Optional note<textarea name="note" maxlength="300" rows="2" placeholder="A useful detail, if needed">${esc(training?.note||'')}</textarea></label><p class="help">This records your next step. Use your current focus or Coach Conversations to make a change or request a conversation.</p><button class="btn ${training?'secondary':'primary'}" type="submit">${training?'Saved ✓':'Save check-in'}</button><span data-engagement-form-state class="help"></span>`:'<p>Choose a current focus or save a Player Plan answer first. Your existing focus controls are on this page.</p>'}</form>`:'';
@@ -17495,14 +17577,15 @@ function engagementRender(s){
   s.host.innerHTML=s.options.training?engagementStyles()+`<section class="engagement-card engagement-training-priority"><div class="engagement-training-heading"><h2>Training Check-in</h2>${training?'<span class="engagement-saved">Saved this week ✓</span>':''}</div>${trainingHtml}<div class="engagement-status" role="status" data-engagement-status></div></section>`:'';
  }
  s.form=s.host.querySelector('form');s.baseline=engagementFormValue(s.form);
- if(s.form){s.form.addEventListener('submit',e=>{e.preventDefault();const source=s.form.elements.source;if(!source||source.value==='')return;const c=candidates[Number(source.value)];if(!c)return;engagementSave(s,'training',{source_kind:c.kind,source_id:c.id||null,source_key:c.key||null,status:s.form.elements.status.value,next_step:s.form.elements.next_step.value,note:s.form.elements.note.value.trim()});});s.form.addEventListener('input',()=>{const button=s.form.querySelector('button[type="submit"]');if(button){const dirty=s.baseline!==engagementFormValue(s.form);button.textContent=dirty?'Save check-in':training?'Saved ✓':'Save check-in';button.classList.toggle('primary',dirty||!training);button.classList.toggle('secondary',!dirty&&!!training);}});}
+ if(s.form){s.form.addEventListener('submit',e=>{e.preventDefault();const source=s.form.elements.source;if(!source||source.value==='')return;const c=candidates[Number(source.value)];if(!c)return;engagementSave(s,'training',{source_kind:c.kind,source_id:c.id||null,source_key:c.key||null,status:s.form.elements.status.value,next_step:s.form.elements.next_step.value,note:s.form.elements.note.value.trim()});});s.form.addEventListener('input',()=>{const button=s.form.querySelector('button[type="submit"]');if(button){const dirty=s.baseline!==engagementFormValue(s.form);button.textContent=dirty?'Save check-in':training?'Saved ✓':'Save check-in';button.classList.toggle('primary',dirty||!training);button.classList.toggle('secondary',!dirty&&!!training);}notifyEngagementStatus(s);});s.form.addEventListener('change',()=>notifyEngagementStatus(s));}
+ notifyEngagementStatus(s);
 }
 async function mountEngagement(host,options={}){
  if(typeof host==='string')host=document.getElementById(host);if(!host)return;
  const s={host,options,scope:engagementScope(),id:++engagementMountNumber,busy:false,bundle:null,form:null,request:null};host.dataset.engagementMount=String(s.id);engagementMounts.add(s);
  for(const old of engagementMounts)if(!engagementCurrent(old))engagementMounts.delete(old);
- host.innerHTML='<p class="help">Loading your weekly engagement…</p>';
- try{const {data,error}=await supabase.rpc('get_my_engagement',{p_club_id:options.clubId||club?.id});if(error)throw error;if(!engagementCurrent(s))return;s.bundle=data;engagementRender(s);}catch(e){if(!engagementCurrent(s))return;host.innerHTML=`<p class="help">${esc(e.message||'Weekly engagement could not load.')}</p><button class="btn secondary" data-engagement-retry>Try again</button>`;host.querySelector('button').onclick=()=>mountEngagement(host,options);}
+ host.innerHTML='<p class="help">Loading your weekly engagement…</p>';notifyEngagementStatus(s,'loading');
+ try{const {data,error}=await supabase.rpc('get_my_engagement',{p_club_id:options.clubId||club?.id});if(error)throw error;if(!engagementCurrent(s))return;s.bundle=data;engagementRender(s);}catch(e){if(!engagementCurrent(s))return;host.innerHTML=`<p class="help">${esc(e.message||'Weekly engagement could not load.')}</p><button class="btn secondary" data-engagement-retry>Try again</button>`;host.querySelector('button').onclick=()=>mountEngagement(host,options);notifyEngagementStatus(s,'error');}
 }
 async function engagementSave(s,op,values){
  if(!engagementCurrent(s)||s.busy)return;
