@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.69 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.70 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.69';
+const APP_UI_VERSION='0.8.62.70';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -7556,10 +7556,9 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   const page=document.getElementById('page');
   page.innerHTML='<div class="splash">Loading Club Batting Guide…</div>';
   const role=guideAudienceKey();
-  const [{data:capabilities,error:capErr},{data:progress,error:progErr},{data:snapshot,error:snapshotErr},messages]=await Promise.all([
+  const [{data:capabilities,error:capErr},{data:progress,error:progErr},messages]=await Promise.all([
     supabase.from('club_batting_guide_capabilities').select('*').eq('active',true).order('sort_order'),
     supabase.from('club_batting_guide_progress').select('*').eq('club_id',club.id).eq('user_id',session.user.id),
-    supabase.rpc('get_club_guide_snapshot',{p_club_id:club.id}),
     loadClubGuideHistory()
   ]);
   if(capErr||progErr){page.innerHTML=`<section class="card"><div class="notice">${esc((capErr||progErr).message)}</div></section>`;return;}
@@ -7574,15 +7573,12 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   const selectedFocus=selected.capability_key==='plan_dates'?'plan_dates':selected.capability_key==='coach_conversations'&&selected.target_tab==='players'?'coach_conversations':'';
   const tutorial=Array.isArray(selected.tutorial)?selected.tutorial:[];
   const progressMap=new Map((progress||[]).map(x=>[x.capability_key,x]));
-  const trial=snapshot?.trial||null;
-  const daysLeft=trial?.ends_on?Math.ceil((new Date(`${trial.ends_on}T23:59:59`).getTime()-Date.now())/86400000):null;
 
   await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'seen'});
 
   page.innerHTML=`${guideHelpStyles()}<section class="card guide-hero">
     <div><div class="section-label">Help & tutorials</div><h1>How Club Batting works</h1><p>Follow your club’s process below. Choose a guide to see how each stage works.</p></div>
   </section>
-  ${trial?`<section class="guide-trial-strip"><strong>${esc(clubTrialStatusLabel(trial,daysLeft))}</strong><span>${esc(niceDate(trial.starts_on))} – ${esc(niceDate(trial.ends_on))} · Nothing is automatically charged.</span></section>`:''}
   <div id="guideInterventionSlot"></div>
     <section class="card guide-chat-card">
       <div class="section-label">Ask the Club Batting Guide</div><h2>A question? Ask it here.</h2><p>Get help with your next step, a feature or the whole process. The Guide replies here as you work.</p>
