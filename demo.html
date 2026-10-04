@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.77 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.78 — Account menu dismissal
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.77';
+const APP_UI_VERSION='0.8.62.78';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -5497,7 +5497,38 @@ function contextSwitcherHtml(id,options){
   </label>`;
 }
 
+let accountMenuDismissalInstalled=false;
+function installAccountMenuDismissal(){
+  if(accountMenuDismissalInstalled)return;
+  accountMenuDismissalInstalled=true;
+  // Delegate once: the header is replaced when the club or account view changes.
+  // Capture clicks without cancelling them, so the chosen action still runs.
+  document.addEventListener('click',event=>{
+    const action=event.target?.closest?.('.account-menu-action');
+    document.querySelectorAll('details.account-menu[open]').forEach(menu=>{
+      const chosen=action&&menu.contains(action)&&!action.matches(':disabled');
+      if(!menu.contains(event.target)||chosen){
+        const restoreFocus=chosen&&menu.contains(document.activeElement);
+        menu.open=false;
+        if(restoreFocus)menu.querySelector('summary')?.focus({preventScroll:true});
+      }
+    });
+  },true);
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Escape'||event.defaultPrevented)return;
+    const menus=document.querySelectorAll('details.account-menu[open]');
+    if(!menus.length)return;
+    menus.forEach(menu=>{
+      const restoreFocus=menu.contains(document.activeElement);
+      menu.open=false;
+      if(restoreFocus)menu.querySelector('summary')?.focus({preventScroll:true});
+    });
+    event.preventDefault();
+  });
+}
+
 function accountMenuHtml({allowJoin=true,allowInvolvement=false,allowCoaching=false,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
+  installAccountMenuDismissal();
   const email=session?.user?.email||'';
   const name=userProfile?.display_name||session?.user?.user_metadata?.display_name||'Your account';
   return `<div class="account-controls"><details class="account-menu">
