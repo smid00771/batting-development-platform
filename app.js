@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.78 — Account menu dismissal
+// Club Batting 0.8.62.79 — Reliable phone setup
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.78';
+const APP_UI_VERSION='0.8.62.79';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -17843,6 +17843,7 @@ function bindClubMessageComposer(page,state){
 
 /* BEGIN PHONE APP — maintained source: tools/phone_app_ui.js */
 let phoneInstallPrompt=null,phoneRegistration=null,phoneStarted=false,phoneSettingsBusy=false;
+let phoneRegistrationTask=null,phoneRegistrationError='';
 let pendingPhoneLaunch=null;
 const phoneIsDemo=()=>typeof window.__fixtureDb!=='undefined'||location.pathname.endsWith('/demo.html');
 const phoneIsInstalled=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
@@ -17858,15 +17859,43 @@ async function updatePhoneAppBadge(){
  try{const n=clubMessageUnread+(coachingUpdateScopeMatches()?myCoachingUpdates.updates.length:0);if(n)await navigator.setAppBadge(n);else await navigator.clearAppBadge();}catch{}
 }
 async function initialisePhoneApp(){
- if(phoneStarted||phoneIsDemo()||!location.pathname.endsWith('/app.html')||!('serviceWorker'in navigator)||!window.isSecureContext)return;
- phoneStarted=true;
- window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();phoneInstallPrompt=event;if(currentTab==='phone_app')void renderPhoneApp();});
- window.addEventListener('appinstalled',()=>{phoneInstallPrompt=null;if(currentTab==='phone_app')void renderPhoneApp();});
- navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='CB_OPEN')void openPhoneNotification(event.data.url);});
- try{phoneRegistration=await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'});void phoneRegistration.update();}catch{phoneStarted=false;}
- // No registration request prompts for notifications. Permission is requested only by Enable notifications.
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}});
- setInterval(()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}},60000);
+ if(phoneIsDemo()||!location.pathname.endsWith('/app.html')||!('serviceWorker'in navigator)||!window.isSecureContext)return;
+ if(!phoneStarted){
+  phoneStarted=true;
+  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();phoneInstallPrompt=event;if(currentTab==='phone_app')void renderPhoneApp();});
+  window.addEventListener('appinstalled',()=>{phoneInstallPrompt=null;if(currentTab==='phone_app')void renderPhoneApp();});
+  navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='CB_OPEN')void openPhoneNotification(event.data.url);});
+  // Setup never asks for notification permission; only the explicit Enable click does.
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}});
+  setInterval(()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}},60000);
+ }
+ if(phoneRegistrationTask)return phoneRegistrationTask;
+ if([phoneRegistration?.active,phoneRegistration?.installing,phoneRegistration?.waiting].some(worker=>worker&&worker.state!=='redundant'))return phoneRegistration;
+ phoneRegistrationTask=(async()=>{
+  try{
+   phoneRegistration=await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'});
+   phoneRegistrationError='';return phoneRegistration;
+  }catch{
+   phoneRegistration=null;
+   phoneRegistrationError=navigator.onLine===false?'You’re offline. Reconnect, then try again.':'Phone notification setup couldn’t finish. Please try again.';
+   return null;
+  }
+ })();
+ try{return await phoneRegistrationTask;}finally{phoneRegistrationTask=null;}
+}
+function waitForPhoneWorker(reg){
+ if(reg.active?.state==='activated')return Promise.resolve(reg);
+ return new Promise((resolve,reject)=>{
+  const watched=new Set();let timer;
+  const finish=error=>{clearTimeout(timer);reg.removeEventListener('updatefound',check);for(const worker of watched)worker.removeEventListener('statechange',check);error?reject(error):resolve(reg);};
+  const check=()=>{
+   if(reg.active?.state==='activated'){finish();return;}
+   for(const worker of [reg.installing,reg.waiting,reg.active].filter(Boolean))if(!watched.has(worker)){watched.add(worker);worker.addEventListener('statechange',check);}
+   if(![reg.installing,reg.waiting,reg.active].some(worker=>worker&&worker.state!=='redundant'))finish(new Error('Phone notification setup couldn’t finish. Please try again.'));
+  };
+  timer=setTimeout(()=>finish(new Error(navigator.onLine===false?'You’re offline. Reconnect, then try again.':'Phone notification setup hasn’t finished. Please try again.')),10000);
+  reg.addEventListener('updatefound',check);check();
+ });
 }
 async function signOutClubBatting(){
  if(phoneIsDemo())return supabase.auth.signOut();
@@ -17893,15 +17922,15 @@ async function renderPhoneApp(){
  ${installed?'<p>✓ Club Batting is open as an app.</p>':`<p>Open the full Club Batting app from an icon on your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Club Batting</button>':ios?'<ol><li>Open clubbatting.com/app.html in Safari.</li><li>Tap Share, then Add to Home Screen. If shown, keep Open as Web App on.</li><li>Open Club Batting from its new icon and sign in.</li></ol>':'<p>In Chrome or Edge, open the browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>. If you opened a link inside WhatsApp, open it in your browser first.</p>'}<p class="help">The icon can go on any Home Screen or in a folder. The app needs an internet connection.</p>`}
  <h2>Phone notifications</h2><p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
  <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label><p class="help">For ${esc(club?.name||'this club')} on this device. Notification previews keep the details private.</p></div>
- <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button></div>
+ <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
  <p class="help">Messages remain under Account → Messages. Coaching updates remain in Coach Conversations. Phone alerts depend on your device and its notification settings.</p><p id="phoneActionStatus" role="status" class="help"></p></section>`;
  document.getElementById('installClubBatting')?.addEventListener('click',async()=>{await phoneInstallPrompt?.prompt();phoneInstallPrompt=null;});
  if(demo)return;
  if(ios&&!installed){document.getElementById('phoneNotificationStatus').textContent='On iPhone or iPad, add Club Batting to your Home Screen, then open its icon to enable notifications (iOS/iPadOS 16.4 or later).';return;}
  if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive phone notifications. Open Club Batting in a supported, up-to-date browser.';return;}
  try{
-  await initialisePhoneApp();const reg=phoneRegistration||await navigator.serviceWorker.getRegistration('./');if(!reg)throw new Error('The phone app files are not available yet. Reload after the website update.');
-  await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(new Error('The app is still installing. Try reloading shortly.')),8000))]);
+  const reg=await initialisePhoneApp();if(!reg)throw new Error(phoneRegistrationError||'Phone notification setup couldn’t finish. Please try again.');
+  await waitForPhoneWorker(reg);if(!here())return;
   let sub=await reg.pushManager.getSubscription();
   const {data,error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'get',p_data:{endpoint:sub?.endpoint||null}});if(error)throw error;if(!here())return;
   const status=document.getElementById('phoneNotificationStatus'),button=document.getElementById('enablePhoneNotifications'),off=document.getElementById('disablePhoneNotifications'),choices=document.getElementById('phoneNotificationChoices');
@@ -17935,7 +17964,10 @@ async function renderPhoneApp(){
    }catch(e){if(here()){result.textContent=`Notifications could not be enabled. ${e.message||'Please try again.'}`;button.disabled=false;}}
    finally{phoneSettingsBusy=false;}
   };
- }catch(error){if(here())document.getElementById('phoneNotificationStatus').textContent=error.message||'Could not check notifications. Reload to try again.';}
+ }catch(error){if(here()){
+  document.getElementById('phoneNotificationStatus').textContent=error.message||'Could not check notifications. Please try again.';
+  const retry=document.getElementById('retryPhoneSetup');retry.hidden=false;retry.onclick=()=>renderPhoneApp();
+ }}
 }
 function capturePhoneLaunch(params){
  if(params.get('message')||params.get('coaching')||params.get('prepare')==='1')pendingPhoneLaunch={clubId:params.get('club'),message:params.get('message'),coaching:params.get('coaching'),prepare:params.get('prepare')==='1'};
