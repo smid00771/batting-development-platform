@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.76 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.77 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.76';
+const APP_UI_VERSION='0.8.62.77';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -4127,6 +4127,7 @@ let publicTrialDraft=null;
 let passwordRecoveryRequired=new URLSearchParams(location.search).has('password_setup') || new URLSearchParams(location.hash.slice(1)).get('type')==='recovery';
 
 async function boot(){
+  void initialisePhoneApp();
   document.title='Club Batting';
   const {data:{session:s}}=await supabase.auth.getSession();
   session=s;
@@ -4134,6 +4135,7 @@ async function boot(){
     const previousUserId=session?.user?.id||null;
     const nextUserId=s2?.user?.id||null;
     session=s2;
+    if(previousUserId!==nextUserId){clubMessageState=null;clubMessageUnread=0;if(previousUserId)void phoneWorkerMessage('CB_SIGN_OUT');}
 
     // Supabase can emit SIGNED_IN again when an already-signed-in browser tab regains focus.
     // Rebuilding the SPA for that same-user event destroys the user's scroll position. Only a
@@ -4149,7 +4151,7 @@ async function boot(){
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
   window.addEventListener('popstate',handleAppNavigationHistory);
-  window.addEventListener('beforeunload',event=>{if(teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(clubMessageDirty()||clubMessageState?.sending||teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -4641,11 +4643,12 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   }
 
   const launchParams=new URLSearchParams(location.search);
+  capturePhoneLaunch(launchParams);
   const routeClub=launchParams.get('club');
   const routeTab=launchParams.get('tab');
   if(routeClub && !allMemberships.some(m=>m.club_id===routeClub)){
     app.innerHTML=`<div class="login"><div class="section-label">Club Batting</div><h1>This club link is for a different account.</h1><p>Sign in with the email address that received the invitation. If you already use that address, ask your club to check your registration.</p><div class="btnrow"><button class="btn secondary" id="launchSignOut">Sign out</button><button class="btn ghost" id="launchMyClubs">Open my clubs</button></div></div>`;
-    document.getElementById('launchSignOut').onclick=()=>supabase.auth.signOut();
+    document.getElementById('launchSignOut').onclick=()=>signOutClubBatting();
     document.getElementById('launchMyClubs').onclick=()=>{
       clearClubLaunchRoute();
       fixtureLocalStorage.setItem('bdp-context','club');
@@ -4698,7 +4701,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(routeClub===club.id){
-    if(['playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide'].includes(routeTab) && canOpenClubTab(routeTab)){
+    if(['playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
       if(routeTab==='myplan')builderSection='core';
     }
@@ -4709,6 +4712,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
     if(!stillCurrent())return;
     restoreClubNavigationState(navigation);
   }
+  await applyPhoneLaunch();
   return renderShell();
 }
 
@@ -4716,6 +4720,7 @@ function clearClubLaunchRoute(){
   const url=new URL(location.href||`${location.origin}${location.pathname}${location.search}`);
   url.searchParams.delete('club');
   url.searchParams.delete('tab');
+  for(const key of ['message','coaching','prepare'])url.searchParams.delete(key);
   history.replaceState({},'',url.pathname+url.search+url.hash);
 }
 
@@ -4982,7 +4987,7 @@ function clubSetupUnavailableReason(tab){
 }
 
 function canOpenClubTab(tab){
-  if(['account_involvement','join_club'].includes(tab))return !!(session&&membership&&club);
+  if(['account_involvement','join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
   if(['playerhome','innings'].includes(tab))return isPlayerUser();
   if(['permissions','groups'].includes(tab))return isAdmin();
@@ -5113,6 +5118,7 @@ async function expandClubHomeStage(key,progress){
 
 
 async function saveClubEditsBeforeNavigation(){
+  if(!confirmLeaveClubMessages())return false;
   if(!await savePhilosophyResponseBeforeNavigation())return false;
   if(!await saveClubPlanBeforeNavigation())return false;
   if(!await savePlayerPlanStructureBeforeNavigation())return false;
@@ -5297,7 +5303,7 @@ async function refreshMyCoachingUpdates(){
     updates:updates.error?myCoachingUpdates.updates:Array.isArray(updates.data?.updates)?updates.data.updates:[],
     openRequestCount:inbox.error?myCoachingUpdates.openRequestCount||0:(inbox.data?.actions||[]).filter(a=>a.is_player_request&&a.status==='open').length,
     error:errors.map(error=>error?.message||'Could not check updates').join(' '),loaded:true};
-  renderCoachingUpdatesMenu();watchVisibleCoachingNotes();
+  renderCoachingUpdatesMenu();watchVisibleCoachingNotes();void updatePhoneAppBadge();
 }
 
 function coachingNoteElement(update){
@@ -5502,6 +5508,7 @@ function accountMenuHtml({allowJoin=true,allowInvolvement=false,allowCoaching=fa
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
       ${allowInvolvement?'<button class="account-menu-action" id="accountInvolvement" type="button">Your involvement</button>':''}
       ${allowCoaching?'<button class="account-menu-action" id="accountCoaching" type="button">Coach Conversations</button>':''}
+      ${allowCoaching?'<button class="account-menu-action" data-club-messages type="button">Messages</button><button class="account-menu-action" data-phone-open type="button">App & notifications</button>':''}
       <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
       <small class="account-menu-version">Club Batting v${APP_UI_VERSION}</small>
@@ -5591,7 +5598,7 @@ function renderShell(){
         <div class="header-actions">
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
-          <div id="coachingUpdatesHost" hidden></div>
+          <div id="coachingUpdatesHost" hidden></div><div id="clubMessagesHost" hidden></div>
           ${accountMenuHtml({allowJoin:true,allowInvolvement:true,allowCoaching:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
@@ -5601,7 +5608,8 @@ function renderShell(){
   </div>`;
 
   void refreshMyCoachingUpdates();
-  document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await supabase.auth.signOut();};
+  void refreshClubMessageBadge();void syncPhoneDeviceSession();
+  document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await signOutClubBatting();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('accountCoaching').onclick=openCoachConversations;
   document.getElementById('accountInvolvement').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderFirstIdentitySetup({editing:true});};
@@ -5910,6 +5918,7 @@ function clubNavigationRoute(){
   if(currentTab==='innings'){const {season,format,openId,editId}=ensureMyInningsState();route.innings={season,format,openId,editId};}
   if(currentTab==='make_your_call'){const {week,season,month}=ensureMakeYourCallState();route.makeYourCall={week,season,month:month||null,results:serializeCallResultsState()};}
   if(currentTab==='training_preparation')route.trainingPreparation={group:ensureTrainingPreparationState().group};
+  if(currentTab==='messages'){const m=ensureClubMessages();route.messages={mode:m.mode==='compose'?'inbox':m.mode,openId:m.openId};}
   if(currentTab==='team_review')route.teamReview=serializeTeamReviewState();
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
@@ -5943,6 +5952,7 @@ function replaceRestoredNavigation(marker){
   history.replaceState({...history.state,clubBattingNavigation:appNavigationCurrent,clubBattingWorkshop:null},'');
 }
 async function resumeAppNavigationOnLoad(){
+  if(new URLSearchParams(location.search).has('club'))return false;
   const marker=history.state?.clubBattingNavigation;
   if(appNavigationCurrent||!validAppNavigationMarker(marker))return false;
   const request=++appNavigationRequest;
@@ -5998,6 +6008,7 @@ function restoreClubNavigationState(route){
   }
   if(currentTab==='innings'){const state=ensureMyInningsState(),saved=route.innings||{};Object.assign(state,{season:saved.season==='all'||/^\d{4}$/.test(saved.season||'')?saved.season:null,format:FORMATS.some(([k])=>k===saved.format)?saved.format:'',openId:typeof saved.openId==='string'?saved.openId:null,editId:typeof saved.editId==='string'?saved.editId:null});}
   if(currentTab==='training_preparation')restoreTrainingPreparationState(route.trainingPreparation||{});
+  if(currentTab==='messages'){const m=ensureClubMessages();m.mode=route.messages?.mode==='sent'?'sent':'inbox';m.openId=route.messages?.openId||null;}
   if(currentTab==='team_review')restoreTeamReviewState(route.teamReview||{});
   if(currentTab==='myplan')builderSection=route.planSection||'core';
   if(currentTab==='groups'){
@@ -6082,6 +6093,7 @@ function renderTab(){
     if(!['workshop','dashboard'].includes(currentTab))clearTimeout(workshopDiscussionTimer);
   }
   const arrived=()=>{
+    bindPhoneAppControls();
     if(scrollOnArrival&&`${club?.id}:${currentTab}`===route){
       const inningsFocus=currentTab==='innings'?(document.getElementById('myReflectionForm')||document.getElementById('innings-detail-'+ensureMyInningsState().openId)):null;
       if(inningsFocus){if(inningsFocus.id==='myReflectionForm')revealMyInningsForm();else{inningsFocus.setAttribute('tabindex','-1');inningsFocus.focus({preventScroll:true});inningsFocus.scrollIntoView({block:'start'});}bindWorkshopReturn();return;}
@@ -6093,6 +6105,7 @@ function renderTab(){
   };
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
   const map={
+    messages:renderClubMessages,phone_app:renderPhoneApp,
     account_involvement:()=>renderFirstIdentitySetup({editing:true}),
     join_club:renderJoinAnotherClub,
     dashboard:renderClubDashboard,
@@ -6170,7 +6183,7 @@ async function openClubBattingGuideTopic(capabilityKey='whole_process',{focus='t
 }
 
 function guideTargetLabel(tab){
-  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',innings:'My Innings',make_your_call:'Make your prediction',howwetrain:'How We Train',conversations:'Coach Conversations'}[tab]||'Open area');
+  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',innings:'My Innings',make_your_call:'Make your prediction',howwetrain:'How We Train',conversations:'Coach Conversations',messages:'Messages',phone_app:'App & notifications'}[tab]||'Open area');
 }
 
 function guideTargetUnavailableReason(tab,focus=''){
@@ -6216,7 +6229,7 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
-const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "current_focus", "how_we_train", "training_preparation", "my_innings", "make_your_call", "weekly_engagement", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline", "team_review"];
+const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "current_focus", "how_we_train", "training_preparation", "my_innings", "make_your_call", "weekly_engagement", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline", "team_review", "phone_app", "club_messages"];
 
 function guideTopicNumber(key){
   const index=GUIDE_TOPIC_ORDER.indexOf(key);
@@ -7328,7 +7341,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Look beside Account",
-        "body": "The Coaching bell beside Account appears only when you have an unread coaching update or an open conversation request. Its number counts unread updates. It appears for the selected person, including non-playing members and teammates, and authorised staff. It checks on opening the app and returning to the browser tab/window. It is an in-app badge, not a phone push notification."
+        "body": "The Coaching bell beside Account appears when you have an unread coaching update or an open conversation request. Its number counts unread updates. Reading clears the unread badge; completing the conversation clears the work. It checks when the app opens, when you return and periodically while visible. Optional phone alerts are enabled separately under Account → App & notifications."
       },
       {
         "title": "Open the note",
@@ -7345,7 +7358,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Check the latest state",
-        "body": "Refresh reloads the current screen and latest permitted data. The system does not currently promise instant cross-device updates or send a new email for every coaching note. Later edits to a current observation can make it unread again."
+        "body": "Refresh reloads the current screen. With phone notifications enabled, new eligible coaching updates can alert you while the app is closed; device settings and connectivity affect delivery. Alerts use a private preview and respect the same player access and independent-reflection rules. They do not send a new email for each coaching note."
       }
     ],
     "sort_order": 170,
@@ -7540,6 +7553,84 @@ const CLUB_BATTING_HELP = {
     ],
     "sort_order": 149,
     "active": true
+  },
+  "phone_app": {
+    "capability_key": "phone_app",
+    "title": "Get the phone app and notifications",
+    "purpose": "Reach the full app from your phone and choose useful alerts.",
+    "short_explanation": "Install Club Batting from your browser, then choose whether this device receives club messages and coaching updates.",
+    "target_tab": "phone_app",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 172,
+    "active": true,
+    "tutorial": [
+      {
+        "title": "Add Club Batting to your phone",
+        "body": "Open clubbatting.com/app.html in your browser. On iPhone or iPad, use Safari → Share → Add to Home Screen; keep Open as Web App on if shown. On Android, use Install Club Batting when offered, or the Chrome menu → Install app / Add to Home screen. Open links outside WhatsApp’s internal browser first."
+      },
+      {
+        "title": "Use the full app",
+        "body": "Open the Club Batting icon and sign in. It opens your full club app, including your existing plans, training and innings. The icon can go on any Home Screen or in a folder. An internet connection is needed to load and save current club information. This is a browser-installed app; no App Store download is needed."
+      },
+      {
+        "title": "Enable notifications deliberately",
+        "body": "Open Account → App & notifications. Select Club messages and/or Coaching updates, then Enable notifications and allow the phone prompt. iPhone/iPad push needs iOS/iPadOS 16.4 or later and the app opened from its Home Screen icon. Each device and club is enabled separately. There is no automatic subscription or backlog of old notes."
+      },
+      {
+        "title": "Open an alert",
+        "body": "Tap a phone notification to open its club message or coaching area. Notification previews omit message and coaching details. Plan-related feedback stays hidden until the player’s independent reflection. Opening a message records Opened; it does not prove the player understood it or complete a coaching conversation."
+      },
+      {
+        "title": "Control or turn off notifications",
+        "body": "Account → App & notifications lets you change this club’s choices or Turn off on this device. Signing out clears this device’s subscription. If blocked, allow notifications in your phone/browser settings. Focus / Do Not Disturb, device restrictions and connectivity can delay or suppress alerts. Messages and coaching updates remain available inside Club Batting."
+      }
+    ]
+  },
+  "club_messages": {
+    "capability_key": "club_messages",
+    "title": "Send and read club messages",
+    "purpose": "Give players a clear message and a direct next step.",
+    "short_explanation": "Staff message permitted players from Players. Recipients find messages under Account, with optional phone alerts and email.",
+    "target_tab": "messages",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 174,
+    "active": true,
+    "tutorial": [
+      {
+        "title": "Choose the right players",
+        "body": "Admin, Head Coach, Coach and Captain roles can open Players → Message players. Choose individuals, a Playing Group, Currently unassigned, or all players in your access. Only current playing members whose records you can edit are offered. Selecting a group adds its permitted players; Clear removes your selections."
+      },
+      {
+        "title": "Write and send once",
+        "body": "Add a short title and message. Optionally link to My Player Plan, How We Train, Prepare for a Match, My Innings or Make your prediction. Check the recipients, then Send to players. This saves an inbox message. Phone alerts go only to opted-in devices. Also send by email is an explicit extra choice; delivery uses the club platform’s existing email service."
+      },
+      {
+        "title": "Send players to the useful screen",
+        "body": "A link opens each recipient’s own information. Prepare for a Match opens My Innings with the preparation form expanded. Personal coaching feedback still belongs in Coach Conversations, where permissions, reflection, notes, review dates and completion are preserved."
+      },
+      {
+        "title": "Read and track messages",
+        "body": "Account → Messages opens the inbox. An unread Messages button appears beside Account when needed. Open View to read the text and follow its link. Staff can see their recent Sent messages, recipient count, opened count and recorded delivery totals. A phone provider accepting an alert or an email being sent is not proof it was read."
+      },
+      {
+        "title": "Copy for WhatsApp",
+        "body": "Copy for WhatsApp copies the title, message and any app link so you can paste it into your club chat. It does not post automatically. Demo messages use fictional people and do not send email or phone notifications."
+      }
+    ]
   }
 };
 function guideCapabilityForCurrentProduct(capability){
@@ -16631,7 +16722,7 @@ function renderPlayersWorkspaceList(){
   page.innerHTML=`<style>.players-workspace-head.compact{padding:12px 14px;gap:8px 14px}.players-workspace-head.compact>div:first-child{min-width:0;flex:1}.workspace-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.workspace-title-row h2{margin:0;font-size:24px}.workspace-title-row h2:focus{outline:none}.workspace-title-row .btn{min-height:44px;font-size:12px;padding:8px 10px}.players-workspace-head .help{margin:3px 0 0;font-size:12px}.players-workspace-head.compact .section-label{font-size:9px;margin:0 0 3px}.players-workspace-head.compact>.btnrow{margin:0;gap:6px}.players-workspace-head.compact>.btnrow .btn{min-height:44px;font-size:11px;padding:8px}.players-workspace-tools.compact{padding:12px 14px;gap:8px;align-items:end}.players-workspace-tools.compact .field{margin:0;min-width:0}.players-workspace-tools.compact label{font-size:12px;margin:0 0 3px}.players-workspace-tools.compact input,.players-workspace-tools.compact select{min-height:44px;font-size:16px;padding:8px}.players-workspace-tools.compact .workspace-filter-count{padding:4px 7px;min-height:44px;font-size:11px}#workspaceAssignmentNotice:empty{display:none}@media(max-width:650px){.players-workspace-head.compact{display:block}.players-workspace-head.compact>.btnrow{margin-top:8px}.players-workspace-tools.compact{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.players-workspace-tools.compact .workspace-filter-count{grid-column:1/-1;min-height:0;padding:0;display:flex;gap:4px;align-items:baseline;justify-content:flex-end;background:none;border:0}}</style><section class="card players-workspace-head compact">
     <div>
       <div class="section-label">${esc(role)} workspace</div>
-      <div class="workspace-title-row"><h2>Players</h2><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div>
+      <div class="workspace-title-row"><h2>Players</h2><div class="btnrow"><button class="btn ghost" id="messagePlayersFromPlayers">Message players</button><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div></div>
       <div class="help">${plansPublished?'Open plans and pick up coaching conversations.':'Register people, assign club roles and organise Playing Groups while the club prepares its setup. Player Plans open after publication.'}</div>
       <div class="btnrow compact" style="margin-top:8px"><span class="help" id="workspaceRegisteredCount"><strong>${players.length}</strong> ${isAdmin()?'registered':'accessible'} player${players.length===1?'':'s'}</span>${players.length?`<button type="button" class="workspace-text-link" id="workspaceShowAllPlayers">${playersWorkspaceShowAll?'Hide player list':'Show all players'}</button>`:''}${query||playersWorkspaceGroupFilter?'<button type="button" class="workspace-text-link" id="workspaceClearSelection">Clear selection</button>':''}</div>
     </div>
@@ -16668,6 +16759,7 @@ function renderPlayersWorkspaceList(){
 
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
 
+  document.getElementById('messagePlayersFromPlayers')?.addEventListener('click',()=>openClubMessages({compose:true}));
   document.getElementById('openTrainingPreparation')?.addEventListener('click',()=>openTrainingPreparation());
   document.getElementById('showCoachConversations')?.addEventListener('click',()=>{if(!confirmLeaveFeedbackEntry())return;playersWorkspaceSearch='';playersWorkspaceGroupFilter='__discussion__';renderPlayersWorkspaceList();});
   document.getElementById('managePlanDatesFromPlayers')?.addEventListener('click',()=>openPlanDueDateDialog());
@@ -17267,6 +17359,7 @@ async function renderPlayerHome(){
     .player-home-tile .player-home-tile-arrow{position:absolute;right:12px;top:13px;color:var(--primary,#202f78);font-size:20px;line-height:1}
     .player-home-tile:hover{border-color:var(--primary,#202f78);box-shadow:0 2px 8px #17245f12}
     .player-home-tile:focus-visible{outline:3px solid var(--primary,#202f78);outline-offset:3px}
+    .phone-install-prompt{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:8px}.phone-install-prompt .btn{padding:6px 8px;min-height:44px;font-size:13px}
     .player-home-links{display:flex;gap:0 18px;flex-wrap:wrap;margin-top:8px}
     .player-home-links button{appearance:none;border:0;background:transparent;padding:6px 0;min-height:44px;color:var(--primary,#202f78);font:inherit;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
     @media(min-width:1050px){.player-home-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -17277,7 +17370,7 @@ async function renderPlayerHome(){
     <nav class="player-home-tiles" aria-label="Your batting tools">
       ${tiles.map(([id,title,copy,area])=>`<button type="button" class="player-home-tile" id="${id}" data-home-area="${area}"><strong>${title}</strong><span class="player-home-tile-copy">${copy}</span><span class="player-home-tile-arrow" aria-hidden="true">→</span></button>`).join('')}
     </nav>
-    <div class="player-home-links"><button type="button" id="playerHomePhilosophy">Read How We Bat</button><button type="button" id="requestConversationFromHome">Request a Coach Conversation</button></div>
+    ${phoneAppPrompt()}<div class="player-home-links"><button type="button" id="playerHomePhilosophy">Read How We Bat</button><button type="button" id="requestConversationFromHome">Request a Coach Conversation</button></div>
   </section>`;
   document.getElementById('playerHomePlan').onclick=()=>openPlayerHomeAction({tab:'myplan'});
   document.getElementById('playerHomeTraining').onclick=()=>openPlayerHomeAction({tab:'howwetrain'});
@@ -18989,7 +19082,7 @@ async function renderPhilosophyInviteRoute(token){
     <div id="philosophyInviteStatus" class="help"></div>
   </div>`;
 
-  document.getElementById('inviteSignOut').onclick=()=>supabase.auth.signOut();
+  document.getElementById('inviteSignOut').onclick=()=>signOutClubBatting();
 
   document.getElementById('acceptPhilosophyInvite').onclick=async()=>{
     const st=document.getElementById('philosophyInviteStatus');
@@ -19176,7 +19269,7 @@ async function renderLeadAdminHandoverRoute(token){
   document.getElementById('outgoingPostAccess').onchange=refreshOutgoingAccessUI;
   refreshOutgoingAccessUI();
 
-  document.getElementById('handoverUseDifferentEmail').onclick=()=>supabase.auth.signOut();
+  document.getElementById('handoverUseDifferentEmail').onclick=()=>signOutClubBatting();
 
   document.getElementById('acceptLeadHandover').onclick=async()=>{
     const st=document.getElementById('leadHandoverStatus');
@@ -19279,7 +19372,7 @@ async function renderPlatformConsole(){
   </div>`;
 
   document.getElementById('accountPassword').onclick=openAccountPassword;
-  document.getElementById('platformOut').onclick=()=>supabase.auth.signOut();
+  document.getElementById('platformOut').onclick=()=>signOutClubBatting();
   if(document.getElementById('platformContextSwitch'))document.getElementById('platformContextSwitch').onchange=async e=>{
     if(e.target.value==='platform')return;
     fixtureLocalStorage.setItem('bdp-context','club');fixtureLocalStorage.setItem('bdp-club-id',e.target.value);await loadContext();
@@ -20782,6 +20875,257 @@ async function engagementSave(s,op,values){
 // END WEEKLY ENGAGEMENT
 
 
+/* PHONE MODULES */
+/* BEGIN CLUB MESSAGES — maintained source: tools/club_messages_ui.js */
+let clubMessageState=null,clubMessageUnread=0,clubMessageRefreshSequence=0;
+const clubMessageTargets=[['','No app link'],['myplan','My Player Plan'],['howwetrain','How We Train'],['prepare','Prepare for a Match'],['innings','My Innings'],['make_your_call','Make your prediction']];
+function ensureClubMessages(){
+ const key=`${session?.user?.id}:${club?.id}`;
+ if(clubMessageState?.key!==key)clubMessageState={key,mode:'inbox',openId:null,context:null,data:null,draft:null,sending:false,notice:''};
+ return clubMessageState;
+}
+function newClubMessageDraft(){return {request_id:crypto.randomUUID(),player_ids:[],title:'',body:'',target:'',email:false};}
+function clubMessageDirty(){const d=clubMessageState?.draft;return !!(d&&(d.title||d.body||d.player_ids.length));}
+function confirmLeaveClubMessages(){
+ if(clubMessageState?.sending){alert('Your message is sending. Wait for the result before leaving.');return false;}
+ if(currentTab==='messages'&&clubMessageState?.mode==='compose'&&clubMessageDirty()&&!confirm('Leave this unsent message? Your draft will stay here while you remain signed in.'))return false;
+ return true;
+}
+function clubMessageStyles(){return `<style>
+ .messages-page{max-width:840px;margin:0 auto}.messages-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.messages-head h1{font-size:24px;margin:0}.messages-head .btn{padding:8px 12px;min-height:44px}.messages-tabs{display:flex;gap:8px;margin:12px 0}.messages-tabs button[aria-pressed=true]{background:var(--navy,#17245f);color:#fff}
+ .messages-page .message-row{padding:0;border:1px solid #dce2ee;border-radius:10px;background:white;margin-bottom:8px}.messages-page .message-row>summary{margin:0;display:flex;align-items:center;gap:8px;padding:12px;min-height:44px;box-sizing:border-box;cursor:pointer;list-style:none}.message-row>summary::after{content:'View ⌄';font-size:12px;margin-left:auto;white-space:nowrap}.message-row[open]>summary::after{content:'Close ⌃'}.message-row strong{font-size:15px}.message-row small{display:block;font-size:12px;color:#59657c}.message-content{padding:0 12px 12px;border-top:1px solid #eef0f7}.message-content p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5;margin:12px 0}.message-unread{width:8px;height:8px;background:#d8232a;border-radius:50%;flex-shrink:0}.message-form{margin-top:12px}.message-form .field{margin-bottom:12px}.message-form input,.message-form textarea,.message-form select{font-size:16px}.message-form label{font-size:13px}.message-form .message-check{display:flex;align-items:center;gap:9px;min-height:44px;margin:0}.message-check input{width:18px;height:18px;margin:0;flex-shrink:0}.message-recipients{max-height:230px;overflow:auto;border:1px solid #dce2ee;border-radius:8px;padding:4px 10px}.message-recipient-tools{display:flex;gap:8px;align-items:center;margin:8px 0}.message-recipient-tools select{min-width:0;flex:1}.message-form fieldset{min-width:0;border:0;padding:0;margin:0}.message-form fieldset:disabled{opacity:.7}.message-form .btn{min-height:44px;padding:8px 10px}.message-form input,.message-form textarea,.message-form select{box-sizing:border-box;max-width:100%}.message-form .help{margin:5px 0;font-size:12px}.messages-status:empty{display:none}.messages-status{margin:8px 0;font-size:14px}.messages-empty{padding:16px;border:1px solid #dce2ee;border-radius:10px}.message-body-count{float:right;font-weight:400;color:#59657c}
+ </style>`;}
+async function openClubMessages({compose=false,id=null}={}){
+ if(!await saveClubEditsBeforeNavigation())return;
+ const state=ensureClubMessages();state.mode=compose?'compose':'inbox';state.openId=id;
+ if(compose&&!state.draft)state.draft=newClubMessageDraft();currentTab='messages';await renderTab();
+}
+async function refreshClubMessageBadge(){
+ if(!session?.user||!club||!membership)return;
+ const key=`${session.user.id}:${club.id}`,seq=++clubMessageRefreshSequence;
+ const {data,error}=await supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'badge'});
+ if(key!==`${session?.user?.id}:${club?.id}`||seq!==clubMessageRefreshSequence||error)return;
+ clubMessageUnread=Number(data?.unread||0);
+ const host=document.getElementById('clubMessagesHost');if(host){host.hidden=!clubMessageUnread;host.innerHTML=clubMessageUnread?`<button class="btn ghost" id="unreadClubMessages" aria-label="${clubMessageUnread} unread club messages">Messages <span class="coaching-unread-badge">${clubMessageUnread}</span></button>`:'';document.getElementById('unreadClubMessages')?.addEventListener('click',()=>openClubMessages());}
+ void updatePhoneAppBadge();
+}
+async function openClubMessageTarget(target){
+ if(!clubMessageTargets.some(([key])=>key===target)||!target)return;
+ if(!await saveClubEditsBeforeNavigation())return;
+ if(target==='prepare')return openMyInnings({prepare:true});
+ if(!canOpenClubTab(target))return;currentTab=target;await renderTab();
+}
+async function copyClubMessage(message,button){
+ const label=button.textContent;
+ const tab=message.target==='prepare'?'innings':message.target;
+ const link=tab?new URL(`./app.html?club=${encodeURIComponent(club.id)}&tab=${tab}${message.target==='prepare'?'&prepare=1':''}`,location.href).href:'';
+ const text=`${message.title}\n\n${message.body}${link?'\n\n'+link:''}`;
+ try{await navigator.clipboard.writeText(text);button.textContent='Copied ✓';}catch{button.textContent='Select and copy below';const box=document.createElement('textarea');box.value=text;box.readOnly=true;box.setAttribute('aria-label','Message to copy');button.after(box);box.focus();box.select();}
+ setTimeout(()=>{if(button.isConnected)button.textContent=label;},2500);
+}
+async function renderClubMessages(){
+ const page=document.getElementById('page'),state=ensureClubMessages();
+ const here=()=>state===clubMessageState&&currentTab==='messages'&&page===document.getElementById('page');
+ page.innerHTML=clubMessageStyles()+'<section class="card messages-page"><div class="messages-head"><h1>Messages</h1></div><p role="status">Loading messages…</p></section>';
+ try{
+  const [list,context]=await Promise.all([supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'list'}),supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'context'})]);
+  if(list.error||context.error)throw list.error||context.error;if(!here())return;
+  state.data=list.data;state.context=context.data;if(!context.data.can_send&&state.mode!=='inbox'){state.mode='inbox';state.draft=null;}
+  drawClubMessages(page,state);void refreshClubMessageBadge();
+ }catch(error){if(here()){page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><h1>Messages</h1><p>${esc(error.message||'Messages could not load.')}</p><button class="btn" id="retryClubMessages">Try again</button></section>`;document.getElementById('retryClubMessages').onclick=renderClubMessages;}}
+}
+function drawClubMessages(page,state){
+ const data=state.data,staff=!!state.context.can_send,rows=state.mode==='sent'?data.sent:data.inbox;
+ page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?'Message players':'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players</button>':''}</div>
+ ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
+ <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
+ ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?`${row.recipients} players`:row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'?`<button class="btn" data-message-target="${esc(row.target)}">${esc(clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
+ document.getElementById('newClubMessage')?.addEventListener('click',()=>{state.mode='compose';state.draft??=newClubMessageDraft();drawClubMessages(page,state);});
+ page.querySelectorAll('[data-message-mode]').forEach(b=>b.onclick=()=>{if(!confirmLeaveClubMessages())return;state.mode=b.dataset.messageMode;drawClubMessages(page,state);});
+ page.querySelectorAll('[data-message-target]').forEach(b=>b.onclick=()=>openClubMessageTarget(b.dataset.messageTarget));
+ page.querySelectorAll('[data-message-copy]').forEach(b=>b.onclick=()=>copyClubMessage(rows.find(r=>r.id===b.dataset.messageCopy),b));
+ const markOpened=async el=>{
+  if(!el.open||state.mode!=='inbox')return;const row=data.inbox.find(r=>r.id===el.dataset.messageId);if(!row||row.opened_at)return;
+  const {error}=await supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'open',p_data:{id:row.id}});
+  if(error||state!==clubMessageState)return;row.opened_at=new Date().toISOString();el.querySelector('.message-unread')?.remove();void refreshClubMessageBadge();
+ };
+ page.querySelectorAll('[data-message-id]').forEach(el=>{el.addEventListener('toggle',()=>void markOpened(el));if(el.open)void markOpened(el);});
+ if(state.openId&&state.mode==='inbox'&&!data.inbox.some(r=>r.id===state.openId))document.getElementById('clubMessageNotice').textContent='That message is unavailable in this account. Recent messages are shown below.';
+ if(state.mode==='compose')bindClubMessageComposer(page,state);
+}
+function clubMessageComposer(state){
+ const d=state.draft??=newClubMessageDraft(),players=state.context.players||[],groups=new Map(players.flatMap(p=>p.groups||[]).map(g=>[g.id,g.name]));
+ return `<form class="message-form" id="clubMessageForm"><fieldset ${state.sending?'disabled':''}>
+ <details id="messageRecipientPicker" ${d.player_ids.length?'':'open'}><summary>To: <strong id="messageRecipientCount">${d.player_ids.length} players</strong> · choose recipients</summary>
+ <div class="message-recipient-tools"><select id="messageGroup" aria-label="Choose a Playing Group"><option value="">All players in my access</option><option value="unassigned">Currently unassigned</option>${[...groups].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><button type="button" class="btn ghost" id="messageSelectGroup">Select</button><button type="button" class="btn ghost" id="messageClearRecipients">Clear</button></div>
+ <div class="message-recipients">${players.length?players.map(p=>`<label class="message-check"><input type="checkbox" data-message-player="${esc(p.id)}" ${d.player_ids.includes(p.id)?'checked':''}>${esc(p.name)}</label>`).join(''):'No players with messaging access. Ask your Club Admin to check your player access.'}</div></details>
+ <div class="field" style="margin-top:12px"><label for="clubMessageTitle">Title</label><input id="clubMessageTitle" required maxlength="80" value="${esc(d.title)}" placeholder="e.g. Thursday training"></div>
+ <div class="field"><label for="clubMessageBody">Message <span class="message-body-count" id="messageBodyCount">${d.body.length}/1500</span></label><textarea id="clubMessageBody" required maxlength="1500" rows="4" placeholder="What do players need to know or do?">${esc(d.body)}</textarea></div>
+ <div class="field"><label for="clubMessageTarget">Link to</label><select id="clubMessageTarget">${clubMessageTargets.map(([key,label])=>`<option value="${key}" ${d.target===key?'selected':''}>${label}</option>`).join('')}</select></div>
+ <label class="message-check"><input id="clubMessageEmail" type="checkbox" ${d.email?'checked':''}>Also send by email</label>
+ <p class="help">Saved in each player’s inbox. Phone alerts go to players who have enabled them.</p>
+ <div class="btnrow"><button type="submit" class="btn" id="sendClubMessage">Send to ${d.player_ids.length} players</button><button type="button" class="btn ghost" id="copyClubMessageDraft">Copy for WhatsApp</button><button type="button" class="btn ghost" id="discardClubMessageDraft">Discard draft</button></div>
+ <p class="messages-status" id="clubMessageSendStatus" role="status"></p></fieldset></form>`;
+}
+function bindClubMessageComposer(page,state){
+ const d=state.draft,form=document.getElementById('clubMessageForm'),status=document.getElementById('clubMessageSendStatus');
+ const sync=()=>{d.title=form.querySelector('#clubMessageTitle').value;d.body=form.querySelector('#clubMessageBody').value;d.target=form.querySelector('#clubMessageTarget').value;d.email=form.querySelector('#clubMessageEmail').checked;d.player_ids=[...form.querySelectorAll('[data-message-player]:checked')].map(x=>x.dataset.messagePlayer);form.querySelector('#messageRecipientCount').textContent=`${d.player_ids.length} players`;form.querySelector('#sendClubMessage').textContent=`Send to ${d.player_ids.length} player${d.player_ids.length===1?'':'s'}`;form.querySelector('#messageBodyCount').textContent=`${d.body.length}/1500`;};
+ form.addEventListener('input',sync);form.addEventListener('change',sync);
+ document.getElementById('messageSelectGroup').onclick=()=>{const group=form.querySelector('#messageGroup').value;form.querySelectorAll('[data-message-player]').forEach(x=>{const p=state.context.players.find(p=>p.id===x.dataset.messagePlayer);if(!group||(group==='unassigned'?!p.groups.length:p.groups.some(g=>g.id===group)))x.checked=true;});sync();};
+ document.getElementById('messageClearRecipients').onclick=()=>{form.querySelectorAll('[data-message-player]').forEach(x=>x.checked=false);sync();};
+ document.getElementById('discardClubMessageDraft').onclick=()=>{if(clubMessageDirty()&&!confirm('Discard this unsent draft?'))return;state.draft=null;state.mode='inbox';drawClubMessages(page,state);};
+ document.getElementById('copyClubMessageDraft').onclick=e=>{sync();void copyClubMessage(d,e.currentTarget);};
+ form.onsubmit=async event=>{
+  event.preventDefault();if(state.sending)return;sync();if(!d.player_ids.length){status.textContent='Choose at least one player.';form.querySelector('#messageRecipientPicker').open=true;return;}
+  if(!d.title.trim()||!d.body.trim()){status.textContent='Add a title and a message.';return;}
+  const clubId=club.id;state.sending=true;form.querySelector('fieldset').disabled=true;status.textContent='Sending…';
+  try{const {data,error}=await supabase.rpc('club_messages_api',{p_club_id:clubId,p_action:'send',p_data:structuredClone(d)});if(error)throw error;
+   if(state!==clubMessageState||clubId!==club?.id)return;
+   state.draft=null;state.mode='sent';state.notice=`Sent to ${data.recipients} player${data.recipients===1?'':'s'} ✓`;state.openId=data.id;state.sending=false;await renderClubMessages();
+  }catch(error){if(state===clubMessageState&&form.isConnected){status.textContent=`Couldn’t confirm sending. Your draft is here; retrying will not send it twice. ${error.message||''}`;form.querySelector('fieldset').disabled=false;}}
+  finally{state.sending=false;}
+ };
+}
+/* END CLUB MESSAGES */
+
+/* BEGIN PHONE APP — maintained source: tools/phone_app_ui.js */
+let phoneInstallPrompt=null,phoneRegistration=null,phoneStarted=false,phoneSettingsBusy=false;
+let pendingPhoneLaunch=null;
+const phoneIsDemo=()=>typeof window.__fixtureDb!=='undefined'||location.pathname.endsWith('/demo.html');
+const phoneIsInstalled=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const phoneIsIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const phonePushSupported=()=>window.isSecureContext&&'serviceWorker'in navigator&&'PushManager'in window&&'Notification'in window;
+async function phoneWorkerMessage(type,binding=null){
+ if(phoneIsDemo()||!('serviceWorker'in navigator))return;
+ const reg=phoneRegistration||await navigator.serviceWorker.getRegistration('./');if(!reg?.active)return;
+ await new Promise(resolve=>{const channel=new MessageChannel(),timer=setTimeout(resolve,2500);channel.port1.onmessage=()=>{clearTimeout(timer);resolve();};reg.active.postMessage({type,binding},[channel.port2]);});
+}
+async function updatePhoneAppBadge(){
+ if(phoneIsDemo()||!navigator.setAppBadge)return;
+ try{const n=clubMessageUnread+(coachingUpdateScopeMatches()?myCoachingUpdates.updates.length:0);if(n)await navigator.setAppBadge(n);else await navigator.clearAppBadge();}catch{}
+}
+async function initialisePhoneApp(){
+ if(phoneStarted||phoneIsDemo()||!location.pathname.endsWith('/app.html')||!('serviceWorker'in navigator)||!window.isSecureContext)return;
+ phoneStarted=true;
+ window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();phoneInstallPrompt=event;if(currentTab==='phone_app')void renderPhoneApp();});
+ window.addEventListener('appinstalled',()=>{phoneInstallPrompt=null;if(currentTab==='phone_app')void renderPhoneApp();});
+ navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='CB_OPEN')void openPhoneNotification(event.data.url);});
+ try{phoneRegistration=await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'});void phoneRegistration.update();}catch{phoneStarted=false;}
+ // No registration request prompts for notifications. Permission is requested only by Enable notifications.
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}});
+ setInterval(()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}},60000);
+}
+async function signOutClubBatting(){
+ if(phoneIsDemo())return supabase.auth.signOut();
+ try{const reg=phoneRegistration||await navigator.serviceWorker?.getRegistration('./'),sub=await reg?.pushManager.getSubscription();if(sub&&session?.user){await Promise.race([supabase.rpc('phone_app_api',{p_club_id:club?.id||null,p_action:'disable',p_data:{endpoint:sub.endpoint}}),new Promise(resolve=>setTimeout(resolve,3000))]);}}catch{}
+ await phoneWorkerMessage('CB_SIGN_OUT');clubMessageState=null;clubMessageUnread=0;return supabase.auth.signOut();
+}
+async function openPhoneApp(){if(!await saveClubEditsBeforeNavigation())return;currentTab='phone_app';await renderTab();}
+function phoneAppPrompt(){
+ if(phoneIsInstalled()||phoneIsDemo()||fixtureLocalStorage.getItem('cb-hide-install')==='yes')return '';
+ return `<div class="phone-install-prompt"><button class="btn ghost" data-phone-open>Get Club Batting on your phone ↗</button><button type="button" class="btn ghost" data-phone-dismiss aria-label="Dismiss phone installation suggestion">×</button></div>`;
+}
+function bindPhoneAppControls(){
+ document.querySelectorAll('[data-phone-open]').forEach(b=>b.onclick=openPhoneApp);
+ document.querySelector('[data-phone-dismiss]')?.addEventListener('click',e=>{fixtureLocalStorage.setItem('cb-hide-install','yes');e.currentTarget.closest('.phone-install-prompt').remove();});
+ document.querySelectorAll('[data-club-messages]').forEach(b=>b.onclick=()=>openClubMessages());
+
+}
+async function renderPhoneApp(){
+ const page=document.getElementById('page'),clubId=club?.id,userId=session?.user?.id;
+ const here=()=>currentTab==='phone_app'&&club?.id===clubId&&session?.user?.id===userId&&document.getElementById('page')===page;
+ const installed=phoneIsInstalled(),ios=phoneIsIOS(),demo=phoneIsDemo();
+ page.innerHTML=`<style>.phone-settings{max-width:640px;margin:0 auto}.phone-settings h1{font-size:24px;margin:0 0 12px}.phone-settings h2{font-size:19px;margin:16px 0 8px}.phone-settings p,.phone-settings li{font-size:15px;line-height:1.5}.phone-settings label{display:flex;gap:10px;align-items:center;min-height:44px}.phone-settings input{width:18px;height:18px;margin:0}.phone-settings .help{font-size:12px}.phone-settings [hidden]{display:none!important}</style>
+ <section class="card phone-settings"><h1>App & notifications</h1>
+ ${installed?'<p>✓ Club Batting is open as an app.</p>':`<p>Open the full Club Batting app from an icon on your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Club Batting</button>':ios?'<ol><li>Open clubbatting.com/app.html in Safari.</li><li>Tap Share, then Add to Home Screen. If shown, keep Open as Web App on.</li><li>Open Club Batting from its new icon and sign in.</li></ol>':'<p>In Chrome or Edge, open the browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>. If you opened a link inside WhatsApp, open it in your browser first.</p>'}<p class="help">The icon can go on any Home Screen or in a folder. The app needs an internet connection.</p>`}
+ <h2>Phone notifications</h2><p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
+ <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label><p class="help">For ${esc(club?.name||'this club')} on this device. Notification previews keep the details private.</p></div>
+ <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button></div>
+ <p class="help">Messages remain under Account → Messages. Coaching updates remain in Coach Conversations. Phone alerts depend on your device and its notification settings.</p><p id="phoneActionStatus" role="status" class="help"></p></section>`;
+ document.getElementById('installClubBatting')?.addEventListener('click',async()=>{await phoneInstallPrompt?.prompt();phoneInstallPrompt=null;});
+ if(demo)return;
+ if(ios&&!installed){document.getElementById('phoneNotificationStatus').textContent='On iPhone or iPad, add Club Batting to your Home Screen, then open its icon to enable notifications (iOS/iPadOS 16.4 or later).';return;}
+ if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive phone notifications. Open Club Batting in a supported, up-to-date browser.';return;}
+ try{
+  await initialisePhoneApp();const reg=phoneRegistration||await navigator.serviceWorker.getRegistration('./');if(!reg)throw new Error('The phone app files are not available yet. Reload after the website update.');
+  await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(new Error('The app is still installing. Try reloading shortly.')),8000))]);
+  let sub=await reg.pushManager.getSubscription();
+  const {data,error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'get',p_data:{endpoint:sub?.endpoint||null}});if(error)throw error;if(!here())return;
+  const status=document.getElementById('phoneNotificationStatus'),button=document.getElementById('enablePhoneNotifications'),off=document.getElementById('disablePhoneNotifications'),choices=document.getElementById('phoneNotificationChoices');
+  if(!data.configured){status.textContent='Phone notifications are not configured yet. Your inbox is available.';return;}
+  if(Notification.permission==='denied'){status.textContent='Notifications are blocked. Allow them in your phone or browser notification settings, then return here.';if(sub){off.hidden=false;off.onclick=async()=>{const r=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(!r.error){await phoneWorkerMessage('CB_SIGN_OUT');await renderPhoneApp();}};}return;}
+  const enabled=!!(sub&&data.subscription_id&&data.club_enabled);
+  status.textContent=enabled?'Notifications are on for this club.':'Choose the updates you want, then enable notifications.';
+  choices.hidden=false;document.getElementById('phoneMessages').checked=data.preferences.messages;document.getElementById('phoneCoaching').checked=data.preferences.coaching;
+  button.hidden=false;button.textContent=enabled?'Saved ✓':'Enable notifications';button.disabled=enabled;
+  off.hidden=!sub;
+  if(enabled)await phoneWorkerMessage('CB_BIND',data.binding);
+  choices.onchange=()=>{button.textContent=enabled?'Save notification choices':'Enable notifications';button.disabled=false;};
+  const disable=async()=>{
+   if(phoneSettingsBusy)return;phoneSettingsBusy=true;off.disabled=true;button.disabled=true;
+   try{if(sub){const {error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(error)throw error;await sub.unsubscribe();}await phoneWorkerMessage('CB_SIGN_OUT');if(here())await renderPhoneApp();}
+   catch(e){if(here())document.getElementById('phoneActionStatus').textContent=e.message||'Could not turn off notifications. Try again.';}
+   finally{phoneSettingsBusy=false;if(off.isConnected)off.disabled=false;}
+  };
+  off.onclick=disable;
+  button.onclick=async()=>{
+   if(phoneSettingsBusy)return;phoneSettingsBusy=true;button.disabled=true;const result=document.getElementById('phoneActionStatus');
+   try{
+    // Keep the browser permission request directly within this user click (required on iOS).
+    const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+    if(permission!=='granted'){if(here()){result.textContent=permission==='denied'?'Notifications were not allowed. You can change this in your phone settings.':'No change made. Your inbox still works.';button.disabled=false;}return;}
+    if(sub&&!data.subscription_id){await sub.unsubscribe();sub=null;}
+    if(!sub){const padded=data.public_key.replace(/-/g,'+').replace(/_/g,'/');const key=Uint8Array.from(atob(padded+'='.repeat((4-padded.length%4)%4)),c=>c.charCodeAt(0));sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});}
+    if(!here())return;
+    const json=sub.toJSON(),saved=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'register',p_data:{endpoint:sub.endpoint,p256dh:json.keys.p256dh,auth:json.keys.auth,messages:document.getElementById('phoneMessages').checked,coaching:document.getElementById('phoneCoaching').checked}});
+    if(saved.error)throw saved.error;if(!here())return;await phoneWorkerMessage('CB_BIND',saved.data.binding);await renderPhoneApp();
+   }catch(e){if(here()){result.textContent=`Notifications could not be enabled. ${e.message||'Please try again.'}`;button.disabled=false;}}
+   finally{phoneSettingsBusy=false;}
+  };
+ }catch(error){if(here())document.getElementById('phoneNotificationStatus').textContent=error.message||'Could not check notifications. Reload to try again.';}
+}
+function capturePhoneLaunch(params){
+ if(params.get('message')||params.get('coaching')||params.get('prepare')==='1')pendingPhoneLaunch={clubId:params.get('club'),message:params.get('message'),coaching:params.get('coaching'),prepare:params.get('prepare')==='1'};
+}
+async function applyPhoneLaunch(){
+ const launch=pendingPhoneLaunch;if(!launch||launch.clubId!==club?.id)return;pendingPhoneLaunch=null;
+ if(launch.message){const s=ensureClubMessages();s.mode='inbox';s.openId=launch.message;currentTab='messages';return;}
+ if(launch.prepare&&isPlayerUser()){const s=ensureMyInningsState();s.editId='prepare:new';s.openId=null;currentTab='innings';return;}
+ if(launch.coaching){
+  const requestedUser=session?.user?.id;
+  const {data,error}=await supabase.rpc('get_my_coaching_updates',{p_club_id:club.id});
+  if(launch.clubId!==club?.id||requestedUser!==session?.user?.id)return;
+  const update=!error&&(data?.updates||[]).find(u=>u.source_key===launch.coaching);
+  if(!update){currentTab='conversations';return;}
+  pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
+  currentTab=update.source_kind==='conversation'?'conversations':update.source_kind==='match'?'innings':'howwetrain';
+  if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=update.can_open?null:update.match_id;}
+ }
+}
+async function openPhoneNotification(raw){
+ let url;try{url=new URL(raw);if(url.origin!==location.origin||url.pathname!==location.pathname)return;}catch{return;}
+ if(!await saveClubEditsBeforeNavigation())return;
+ capturePhoneLaunch(url.searchParams);
+ if(!session?.user){history.replaceState({},'',url);return routeAuth();}
+ const clubId=url.searchParams.get('club');if(!allMemberships.some(m=>m.club_id===clubId)){alert('This notification belongs to another account or a club you no longer belong to.');return;}
+ if(club?.id!==clubId||!document.getElementById('page')){fixtureLocalStorage.setItem('bdp-club-id',clubId);fixtureLocalStorage.setItem('bdp-context','club');history.replaceState({},'',url);await loadContext();}
+ else{await applyPhoneLaunch();await renderTab();}
+}
+let phoneSessionSync='';
+async function syncPhoneDeviceSession(){
+ if(phoneIsDemo()||!phonePushSupported()||!session?.user||!club)return;
+ const key=session.user.id+':'+club.id;if(phoneSessionSync===key)return;phoneSessionSync=key;
+ try{
+  await initialisePhoneApp();const reg=phoneRegistration||await navigator.serviceWorker.getRegistration('./');const sub=await reg?.pushManager.getSubscription();if(!sub)return;
+  const {data,error}=await supabase.rpc('phone_app_api',{p_club_id:club.id,p_action:'get',p_data:{endpoint:sub.endpoint}});
+  if(error){phoneSessionSync='';return;}
+  if(key!==session?.user?.id+':'+club?.id)return;
+  await phoneWorkerMessage(data.subscription_id?'CB_BIND':'CB_SIGN_OUT',data.binding);
+ }catch{phoneSessionSync='';}
+}
+/* END PHONE APP */
+
+
 // Local data adapter adapted from the existing Club Batting example fixtures.
 let fixtureRows={};
 let fixtureCurrent;
@@ -20899,6 +21243,9 @@ function fixtureResetGlobals(){
 
 // All people, results and club records in this file are fictional examples.
 const demoStages=[
+  {key:'messages',label:'Message players · staff',tab:'messages',role:'coach',hint:'Casey can send to permitted players, attach an app link and optionally request email delivery. This isolated demo sends nothing. Switch to Player inbox to see Alex’s example message.'},
+  {key:'player_messages',label:'Player inbox',tab:'messages',role:'player',hint:'Open Casey’s message and follow its How We Train link. Account → App & notifications explains phone installation; real notifications are disabled in the demo.'},
+  {key:'phone_app',label:'Get the phone app',tab:'phone_app',role:'player',hint:'Club Batting opens as a full web app from its Home Screen icon. This fictional demo does not install anything or request notification permission.'},
   {key:'home',label:'Club Home · published example',tab:'dashboard',role:'admin',hint:'The five preparation steps are complete. Players can build their plans, train and learn through feedback. People can sign up at any stage. View any saved phase.'},
   {key:'preparation',label:'Club Home · during preparation',tab:'dashboard',role:'admin',preparing:true,hint:'People can register during preparation. Assign club roles in People & Sign-up, then select the Philosophy Lead and contributors in the Workshop.'},
   {key:'people',label:'People & Sign-up · during preparation',tab:'permissions',role:'admin',preparing:true,hint:'Player and non-playing staff sign-up stay separate. Registration is available before publication; club roles and workshop access are assigned afterwards.'},
@@ -20931,7 +21278,7 @@ let demoPublishedSnapshot=null;
 const demoLabels={wicket_preservation:'Value your wicket',leaving_defending:'Leaving and defending',strike_rotation:'Get off strike',boundary_access:'Boundary options',running:'Running between wickets',scoring_areas:'Trusted scoring areas',tempo:'Tempo',matchups:'Matchups',spin_method:'Playing spin',pace_method:'Playing pace',risk_management:'Decision making',reset_routines:'Reset routines',dot_ball_management:'Managing dot balls',powerplay:'Powerplay',death_overs:'Late innings',innovation:'Innovation',patience:'Patience',partnerships:'Partnerships'};
 
 function demoSeedClub(){
-  demoPublishedSnapshot=null;
+  demoPublishedSnapshot=null;demoClubMessageRecords=[];clubMessageState=null;clubMessageUnread=0;
   fixtureResetGlobals();fixtureLocalStorage.clear();fixtureSessionStorage.clear();
   club={id:'example-club',name:'Harbour Example Cricket Club',primary_colour:'#203578',accent_colour:'#177c78',branding_updated_at:fixtureNow(),lead_admin_user_id:'user-admin',player_signup_open:true,player_join_token:'demo-only',join_code:'DEMO-ONLY'};
   session={user:{id:'user-admin',email:'sam@example.test'}};userProfile={user_id:'user-admin',display_name:'Sam Taylor'};
@@ -22406,6 +22753,29 @@ window.__fixtureRpc=async(name,args={})=>{
  if(['get_team_review_roster','get_team_match_review','get_team_review_session'].includes(name))for(const p of out.data.players||[]){const m=fixtureRows.feedback[p.player_id]?.matches.find(m=>m.id===p.match_id),entry=fixtureRows.make_your_call.entries.find(e=>e.player_id===p.player_id&&e.match_date===(out.data.review?.match_date||args.p_match_date)&&e.format_key===(out.data.review?.format_key||args.p_format_key)&&(fixtureRows.match_preparations.find(v=>v.id===e.preparation_id)?.innings_number||1)===(out.data.review?.innings_number||args.p_innings_number||1));Object.assign(p,{can_record_score:demoCallCanRecord({player_id:p.player_id}),score_text:m?.score_text||'',scorecard:m?.scorecard||null,official_result_revision:entry?.result?.revision||0});}
  if(name==='get_team_review_session'){const r=fixtureRows.team_review_sessions.find(r=>r.id===args.p_review_id);Object.assign(out.data.review,{source_team_id:r.source_team_id,source_match_id:r.source_match_id});out.data.scorecard_preview=r.scorecard_id?demoScorecardPreview(r.scorecard_id):null;out.data.sibling_reviews=fixtureRows.team_review_sessions.filter(x=>!x.deleted&&x.author_user_id===r.author_user_id&&x.group_id===r.group_id&&x.format_key===r.format_key&&(r.source_match_id?x.source_match_id===r.source_match_id:x.match_date===r.match_date&&demoInningsOpponent(x.opposition)===demoInningsOpponent(r.opposition))).map(demoTeamMetadata);}
  return out;
+};
+
+// Fictional inbox and sends. Never registers a service worker or contacts a delivery provider.
+let demoClubMessageRecords=[];
+const previousPhoneFixtureRpc=window.__fixtureRpc;
+window.__fixtureRpc=async(name,args={})=>{
+ if(name!=='club_messages_api'&&name!=='phone_app_api')return previousPhoneFixtureRpc(name,args);
+ window.__fixtureLog(name,args);
+ if(name==='phone_app_api')return {data:{configured:false,preferences:{messages:true,coaching:true}},error:null};
+ const staff=['admin','head_coach','coach','captain'].includes(membership.permission_role),uid=session.user.id,action=args.p_action;
+ if(!demoClubMessageRecords.length)demoClubMessageRecords=[{id:'demo-message-welcome',sender_id:'user-coach',sender:'Casey Reid',title:'Ready for Thursday?',body:'Have a look at the training ideas from your plan before our next session. Bring one thing you want to work on.',target:'howwetrain',created_at:fixtureNow(),user_ids:['user-alex','user-jordan'],opened:{},email_requested:false}];
+ if(action==='context')return {data:{can_send:staff,players:staff?fixtureWorkspacePlayers().filter(p=>p.can_edit).map(p=>({id:p.id,name:p.display_name,groups:p.groups||[]})):[]},error:null};
+ if(action==='badge')return {data:{unread:demoClubMessageRecords.filter(r=>r.user_ids.includes(uid)&&!r.opened[uid]).length},error:null};
+ if(action==='list')return {data:{can_send:staff,inbox:demoClubMessageRecords.filter(r=>r.user_ids.includes(uid)).map(r=>({...r,opened_at:r.opened[uid]||null})),unread:demoClubMessageRecords.filter(r=>r.user_ids.includes(uid)&&!r.opened[uid]).length,sent:staff?demoClubMessageRecords.filter(r=>r.sender_id===uid).map(r=>({...r,recipients:r.user_ids.length,opened:Object.keys(r.opened).length,email_sent:0,push_sent:0,email_failed:0})):[]},error:null};
+ if(action==='open'){const r=demoClubMessageRecords.find(r=>r.id===args.p_data?.id&&r.user_ids.includes(uid));if(!r)return {data:null,error:{message:'Message unavailable'}};r.opened[uid]=fixtureNow();return {data:{opened:true},error:null};}
+ if(action==='send'){
+  if(!staff)return {data:null,error:{message:'Staff access required'}};
+  const d=args.p_data,previous=demoClubMessageRecords.find(r=>r.request_id===d.request_id&&r.sender_id===uid);if(previous)return {data:{id:previous.id,recipients:previous.user_ids.length,already_sent:true},error:null};
+  const ids=[...new Set(fixtureRows.players.filter(p=>d.player_ids.includes(p.id)).map(p=>p.user_id))];
+  const r={...d,id:'demo-message-'+crypto.randomUUID(),sender_id:uid,sender:userProfile.display_name,user_ids:ids,created_at:fixtureNow(),opened:{},email_requested:d.email};demoClubMessageRecords.unshift(r);
+  return {data:{id:r.id,recipients:ids.length,already_sent:false},error:null};
+ }
+ return {data:null,error:{message:'Unsupported example action'}};
 };
 
 function demoDecorate(){
