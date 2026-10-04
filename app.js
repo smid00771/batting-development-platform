@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.80 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.81 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.80';
+const APP_UI_VERSION='0.8.62.81';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3226,12 +3226,16 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Share the player link",
-        "body": "Club Admin opens People & Sign-up and uses Copy WhatsApp message, Copy player sign-up link or the QR code. Share the complete generated link; an empty player_join= link is not usable. A playing coach or captain uses the player route.",
+        "body": "Club Admin opens People & Sign-up and uses Copy WhatsApp message, Copy player sign-up link or the QR code. The WhatsApp message includes sign-up, app installation and notification steps. Share the complete generated link; an empty player_join= link is not usable. Playing coaches and captains use the player route.",
         "target_tab": "permissions"
       },
       {
         "title": "Create a new player account from the club link",
         "body": "The player link and QR open Join [club name]. Enter your email and choose Email my sign-up link; no password is needed. Open the email, then enter your name to finish joining. Existing members can sign in with their password. If you reach password help before registering, choose Start player sign-up or reopen the original club link or QR. Password reset cannot create a new account."
+      },
+      {
+        "title": "Put the app on your phone after joining",
+        "body": "After registration, open Account → App & notifications for the steps for your phone. Add the Club Batting icon, then open it and sign in with the same account if asked. Choose Club messages and/or Coaching updates, tap Enable notifications, then Allow. Installation and notification permission are separate steps; no new account is needed."
       },
       {
         "title": "Use the staff route for non-players",
@@ -4411,7 +4415,7 @@ const CLUB_BATTING_HELP = {
     "capability_key": "phone_app",
     "title": "Get the phone app and notifications",
     "purpose": "Reach the full app from your phone and choose useful alerts.",
-    "short_explanation": "Install Club Batting from your browser, then choose whether this device receives club messages and coaching updates.",
+    "short_explanation": "Add the app icon, open it, then choose club messages and coaching alerts. Account → App & notifications shows the next steps for your device.",
     "target_tab": "phone_app",
     "audience": [
       "admin",
@@ -4425,16 +4429,20 @@ const CLUB_BATTING_HELP = {
     "active": true,
     "tutorial": [
       {
-        "title": "Add Club Batting to your phone",
-        "body": "Open clubbatting.com/app.html in your browser. On iPhone or iPad, use Safari → Share → Add to Home Screen; keep Open as Web App on if shown. On Android, use Install Club Batting when offered, or the Chrome menu → Install app / Add to Home screen. Open links outside WhatsApp’s internal browser first."
+        "title": "Add the app on iPhone or iPad",
+        "body": "In Safari, tap the three dots (…) at the bottom right, then Share (square with an upwards arrow). Tap View More if shown, then Add to Home Screen; you may need to scroll down. Keep Open as Web App on if shown, then Add. If you see Share directly, start there; on iPad it may be at the top. If Add to Home Screen is missing, use Edit Actions. Links opened inside WhatsApp should be opened in Safari first."
+      },
+      {
+        "title": "Add the app on Android",
+        "body": "In Chrome, tap Install Club Batting if offered. Otherwise use the three dots (⋮), usually at the top right → Install and create shortcut → Install. Some versions say Install app or Add to Home screen. If the link opened inside WhatsApp, use its menu to open it in Chrome first."
       },
       {
         "title": "Use the full app",
-        "body": "Open the Club Batting icon and sign in. It opens your full club app, including your existing plans, training and innings. The icon can go on any Home Screen or in a folder. An internet connection is needed to load and save current club information. This is a browser-installed app; no App Store download is needed."
+        "body": "Open the new Club Batting icon and sign in with your existing account if asked. It opens your full club app: plans, training, innings and messages. The icon can go on any Home Screen or in a folder. An internet connection is needed. If you already added the icon, open that instead of installing again. No App Store download or new account is needed."
       },
       {
         "title": "Enable notifications deliberately",
-        "body": "Open Account → App & notifications. Select Club messages and/or Coaching updates, then Enable notifications and allow the phone prompt. iPhone/iPad push needs iOS/iPadOS 16.4 or later and the app opened from its Home Screen icon. Each device and club is enabled separately. There is no automatic subscription or backlog of old notes."
+        "body": "From the Club Batting icon, open Account → App & notifications. Select Club messages and/or Coaching updates, tap Enable notifications, then Allow. Saved settings show Notifications on ✓; turning off both choices shows Notifications off ✓. iPhone/iPad push needs iOS/iPadOS 16.4 or later. Each club and device is separate. There is no automatic subscription or backlog of old notes."
       },
       {
         "title": "Open an alert",
@@ -9573,7 +9581,7 @@ async function renderPermissions(){
   </section>
 `;
 
-  const playerWhatsAppMessage=`${club.name} players — Club Batting is ready for player registration.\n\nUse this link to join as a Player:\n${playerJoinLink}\n\nYou’ll sign in securely with your email and confirm your name. If you are also a captain or coach, still use this Player link — the club will add that role afterwards. ${plansReady?'Read How We Bat, build your Player Plan and use How We Train to put it into practice.':'The club is preparing How We Bat and the Player Plan questions. Register now; we’ll email you when your plan is ready to start. Anyone assigned a setup role can take part in preparation now.'}`;
+  const playerWhatsAppMessage=playerSignupWhatsAppMessage(club.name,playerJoinLink,plansReady);
 
   const copyText=async(text,label,statusId)=>{
     const st=document.getElementById(statusId);
@@ -17876,7 +17884,41 @@ let pendingPhoneLaunch=null;
 const phoneIsDemo=()=>typeof window.__fixtureDb!=='undefined'||location.pathname.endsWith('/demo.html');
 const phoneIsInstalled=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const phoneIsIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const phoneIsAndroid=()=>/Android/i.test(navigator.userAgent);
 const phonePushSupported=()=>window.isSecureContext&&'serviceWorker'in navigator&&'PushManager'in window&&'Notification'in window;
+function playerSignupWhatsAppMessage(clubName,playerJoinLink,plansReady){
+ return `🏏 ${clubName} players — get started with Club Batting
+
+1. Sign up
+Open this Player link in Safari on iPhone or Chrome on Android:
+${playerJoinLink}
+
+Register with your email and confirm your name. Check your inbox and junk folder for the sign-in email. Playing coaches and captains use this link too.
+
+2. Put Club Batting on your phone
+Once you’ve finished registering:
+
+🍎 iPhone: Tap Safari’s three dots (…) at the bottom right → Share → View More if shown → Add to Home Screen. Keep Open as Web App switched on if shown, then tap Add. If you see the Share icon directly, start there.
+
+🤖 Android: In Chrome, tap three dots (⋮) → Install and create shortcut → Install. Some versions say Install app or Add to Home screen.
+
+3. Turn on notifications
+Open the new Club Batting icon on your phone. Sign in if asked, then go to Account → App & notifications. Choose Club messages and Coaching updates, tap Enable notifications, then Allow.
+
+${plansReady?'Your Player Plan, training ideas and match preparation are now one tap away.':'Register now while the club prepares How We Bat and the Player Plan questions. We’ll email you when your plan is ready; anyone assigned a setup role can help with preparation now.'}`;
+}
+function phoneIOSInstallSteps(){
+ return `<ol><li>Tap Safari’s <strong>three dots (…)</strong> at the bottom-right of your screen.</li><li>Tap <strong>Share</strong> — the square with an arrow pointing upwards.</li><li>Tap <strong>View More</strong> if shown, then <strong>Add to Home Screen</strong>. You may need to scroll down.</li><li>Keep <strong>Open as Web App</strong> switched on if shown, then tap <strong>Add</strong>.</li><li>Go to your phone’s Home Screen and open the <strong>Club Batting icon</strong>. Sign in with your existing account if asked.</li></ol>`;
+}
+function phoneAndroidInstallSteps(){
+ return `<ol><li>Tap Chrome’s <strong>three dots (⋮)</strong>, usually at the top-right.</li><li>Tap <strong>Install and create shortcut → Install</strong>. Some versions say <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li><li>Open the new <strong>Club Batting icon</strong> on your phone. Sign in with your existing account if asked.</li></ol>`;
+}
+function phoneInstallHelp(ios,android){
+ const next='<p class="phone-next"><strong>Then turn on alerts:</strong> open <strong>Account → App &amp; notifications</strong> from the new app.</p>';
+ if(ios)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneIOSInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If Safari shows the <strong>Share icon</strong> directly, tap it and continue from step 3. If <strong>Add to Home Screen</strong> is missing, scroll to <strong>Edit Actions</strong> and add it. On iPad, Share may be at the top.</p><p>If you opened Club Batting inside WhatsApp or another browser, open this page in <strong>Safari</strong> first. Already added the icon? Open that icon instead of adding it again.</p></details>`;
+ if(android)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Club Batting</button><details><summary>Or use Chrome’s menu</summary>'+phoneAndroidInstallSteps()+'</details>':phoneAndroidInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If you opened Club Batting inside WhatsApp, use its menu to open this page in <strong>Chrome</strong>. Already added the icon? Open that icon instead of adding it again.</p></details>`;
+ return `<details class="phone-other-devices"><summary>Get the Club Batting app on your phone</summary><h2>iPhone or iPad</h2><p>Open Club Batting in Safari on your phone.</p>${phoneIOSInstallSteps()}<h2>Android</h2><p>Open Club Batting in Chrome on your phone.</p>${phoneAndroidInstallSteps()}${next}</details>${phoneInstallPrompt?'<button class="btn secondary" id="installClubBatting">Install on this device</button>':''}`;
+}
 async function phoneWorkerMessage(type,binding=null){
  if(phoneIsDemo()||!('serviceWorker'in navigator))return;
  const reg=phoneRegistration||await navigator.serviceWorker.getRegistration('./');if(!reg?.active)return;
@@ -17944,17 +17986,20 @@ function bindPhoneAppControls(){
 async function renderPhoneApp(){
  const page=document.getElementById('page'),clubId=club?.id,userId=session?.user?.id;
  const here=()=>currentTab==='phone_app'&&club?.id===clubId&&session?.user?.id===userId&&document.getElementById('page')===page;
- const installed=phoneIsInstalled(),ios=phoneIsIOS(),demo=phoneIsDemo();
- page.innerHTML=`<style>.phone-settings{max-width:640px;margin:0 auto}.phone-settings h1{font-size:24px;margin:0 0 12px}.phone-settings h2{font-size:19px;margin:16px 0 8px}.phone-settings p,.phone-settings li{font-size:15px;line-height:1.5}.phone-settings label{display:flex;gap:10px;align-items:center;min-height:44px}.phone-settings input{width:18px;height:18px;margin:0}.phone-settings .help{font-size:12px}.phone-settings [hidden]{display:none!important}</style>
- <section class="card phone-settings"><h1>App & notifications</h1>
- ${installed?'<p>✓ Club Batting is open as an app.</p>':`<p>Open the full Club Batting app from an icon on your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Club Batting</button>':ios?'<ol><li>Open clubbatting.com/app.html in Safari.</li><li>Tap Share, then Add to Home Screen. If shown, keep Open as Web App on.</li><li>Open Club Batting from its new icon and sign in.</li></ol>':'<p>In Chrome or Edge, open the browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>. If you opened a link inside WhatsApp, open it in your browser first.</p>'}<p class="help">The icon can go on any Home Screen or in a folder. The app needs an internet connection.</p>`}
- <h2>Phone notifications</h2><p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
- <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label><p class="help">For ${esc(club?.name||'this club')} on this device. Notification previews keep the details private.</p></div>
+ const installed=phoneIsInstalled(),ios=phoneIsIOS(),android=phoneIsAndroid(),demo=phoneIsDemo(),installFirst=!installed&&(ios||android);
+ page.innerHTML=`<style>.phone-settings{max-width:640px;margin:0 auto}.phone-settings h1{font-size:24px;margin:0 0 12px}.phone-settings h2{font-size:19px;margin:16px 0 8px}.phone-settings p,.phone-settings li{font-size:15px;line-height:1.5}.phone-settings ol{padding-left:24px}.phone-settings li{padding-left:3px;margin-bottom:10px}.phone-settings label{display:flex;gap:10px;align-items:center;min-height:44px}.phone-settings input{width:18px;height:18px;margin:0}.phone-settings .help{font-size:12px}.phone-settings details{margin:12px 0}.phone-settings summary{cursor:pointer;min-height:44px;align-content:center;font-weight:700}.phone-settings .phone-next{padding:12px;border-radius:10px;background:#eef0ff}.phone-settings .phone-installed{color:#08766a}.phone-settings [hidden]{display:none!important}.phone-settings #phoneActionStatus:empty{display:none}</style>
+ <section class="card phone-settings"><h1>${installFirst?'Get the Club Batting app on your phone':'App &amp; notifications'}</h1>
+ ${installed?'<p class="phone-installed">✓ You’re using the Club Batting app.</p>':phoneInstallHelp(ios,android)}
+ <div id="phoneNotificationPanel" ${installFirst?'hidden':''}>
+ <p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
+ <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label></div>
  <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
- <p class="help">Messages remain under Account → Messages. Coaching updates remain in Coach Conversations. Phone alerts depend on your device and its notification settings.</p><p id="phoneActionStatus" role="status" class="help"></p></section>`;
- document.getElementById('installClubBatting')?.addEventListener('click',async()=>{await phoneInstallPrompt?.prompt();phoneInstallPrompt=null;});
+ <p id="phoneAllowHint" class="help" hidden>Tap <strong>Allow</strong> when your phone asks.</p>
+ <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Phone alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages, and coaching updates stay in Coach Conversations.</p></details>
+ <p id="phoneActionStatus" role="status" class="help"></p></div>${demo&&installFirst?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
+ document.getElementById('installClubBatting')?.addEventListener('click',async()=>{const prompt=phoneInstallPrompt;phoneInstallPrompt=null;await prompt?.prompt();if(here())await renderPhoneApp();});
  if(demo)return;
- if(ios&&!installed){document.getElementById('phoneNotificationStatus').textContent='On iPhone or iPad, add Club Batting to your Home Screen, then open its icon to enable notifications (iOS/iPadOS 16.4 or later).';return;}
+ if(installFirst)return;
  if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive phone notifications. Open Club Batting in a supported, up-to-date browser.';return;}
  try{
   const reg=await initialisePhoneApp();if(!reg)throw new Error(phoneRegistrationError||'Phone notification setup couldn’t finish. Please try again.');
@@ -17965,9 +18010,11 @@ async function renderPhoneApp(){
   if(!data.configured){status.textContent='Phone notifications are not configured yet. Your inbox is available.';return;}
   if(Notification.permission==='denied'){status.textContent='Notifications are blocked. Allow them in your phone or browser notification settings, then return here.';if(sub){off.hidden=false;off.onclick=async()=>{const r=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(!r.error){await phoneWorkerMessage('CB_SIGN_OUT');await renderPhoneApp();}};}return;}
   const enabled=!!(sub&&data.subscription_id&&data.club_enabled);
-  status.textContent=enabled?'Notifications are on for this club.':'Choose the updates you want, then enable notifications.';
+  const anyUpdates=data.preferences.messages||data.preferences.coaching;
+  status.textContent=enabled?(anyUpdates?'Which updates would you like?':'Both types of update are off. Tick either to turn it on.'):'Which updates would you like?';
   choices.hidden=false;document.getElementById('phoneMessages').checked=data.preferences.messages;document.getElementById('phoneCoaching').checked=data.preferences.coaching;
-  button.hidden=false;button.textContent=enabled?'Saved ✓':'Enable notifications';button.disabled=enabled;
+  button.hidden=false;button.textContent=enabled?(anyUpdates?'Notifications on ✓':'Notifications off ✓'):'Enable notifications';button.disabled=enabled;
+  document.getElementById('phoneAllowHint').hidden=enabled||Notification.permission==='granted';
   off.hidden=!sub;
   if(enabled)await phoneWorkerMessage('CB_BIND',data.binding);
   choices.onchange=()=>{button.textContent=enabled?'Save notification choices':'Enable notifications';button.disabled=false;};
