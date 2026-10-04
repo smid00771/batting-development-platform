@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.79 — Reliable phone setup
+// Club Batting 0.8.62.80 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.79';
+const APP_UI_VERSION='0.8.62.80';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -4449,8 +4449,8 @@ const CLUB_BATTING_HELP = {
   "club_messages": {
     "capability_key": "club_messages",
     "title": "Send and read club messages",
-    "purpose": "Give players a clear message and a direct next step.",
-    "short_explanation": "Staff message permitted players from Players. Recipients find messages under Account, with optional phone alerts and email.",
+    "purpose": "Keep players and staff informed with a clear message and a direct next step.",
+    "short_explanation": "Message permitted players and keep coaching staff informed by default. Untick Include coaching staff or choose names for a particular message.",
     "target_tab": "messages",
     "audience": [
       "admin",
@@ -4465,15 +4465,19 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Choose the right players",
-        "body": "Admin, Head Coach, Coach and Captain roles can open Players → Message players. Choose individuals, a Playing Group, Currently unassigned, or all players in your access. Only current playing members whose records you can edit are offered. Selecting a group adds its permitted players; Clear removes your selections."
+        "body": "Admin, Head Coach, Coach and Captain roles can open Players → Message players & staff, or Account → Messages → Message players & staff. Choose individuals, a Playing Group, Currently unassigned, or all players in your access. Only current playing members whose records you can edit are offered. Selecting a group adds its permitted players; Clear removes all player and staff selections."
+      },
+      {
+        "title": "Keep staff informed",
+        "body": "Include coaching staff is checked for each new message. Other club Admins, Head Coaches, Coaches and Captains are selected, including non-playing staff. Open choose staff to adjust names or add other registered staff. Untick Include coaching staff to omit staff copies. A playing coach selected as a player still receives that copy; anyone included both ways receives one copy. The sender sees it in Sent. Receiving a message grants no player-record or other-message access."
       },
       {
         "title": "Write and send once",
-        "body": "Add a short title and message. Optionally link to My Player Plan, How We Train, Prepare for a Match, My Innings or Make your prediction. Check the recipients, then Send to players. This saves an inbox message. Phone alerts go only to opted-in devices. Also send by email is an explicit extra choice; delivery uses the club platform’s existing email service."
+        "body": "Add a short title and message. Optionally link to My Player Plan, How We Train, Prepare for a Match, My Innings or Make your prediction. Check the total people included, then Send. This saves an inbox message for every selected person, including staff without a Player Plan. Phone alerts go only to opted-in devices. Also send by email is an explicit extra choice."
       },
       {
         "title": "Send players to the useful screen",
-        "body": "A link opens each recipient’s own information. Prepare for a Match opens My Innings with the preparation form expanded. Personal coaching feedback still belongs in Coach Conversations, where permissions, reflection, notes, review dates and completion are preserved."
+        "body": "Player links open each player’s own information. Prepare for a Match opens My Innings with the preparation form expanded. Non-playing staff see the message without unusable personal Player Plan, training or innings buttons. Personal coaching feedback still belongs in Coach Conversations, where player access, independent reflection, notes, review dates and completion are preserved."
       },
       {
         "title": "Read and track messages",
@@ -13575,7 +13579,7 @@ function renderPlayersWorkspaceList(){
   page.innerHTML=`<style>.players-workspace-head.compact{padding:12px 14px;gap:8px 14px}.players-workspace-head.compact>div:first-child{min-width:0;flex:1}.workspace-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.workspace-title-row h2{margin:0;font-size:24px}.workspace-title-row h2:focus{outline:none}.workspace-title-row .btn{min-height:44px;font-size:12px;padding:8px 10px}.players-workspace-head .help{margin:3px 0 0;font-size:12px}.players-workspace-head.compact .section-label{font-size:9px;margin:0 0 3px}.players-workspace-head.compact>.btnrow{margin:0;gap:6px}.players-workspace-head.compact>.btnrow .btn{min-height:44px;font-size:11px;padding:8px}.players-workspace-tools.compact{padding:12px 14px;gap:8px;align-items:end}.players-workspace-tools.compact .field{margin:0;min-width:0}.players-workspace-tools.compact label{font-size:12px;margin:0 0 3px}.players-workspace-tools.compact input,.players-workspace-tools.compact select{min-height:44px;font-size:16px;padding:8px}.players-workspace-tools.compact .workspace-filter-count{padding:4px 7px;min-height:44px;font-size:11px}#workspaceAssignmentNotice:empty{display:none}@media(max-width:650px){.players-workspace-head.compact{display:block}.players-workspace-head.compact>.btnrow{margin-top:8px}.players-workspace-tools.compact{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.players-workspace-tools.compact .workspace-filter-count{grid-column:1/-1;min-height:0;padding:0;display:flex;gap:4px;align-items:baseline;justify-content:flex-end;background:none;border:0}}</style><section class="card players-workspace-head compact">
     <div>
       <div class="section-label">${esc(role)} workspace</div>
-      <div class="workspace-title-row"><h2>Players</h2><div class="btnrow"><button class="btn ghost" id="messagePlayersFromPlayers">Message players</button><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div></div>
+      <div class="workspace-title-row"><h2>Players</h2><div class="btnrow"><button class="btn ghost" id="messagePlayersFromPlayers">Message players &amp; staff</button><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div></div>
       <div class="help">${plansPublished?'Open plans and pick up coaching conversations.':'Register people, assign club roles and organise Playing Groups while the club prepares its setup. Player Plans open after publication.'}</div>
       <div class="btnrow compact" style="margin-top:8px"><span class="help" id="workspaceRegisteredCount"><strong>${players.length}</strong> ${isAdmin()?'registered':'accessible'} player${players.length===1?'':'s'}</span>${players.length?`<button type="button" class="workspace-text-link" id="workspaceShowAllPlayers">${playersWorkspaceShowAll?'Hide player list':'Show all players'}</button>`:''}${query||playersWorkspaceGroupFilter?'<button type="button" class="workspace-text-link" id="workspaceClearSelection">Clear selection</button>':''}</div>
     </div>
@@ -17737,8 +17741,20 @@ function ensureClubMessages(){
  if(clubMessageState?.key!==key)clubMessageState={key,mode:'inbox',openId:null,context:null,data:null,draft:null,sending:false,notice:''};
  return clubMessageState;
 }
-function newClubMessageDraft(){return {request_id:crypto.randomUUID(),player_ids:[],title:'',body:'',target:'',email:false};}
-function clubMessageDirty(){const d=clubMessageState?.draft;return !!(d&&(d.title||d.body||d.player_ids.length));}
+function newClubMessageDraft(){return {request_id:crypto.randomUUID(),player_ids:[],staff_user_ids:[],include_staff:true,staff_initialised:false,recipients_changed:false,title:'',body:'',target:'',email:false};}
+function initialiseMessageStaff(state){
+ const d=state.draft;if(!d||d.staff_initialised||!state.context)return;
+ d.staff_user_ids=(state.context.staff||[]).filter(p=>p.default_included).map(p=>p.user_id);d.staff_initialised=true;
+}
+function clubMessageRecipientCount(state){
+ const d=state.draft,people=new Set((state.context.players||[]).filter(p=>d.player_ids.includes(p.id)).map(p=>p.user_id||p.id));
+ if(d.include_staff)for(const p of state.context.staff||[])if(d.staff_user_ids.includes(p.user_id))people.add(p.user_id);
+ return people.size;
+}
+function messagePeople(count){return `${count} ${count===1?'person':'people'}`;}
+function canOpenMessageTarget(target){return target==='make_your_call'||(isPlayerUser()&&clubMessageTargets.some(([key])=>key===target)&&!!target);}
+function messageStaffRole(role){return ({admin:'Admin',head_coach:'Head Coach',coach:'Coach',captain:'Captain'})[role]||'Staff';}
+function clubMessageDirty(){const d=clubMessageState?.draft;return !!(d&&(d.title||d.body||d.player_ids.length||d.recipients_changed||d.target||d.email));}
 function confirmLeaveClubMessages(){
  if(clubMessageState?.sending){alert('Your message is sending. Wait for the result before leaving.');return false;}
  if(currentTab==='messages'&&clubMessageState?.mode==='compose'&&clubMessageDirty()&&!confirm('Leave this unsent message? Your draft will stay here while you remain signed in.'))return false;
@@ -17763,7 +17779,7 @@ async function refreshClubMessageBadge(){
  void updatePhoneAppBadge();
 }
 async function openClubMessageTarget(target){
- if(!clubMessageTargets.some(([key])=>key===target)||!target)return;
+ if(!canOpenMessageTarget(target))return;
  if(!await saveClubEditsBeforeNavigation())return;
  if(target==='prepare')return openMyInnings({prepare:true});
  if(!canOpenClubTab(target))return;currentTab=target;await renderTab();
@@ -17788,11 +17804,12 @@ async function renderClubMessages(){
  }catch(error){if(here()){page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><h1>Messages</h1><p>${esc(error.message||'Messages could not load.')}</p><button class="btn" id="retryClubMessages">Try again</button></section>`;document.getElementById('retryClubMessages').onclick=renderClubMessages;}}
 }
 function drawClubMessages(page,state){
+ initialiseMessageStaff(state);
  const data=state.data,staff=!!state.context.can_send,rows=state.mode==='sent'?data.sent:data.inbox;
- page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?'Message players':'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players</button>':''}</div>
+ page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?'New message':'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players &amp; staff</button>':''}</div>
  ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
  <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
- ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?`${row.recipients} players`:row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'?`<button class="btn" data-message-target="${esc(row.target)}">${esc(clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
+ ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}">${esc(clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
  document.getElementById('newClubMessage')?.addEventListener('click',()=>{state.mode='compose';state.draft??=newClubMessageDraft();drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-mode]').forEach(b=>b.onclick=()=>{if(!confirmLeaveClubMessages())return;state.mode=b.dataset.messageMode;drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-target]').forEach(b=>b.onclick=()=>openClubMessageTarget(b.dataset.messageTarget));
@@ -17807,34 +17824,45 @@ function drawClubMessages(page,state){
  if(state.mode==='compose')bindClubMessageComposer(page,state);
 }
 function clubMessageComposer(state){
- const d=state.draft??=newClubMessageDraft(),players=state.context.players||[],groups=new Map(players.flatMap(p=>p.groups||[]).map(g=>[g.id,g.name]));
+ const d=state.draft??=newClubMessageDraft();initialiseMessageStaff(state);const players=state.context.players||[],staff=state.context.staff||[],count=clubMessageRecipientCount(state),groups=new Map(players.flatMap(p=>p.groups||[]).map(g=>[g.id,g.name]));
  return `<form class="message-form" id="clubMessageForm"><fieldset ${state.sending?'disabled':''}>
- <details id="messageRecipientPicker" ${d.player_ids.length?'':'open'}><summary>To: <strong id="messageRecipientCount">${d.player_ids.length} players</strong> · choose recipients</summary>
+ <details id="messageRecipientPicker" ${d.player_ids.length?'':'open'}><summary>To: <strong id="messageRecipientCount">${messagePeople(count)}</strong> · choose recipients</summary>
  <div class="message-recipient-tools"><select id="messageGroup" aria-label="Choose a Playing Group"><option value="">All players in my access</option><option value="unassigned">Currently unassigned</option>${[...groups].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><button type="button" class="btn ghost" id="messageSelectGroup">Select</button><button type="button" class="btn ghost" id="messageClearRecipients">Clear</button></div>
  <div class="message-recipients">${players.length?players.map(p=>`<label class="message-check"><input type="checkbox" data-message-player="${esc(p.id)}" ${d.player_ids.includes(p.id)?'checked':''}>${esc(p.name)}</label>`).join(''):'No players with messaging access. Ask your Club Admin to check your player access.'}</div></details>
+ ${staff.length?`<label class="message-check"><input id="messageIncludeStaff" type="checkbox" ${d.include_staff?'checked':''}>Include coaching staff</label>
+ <details id="messageStaffPicker" ${d.include_staff?'':'hidden'}><summary><span id="messageStaffCount">${d.staff_user_ids.length} staff included</span> · choose staff</summary>
+ <div class="message-recipients">${staff.map(p=>`<label class="message-check"><input type="checkbox" data-message-staff="${esc(p.user_id)}" ${d.staff_user_ids.includes(p.user_id)?'checked':''}><span>${esc(p.name)} <small>· ${esc(messageStaffRole(p.role))}</small></span></label>`).join('')}</div></details>`:''}
  <div class="field" style="margin-top:12px"><label for="clubMessageTitle">Title</label><input id="clubMessageTitle" required maxlength="80" value="${esc(d.title)}" placeholder="e.g. Thursday training"></div>
- <div class="field"><label for="clubMessageBody">Message <span class="message-body-count" id="messageBodyCount">${d.body.length}/1500</span></label><textarea id="clubMessageBody" required maxlength="1500" rows="4" placeholder="What do players need to know or do?">${esc(d.body)}</textarea></div>
+ <div class="field"><label for="clubMessageBody">Message <span class="message-body-count" id="messageBodyCount">${d.body.length}/1500</span></label><textarea id="clubMessageBody" required maxlength="1500" rows="4" placeholder="What does everyone need to know or do?">${esc(d.body)}</textarea></div>
  <div class="field"><label for="clubMessageTarget">Link to</label><select id="clubMessageTarget">${clubMessageTargets.map(([key,label])=>`<option value="${key}" ${d.target===key?'selected':''}>${label}</option>`).join('')}</select></div>
  <label class="message-check"><input id="clubMessageEmail" type="checkbox" ${d.email?'checked':''}>Also send by email</label>
- <p class="help">Saved in each player’s inbox. Phone alerts go to players who have enabled them.</p>
- <div class="btnrow"><button type="submit" class="btn" id="sendClubMessage">Send to ${d.player_ids.length} players</button><button type="button" class="btn ghost" id="copyClubMessageDraft">Copy for WhatsApp</button><button type="button" class="btn ghost" id="discardClubMessageDraft">Discard draft</button></div>
+ <p class="help">Saved in each recipient’s inbox. Phone alerts go to those who have enabled them.</p>
+ <div class="btnrow"><button type="submit" class="btn" id="sendClubMessage">Send to ${messagePeople(count)}</button><button type="button" class="btn ghost" id="copyClubMessageDraft">Copy for WhatsApp</button><button type="button" class="btn ghost" id="discardClubMessageDraft">Discard draft</button></div>
  <p class="messages-status" id="clubMessageSendStatus" role="status"></p></fieldset></form>`;
 }
 function bindClubMessageComposer(page,state){
  const d=state.draft,form=document.getElementById('clubMessageForm'),status=document.getElementById('clubMessageSendStatus');
- const sync=()=>{d.title=form.querySelector('#clubMessageTitle').value;d.body=form.querySelector('#clubMessageBody').value;d.target=form.querySelector('#clubMessageTarget').value;d.email=form.querySelector('#clubMessageEmail').checked;d.player_ids=[...form.querySelectorAll('[data-message-player]:checked')].map(x=>x.dataset.messagePlayer);form.querySelector('#messageRecipientCount').textContent=`${d.player_ids.length} players`;form.querySelector('#sendClubMessage').textContent=`Send to ${d.player_ids.length} player${d.player_ids.length===1?'':'s'}`;form.querySelector('#messageBodyCount').textContent=`${d.body.length}/1500`;};
- form.addEventListener('input',sync);form.addEventListener('change',sync);
- document.getElementById('messageSelectGroup').onclick=()=>{const group=form.querySelector('#messageGroup').value;form.querySelectorAll('[data-message-player]').forEach(x=>{const p=state.context.players.find(p=>p.id===x.dataset.messagePlayer);if(!group||(group==='unassigned'?!p.groups.length:p.groups.some(g=>g.id===group)))x.checked=true;});sync();};
- document.getElementById('messageClearRecipients').onclick=()=>{form.querySelectorAll('[data-message-player]').forEach(x=>x.checked=false);sync();};
+ const sync=()=>{
+  d.title=form.querySelector('#clubMessageTitle').value;d.body=form.querySelector('#clubMessageBody').value;d.target=form.querySelector('#clubMessageTarget').value;d.email=form.querySelector('#clubMessageEmail').checked;
+  d.player_ids=[...form.querySelectorAll('[data-message-player]:checked')].map(x=>x.dataset.messagePlayer);
+  d.include_staff=!!form.querySelector('#messageIncludeStaff')?.checked;
+  d.staff_user_ids=[...form.querySelectorAll('[data-message-staff]:checked')].map(x=>x.dataset.messageStaff);
+  const picker=form.querySelector('#messageStaffPicker');if(picker)picker.hidden=!d.include_staff;
+  const staffCount=form.querySelector('#messageStaffCount');if(staffCount)staffCount.textContent=`${d.staff_user_ids.length} staff included`;
+  const count=clubMessageRecipientCount(state);form.querySelector('#messageRecipientCount').textContent=messagePeople(count);form.querySelector('#sendClubMessage').textContent=`Send to ${messagePeople(count)}`;form.querySelector('#messageBodyCount').textContent=`${d.body.length}/1500`;
+ };
+ form.addEventListener('input',sync);form.addEventListener('change',event=>{if(event.target.matches('[data-message-player],[data-message-staff],#messageIncludeStaff'))d.recipients_changed=true;sync();});
+ document.getElementById('messageSelectGroup').onclick=()=>{d.recipients_changed=true;const group=form.querySelector('#messageGroup').value;form.querySelectorAll('[data-message-player]').forEach(x=>{const p=state.context.players.find(p=>p.id===x.dataset.messagePlayer);if(!group||(group==='unassigned'?!p.groups.length:p.groups.some(g=>g.id===group)))x.checked=true;});sync();};
+ document.getElementById('messageClearRecipients').onclick=()=>{d.recipients_changed=true;form.querySelectorAll('[data-message-player],[data-message-staff],#messageIncludeStaff').forEach(x=>x.checked=false);sync();};
  document.getElementById('discardClubMessageDraft').onclick=()=>{if(clubMessageDirty()&&!confirm('Discard this unsent draft?'))return;state.draft=null;state.mode='inbox';drawClubMessages(page,state);};
  document.getElementById('copyClubMessageDraft').onclick=e=>{sync();void copyClubMessage(d,e.currentTarget);};
  form.onsubmit=async event=>{
-  event.preventDefault();if(state.sending)return;sync();if(!d.player_ids.length){status.textContent='Choose at least one player.';form.querySelector('#messageRecipientPicker').open=true;return;}
+  event.preventDefault();if(state.sending)return;sync();if(!clubMessageRecipientCount(state)){status.textContent='Choose at least one person.';form.querySelector('#messageRecipientPicker').open=true;return;}
   if(!d.title.trim()||!d.body.trim()){status.textContent='Add a title and a message.';return;}
   const clubId=club.id;state.sending=true;form.querySelector('fieldset').disabled=true;status.textContent='Sending…';
-  try{const {data,error}=await supabase.rpc('club_messages_api',{p_club_id:clubId,p_action:'send',p_data:structuredClone(d)});if(error)throw error;
+  try{const {data,error}=await supabase.rpc('club_messages_api',{p_club_id:clubId,p_action:'send',p_data:{request_id:d.request_id,player_ids:[...d.player_ids],staff_user_ids:d.include_staff?[...d.staff_user_ids]:[],title:d.title,body:d.body,target:d.target,email:d.email}});if(error)throw error;
    if(state!==clubMessageState||clubId!==club?.id)return;
-   state.draft=null;state.mode='sent';state.notice=`Sent to ${data.recipients} player${data.recipients===1?'':'s'} ✓`;state.openId=data.id;state.sending=false;await renderClubMessages();
+   state.draft=null;state.mode='sent';state.notice=`Sent to ${messagePeople(data.recipients)} ✓`;state.openId=data.id;state.sending=false;await renderClubMessages();
   }catch(error){if(state===clubMessageState&&form.isConnected){status.textContent=`Couldn’t confirm sending. Your draft is here; retrying will not send it twice. ${error.message||''}`;form.querySelector('fieldset').disabled=false;}}
   finally{state.sending=false;}
  };
