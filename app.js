@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.87 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.88 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.87';
+const APP_UI_VERSION='0.8.62.88';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -3269,7 +3269,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Set your club’s coaching titles",
-        "body": "Club Admin opens Club coaching titles near the top of People & Sign-up. View coaching titles expands the saved list; Rename opens a text box and Remove removes a title. + Add coaching title separately opens suggested or custom titles. Save changes stores your edits; Cancel discards them. Suggestions become available for assignment only after adding and saving. Assign duties separately on each person’s row.",
+        "body": "Club Admin opens Club coaching titles below the invitations in People & Sign-up. View coaching titles expands the saved list; Rename opens a text box and Remove removes a title. + Add coaching title separately opens suggested or custom titles. Save changes stores your edits; Cancel discards them. Suggestions become available for assignment only after adding and saving. Assign duties separately on each person’s row.",
         "target_tab": "permissions"
       },
       {
@@ -9418,8 +9418,6 @@ async function renderPermissions(){
   </section>
 
 
-  <section class="card" id="coachingStaffHost" style="margin-top:16px"></section>
-
   <div class="grid permissions-top-grid" style="margin-top:16px">
     <section class="card player-signup-card">
       <div class="section-label">Player sign-up</div>
@@ -9482,6 +9480,8 @@ async function renderPermissions(){
       </div>
     </section>
   </div>
+
+  <section class="card" id="coachingStaffHost" style="margin-top:16px"></section>
 
   <section class="card" style="margin-top:16px">
     <div class="section-label">Club roles</div>
