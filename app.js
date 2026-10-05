@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.81 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.82 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.81';
+const APP_UI_VERSION='0.8.62.82';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -17917,7 +17917,7 @@ function phoneInstallHelp(ios,android){
  const next='<p class="phone-next"><strong>Then turn on alerts:</strong> open <strong>Account → App &amp; notifications</strong> from the new app.</p>';
  if(ios)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneIOSInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If Safari shows the <strong>Share icon</strong> directly, tap it and continue from step 3. If <strong>Add to Home Screen</strong> is missing, scroll to <strong>Edit Actions</strong> and add it. On iPad, Share may be at the top.</p><p>If you opened Club Batting inside WhatsApp or another browser, open this page in <strong>Safari</strong> first. Already added the icon? Open that icon instead of adding it again.</p></details>`;
  if(android)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Club Batting</button><details><summary>Or use Chrome’s menu</summary>'+phoneAndroidInstallSteps()+'</details>':phoneAndroidInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If you opened Club Batting inside WhatsApp, use its menu to open this page in <strong>Chrome</strong>. Already added the icon? Open that icon instead of adding it again.</p></details>`;
- return `<details class="phone-other-devices"><summary>Get the Club Batting app on your phone</summary><h2>iPhone or iPad</h2><p>Open Club Batting in Safari on your phone.</p>${phoneIOSInstallSteps()}<h2>Android</h2><p>Open Club Batting in Chrome on your phone.</p>${phoneAndroidInstallSteps()}${next}</details>${phoneInstallPrompt?'<button class="btn secondary" id="installClubBatting">Install on this device</button>':''}`;
+ return `<details class="phone-other-devices"><summary>Get the Club Batting app on your phone</summary><h2>iPhone or iPad</h2><p>Open Club Batting in Safari on your phone.</p>${phoneIOSInstallSteps()}<h2>Android</h2><p>Open Club Batting in Chrome on your phone.</p>${phoneAndroidInstallSteps()}${next}</details>`;
 }
 async function phoneWorkerMessage(type,binding=null){
  if(phoneIsDemo()||!('serviceWorker'in navigator))return;
@@ -17986,7 +17986,7 @@ function bindPhoneAppControls(){
 async function renderPhoneApp(){
  const page=document.getElementById('page'),clubId=club?.id,userId=session?.user?.id;
  const here=()=>currentTab==='phone_app'&&club?.id===clubId&&session?.user?.id===userId&&document.getElementById('page')===page;
- const installed=phoneIsInstalled(),ios=phoneIsIOS(),android=phoneIsAndroid(),demo=phoneIsDemo(),installFirst=!installed&&(ios||android);
+ const installed=phoneIsInstalled(),ios=phoneIsIOS(),android=phoneIsAndroid(),demo=phoneIsDemo(),mobile=ios||android,installFirst=!installed&&mobile;
  page.innerHTML=`<style>.phone-settings{max-width:640px;margin:0 auto}.phone-settings h1{font-size:24px;margin:0 0 12px}.phone-settings h2{font-size:19px;margin:16px 0 8px}.phone-settings p,.phone-settings li{font-size:15px;line-height:1.5}.phone-settings ol{padding-left:24px}.phone-settings li{padding-left:3px;margin-bottom:10px}.phone-settings label{display:flex;gap:10px;align-items:center;min-height:44px}.phone-settings input{width:18px;height:18px;margin:0}.phone-settings .help{font-size:12px}.phone-settings details{margin:12px 0}.phone-settings summary{cursor:pointer;min-height:44px;align-content:center;font-weight:700}.phone-settings .phone-next{padding:12px;border-radius:10px;background:#eef0ff}.phone-settings .phone-installed{color:#08766a}.phone-settings [hidden]{display:none!important}.phone-settings #phoneActionStatus:empty{display:none}</style>
  <section class="card phone-settings"><h1>${installFirst?'Get the Club Batting app on your phone':'App &amp; notifications'}</h1>
  ${installed?'<p class="phone-installed">✓ You’re using the Club Batting app.</p>':phoneInstallHelp(ios,android)}
@@ -17994,24 +17994,25 @@ async function renderPhoneApp(){
  <p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
  <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label></div>
  <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
- <p id="phoneAllowHint" class="help" hidden>Tap <strong>Allow</strong> when your phone asks.</p>
- <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Phone alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages, and coaching updates stay in Coach Conversations.</p></details>
+ <p id="phoneAllowHint" class="help" hidden>${mobile?'Tap <strong>Allow</strong> when your phone asks.':'Choose <strong>Allow</strong> when your browser asks.'}</p>
+ <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages, and coaching updates stay in Coach Conversations.</p></details>
  <p id="phoneActionStatus" role="status" class="help"></p></div>${demo&&installFirst?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
  document.getElementById('installClubBatting')?.addEventListener('click',async()=>{const prompt=phoneInstallPrompt;phoneInstallPrompt=null;await prompt?.prompt();if(here())await renderPhoneApp();});
  if(demo)return;
  if(installFirst)return;
- if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive phone notifications. Open Club Batting in a supported, up-to-date browser.';return;}
+ if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive notifications. Open Club Batting in a supported, up-to-date browser.';return;}
  try{
   const reg=await initialisePhoneApp();if(!reg)throw new Error(phoneRegistrationError||'Phone notification setup couldn’t finish. Please try again.');
   await waitForPhoneWorker(reg);if(!here())return;
   let sub=await reg.pushManager.getSubscription();
   const {data,error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'get',p_data:{endpoint:sub?.endpoint||null}});if(error)throw error;if(!here())return;
   const status=document.getElementById('phoneNotificationStatus'),button=document.getElementById('enablePhoneNotifications'),off=document.getElementById('disablePhoneNotifications'),choices=document.getElementById('phoneNotificationChoices');
-  if(!data.configured){status.textContent='Phone notifications are not configured yet. Your inbox is available.';return;}
+  if(!data.configured){status.textContent='Notifications are not configured yet. Your inbox is available.';return;}
   if(Notification.permission==='denied'){status.textContent='Notifications are blocked. Allow them in your phone or browser notification settings, then return here.';if(sub){off.hidden=false;off.onclick=async()=>{const r=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(!r.error){await phoneWorkerMessage('CB_SIGN_OUT');await renderPhoneApp();}};}return;}
   const enabled=!!(sub&&data.subscription_id&&data.club_enabled);
   const anyUpdates=data.preferences.messages||data.preferences.coaching;
-  status.textContent=enabled?(anyUpdates?'Which updates would you like?':'Both types of update are off. Tick either to turn it on.'):'Which updates would you like?';
+  const choicePrompt=mobile?'Which updates would you like?':'Which updates would you like on this computer?';
+  status.textContent=enabled&&!anyUpdates?'Both types of update are off. Tick either to turn it on.':choicePrompt;
   choices.hidden=false;document.getElementById('phoneMessages').checked=data.preferences.messages;document.getElementById('phoneCoaching').checked=data.preferences.coaching;
   button.hidden=false;button.textContent=enabled?(anyUpdates?'Notifications on ✓':'Notifications off ✓'):'Enable notifications';button.disabled=enabled;
   document.getElementById('phoneAllowHint').hidden=enabled||Notification.permission==='granted';
