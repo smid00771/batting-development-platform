@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.86 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.87 — current product Help, Tutorials and Guide knowledge
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.86';
+const APP_UI_VERSION='0.8.62.87';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -6447,7 +6447,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Set your club’s coaching titles",
-        "body": "Club Admin opens Club coaching titles near the top of People & Sign-up. Manage club coaching titles, then + Add coaching title opens a choice of suggested or custom titles. Save coaching titles stores the chosen list. Suggestions are not included until added and saved. This section has no people or assignment controls. Assign duties separately on each person’s row.",
+        "body": "Club Admin opens Club coaching titles near the top of People & Sign-up. View coaching titles expands the saved list; Rename opens a text box and Remove removes a title. + Add coaching title separately opens suggested or custom titles. Save changes stores your edits; Cancel discards them. Suggestions become available for assignment only after adding and saving. Assign duties separately on each person’s row.",
         "target_tab": "permissions"
       },
       {
@@ -13026,40 +13026,49 @@ async function renderCoachingStaffSetup(){
     if(!current())return;if(error)throw error;if(!data?.ok)throw new Error('Coaching staff could not be loaded.');
     // A read started before a successful save must not replace that newer result.
     if(state.data&&data.revision<state.data.revision){draw();return;}
-    if(!state.dirty){state.data=data;state.roles=structuredClone(data.roles);state.editing=state.editing||!data.roles.length;}
+    if(!state.dirty){state.data=data;state.roles=structuredClone(data.roles);}
     else state.data={...state.data,people:data.people,can_manage:data.can_manage};
     coachingStaffUpdateLabels(data);
     draw();
   }catch(error){if(current()){host.innerHTML=`<p role="status">${esc(error?.message||'Could not load coaching staff.')}</p><button class="btn ghost" id="retryCoachingStaff">Try again</button>`;host.querySelector('button').onclick=renderCoachingStaffSetup;}}
-  function changed(){state.dirty=JSON.stringify(state.roles)!==JSON.stringify(state.data.roles);state.command=null;sync();}
+  function changed(){state.dirty=JSON.stringify(state.roles)!==JSON.stringify(state.data.roles);state.command=null;state.error='';sync();}
   function sync(){
-    const button=host.querySelector('#saveCoachingStaff');if(button){button.disabled=state.saving||!state.dirty;button.textContent=state.saving?'Saving…':state.dirty?'Save coaching titles':'Saved ✓';}
+    const actions=host.querySelector('#coachingTitleActions');if(actions)actions.hidden=!(state.dirty||state.renamingId||state.saving);
+    const button=host.querySelector('#saveCoachingStaff');if(button){button.disabled=state.saving||!state.dirty;button.textContent=state.saving?'Saving…':'Save changes';}
     host.querySelectorAll('input,select,button').forEach(el=>{if(el.id!=='saveCoachingStaff')el.disabled=state.saving;});
-    const status=host.querySelector('#coachingStaffStatus');if(status)status.textContent=state.dirty?'Unsaved changes':'';
+    const status=host.querySelector('#coachingStaffStatus');if(status){status.textContent=state.error||'';status.hidden=!state.error;}
   }
   function draw(){
     if(!current())return;
+    const manage=state.data.can_manage;
     host.innerHTML=`<style>
-      .coaching-staff-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.coaching-staff-head h2{margin:0}
-      .coaching-duty-row{border-top:1px solid #dce1ed;padding:12px 0}.coaching-duty-title{display:flex;gap:8px;align-items:center}.coaching-duty-title input{min-width:0;flex:1}.coaching-duty-title button{flex:0 0 auto}
-      #coachingStaffHost input,#coachingStaffHost select{max-width:100%;width:100%;box-sizing:border-box;border:1px solid #d8deee;border-radius:10px;background:white;color:#172660;font:inherit;font-size:16px;padding:10px;min-height:42px}#coachingStaffHost [hidden]{display:none!important}#coachingStaffHost{scroll-margin-top:150px}.coaching-title-list{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.coaching-title-list span{border-radius:8px;background:#f0f3fb;padding:6px 10px;overflow-wrap:anywhere}.coaching-title-add{margin:10px 0}.coaching-title-add summary{cursor:pointer;font-weight:700;padding:8px 0}
-    </style><div class="coaching-staff-head"><h2>Club coaching titles</h2>${state.data.can_manage&&!state.editing?'<button class="btn ghost" id="editCoachingStaff">Manage club coaching titles</button>':''}</div>
-    ${state.editing&&state.data.can_manage?`<p class="help">Choose the titles your club uses.</p>
-      <div id="coachingDutyRows">${state.roles.map((r,i)=>`<div class="coaching-duty-row" data-duty-row="${esc(r.id)}">
-        <div class="coaching-duty-title"><input aria-label="Coaching title ${i+1}" data-duty-title="${esc(r.id)}" maxlength="60" placeholder="e.g. Batting Coach" value="${esc(r.title)}"><button class="btn ghost" data-duty-remove="${esc(r.id)}" aria-label="Remove coaching title ${esc(r.title||String(i+1))}">Remove</button></div>
-      </div>`).join('')}</div>
-      <details class="coaching-title-add" ${!state.roles.length?'open':''}><summary>+ Add coaching title</summary><select id="addCoachingDuty" aria-label="Choose a coaching title to add"><option value="">Choose a title to add…</option>${['Head Coach','Batting Coach','Bowling Coach','Fielding Coach','Wicketkeeping Coach'].filter(t=>!state.roles.some(r=>r.title.toLowerCase()===t.toLowerCase())).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}<option value="__custom">Custom title…</option></select></details>
-      <div class="btnrow"><button class="btn secondary" id="saveCoachingStaff">Save coaching titles</button><button class="btn ghost" id="cancelCoachingStaff">Cancel</button><span id="coachingStaffStatus" class="help" role="status" aria-live="polite"></span></div>
-      `:state.roles.length?`<div class="coaching-title-list">${state.roles.map(r=>`<span>${esc(r.title)}</span>`).join('')}</div>`:'<p class="help">No coaching titles set.</p>'}`;
-    host.querySelector('#editCoachingStaff')?.addEventListener('click',()=>{state.editing=true;draw();});
+      .coaching-staff-head h2{margin:0}
+      .coaching-duty-row{display:flex;align-items:center;gap:8px;border-top:1px solid #dce1ed;padding:10px 0}.coaching-duty-name{flex:1;min-width:0;overflow-wrap:anywhere}.coaching-duty-actions{display:flex;gap:4px;flex:0 0 auto}.coaching-duty-actions .btn{padding:8px}
+      #coachingStaffHost input,#coachingStaffHost select{max-width:100%;width:100%;box-sizing:border-box;border:1px solid #d8deee;border-radius:10px;background:white;color:#172660;font:inherit;font-size:16px;padding:10px;min-height:42px}#coachingStaffHost [hidden]{display:none!important}#coachingStaffHost{scroll-margin-top:150px}
+      .coaching-title-disclosure{margin:8px 0 0}.coaching-title-disclosure summary{cursor:pointer;font-weight:700;padding:8px 0;color:#233478}.coaching-title-disclosure summary:focus-visible{outline:2px solid #233478;outline-offset:3px;border-radius:4px}#coachingTitleActions{margin-top:12px}
+    </style><div class="coaching-staff-head"><h2>Club coaching titles</h2></div>
+      <details id="coachingCurrentTitles" class="coaching-title-disclosure" ${state.titlesOpen?'open':''}><summary>View coaching titles (${state.roles.length})</summary>
+        <div id="coachingDutyRows">${state.roles.length?state.roles.map((r,i)=>`<div class="coaching-duty-row" data-duty-row="${esc(r.id)}">
+          <div class="coaching-duty-name">${manage&&state.renamingId===r.id?`<input aria-label="Coaching title ${i+1}" data-duty-title="${esc(r.id)}" maxlength="60" placeholder="Coaching title" value="${esc(r.title)}">`:`<span data-duty-name="${esc(r.id)}">${esc(r.title)}</span>`}</div>
+          ${manage?`<div class="coaching-duty-actions">${state.renamingId!==r.id?`<button class="btn ghost" data-duty-rename="${esc(r.id)}" aria-label="Rename ${esc(r.title)}">Rename</button>`:''}<button class="btn ghost" data-duty-remove="${esc(r.id)}" aria-label="Remove coaching title ${esc(r.title||String(i+1))}">Remove</button></div>`:''}
+        </div>`).join(''):'<p class="help">No coaching titles added.</p>'}</div>
+      </details>
+      ${manage?`<details class="coaching-title-add coaching-title-disclosure" ${state.addOpen?'open':''}><summary>+ Add coaching title</summary><select id="addCoachingDuty" aria-label="Choose a coaching title to add"><option value="">Choose a title to add…</option>${['Head Coach','Batting Coach','Bowling Coach','Fielding Coach','Wicketkeeping Coach'].filter(t=>!state.roles.some(r=>r.title.toLowerCase()===t.toLowerCase())).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}<option value="__custom">Custom title…</option></select></details>
+      <div id="coachingTitleActions" class="btnrow" hidden><button class="btn secondary" id="saveCoachingStaff">Save changes</button><button class="btn ghost" id="cancelCoachingStaff">Cancel</button></div>`:''}
+      <p id="coachingStaffStatus" class="help" role="status" aria-live="polite" hidden></p>`;
+    const titles=host.querySelector('#coachingCurrentTitles'),adding=host.querySelector('.coaching-title-add');
+    titles.addEventListener('toggle',()=>{if(titles.isConnected)state.titlesOpen=titles.open;});
+    adding?.addEventListener('toggle',()=>{if(adding.isConnected)state.addOpen=adding.open;});
+    const focusTitle=id=>{const input=host.querySelector(`[data-duty-title="${id}"]`);input?.focus();input?.scrollIntoView({block:'nearest',behavior:'smooth'});};
     host.querySelectorAll('[data-duty-title]').forEach(input=>input.oninput=()=>{state.roles.find(r=>r.id===input.dataset.dutyTitle).title=input.value;changed();});
-    host.querySelectorAll('[data-duty-remove]').forEach(button=>button.onclick=()=>{state.roles=state.roles.filter(r=>r.id!==button.dataset.dutyRemove);changed();draw();});
-    const add=title=>{if(state.roles.length>=50)return;const id=preparationUuid();state.roles.push({id,title,user_ids:[]});changed();draw();const input=host.querySelector(`[data-duty-title="${id}"]`);input.focus();input.scrollIntoView({block:'nearest',behavior:'smooth'});};
+    host.querySelectorAll('[data-duty-rename]').forEach(button=>button.onclick=()=>{state.renamingId=button.dataset.dutyRename;state.titlesOpen=true;draw();focusTitle(state.renamingId);});
+    host.querySelectorAll('[data-duty-remove]').forEach(button=>button.onclick=()=>{state.roles=state.roles.filter(r=>r.id!==button.dataset.dutyRemove);if(state.renamingId===button.dataset.dutyRemove)state.renamingId=null;state.titlesOpen=true;changed();draw();});
+    const add=title=>{if(state.roles.length>=50)return;const id=preparationUuid();state.roles.push({id,title,user_ids:[]});state.titlesOpen=true;state.addOpen=false;state.renamingId=title?null:id;changed();draw();if(!title)focusTitle(id);};
     host.querySelector('#addCoachingDuty')?.addEventListener('change',event=>{if(event.target.value)add(event.target.value==='__custom'?'':event.target.value);});
-    host.querySelector('#cancelCoachingStaff')?.addEventListener('click',()=>{if(state.dirty&&!confirm('Discard your coaching staff changes?'))return;state.roles=structuredClone(state.data.roles);state.dirty=false;state.editing=false;state.command=null;draw();returnToPerson();});
+    host.querySelector('#cancelCoachingStaff')?.addEventListener('click',()=>{if(state.dirty&&!confirm('Discard your coaching title changes?'))return;state.roles=structuredClone(state.data.roles);state.dirty=false;state.editing=false;state.command=null;state.error='';state.renamingId=null;state.titlesOpen=false;state.addOpen=false;draw();returnToPerson();});
     host.querySelector('#saveCoachingStaff')?.addEventListener('click',async()=>{if(await state.save())returnToPerson();});
     if(state.returnToPerson){
-      const back=document.createElement('button');back.className='btn ghost';back.textContent='Back to coaching duties';back.onclick=()=>{if(state.saving)return;if(state.dirty){const status=host.querySelector('#coachingStaffStatus');status.textContent='Save or cancel your title changes first.';return;}returnToPerson();};host.append(back);
+      const back=document.createElement('button');back.className='btn ghost';back.textContent='Back to coaching duties';back.onclick=()=>{if(state.saving)return;if(state.dirty){state.error='Save or cancel your title changes first.';sync();return;}returnToPerson();};host.append(back);
     }
     sync();
   }
@@ -13068,14 +13077,14 @@ async function renderCoachingStaffSetup(){
     if(state.saving||!state.dirty||!current())return;
     const status=host.querySelector('#coachingStaffStatus');
     state.error='';
-    if(state.roles.some(r=>r.title.trim().length<2)){state.error='Enter a title of at least 2 characters.';status.textContent=state.error;return false;}
-    if(new Set(state.roles.map(r=>r.title.trim().toLowerCase())).size!==state.roles.length){state.error='Each coaching title must be different.';status.textContent=state.error;return false;}
+    if(state.roles.some(r=>r.title.trim().length<2)){state.error='Enter a title of at least 2 characters.';status.textContent=state.error;status.hidden=false;return false;}
+    if(new Set(state.roles.map(r=>r.title.trim().toLowerCase())).size!==state.roles.length){state.error='Each coaching title must be different.';status.textContent=state.error;status.hidden=false;return false;}
     state.command ||= {request_id:preparationUuid(),expected_revision:state.data.revision,roles:structuredClone(state.roles)};
-    state.saving=true;sync();status.textContent='Saving…';
+    state.saving=true;sync();
     try{
       const {data,error}=await supabase.rpc('coaching_staff_api',{p_club_id:targetClub,p_action:'save',p_values:state.command});
       if(error)throw error;if(!data?.ok)throw new Error('Could not confirm the save.');
-      state.data=data;state.roles=structuredClone(data.roles);state.dirty=false;state.command=null;state.editing=false;
+      state.data=data;state.roles=structuredClone(data.roles);state.dirty=false;state.command=null;state.editing=false;state.renamingId=null;state.titlesOpen=false;state.addOpen=false;
       if(key===coachingStaffKey()){coachingStaffUpdateLabels(data);state.saving=false;state.draw();}
       state.error='';return true;
     }catch(error){
@@ -13095,7 +13104,7 @@ async function editPersonCoachingDuties(userId,pending=null){
   if(coachingStaffState?.key!==coachingStaffKey()||!coachingStaffState?.data)await renderCoachingStaffSetup();
   const state=coachingStaffState,person=state?.data?.people?.find(p=>p.user_id===userId);
   if(!person||!state.data.can_manage||state.saving)return;
-  if(state.dirty){state.editing=true;state.draw();const host=document.getElementById('coachingStaffHost');host.querySelector('#coachingStaffStatus').textContent='Save or cancel the coaching title changes first.';host.scrollIntoView({block:'start',behavior:'smooth'});return;}
+  if(state.dirty){state.editing=true;state.draw();const host=document.getElementById('coachingStaffHost');const status=host.querySelector('#coachingStaffStatus');status.textContent='Save or cancel the coaching title changes first.';status.hidden=false;host.scrollIntoView({block:'start',behavior:'smooth'});return;}
   document.getElementById('personCoachingDialog')?.remove();
   const original=structuredClone(state.roles),wasDirty=state.dirty,wasEditing=state.editing,originalCommand=state.command;
   const initial=new Set(state.roles.filter(r=>r.user_ids.includes(userId)).map(r=>r.id)),selected=new Set(initial);
@@ -13117,7 +13126,7 @@ async function editPersonCoachingDuties(userId,pending=null){
   dialog.querySelectorAll('[data-person-duty]').forEach(box=>box.onchange=()=>{
     if(box.checked)selected.add(box.dataset.personDuty);else selected.delete(box.dataset.personDuty);sync();
   });
-  dialog.querySelector('#manageCoachingTitles').onclick=()=>{state.returnToPerson={userId,addIds:[...selected].filter(id=>!initial.has(id)),removeIds:[...initial].filter(id=>!selected.has(id))};dialog.remove();state.editing=true;state.draw();document.getElementById('coachingStaffHost')?.scrollIntoView({block:'start',behavior:'smooth'});};
+  dialog.querySelector('#manageCoachingTitles').onclick=()=>{state.returnToPerson={userId,addIds:[...selected].filter(id=>!initial.has(id)),removeIds:[...initial].filter(id=>!selected.has(id))};dialog.remove();state.editing=true;state.titlesOpen=!!state.roles.length;state.addOpen=!state.roles.length;state.draw();document.getElementById('coachingStaffHost')?.scrollIntoView({block:'start',behavior:'smooth'});};
   dialog.querySelector('#savePersonDuties').onclick=async()=>{
     if(state.saving||!selectionChanged())return;
     const roles=structuredClone(state.roles);roles.forEach(role=>{role.user_ids=role.user_ids.filter(id=>id!==userId);if(selected.has(role.id))role.user_ids.push(userId);});
@@ -21543,7 +21552,7 @@ const demoStages=[
   {key:'phone_app',label:'Get the phone app',tab:'phone_app',role:'player',hint:'Follow the steps for your phone, then open the Club Batting icon to choose notifications. Desktop viewers can expand the phone instructions. This demo installs nothing and requests no permission.'},
   {key:'home',label:'Club Home · published example',tab:'dashboard',role:'admin',hint:'The five preparation steps are complete. Players can build their plans, train and learn through feedback. People can sign up at any stage. View any saved phase.'},
   {key:'preparation',label:'Club Home · during preparation',tab:'dashboard',role:'admin',preparing:true,hint:'People can register during preparation. Assign club roles in People & Sign-up, then select the Philosophy Lead and contributors in the Workshop.'},
-  {key:'people',label:'People & Sign-up · during preparation',tab:'permissions',role:'admin',preparing:true,hint:'Set the club’s coaching titles first. Assign them through Edit coaching duties on a person’s row. Sam is both Club Admin and Batting Coach.'},
+  {key:'people',label:'People & Sign-up · during preparation',tab:'permissions',role:'admin',preparing:true,hint:'Expand View coaching titles to see the club’s titles, or use + Add coaching title. Assign saved titles through Edit coaching duties on a person’s row.'},
   {key:'waiting',label:'Player Home · before publication',tab:'playerhome',role:'player',preparing:true,hint:'Alex has registered successfully. Until the club publishes, Player Plans wait; anyone given a workshop or setup role can participate now.'},
   {key:'workshop',label:'Batting Philosophy Workshop',tab:'workshop',role:'admin',preparing:true,hint:'Three contributors have shared independent views. Open their responses and compare How We Bat options.'},
   {key:'contributor',label:'Workshop · contributor view',tab:'workshop',role:'player',userId:'user-jordan',preparing:true,hint:'Jordan has submitted. Compare all combinations and join the shared conversation. Only the Philosophy Lead can choose the club approach.'},
