@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.85 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.86 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.85';
+const APP_UI_VERSION='0.8.62.86';
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1601,26 +1601,22 @@ function hasPlayingChoice(involvement){
   return ['player','coach_captain','both'].includes(involvement);
 }
 
-function renderFirstIdentitySetup({editing=false}={}){
-  if(editing)recordAccountScreen('account_involvement');
+function renderFirstIdentitySetup(){
   app.innerHTML=`<div class="login" style="max-width:720px">
     <div class="section-label">${esc(club.name)}</div>
-    <h1>${editing?'Your involvement':'How are you involved?'}</h1>
+    <h1>How are you involved?</h1>
     <p>Choose whether you play for this club. Coaching duties and access to other players are set separately.</p>
     ${membership.involvement==='philosophy_contributor'?'<p>Your Workshop invitation is accepted. Before you continue, tell us whether you also play for this club. Your Workshop access and any assigned club roles stay with your account.</p>':''}
-    ${editing?'<div id="myAssignedClubRoles"></div>':''}
     <div class="field"><label>Your name</label><input id="myName" value="${esc(userProfile?.display_name||'')}"></div>
     ${roleCards('myRole',membership.involvement||'')}
-    <div class="btnrow"><button class="btn secondary" id="saveIdentity">${editing?'Save changes':'Continue'}</button>${editing?'<button class="btn ghost" id="cancelIdentity">Cancel</button>':''}</div>
+    <div class="btnrow"><button class="btn secondary" id="saveIdentity">Continue</button></div>
     <div id="identitySetupStatus" class="help" role="status" aria-live="polite"></div>
   </div>`;
-  showMyCoachingDuties();
   wireRoleCards();
   const targetClubId=club.id,requestingUserId=session?.user?.id;
   const button=document.getElementById('saveIdentity');
   const stillCurrent=()=>club?.id===targetClubId&&session?.user?.id===requestingUserId&&document.getElementById('saveIdentity')===button;
   let saving=false;
-  document.getElementById('cancelIdentity')?.addEventListener('click',()=>{if(!saving)closeAccountScreen();});
   document.getElementById('saveIdentity').onclick=async()=>{
     if(saving||!stillCurrent())return;
     const status=document.getElementById('identitySetupStatus');
@@ -1629,7 +1625,7 @@ function renderFirstIdentitySetup({editing=false}={}){
     if(!['player','coach_captain','both'].includes(involvement)){status.textContent='Choose how you are involved.';return;}
     if(displayName.length<2||displayName.length>120){status.textContent='Enter your name (2–120 characters).';return;}
     saving=true;button.disabled=true;
-    const controls=[document.getElementById('myName'),...document.querySelectorAll('input[name="myRole"]'),document.getElementById('cancelIdentity')].filter(Boolean);
+    const controls=[document.getElementById('myName'),...document.querySelectorAll('input[name="myRole"]')].filter(Boolean);
     controls.forEach(control=>control.disabled=true);
     status.textContent='Saving…';
     try{
@@ -1810,7 +1806,7 @@ function clubSetupUnavailableReason(tab){
 }
 
 function canOpenClubTab(tab){
-  if(['account_involvement','join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
+  if(['join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
   if(['playerhome','innings'].includes(tab))return isPlayerUser();
   if(['permissions','groups'].includes(tab))return isAdmin();
@@ -2351,7 +2347,7 @@ function installAccountMenuDismissal(){
   });
 }
 
-function accountMenuHtml({allowJoin=true,allowInvolvement=false,allowCoaching=false,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
+function accountMenuHtml({allowJoin=true,allowCoaching=false,outId='out',joinId='joinAnother',showPlatform=false,platformId='accountPlatform'}={}){
   installAccountMenuDismissal();
   const email=session?.user?.email||'';
   const name=userProfile?.display_name||session?.user?.user_metadata?.display_name||'Your account';
@@ -2361,7 +2357,6 @@ function accountMenuHtml({allowJoin=true,allowInvolvement=false,allowCoaching=fa
       <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
-      ${allowInvolvement?'<button class="account-menu-action" id="accountInvolvement" type="button">Your involvement</button>':''}
       ${allowCoaching?'<button class="account-menu-action" id="accountCoaching" type="button">Coach Conversations</button>':''}
       ${allowCoaching?'<button class="account-menu-action" data-club-messages type="button">Messages</button><button class="account-menu-action" data-phone-open type="button">App & notifications</button>':''}
       <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
@@ -2454,7 +2449,7 @@ function renderShell(){
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <div id="coachingUpdatesHost" hidden></div><div id="clubMessagesHost" hidden></div>
-          ${accountMenuHtml({allowJoin:true,allowInvolvement:true,allowCoaching:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
+          ${accountMenuHtml({allowJoin:true,allowCoaching:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
     </header>
@@ -2467,7 +2462,6 @@ function renderShell(){
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await signOutClubBatting();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('accountCoaching').onclick=openCoachConversations;
-  document.getElementById('accountInvolvement').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderFirstIdentitySetup({editing:true});};
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
   document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;await renderPlatformConsole();});
   document.getElementById('retryAccountAccess')?.addEventListener('click',async()=>{
@@ -2751,7 +2745,7 @@ function renderJoinAnotherClub(){
 // The first screen replaces the current entry; subsequent screens create real Back/Forward steps.
 function recordAccountScreen(tab){
   if(!club||!session)return;
-  if(!['account_involvement','join_club'].includes(currentTab))accountReturnTab=currentTab;
+  if(!['join_club'].includes(currentTab))accountReturnTab=currentTab;
   currentTab=tab;
   recordAppNavigation(clubNavigationRoute());
 }
@@ -2782,7 +2776,7 @@ function clubNavigationRoute(){
     route.preview={ids:[...workshopPreview.ids],round:workshopPreview.round,format:workshopPreview.format};
   }
   route.viewState={howWeBatFormat:publishedHowWeBatFormat,builderFormat:howWeBatBuilderFormat,questionsSection:playerPlanStructureSection,responseFormat:previewFormat,guideTopic:guideSelectedCapabilityKey};
-  if(['account_involvement','join_club'].includes(currentTab))route.returnTab=accountReturnTab;
+  if(['join_club'].includes(currentTab))route.returnTab=accountReturnTab;
   return route;
 }
 function platformNavigationRoute(){
@@ -2801,7 +2795,7 @@ function restorePlatformNavigationState(route){
   platformSelectedOnboardingId=route.onboardingId||null;
 }
 function replaceRestoredNavigation(marker){
-  const route=document.getElementById('platformPage')?platformNavigationRoute():document.getElementById('page')||document.getElementById('cancelIdentity')||document.getElementById('cancelJoin')?clubNavigationRoute():null;
+  const route=document.getElementById('platformPage')?platformNavigationRoute():document.getElementById('page')||document.getElementById('cancelJoin')?clubNavigationRoute():null;
   if(!route)return;
   appNavigationCurrent={...marker,route};
   history.replaceState({...history.state,clubBattingNavigation:appNavigationCurrent,clubBattingWorkshop:null},'');
@@ -2961,7 +2955,6 @@ function renderTab(){
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
   const map={
     messages:renderClubMessages,phone_app:renderPhoneApp,
-    account_involvement:()=>renderFirstIdentitySetup({editing:true}),
     join_club:renderJoinAnotherClub,
     dashboard:renderClubDashboard,
     playerhome:renderPlayerHome,
@@ -3252,8 +3245,8 @@ const CLUB_BATTING_HELP = {
         "body": "Someone joining through a Workshop invitation must say whether they play. A playing contributor gets their own Player Plan; a non-playing contributor does not. Contributing alone gives no Coach, Captain or Admin role."
       },
       {
-        "title": "Manage the link and correct involvement",
-        "body": "Club Admin can open/close player sign-up or regenerate the link and QR; regeneration invalidates the old player link. A member can use Account → Your involvement to correct their playing choice for the current club. Before publication, ordinary players wait for the club’s ready-to-start notification."
+        "title": "Manage club sign-up",
+        "body": "Club Admin can open or close player sign-up, or regenerate the link and QR. Regeneration invalidates the old player link. Members choose playing or non-playing involvement when they join. Before publication, ordinary players wait for the club’s ready-to-start notification."
       }
     ],
     "sort_order": 30,
@@ -3275,13 +3268,13 @@ const CLUB_BATTING_HELP = {
     ],
     "tutorial": [
       {
-        "title": "Name your coaching staff",
-        "body": "Club Admin sets the titles in Club coaching titles, near the top of People & Sign-up. Use a suggested or custom title, then assign people and Save coaching staff. Manage club coaching titles lets you change the list later. One person can hold several titles alongside their access role; titles do not grant player access.",
+        "title": "Set your club’s coaching titles",
+        "body": "Club Admin opens Club coaching titles near the top of People & Sign-up. Manage club coaching titles, then + Add coaching title opens a choice of suggested or custom titles. Save coaching titles stores the chosen list. Suggestions are not included until added and saved. This section has no people or assignment controls. Assign duties separately on each person’s row.",
         "target_tab": "permissions"
       },
       {
         "title": "Find someone to assign a role",
-        "body": "Search a registered person by name. Edit roles or Edit coaching duties shows all titles configured for the club. Tick their duties and Save coaching duties once; the saved titles appear on their row. Manage club coaching titles returns you to that person after saving, keeping unchecked/checked choices you had changed. An unassigned title is not an appointment.",
+        "body": "Edit coaching duties shows the person’s name and a checklist of the titles your club has saved. Tick their duties, then Save coaching duties. Their saved titles appear on their person row. Manage club coaching titles returns to the checklist after saving and retains pending selections. One person can hold several duties; player access is set separately on the main page.",
         "target_tab": "permissions"
       },
       {
@@ -4248,8 +4241,8 @@ const CLUB_BATTING_HELP = {
         "body": "Use the current club/Platform Admin selector and its dropdown arrow. It is separate from Account. Platform Admin appears only for authorised accounts; switching context does not sign you out."
       },
       {
-        "title": "Manage your own involvement",
-        "body": "Account → Your involvement shows your access role and assigned coaching duties, and lets you change whether you play. Earlier Player Plans and feedback are retained if you stop playing. Club Admin can use Manage coaching staff to edit coaching appointments; other members ask their Club Admin. Playing involvement, coaching titles and access to players are separate."
+        "title": "Use Account",
+        "body": "Account contains Join another club, Coach Conversations, Messages, App & notifications, Set / change password and Sign out. New members choose whether they play during sign-up. Club Admin manages coaching duties and player access in People & Sign-up."
       },
       {
         "title": "Use Back and refresh",
@@ -9862,41 +9855,33 @@ async function renderCoachingStaffSetup(){
   }catch(error){if(current()){host.innerHTML=`<p role="status">${esc(error?.message||'Could not load coaching staff.')}</p><button class="btn ghost" id="retryCoachingStaff">Try again</button>`;host.querySelector('button').onclick=renderCoachingStaffSetup;}}
   function changed(){state.dirty=JSON.stringify(state.roles)!==JSON.stringify(state.data.roles);state.command=null;sync();}
   function sync(){
-    const button=host.querySelector('#saveCoachingStaff');if(button){button.disabled=state.saving||!state.dirty;button.textContent=state.saving?'Saving…':state.dirty?'Save coaching staff':'Saved ✓';}
+    const button=host.querySelector('#saveCoachingStaff');if(button){button.disabled=state.saving||!state.dirty;button.textContent=state.saving?'Saving…':state.dirty?'Save coaching titles':'Saved ✓';}
     host.querySelectorAll('input,select,button').forEach(el=>{if(el.id!=='saveCoachingStaff')el.disabled=state.saving;});
     const status=host.querySelector('#coachingStaffStatus');if(status)status.textContent=state.dirty?'Unsaved changes':'';
   }
   function draw(){
     if(!current())return;
-    const people=state.data.people||[],person=id=>people.find(p=>p.user_id===id)?.display_name||'Club member';
     host.innerHTML=`<style>
       .coaching-staff-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.coaching-staff-head h2{margin:0}
       .coaching-duty-row{border-top:1px solid #dce1ed;padding:12px 0}.coaching-duty-title{display:flex;gap:8px;align-items:center}.coaching-duty-title input{min-width:0;flex:1}.coaching-duty-title button{flex:0 0 auto}
-      .coaching-duty-people{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.coaching-duty-people button{border:1px solid #cbd4ee;background:#f0f3fb;color:#172660;border-radius:18px;padding:6px 10px;min-height:36px;max-width:100%;overflow-wrap:anywhere}
-      #coachingStaffHost input,#coachingStaffHost select{max-width:100%;width:100%;box-sizing:border-box;border:1px solid #d8deee;border-radius:10px;background:white;color:#172660;font:inherit;font-size:16px;padding:10px;min-height:42px}#coachingStaffHost [hidden]{display:none!important}#coachingStaffHost{scroll-margin-top:150px}.coaching-duty-summary{display:grid;grid-template-columns:minmax(100px,1fr) 2fr;gap:8px;padding:8px 0;border-top:1px solid #e4e7ef;overflow-wrap:anywhere}.coaching-staff-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+      #coachingStaffHost input,#coachingStaffHost select{max-width:100%;width:100%;box-sizing:border-box;border:1px solid #d8deee;border-radius:10px;background:white;color:#172660;font:inherit;font-size:16px;padding:10px;min-height:42px}#coachingStaffHost [hidden]{display:none!important}#coachingStaffHost{scroll-margin-top:150px}.coaching-title-list{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.coaching-title-list span{border-radius:8px;background:#f0f3fb;padding:6px 10px;overflow-wrap:anywhere}.coaching-title-add{margin:10px 0}.coaching-title-add summary{cursor:pointer;font-weight:700;padding:8px 0}
     </style><div class="coaching-staff-head"><h2>Club coaching titles</h2>${state.data.can_manage&&!state.editing?'<button class="btn ghost" id="editCoachingStaff">Manage club coaching titles</button>':''}</div>
-    ${state.editing&&state.data.can_manage?`<p class="help">Set up the titles your club uses, then assign people. One person can hold several.</p>
+    ${state.editing&&state.data.can_manage?`<p class="help">Choose the titles your club uses.</p>
       <div id="coachingDutyRows">${state.roles.map((r,i)=>`<div class="coaching-duty-row" data-duty-row="${esc(r.id)}">
         <div class="coaching-duty-title"><input aria-label="Coaching title ${i+1}" data-duty-title="${esc(r.id)}" maxlength="60" placeholder="e.g. Batting Coach" value="${esc(r.title)}"><button class="btn ghost" data-duty-remove="${esc(r.id)}" aria-label="Remove coaching title ${esc(r.title||String(i+1))}">Remove</button></div>
-        <div class="coaching-duty-people">${r.user_ids.map(id=>`<button type="button" data-duty-unassign="${esc(r.id)}" data-person="${esc(id)}" aria-label="Remove ${esc(person(id))} from ${esc(r.title)}">${esc(person(id))} ×</button>`).join('')}</div>
-        <select data-duty-add-person="${esc(r.id)}" aria-label="Assign someone to ${esc(r.title||'this coaching title')}"><option value="">Assign a club member…</option>${people.filter(p=>!r.user_ids.includes(p.user_id)).map(p=>`<option value="${esc(p.user_id)}">${esc(p.display_name)}${p.user_id===session.user.id?' · You':''}</option>`).join('')}</select>
       </div>`).join('')}</div>
-      ${!state.roles.length?'<p class="help">Start with a title, or add your own.</p>':''}
-      <div class="coaching-staff-suggestions">${['Head Coach','Batting Coach','Bowling Coach','Fielding Coach','Wicketkeeping Coach'].filter(t=>!state.roles.some(r=>r.title.toLowerCase()===t.toLowerCase())).map(t=>`<button class="btn ghost" data-duty-suggestion="${esc(t)}">+ ${esc(t)}</button>`).join('')}<button class="btn ghost" id="addCoachingDuty">+ Custom title</button></div>
-      <div class="btnrow"><button class="btn secondary" id="saveCoachingStaff">Save coaching staff</button><button class="btn ghost" id="cancelCoachingStaff">Cancel</button><span id="coachingStaffStatus" class="help" role="status" aria-live="polite"></span></div>
-      `:state.roles.map(r=>`<div class="coaching-duty-summary"><strong>${esc(r.title)}</strong><span>${esc(r.user_ids.map(person).join(', ')||'Not assigned')}</span></div>`).join('')||'<p class="help">No coaching duties assigned.</p>'}`;
+      <details class="coaching-title-add" ${!state.roles.length?'open':''}><summary>+ Add coaching title</summary><select id="addCoachingDuty" aria-label="Choose a coaching title to add"><option value="">Choose a title to add…</option>${['Head Coach','Batting Coach','Bowling Coach','Fielding Coach','Wicketkeeping Coach'].filter(t=>!state.roles.some(r=>r.title.toLowerCase()===t.toLowerCase())).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}<option value="__custom">Custom title…</option></select></details>
+      <div class="btnrow"><button class="btn secondary" id="saveCoachingStaff">Save coaching titles</button><button class="btn ghost" id="cancelCoachingStaff">Cancel</button><span id="coachingStaffStatus" class="help" role="status" aria-live="polite"></span></div>
+      `:state.roles.length?`<div class="coaching-title-list">${state.roles.map(r=>`<span>${esc(r.title)}</span>`).join('')}</div>`:'<p class="help">No coaching titles set.</p>'}`;
     host.querySelector('#editCoachingStaff')?.addEventListener('click',()=>{state.editing=true;draw();});
     host.querySelectorAll('[data-duty-title]').forEach(input=>input.oninput=()=>{state.roles.find(r=>r.id===input.dataset.dutyTitle).title=input.value;changed();});
     host.querySelectorAll('[data-duty-remove]').forEach(button=>button.onclick=()=>{state.roles=state.roles.filter(r=>r.id!==button.dataset.dutyRemove);changed();draw();});
-    host.querySelectorAll('[data-duty-unassign]').forEach(button=>button.onclick=()=>{const r=state.roles.find(r=>r.id===button.dataset.dutyUnassign);r.user_ids=r.user_ids.filter(id=>id!==button.dataset.person);changed();draw();});
-    host.querySelectorAll('[data-duty-add-person]').forEach(select=>select.onchange=()=>{if(!select.value)return;state.roles.find(r=>r.id===select.dataset.dutyAddPerson).user_ids.push(select.value);changed();draw();});
     const add=title=>{if(state.roles.length>=50)return;const id=preparationUuid();state.roles.push({id,title,user_ids:[]});changed();draw();const input=host.querySelector(`[data-duty-title="${id}"]`);input.focus();input.scrollIntoView({block:'nearest',behavior:'smooth'});};
-    host.querySelectorAll('[data-duty-suggestion]').forEach(button=>button.onclick=()=>add(button.dataset.dutySuggestion));
-    host.querySelector('#addCoachingDuty')?.addEventListener('click',()=>add(''));
+    host.querySelector('#addCoachingDuty')?.addEventListener('change',event=>{if(event.target.value)add(event.target.value==='__custom'?'':event.target.value);});
     host.querySelector('#cancelCoachingStaff')?.addEventListener('click',()=>{if(state.dirty&&!confirm('Discard your coaching staff changes?'))return;state.roles=structuredClone(state.data.roles);state.dirty=false;state.editing=false;state.command=null;draw();returnToPerson();});
     host.querySelector('#saveCoachingStaff')?.addEventListener('click',async()=>{if(await state.save())returnToPerson();});
     if(state.returnToPerson){
-      const back=document.createElement('button');back.className='btn ghost';back.textContent='Back to '+person(state.returnToPerson.userId);back.onclick=()=>{if(state.saving)return;if(state.dirty){const status=host.querySelector('#coachingStaffStatus');status.textContent='Save or cancel your title changes first.';return;}returnToPerson();};host.append(back);
+      const back=document.createElement('button');back.className='btn ghost';back.textContent='Back to coaching duties';back.onclick=()=>{if(state.saving)return;if(state.dirty){const status=host.querySelector('#coachingStaffStatus');status.textContent='Save or cancel your title changes first.';return;}returnToPerson();};host.append(back);
     }
     sync();
   }
@@ -9932,6 +9917,7 @@ async function editPersonCoachingDuties(userId,pending=null){
   if(coachingStaffState?.key!==coachingStaffKey()||!coachingStaffState?.data)await renderCoachingStaffSetup();
   const state=coachingStaffState,person=state?.data?.people?.find(p=>p.user_id===userId);
   if(!person||!state.data.can_manage||state.saving)return;
+  if(state.dirty){state.editing=true;state.draw();const host=document.getElementById('coachingStaffHost');host.querySelector('#coachingStaffStatus').textContent='Save or cancel the coaching title changes first.';host.scrollIntoView({block:'start',behavior:'smooth'});return;}
   document.getElementById('personCoachingDialog')?.remove();
   const original=structuredClone(state.roles),wasDirty=state.dirty,wasEditing=state.editing,originalCommand=state.command;
   const initial=new Set(state.roles.filter(r=>r.user_ids.includes(userId)).map(r=>r.id)),selected=new Set(initial);
@@ -9940,9 +9926,9 @@ async function editPersonCoachingDuties(userId,pending=null){
   const selectionChanged=()=>selected.size!==initial.size||[...selected].some(id=>!initial.has(id));
   const dialog=document.createElement('dialog');dialog.id='personCoachingDialog';
   dialog.style.cssText='width:min(460px,calc(100vw - 32px));max-height:85vh;overflow:auto;border:1px solid #d8deee;border-radius:16px;padding:20px;box-sizing:border-box;color:#14235b';
-  dialog.innerHTML=`<h2 style="margin:0 0 6px">${esc(person.display_name)}</h2><p class="help">${esc(coachingPermissionLabel(person.permission_role)||'No access role assigned')} · ${person.involvement==='coach_captain'?'Non-playing staff':['player','both'].includes(person.involvement)?'Player':'Involvement not yet chosen'}</p>
-    <h3>Coaching duties</h3>${state.roles.length?state.roles.map(r=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 0"><input type="checkbox" style="width:18px;height:18px;flex:0 0 auto" data-person-duty="${esc(r.id)}" ${selected.has(r.id)?'checked':''}>${esc(r.title)}</label>`).join(''):'<p>Set up the club’s coaching titles first.</p>'}
-    <div class="btnrow"><button class="btn ${state.roles.length?'ghost':'secondary'}" id="manageCoachingTitles">${state.roles.length?'Manage club coaching titles':'Set up club coaching titles'}</button><button class="btn ghost" id="editPersonAccess">Edit player access</button></div>
+  dialog.innerHTML=`<h2 style="margin:0 0 12px">${esc(person.display_name)}</h2>
+    ${state.roles.length?state.roles.map(r=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 0"><input type="checkbox" style="width:18px;height:18px;flex:0 0 auto" data-person-duty="${esc(r.id)}" ${selected.has(r.id)?'checked':''}>${esc(r.title)}</label>`).join(''):'<p>Set up the club’s coaching titles first.</p>'}
+    <button class="btn ${state.roles.length?'ghost':'secondary'}" id="manageCoachingTitles" style="margin-top:8px">${state.roles.length?'Manage club coaching titles':'Set up club coaching titles'}</button>
     <div class="btnrow" style="margin-top:14px"><button class="btn secondary" id="savePersonDuties" disabled>Saved ✓</button><button class="btn ghost" id="cancelPersonDuties">Cancel</button></div><p id="personDutiesStatus" class="help" role="status"></p>`;
   document.body.append(dialog);dialog.showModal();
   const sync=()=>{state.personDraft=selectionChanged();const b=dialog.querySelector('#savePersonDuties');b.disabled=state.saving||!selectionChanged();b.textContent=state.saving?'Saving…':selectionChanged()?'Save coaching duties':selected.size?'Changes saved ✓':'Save coaching duties';dialog.querySelector('#cancelPersonDuties').textContent=selectionChanged()?'Cancel':'Close';};
@@ -9953,7 +9939,6 @@ async function editPersonCoachingDuties(userId,pending=null){
   dialog.querySelectorAll('[data-person-duty]').forEach(box=>box.onchange=()=>{
     if(box.checked)selected.add(box.dataset.personDuty);else selected.delete(box.dataset.personDuty);sync();
   });
-  dialog.querySelector('#editPersonAccess').onclick=()=>{cancel();const row=document.getElementById('assignedRole-'+userId);row?.scrollIntoView({block:'center',behavior:'smooth'});row?.querySelector('select')?.focus({preventScroll:true});};
   dialog.querySelector('#manageCoachingTitles').onclick=()=>{state.returnToPerson={userId,addIds:[...selected].filter(id=>!initial.has(id)),removeIds:[...initial].filter(id=>!selected.has(id))};dialog.remove();state.editing=true;state.draw();document.getElementById('coachingStaffHost')?.scrollIntoView({block:'start',behavior:'smooth'});};
   dialog.querySelector('#savePersonDuties').onclick=async()=>{
     if(state.saving||!selectionChanged())return;
@@ -9965,17 +9950,6 @@ async function editPersonCoachingDuties(userId,pending=null){
     if(await state.save()){dialog.remove();return;}
     dialog.querySelectorAll('button,input').forEach(el=>el.disabled=false);sync();dialog.querySelector('#personDutiesStatus').textContent=state.error||'Could not save. Your changes are still here.';
   };
-}
-async function showMyCoachingDuties(){
-  const host=document.getElementById('myAssignedClubRoles');if(!host)return;
-  const key=coachingStaffKey();
-  const assigned=[coachingPermissionLabel(membership.permission_role)];
-  const involvement=membership.involvement==='coach_captain'?'Non-playing staff':['player','both'].includes(membership.involvement)?'Player':'';
-  const show=titles=>{host.innerHTML=`<div class="notice compact"><strong>${esc([...new Set([...assigned,...titles,involvement].filter(Boolean))].join(' · ')||'Club member')}</strong>${isAdmin()?'<button type="button" class="btn ghost" id="manageMyCoachingDuties" style="margin-left:8px">Manage coaching staff</button>':''}</div>`;
-    host.querySelector('button')?.addEventListener('click',async()=>{accountReturnTab='permissions';await closeAccountScreen();const target=document.getElementById('coachingStaffHost');target?.scrollIntoView({block:'start',behavior:'smooth'});});};
-  show([]);
-  try{const {data,error}=await supabase.rpc('coaching_staff_api',{p_club_id:club.id,p_action:'get'});if(key!==coachingStaffKey()||host!==document.getElementById('myAssignedClubRoles'))return;if(error)throw error;show(coachingTitlesFor(data,session.user.id));}
-  catch{if(host===document.getElementById('myAssignedClubRoles'))host.insertAdjacentHTML('beforeend','<small role="status">Coaching titles could not be loaded. Your playing choice can still be saved.</small>');}
 }
 function conversationPeopleOptions(people,selected='',query=''){
   const title=p=>(p.coaching_titles||[]).length?p.coaching_titles:['coach','head_coach'].includes(p.permission_role)?[coachingPermissionLabel(p.permission_role)]:[];
