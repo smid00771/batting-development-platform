@@ -1,10 +1,17 @@
-// Club Batting 0.8.62.88 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.89 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.88';
+const APP_UI_VERSION='0.8.62.89';
+
+// BEGIN SHARED HEADING STYLES V89
+const appHeadingStyle=document.createElement('style');
+appHeadingStyle.id='club-batting-heading-styles';
+appHeadingStyle.textContent="/* One type scale for the app. Small status labels remain metadata, not headings. */\n:root{--cb-heading-page:24px;--cb-heading-section:20px;--cb-heading-subsection:17px;--cb-heading-detail:16px}\n:is(#app,dialog,[role=\"dialog\"]) :is(h1,h2,h3,h4,h5,h6,[role=\"heading\"]){font-weight:700!important;line-height:1.3!important;letter-spacing:normal!important;overflow-wrap:anywhere}\n:is(#app,dialog,[role=\"dialog\"]) h1{font-size:var(--cb-heading-page)!important}\n:is(#app,dialog,[role=\"dialog\"]) h2{font-size:var(--cb-heading-section)!important}\n:is(#app,dialog,[role=\"dialog\"]) h3{font-size:var(--cb-heading-subsection)!important}\n:is(#app,dialog,[role=\"dialog\"]) :is(h4,h5,h6){font-size:var(--cb-heading-detail)!important}\n:is(#app,dialog,[role=\"dialog\"]) [aria-level=\"1\"]{font-size:var(--cb-heading-page)!important}\n:is(#app,dialog,[role=\"dialog\"]) [aria-level=\"2\"]{font-size:var(--cb-heading-section)!important}\n:is(#app,dialog,[role=\"dialog\"]) [aria-level=\"3\"]{font-size:var(--cb-heading-subsection)!important}\n:is(#app,dialog,[role=\"dialog\"]) :is([aria-level=\"4\"],[aria-level=\"5\"],[aria-level=\"6\"]){font-size:var(--cb-heading-detail)!important}\n/* Expandable sections and navigation tiles use the same shared scale. */\n#app .plan-section-tile>summary>strong{font-size:var(--cb-heading-section)!important;line-height:1.3}\n#app :is(.train-format-accordion summary strong,.training-tool-tile>strong,.player-home-tile>strong,.training-disclosure>summary,.innings-prep-section>summary,.innings-reflection-options>summary){font-size:var(--cb-heading-subsection)!important;line-height:1.3}\n#app .call-award-title{font-size:var(--cb-heading-detail)!important;line-height:1.3}\n\n/* Headings focused after navigation are landmarks, not input fields. */\n#app :is(h1,h2,h3,h4,h5,h6)[tabindex=\"-1\"]:focus{outline:none}\n";
+document.head.append(appHeadingStyle);
+// END SHARED HEADING STYLES V89
 
 function upgradeLegacyHowWeBatWording(draft){
   if(!draft || typeof draft!=='object')return draft;
@@ -1573,7 +1580,7 @@ function renderNoClub(){
       <h2>Join an existing club</h2>
       <div class="field"><label>Your name</label><input id="joinName" placeholder="Full name"></div>
       <div class="field"><label>Club join code</label><input id="joinCode" placeholder="e.g. A1B2C3D4"></div>
-      <div class="section-label">How are you involved?</div>
+      <h2>How are you involved?</h2>
       ${roleCards('joinRole','player')}
       <button class="btn secondary" id="joinClub">Join club</button>
       <div id="joinStatus" class="help"></div>
@@ -2676,7 +2683,7 @@ async function renderJoinByCode(joinCode){
 
     <div class="field"><label>Your name</label><input id="joinName" value="${esc(userProfile?.display_name||'')}" placeholder="Full name"></div>
 
-    <div class="section-label">How are you involved?</div>
+    <h2>How are you involved?</h2>
     ${roleCards('joinRole',staffRoute?'coach_captain':'player')}
 
     <div class="btnrow">
@@ -5244,7 +5251,7 @@ async function renderPlayingGroups(){
   page.innerHTML=`<div class="grid playing-groups-top">
     <section class="card">
       <div class="section-label">Players · Admin tool</div>
-      <h2>Playing Groups</h2>
+      <h2 aria-level="1">Playing Groups</h2>
       <div class="help"><strong>Use the groups your club actually uses.</strong> This is roster administration and can be updated whenever players, grades or development groups change.</div>
       <div class="help">Playing Groups can be grades, junior sides, XI teams, development pools or competition eligibility groups. A player can belong to more than one.</div>
       <div class="btnrow compact" style="margin-top:10px"><button class="btn ghost" id="backToPlayersFromGroups">← Back to Players</button></div>
@@ -7159,12 +7166,12 @@ function renderLateResponseDetail(response){
 
   return `<div class="late-response-detail-grid">
     <div>
-      <div class="section-label">Club identity</div>
+      <h3>Club identity</h3>
       <p>${identities.length?esc(identities.join(' · ')):'No identity options selected.'}</p>
       ${r.identity_note?`<div class="source-comment"><p>${esc(r.identity_note)}</p></div>`:''}
     </div>
     <div>
-      <div class="section-label">Formats</div>
+      <h3>Formats</h3>
       <p>${formats.length?esc(formats.join(' · ')):'No formats enabled.'}</p>
     </div>
   </div>
@@ -8068,7 +8075,7 @@ function renderHowWeBatBuilder(savedMessage=''){
     </section>
 
     <section class="card" style="margin-top:16px">
-      <div class="section-label">Club-wide identity · appears across your club’s formats</div>
+      <h3>Club-wide identity · appears across your club’s formats</h3>
       <div class="field"><label>Opening identity statement</label><textarea id="hwbIdentity" rows="3">${esc(draft.identity_statement||'')}</textarea></div>
       <div class="field"><label>Closing strapline</label><input id="hwbStrap" value="${esc(draft.closing_strapline||'')}" placeholder="e.g. VALUE YOUR WICKET · KEEP IT MOVING · KNOW WHERE YOU SCORE"></div>
     </section>
@@ -8355,7 +8362,7 @@ function renderKeyMessageReferenceCard(b,index,context='hwb',format=null){
       <em><span class="key-message-open">Open key message ↓</span><span class="key-message-close">Close key message ↑</span></em>
     </summary>
     <div class="hwb-banner-expanded">
-      <div class="section-label">What this means in your batting</div>
+      <h4>What this means in your batting</h4>
       <ul>${points.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
     </div>
   </details>`;
@@ -8368,7 +8375,7 @@ function renderHowWeBatLivePreview(draft,format,isBuilder=false){
   return `<section class="hwb-publication-preview ${isBuilder?'builder-preview':''}">
     <div class="hwb-public-hero" style="padding:24px 38px 22px;min-height:0">
       <div class="k" style="margin-bottom:6px">${esc(club.name)}</div>
-      <h2 style="margin:0 0 8px;font-size:clamp(32px,4vw,42px);line-height:1.02">How We Bat</h2>
+      <h2 aria-level="1" style="margin:0 0 8px">How We Bat</h2>
       <p style="margin:0;line-height:1.42;max-width:920px">${esc(draft.identity_statement||'')}</p>
     </div>
     <div class="hwb-public-tabs"><button class="active">${esc(label)}</button></div>
@@ -8473,12 +8480,12 @@ function renderPublishedHowWeBat(){
     <section class="hwb-publication-preview ${canSeeWorking?'working':'published'}">
       <div class="hwb-public-hero" style="padding:24px 38px 22px;min-height:0">
         <div class="k" style="margin-bottom:6px">${esc(club.name)}</div>
-        <h2 style="margin:0 0 8px;font-size:clamp(32px,4vw,42px);line-height:1.02">How We Bat</h2>
+        <h2 aria-level="1" style="margin:0 0 8px">How We Bat</h2>
         <p style="margin:0;line-height:1.42;max-width:920px">${esc(snap.identity_statement||'')}</p>
       </div>
       <div class="hwb-public-tabs">${formats.map(([k,l])=>`<button data-public-hwb-format="${k}" class="${k===publishedHowWeBatFormat?'active':''}">${esc(l)}</button>`).join('')}</div>
       <div class="hwb-public-body">
-        <div class="section-label">${esc(formatLabel)}</div>
+        <h2>${esc(formatLabel)}</h2>
         <p class="hwb-public-intro">${esc(f?.intro||'')}</p>
         <div class="hwb-public-banner-grid">${(f?.banners||[]).map((b,i)=>renderKeyMessageReferenceCard(b,i,'hwb',publishedHowWeBatFormat)).join('')}</div>
         <div class="hwb-public-callout">${esc(f?.callout||'')}</div>
@@ -8928,7 +8935,7 @@ function renderPlayerPlanAddedIdeas(groups,error=''){
   const count=groups.reduce((n,g)=>n+g.ideas.length,0);
   return `<details class="card plan-player-ideas" ${count?'':'open'}>
     <summary>
-      <div><div class="section-label">Player-added answers</div><strong>${count?`${count} answer${count===1?'':'s'} outside the current option lists`:'Nothing new yet'}</strong><span>These come from the “Can’t see your answer?” fields. Player names are deliberately not shown.</span></div>
+      <div><h2>Player-added answers</h2><strong>${count?`${count} answer${count===1?'':'s'} outside the current option lists`:'Nothing new yet'}</strong><span>These come from the “Can’t see your answer?” fields. Player names are deliberately not shown.</span></div>
       <em>${count?'Review ↓':'No additions yet'}</em>
     </summary>
     <div class="plan-player-ideas-body">
@@ -9412,7 +9419,7 @@ async function renderPermissions(){
   <style>.player-share-layout[hidden],.join-security-row[hidden]{display:none!important}</style>
   <section class="card">
     <div class="section-label">Players · Club people</div>
-    <h2>People & Sign-up</h2>
+    <h2 aria-level="1">People & Sign-up</h2>
     <div class="help"><strong>Get people into Club Batting first. Give responsibilities second.</strong></div>
     <div class="help">Players register as <strong>Players</strong>. Club roles such as Captain, Coach, Head Coach and Admin are assigned afterwards. Batting Philosophy Workshop invitations are separate again — contributing to the philosophy does <strong>not</strong> make somebody a coach, captain or Admin.</div>
   </section>
@@ -9495,7 +9502,7 @@ async function renderPermissions(){
     <div id="clubPersonSearchResults" class="member-list"></div>
 
     <div style="margin-top:18px">
-      <div class="section-label">People with assigned roles</div>
+      <h2>People with assigned roles</h2>
       <p class="help">Captain, Coach, Head Coach and Admin access roles. Adjust player access here.</p>
       <div class="btnrow"><button class="btn secondary" id="saveAllPeopleChanges" disabled>Changes saved ✓</button><span id="peopleChangesStatus" role="status" aria-live="polite"></span></div>
       <div class="member-list">${roleMemberHtml||'<div class="notice">No Captain, Coach, Head Coach or additional Admin roles have been assigned yet.</div>'}</div>
@@ -9533,7 +9540,7 @@ async function renderPermissions(){
       </div>
 
       <div id="leadHandoverForm" class="lead-handover-form" style="display:none">
-        <div class="section-label">Choose your successor</div>
+        <h3>Choose your successor</h3>
         <div class="handover-successor-choice">
           <label class="handover-option on">
             <input type="radio" name="handoverSuccessorType" value="existing" checked>
@@ -9639,7 +9646,7 @@ async function renderPermissions(){
     const q=(document.getElementById('clubPersonSearch')?.value||'').trim().toLowerCase();
     if(!wrap)return;
     if(q.length<2){
-      wrap.innerHTML='<div class="help" style="padding:8px 0">Type at least two letters of their name.</div>';
+      wrap.innerHTML='';
       return;
     }
     const matches=(members||[])
@@ -10677,7 +10684,7 @@ function renderOutsidePlanReview(action,{compact=false,snapshot=false}={}){
   if(compact)return `<div data-outside-plan-review="compact" data-review-concern="${concern}" style="border-left:4px solid ${border};background:${background};border-radius:6px;padding:9px 10px;margin:8px 0;font-size:13px">${badges}</div>`;
   const meta=[context.match_date?formatDateShort(context.match_date):'',context.opposition||'',context.format_key?formatLabel(context.format_key):''].filter(Boolean);
   const matchups=context.matchups.filter(m=>m&&Array.isArray(m.shots)).map(m=>`<section style="margin-top:12px"><strong>${esc(m.bowler||'Bowler not named')}</strong><p class="help" style="margin:4px 0">${m.training_focus===true?'Training focus selected for this match-up':'No training focus selected for this match-up'}</p><ul style="margin:8px 0;padding-left:20px">${m.shots.filter(s=>s&&typeof s.shot==='string').map(s=>`<li style="margin:8px 0;overflow-wrap:anywhere"><strong>${esc(s.shot)}</strong><p style="margin:4px 0;white-space:pre-wrap">${typeof s.reason==='string'&&s.reason.trim()?`Player’s reason: ${esc(s.reason)}`:'No reason added.'}</p></li>`).join('')}</ul></section>`).join('');
-  return `<section data-outside-plan-review="${snapshot?'snapshot':'current'}" data-review-concern="${concern}" style="border-left:4px solid ${border};background:${background};border-radius:8px;padding:12px 14px;margin:12px 0;overflow-wrap:anywhere"><div class="section-label">${snapshot?'Scoring context at this update':'Scoring context to discuss'}</div>${badges}${meta.length?`<p class="help" style="margin:8px 0">${meta.map(esc).join(' · ')}</p>`:''}${count?`<p style="margin:8px 0">${count>1?'Check these scoring choices against the Player Plan and agree the approach together.':noTraining?'Read the player’s reason and discuss the shot and preparation.':'Discuss how this shot fits the player’s plan and practice.'}</p>${matchups}<p class="help">A training tick records a choice here, not completed practice. No tick does not mean the shot is unpractised; the player may practise elsewhere.</p>`:`<p class="help">Removing outside-plan shots does not automatically close this conversation.</p>`}</section>`;
+  return `<section data-outside-plan-review="${snapshot?'snapshot':'current'}" data-review-concern="${concern}" style="border-left:4px solid ${border};background:${background};border-radius:8px;padding:12px 14px;margin:12px 0;overflow-wrap:anywhere"><h4>${snapshot?'Scoring context at this update':'Scoring context to discuss'}</h4>${badges}${meta.length?`<p class="help" style="margin:8px 0">${meta.map(esc).join(' · ')}</p>`:''}${count?`<p style="margin:8px 0">${count>1?'Check these scoring choices against the Player Plan and agree the approach together.':noTraining?'Read the player’s reason and discuss the shot and preparation.':'Discuss how this shot fits the player’s plan and practice.'}</p>${matchups}<p class="help">A training tick records a choice here, not completed practice. No tick does not mean the shot is unpractised; the player may practise elsewhere.</p>`:`<p class="help">Removing outside-plan shots does not automatically close this conversation.</p>`}</section>`;
 }
 // END OUTSIDE PLAN REVIEW
 
@@ -12443,7 +12450,7 @@ function renderTrainingFormatAccordion(format,raw,feedback,{player=null}={}){
         <div class="train-plan-lines">
           ${cards.length?cards.map(c=>renderTrainingPlanCard(c,format)).join(''):'<div class="notice">Your Player Plan is complete, but there are no specific training cues to show yet.</div>'}
         </div>
-        ${feedbackFocus.length?`<div class="train-feedback-focus"><div class="section-label">FROM RECENT FEEDBACK</div>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
+        ${feedbackFocus.length?`<div class="train-feedback-focus"><h4>From recent feedback</h4>${feedbackFocus.map(x=>`<p><strong>${esc(x.text)}</strong><span>${esc(x.source)}</span></p>`).join('')}</div>`:''}
       `:`<div class="train-format-empty"><strong>${staff?'The player’s':'Your'} ${esc(label)} training plan starts with ${staff?'their':'your'} Player Plan.</strong><span>${coreProgress.complete?`Finish the ${esc(label)} questions to create your training plan.`:formatProgress.complete?`${staff?'Their':'Your'} ${esc(label)} answers are complete. Finish Core to create your training plan.`:`Start with Core, then complete the ${esc(label)} questions. ${staff?'Their':'Your'} training plan will use those answers.`}</span><div class="btnrow"><button class="btn secondary" ${staff?`data-workspace-section="${esc(nextSection)}"`:`data-go="myplan" data-plan-section="${esc(nextSection)}"`}>${staff?(player.can_edit?'Open':'View'):'Complete'} ${esc(nextLabel)}${staff?' Player Plan':''}</button></div></div>`}
     </div>
   </details>`;
@@ -13745,7 +13752,7 @@ function renderPlayersWorkspaceList(){
   page.innerHTML=`<style>.players-workspace-head.compact{padding:12px 14px;gap:8px 14px}.players-workspace-head.compact>div:first-child{min-width:0;flex:1}.workspace-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.workspace-title-row h2{margin:0;font-size:24px}.workspace-title-row h2:focus{outline:none}.workspace-title-row .btn{min-height:44px;font-size:12px;padding:8px 10px}.players-workspace-head .help{margin:3px 0 0;font-size:12px}.players-workspace-head.compact .section-label{font-size:9px;margin:0 0 3px}.players-workspace-head.compact>.btnrow{margin:0;gap:6px}.players-workspace-head.compact>.btnrow .btn{min-height:44px;font-size:11px;padding:8px}.players-workspace-tools.compact{padding:12px 14px;gap:8px;align-items:end}.players-workspace-tools.compact .field{margin:0;min-width:0}.players-workspace-tools.compact label{font-size:12px;margin:0 0 3px}.players-workspace-tools.compact input,.players-workspace-tools.compact select{min-height:44px;font-size:16px;padding:8px}.players-workspace-tools.compact .workspace-filter-count{padding:4px 7px;min-height:44px;font-size:11px}#workspaceAssignmentNotice:empty{display:none}@media(max-width:650px){.players-workspace-head.compact{display:block}.players-workspace-head.compact>.btnrow{margin-top:8px}.players-workspace-tools.compact{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.players-workspace-tools.compact .workspace-filter-count{grid-column:1/-1;min-height:0;padding:0;display:flex;gap:4px;align-items:baseline;justify-content:flex-end;background:none;border:0}}</style><section class="card players-workspace-head compact">
     <div>
       <div class="section-label">${esc(role)} workspace</div>
-      <div class="workspace-title-row"><h2>Players</h2><div class="btnrow"><button class="btn ghost" id="messagePlayersFromPlayers">Message players &amp; staff</button><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div></div>
+      <div class="workspace-title-row"><h2 aria-level="1">Players</h2><div class="btnrow"><button class="btn ghost" id="messagePlayersFromPlayers">Message players &amp; staff</button><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div></div>
       <div class="help">${plansPublished?'Open plans and pick up coaching conversations.':'Register people, assign club roles and organise Playing Groups while the club prepares its setup. Player Plans open after publication.'}</div>
       <div class="btnrow compact" style="margin-top:8px"><span class="help" id="workspaceRegisteredCount"><strong>${players.length}</strong> ${isAdmin()?'registered':'accessible'} player${players.length===1?'':'s'}</span>${players.length?`<button type="button" class="workspace-text-link" id="workspaceShowAllPlayers">${playersWorkspaceShowAll?'Hide player list':'Show all players'}</button>`:''}${query||playersWorkspaceGroupFilter?'<button type="button" class="workspace-text-link" id="workspaceClearSelection">Clear selection</button>':''}</div>
     </div>
@@ -15369,7 +15376,7 @@ function renderPlayerPlanTiles(curated,playerName,{title='My Player Plan'}={}){
     @media(max-width:680px){.plan-tile-grid{grid-template-columns:1fr;gap:10px}.plan-section-tile>summary{min-height:70px;padding:14px}.plan-section-tile>summary strong{font-size:17px}.plan-tile-answers{padding:0 14px}}
     @media(prefers-reduced-motion:reduce){.plan-tile-control svg{transition:none}}
   </style><div class="plan-draft plan-tile-plan">
-    <div class="plan-draft-head"><div class="section-label" style="color:#fff;opacity:.75">${esc(title)}</div><h2>${esc(playerName||'Player')}</h2></div>
+    <div class="plan-draft-head"><div class="section-label" style="color:#fff;opacity:.75">${esc(title)}</div><h2 aria-level="1">${esc(playerName||'Player')}</h2></div>
     <div class="plan-tile-grid">${sections.map(section=>`<details class="plan-section-tile" data-plan-tile="${esc(section.key)}"><summary><strong>${esc(section.label)}</strong><span class="plan-tile-control"><span class="plan-tile-view">View</span><span class="plan-tile-close">Close</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="plan-tile-answers">${section.lines.length?section.lines.map(line=>`<div class="plan-tile-answer"><h3 class="plan-tile-question">${esc(line.label)}</h3><p>${esc(line.value)}</p></div>`).join(''):'<p class="plan-tile-empty">No saved answers in this section yet.</p>'}</div></details>`).join('')}</div>
   </div>`;
 }
@@ -15543,7 +15550,7 @@ async function renderSalesProspectRoute(token){
           <button class="btn ghost" data-sales-response="declined">Not interested</button>
         </div>
         <div id="wrongContactBox" class="handoff-box" style="display:none;margin-top:16px">
-          <div class="section-label">Right club contact</div>
+          <h2>Right club contact</h2>
           <p class="help">If you know who looks after cricket/coaching decisions, you can point us in the right direction. This is optional.</p>
           <div class="field"><label>Name</label><input id="salesReferralName"></div>
           <div class="field"><label>Email</label><input id="salesReferralEmail" type="email"></div>
@@ -15829,7 +15836,7 @@ function renderProspectCoordinatorChoice(token,p){
       </div>
       <p class="help">The coordinator has Club Admin access and can choose who leads the Batting Philosophy Workshop.</p>
       <div class="handoff-box" id="coordinatorHandoffBox" hidden>
-        <div class="section-label">Invite your Club Admin</div>
+        <h2>Invite your Club Admin</h2>
         <div class="field"><label for="adminName">Name</label><input id="adminName" autocomplete="name" placeholder="The person who will coordinate setup"></div>
         <div class="field"><label for="adminEmail">Email</label><input id="adminEmail" type="email" autocomplete="email"></div>
         <div class="btnrow"><button class="btn secondary" id="sendAdminInvite">Send Club Admin invitation</button><button class="btn ghost" id="cancelCoordinatorHandoff">Back to my choices</button></div>
@@ -16595,7 +16602,7 @@ async function renderPlatformMarketDiscovery(options={}){
     ${researchRes.error?`<p class="notice">Research status could not be checked: ${esc(researchRes.error.message)}. Refresh to retry; saved prospects are shown below.</p>`:''}
     <details ${configured?'':'open'} style="margin-top:12px"><summary>Research setup${configured?'':' · complete these checks before starting'}</summary><ul>${readiness.map(item=>`<li>${item.ready?'✓':'○'} <strong>${esc(item.label||item.key)}</strong>${item.message?` — ${esc(item.message)}`:''}</li>`).join('')||'<li>Deploy and configure Market Research, then refresh this page.</li>'}</ul>${research.pricing?.model?`<p class="help">Research model: ${esc(research.pricing.model)}. Budget uses configured provider rates in USD.</p>`:''}</details>
   </section>
-  ${jobs.length?`<section class="admin-card" style="margin-bottom:16px"><div class="section-label">Latest research batch</div>${marketResearchJobHtml(jobs[0],canControl)}${jobs.length>1?`<details><summary>Previous research batches (${jobs.length-1})</summary>${jobs.slice(1).map(job=>marketResearchJobHtml(job,canControl)).join('')}</details>`:''}<p class="help">Pause and cancel stop new work. An already running provider call may finish and still count towards the limit. Refresh progress to see saved updates.</p></section>`:''}
+  ${jobs.length?`<section class="admin-card" style="margin-bottom:16px"><h2>Latest research batch</h2>${marketResearchJobHtml(jobs[0],canControl)}${jobs.length>1?`<details><summary>Previous research batches (${jobs.length-1})</summary>${jobs.slice(1).map(job=>marketResearchJobHtml(job,canControl)).join('')}</details>`:''}<p class="help">Pause and cancel stop new work. An already running provider call may finish and still count towards the limit. Refresh progress to see saved updates.</p></section>`:''}
   <section class="admin-card form-wide" id="marketClubInventory">
     <div class="admin-card-head"><div><div class="section-label">Your shortlist</div><h2>Choose the clubs to approach</h2><p class="help">Select all applies to the list shown. Untick any exceptions, then send outreach. Research never sends email on its own.</p></div></div>
     <div class="btnrow" style="margin-top:12px"><span class="status-pill">${ready.length} ready to review</span><span class="status-pill">${uncertain.length} need review</span><span class="status-pill">${legacy.length} not researched</span><span class="status-pill">${invited.length} in Club Pipeline</span><span class="status-pill">${excluded.length} do not invite</span></div>
