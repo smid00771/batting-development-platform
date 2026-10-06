@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.91 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.92 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.91';
+const APP_UI_VERSION='0.8.62.92';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -980,7 +980,7 @@ async function boot(){
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
   window.addEventListener('popstate',handleAppNavigationHistory);
-  window.addEventListener('beforeunload',event=>{if(coachingStaffDirty()||coachingStaffPending()||clubMessageDirty()||clubMessageState?.sending||teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(selectionState?.busy||selectionState?.pending||selectionState?.formDirty||coachingStaffDirty()||coachingStaffPending()||clubMessageDirty()||clubMessageState?.sending||teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -1515,6 +1515,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   if(!stillCurrent())return;
   userProfile=profileData||null;
 
+  await loadSelectionsAccess();
   if(!userProfile || !hasPlayingChoice(membership.involvement)){
     renderFirstIdentitySetup();
     return;
@@ -1528,9 +1529,9 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   }
   if(!stillCurrent())return;
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
-  currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
+  currentTab=selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(routeClub===club.id){
-    if(['playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app'].includes(routeTab) && canOpenClubTab(routeTab)){
+    if(['playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app','teams'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
       if(routeTab==='myplan')builderSection='core';
     }
@@ -1555,9 +1556,9 @@ function clearClubLaunchRoute(){
 
 function roleCards(prefix,selected=''){
   const roles=[
-    ['player','Player','I want to build and use my own Player Plan.'],
-    ['coach_captain','Non-playing staff','I do not need my own Player Plan.'],
-    ['both','Player who also coaches or captains','I play and need my own Player Plan. Coaching duties and player access are set separately.']
+    ['player','Player',selectionsStandalone()?'I play for this club.':'I want to build and use my own Player Plan.'],
+    ['coach_captain','Non-playing staff',selectionsStandalone()?'I help the club without playing.':'I do not need my own Player Plan.'],
+    ['both','Player who also coaches or captains',selectionsStandalone()?'I play and help with the team. Selection permissions are set by Club Admin.':'I play and need my own Player Plan. Coaching duties and player access are set separately.']
   ];
   return `<div class="role-grid">${roles.map(([k,t,d])=>`
     <label class="role-card ${selected===k?'on':''}">
@@ -1659,6 +1660,14 @@ function renderFirstIdentitySetup(){
 
 
 async function loadData(){
+  await loadSelectionsAccess();
+  if(selectionsStandalone()){
+    myPlayer=null;workflow=null;workshop=null;myContributor=null;myContribution=null;
+    philosophyVersions=[];howWeBatVersions=[];playerPlanStructureVersions=[];
+    howWeBatDraft=null;playerPlanStructureDraft=null;publishedProfile={};clubProfile={};
+    selectedDims=new Map();weights=new Map();dimensions=[];
+    return;
+  }
   const [pRes,dRes,sdRes,wRes,playerRes,workshopRes,myContributorRes,versionsRes,hwbDraftRes,hwbVersionsRes,planDraftRes,planVersionsRes]=await Promise.all([
     supabase.from('philosophy_profiles').select('*').eq('club_id',club.id).single(),
     supabase.from('philosophy_dimension_catalogue').select('*').order('sort_order'),
@@ -1813,6 +1822,8 @@ function clubSetupUnavailableReason(tab){
 }
 
 function canOpenClubTab(tab){
+  if(tab==='teams')return !!(session&&membership&&club);
+  if(selectionsStandalone()&&!['teams','messages','phone_app','guide','join_club'].includes(tab))return false;
   if(['join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
   if(['playerhome','innings'].includes(tab))return isPlayerUser();
@@ -1944,6 +1955,7 @@ async function expandClubHomeStage(key,progress){
 
 
 async function saveClubEditsBeforeNavigation(){
+  if(!confirmLeaveSelections())return false;
   if(!confirmLeaveCoachingStaff())return false;
   if(!confirmLeaveClubMessages())return false;
   if(!await savePhilosophyResponseBeforeNavigation())return false;
@@ -2364,7 +2376,7 @@ function accountMenuHtml({allowJoin=true,allowCoaching=false,outId='out',joinId=
       <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
-      ${allowCoaching?'<button class="account-menu-action" id="accountCoaching" type="button">Coach Conversations</button>':''}
+      ${allowCoaching&&!selectionsStandalone()?'<button class="account-menu-action" id="accountCoaching" type="button">Coach Conversations</button>':''}
       ${allowCoaching?'<button class="account-menu-action" data-club-messages type="button">Messages</button><button class="account-menu-action" data-phone-open type="button">App & notifications</button>':''}
       <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
       <button class="account-menu-action danger" id="${outId}" type="button">Sign out</button>
@@ -2378,6 +2390,7 @@ function renderShell(){
   applyClubTheme();
 
   const nav=[];
+  if(!selectionsStandalone()){
   if(canUseClubHome())nav.push(['dashboard','Club Home','club']);
   if(canUsePlayersWorkspace())nav.push(['players','Players','club']);
   if(canUseTeamReview())nav.push(['team_review','Match review','club']);
@@ -2430,10 +2443,13 @@ function renderShell(){
 
   if(session&&membership&&club)nav.push(['make_your_call','Make your prediction','club']);
 
+  }
+  nav.push(['teams','Teams & availability','selection']);
+
   // Workflow screens stay available internally when their prerequisites and
   // permissions are met. They do not each become another menu choice.
   if(!canOpenClubTab(currentTab)){
-    currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':nav[0]?.[0]||'howwetrain';
+    currentTab=selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':nav[0]?.[0]||'howwetrain';
   }
 
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
@@ -2464,11 +2480,11 @@ function renderShell(){
     <main class="page" id="page"></main>
   </div>`;
 
-  void refreshMyCoachingUpdates();
+  if(!selectionsStandalone())void refreshMyCoachingUpdates();
   void refreshClubMessageBadge();void syncPhoneDeviceSession();
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await signOutClubBatting();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
-  document.getElementById('accountCoaching').onclick=openCoachConversations;
+  document.getElementById('accountCoaching')?.addEventListener('click',openCoachConversations);
   document.getElementById('joinAnother').onclick=async()=>{if(await saveClubEditsBeforeNavigation())renderJoinAnotherClub();};
   document.getElementById('accountPlatform')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;await renderPlatformConsole();});
   document.getElementById('retryAccountAccess')?.addEventListener('click',async()=>{
@@ -2762,6 +2778,7 @@ function closeAccountScreen(){
 }
 function clubNavigationRoute(){
   const route={scope:'club',clubId:club?.id,tab:currentTab};
+  if(currentTab==='teams'){const s=ensureSelections();route.selections={view:s.view,date:s.date};}
   if(currentTab==='players')Object.assign(route,{
     playerId:playersWorkspaceSelectedId,playerSection:playersWorkspaceSection,
     search:playersWorkspaceSearch,group:playersWorkspaceGroupFilter,showAll:playersWorkspaceShowAll,
@@ -2847,7 +2864,8 @@ function restoreClubNavigationState(route){
   if(typeof view.guideTopic==='string')guideSelectedCapabilityKey=view.guideTopic;
   if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
   const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
-  currentTab=canOpenClubTab(tab)?tab:canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  currentTab=canOpenClubTab(tab)?tab:selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  if(currentTab==='teams'){const s=ensureSelections();s.view=route.selections?.view||'published';s.date=route.selections?.date||'';}
   if(currentTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=route.makeYourCall?.week||null;s.season=route.makeYourCall?.season||null;s.month=route.makeYourCall?.month||null;restoreCallResultsState(route.makeYourCall?.results||{});}
   if(currentTab==='players'){
     resetPlayersWorkspaceForClub();
@@ -2937,7 +2955,7 @@ function renderTab(){
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   }
   if(!canOpenClubTab(currentTab)){
-    currentTab=canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+    currentTab=selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   }
   if(currentTab==='players')resetPlayersWorkspaceForClub();
@@ -2961,7 +2979,7 @@ function renderTab(){
   };
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
   const map={
-    messages:renderClubMessages,phone_app:renderPhoneApp,
+    teams:renderSelections,messages:renderClubMessages,phone_app:renderPhoneApp,
     join_club:renderJoinAnotherClub,
     dashboard:renderClubDashboard,
     playerhome:renderPlayerHome,
@@ -3084,7 +3102,7 @@ function guideVisibleMessages(messages=[]){
   return (messages||[]).filter(m=>['user','assistant'].includes(m.role));
 }
 
-const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "current_focus", "how_we_train", "training_preparation", "my_innings", "make_your_call", "weekly_engagement", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline", "team_review", "phone_app", "club_messages"];
+const GUIDE_TOPIC_ORDER=["whole_process", "trial_sign_up", "people_sign_up", "roles_and_access", "admin_handover", "philosophy_workshop", "workshop_changes", "how_we_bat", "player_plan_structure", "club_look_publication", "playing_groups", "plan_dates", "player_plan", "current_focus", "how_we_train", "training_preparation", "my_innings", "make_your_call", "weekly_engagement", "feedback_loop", "coach_conversations", "request_conversation", "youtube_video", "notifications", "navigation_account", "guide_support", "platform_pipeline", "team_review", "phone_app", "club_messages", "selections", "selection_availability", "selection_playing_groups", "selections_subscription"];
 
 function guideTopicNumber(key){
   const index=GUIDE_TOPIC_ORDER.indexOf(key);
@@ -4532,6 +4550,184 @@ const CLUB_BATTING_HELP = {
         "title": "Workshop invitations and late contributions",
         "body": "Registered contributors receive Workshop invitations in Messages. The Philosophy Lead receives late-contribution notices there too. Open the message, then Batting Philosophy Workshop. These notices use Club messages phone alerts first and a generic email link when needed. First-time club joining invitations still arrive by email.",
         "target_tab": "messages"
+      }
+    ]
+  },
+  "selections": {
+    "capability_key": "selections",
+    "title": "Teams, selections and brackets",
+    "purpose": "Build and publish balanced teams using your registered playing list.",
+    "short_explanation": "Build and publish balanced teams using your registered playing list.",
+    "target_tab": "teams",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Independent or connected",
+        "body": "Selections can be enabled independently of Club Batting or alongside it. Its playing list, cricket-role attributes, availability and selected teams are its own records. Shared login and club membership do not require a batting plan. Platform Admin manages its own annual price, trial and subscription terms. Product-specific sales outreach and checkout are not connected in this release.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Refresh the registered playing list",
+        "body": "Teams & availability → Playing list → Import / refresh registration CSV. Map a stable registration ID, player name and optional grade. Review the preview before importing. Matching IDs update names and grades, preserving roles, calendars and account links. Omitted players are retained. Inactivate departures explicitly. This is a manual refresh, not a live PlayHQ connection.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Code player roles once",
+        "body": "Use the Playing list bulk editor for top, middle or lower order; quick, spinner or does not bowl; frontline or part time; and keeper. Save player roles. Not coded is distinct from does not bowl. Attributes stay separate from batting plans. Any active registered player is selectable across grades, including players without an app account.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Link verified accounts",
+        "body": "Details / account links a roster entry to a current club member after a selector verifies the person. Names are never automatically matched. Linked accounts can edit their own calendar and receive selected-team alerts. An unlinked player can still be selected; share the team list separately until linked.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Select against real fixture dates",
+        "body": "Add a fixture with competition, grade, opposition and actual date or dates. Optional start and finish times handle partial-day availability in the club time zone. Day 2 is never assumed to be the next Saturday. Draw import and automatic PlayHQ team upload are not included.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Use the meeting board",
+        "body": "Choose a slot then a player. Teams always have 11 slots. The board counts frontline quicks, spinners, top/middle-order batters and keepers separately for each day. A move clears the earlier place after confirmation; all affected drafts save together. Undo is available for your last selection unless a team has since changed. The board refreshes every 20 seconds outside forms. Concurrent changes require review rather than silent overwriting.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Find a bracketed pair",
+        "body": "Enable bracketing only where competition rules permit it. Find matching pair suggests confirmed complementary Day 1 / Day 2 availability, ranking similar batting roles, bowling type/workload and keeping cover first. Keep a chosen Day 1 player to find a partner. Less similar options explain the differences. Both players fill one slot; declare the names before the toss. The software does not predict the toss or decide competition eligibility.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Publish and revise",
+        "body": "Drafts are private to selectors. Review & publish requires 11 available players on each day, no duplicates or clashes, and acknowledgement of balance warnings. Unknown or partial availability must be resolved before publication. Cross-grade transfers require both changed teams in the same publication. Published versions are retained. Copy team list exports the published names and dates for sharing.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Use the changing match group",
+        "body": "Publishing or revising creates an in-app update for linked current and removed players and current match staff. Existing phone-first messaging uses generic email-link fallback. Match conversations permit current published players, both bracket partners, selectors and nominated staff. Removed players lose conversation access. This does not edit WhatsApp group membership. Unlinked players do not receive app alerts.",
+        "target_tab": "teams"
+      }
+    ],
+    "sort_order": 310,
+    "active": true
+  },
+  "selection_availability": {
+    "capability_key": "selection_availability",
+    "title": "Availability calendar",
+    "purpose": "Black out dates once for every competition.",
+    "short_explanation": "Black out dates once for every competition.",
+    "target_tab": "teams",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Confirm the starting assumption",
+        "body": "Teams & availability → Availability. Tick normally available only after confirming it. Before that, blank dates mean Not confirmed. You can instead list individual available dates.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Black out dates and ranges",
+        "body": "Tap a calendar date to add or clear a full-day blackout. Expand the range control for holidays or unavailable hours. Save / confirm calendar. All fixtures check the actual date and the club time zone; overlapping unavailable hours prevent selection. If fixture hours are missing, a time restriction requires checking.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Keep the calendar current",
+        "body": "Save / confirm calendar also records when it was last checked. A selector can record a player’s answer for them. Each player can edit only their own linked calendar; selectors can manage the club list. A late change flags a published team for selector review; it does not silently replace a player.",
+        "target_tab": "teams"
+      }
+    ],
+    "sort_order": 320,
+    "active": true
+  },
+  "selection_playing_groups": {
+    "capability_key": "selection_playing_groups",
+    "title": "Selections and Playing Groups",
+    "purpose": "Add missing Playing Group memberships when teams are published.",
+    "short_explanation": "Add missing Playing Group memberships when teams are published.",
+    "target_tab": "teams",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "tutorial": [
+      {
+        "title": "Choose the optional connection",
+        "body": "When both products are enabled, Club Admin opens Teams & availability → Settings → Connect Playing Groups. Map the exact competition and grade to an active Playing Group. Standalone clubs do not need this connection.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Add memberships on publication",
+        "body": "Publishing the latest fixture for each mapped competition and grade adds any missing membership for linked active batting accounts. Both bracketed players are included. Existing Playing Groups remain; publication never automatically removes a membership. Drafts do not alter Playing Groups.",
+        "target_tab": "teams"
+      },
+      {
+        "title": "Understand due dates and access",
+        "body": "New membership brings applicable Player Plan due dates and any coaching access already granted by group. The earliest active date for the same format applies across groups. Previous groups still apply until Club Admin removes them deliberately. Missing batting-account links are reported. No plan answers or due-date rules are rewritten.",
+        "target_tab": "teams"
+      }
+    ],
+    "sort_order": 330,
+    "active": true
+  },
+  "selections_subscription": {
+    "capability_key": "selections_subscription",
+    "title": "Manage Selections subscriptions",
+    "purpose": "Use familiar subscription controls for a separate product.",
+    "short_explanation": "Set Selections prices, free trials, special rates, complimentary access and renewal terms separately from Club Batting.",
+    "target_tab": "guide",
+    "audience": [
+      "admin",
+      "head_coach",
+      "coach",
+      "captain",
+      "player",
+      "member"
+    ],
+    "sort_order": 340,
+    "tutorial": [
+      {
+        "title": "Choose the product arrangement",
+        "body": "Platform Admin → Active clubs → Selections subscription. Choose With Club Batting or Selections only. The Selections record has its own access dates and price. Changing it does not restart, charge, cancel or edit the existing batting subscription."
+      },
+      {
+        "title": "Set product defaults",
+        "body": "Expand Selections standard price & trial settings. Set the annual club price and currency; an optional trial-day override can differ from the current Club Batting setting. Leave the price blank until decided. Agreed existing terms keep their recorded price."
+      },
+      {
+        "title": "Offer a full free trial",
+        "body": "Choose Free club trial and the activation date. The trial length follows Club Batting unless overridden. It does not restart on another save, shorten when future defaults change, or convert to a paid subscription automatically."
+      },
+      {
+        "title": "Set discounts or ongoing free access",
+        "body": "Set the rate reduction percentage and special-rate end date, or Never. A 100% reduction plus Never gives ongoing complimentary access without an access expiry or payment request. Other arrangements have a separate finite Access ends date."
+      },
+      {
+        "title": "Preview and record the term",
+        "body": "Choose the club-year calendar and Preview term & amount. Selections uses the same calendar, mid-season pro-rata and short-period rules as Club Batting, with the independent Selections annual price. Record agreed continuation for paid access. Amount recorded as paid is bookkeeping; it does not collect payment."
+      },
+      {
+        "title": "Continue, renew or end",
+        "body": "Prepare continuation / renewal creates editable proposed dates and clears the agreement checkbox. Return to standard rate at renewal clears the special reduction for the next offer. An approved future term preserves access through the current term. Expiry requires an approved continuation; nothing is automatically charged. Earlier terms remain in Subscription history."
+      },
+      {
+        "title": "Know what remains separate",
+        "body": "This release supplies Platform Admin subscription management and independent access. Selections-specific prospect emails, public checkout, payment-provider integration and renewal-notification jobs are not connected to the club sales pipeline yet. Do not promise an automated sales or billing journey for Selections."
       }
     ]
   }
@@ -17556,11 +17752,12 @@ async function renderPlatformActiveClubs(message=''){
             <label>Access ends<input data-sub-active="${c.id}" type="date" value="${s.active_until==='infinity'?'':esc(String(s.active_until||'').slice(0,10))}" ${forever||!canCommercial?'disabled':''}><small data-sub-access-note="${c.id}">${forever?'Never — ongoing free access':'A separate date from the special rate.'}</small></label>
             <label>At expiry<select data-sub-expiry="${c.id}" ${forever||!canCommercial?'disabled':''}><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return to standard rate</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End access</option></select></label>
           </div>`:''}
-          <div class="btnrow" style="margin-top:12px">${s&&canCommercial?`<button class="btn ghost" data-save-access="${c.id}" disabled>Saved ✓</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
+          <div class="btnrow" style="margin-top:12px">${canCommercial?`<button class="btn ghost" data-selections-access="${c.id}">Selections subscription</button>`:''}${s&&canCommercial?`<button class="btn ghost" data-save-access="${c.id}" disabled>Saved ✓</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
         </div></div>`;
       }).join('')||'<p>No active clubs. Add a lead and send its promo email to start the full journey.</p>'}</div>
     </section>
     ${removed.length?`<details class="admin-card" style="margin-top:16px"><summary><strong>Removed clubs</strong> · ${removed.length}</summary><p>These workspaces are closed and retained as archives. Adding a contact to the promo list starts a new journey; it does not restore the old setup.</p>${removed.map(row=>`<div class="message-row"><div><strong>${esc(row.club_name)}</strong><small>Removed ${esc(niceDate(row.removed_at))}${row.contact_email?` · ${esc(row.contact_email)}`:''}</small></div><button class="btn ghost" data-removed-promo="${row.club_id}">Add to promo list</button></div>`).join('')}</details>`:''}`;
+  page.querySelectorAll('[data-selections-access]').forEach(b=>b.onclick=()=>openSelectionsAccess(b.dataset.selectionsAccess,clubs.find(c=>c.id===b.dataset.selectionsAccess)?.name||'Club'));
   document.getElementById('activeAddLeads').onclick=()=>openPlatformLeadEntry();
   page.querySelectorAll('[data-remove-club]').forEach(button=>button.onclick=()=>openEndClubDialog(button.dataset.removeClub));
   page.querySelectorAll('[data-removed-promo]').forEach(button=>button.onclick=()=>openPlatformLeadEntry(removed.find(row=>row.club_id===button.dataset.removedPromo)));
@@ -17991,7 +18188,7 @@ function clubMessageRecipientCount(state){
  return people.size;
 }
 function messagePeople(count){return `${count} ${count===1?'person':'people'}`;}
-function canOpenMessageTarget(target){if(target==='workshop')return canOpenClubTab('workshop');return target==='make_your_call'||(isPlayerUser()&&clubMessageTargets.some(([key])=>key===target)&&!!target);}
+function canOpenMessageTarget(target){if(target==='teams')return canOpenClubTab('teams');if(target==='workshop')return canOpenClubTab('workshop');return target==='make_your_call'||(isPlayerUser()&&clubMessageTargets.some(([key])=>key===target)&&!!target);}
 function messageStaffRole(role){return ({admin:'Admin',head_coach:'Head Coach',coach:'Coach',captain:'Captain'})[role]||'Staff';}
 function clubMessageDirty(){const d=clubMessageState?.draft;return !!(d&&(d.title||d.body||d.player_ids.length||d.recipients_changed||d.target||d.email));}
 function confirmLeaveClubMessages(){
@@ -18058,7 +18255,7 @@ function drawClubMessages(page,state){
  page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?(state.draft?.kind==='plan_reminder'?'Player Plan reminder':'New message'):'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players &amp; staff</button>':''}</div>
  ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
  <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
- ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}">${esc(row.target==='workshop'?'Batting Philosophy Workshop':clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
+ ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}">${esc(row.target==='teams'?'Open Teams':row.target==='workshop'?'Batting Philosophy Workshop':clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
  document.getElementById('newClubMessage')?.addEventListener('click',()=>{state.mode='compose';state.draft??=newClubMessageDraft();drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-mode]').forEach(b=>b.onclick=()=>{if(!confirmLeaveClubMessages())return;state.mode=b.dataset.messageMode;drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-target]').forEach(b=>b.onclick=()=>openClubMessageTarget(b.dataset.messageTarget));
@@ -18339,5 +18536,133 @@ async function syncPhoneDeviceSession(){
  }catch{phoneSessionSync='';}
 }
 /* END PHONE APP */
+
+/* BEGIN SELECTIONS MODEL — selections-owned attributes; no batting workflow dependency. */
+const SE_BATTING=[['unknown','Not coded'],['top','Top order'],['middle','Middle order'],['lower','Lower order']];
+const SE_BOWLING=[['unknown','Not coded'],['pace','Quick'],['spin','Spinner'],['none','Does not bowl']];
+const SE_LOAD=[['unknown','Not coded'],['frontline','Frontline'],['part_time','Part time']];
+function seDayStatus(p,d){const a=p?.availability;if(!a||!a.revision)return 'unknown';let partial=false;for(const b of a.blocks||[])if(d.date>=b.start&&d.date<=b.end){if(!b.from)return 'unavailable';if(!d.start||!d.end)partial=true;else if(b.from<d.end&&b.to>d.start)return 'unavailable';}return partial?'partial':a.usual_available||(a.available_dates||[]).includes(d.date)?'available':'unknown';}
+function seRole(p){if(!p)return '';return [SE_BATTING.find(([v])=>v===p.batting)?.[1],p.bowling==='pace'?'Quick':p.bowling==='spin'?'Spinner':p.bowling==='unknown'?'Bowling not coded':'',p.bowling_load==='part_time'?'Part time':'',p.keeper?'Keeper':''].filter(Boolean).join(' · ');}
+function seOverlap(a,b){return a.date===b.date&&(!a.start||!b.start||(a.start<b.end&&a.end>b.start));}
+function seCounts(f,roster,index){const ps=f.slots.map(s=>roster.find(p=>p.id===s['d'+(index+1)])).filter(Boolean);return {players:ps.length,batters:ps.filter(p=>['top','middle'].includes(p.batting)).length,quicks:ps.filter(p=>p.bowling==='pace'&&p.bowling_load==='frontline').length,spinners:ps.filter(p=>p.bowling==='spin'&&p.bowling_load==='frontline').length,keepers:ps.filter(p=>p.keeper).length};}
+function seUsed(p,day,fixtures,exclude={}){return fixtures.some(f=>!f.details.cancelled&&f.details.days.some((d,j)=>seOverlap(d,day)&&f.slots.some((s,i)=>!(f.id===exclude.id&&i===exclude.slot)&&s['d'+(j+1)]===p.id)));}
+function sePairs(roster,fixture,fixtures,slot,fixed=null){if(fixture.details.days.length!==2)return [];const [d1,d2]=fixture.details.days,exclude={id:fixture.id,slot};
+ const first=roster.filter(p=>p.active&&(!fixed||p.id===fixed)&&seDayStatus(p,d1)==='available'&&!seUsed(p,d1,fixtures,exclude)&&(fixed||seDayStatus(p,d2)!=='available'));
+ const second=roster.filter(p=>p.active&&seDayStatus(p,d2)==='available'&&seDayStatus(p,d1)!=='available'&&!seUsed(p,d2,fixtures,exclude));
+ return first.flatMap(a=>second.filter(b=>b.id!==a.id).map(b=>{const differences=[];let rank=0;for(const [key,weight,label] of [['batting',3,'batting order'],['bowling',5,'bowling type'],['bowling_load',2,'bowling workload'],['keeper',4,'keeping cover']]){if(a[key]==='unknown'||b[key]==='unknown'){rank+=3;differences.push(label+' not fully coded');}else if(a[key]!==b[key]){rank+=weight;differences.push('Different '+label);}}return {a,b,rank,reason:differences.length?differences.join(' · '):'Same batting role, bowling role and keeping cover'};})).sort((a,b)=>a.rank-b.rank||a.a.name.localeCompare(b.a.name)||a.b.name.localeCompare(b.b.name));
+}
+function seCSV(text){text=String(text).replace(/^\uFEFF/,'');const rows=[];let row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v.trim()))rows.push(row);row=[];cell='';}else cell+=c;}if(quoted)throw Error('Unclosed quote in CSV. Export the file again.');row.push(cell);if(row.some(v=>v.trim()))rows.push(row);if(!rows.length)throw Error('The CSV is empty.');return rows;}
+function seBlankSlots(){return Array.from({length:11},()=>({d1:null,d2:null}));}
+function seDate(date){return new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z'));}
+function seTeamText(f,clubName){const s=f.published;if(!s)return '';const d=s.details,name=id=>s.players.find(p=>p.id===id)?.name||'Vacant';return [clubName+' — '+d.grade,d.competition,d.opposition?'v '+d.opposition:'',d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'' )).join('\n'),d.ground,d.meeting,d.cancelled?'MATCH CANCELLED':s.slots.map((slot,i)=>(i+1)+'. '+name(slot.d1)+(d.days.length>1&&slot.d1!==slot.d2?' (Day 1) / '+name(slot.d2)+' (Day 2)':'')).join('\n'),'Published version '+f.publication].filter(Boolean).join('\n');}
+/* END SELECTIONS MODEL */
+
+/* Selections commercial UI: shared calendars, independent product pricing and terms. */
+async function openSelectionsSubscription(clubId,clubName){
+ const call=async(action,data={})=>{const {data:result,error}=await supabase.rpc('club_selections_api',{p_club_id:clubId,p_action:action,p_data:data});if(error){const failure=Error(error.message);failure.code=error.code;throw failure;}return result;};let context;
+ try{context=await call('subscription_context');}catch(e){alert(e.message);return;}
+ const p=context.pricing,s=context.subscription||{},a=context.access||{},trialDays=s.status==='trial'&&s.trial_started&&s.trial_ends?Math.round((new Date(s.trial_ends+'T12:00:00Z')-new Date(s.trial_started+'T12:00:00Z'))/86400000)+1:context.default_trial_days,today=new Date().toLocaleDateString('en-CA',{timeZone:a.timezone||'Australia/Sydney'}),initial={status:s.status||'trial',mode:a.mode||'bundle',calendar:s.calendar||context.calendars.find(x=>x.code==='australia')?.code||context.calendars[0]?.code||'',active_from:s.active_from||today,active_until:s.active_until||'',annual_price_cents:s.annual_price_cents??p.annual_price_cents,adjustment_percent:s.adjustment_percent??0,adjustment_end:s.adjustment_end||'',special_rate_never_ends:!!s.special_rate_never_ends,expiry_action:s.expiry_action||'renewal_approval',amount_paid_cents:s.amount_paid_cents||0,timezone:a.timezone||'Australia/Sydney',continuation_agreed:!!s.continuation_agreed};
+ const dialog=document.createElement('dialog');dialog.style.maxWidth='850px';dialog.style.width='calc(100% - 32px)';dialog.style.maxHeight='90vh';dialog.style.overflow='auto';
+ dialog.innerHTML=seStyles()+`<section class="se-page"><div class="se-top"><h2>Selections subscription · ${seEsc(clubName)}</h2><button class="btn ghost" id="seBillingClose">Close</button></div><p>Manage Selections separately using the same club-year calendars, pro-rata rules and access controls as Club Batting. Saving here does not change the club’s batting subscription or charge a payment method.</p><details><summary>Selections standard price &amp; trial settings</summary><form id="sePricingForm"><p class="se-form-note">Defaults for new Selections offers. Existing agreed terms keep their recorded price. Leave the annual price blank until decided; free trials and ongoing complimentary access still work.</p><div class="se-form-grid"><label>Annual club price<input name="annual_price" type="number" min="0" step="0.01" value="${p.annual_price_cents==null?'':(p.annual_price_cents/100).toFixed(2)}"></label><label>Currency<input name="currency" maxlength="3" value="${seEsc(p.currency)}" required></label><label>Trial days · optional override<input name="trial_days" type="number" min="1" max="365" value="${p.trial_days||''}" placeholder="Use Club Batting setting: ${context.inherited_trial_days||60}"></label></div><button class="btn ghost" type="submit" style="margin-top:12px">Save product defaults</button></form></details><form id="seSubscriptionForm" style="margin-top:18px"><div class="se-form-grid"><label>Product arrangement<select name="mode">${seOpt([['bundle','With Club Batting'],['standalone','Selections only']],initial.mode)}</select></label><label>Selections status<select name="status">${seOpt([['disabled','Not active / ended'],['trial','Free club trial'],['active','Active access']],initial.status)}</select></label><label>Club-year calendar<select name="calendar">${seOpt(context.calendars.map(x=>[x.code,x.label]),initial.calendar)}</select></label><label>Access / term starts<input name="active_from" type="date" value="${initial.active_from}" required></label><label>Access ends<input name="active_until" type="date" value="${initial.active_until}"></label><label>Fixture time zone<input name="timezone" value="${seEsc(initial.timezone)}" required></label></div><p class="se-form-note" id="seTrialTerms"></p><details open><summary>Price and special rate</summary><div class="se-form-grid"><label>Agreed annual club price (<span data-se-currency>${seEsc(s.currency||p.currency)}</span>)<input name="annual_price" type="number" step="0.01" min="0" value="${initial.annual_price_cents==null?'':(initial.annual_price_cents/100).toFixed(2)}"></label><label>Rate reduction %<input name="adjustment_percent" type="number" min="0" max="100" step="0.01" value="${initial.adjustment_percent}"></label><label>Special rate ends<select name="special_rate_never_ends">${seOpt([['false','On a date'],['true','Never']],String(initial.special_rate_never_ends))}</select><input name="adjustment_end" type="date" aria-label="Special rate end date" value="${initial.adjustment_end}"></label><label>Amount recorded as paid (<span data-se-currency>${seEsc(s.currency||p.currency)}</span>)<input name="amount_paid" type="number" min="0" step="0.01" value="${(initial.amount_paid_cents/100).toFixed(2)}"></label></div><p class="se-form-note">100% reduction + Never gives ongoing complimentary access, with no expiry or payment request. Recording a payment does not collect it.</p></details><div class="se-form-grid"><label>At expiry<select name="expiry_action">${seOpt([['renewal_approval','Require renewal approval'],['return_standard','Return to standard rate at renewal'],['end_subscription','End access']],initial.expiry_action)}</select></label></div><label class="se-check" id="seAgreementLabel"><input name="continuation_agreed" type="checkbox" ${initial.continuation_agreed?'checked':''}>The club has agreed to these paid / renewal terms.</label><div id="seQuote" class="se-form-note"></div><div class="se-actions se-editor-actions"><button class="btn ghost" type="button" id="sePreviewTerms">Preview term &amp; amount</button>${s.club_id?'<button class="btn ghost" type="button" id="seRenewTerms">Prepare continuation / renewal</button>':''}<button class="btn" type="submit">Save subscription</button></div><p class="se-form-note">Trials do not convert or charge automatically. At expiry, access waits for an approved continuation. Product-specific sales emails, checkout and renewal notifications need a later connection to the existing club pipeline.</p></form><p id="seBillingStatus" role="status"></p>${context.history.length?`<details><summary>Subscription history · ${context.history.length} recent changes</summary>${context.history.map(h=>`<p class="se-muted">${seEsc(new Date(h.created_at).toLocaleString('en-AU'))} · ${seEsc(h.snapshot.status)} · ${seEsc(h.snapshot.active_from)} to ${seEsc(h.snapshot.active_until||'ongoing')}</p>`).join('')}</details>`:''}</section>`;
+ document.body.append(dialog);dialog.showModal();let dirty=false,busy=false,pending=null,pricingDirty=false,subscriptionDirty=false;const status=dialog.querySelector('#seBillingStatus'),form=dialog.querySelector('#seSubscriptionForm');const field=name=>form.elements.namedItem(name);dialog.onclose=()=>dialog.remove();dialog.querySelector('#seBillingClose').onclick=()=>{if(busy)return;if(!dirty||confirm('Close without saving these subscription changes?'))dialog.close();};dialog.addEventListener('cancel',e=>{if(busy||(dirty&&!confirm('Close without saving these subscription changes?')))e.preventDefault();});dialog.addEventListener('input',event=>{dirty=true;if(event.target.closest('#sePricingForm'))pricingDirty=true;else subscriptionDirty=true;});
+ const values=()=>{const d=Object.fromEntries(new FormData(form));return {...d,revision:s.revision||0,access_revision:a.revision||0,annual_price_cents:d.annual_price===''?null:Math.round(Number(d.annual_price)*100),adjustment_percent:Number(d.adjustment_percent),special_rate_never_ends:d.special_rate_never_ends==='true',amount_paid_cents:Math.round(Number(d.amount_paid||0)*100),continuation_agreed:field('continuation_agreed').checked};};
+ const sync=()=>{const d=values(),free=d.special_rate_never_ends&&d.adjustment_percent===100,displayedTrialDays=s.status==='trial'&&s.trial_started?trialDays:Number(p.trial_days||context.inherited_trial_days||60);field('active_until').disabled=d.status==='trial'||free;field('adjustment_end').hidden=d.special_rate_never_ends;dialog.querySelector('#seAgreementLabel').hidden=d.status!=='active'||free;dialog.querySelector('#seTrialTerms').textContent=d.status==='trial'?`${displayedTrialDays}-day Selections trial. It starts on the chosen date and does not restart when saved again.`:free?'Ongoing complimentary access · no expiry or renewal.':'Access and special-rate end dates are separate. Leaving Access ends blank uses the shared club-year calendar.';};form.addEventListener('change',sync);form.addEventListener('input',sync);sync();
+ const preview=async()=>{status.textContent='Calculating…';try{const q=await call('preview_subscription',values());dialog.querySelector('#seQuote').textContent=q.trial?`${q.trial_days}-day free trial through ${q.active_until}. Nothing is charged.`:q.ongoing_complimentary?'Ongoing complimentary access. No renewal date or amount due.':`Current offer: ${money(q.amount_due_cents,q.currency)} · calculated access through ${q.active_until} · next club-year renewal ${q.next_renewal}${q.bundled_next_full_year?' · short remaining period included with the next full year':''}.`;status.textContent='';return q;}catch(e){status.textContent=e.message;return null;}};
+ dialog.querySelector('#sePreviewTerms').onclick=preview;dialog.querySelector('#seRenewTerms')?.addEventListener('click',()=>{field('status').value='active';const next=s.active_until?new Date(s.active_until+'T12:00:00Z'):new Date(today+'T12:00:00Z');if(s.active_until)next.setUTCDate(next.getUTCDate()+1);field('active_from').value=next.toISOString().slice(0,10)>today?next.toISOString().slice(0,10):today;field('active_until').value='';field('amount_paid').value='0.00';field('continuation_agreed').checked=false;if(s.expiry_action==='return_standard'&&!s.special_rate_never_ends){field('adjustment_percent').value='0';field('adjustment_end').value='';}dirty=true;subscriptionDirty=true;sync();void preview();});
+ const mutate=async(action,d)=>{if(busy)return;busy=true;const proposed={action,data:d};pending??={...proposed,data:{...d,request_id:crypto.randomUUID()}};if(pending.action!==action){status.textContent='Retry the unconfirmed save before changing another subscription setting.';busy=false;return;}dialog.querySelectorAll('button').forEach(b=>b.disabled=true);status.textContent='Saving…';try{await call(pending.action,pending.data);pending=null;if(action==='set_selection_pricing'){Object.assign(p,d,{revision:p.revision+1});pricingDirty=false;dirty=subscriptionDirty;dialog.querySelectorAll('[data-se-currency]').forEach(el=>el.textContent=s.currency||p.currency);sync();status.textContent='Product defaults saved. Club terms remain as entered.';}else{dirty=false;dialog.close();await openSelectionsSubscription(clubId,clubName);}}catch(e){if(e.code)pending=null;status.textContent=e.code?e.message:'Save not confirmed. Retry keeps the same request. '+e.message;}finally{busy=false;dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}};
+ form.onsubmit=e=>{e.preventDefault();if(pricingDirty){status.textContent='Save the edited product defaults first, then save this club subscription.';return;}return mutate('save_subscription',values());};dialog.querySelector('#sePricingForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));return mutate('set_selection_pricing',{revision:p.revision,annual_price_cents:d.annual_price===''?null:Math.round(Number(d.annual_price)*100),currency:d.currency.toUpperCase(),trial_days:d.trial_days||null});};
+ if(context.can_manage===false){dialog.querySelectorAll('form input,form select').forEach(el=>el.disabled=true);dialog.querySelectorAll('form button').forEach(el=>el.hidden=true);status.textContent='Read-only subscription view. An owner or commercial administrator can change these terms.';}
+}
+
+
+/* BEGIN TEAMS SELECTION — maintained source: tools/teams_selection_ui.js */
+let selectionAccess=null,selectionState=null,selectionRefreshTimer=null;
+function selectionsStandalone(){return selectionAccess?.key===`${session?.user?.id}:${club?.id}`&&selectionAccess.mode==='standalone';}
+async function loadSelectionsAccess(){const key=`${session?.user?.id}:${club?.id}`;const {data,error}=await supabase.rpc('club_selections_api',{p_club_id:club.id,p_action:'access'});if(key===`${session?.user?.id}:${club?.id}`)selectionAccess={key,...(data||{}),error:error?.message||''};return selectionAccess;}
+function ensureSelections(){const key=`${session?.user?.id}:${club?.id}`;if(selectionState?.key!==key){let pending=null;try{pending=JSON.parse(sessionStorage.getItem('selections-pending-'+key)||'null');}catch{}selectionState={key,view:'published',data:null,notice:'',busy:false,pending,undo:[],date:'',search:'',role:'',active:null,pairs:false,formDirty:false};}return selectionState;}
+function seEsc(v){return esc(String(v??''));}
+function seOpt(opts,value){return opts.map(([v,label])=>`<option value="${seEsc(v)}" ${v===value?'selected':''}>${seEsc(label)}</option>`).join('');}
+function seName(id){return ensureSelections().data?.roster.find(p=>p.id===id)?.name||'Choose player';}
+function seNotice(text){const s=ensureSelections();s.notice=text;const n=document.getElementById('seNotice');if(n)n.textContent=text;}
+function sePersist(){const s=ensureSelections();try{const key='selections-pending-'+s.key;s.pending?sessionStorage.setItem(key,JSON.stringify(s.pending)):sessionStorage.removeItem(key);}catch{}}
+function confirmLeaveSelections(){const s=selectionState;if(currentTab!=='teams'||!s)return true;if(s.busy){alert('The selection change is saving. Please wait.');return false;}if(s.pending){alert('This save is not confirmed. Retry it or download the recovery file before leaving.');return false;}if(s.formDirty&&!confirm('Leave these unsaved form changes?'))return false;s.formDirty=false;return true;}
+async function seRPC(action,data={}){const {data:result,error}=await supabase.rpc('club_selections_api',{p_club_id:club.id,p_action:action,p_data:data});if(error)throw Error(error.message+(error.details&&error.details.startsWith('[')?' '+error.details:''));return result;}
+async function seReload(){const s=ensureSelections(),sequence=(s.loadSequence||0)+1;s.loadSequence=sequence;const result=await seRPC('context');if(s!==selectionState||sequence!==s.loadSequence)return false;s.data=result;selectionAccess={...selectionAccess,enabled:true,mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
+async function seMutate(action,data,{undo=null}={}){const s=ensureSelections();if(s.busy)return false;const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()}};s.pending=pending;s.busy=true;sePersist();seNotice('Saving…');seLock(true);
+ try{const result=await seRPC(pending.action,pending.data);if(s!==selectionState)return false;s.pending=null;sePersist();if(undo)s.undo.push({before:undo,expected:result.revisions});s.formDirty=false;await seReload();s.notice=action==='publish'?`Published ✓${result.groups?.unlinked_players?.length?` · ${result.groups.unlinked_players.length} Playing Group additions need linked batting accounts.`:''}`:'Saved ✓';s.busy=false;drawSelections();return true;}catch(error){s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;s.busy=false;drawSelections();return false;}finally{s.busy=false;seLock(false);}}
+function seLock(disabled){document.querySelectorAll('#sePage button,#sePage input,#sePage select,#sePage textarea').forEach(x=>{if(disabled){x.dataset.seWasDisabled=x.disabled?'1':'0';x.disabled=true;}else if(x.dataset.seWasDisabled!==undefined){x.disabled=x.dataset.seWasDisabled==='1';delete x.dataset.seWasDisabled;}});}
+function seDownload(name,text,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
+function seStyles(){return `<style>
+.se-page{max-width:1400px;margin:auto}.se-page h1{font-size:26px;margin:0}.se-page h2{font-size:19px;margin:0 0 12px}.se-page p{line-height:1.5}.se-page .btn{min-height:44px;padding:8px 12px}.se-top,.se-toolbar,.se-tabs,.se-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.se-top{justify-content:space-between}.se-top small{display:block;color:#64748b;margin:6px 0}.se-tabs{margin:14px 0;border-bottom:1px solid #dce2ee;padding-bottom:10px}.se-tabs [aria-pressed=true]{background:var(--navy,#17245f);color:white}.se-notice{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.se-notice:empty{display:none}.se-page input,.se-page select,.se-page textarea{font-size:16px;min-width:0;max-width:100%;box-sizing:border-box}.se-page label{font-size:13px;display:block}.se-page input:not([type=checkbox]),.se-page select,.se-page textarea{border:1px solid #cbd5e1;border-radius:7px;padding:9px 10px;background:white;color:#24344c;min-height:42px}.se-page textarea{width:100%}.se-month-tools{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:end;max-width:560px}.se-slot-captions{display:grid;grid-template-columns:repeat(var(--se-days,1),minmax(0,1fr));margin:10px 0 0 28px;font-size:11px;color:#64748b;gap:3px}.se-page label input:not([type=checkbox]),.se-page label select{margin-top:5px;width:100%}.se-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px;margin:14px 0}.se-card{background:white;border:1px solid #dce2ee;border-radius:12px;padding:16px;min-width:0}.se-team-head{padding-bottom:10px;border-bottom:1px solid #e7eaf1}.se-team-head p{font-size:13px;color:#64748b;margin:4px 0}.se-counts{display:flex;flex-wrap:wrap;gap:5px;font-size:12px;margin:8px 0}.se-chip{padding:4px 7px;border-radius:5px;background:#edf3f1;color:#285749}.se-warn{background:#fff2d9;color:#7a5319}.se-role{font-size:11px;color:#64748b;display:block;line-height:1.5}.se-slot{display:grid;grid-template-columns:22px 1fr;gap:6px;align-items:center;border-bottom:1px solid #eef0f7;padding:3px 0}.se-slot-number{font-size:12px;color:#64748b}.se-slot-names{display:grid;grid-template-columns:repeat(var(--se-days,1),minmax(0,1fr));gap:3px}.se-pick{border:1px solid transparent;border-radius:6px;background:transparent;text-align:left;font:inherit;font-size:13px;padding:8px 5px;min-height:48px;cursor:pointer;color:#24344c;overflow-wrap:anywhere}.se-pick:hover{background:#f4f6fb}.se-pick[aria-pressed=true]{border-color:#4e70bc;background:#edf2fe}.se-day-caption{font-size:11px;color:#64748b}.se-status{font-size:11px;display:block;color:#997027}.se-status.available{color:#33785b}.se-status.unavailable{color:#b03b35}.se-board-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}.se-picker{position:sticky;top:12px;max-height:82vh;overflow:auto}.se-picker input{width:100%}.se-candidate{width:100%;display:block;border:0;border-bottom:1px solid #e5eaf0;background:white;padding:10px 0;text-align:left;cursor:pointer;color:#24344c;min-height:52px;font-size:14px}.se-candidate:hover{background:#f5f8fe}.se-pair{border:1px solid #dce2ee;border-radius:8px;padding:10px;margin-top:8px}.se-pair p{font-size:12px;margin:5px 0}.se-empty{padding:28px 18px;text-align:center;color:#62738d}.se-issues{font-size:12px;margin:8px 0}.se-issues summary{cursor:pointer;min-height:36px;align-content:center}.se-issues p{margin:4px 0}.se-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}.se-check{display:flex!important;gap:9px;align-items:center;min-height:44px}.se-check input{width:18px;height:18px;flex:0 0 18px}.se-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;max-width:560px;margin:12px 0}.se-calendar button{border:1px solid #dce2ee;background:#fff;min-height:44px;border-radius:6px;font:inherit;cursor:pointer}.se-calendar button[aria-pressed=true]{background:#ffe5e2;border-color:#bf665d;color:#983d34}.se-calendar small{text-align:center;font-size:11px}.se-date-entry{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.se-date-entry label{flex:1;min-width:130px}.se-blackout{display:flex;align-items:center;gap:8px;border-bottom:1px solid #e6ebf1;padding:6px 0;font-size:13px}.se-blackout span{flex:1}.se-roster-row{display:grid;grid-template-columns:minmax(160px,1.4fr) repeat(3,minmax(120px,1fr)) 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #e6ebf1}.se-roster-row select{width:100%}.se-roster-row strong{font-size:14px;display:block}.se-published-name{font-size:14px;line-height:1.7}.se-date-tag{font-size:11px;background:#edf2fa;padding:2px 4px;border-radius:4px}.se-drawer{max-width:860px}.se-post{border-bottom:1px solid #e2e8f0;padding:12px 0}.se-post p{white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0}.se-post small{font-size:12px;color:#64748b}.se-preview-scroll{overflow:auto}.se-preview-scroll table{width:100%;font-size:13px}.se-recovery{border:1px solid #b88432;background:#fff7e8;border-radius:8px;padding:14px;margin:10px 0}.se-editor-actions{margin-top:16px}.se-link-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin:8px 0;align-items:end}.se-muted{color:#64748b;font-size:13px}.se-form-note{font-size:13px;color:#56657b;margin:10px 0}.se-page [hidden]{display:none!important}
+@media(max-width:1100px){.se-board-layout{grid-template-columns:1fr}.se-picker{position:static;max-height:none}.se-roster-row{grid-template-columns:1fr 1fr}.se-roster-row>div:first-child{grid-column:1/-1}}@media(max-width:560px){.se-card{padding:12px}.se-top h1{font-size:23px}.se-tabs{gap:4px}.se-tabs .btn{padding:7px 8px;font-size:13px}.se-link-row{grid-template-columns:1fr}.se-actions .btn{flex-grow:1}.se-toolbar>label{width:100%}.se-toolbar select{width:100%}}
+</style>`;}
+async function renderSelections(){const page=document.getElementById('page'),s=ensureSelections();page.innerHTML='<div class="splash">Loading Selections…</div>';await loadSelectionsAccess();if(s!==selectionState||currentTab!=='teams')return;if(!selectionAccess.enabled){page.innerHTML=seStyles()+`<section class="se-page se-card"><h1>Club Selections</h1><p>Playing lists, availability and team selection, available independently or alongside Club Batting.</p><p>${seEsc(selectionAccess.error||'Selections has not been activated for this club. Your Platform Admin can enable a pilot or subscription separately.')}</p><button class="btn ghost" id="seRetryAccess">Refresh access</button></section>`;document.getElementById('seRetryAccess').onclick=renderSelections;return;}try{await seReload();seStartLiveRefresh();if(s.view==='board'&&!s.data.selector)s.view='published';drawSelections();}catch(e){page.innerHTML=`<section class="card"><h2>Selections could not load</h2><p>${seEsc(e.message)}</p><button class="btn" id="seRetryAccess">Try again</button></section>`;document.getElementById('seRetryAccess').onclick=renderSelections;}}
+function drawSelections(){if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const tabs=[['published','Teams'],...(d.selector?[['board','Selection board'],['roster','Playing list']]:[]),['availability','Availability'],...(d.admin?[['settings','Settings']]:[])];
+ document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><button class="btn ghost" id="seRefresh">Refresh</button></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div><p id="seNotice" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}<div id="seContent"></div></section>`;
+ document.querySelectorAll('[data-se-view]').forEach(b=>b.onclick=()=>{if(!confirmLeaveSelections())return;s.view=b.dataset.seView;s.active=null;s.formDirty=false;s.notice='';drawSelections();});
+ document.getElementById('seRefresh').onclick=async()=>{if(!confirmLeaveSelections())return;s.notice='';await renderSelections();};
+ document.getElementById('seRetrySave')?.addEventListener('click',()=>seMutate(s.pending.action,s.pending.data));
+ document.getElementById('seRecovery')?.addEventListener('click',async()=>{seDownload('Selection-save-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;sePersist();s.notice='Proposal downloaded. Review it against the latest saved teams before making changes.';await seReload();drawSelections();});
+ ({published:sePublished,board:seBoard,roster:seRoster,availability:seAvailability,settings:seSettings}[s.view]||sePublished)();
+ if(s.pending)document.querySelectorAll('#seContent button,#seContent input,#seContent select,#seContent textarea').forEach(x=>x.disabled=true);
+}
+function seBoardFixtures(){const s=ensureSelections();const dates=[...new Set(s.data.fixtures.map(f=>f.details.days[0].date))].sort();if(!dates.includes(s.date))s.date=dates.find(x=>x>=new Date().toLocaleDateString('en-CA',{timeZone:s.data.access.timezone}))||dates.at(-1)||'';return s.data.fixtures.filter(f=>f.details.days[0].date===s.date);}
+function seBoard(){const s=ensureSelections(),fs=seBoardFixtures(),dates=[...new Set(s.data.fixtures.map(f=>f.details.days[0].date))].sort();
+ document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label>First fixture date <select id="seBoardDate">${dates.map(x=>`<option ${x===s.date?'selected':''}>${x}</option>`).join('')}</select></label><button class="btn" id="seNewFixture">Add fixture</button><button class="btn ghost" id="seUndo" ${s.undo.length?'':'disabled'}>Undo last selection</button>${fs.length?'<button class="btn secondary" id="sePublish">Review &amp; publish</button>':''}</div><p class="se-muted">Choose a slot, then choose any registered player. Drafts are private to selectors. The shared board refreshes every 20 seconds while you are not editing a form.</p><div class="se-board-layout"><div class="se-grid">${fs.map(f=>seTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div><aside class="se-card se-picker" id="sePicker"></aside></div>`;
+ document.getElementById('seBoardDate').onchange=e=>{s.date=e.target.value;s.active=null;seBoard();};document.getElementById('seNewFixture').onclick=()=>seFixtureEditor();document.getElementById('sePublish')?.addEventListener('click',()=>sePublishReview(fs));
+ document.getElementById('seUndo').onclick=()=>{const previous=s.undo.at(-1);if(!previous)return;if(previous.before.some(f=>s.data.fixtures.find(x=>x.id===f.id)?.revision!==previous.expected?.[f.id])){seNotice('A team has changed since your edit. Review it before undoing anything.');return;}s.undo.pop();const fixtures=previous.before.map(f=>({...f,revision:previous.expected[f.id]}));void seMutate('save_board',{fixtures});};
+ document.querySelectorAll('[data-se-slot]').forEach(b=>b.onclick=()=>{s.active={id:b.dataset.seFixture,slot:Number(b.dataset.seSlot),day:Number(b.dataset.seDay)};s.pairs=false;seBoard();document.getElementById('seSearch')?.focus({preventScroll:true});if(innerWidth<1100)document.getElementById('sePicker').scrollIntoView({block:'start',behavior:'smooth'});});
+ document.querySelectorAll('[data-se-edit]').forEach(b=>b.onclick=()=>seFixtureEditor(s.data.fixtures.find(f=>f.id===b.dataset.seEdit)));
+ document.querySelectorAll('[data-se-copylast]').forEach(b=>b.onclick=()=>seCopyLast(b.dataset.seCopylast));sePicker();
+}
+function seTeamCard(f){const s=ensureSelections(),d=f.details,problems=f.issues||[],same=f.published&&JSON.stringify(f.slots)===JSON.stringify(f.published.slots)&&JSON.stringify(d)===JSON.stringify(f.published.details);return `<section class="se-card"><div class="se-team-head"><h2>${seEsc(d.grade)}</h2><p>${seEsc(d.competition)} · v ${seEsc(d.opposition)}</p><p>${d.days.map((x,i)=>`Day ${i+1}: ${seDate(x.date)}`).join(' · ')}</p><p>${d.cancelled?'Cancelled draft':same?'Published · version '+f.publication:f.published?'Unpublished changes':'Draft'}</p></div>${d.days.map((day,i)=>{const c=seCounts(f,s.data.roster,i);return `<div class="se-counts"><span>Day ${i+1}</span><span class="se-chip ${c.players!==11?'se-warn':''}">${c.players}/11</span><span class="se-chip ${c.quicks<d.min_quicks?'se-warn':''}">${c.quicks} quicks</span><span class="se-chip">${c.spinners} spin</span><span class="se-chip ${c.batters<d.min_batters?'se-warn':''}">${c.batters} batters</span><span class="se-chip ${c.keepers?'':'se-warn'}">${c.keepers} WK</span></div>`;}).join('')}<div class="se-slot-captions" style="--se-days:${d.days.length}">${d.days.map((_,i)=>`<span>Day ${i+1}</span>`).join('')}</div><div>${f.slots.map((slot,i)=>`<div class="se-slot"><span class="se-slot-number">${i+1}</span><div class="se-slot-names" style="--se-days:${d.days.length}">${d.days.map((day,j)=>{const id=slot['d'+(j+1)],p=s.data.roster.find(x=>x.id===id),status=p?seDayStatus(p,day):'';return `<button class="se-pick" data-se-fixture="${f.id}" data-se-slot="${i}" data-se-day="${j}" aria-pressed="${s.active?.id===f.id&&s.active?.slot===i&&s.active?.day===j}" aria-label="${seEsc(d.grade)}, slot ${i+1}, Day ${j+1}: ${seEsc(p?.name||'Choose player')}"><strong>${seEsc(p?.name||'＋ Choose player')}</strong>${p?`<span class="se-role">${seEsc(seRole(p))}</span>${status!=='available'?`<span class="se-status ${status}">${({unknown:'Not confirmed',partial:'Check times',available:'Available',unavailable:'Unavailable'})[status]}</span>`:''}`:''}</button>`;}).join('')}</div></div>`).join('')}</div>${problems.length?`<details class="se-issues"><summary>${problems.filter(i=>i.level==='error').length} issues · ${problems.filter(i=>i.level==='warning').length} balance warnings</summary>${problems.map(i=>`<p>${seEsc(i.text)}</p>`).join('')}</details>`:''}<div class="se-actions" style="margin-top:10px"><button class="btn ghost" data-se-edit="${f.id}">Fixture details</button><button class="btn ghost" data-se-copylast="${f.id}">Copy previous team</button></div></section>`;}
+function sePicker(){const s=ensureSelections(),host=document.getElementById('sePicker'),a=s.active,f=s.data.fixtures.find(f=>f.id===a?.id);if(!f){host.innerHTML='<h2>Choose a team slot</h2><p class="se-muted">Player roles and availability appear here. For a two-day fixture, find a complementary bracketed pair.</p>';return;}
+ if(s.pairs){const fixed=f.slots[a.slot].d1,pairs=sePairs(s.data.roster,f,s.data.fixtures,a.slot,s.fixed?fixed:null);host.innerHTML=`<h2>Find a bracketed pair</h2><p class="se-muted">${seEsc(f.details.grade)} · slot ${a.slot+1}. Closest roles first. These pairs are available on their own day; declare both names before the toss.</p>${fixed?`<label class="se-check"><input type="checkbox" id="seFixedPair" ${s.fixed?'checked':''}>Keep ${seEsc(seName(fixed))} on Day 1</label>`:''}${pairs.slice(0,30).map((pair,i)=>`<div class="se-pair"><strong>${seEsc(pair.a.name)}</strong> <small>Day 1</small><span class="se-role">${seEsc(seRole(pair.a))}</span><strong>${seEsc(pair.b.name)}</strong> <small>Day 2</small><span class="se-role">${seEsc(seRole(pair.b))}</span><p>${seEsc(pair.reason)}</p><button class="btn ghost" data-se-pair="${i}">Use this pair</button></div>`).join('')||'<p>No confirmed complementary pairs. Check the calendars or keep a Day 1 player to find their partner.</p>'}<button class="btn ghost" id="seBackPicker">Back to players</button>`;
+ document.getElementById('seFixedPair')?.addEventListener('change',e=>{s.fixed=e.target.checked;sePicker();});document.getElementById('seBackPicker').onclick=()=>{s.pairs=false;sePicker();};host.querySelectorAll('[data-se-pair]').forEach(b=>b.onclick=()=>seAssign(pairs[Number(b.dataset.sePair)].a.id,pairs[Number(b.dataset.sePair)].b.id));return;}
+ host.innerHTML=`<h2>${seEsc(f.details.grade)} · slot ${a.slot+1}</h2><p class="se-muted">${seDate(f.details.days[a.day].date)} · ${f.details.days.length>1?'Day '+(a.day+1):'match day'}</p><label for="seSearch">Find a registered player</label><input id="seSearch" type="search" value="${seEsc(s.search)}" placeholder="Search name or usual grade"><select id="seRoleFilter" aria-label="Player role" style="margin:8px 0;width:100%">${seOpt([['','All roles'],['pace','Quicks'],['spin','Spinners'],['batters','Batters'],['keeper','Keepers']],s.role)}</select>${f.details.days.length===2?`<label class="se-check"><input type="checkbox" id="seBothDays" ${s.both!==false?'checked':''}>Assign to both days</label>${f.details.brackets?'<button class="btn ghost" id="seFindPair">Find matching pair</button>':'<p class="se-muted">Enable bracketing in Fixture details to split this slot.</p>'}`:''}<button class="btn ghost" id="seClearSlot">Clear ${f.details.days.length>1?'this day':'slot'}</button><div id="seCandidates"></div>`;
+ const renderCandidates=()=>{const matches=s.data.roster.filter(p=>p.active&&(!s.search||[p.name,p.grade].join(' ').toLowerCase().includes(s.search.toLowerCase()))&&(!s.role||p.bowling===s.role||s.role==='batters'&&['top','middle'].includes(p.batting)||s.role==='keeper'&&p.keeper));document.getElementById('seCandidates').innerHTML=matches.map(p=>`<button class="se-candidate" data-se-player="${p.id}"><strong>${seEsc(p.name)}</strong><span class="se-role">${seEsc(seRole(p))}</span><span class="se-role">${f.details.days.map((d,i)=>`D${i+1}: ${({available:'available',unknown:'not confirmed',partial:'check times',unavailable:'unavailable'})[seDayStatus(p,d)]}`).join(' · ')}${seUsed(p,f.details.days[a.day],s.data.fixtures,{id:f.id,slot:a.slot})?' · selected elsewhere':''}</span></button>`).join('')||'<p>No matching registered players.</p>';document.querySelectorAll('[data-se-player]').forEach(b=>b.onclick=()=>seAssign(b.dataset.sePlayer));};
+ document.getElementById('seSearch').oninput=e=>{s.search=e.target.value;renderCandidates();};document.getElementById('seRoleFilter').onchange=e=>{s.role=e.target.value;renderCandidates();};document.getElementById('seBothDays')?.addEventListener('change',e=>s.both=e.target.checked);document.getElementById('seFindPair')?.addEventListener('click',()=>{s.pairs=true;s.fixed=!!f.slots[a.slot].d1;sePicker();});document.getElementById('seClearSlot').onclick=()=>seAssign(null);renderCandidates();
+}
+async function seAssign(id,pairDay2=undefined){const s=ensureSelections(),a=s.active,old=s.data.fixtures.find(f=>f.id===a.id),f=structuredClone(old),both=pairDay2!==undefined||(s.both!==false||!f.details.brackets)&&f.details.days.length===2,changes=new Map([[f.id,f]]);if(pairDay2!==undefined){f.slots[a.slot]={d1:id,d2:pairDay2};}else{f.slots[a.slot]['d'+(a.day+1)]=id;if(both)f.slots[a.slot]={d1:id,d2:id};}
+ const moving=[];f.details.days.forEach((day,j)=>{if(!both&&j!==a.day)return;const chosen=f.slots[a.slot]['d'+(j+1)];if(!chosen)return;for(const original of s.data.fixtures){if(original.details.cancelled)continue;original.details.days.forEach((od,k)=>{if(!seOverlap(day,od))return;original.slots.forEach((slot,i)=>{if(original.id===f.id&&i===a.slot)return;if(slot['d'+(k+1)]===chosen){const other=changes.get(original.id)||structuredClone(original);other.slots[i]['d'+(k+1)]=null;if(other.details.days.length===2&&!other.details.brackets)other.slots[i]={d1:null,d2:null};changes.set(other.id,other);moving.push(`${seName(chosen)} from ${original.details.grade}, slot ${i+1}`);}});});}});
+ if(moving.length&&!confirm('Move '+[...new Set(moving)].join('; ')+'? The old place will become vacant.'))return;
+ const before=[...changes.keys()].map(key=>structuredClone(s.data.fixtures.find(f=>f.id===key)));const ok=await seMutate('save_board',{fixtures:[...changes.values()]},{undo:before});if(ok){s.active={...a,slot:Math.min(a.slot+1,10)};s.pairs=false;seBoard();}}
+async function seCopyLast(id){const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id),last=s.data.fixtures.filter(x=>x.id!==id&&x.details.grade===f.details.grade&&x.details.competition===f.details.competition&&x.details.days[0].date<f.details.days[0].date).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date))[0];if(!last){seNotice('There is no earlier team for this competition and grade.');return;}if(!confirm('Copy the previous team into this draft? Availability will be checked against the new dates.'))return;const copy=structuredClone(f);copy.slots=(last.published?.slots||last.slots).map(x=>({d1:x.d1,d2:f.details.days.length===2?(f.details.brackets?x.d2||x.d1:x.d1):null}));await seMutate('save_board',{fixtures:[copy]},{undo:[structuredClone(f)]});}
+function seFixtureEditor(f=null){const s=ensureSelections(),d=f?.details||{grade:'',competition:'',opposition:'',ground:'',meeting:'',days:[{date:s.date||'',start:'12:00',end:'18:00'}],brackets:false,min_quicks:3,min_batters:5,staff:[]};
+ document.getElementById('seContent').innerHTML=`<form id="seFixtureForm" class="se-card se-drawer"><h2>${f?'Fixture details':'Add fixture'}</h2><div class="se-form-grid">${[['competition','Competition'],['grade','Grade'],['opposition','Opposition'],['ground','Ground']].map(([k,l])=>`<label>${l}<input name="${k}" maxlength="120" value="${seEsc(d[k])}" ${['grade','opposition'].includes(k)?'required':''}></label>`).join('')}</div><div class="se-form-grid" style="margin-top:12px">${[0,1].map(i=>`<div><label>Day ${i+1} date${i?' · optional':''}<input type="date" name="date${i}" value="${d.days[i]?.date||''}" ${i?'':'required'}></label><div class="se-form-grid"><label>Start<input type="time" name="start${i}" value="${d.days[i]?.start||''}"></label><label>Finish<input type="time" name="end${i}" value="${d.days[i]?.end||''}"></label></div></div>`).join('')}</div><p class="se-form-note">Enter the actual fixture dates in ${seEsc(s.data.access.timezone)}. Times let us check partial-day availability. Dates are never guessed from the competition name.</p><label class="se-check"><input name="brackets" type="checkbox" ${d.brackets?'checked':''}>Bracketing is permitted for this fixture</label><p class="se-form-note">Confirm your competition’s rules. Both names must be declared before the toss.</p><div class="se-form-grid"><label>Minimum frontline quicks<input name="min_quicks" type="number" min="0" max="11" value="${d.min_quicks??3}"></label><label>Minimum top/middle-order batters<input name="min_batters" type="number" min="0" max="11" value="${d.min_batters??5}"></label></div><label style="margin-top:12px">Meeting / match instructions<textarea name="meeting" maxlength="800" rows="3">${seEsc(d.meeting)}</textarea></label><details><summary>Additional match staff</summary><p class="se-form-note">Selectors already have access. Add the captain or other staff who need this match conversation.</p>${s.data.members.map(m=>`<label class="se-check"><input type="checkbox" name="staff" value="${m.user_id}" ${(d.staff||[]).includes(m.user_id)?'checked':''}>${seEsc(m.name)}</label>`).join('')}</details>${f?`<label class="se-check"><input name="cancelled" type="checkbox" ${d.cancelled?'checked':''}>Match cancelled</label>`:''}<div class="se-actions se-editor-actions"><button class="btn" type="submit">Save fixture</button><button class="btn ghost" type="button" id="seCancelEdit">Cancel</button></div><p id="seFormError" role="alert"></p></form>`;
+ const form=document.getElementById('seFixtureForm');form.oninput=()=>s.formDirty=true;document.getElementById('seCancelEdit').onclick=()=>{if(confirmLeaveSelections())drawSelections();};form.onsubmit=async e=>{e.preventDefault();const data=new FormData(form),days=[0,1].filter(i=>data.get('date'+i)).map(i=>({date:data.get('date'+i),start:data.get('start'+i),end:data.get('end'+i)})),details={...d,...Object.fromEntries(['competition','grade','opposition','ground','meeting'].map(k=>[k,data.get(k).trim()])),days,brackets:data.has('brackets'),min_quicks:Number(data.get('min_quicks')),min_batters:Number(data.get('min_batters')),staff:data.getAll('staff'),cancelled:data.has('cancelled')};let slots=structuredClone(f?.slots||seBlankSlots());if(f&&f.details.days.length===2&&days.length===1&&slots.some(x=>x.d2&&x.d1!==x.d2)&&!confirm('Changing to one day removes Day 2 selections from this draft. Continue?'))return;if(days.length===1)slots=slots.map(x=>({...x,d2:null}));else if(!details.brackets)slots=slots.map(x=>({...x,d2:x.d1}));s.date=days[0].date;await seMutate('save_board',{fixtures:[{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details,slots}]});};}
+function sePublishReview(fs){const s=ensureSelections(),changed=fs.filter(f=>!f.published||JSON.stringify(f.details)!==JSON.stringify(f.published.details)||JSON.stringify(f.slots)!==JSON.stringify(f.published.slots)),issues=changed.flatMap(f=>(f.details.cancelled?[]:f.issues||[]).map(i=>({...i,text:f.details.grade+': '+i.text}))),errors=issues.filter(i=>i.level==='error'),warnings=issues.filter(i=>i.level==='warning');
+ const unlinked=[...new Set(changed.flatMap(f=>f.slots.flatMap(x=>[x.d1,x.d2])).filter(Boolean))].map(id=>s.data.roster.find(p=>p.id===id)).filter(p=>p&&!p.user_id);
+ document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Review publication</h2><p>${changed.length} changed team${changed.length===1?'':'s'} will become visible to club members. Current and removed players with linked accounts receive a generic update alert. Match conversations use the current published team.</p>${changed.map(f=>`<p><strong>${seEsc(f.details.grade)}</strong> · ${f.details.cancelled?'Cancelled':f.details.days.map(d=>seDate(d.date)).join(' / ')} · ${f.slots.filter(x=>x.d1&&x.d2&&x.d1!==x.d2).length} bracketed slots</p>`).join('')}${issues.map(i=>`<p class="${i.level==='error'?'se-warn':'se-muted'}">${seEsc(i.text)}</p>`).join('')}${unlinked.length?`<p>${unlinked.length} selected players are not linked to accounts: ${unlinked.map(p=>seEsc(p.name)).join(', ')}. Share the exported list with them; they cannot receive app alerts yet.</p>`:''}${s.data.group_links.length?'<p>Mapped Playing Groups gain missing members for the latest published fixture in each grade. Existing memberships stay. Linked batting accounts inherit applicable plan dates and group-based coaching access.</p>':''}${warnings.length?'<label class="se-check"><input type="checkbox" id="seAcknowledge">We have reviewed these team-balance warnings.</label>':''}<div class="se-actions"><button class="btn secondary" id="seConfirmPublish" ${errors.length||!changed.length?'disabled':''}>Publish ${changed.length} team${changed.length===1?'':'s'}</button><button class="btn ghost" id="seBackBoard">Back to selections</button></div></section>`;
+ document.getElementById('seBackBoard').onclick=seBoard;document.getElementById('seConfirmPublish').onclick=async()=>{if(warnings.length&&!document.getElementById('seAcknowledge').checked){seNotice('Acknowledge the balance warnings before publishing.');return;}await seMutate('publish',{ids:changed.map(f=>f.id),revisions:Object.fromEntries(changed.map(f=>[f.id,f.revision])),acknowledge_balance:!warnings.length||document.getElementById('seAcknowledge').checked});};}
+function sePublished(){const s=ensureSelections(),fs=s.data.fixtures.filter(f=>f.published).sort((a,b)=>b.published.details.days[0].date.localeCompare(a.published.details.days[0].date));document.getElementById('seContent').innerHTML=fs.length?`<div class="se-grid">${fs.map(f=>{const d=f.published.details,ps=f.published.players,own=s.data.roster.find(p=>p.user_id===session.user.id),name=id=>ps.find(p=>p.id===id)?.name||'Vacant';return `<section class="se-card"><div class="se-team-head"><h2>${seEsc(d.grade)}</h2><p>${seEsc(d.competition)} · v ${seEsc(d.opposition)}</p><p>${d.days.map((x,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(x.date)+(x.start?' · '+x.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}</p><p>${seEsc(d.meeting)}</p></div>${d.cancelled?'<p>Match cancelled</p>':`<ol>${f.published.slots.map(slot=>`<li class="se-published-name">${seEsc(name(slot.d1))}${slot.d1===own?.id?' · you':''}${d.days.length>1&&slot.d1!==slot.d2?` <span class="se-date-tag">Day 1</span><br>${seEsc(name(slot.d2))}${slot.d2===own?.id?' · you':''} <span class="se-date-tag">Day 2</span>`:''}</li>`).join('')}</ol>`}<p class="se-muted">Published version ${f.publication}</p><div class="se-actions"><button class="btn ghost" data-se-export="${f.id}">Copy team list</button>${f.can_chat?`<button class="btn" data-se-chat="${f.id}">Match conversation</button>`:''}</div></section>`;}).join('')}</div>`:'<div class="se-card se-empty">Published teams will appear here. Selectors can start in Selection board.</div>';
+ document.querySelectorAll('[data-se-export]').forEach(b=>b.onclick=async()=>{const text=seTeamText(fs.find(f=>f.id===b.dataset.seExport),club.name);try{await navigator.clipboard.writeText(text);seNotice('Team list copied. You can paste it into WhatsApp or your publication.');}catch{seDownload('Team-list.txt',text);seNotice('Team list downloaded.');}});document.querySelectorAll('[data-se-chat]').forEach(b=>b.onclick=()=>seChat(b.dataset.seChat));}
+async function seChat(id){const s=ensureSelections();try{const posts=await seRPC('posts',{id}),f=s.data.fixtures.find(f=>f.id===id);document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(f.published.details.grade)} · match conversation</h2><button class="btn ghost" id="seChatBack">Teams</button></div><p class="se-muted">Current selected players, both bracket partners, selectors and nominated match staff. Refresh for new replies.</p><button class="btn ghost" id="seChatRefresh">Refresh conversation</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}</small><p>${seEsc(p.body)}</p></article>`).join('')||'<p>No messages yet.</p>'}<form id="sePostForm"><label>Message<textarea name="body" required maxlength="1500" rows="3"></textarea></label><div class="se-actions se-editor-actions"><button class="btn" type="submit">Send to match group</button></div></form></section>`;document.getElementById('seChatBack').onclick=()=>{if(confirmLeaveSelections())sePublished();};document.getElementById('seChatRefresh').onclick=()=>{if(confirmLeaveSelections())seChat(id);};const form=document.getElementById('sePostForm');form.oninput=()=>s.formDirty=true;form.onsubmit=async e=>{e.preventDefault();const body=new FormData(form).get('body');if(await seMutate('post',{id,body}))await seChat(id);};}catch(e){seNotice(e.message);}}
+
+function seAvailability(playerId=null){const s=ensureSelections(),mine=s.data.roster.find(p=>p.user_id===session.user.id),p=s.data.roster.find(p=>p.id===playerId)||mine||(s.data.selector?s.data.roster.find(p=>p.active):null),host=document.getElementById('seContent');if(!p){host.innerHTML='<section class="se-card"><h2>Your availability</h2><p>A selector needs to link your registered playing-list entry to your club account. You can then manage your calendar here without completing a batting plan.</p></section>';return;}
+ const a=structuredClone(p.availability||{revision:0,usual_available:false,blocks:[],available_dates:[]}),today=new Date().toLocaleDateString('en-CA',{timeZone:s.data.access.timezone});let month=today.slice(0,7),blocks=a.blocks||[];
+ host.innerHTML=`<form id="seAvailabilityForm" class="se-card se-drawer"><div class="se-top"><h2>Availability · ${seEsc(p.name)}</h2>${s.data.selector?`<select id="seAvailabilityPlayer" aria-label="Player availability">${s.data.roster.filter(p=>p.active).map(x=>`<option value="${x.id}" ${x.id===p.id?'selected':''}>${seEsc(x.name)}</option>`).join('')}</select>`:''}</div><p>Black out dates once; every competition checks this calendar against its actual fixture dates.</p><label class="se-check"><input id="seUsual" type="checkbox" ${a.usual_available?'checked':''}>I am normally available except for my blacked-out dates.</label><p class="se-form-note">Until this is confirmed, blank dates mean “Not confirmed”. A selector can record a player’s answer for them. Times use ${seEsc(s.data.access.timezone)}.</p><div class="se-month-tools"><button type="button" class="btn ghost" id="seMonthPrev" aria-label="Previous month">‹</button><label>Month<input type="month" id="seMonth" value="${month}"></label><button type="button" class="btn ghost" id="seMonthNext" aria-label="Next month">›</button></div><p class="se-muted">Tap a date to mark or clear a full-day blackout.</p><div id="seCalendar" class="se-calendar"></div><details><summary>Add a date range or unavailable hours</summary><div class="se-date-entry"><label>From date<input type="date" id="seBlackoutStart" value="${today}"></label><label>Through date<input type="date" id="seBlackoutEnd" value="${today}"></label><label>From time · optional<input type="time" id="seBlackoutFrom"></label><label>Until time<input type="time" id="seBlackoutTo"></label><button class="btn ghost" id="seAddBlackout" type="button">Add blackout</button></div></details><div id="seBlackouts"></div><details style="margin-top:12px"><summary>Confirm individual dates instead</summary><label>Available dates · comma separated<input id="seAvailableDates" value="${seEsc((a.available_dates||[]).join(', '))}" placeholder="2026-10-10, 2026-10-17"></label><p class="se-form-note">Useful if you cannot confirm normal availability. Blackouts take precedence.</p></details><p class="se-muted">${a.checked_at?'Last checked '+seEsc(new Date(a.checked_at).toLocaleString('en-AU')):'Availability has not been confirmed.'}</p><div class="se-actions"><button type="submit" class="btn">Save / confirm calendar</button></div><p id="seAvailabilityError" role="alert"></p></form>`;
+ const form=document.getElementById('seAvailabilityForm');form.oninput=()=>s.formDirty=true;
+ const shift=(date,n)=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
+ const paint=()=>{document.getElementById('seMonth').value=month;const first=new Date(month+'-01T12:00:00Z'),offset=(first.getUTCDay()+6)%7,count=new Date(first.getUTCFullYear(),first.getUTCMonth()+1,0).getDate();document.getElementById('seCalendar').innerHTML=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<small>${x}</small>`).join('')+'<span></span>'.repeat(offset)+Array.from({length:count},(_,i)=>{const date=month+'-'+String(i+1).padStart(2,'0'),off=blocks.some(b=>!b.from&&b.start<=date&&b.end>=date);return `<button type="button" data-se-date="${date}" aria-pressed="${off}" aria-label="${date}${off?', unavailable':''}">${i+1}</button>`;}).join('');document.querySelectorAll('[data-se-date]').forEach(b=>b.onclick=()=>{const date=b.dataset.seDate,off=blocks.some(b=>!b.from&&b.start<=date&&b.end>=date);if(off)blocks=blocks.flatMap(b=>b.from||b.start>date||b.end<date?[b]:[...(b.start<date?[{...b,end:shift(date,-1)}]:[]),...(b.end>date?[{...b,start:shift(date,1)}]:[])]);else blocks.push({start:date,end:date});s.formDirty=true;paint();});document.getElementById('seBlackouts').innerHTML=blocks.map((b,i)=>`<div class="se-blackout"><span>${seEsc(b.start)}${b.end!==b.start?' to '+seEsc(b.end):''}${b.from?' · '+seEsc(b.from)+'–'+seEsc(b.to):' · all day'}</span><button type="button" class="btn ghost" data-se-remove-block="${i}" aria-label="Remove blackout ${seEsc(b.start)}">Remove</button></div>`).join('');document.querySelectorAll('[data-se-remove-block]').forEach(b=>b.onclick=()=>{blocks.splice(Number(b.dataset.seRemoveBlock),1);s.formDirty=true;paint();});};
+ const changeMonth=n=>{const d=new Date(month+'-01T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+n);month=d.toISOString().slice(0,7);paint();};document.getElementById('seMonthPrev').onclick=()=>changeMonth(-1);document.getElementById('seMonthNext').onclick=()=>changeMonth(1);document.getElementById('seMonth').onchange=e=>{if(/^\d{4}-\d{2}$/.test(e.target.value)){month=e.target.value;paint();}};
+ document.getElementById('seAvailabilityPlayer')?.addEventListener('change',e=>{if(confirmLeaveSelections())seAvailability(e.target.value);else e.target.value=p.id;});document.getElementById('seAddBlackout').onclick=()=>{const b={start:document.getElementById('seBlackoutStart').value,end:document.getElementById('seBlackoutEnd').value,from:document.getElementById('seBlackoutFrom').value,to:document.getElementById('seBlackoutTo').value},err=document.getElementById('seAvailabilityError');if(!b.start||!b.end||b.start>b.end||((b.from||b.to)&&(!b.from||!b.to||b.from>=b.to))){err.textContent='Check the date range and both optional times.';return;}err.textContent='';blocks.push(b);s.formDirty=true;paint();};
+ form.onsubmit=async e=>{e.preventDefault();const available_dates=document.getElementById('seAvailableDates').value.split(',').map(x=>x.trim()).filter(Boolean);if(available_dates.some(x=>!/^\d{4}-\d{2}-\d{2}$/.test(x))){document.getElementById('seAvailabilityError').textContent='Use YYYY-MM-DD for each available date.';return;}const ok=await seMutate('availability',{id:p.id,revision:a.revision||0,usual_available:document.getElementById('seUsual').checked,blocks,available_dates});if(ok)seAvailability(p.id);};paint();
+}
+function seRoster(){const s=ensureSelections();document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><button class="btn" id="seImportRoster">Import / refresh registration CSV</button><button class="btn ghost" id="seAddPlayer">Add registered player</button><button class="btn ghost" id="seRosterTemplate">CSV template</button></div><p class="se-muted">Selection roles are maintained here, independently of batting plans. Imports match stable registration IDs and preserve your coding, availability and account links.</p><form id="seRosterForm" class="se-card"><label>Find player<input type="search" id="seRosterSearch" placeholder="Name or grade"></label><div id="seRosterRows">${s.data.roster.map(p=>`<div class="se-roster-row" data-se-roster-id="${p.id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}"><div><strong>${seEsc(p.name)}${p.active?'':' · inactive'}</strong><span class="se-role">${seEsc(p.grade)} · ${p.user_id?'Account linked':'No account linked'}</span><button class="btn ghost" type="button" data-se-edit-player="${p.id}">Details / account</button><button class="btn ghost" type="button" data-se-player-calendar="${p.id}">Calendar</button></div><label>Batting role<select name="batting">${seOpt(SE_BATTING,p.batting)}</select></label><label>Bowling role<select name="bowling">${seOpt(SE_BOWLING,p.bowling)}</select></label><label>Bowling workload<select name="bowling_load">${seOpt(SE_LOAD,p.bowling_load)}</select></label><label class="se-check"><input name="keeper" type="checkbox" ${p.keeper?'checked':''}>WK</label></div>`).join('')||'<p>No registered players yet. Import your club’s CSV or add a player.</p>'}</div>${s.data.roster.length?'<div class="se-actions se-editor-actions"><button type="submit" class="btn">Save player roles</button></div>':''}</form>`;
+ document.getElementById('seRosterSearch').oninput=e=>{const q=e.target.value.toLowerCase();document.querySelectorAll('[data-se-roster-id]').forEach(r=>r.hidden=!r.dataset.seRosterName.includes(q));};document.getElementById('seImportRoster').onclick=()=>{if(confirmLeaveSelections())seImport();};document.getElementById('seAddPlayer').onclick=()=>{if(confirmLeaveSelections())sePlayerEditor();};document.getElementById('seRosterTemplate').onclick=()=>seDownload('Playing-list-template.csv','Registration ID,Player name,Usual grade\r\n','text/csv');
+ document.querySelectorAll('[data-se-edit-player]').forEach(b=>b.onclick=()=>{if(confirmLeaveSelections())sePlayerEditor(s.data.roster.find(p=>p.id===b.dataset.seEditPlayer));});document.querySelectorAll('[data-se-player-calendar]').forEach(b=>b.onclick=()=>{if(confirmLeaveSelections()){s.view='availability';drawSelections();seAvailability(b.dataset.sePlayerCalendar);}});
+ const form=document.getElementById('seRosterForm');form.addEventListener('change',e=>{if(e.target.closest('[data-se-roster-id]'))s.formDirty=true;});form.onsubmit=async e=>{e.preventDefault();const rows=[...form.querySelectorAll('[data-se-roster-id]')].map(el=>{const p=s.data.roster.find(p=>p.id===el.dataset.seRosterId);return {...p,batting:el.querySelector('[name=batting]').value,bowling:el.querySelector('[name=bowling]').value,bowling_load:el.querySelector('[name=bowling_load]').value,keeper:el.querySelector('[name=keeper]').checked};}).filter(p=>{const old=s.data.roster.find(x=>x.id===p.id);return ['batting','bowling','bowling_load','keeper'].some(k=>old[k]!==p[k]);});if(!rows.length){seNotice('No role changes to save.');return;}await seMutate('save_roster',{revision:s.data.roster_revision,rows});};}
+function sePlayerEditor(player=null){const s=ensureSelections(),p=player||{name:'',grade:'',external_id:'',batting:'unknown',bowling:'unknown',bowling_load:'unknown',keeper:false,active:true,user_id:null};document.getElementById('seContent').innerHTML=`<form class="se-card se-drawer" id="sePlayerForm"><h2>${player?'Player details':'Add registered player'}</h2><div class="se-form-grid"><label>Name<input name="name" value="${seEsc(p.name)}" maxlength="120" required></label><label>Registration ID<input name="external_id" value="${seEsc(p.external_id)}" maxlength="120"></label><label>Usual grade<input name="grade" value="${seEsc(p.grade)}" maxlength="80"></label></div><p class="se-form-note">Use the same registration ID on future CSV refreshes. Leaving it blank is fine for a manually maintained player.</p><label>Verified club account<select name="user_id"><option value="">Not linked yet</option>${s.data.members.filter(m=>!s.data.roster.some(x=>x.user_id===m.user_id&&x.id!==p.id)).map(m=>`<option value="${m.user_id}" ${m.user_id===p.user_id?'selected':''}>${seEsc(m.name)}${m.email?' · '+seEsc(m.email):''}</option>`).join('')}</select></label><p class="se-form-note">Confirm this is the same person before linking. We never match accounts by name automatically. Linking enables their calendar and selected-team messages; it does not grant coaching access.</p><label class="se-check"><input name="active" type="checkbox" ${p.active?'checked':''}>Active registered player</label><div class="se-actions se-editor-actions"><button class="btn" type="submit">Save player</button><button class="btn ghost" type="button" id="sePlayerCancel">Cancel</button></div></form>`;const form=document.getElementById('sePlayerForm');form.oninput=()=>s.formDirty=true;document.getElementById('sePlayerCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};form.onsubmit=e=>{e.preventDefault();const d=new FormData(form),user_id=d.get('user_id')||null;if(user_id!==p.user_id&&user_id&&!confirm('Confirm this account belongs to '+d.get('name')+'? It will receive this player’s selections and can edit their availability.'))return;return seMutate('save_roster',{revision:s.data.roster_revision,rows:[{...p,name:d.get('name').trim(),grade:d.get('grade').trim(),external_id:d.get('external_id').trim(),user_id,active:d.has('active')}]});};}
+function seImport(){const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Refresh the registered playing list</h2><p>Upload a current registration CSV. Choose the ID and name columns, review the preview, then import. Existing roles and calendars stay. Missing rows are not deleted or deactivated.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
+ const preview=()=>{const map=Object.fromEntries([...document.querySelectorAll('[data-se-map]')].map(el=>[el.dataset.seMap,Number(el.value)]));if(map.id<0||map.name<0)throw Error('Choose both a stable ID and name column.');const data=rows.map(r=>({external_id:(r[map.id]||'').trim(),name:[r[map.name],map.last>=0&&map.last!==map.name?r[map.last]:''].filter(Boolean).join(' ').trim(),grade:map.grade>=0?(r[map.grade]||'').trim():''}));if(data.some(r=>!r.external_id||!r.name))throw Error('Every row must have a registration ID and name.');if(new Set(data.map(r=>r.external_id)).size!==data.length)throw Error('Duplicate registration IDs. Remove duplicate rows before importing.');return data;};
+ const draw=()=>{try{const data=preview(),matches=data.filter(r=>s.data.roster.some(p=>p.external_id===r.external_id)).length;document.getElementById('seCSVError').textContent='';document.getElementById('seCSVCommit').disabled=false;document.getElementById('seCSVPreview').innerHTML=`<p>${data.length} rows · ${matches} existing players · ${data.length-matches} new players</p><div class="se-preview-scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Grade</th></tr></thead><tbody>${data.slice(0,8).map(r=>`<tr><td>${seEsc(r.external_id)}</td><td>${seEsc(r.name)}</td><td>${seEsc(r.grade)}</td></tr>`).join('')}</tbody></table></div><p class="se-muted">Preview of the first ${Math.min(8,data.length)} rows. Import refreshes names and usual grades only.</p>`;}catch(err){document.getElementById('seCSVError').textContent=err.message;document.getElementById('seCSVCommit').disabled=true;}};document.querySelectorAll('[data-se-map]').forEach(el=>el.onchange=draw);document.getElementById('seCSVCommit').onclick=()=>seMutate('import_roster',{revision:s.data.roster_revision,rows:preview()});draw();}catch(err){document.getElementById('seCSVError').textContent=err.message;}};}
+function seSettings(){const s=ensureSelections(),d=s.data;document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Selection permissions</h2><p>Club Admins can select. Give other club members selection access here without granting access to batting plans.</p><form id="seSelectors">${d.members.map(m=>`<label class="se-check"><input name="users" type="checkbox" value="${m.user_id}" ${m.selector?'checked':''}>${seEsc(m.name)}</label>`).join('')}<button class="btn" type="submit">Save selectors</button></form></section>${d.access.mode==='bundle'?`<section class="se-card se-drawer" style="margin-top:14px"><h2>Connect Playing Groups</h2><p>Publishing the latest fixture for a mapped competition and grade adds missing Playing Group memberships in Club Batting. Both bracketed players are included. Existing memberships remain.</p><p class="se-form-note">These memberships affect Player Plan due dates and any coaching access granted by group. Only linked active batting accounts can be added. No batting data is required to make selections.</p><form id="seGroupLinks"><div id="seGroupLinkRows"></div><div class="se-actions"><button class="btn ghost" type="button" id="seAddGroupLink">Add grade mapping</button><button class="btn" type="submit">Save group connections</button></div></form></section>`:'<section class="se-card se-drawer" style="margin-top:14px"><h2>Selections subscription</h2><p>Player roles, calendars and teams work independently. If this club later adds Club Batting, its accounts can connect and published selections can add Playing Group memberships.</p></section>'}`;
+ const selectorForm=document.getElementById('seSelectors');selectorForm.oninput=()=>s.formDirty=true;selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users')});};if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks');
+ const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No automatic connections. Teams remain independent.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);s.formDirty=true;renderLinks();});};
+ const sync=()=>document.querySelectorAll('[data-se-link]').forEach(el=>{links[Number(el.dataset.seLink)]={competition:el.querySelector('[name=competition]').value.trim(),grade:el.querySelector('[name=grade]').value.trim(),group_id:el.querySelector('[name=group_id]').value};});form.oninput=()=>s.formDirty=true;document.getElementById('seAddGroupLink').onclick=()=>{sync();links.push({competition:'',grade:'',group_id:''});s.formDirty=true;renderLinks();};form.onsubmit=e=>{e.preventDefault();sync();return seMutate('group_links',{revision:d.access.revision,links});};renderLinks();}
+async function openSelectionsAccess(clubId,clubName){return openSelectionsSubscription(clubId,clubName);}
+function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTimer=setInterval(async()=>{const s=selectionState;if(!s||currentTab!=='teams'||s.view!=='board'||s.busy||s.pending||s.formDirty||document.activeElement?.matches('input,select,textarea')||!document.getElementById('sePicker'))return;try{const before=JSON.stringify(s.data);await seReload();if(s===selectionState&&currentTab==='teams'&&s.view==='board'&&!s.busy&&!s.pending&&!s.formDirty&&before!==JSON.stringify(s.data)){s.notice='Updated from the shared selection board.';drawSelections();}}catch{seNotice('Live refresh could not connect. Your saved selections are retained; use Refresh to reconnect.');}},20000);}
+/* END TEAMS SELECTION */
 
 boot();
