@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.92 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.94 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.93';
+const APP_UI_VERSION='0.8.62.94';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2814,7 +2814,7 @@ function validAppNavigationMarker(marker){
     (marker.route?.scope==='platform'||(marker.route?.scope==='club'&&typeof marker.route.clubId==='string'&&typeof marker.route.tab==='string')));
 }
 function restorePlatformNavigationState(route){
-  platformView=['home','add_clubs','clubs','selections','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
+  platformView=route.view==='selections'?'clubs':['home','add_clubs','clubs','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
   platformSelectedProspectId=route.prospectId||null;
   platformSelectedOnboardingId=route.onboardingId||null;
 }
@@ -4569,8 +4569,8 @@ const CLUB_BATTING_HELP = {
     ],
     "tutorial": [
       {
-        "title": "Independent or connected",
-        "body": "Selections can be enabled independently of Club Batting or alongside it. Its playing list, cricket-role attributes, availability and selected teams are its own records. Shared login and club membership do not require a batting plan. Platform Admin manages its own annual price, trial and subscription terms. Product-specific sales outreach and checkout are not connected in this release.",
+        "title": "Choose your club products",
+        "body": "Your club can use Club Batting, Selections or both. Platform Admin → Clubs → Manage adds or changes either product. The playing list, cricket roles and availability do not require batting plans.",
         "target_tab": "teams"
       },
       {
@@ -4687,9 +4687,9 @@ const CLUB_BATTING_HELP = {
   },
   "selections_subscription": {
     "capability_key": "selections_subscription",
-    "title": "Manage Selections subscriptions",
-    "purpose": "Use familiar subscription controls for a separate product.",
-    "short_explanation": "Set Selections prices, free trials, special rates, complimentary access and renewal terms separately from Club Batting.",
+    "title": "Manage club subscriptions",
+    "purpose": "Manage Club Batting and Selections for one club.",
+    "short_explanation": "Add or change either product from the same club record.",
     "target_tab": "guide",
     "audience": [
       "admin",
@@ -4702,32 +4702,32 @@ const CLUB_BATTING_HELP = {
     "sort_order": 340,
     "tutorial": [
       {
-        "title": "Choose the product arrangement",
-        "body": "Platform Admin → Active clubs → Selections subscription. Choose With Club Batting or Selections only. The Selections record has its own access dates and price. Changing it does not restart, charge, cancel or edit the existing batting subscription."
+        "title": "Open the club",
+        "body": "Platform Admin → Clubs → Manage beside the club. Choose Add or Change under Club Batting or Selections. Each product keeps its own terms; both use the same club workspace."
       },
       {
-        "title": "Set product defaults",
-        "body": "Expand Selections standard price & trial settings. Set the annual club price and currency; an optional trial-day override can differ from the current Club Batting setting. Leave the price blank until decided. Agreed existing terms keep their recorded price."
+        "title": "Start a free trial",
+        "body": "Choose Free trial, then Start trial. For Selections, choose the start date. Saving an existing trial does not restart it; it does not convert to paid access automatically."
       },
       {
-        "title": "Offer a full free trial",
-        "body": "Choose Free club trial and the activation date. The trial length follows Club Batting unless overridden. It does not restart on another save, shorten when future defaults change, or convert to a paid subscription automatically."
+        "title": "Give complimentary access",
+        "body": "Choose Complimentary and save. Complimentary means $0, no expiry."
       },
       {
-        "title": "Set discounts or ongoing free access",
-        "body": "Set the rate reduction percentage and special-rate end date, or Never. A 100% reduction plus Never gives ongoing complimentary access without an access expiry or payment request. Other arrangements have a separate finite Access ends date."
+        "title": "Set paid Selections terms",
+        "body": "Choose Paid subscription, enter the annual price and confirm the club agreement. Term details contains discounts, access dates, payment recorded and renewal settings. Preview amount uses the club-year calendar. Recording payment does not collect it."
       },
       {
-        "title": "Preview and record the term",
-        "body": "Choose the club-year calendar and Preview term & amount. Selections uses the same calendar, mid-season pro-rata and short-period rules as Club Batting, with the independent Selections annual price. Record agreed continuation for paid access. Amount recorded as paid is bookkeeping; it does not collect payment."
+        "title": "Renew or end Selections",
+        "body": "Term details → Prepare renewal fills proposed dates for review. Confirm the club agreement and save. Choose Ended to stop access. Earlier terms remain in History."
       },
       {
-        "title": "Continue, renew or end",
-        "body": "Prepare continuation / renewal creates editable proposed dates and clears the agreement checkbox. Return to standard rate at renewal clears the special reduction for the next offer. An approved future term preserves access through the current term. Expiry requires an approved continuation; nothing is automatically charged. Earlier terms remain in Subscription history."
+        "title": "Change product defaults",
+        "body": "Platform Settings → Product pricing. Set Club Batting, Selections and an optional Both products annual price. Existing agreed club prices stay unchanged."
       },
       {
-        "title": "Know what remains separate",
-        "body": "This release supplies Platform Admin subscription management and independent access. Selections-specific prospect emails, public checkout, payment-provider integration and renewal-notification jobs are not connected to the club sales pipeline yet. Do not promise an automated sales or billing journey for Selections."
+        "title": "Know the current scope",
+        "body": "Platform Admin can add Club Batting to an existing Selections club without creating another club. Selections sales emails, public checkout, payment collection and renewal notifications are not connected yet."
       }
     ]
   }
@@ -4941,7 +4941,7 @@ async function renderClubDashboard(){
   const page=document.getElementById('page');
   const targetClubId=club.id;
   page.innerHTML='<div class="splash">Loading Club Home…</div>';
-  const [{data:entitlement},{data:players},{data:trial}]=await Promise.all([
+  const [{data:entitlement},{data:players},{data:trialRecord}]=await Promise.all([
     isAdmin()?supabase.rpc('get_club_entitlement',{p_club_id:targetClubId}):Promise.resolve({data:null}),
     canUsePlayersWorkspace()?supabase.from('players').select('id,active').eq('club_id',targetClubId).eq('active',true):Promise.resolve({data:[]}),
     isAdmin()?supabase.rpc('get_club_trial',{p_club_id:targetClubId}):Promise.resolve({data:null})
@@ -4960,6 +4960,7 @@ async function renderClubDashboard(){
   const canAct=!!step&&canActOnClubSetupStep(step);
   const registeredPlayerCount=(players||[]).length;
   const entitlementActive=entitlement?.active!==false;
+  const trial=trialRecord&&['active','conversion_requested','declined'].includes(trialRecord.status)?trialRecord:null;
   const trialDaysLeft=trial?.ends_on?Math.max(0,Math.ceil((new Date(`${trial.ends_on}T23:59:59`).getTime()-Date.now())/86400000)):null;
   const liveAction=canUsePlayersWorkspace()?{tab:'players',label:'Open Players'}:isPlayerUser()?{tab:'myplan',label:'Complete your Player Plan'}:{tab:'howwebat',label:'Read How We Bat'};
   const nextLabel=contributorWaiting?'Compare and discuss How We Bat':step?.key==='workshop'&&!workshop?.philosophy_lead_user_id&&isAdmin()?'Choose a Philosophy Lead':step?.action;
@@ -16596,17 +16597,18 @@ async function renderPlatformConsole(){
   if(!platformRole){await loadContext();return;}
   localStorage.setItem('bdp-context','platform');
   if(platformView==='onboarding')platformView='home';
+  if(platformView==='selections')platformView='clubs';
 
   app.innerHTML=`${accountMenuStyles()}<div class="platform-shell">
     <header class="platform-header">
-      <div><div class="section-label">Private Platform Administration</div><h1>Club Batting</h1><p>Manage club outreach, Club Batting access and Selections subscriptions.</p></div>
+      <div><div class="section-label">Private Platform Administration</div><h1>Club Batting</h1></div>
       <div class="header-actions">
         ${allMemberships.length?contextSwitcherHtml('platformContextSwitch',`<option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}`):''}
         ${accountMenuHtml({allowJoin:false,outId:'platformOut'})}
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['home','Club Pipeline'],['add_clubs','Add club leads'],['clubs','Active Clubs'],['selections','Selections'],['market','Market Discovery'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['home','Club Pipeline'],['add_clubs','Add club leads'],['clubs','Clubs'],['market','Market Discovery'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
@@ -16622,13 +16624,13 @@ async function renderPlatformConsole(){
 }
 
 async function renderPlatformView(){
+  if(platformView==='selections')platformView='clubs';
   recordAppNavigation(platformNavigationRoute());
   platformMarketRenderVersion++; // Invalidate older discovery requests before any navigation.
   document.querySelectorAll('[data-platform-view]').forEach(b=>b.classList.toggle('active',b.dataset.platformView===(platformView==='outbox'?'home':platformView)));
   if(platformView==='add_clubs')return renderPlatformLeadEntry();
   if(platformView==='market')return renderPlatformMarketDiscovery();
   if(platformView==='clubs')return renderPlatformActiveClubs();
-  if(platformView==='selections')return renderPlatformSelections();
   if(platformView==='outbox')return renderPlatformOutbox();
   if(platformView==='guide_requests')return renderPlatformGuideRequests();
   if(platformView==='settings')return renderPlatformSettings();
@@ -17326,7 +17328,7 @@ async function renderPlatformProspects(){
 
   page.innerHTML=`
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Club Batting outreach and onboarding progress appear here. For Selections trials, access and subscription terms, choose Manage Selections.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length+deliveryExceptions.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn ghost" id="pipelineSelections">Manage Selections</button><button class="btn secondary" id="pipelineAddLeads">Add club leads</button><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
+    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Outreach and onboarding</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length+deliveryExceptions.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn ghost" id="pipelineClubs">Manage clubs</button><button class="btn secondary" id="pipelineAddLeads">Add club leads</button><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
   </section>
 
   <section class="admin-card" style="margin-bottom:16px">
@@ -17355,7 +17357,7 @@ async function renderPlatformProspects(){
 
   <div class="btnrow" style="justify-content:flex-end"><button class="btn ghost compact" id="openEmailHistory">View email history →</button></div>`;
 
-  document.getElementById('pipelineSelections').onclick=openPlatformSelections;
+  document.getElementById('pipelineClubs').onclick=openPlatformClubs;
   document.getElementById('pipelineAddLeads').onclick=()=>openPlatformLeadEntry();
   document.getElementById('openMarketDiscovery').onclick=()=>{platformView='market';renderPlatformConsole();};
   const renderList=()=>{
@@ -17730,89 +17732,7 @@ async function renderPlatformOnboardingDetail(p){
   };
 }
 
-let platformActiveClubsLoad=0;
-async function renderPlatformActiveClubs(message=''){
-  const load=++platformActiveClubsLoad,requestedUser=session?.user?.id;
-  const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading clubs…</div>';
-  const [subsRes,clubsRes,removedRes]=await Promise.all([
-    supabase.from('club_subscriptions').select('*').is('retired_at',null).in('status',['active','grace']).order('active_until'),
-    supabase.from('clubs').select('id,name,archived_at').is('archived_at',null).order('name'),
-    supabase.from('platform_club_removals').select('club_id,club_name,contact_name,contact_email,removed_at').order('removed_at',{ascending:false})
-  ]);
-  if(load!==platformActiveClubsLoad||platformView!=='clubs'||requestedUser!==session?.user?.id||page!==document.getElementById('platformPage'))return;
-  const error=subsRes.error||clubsRes.error||removedRes.error;if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
-  const clubs=clubsRes.data||[],removed=removedRes.data||[];
-  const byClub=new Map((subsRes.data||[]).map(s=>[s.club_id,s]));
-  const canCommercial=['owner','commercial_admin'].includes(platformRole),canRemove=platformRole==='owner';
-  page.innerHTML=`<style>.active-club-row{align-items:start;display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,3fr);padding:18px;gap:24px}.active-club-row>div:first-child strong{font-size:18px}.active-club-row .btn{font-size:13px}.active-club-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end}.active-club-controls label{min-width:145px;flex:1;font-size:13px;text-transform:none;color:var(--ink)}.active-club-controls input,.active-club-controls select{width:100%;max-width:none;font-size:15px;padding:10px}.active-club-controls label small{display:block;line-height:1.5;font-size:12px}.active-club-controls [hidden]{display:none}.active-club-controls input:disabled,.active-club-controls select:disabled{background:#f2f4f8;color:#73798a}@media(max-width:850px){.active-club-row{grid-template-columns:1fr;gap:14px}}.club-access-description{display:block;margin-top:8px;font-size:15px;line-height:1.5}.club-access-infinity{font-weight:700;color:#166f67}.club-access-header{display:flex;justify-content:space-between;align-items:start;gap:20px;flex-wrap:wrap}</style>
-    <section class="admin-card"><div class="club-access-header"><div><div class="section-label">Platform Admin</div><h2>Active clubs</h2><p>Manage registered clubs and their Club Batting terms here. Use Selections for separate trials, access and subscription terms.</p></div><div class="btnrow"><button class="btn secondary" id="activeSelections">Manage Selections</button><button class="btn ghost" id="activeAddLeads">Add clubs for promo email</button></div></div>
-      <div class="notice"><strong>Club Batting — ongoing free access:</strong> choose <strong>100% rate reduction</strong> and <strong>Special rate ends: Never</strong>. The club keeps access with no renewal date, payment request or trial-expiry reminder. You can change that arrangement here later.</div>
-      ${message?`<p class="notice success" role="status">${esc(message)}</p>`:''}
-      <div class="active-club-list">${clubs.map(c=>{
-        const s=byClub.get(c.id),forever=s?.special_rate_never_ends&&Number(s.adjustment_percent)===100;
-        return `<div class="active-club-row"><div><strong>${esc(c.name)}</strong><small class="section-label" style="display:block;margin-top:12px">Club Batting</small><span data-sub-description="${c.id}" class="club-access-description ${forever?'club-access-infinity':''}">${forever?'Ongoing complimentary access · no expiry or renewal':s?`Access through ${esc(niceDate(s.active_until))}`:'No active Club Batting subscription. Selections can be set up independently.'}</span></div><div>
-          ${s?`<div class="active-club-controls">
-            <label>Rate reduction %<input data-sub-adjust="${c.id}" type="number" min="0" max="100" step="1" value="${Number(s.adjustment_percent)}" ${canCommercial?'':'disabled'}><small>0 = full price · 100 = free</small></label>
-            <label>Special rate ends<select data-sub-end-mode="${c.id}" ${canCommercial?'':'disabled'}><option value="date" ${s.special_rate_never_ends?'':'selected'}>On a date</option><option value="never" ${s.special_rate_never_ends?'selected':''}>Never</option></select><input data-sub-adjend="${c.id}" type="date" aria-label="Special rate end date for ${esc(c.name)}" value="${esc(s.adjustment_end||'')}" ${s.special_rate_never_ends?'hidden':''} ${canCommercial?'':'disabled'}></label>
-            <label>Access ends<input data-sub-active="${c.id}" type="date" value="${s.active_until==='infinity'?'':esc(String(s.active_until||'').slice(0,10))}" ${forever||!canCommercial?'disabled':''}><small data-sub-access-note="${c.id}">${forever?'Never — ongoing free access':'A separate date from the special rate.'}</small></label>
-            <label>At expiry<select data-sub-expiry="${c.id}" ${forever||!canCommercial?'disabled':''}><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return to standard rate</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End access</option></select></label>
-          </div>`:''}
-          <div class="btnrow" style="margin-top:12px">${seCanReadSubscriptions()?`<button class="btn secondary" data-selections-access="${c.id}">${canCommercial?'Set up / manage Selections':'View Selections subscription'}</button>`:''}${s&&canCommercial?`<button class="btn ghost" data-save-access="${c.id}" disabled>Saved ✓</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
-        </div></div>`;
-      }).join('')||'<p>No active clubs. Add a lead and send its promo email to start the full journey.</p>'}</div>
-    </section>
-    ${removed.length?`<details class="admin-card" style="margin-top:16px"><summary><strong>Removed clubs</strong> · ${removed.length}</summary><p>These workspaces are closed and retained as archives. Adding a contact to the promo list starts a new journey; it does not restore the old setup.</p>${removed.map(row=>`<div class="message-row"><div><strong>${esc(row.club_name)}</strong><small>Removed ${esc(niceDate(row.removed_at))}${row.contact_email?` · ${esc(row.contact_email)}`:''}</small></div><button class="btn ghost" data-removed-promo="${row.club_id}">Add to promo list</button></div>`).join('')}</details>`:''}`;
-  page.querySelectorAll('[data-selections-access]').forEach(b=>b.onclick=()=>openSelectionsAccess(b.dataset.selectionsAccess,clubs.find(c=>c.id===b.dataset.selectionsAccess)?.name||'Club'));
-  document.getElementById('activeSelections').onclick=openPlatformSelections;
-  document.getElementById('activeAddLeads').onclick=()=>openPlatformLeadEntry();
-  page.querySelectorAll('[data-remove-club]').forEach(button=>button.onclick=()=>openEndClubDialog(button.dataset.removeClub));
-  page.querySelectorAll('[data-removed-promo]').forEach(button=>button.onclick=()=>openPlatformLeadEntry(removed.find(row=>row.club_id===button.dataset.removedPromo)));
-  clubs.forEach(c=>{
-    if(!byClub.has(c.id))return;
-    const keys=['adjust','end-mode','adjend','active','expiry'];
-    const fields=Object.fromEntries(keys.map(key=>[key,page.querySelector(`[data-sub-${key}="${c.id}"]`)])),el=key=>fields[key];
-    const button=page.querySelector(`[data-save-access="${c.id}"]`),status=page.querySelector(`[data-access-result="${c.id}"]`);
-    const note=page.querySelector(`[data-sub-access-note="${c.id}"]`),description=page.querySelector(`[data-sub-description="${c.id}"]`);
-    const values=()=>JSON.stringify(keys.map(key=>el(key).value));
-    let savedValues=values(),saving=false;
-    const sync=()=>{
-      const never=el('end-mode').value==='never',free=never&&Number(el('adjust').value)===100;
-      el('adjend').hidden=never;
-      keys.forEach(key=>{el(key).disabled=saving||!canCommercial||(free&&['active','expiry'].includes(key));});
-      note.textContent=free?'Never — ongoing free access':never?'The discount continues; access still renews on this date.':'A separate date from the special rate.';
-      if(button){
-        const dirty=values()!==savedValues;
-        button.disabled=saving||!dirty;
-        button.className=`btn ${dirty?'secondary':'ghost'}`;
-        button.textContent=saving?'Saving…':dirty?'Save changes':'Saved ✓';
-      }
-    };
-    keys.forEach(key=>{el(key).oninput=el(key).onchange=()=>{if(!saving)status.textContent='';sync();};});
-    sync();
-    if(!button)return;
-    button.onclick=async()=>{
-      if(saving||values()===savedValues)return;
-      const reduction=Number(el('adjust').value),never=el('end-mode').value==='never',free=never&&reduction===100;
-      if(!Number.isFinite(reduction)||reduction<0||reduction>100){status.textContent='Enter a rate reduction between 0 and 100.';return;}
-      if(!free&&!el('active').value){status.textContent='Choose an access end date.';return;}
-      if(reduction>0&&!never&&!el('adjend').value){status.textContent='Choose a special rate end date, or Never.';return;}
-      const terms={p_club_id:c.id,p_adjustment_percent:reduction,p_never_ends:never,p_adjustment_end:never?null:el('adjend').value||null,p_active_until:free?null:el('active').value,p_expiry_action:el('expiry').value};
-      saving=true;status.textContent='Saving…';sync();
-      try{
-        const {error}=await supabase.rpc('platform_set_club_access_terms',terms);
-        if(error)throw Error(error.message);
-        // Reflect the confirmed save in this row without discarding another club's edits.
-        el('adjust').value=String(reduction);el('adjend').value=terms.p_adjustment_end||'';el('active').value=terms.p_active_until||'';
-        savedValues=values();
-        description.className=`club-access-description ${free?'club-access-infinity':''}`;
-        description.textContent=free?'Ongoing complimentary access · no expiry or renewal':`Access through ${niceDate(terms.p_active_until)}`;
-        status.textContent=free?'Ongoing complimentary access saved. No renewal or payment reminders.':'Access and rate saved.';
-      }catch(error){status.textContent=error.message||'Could not save the access terms.';}
-      finally{saving=false;sync();}
-    };
-  });
-}
-
+/* Club administration maintained in tools/club_subscriptions_ui.js. */
 
 async function renderPlatformOutbox(){
   const page=document.getElementById('platformPage');
@@ -17882,15 +17802,15 @@ async function renderPlatformSettings(){
   ]);
   if(error||calendarError){page.innerHTML=`<div class="notice">${esc(error?.message||calendarError?.message)}</div>`;return;}
   const canCommercial=['owner','commercial_admin'].includes(platformRole);
-  page.innerHTML=`<section class="admin-card form-wide"><div class="section-label">Platform defaults</div><h2>Commercial settings</h2><div class="form-grid">
-    <div class="field"><label>Standard annual club price (${esc(s.currency)})</label><input id="settingPrice" type="number" step="0.01" value="${(s.standard_season_price_cents/100).toFixed(2)}" ${canCommercial?'':'disabled'}><small>This is the full 12-month Club Year price before any private rate reduction.</small></div>
-    <div class="field"><label>Full Club Trial length (days)</label><input id="settingTrialDays" type="number" min="1" max="180" value="${Number(s.club_trial_days||60)}" ${canCommercial?'':'disabled'}><small>Default launch model: full product, no payment upfront, explicit decision at the end.</small></div>
+  page.innerHTML=`<div id="productPriceSettings"></div><details class="admin-card form-wide"><summary>Billing settings</summary><div class="form-grid">
+    
+    <div class="field"><label>Club Batting trial days</label><input id="settingTrialDays" type="number" min="1" max="180" value="${Number(s.club_trial_days||60)}" ${canCommercial?'':'disabled'}><small>Default launch model: full product, no payment upfront, explicit decision at the end.</small></div>
     <div class="field"><label>Minimum days before renewal for a pro-rata term</label><input id="settingMinDays" type="number" value="${s.minimum_prorata_days}" ${canCommercial?'':'disabled'}><small>If fewer days remain, those days are included and the club is charged for the next full Club Year instead.</small></div>
     <div class="field"><label>Payment grace period</label><input id="settingGrace" type="number" value="${s.payment_grace_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Payment mode</label><select id="settingMode" ${canCommercial?'':'disabled'}><option value="prototype" ${s.payment_mode==='prototype'?'selected':''}>Prototype — simulate payment</option><option value="live" ${s.payment_mode==='live'?'selected':''}>Live provider</option></select></div>
     <div class="field"><label>Payment provider</label><select id="settingPaymentProvider" ${canCommercial?'':'disabled'}><option value="stripe" ${(s.payment_provider||'stripe')==='stripe'?'selected':''}>Stripe</option></select><small>Hosted Stripe Checkout / invoices. Card data never touches this app.</small></div>
-  </div></section>
+  </div></details>
 
   <section class="admin-card form-wide"><div class="section-label">Club Batting Guide</div><h2>OpenAI provider</h2><div class="form-grid">
     <div class="field"><label>Guide provider</label><div class="provider-check-box provider-name-box">OpenAI Responses API</div><small>The provider key and model are stored only in Supabase Edge Function Secrets.</small></div>
@@ -17915,6 +17835,7 @@ async function renderPlatformSettings(){
   <section class="admin-card form-wide"><div class="section-label">Regional Club Years</div><h2>Renewal calendars</h2><p class="help">These universal renewal dates give clubs access before their playing season instead of trying to identify each club's exact season start and finish.</p><div class="calendar-list">${(calendars||[]).map(c=>`<div><strong>${esc(c.label)}</strong><span>Club Year renews ${esc(calendarStartLabel(c))}</span></div>`).join('')}</div></section>
   ${canCommercial?'<button class="btn secondary" id="savePlatformSettings">Save settings</button>':''}<div id="settingsStatus" class="help"></div>`;
 
+  void mountProductPriceSettings();
   document.getElementById('checkDiscoveryProvider').onclick=async()=>{
     const box=document.getElementById('discoveryProviderCheck');box.textContent='Checking…';
     const {data,error}=await supabase.functions.invoke('discover-clubs',{body:{action:'status'}});
@@ -17961,7 +17882,7 @@ async function renderPlatformSettings(){
       ? ((s.email_mode==='live'&&s.email_live_from)?s.email_live_from:new Date().toISOString())
       : s.email_live_from;
     const {error}=await supabase.from('platform_settings').update({
-      standard_season_price_cents:Math.round(Number(val('settingPrice'))*100),club_trial_days:Number(val('settingTrialDays')||60),minimum_prorata_days:Number(val('settingMinDays')),
+      club_trial_days:Number(val('settingTrialDays')||60),minimum_prorata_days:Number(val('settingMinDays')),
       payment_grace_days:Number(val('settingGrace')),commercial_adjustment_warning_days:Number(val('settingWarn')),payment_mode:document.getElementById('settingMode').value,
       payment_provider:document.getElementById('settingPaymentProvider').value,discovery_provider:document.getElementById('settingDiscoveryProvider').value,
       email_mode:newEmailMode,email_provider:document.getElementById('settingEmailProvider').value,
@@ -18563,28 +18484,123 @@ function seDate(date){return new Intl.DateTimeFormat('en-AU',{day:'numeric',mont
 function seTeamText(f,clubName){const s=f.published;if(!s)return '';const d=s.details,name=id=>s.players.find(p=>p.id===id)?.name||'Vacant';return [clubName+' — '+d.grade,d.competition,d.opposition?'v '+d.opposition:'',d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'' )).join('\n'),d.ground,d.meeting,d.cancelled?'MATCH CANCELLED':s.slots.map((slot,i)=>(i+1)+'. '+name(slot.d1)+(d.days.length>1&&slot.d1!==slot.d2?' (Day 1) / '+name(slot.d2)+' (Day 2)':'')).join('\n'),'Published version '+f.publication].filter(Boolean).join('\n');}
 /* END SELECTIONS MODEL */
 
-/* Selections commercial UI: shared calendars, independent product pricing and terms. */
-async function openSelectionsSubscription(clubId,clubName,{onSaved}={}){
- const call=async(action,data={})=>{const {data:result,error}=await supabase.rpc('club_selections_api',{p_club_id:clubId,p_action:action,p_data:data});if(error){const failure=Error(error.message);failure.code=error.code;throw failure;}return result;};let context;
- try{context=await call('subscription_context');}catch(e){alert(e.message);return;}
- const p=context.pricing,s=context.subscription||{},a=context.access||{},trialDays=s.status==='trial'&&s.trial_started&&s.trial_ends?Math.round((new Date(s.trial_ends+'T12:00:00Z')-new Date(s.trial_started+'T12:00:00Z'))/86400000)+1:context.default_trial_days,today=new Date().toLocaleDateString('en-CA',{timeZone:a.timezone||'Australia/Sydney'}),initial={status:s.status||'trial',mode:a.mode||'bundle',calendar:s.calendar||context.calendars.find(x=>x.code==='australia')?.code||context.calendars[0]?.code||'',active_from:s.active_from||today,active_until:s.active_until||'',annual_price_cents:s.annual_price_cents??p.annual_price_cents,adjustment_percent:s.adjustment_percent??0,adjustment_end:s.adjustment_end||'',special_rate_never_ends:!!s.special_rate_never_ends,expiry_action:s.expiry_action||'renewal_approval',amount_paid_cents:s.amount_paid_cents||0,timezone:a.timezone||'Australia/Sydney',continuation_agreed:!!s.continuation_agreed};
- const dialog=document.createElement('dialog');dialog.style.maxWidth='850px';dialog.style.width='calc(100% - 32px)';dialog.style.maxHeight='90vh';dialog.style.overflow='auto';
- dialog.innerHTML=seStyles()+`<section class="se-page"><div class="se-top"><h2>Selections subscription · ${seEsc(clubName)}</h2><button class="btn ghost" id="seBillingClose">Close</button></div><p>Manage Selections separately using the same club-year calendars, pro-rata rules and access controls as Club Batting. Saving here does not change the club’s batting subscription or charge a payment method.</p><details><summary>Selections standard price &amp; trial settings</summary><form id="sePricingForm"><p class="se-form-note">Defaults for new Selections offers. Existing agreed terms keep their recorded price. Leave the annual price blank until decided; free trials and ongoing complimentary access still work.</p><div class="se-form-grid"><label>Annual club price<input name="annual_price" type="number" min="0" step="0.01" value="${p.annual_price_cents==null?'':(p.annual_price_cents/100).toFixed(2)}"></label><label>Currency<input name="currency" maxlength="3" value="${seEsc(p.currency)}" required></label><label>Trial days · optional override<input name="trial_days" type="number" min="1" max="365" value="${p.trial_days||''}" placeholder="Use Club Batting setting: ${context.inherited_trial_days||60}"></label></div><button class="btn ghost" type="submit" style="margin-top:12px">Save product defaults</button></form></details><form id="seSubscriptionForm" style="margin-top:18px"><div class="se-form-grid"><label>Product arrangement<select name="mode">${seOpt([['bundle','With Club Batting'],['standalone','Selections only']],initial.mode)}</select></label><label>Selections status<select name="status">${seOpt([['disabled','Not active / ended'],['trial','Free club trial'],['active','Active access']],initial.status)}</select></label><label>Club-year calendar<select name="calendar">${seOpt(context.calendars.map(x=>[x.code,x.label]),initial.calendar)}</select></label><label>Access / term starts<input name="active_from" type="date" value="${initial.active_from}" required></label><label>Access ends<input name="active_until" type="date" value="${initial.active_until}"></label><label>Fixture time zone<input name="timezone" value="${seEsc(initial.timezone)}" required></label></div><p class="se-form-note" id="seTrialTerms"></p><details open><summary>Price and special rate</summary><div class="se-form-grid"><label>Agreed annual club price (<span data-se-currency>${seEsc(s.currency||p.currency)}</span>)<input name="annual_price" type="number" step="0.01" min="0" value="${initial.annual_price_cents==null?'':(initial.annual_price_cents/100).toFixed(2)}"></label><label>Rate reduction %<input name="adjustment_percent" type="number" min="0" max="100" step="0.01" value="${initial.adjustment_percent}"></label><label>Special rate ends<select name="special_rate_never_ends">${seOpt([['false','On a date'],['true','Never']],String(initial.special_rate_never_ends))}</select><input name="adjustment_end" type="date" aria-label="Special rate end date" value="${initial.adjustment_end}"></label><label>Amount recorded as paid (<span data-se-currency>${seEsc(s.currency||p.currency)}</span>)<input name="amount_paid" type="number" min="0" step="0.01" value="${(initial.amount_paid_cents/100).toFixed(2)}"></label></div><p class="se-form-note">100% reduction + Never gives ongoing complimentary access, with no expiry or payment request. Recording a payment does not collect it.</p></details><div class="se-form-grid"><label>At expiry<select name="expiry_action">${seOpt([['renewal_approval','Require renewal approval'],['return_standard','Return to standard rate at renewal'],['end_subscription','End access']],initial.expiry_action)}</select></label></div><label class="se-check" id="seAgreementLabel"><input name="continuation_agreed" type="checkbox" ${initial.continuation_agreed?'checked':''}>The club has agreed to these paid / renewal terms.</label><div id="seQuote" class="se-form-note"></div><div class="se-actions se-editor-actions"><button class="btn ghost" type="button" id="sePreviewTerms">Preview term &amp; amount</button>${s.club_id?'<button class="btn ghost" type="button" id="seRenewTerms">Prepare continuation / renewal</button>':''}<button class="btn" type="submit">Save subscription</button></div><p class="se-form-note">Trials do not convert or charge automatically. At expiry, access waits for an approved continuation. Product-specific sales emails, checkout and renewal notifications need a later connection to the existing club pipeline.</p></form><p id="seBillingStatus" role="status"></p>${context.history.length?`<details><summary>Subscription history · ${context.history.length} recent changes</summary>${context.history.map(h=>`<p class="se-muted">${seEsc(new Date(h.created_at).toLocaleString('en-AU'))} · ${seEsc(h.snapshot.status)} · ${seEsc(h.snapshot.active_from)} to ${seEsc(h.snapshot.active_until||'ongoing')}</p>`).join('')}</details>`:''}</section>`;
- document.body.append(dialog);dialog.showModal();let dirty=false,busy=false,pending=null,pricingDirty=false,subscriptionDirty=false;const status=dialog.querySelector('#seBillingStatus'),form=dialog.querySelector('#seSubscriptionForm');const field=name=>form.elements.namedItem(name);dialog.onclose=()=>dialog.remove();dialog.querySelector('#seBillingClose').onclick=()=>{if(busy)return;if(!dirty||confirm('Close without saving these subscription changes?'))dialog.close();};dialog.addEventListener('cancel',e=>{if(busy||(dirty&&!confirm('Close without saving these subscription changes?')))e.preventDefault();});dialog.addEventListener('input',event=>{dirty=true;if(event.target.closest('#sePricingForm'))pricingDirty=true;else subscriptionDirty=true;});
- const values=()=>{const d=Object.fromEntries(new FormData(form));return {...d,revision:s.revision||0,access_revision:a.revision||0,annual_price_cents:d.annual_price===''?null:Math.round(Number(d.annual_price)*100),adjustment_percent:Number(d.adjustment_percent),special_rate_never_ends:d.special_rate_never_ends==='true',amount_paid_cents:Math.round(Number(d.amount_paid||0)*100),continuation_agreed:field('continuation_agreed').checked};};
- const sync=()=>{const d=values(),free=d.special_rate_never_ends&&d.adjustment_percent===100,displayedTrialDays=s.status==='trial'&&s.trial_started?trialDays:Number(p.trial_days||context.inherited_trial_days||60);field('active_until').disabled=d.status==='trial'||free;field('adjustment_end').hidden=d.special_rate_never_ends;dialog.querySelector('#seAgreementLabel').hidden=d.status!=='active'||free;dialog.querySelector('#seTrialTerms').textContent=d.status==='trial'?`${displayedTrialDays}-day Selections trial. It starts on the chosen date and does not restart when saved again.`:free?'Ongoing complimentary access · no expiry or renewal.':'Access and special-rate end dates are separate. Leaving Access ends blank uses the shared club-year calendar.';};form.addEventListener('change',sync);form.addEventListener('input',sync);sync();
- const preview=async()=>{status.textContent='Calculating…';try{const q=await call('preview_subscription',values());dialog.querySelector('#seQuote').textContent=q.trial?`${q.trial_days}-day free trial through ${q.active_until}. Nothing is charged.`:q.ongoing_complimentary?'Ongoing complimentary access. No renewal date or amount due.':`Current offer: ${money(q.amount_due_cents,q.currency)} · calculated access through ${q.active_until} · next club-year renewal ${q.next_renewal}${q.bundled_next_full_year?' · short remaining period included with the next full year':''}.`;status.textContent='';return q;}catch(e){status.textContent=e.message;return null;}};
- dialog.querySelector('#sePreviewTerms').onclick=preview;dialog.querySelector('#seRenewTerms')?.addEventListener('click',()=>{field('status').value='active';const next=s.active_until?new Date(s.active_until+'T12:00:00Z'):new Date(today+'T12:00:00Z');if(s.active_until)next.setUTCDate(next.getUTCDate()+1);field('active_from').value=next.toISOString().slice(0,10)>today?next.toISOString().slice(0,10):today;field('active_until').value='';field('amount_paid').value='0.00';field('continuation_agreed').checked=false;if(s.expiry_action==='return_standard'&&!s.special_rate_never_ends){field('adjustment_percent').value='0';field('adjustment_end').value='';}dirty=true;subscriptionDirty=true;sync();void preview();});
- const mutate=async(action,d)=>{if(busy)return;busy=true;const proposed={action,data:d};pending??={...proposed,data:{...d,request_id:crypto.randomUUID()}};if(pending.action!==action){status.textContent='Retry the unconfirmed save before changing another subscription setting.';busy=false;return;}dialog.querySelectorAll('button').forEach(b=>b.disabled=true);status.textContent='Saving…';try{const saved=await call(pending.action,pending.data);pending=null;if(action==='set_selection_pricing'){Object.assign(p,d,{revision:p.revision+1});pricingDirty=false;dirty=subscriptionDirty;dialog.querySelectorAll('[data-se-currency]').forEach(el=>el.textContent=s.currency||p.currency);sync();status.textContent='Product defaults saved. Club terms remain as entered.';}else{dirty=false;dialog.close();if(onSaved){try{await onSaved(saved);}catch(refreshError){alert('Subscription saved. This screen could not refresh; use Refresh access or Refresh status to reload. '+refreshError.message);}}else await openSelectionsSubscription(clubId,clubName);}}catch(e){if(e.code)pending=null;status.textContent=e.code?e.message:'Save not confirmed. Retry keeps the same request. '+e.message;}finally{busy=false;dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}};
- form.onsubmit=e=>{e.preventDefault();if(pricingDirty){status.textContent='Save the edited product defaults first, then save this club subscription.';return;}return mutate('save_subscription',values());};dialog.querySelector('#sePricingForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));return mutate('set_selection_pricing',{revision:p.revision,annual_price_cents:d.annual_price===''?null:Math.round(Number(d.annual_price)*100),currency:d.currency.toUpperCase(),trial_days:d.trial_days||null});};
- if(context.can_manage===false){dialog.querySelectorAll('form input,form select').forEach(el=>el.disabled=true);dialog.querySelectorAll('form button').forEach(el=>el.hidden=true);status.textContent='Read-only subscription view. An owner or commercial administrator can change these terms.';}
+/* Selections terms editor, shared by the club subscription screen and direct setup. */
+async function openSelectionsSubscription(clubId,clubName,{onSaved,onCancel,host,mode}={}){
+ const call=async(action,data={})=>{
+  const {data:result,error}=await supabase.rpc('club_selections_api',{p_club_id:clubId,p_action:action,p_data:data});
+  if(error){const failure=Error(error.message);failure.code=error.code;throw failure;}return result;
+ };
+ let context;
+ if(host){host.__canLeave=()=>false;host.innerHTML='<p role="status">Loading…</p>';}
+ try{context=await call('subscription_context');}catch(e){
+  if(host){host.__canLeave=()=>true;host.innerHTML=`<button class="btn ghost" id="seBillingClose">Back</button><p role="alert">${seEsc(e.message)}</p>`;host.querySelector('#seBillingClose').onclick=()=>onCancel?.();}
+  else alert(e.message);return;
+ }
+ const p=context.pricing,s=context.subscription||{},a=context.access||{},calendars=context.calendars||[],history=context.history||[],readOnly=context.can_manage===false;
+ const trialDays=s.status==='trial'&&s.trial_started&&s.trial_ends?Math.round((new Date(s.trial_ends+'T12:00:00Z')-new Date(s.trial_started+'T12:00:00Z'))/86400000)+1:context.default_trial_days||context.inherited_trial_days||60;
+ const today=new Date().toLocaleDateString('en-CA',{timeZone:a.timezone||'Australia/Sydney'});
+ const productDefault=(mode||a.mode||'bundle')==='bundle'&&p.bundle_annual_price_cents!=null&&context.batting_annual_price_cents!=null?p.bundle_annual_price_cents-context.batting_annual_price_cents:p.annual_price_cents;
+ const initial={access_kind:s.status==='disabled'?'ended':s.status==='active'?(s.special_rate_never_ends&&Number(s.adjustment_percent)===100?'complimentary':'paid'):'trial',mode:mode||a.mode||'bundle',calendar:s.calendar||calendars.find(x=>x.code==='australia')?.code||calendars[0]?.code||'',active_from:s.active_from||today,active_until:s.active_until||'',annual_price_cents:s.annual_price_cents??productDefault,adjustment_percent:s.adjustment_percent??0,adjustment_end:s.adjustment_end||'',special_rate_never_ends:!!s.special_rate_never_ends,expiry_action:s.expiry_action||'renewal_approval',amount_paid_cents:s.amount_paid_cents||0,timezone:a.timezone||'Australia/Sydney',continuation_agreed:!!s.continuation_agreed};
+ const dialog=host?null:document.createElement('dialog'),view=host||dialog;
+ if(dialog){dialog.style.maxWidth='700px';dialog.style.width='calc(100% - 32px)';dialog.style.maxHeight='90vh';dialog.style.overflow='auto';}
+ view.innerHTML=seStyles()+`<section class="se-page"><div class="se-top"><h2>${host?'Selections':`Selections · ${seEsc(clubName)}`}</h2><button class="btn ghost" id="seBillingClose">${host?'Back':'Close'}</button></div><form id="seSubscriptionForm"><input name="status" type="hidden"><div class="se-form-grid"><label>Access<select name="access_kind">${seOpt([['trial','Free trial'],['complimentary','Complimentary'],['paid','Paid subscription'],['ended','Ended']],initial.access_kind)}</select></label><label>Starts<input name="active_from" type="date" value="${initial.active_from}" required></label></div><p class="se-form-note" id="seTrialTerms"></p><div id="sePaidTerms" hidden><label>Annual price (${seEsc(s.currency||p.currency)})<input name="annual_price" type="number" step="0.01" min="0" value="${initial.annual_price_cents==null?'':(initial.annual_price_cents/100).toFixed(2)}"></label><label class="se-check" id="seAgreementLabel"><input name="continuation_agreed" type="checkbox" ${initial.continuation_agreed?'checked':''}>Club agreement confirmed</label><details id="seTermDetails"><summary>Term details</summary><div class="se-form-grid"><label>Access ends<input name="active_until" type="date" value="${initial.active_until}"></label><label>Rate reduction (%)<input name="adjustment_percent" type="number" min="0" max="100" step="0.01" value="${initial.access_kind==='complimentary'?0:initial.adjustment_percent}"></label><label>Special rate ends<select name="special_rate_never_ends">${seOpt([['false','On a date'],['true','Never']],String(initial.access_kind==='complimentary'?false:initial.special_rate_never_ends))}</select><input name="adjustment_end" type="date" aria-label="Special rate end date" value="${initial.adjustment_end}"></label><label>Payment recorded (${seEsc(s.currency||p.currency)})<input name="amount_paid" type="number" min="0" step="0.01" value="${(initial.amount_paid_cents/100).toFixed(2)}"></label><label>At expiry<select name="expiry_action">${seOpt([['renewal_approval','Require renewal approval'],['return_standard','Return to standard rate'],['end_subscription','End access']],initial.expiry_action)}</select></label></div>${s.club_id?'<button class="btn ghost" type="button" id="seRenewTerms">Prepare renewal</button>':''}</details><button class="btn ghost" type="button" id="sePreviewTerms">Preview amount</button><p id="seQuote" class="se-form-note"></p></div><details id="seMoreSettings"><summary>More settings</summary><div class="se-form-grid">${host?`<input name="mode" type="hidden" value="${seEsc(initial.mode)}">`:`<label>Products<select name="mode">${seOpt([['bundle','Club Batting + Selections'],['standalone','Selections only']],initial.mode)}</select></label>`}<label>Club year<select name="calendar">${seOpt(calendars.map(x=>[x.code,x.label]),initial.calendar)}</select></label><label>Fixture time zone<input name="timezone" value="${seEsc(initial.timezone)}" required></label></div></details><div class="se-actions se-editor-actions"><button class="btn" type="submit" id="seSaveSubscription">Save</button></div></form><p id="seBillingStatus" role="status"></p>${history.length?`<details><summary>History</summary>${history.map(h=>`<p class="se-muted">${seEsc(new Date(h.created_at).toLocaleDateString('en-AU'))} · ${seEsc(h.snapshot.status)} · ${seEsc(h.snapshot.active_from)}${h.snapshot.active_until?' to '+seEsc(h.snapshot.active_until):' · ongoing'}</p>`).join('')}</details>`:''}</section>`;
+ if(dialog){document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();}
+ let dirty=false,busy=false,pending=null,previousKind=initial.access_kind;
+ const status=view.querySelector('#seBillingStatus'),form=view.querySelector('#seSubscriptionForm'),save=view.querySelector('#seSaveSubscription'),field=name=>form.elements.namedItem(name);
+ const canLeave=()=>{
+  if(busy){status.textContent='Saving…';return false;}
+  if(pending){status.textContent='Retry the unconfirmed save before leaving.';return false;}
+  return !dirty||confirm('Discard unsaved changes?');
+ };
+ if(host)host.__canLeave=canLeave;
+ const cancel=()=>{if(!canLeave())return;if(dialog)dialog.close();onCancel?.();};
+ view.querySelector('#seBillingClose').onclick=cancel;
+ dialog?.addEventListener('cancel',e=>{e.preventDefault();cancel();});
+ const values=()=>{
+  const kind=field('access_kind').value;
+  const result={status:kind==='trial'?'trial':kind==='ended'?'disabled':'active',mode:field('mode').value,calendar:field('calendar').value,active_from:field('active_from').value,active_until:field('active_until').value,timezone:field('timezone').value,revision:s.revision||0,access_revision:a.revision||0,annual_price_cents:field('annual_price').value===''?null:Math.round(Number(field('annual_price').value)*100),adjustment_percent:Number(field('adjustment_percent').value||0),adjustment_end:field('adjustment_end').value,special_rate_never_ends:field('special_rate_never_ends').value==='true',expiry_action:field('expiry_action').value,amount_paid_cents:Math.round(Number(field('amount_paid').value||0)*100),continuation_agreed:field('continuation_agreed').checked};
+  if(kind==='complimentary')Object.assign(result,{active_until:'',adjustment_percent:100,adjustment_end:'',special_rate_never_ends:true,continuation_agreed:false});
+  if(kind==='trial')Object.assign(result,{active_until:'',adjustment_percent:0,adjustment_end:'',special_rate_never_ends:false,amount_paid_cents:0,continuation_agreed:false});
+  if(kind==='ended')Object.assign(result,{annual_price_cents:s.annual_price_cents??p.annual_price_cents,adjustment_percent:s.adjustment_percent??0,adjustment_end:s.adjustment_end||'',special_rate_never_ends:!!s.special_rate_never_ends,amount_paid_cents:s.amount_paid_cents||0,continuation_agreed:!!s.continuation_agreed});
+  return result;
+ };
+ const sync=()=>{
+  const kind=field('access_kind').value,d=values(),paid=kind==='paid',free=d.special_rate_never_ends&&d.adjustment_percent===100;
+  field('status').value=d.status;
+  view.querySelector('#sePaidTerms').hidden=!paid;
+  field('annual_price').required=paid&&!free;
+  field('continuation_agreed').required=paid&&!free;
+  view.querySelector('#seAgreementLabel').hidden=!paid||free;
+  field('active_until').disabled=!paid||free||readOnly;
+  field('adjustment_end').hidden=field('special_rate_never_ends').value==='true';
+  field('active_from').readOnly=kind==='trial'&&!!s.trial_started;
+  save.textContent=pending?'Retry save':!s.club_id&&kind==='trial'?'Start trial':'Save';
+  let hint='';
+  if(kind==='trial'){
+   const date=new Date(field('active_from').value+'T12:00:00Z');
+   if(Number.isFinite(+date)){date.setUTCDate(date.getUTCDate()+trialDays-1);hint=`${trialDays}-day trial · ends ${s.status==='trial'&&s.trial_ends?s.trial_ends:date.toISOString().slice(0,10)}`;}
+  }else if(kind==='complimentary')hint='$0 · no expiry';
+  view.querySelector('#seTrialTerms').textContent=hint;
+ };
+ if(s.trial_started&&s.status!=='trial')field('access_kind').querySelector('option[value="trial"]').disabled=true;
+ const changed=()=>{
+  dirty=true;const kind=field('access_kind').value;
+  if(kind!==previousKind){
+   if(kind==='trial'&&s.trial_started)field('active_from').value=s.trial_started;
+   if(kind==='paid'&&previousKind!=='paid'){field('continuation_agreed').checked=false;field('active_until').value='';}
+   previousKind=kind;view.querySelector('#seQuote').textContent='';
+  }
+  sync();
+ };
+ form.addEventListener('input',changed);form.addEventListener('change',changed);sync();
+ const preview=async()=>{
+  if(busy||pending)return;status.textContent='Calculating…';
+  try{
+   const q=await call('preview_subscription',values());
+   view.querySelector('#seQuote').textContent=q.ongoing_complimentary?'Free · no expiry':`${money(q.amount_due_cents,q.currency)} · through ${q.active_until}`;
+   status.textContent='';return q;
+  }catch(e){status.textContent=e.message;return null;}
+ };
+ view.querySelector('#sePreviewTerms').onclick=preview;
+ view.querySelector('#seRenewTerms')?.addEventListener('click',()=>{
+  field('access_kind').value='paid';previousKind='paid';const next=new Date((s.active_until||today)+'T12:00:00Z');
+  if(s.active_until)next.setUTCDate(next.getUTCDate()+1);
+  field('active_from').value=next.toISOString().slice(0,10)>today?next.toISOString().slice(0,10):today;
+  field('active_until').value='';field('amount_paid').value='0.00';field('continuation_agreed').checked=false;
+  if(s.expiry_action==='return_standard'&&!s.special_rate_never_ends){field('adjustment_percent').value='0';field('adjustment_end').value='';}
+  dirty=true;sync();void preview();
+ });
+ const lock=()=>{
+  form.querySelectorAll('input,select,button').forEach(el=>el.disabled=busy||!!pending||readOnly);
+  save.disabled=busy||readOnly;
+  view.querySelector('#seBillingClose').disabled=busy;
+  if(!busy&&!pending)sync();
+ };
+ form.onsubmit=async e=>{
+  e.preventDefault();if(busy||readOnly)return;
+  pending??={...values(),request_id:crypto.randomUUID()};busy=true;lock();status.textContent='Saving…';
+  try{
+   const saved=await call('save_subscription',pending);pending=null;dirty=false;busy=false;
+   if(host)host.__canLeave=()=>true;
+   if(dialog)dialog.close();
+   if(onSaved){
+    try{await onSaved(saved);}catch(refreshError){
+     const message='Saved. Refresh to see the updated status. '+refreshError.message;
+     if(view.isConnected)status.textContent=message;else alert(message);
+    }
+   }else await openSelectionsSubscription(clubId,clubName,{onCancel,host,mode});
+  }catch(e){
+   if(e.code)pending=null;
+   status.textContent=e.code?e.message:'Save not confirmed. Retry save.';
+  }finally{busy=false;if(form.isConnected){lock();if(pending)save.textContent='Retry save';}}
+ };
+ if(readOnly){form.querySelectorAll('input,select').forEach(el=>el.disabled=true);form.querySelectorAll('button').forEach(el=>el.hidden=true);status.textContent='View only';}
 }
-
 
 /* Selections product administration. Uses the existing guarded billing RPC. */
 function seCanManageSubscriptions(){return ['owner','commercial_admin'].includes(platformRole);}
 function seCanReadSubscriptions(){return ['owner','commercial_admin','support_admin'].includes(platformRole);}
-function openPlatformSelections(){platformView='selections';platformSelectedProspectId=null;platformSelectedOnboardingId=null;return renderPlatformConsole();}
+function openPlatformSelections(){return openPlatformClubs();}
 function seSubscriptionSummary(context){
  const a=context.access||{},s=context.subscription||{},today=new Date().toLocaleDateString('en-CA',{timeZone:a.timezone||'Australia/Sydney'}),starts=a.active_from||s.active_from,ends=a.valid_until||s.active_until;
  if(!a.status)return {label:'Not activated',detail:'Choose a free trial or agree subscription terms to get started.'};
@@ -18596,33 +18612,111 @@ function seSubscriptionSummary(context){
  if(a.status==='pilot')return {label:'Pilot access',detail:ends?`Access through ${niceDate(ends)}.`:'Pilot access is enabled.'};
  return {label:'Active',detail:ends?`Access through ${niceDate(ends)}.`:'Access is enabled.'};
 }
-let platformSelectionsLoad=0;
-async function renderPlatformSelections(){
- const page=document.getElementById('platformPage'),sequence=++platformSelectionsLoad;
- if(!page)return;
- document.querySelector('[data-platform-view="selections"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
- const current=()=>sequence===platformSelectionsLoad&&platformView==='selections'&&page===document.getElementById('platformPage');
- if(!seCanReadSubscriptions()){page.innerHTML='<section class="admin-card"><h2>Selections</h2><p>A platform owner or commercial administrator can set up Selections subscriptions. Support administrators can view the terms.</p></section>';return;}
- page.innerHTML='<div class="splash">Loading Selections subscriptions…</div>';
- const {data:clubs,error}=await supabase.from('clubs').select('id,name,archived_at').is('archived_at',null).order('name');
+async function renderPlatformSelections(){return openPlatformClubs();}
+
+/* One club workspace, independently recorded product terms. */
+let platformClubsLoad=0;
+function openPlatformClubs(){platformView='clubs';platformSelectedProspectId=null;platformSelectedOnboardingId=null;return renderPlatformConsole();}
+async function clubProductContext(id){
+ const call=async(name)=>{const {data,error}=await supabase.rpc(name,{p_club_id:id,p_action:'context'});if(error)throw Error(error.message);return data;};
+ const [batting,selections]=await Promise.allSettled([call('platform_club_batting_api'),(async()=>{const {data,error}=await supabase.rpc('club_selections_api',{p_club_id:id,p_action:'subscription_context'});if(error)throw Error(error.message);return data;})()]);
+ return {batting:batting.status==='fulfilled'?batting.value:null,battingError:batting.status==='rejected'?batting.reason.message:'',selections:selections.status==='fulfilled'?selections.value:null,selectionsError:selections.status==='rejected'?selections.reason.message:''};
+}
+function clubBattingSummary(context){
+ const s=context?.subscription,t=context?.trial;
+ if(!s||context.can_activate)return {label:'No subscription',detail:''};
+ const today=context.starts_on||new Date().toISOString().slice(0,10);
+ if(s.active_until&&s.active_until!=='infinity'&&s.active_until<today)return {label:'Expired',detail:`Ended ${niceDate(s.active_until)}`};
+ if(s.special_rate_never_ends&&Number(s.adjustment_percent)===100)return {label:'Complimentary',detail:'$0 · no expiry'};
+ if(context.status==='trial')return {label:'Free trial',detail:`Until ${niceDate(t?.ends_on||s.active_until)}`};
+ return {label:'Active',detail:s.active_until==='infinity'?'Ongoing':`Until ${niceDate(s.active_until)}`};
+}
+function clubSelectionSummary(context){
+ const summary=seSubscriptionSummary(context);const s=context?.subscription,a=context?.access;
+ if(summary.label==='Not activated')return {label:'Not added',detail:''};
+ if(summary.label==='Complimentary')return {label:'Complimentary',detail:'$0 · no expiry'};
+ const end=summary.label==='Free trial'?s?.trial_ends||a?.valid_until:a?.valid_until||s?.active_until;
+ return {label:summary.label,detail:summary.label==='Scheduled'?`From ${niceDate(a?.active_from||s?.active_from)}`:end?`${summary.label==='Expired'?'Ended':'Until'} ${niceDate(end)}`:summary.label==='Complimentary'?'$0 · no expiry':''};
+}
+function clubProductsStyles(){return seStyles()+`<style>.cp-list{display:grid;gap:10px;margin-top:16px}.cp-row{display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(160px,1fr) minmax(150px,1fr) auto;gap:16px;align-items:center;padding:16px;border:1px solid #dce2ee;border-radius:12px;background:white}.cp-product-label{display:block;font-size:12px;color:#64748b;margin-bottom:4px}.cp-row strong{font-size:16px}.cp-detail{font-size:13px;color:#64748b;margin:4px 0 0}.cp-products{display:grid;gap:12px;margin-top:18px}.cp-product{display:flex;gap:16px;align-items:center;justify-content:space-between;border:1px solid #dce2ee;padding:16px;border-radius:10px}.cp-product h3{margin:0 0 6px}.cp-product p{margin:0}.cp-dialog{border:1px solid #cbd5e1;border-radius:14px;width:calc(100% - 32px);max-width:680px;max-height:90vh;overflow:auto;padding:20px}.cp-dialog::backdrop{background:#0b173766}.cp-dialog details{margin:16px 0}.cp-dialog summary{cursor:pointer;min-height:36px}.cp-dialog [hidden]{display:none!important}.cp-dialog input,.cp-dialog select{font:inherit}.cp-search{max-width:440px;margin-top:16px}@media(max-width:700px){.cp-row{grid-template-columns:1fr 1fr;gap:12px}.cp-row>strong{grid-column:1/-1}.cp-row>.btn{grid-column:1/-1}.cp-dialog{padding:14px}.cp-product{padding:12px;gap:8px}}</style>`;}
+async function renderPlatformActiveClubs(message=''){
+ const page=document.getElementById('platformPage'),sequence=++platformClubsLoad,userId=session?.user?.id;
+ const current=()=>sequence===platformClubsLoad&&platformView==='clubs'&&userId===session?.user?.id&&page===document.getElementById('platformPage');
+ page.innerHTML='<div class="splash">Loading clubs…</div>';
+ const [clubsRes,removedRes]=await Promise.all([supabase.from('clubs').select('id,name,archived_at').is('archived_at',null).order('name'),supabase.from('platform_club_removals').select('club_id,club_name,contact_name,contact_email,removed_at').order('removed_at',{ascending:false})]);
  if(!current())return;
- if(error){page.innerHTML=`<section class="admin-card"><h2>Selections could not load</h2><p>${seEsc(error.message)}</p><button class="btn" id="sePlatformRetry">Try again</button></section>`;page.querySelector('#sePlatformRetry').onclick=renderPlatformSelections;return;}
- const rows=(clubs||[]).map(club=>({club}));let next=0;
- await Promise.all(Array.from({length:Math.min(4,rows.length)},async()=>{while(next<rows.length){const row=rows[next++];try{const result=await supabase.rpc('club_selections_api',{p_club_id:row.club.id,p_action:'subscription_context'});if(result.error)throw Error(result.error.message);if(!result.data)throw Error('No subscription details returned.');row.context=result.data;}catch(e){row.error=e.message;}}}));
+ if(clubsRes.error||removedRes.error){page.innerHTML=`<section class="admin-card"><p>${seEsc(clubsRes.error?.message||removedRes.error?.message)}</p><button class="btn" id="cpRetry">Retry</button></section>`;page.querySelector('#cpRetry').onclick=()=>renderPlatformActiveClubs();return;}
+ const rows=(clubsRes.data||[]).map(club=>({club})),removed=removedRes.data||[];let next=0;
+ if(seCanReadSubscriptions())await Promise.all(Array.from({length:Math.min(4,rows.length)},async()=>{while(next<rows.length){const row=rows[next++];row.products=await clubProductContext(row.club.id);}}));
  if(!current())return;
- const defaults=rows.find(row=>row.context)?.context;
- page.innerHTML=seStyles()+`<section class="se-page"><div class="admin-card"><div class="se-top"><div><div class="section-label">Platform Admin · Selections</div><h1>Selections</h1></div><button class="btn ghost" id="sePlatformRefresh">Refresh status</button></div><p>Set up and manage each registered club’s Selections access, either alongside Club Batting or as a Selections-only subscription.</p><p><strong>To get started:</strong> find the club, choose <strong>Set up Selections</strong>, select <strong>Free club trial</strong>, check the dates and save. Club Admin can then open <strong>Teams &amp; availability → Playing list</strong> to import players.</p>${defaults?`<p class="se-form-note">Standard annual price: <strong>${defaults.pricing.annual_price_cents==null?'Not set':seEsc(money(defaults.pricing.annual_price_cents,defaults.pricing.currency))}</strong> · Default trial: <strong>${seEsc(defaults.default_trial_days)} days</strong>. Product defaults can be changed within a club’s subscription window.</p>`:''}<p class="se-form-note">Club Pipeline manages Club Batting outreach and onboarding. Selections trials and subscriptions are managed here; Selections sales emails and checkout are not connected yet.</p><label style="max-width:440px">Find a registered club<input id="sePlatformSearch" type="search" placeholder="Search club name"></label></div><div class="se-grid" id="sePlatformClubs"></div><p id="sePlatformEmpty" class="se-empty" hidden>No matching registered clubs.</p></section>`;
- const renderRows=()=>{
-  const query=page.querySelector('#sePlatformSearch').value.trim().toLowerCase(),visible=rows.filter(row=>row.club.name.toLowerCase().includes(query));
-  page.querySelector('#sePlatformEmpty').hidden=visible.length>0;
-  page.querySelector('#sePlatformClubs').innerHTML=visible.map(({club:c,context,error})=>{
-   const summary=context?seSubscriptionSummary(context):null,canManage=seCanManageSubscriptions()&&context?.can_manage!==false,started=!!(context?.subscription||context?.access?.status),label=canManage?(started?'Manage Selections':'Set up Selections'):'View subscription';
-   return `<article class="se-card"><h2>${seEsc(c.name)}</h2>${error?`<p role="status"><strong>Status unavailable</strong></p><p class="se-form-note">${seEsc(error)}</p><button class="btn ghost" data-selection-retry>Retry status</button>`:`<span class="se-chip">${seEsc(summary.label)}</span><p>${seEsc(summary.detail)}</p><p class="se-muted">${context.access?.mode?context.access.mode==='standalone'?'Selections only':'With Club Batting':'Product arrangement chosen at setup'}</p><button class="btn ${canManage?'':'ghost'}" data-selection-subscription="${seEsc(c.id)}">${label}</button>`}</article>`;
-  }).join('');
-  page.querySelectorAll('[data-selection-subscription]').forEach(button=>button.onclick=()=>{const row=rows.find(row=>row.club.id===button.dataset.selectionSubscription);return openSelectionsSubscription(row.club.id,row.club.name,{onSaved:async()=>{if(current())await renderPlatformSelections();}});});
-  page.querySelectorAll('[data-selection-retry]').forEach(button=>button.onclick=renderPlatformSelections);
+ page.innerHTML=clubProductsStyles()+`<section class="se-page"><div class="se-top"><h1>Clubs</h1><button class="btn ghost" id="cpRefresh">Refresh</button></div><label class="cp-search">Find a club<input id="cpSearch" type="search" placeholder="Club name"></label>${message?`<p role="status">${seEsc(message)}</p>`:''}<div class="cp-list" id="cpClubs"></div><p id="cpEmpty" hidden>No matching clubs.</p>${removed.length?`<details class="se-card" style="margin-top:16px"><summary>Archived clubs · ${removed.length}</summary>${removed.map(row=>`<div class="message-row"><strong>${seEsc(row.club_name)}</strong><button class="btn ghost" data-removed-promo="${seEsc(row.club_id)}">Add to pipeline</button></div>`).join('')}</details>`:''}</section>`;
+ const render=()=>{const q=page.querySelector('#cpSearch').value.trim().toLowerCase(),visible=rows.filter(row=>row.club.name.toLowerCase().includes(q));page.querySelector('#cpEmpty').hidden=!!visible.length;page.querySelector('#cpClubs').innerHTML=visible.map(({club:c,products:p})=>{
+  const batting=p?.batting?clubBattingSummary(p.batting):null,selections=p?.selections?clubSelectionSummary(p.selections):null;
+  const status=(label,summary,error)=>`<div><span class="cp-product-label">${label}</span>${error?'Status unavailable':seEsc(summary?.label||'Restricted')}<div class="cp-detail">${seEsc(summary?.detail||'')}</div></div>`;
+  return `<article class="cp-row"><strong>${seEsc(c.name)}</strong>${status('Club Batting',batting,p?.battingError)}${status('Selections',selections,p?.selectionsError)}${seCanReadSubscriptions()?`<button class="btn" data-club-manage="${seEsc(c.id)}">${seCanManageSubscriptions()?'Manage':'View'}</button>`:''}</article>`;
+ }).join('');page.querySelectorAll('[data-club-manage]').forEach(button=>button.onclick=()=>{const row=rows.find(r=>r.club.id===button.dataset.clubManage);return openClubSubscriptions(row.club.id,row.club.name);});};
+ page.querySelector('#cpSearch').oninput=render;page.querySelector('#cpRefresh').onclick=()=>renderPlatformActiveClubs();page.querySelectorAll('[data-removed-promo]').forEach(button=>button.onclick=()=>openPlatformLeadEntry(removed.find(r=>r.club_id===button.dataset.removedPromo)));render();
+}
+async function openClubSubscriptions(clubId,clubName,{onSelectionsSaved}={}){
+ const dialog=document.createElement('dialog');dialog.id='clubSubscriptionDialog';dialog.className='cp-dialog';dialog.innerHTML=clubProductsStyles()+`<section class="se-page"><div class="se-top"><h2>${seEsc(clubName)}</h2><button class="btn ghost" id="cpClose">Close</button></div><div id="clubProductEditor"><p>Loading…</p></div></section>`;document.body.append(dialog);dialog.showModal();
+ const host=dialog.querySelector('#clubProductEditor'),userId=session?.user?.id;let products,busy=false;
+ const current=()=>dialog.isConnected&&userId===session?.user?.id;
+ const canLeave=()=>!busy&&(!host.__canLeave||host.__canLeave());
+ dialog.querySelector('#cpClose').onclick=()=>{if(canLeave())dialog.close();};dialog.addEventListener('cancel',event=>{if(!canLeave())event.preventDefault();});dialog.onclose=()=>dialog.remove();
+ const refresh=async()=>{busy=true;products=await clubProductContext(clubId);busy=false;if(current())overview();};
+ const saved=async(product)=>{await refresh();if(!current())return;if(platformView==='clubs'&&document.getElementById('platformPage'))await renderPlatformActiveClubs();if(product==='selections'&&onSelectionsSaved){dialog.close();await onSelectionsSaved();}};
+ const overview=()=>{
+  delete host.__canLeave;
+  host.innerHTML=`<div class="cp-products">${[['batting','Club Batting'],['selections','Selections']].map(([key,label])=>{
+   const context=products[key],error=products[key+'Error'],summary=context?(key==='batting'?clubBattingSummary(context):clubSelectionSummary(context)):null,has=context&&(key==='batting'?!context.can_activate:!!context.subscription||context.access?.status&&context.access.status!=='disabled');
+   return `<section class="cp-product"><div><h3>${label}</h3><p>${error?'Status unavailable':seEsc(summary?.label||'Unavailable')}</p>${summary?.detail?`<p class="cp-detail">${seEsc(summary.detail)}</p>`:''}</div>${error?'<button class="btn ghost" data-cp-retry>Retry</button>':`<button class="btn ${has?'ghost':''}" data-club-product="${key}" ${key==='selections'&&products.battingError?'disabled':''}>${context.can_manage===false?'View':has?'Change':'Add'}</button>`}</section>`;
+  }).join('')}</div>${platformRole==='owner'?'<details><summary>Club settings</summary><button class="btn ghost danger-lite" id="cpArchive">End &amp; remove club</button></details>':''}`;
+  host.querySelectorAll('[data-cp-retry]').forEach(button=>button.onclick=refresh);
+  host.querySelectorAll('[data-club-product]').forEach(button=>button.onclick=()=>{
+   if(button.dataset.clubProduct==='selections')return openSelectionsSubscription(clubId,clubName,{host,mode:products.batting?.subscription&&['active','grace'].includes(products.batting.subscription.status)?'bundle':'standalone',onCancel:overview,onSaved:()=>saved('selections')});
+   return renderClubBattingEditor(host,clubId,products.batting,{onCancel:overview,onSaved:()=>saved('batting')});
+  });host.querySelector('#cpArchive')?.addEventListener('click',()=>{dialog.close();openEndClubDialog(clubId);});
  };
- page.querySelector('#sePlatformSearch').oninput=renderRows;page.querySelector('#sePlatformRefresh').onclick=renderPlatformSelections;renderRows();
+ await refresh();
+}
+function renderClubBattingEditor(host,clubId,context,{onCancel,onSaved}){
+ const s=context.can_activate?null:context.subscription,canManage=context.can_manage!==false,initialFree=s?.special_rate_never_ends&&Number(s.adjustment_percent)===100,existingTrial=context.status==='trial';let busy=false,dirty=false,pending=null,previousKind=initialFree?'complimentary':existingTrial?'trial':'paid';
+ host.__canLeave=()=>{if(busy||pending){alert('Retry the unconfirmed save before leaving.');return false;}return !dirty||confirm('Discard these changes?');};
+ host.innerHTML=`<form id="cpBattingForm"><div class="se-top" style="margin:18px 0"><h3>Club Batting</h3><button class="btn ghost" type="button" id="cpBattingBack">Back</button></div><div class="se-form-grid"><label>Access<select name="access_kind">${seOpt(s?[...(existingTrial?[['trial','Free trial']]:[]),['complimentary','Complimentary'],['paid','Paid subscription']]:[...(context.trial_available?[['trial','Free trial']]:[]),['complimentary','Complimentary']],s?initialFree?'complimentary':existingTrial?'trial':'paid':context.trial_available?'trial':'complimentary')}</select></label>${s?`<label id="cpBattingEndLabel">Until<input name="active_until" type="date" value="${s.active_until==='infinity'?'':seEsc(s.active_until)}"></label>`:''}</div><p id="cpBattingHint" class="cp-detail"></p>${s?`<details id="cpBattingMore"><summary>More settings</summary><div class="se-form-grid"><label>Rate reduction %<input name="adjustment_percent" type="number" min="0" max="100" value="${Number(s.adjustment_percent)||0}"></label><label>Special rate ends<select name="never_ends">${seOpt([['false','On a date'],['true','Never']],String(!!s.special_rate_never_ends))}</select><input name="adjustment_end" type="date" aria-label="Special rate ends" value="${seEsc(s.adjustment_end||'')}"></label><label>At expiry<select name="expiry_action">${seOpt([['renewal_approval','Review renewal'],['return_standard','Return to standard price'],['end_subscription','End access']],s.expiry_action||'renewal_approval')}</select></label></div></details><label class="se-check" id="cpBattingAgreement"><input name="agreed" type="checkbox">Club has agreed to these terms</label>`:`<details><summary>More settings</summary><label>Club year<select name="calendar">${seOpt((context.calendars||[]).map(c=>[c.code,c.label]),context.calendar)}</select></label></details>`}<div class="se-actions" style="margin-top:16px"><button class="btn" type="submit" id="cpBattingSave">${s?'Save':'Start trial'}</button></div><p id="cpBattingStatus" role="status"></p></form>`;
+ const form=host.querySelector('form'),field=name=>form.elements.namedItem(name),status=host.querySelector('#cpBattingStatus');
+ const sync=()=>{const kind=field('access_kind').value;if(s&&kind==='paid'&&previousKind!=='paid'){field('adjustment_percent').value='0';field('never_ends').value='false';field('adjustment_end').value='';field('agreed').checked=false;if(s.active_until==='infinity')field('active_until').value='';}previousKind=kind;host.querySelector('#cpBattingHint').textContent=kind==='trial'?(s?`Until ${niceDate(s.active_until)}`:`${context.default_trial_days}-day trial`):kind==='complimentary'?'$0 · no expiry':'';if(s){host.querySelector('#cpBattingEndLabel').hidden=kind!=='paid';host.querySelector('#cpBattingMore').hidden=kind!=='paid';host.querySelector('#cpBattingAgreement').hidden=kind!=='paid';field('active_until').required=kind==='paid';}host.querySelector('#cpBattingSave').textContent=s?'Save':kind==='trial'?'Start trial':'Add Club Batting';};sync();
+ form.addEventListener('input',()=>{dirty=true;sync();});form.addEventListener('change',()=>{dirty=true;sync();});host.querySelector('#cpBattingBack').onclick=()=>{if(host.__canLeave())onCancel();};
+ if(!canManage){form.querySelectorAll('input,select').forEach(x=>x.disabled=true);host.querySelector('#cpBattingSave').hidden=true;}
+ form.onsubmit=async(event)=>{
+  event.preventDefault();if(busy||!canManage)return;
+  const kind=field('access_kind').value;
+  if(!pending&&s&&kind==='paid'&&!field('agreed').checked){status.textContent='Confirm the club agreement.';return;}
+  let name,data;
+  if(s){const free=kind==='complimentary';name='platform_club_batting_api';data={p_club_id:clubId,p_action:'update_terms',p_data:{kind,state_token:context.state_token,request_id:crypto.randomUUID(),adjustment_percent:free?100:Number(field('adjustment_percent').value),never_ends:free||field('never_ends').value==='true',adjustment_end:free||field('never_ends').value==='true'?null:field('adjustment_end').value||null,active_until:free?null:field('active_until').value,expiry_action:field('expiry_action').value,continuation_agreed:field('agreed').checked}};}
+  else{name='platform_club_batting_api';data={p_club_id:clubId,p_action:'activate',p_data:{kind,calendar:field('calendar').value,timezone:context.timezone||'Australia/Sydney',state_token:context.state_token,request_id:crypto.randomUUID()}};}
+  pending??={name,data};busy=true;status.textContent='Saving…';form.querySelectorAll('input,select,button').forEach(x=>x.disabled=true);
+  try{const result=await supabase.rpc(pending.name,pending.data);if(result.error){if(result.error.code)pending=null;throw Error(result.error.message);}pending=null;dirty=false;busy=false;delete host.__canLeave;try{await onSaved();}catch(e){status.textContent='Saved. Refresh to see the change.';}}
+  catch(e){status.textContent=(pending?'Save not confirmed. Retry. ':'')+e.message;}
+  finally{busy=false;if(form.isConnected){form.querySelectorAll('input,select,button').forEach(x=>x.disabled=!!pending);host.querySelector('#cpBattingSave').disabled=false;host.querySelector('#cpBattingSave').textContent=pending?'Retry save':s?'Save':kind==='trial'?'Start trial':'Add Club Batting';}}
+ };
+}
+async function mountProductPriceSettings(){
+ const host=document.getElementById('productPriceSettings');if(!host||!seCanReadSubscriptions())return;
+ host.innerHTML='<section class="admin-card"><h2>Product pricing</h2><p>Loading…</p></section>';
+ const {data:p,error}=await supabase.rpc('platform_product_pricing_api',{p_action:'context'});if(!host.isConnected)return;
+ if(error){host.innerHTML=`<section class="admin-card"><h2>Product pricing</h2><p>${seEsc(error.message)}</p><button class="btn" id="cpPricingRetry">Retry</button></section>`;host.querySelector('button').onclick=mountProductPriceSettings;return;}
+ const amount=v=>v==null?'':(v/100).toFixed(2);
+ host.innerHTML=seStyles()+`<section class="admin-card form-wide se-page"><h2>Product pricing</h2><form id="cpProductPricingForm"><div class="se-form-grid"><label>Club Batting · ${seEsc(p.currency)} / year<input name="batting_annual_price" type="number" min="0" step="0.01" required value="${amount(p.batting_annual_price_cents)}"></label><label>Selections · ${seEsc(p.currency)} / year<input name="selection_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.selection_annual_price_cents)}"></label><label>Both products · ${seEsc(p.currency)} / year<input name="bundle_annual_price" type="number" min="0" step="0.01" placeholder="Use separate prices" value="${amount(p.bundle_annual_price_cents)}"></label></div><details style="margin:14px 0"><summary>Trial settings</summary><label>Selections trial days<input name="selection_trial_days" type="number" min="1" max="365" value="${p.selection_trial_days||''}" placeholder="Use Club Batting trial length"></label></details><button class="btn" id="cpPricingSave" type="submit">Save prices</button><p role="status"></p></form></section>`;
+ const form=host.querySelector('form'),status=form.querySelector('[role=status]'),save=form.querySelector('button');if(!p.can_manage){form.querySelectorAll('input').forEach(x=>x.disabled=true);save.hidden=true;return;}
+ let pending=null,busy=false;
+ form.onsubmit=async event=>{event.preventDefault();if(busy)return;
+ const value=name=>form.elements.namedItem(name).value,price=name=>value(name)===''?null:Math.round(Number(value(name))*100);
+ pending??={batting_annual_price_cents:price('batting_annual_price'),selection_annual_price_cents:price('selection_annual_price'),bundle_annual_price_cents:price('bundle_annual_price'),selection_trial_days:value('selection_trial_days')===''?null:Number(value('selection_trial_days')),state_token:p.state_token,request_id:crypto.randomUUID()};
+ busy=true;form.querySelectorAll('input,button').forEach(x=>x.disabled=true);status.textContent='Saving…';
+ try{const {error}=await supabase.rpc('platform_product_pricing_api',{p_action:'save',p_data:pending});if(error){if(error.code)pending=null;throw Error(error.message);}pending=null;await mountProductPriceSettings();const saved=document.querySelector('#cpProductPricingForm [role=status]');if(saved)saved.textContent='Saved';}
+ catch(e){status.textContent=(pending?'Save not confirmed. Retry. ':'')+e.message;}
+ finally{busy=false;if(form.isConnected){form.querySelectorAll('input').forEach(x=>x.disabled=!!pending);save.disabled=false;save.textContent=pending?'Retry save':'Save prices';}}
+ };
 }
 
 /* BEGIN TEAMS SELECTION — maintained source: tools/teams_selection_ui.js */
@@ -18650,9 +18744,9 @@ async function renderSelections(){
  const page=document.getElementById('page'),s=ensureSelections();page.innerHTML='<div class="splash">Loading Selections…</div>';await loadSelectionsAccess();if(s!==selectionState||currentTab!=='teams')return;
  if(!selectionAccess.enabled){
   const failed=!!selectionAccess.error,canSetup=seCanManageSubscriptions(),clubId=club.id,clubName=club.name;
-  page.innerHTML=seStyles()+`<section class="se-page se-card"><h1>Club Selections</h1><p>Playing lists, availability and team selection, available independently or alongside Club Batting.</p>${failed?`<p><strong>Could not check Selections access.</strong> ${seEsc(selectionAccess.error)}</p>`:`<h2>Set up Selections for ${seEsc(clubName)}</h2><p>Selections access is not currently active for this club.</p><p>${canSetup?'Choose <strong>Set up Selections</strong> below, select <strong>Free club trial</strong>, check the dates and save. You can also agree ongoing subscription terms.':'Ask your club administrator to arrange Selections access with the Platform Admin.'}</p><p>The setup route is <strong>Platform Admin → Selections → ${seEsc(clubName)}</strong>. Once access is active, Club Admin can import the registered players under <strong>Teams &amp; availability → Playing list</strong>.</p>`}<div class="se-actions">${canSetup&&!failed?'<button class="btn" id="seSetupSelections">Set up Selections</button>':''}<button class="btn ghost" id="seRetryAccess">${failed?'Try again':'Refresh access'}</button></div></section>`;
+  page.innerHTML=seStyles()+`<section class="se-page se-card"><h1>Club Selections</h1><p>${failed?`Access could not be checked. ${seEsc(selectionAccess.error)}`:canSetup?'Add Selections to your club.':'Ask your Club Admin to arrange Selections access.'}</p><div class="se-actions">${canSetup&&!failed?'<button class="btn" id="seSetupSelections">Manage club</button>':''}<button class="btn ghost" id="seRetryAccess">${failed?'Retry':'Refresh'}</button></div></section>`;
   document.getElementById('seRetryAccess').onclick=renderSelections;
-  document.getElementById('seSetupSelections')?.addEventListener('click',()=>openSelectionsSubscription(clubId,clubName,{onSaved:async()=>{
+  document.getElementById('seSetupSelections')?.addEventListener('click',()=>openClubSubscriptions(clubId,clubName,{onSelectionsSaved:async()=>{
    if(s!==selectionState||club?.id!==clubId||currentTab!=='teams')return;
    await loadData();if(s!==selectionState||club?.id!==clubId||currentTab!=='teams')return;
    s.view=selectionAccess?.selector?'roster':'published';renderShell();
@@ -18724,7 +18818,7 @@ function seSettings(){const s=ensureSelections(),d=s.data;document.getElementByI
  const selectorForm=document.getElementById('seSelectors');selectorForm.oninput=()=>s.formDirty=true;selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users')});};if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks');
  const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No automatic connections. Teams remain independent.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);s.formDirty=true;renderLinks();});};
  const sync=()=>document.querySelectorAll('[data-se-link]').forEach(el=>{links[Number(el.dataset.seLink)]={competition:el.querySelector('[name=competition]').value.trim(),grade:el.querySelector('[name=grade]').value.trim(),group_id:el.querySelector('[name=group_id]').value};});form.oninput=()=>s.formDirty=true;document.getElementById('seAddGroupLink').onclick=()=>{sync();links.push({competition:'',grade:'',group_id:''});s.formDirty=true;renderLinks();};form.onsubmit=e=>{e.preventDefault();sync();return seMutate('group_links',{revision:d.access.revision,links});};renderLinks();}
-async function openSelectionsAccess(clubId,clubName){return openSelectionsSubscription(clubId,clubName);}
+async function openSelectionsAccess(clubId,clubName){return openClubSubscriptions(clubId,clubName);}
 function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTimer=setInterval(async()=>{const s=selectionState;if(!s||currentTab!=='teams'||s.view!=='board'||s.busy||s.pending||s.formDirty||document.activeElement?.matches('input,select,textarea')||!document.getElementById('sePicker'))return;try{const before=JSON.stringify(s.data);await seReload();if(s===selectionState&&currentTab==='teams'&&s.view==='board'&&!s.busy&&!s.pending&&!s.formDirty&&before!==JSON.stringify(s.data)){s.notice='Updated from the shared selection board.';drawSelections();}}catch{seNotice('Live refresh could not connect. Your saved selections are retained; use Refresh to reconnect.');}},20000);}
 /* END TEAMS SELECTION */
 
