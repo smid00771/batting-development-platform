@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.89 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.90 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.89';
+const APP_UI_VERSION='0.8.62.90';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -3592,7 +3592,11 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Review or remind when necessary",
-        "body": "Select a Playing Group in Players to see currently required progress and overdue counts. Admin can send eligible overdue reminders, subject to the existing reminder cooldown and email delivery mode. Remove an active due-date requirement when it is no longer needed."
+        "body": "In Players → Show players, choose Overdue Player Plans. Only unfinished required sections whose due date has passed are included. Club Admin can tick individuals or Select all shown, then Remind selected. Review the message and send; it links directly to My Player Plan. Completed players and anyone reminded within 48 hours are skipped at send time. Remove an active due-date requirement when it is no longer needed."
+      },
+      {
+        "title": "Choose reminder delivery",
+        "body": "Every reminder appears in the player’s Messages inbox. Enabled Club messages devices receive a phone alert; otherwise an email links to the message. Email also for everyone selected adds email for all recipients. Expand Email also for selected people to choose particular recipients. A player need not tick an installation declaration: the system checks enabled subscriptions. An installed icon alone is not an enabled notification."
       }
     ],
     "sort_order": 120,
@@ -4457,7 +4461,11 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Control or turn off notifications",
-        "body": "Account → App & notifications lets you change this club’s choices or Turn off on this device. Signing out clears this device’s subscription. If blocked, allow notifications in your phone/browser settings. Focus / Do Not Disturb, device restrictions and connectivity can delay or suppress alerts. Messages and coaching updates remain available inside Club Batting."
+        "body": "Account → App & notifications changes this club’s choices or turns alerts off on this device. Signing out clears this device’s subscription. If blocked, allow notifications in phone/browser settings. Focus / Do Not Disturb and connectivity can delay alerts. Messages and coaching updates remain in Club Batting."
+      },
+      {
+        "title": "When an email is used instead",
+        "body": "Club messages and Player Plan reminders use an email link when there is no active Club messages subscription. The system checks your enabled devices, so using a laptop does not turn off phone alerts. No “I installed it” checkbox is needed. An installed icon alone does not mean notifications are enabled. This does not add emails for every coaching note."
       }
     ]
   },
@@ -4488,7 +4496,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Write and send once",
-        "body": "Add a short title and message. Optionally link to My Player Plan, How We Train, Prepare for a Match, My Innings or Make your prediction. Check the total people included, then Send. This saves an inbox message for every selected person, including staff without a Player Plan. Phone alerts go only to opted-in devices. Also send by email is an explicit extra choice."
+        "body": "Add a short title and message. Optionally link to My Player Plan, How We Train, Prepare for a Match, My Innings or Make your prediction. Check the recipients, then Send. Everyone gets an inbox message. Phone alerts go to enabled Club messages subscriptions; an email link is used if there is none. Email also for everyone selected or Email also for selected people adds email for recipients who already have phone alerts. Reminder messages do not automatically copy staff."
       },
       {
         "title": "Send players to the useful screen",
@@ -4496,7 +4504,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Read and track messages",
-        "body": "Account → Messages opens the inbox. An unread Messages button appears beside Account when needed. Open View to read the text and follow its link. Staff can see their recent Sent messages, recipient count, opened count and recorded delivery totals. A phone provider accepting an alert or an email being sent is not proof it was read."
+        "body": "Open Account → Messages or the unread Messages button, then View. Staff see recent Sent messages, recipients, opened counts and phone/email delivery totals. If all phone delivery fails or expires, an unread message can fall back to an email link. Provider acceptance does not prove it was read. In Prototype email mode, email copies and fallbacks are queued but not delivered."
       },
       {
         "title": "Copy for WhatsApp",
@@ -13181,7 +13189,7 @@ function playerPlanDeadlineState(player){
       return {...req,due,overdue,label:formatLabel(req.format_key)};
     })
     .sort((a,b)=>String(a.due_date||'9999-12-31').localeCompare(String(b.due_date||'9999-12-31')));
-  const overdue=incomplete.filter(x=>x.overdue);
+  const overdue=Array.isArray(player?.overdue_plan_sections)?player.overdue_plan_sections.map(x=>({...x,label:formatLabel(x.format_key),overdue:true})):incomplete.filter(x=>x.overdue);
   return {
     raw,requirements,requiredSections,completeCount,totalCount:requiredSections.length,
     allComplete:completeCount===requiredSections.length,
@@ -13421,8 +13429,9 @@ function renderWorkspaceRosterDiscussion(player,signals=[]){
 function workspaceReminderHistory(playerId,formatKey=''){
   const all=playersWorkspaceReminderData?.reminders||[];
   return all
-    .filter(r=>String(r.player_id||'')===String(playerId||'')&&String(r.format_key||'')===String(formatKey||''))
-    .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    .filter(r=>String(r.player_id||'')===String(playerId||'')&&(!formatKey||String(r.format_key||'')===String(formatKey)))
+    .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))
+    .filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i);
 }
 
 function workspaceReminderState(playerId,formatKey=''){
@@ -13434,7 +13443,8 @@ function workspaceReminderState(playerId,formatKey=''){
   const inCooldown=!!(nextAllowed&&nextAllowed.getTime()>Date.now());
   let delivery='';
   if(latest){
-    if(latest.sent_at)delivery='sent';
+    if(latest.in_app_at)delivery='in_app';
+    else if(latest.sent_at)delivery='sent';
     else if(latest.failed_at)delivery='failed';
     else if(latest.processing_at)delivery='sending';
     else delivery='queued';
@@ -13584,6 +13594,7 @@ function bindWorkspaceAssignments(page,groups){
 }
 
 function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assignmentGroups=[]}={}){
+  const selectReminder=isAdmin()&&playersWorkspaceGroupFilter==='__overdue__';
   const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
   const feedbackCount=workspaceFeedbackCount(player.id);
   const conversationAlert=renderPlayerActionAlert(player.id,signals);
@@ -13594,7 +13605,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
   const coreComplete=plansPublished&&sectionProgress('core',planState.raw).complete;
   const formatProgress=plansPublished?publishedEnabledFormats().map(([key,label])=>({label,complete:sectionProgress(key,planState.raw).complete})):[];
   const completedFormats=formatProgress.filter(format=>format.complete).map(format=>format.label);
-  const reminder=overdue?workspaceReminderState(player.id,overdue.format_key):{history:[],count:0,inCooldown:false,latest:null,delivery:''};
+  const reminder=overdue?workspaceReminderState(player.id):{history:[],count:0,inCooldown:false,latest:null,delivery:''};
   const planHeadline=!plansPublished
     ?'Player Plan questions are being prepared'
     :coreComplete?'Core complete ✓':'Core still to complete';
@@ -13615,7 +13626,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
   let reminderAction='';
   if(isAdmin()&&overdue){
     if(reminder.latest){
-      const stateLabel=reminder.delivery==='sent'?'sent':reminder.delivery==='failed'?'failed':reminder.delivery==='sending'?'sending':'queued';
+      const stateLabel=reminder.delivery==='in_app'?'in Messages':reminder.delivery==='sent'?'sent':reminder.delivery==='failed'?'failed':reminder.delivery==='sending'?'sending':'queued';
       const at=reminderTimestamp(reminder.latest.sent_at||reminder.latest.failed_at||reminder.latest.created_at);
       const countLabel=`${reminder.count} reminder${reminder.count===1?'':'s'}`;
       const failure=reminder.delivery==='failed'&&reminder.latest.last_error?` · ${reminder.latest.last_error}`:'';
@@ -13623,7 +13634,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
       reminderMeta=`<span style="display:block;margin-top:3px;font-size:10.5px;color:var(--muted)">${esc(countLabel)} · ${esc(stateLabel)}${at?` ${esc(at)}`:''}${esc(failure)}${esc(cooldown)}</span>`;
     }
     if(reminder.inCooldown){
-      reminderAction=`<button class="workspace-text-link strong" disabled title="A new reminder becomes available after the 48-hour cooldown.">${reminder.delivery==='sent'?'Reminder sent':'Reminder queued'}</button>`;
+      reminderAction=`<button class="workspace-text-link strong" disabled title="A new reminder becomes available after the 48-hour cooldown.">${['sent','in_app'].includes(reminder.delivery)?'Reminder sent':'Reminder queued'}</button>`;
     }else{
       reminderAction=`<button class="workspace-text-link strong" data-send-plan-reminder="${player.id}" data-reminder-format="${overdue.format_key}">${reminder.count?'Send another reminder':'Send reminder'}</button>`;
     }
@@ -13632,7 +13643,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
   return `<article class="workspace-roster-row" data-workspace-roster-player="${player.id}" ${overdue?'style="border-left:4px solid var(--accent,#D8232A)"':''}>
     <div class="workspace-roster-person">
       <div>
-        <h3>${esc(player.display_name||'Player')}</h3>
+        <h3>${selectReminder?`<label class="plan-reminder-person"><input type="checkbox" data-select-overdue="${esc(player.id)}" aria-label="Select ${esc(player.display_name||'player')}" ${workspaceCanRemind(player)?'':'disabled'}>${esc(player.display_name||'Player')}</label>`:esc(player.display_name||'Player')}</h3>
         <div class="workspace-roster-groups">${groups||'<span>Unassigned</span>'}</div>
       </div>
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
@@ -13696,6 +13707,7 @@ function renderPlayersWorkspaceList(){
   const allSignals=workspaceDiscussionSignals();
   const conversations=workspaceCoachConversations();
   const signalPlayerIds=new Set(conversations.map(x=>x.playerId));
+  const overdueMode=playersWorkspaceGroupFilter==='__overdue__';
   const discussionMode=playersWorkspaceGroupFilter==='__discussion__';
   const unassignedMode=playersWorkspaceGroupFilter==='__unassigned__';
   const unassignedCount=players.filter(player=>!(player.groups||[]).some(g=>g.active!==false)).length;
@@ -13703,7 +13715,9 @@ function renderPlayersWorkspaceList(){
   const hasSelection=!!(query||playersWorkspaceGroupFilter||playersWorkspaceShowAll);
 
   let filtered=[];
-  if(discussionMode){
+  if(overdueMode){
+    filtered=plansPublished?players.filter(p=>(!query||String(p.display_name||'').toLowerCase().includes(query))&&playerPlanDeadlineState(p).overdue.length):[];
+  }else if(discussionMode){
     filtered=players.filter(player=>{
       const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
       return matchesName&&signalPlayerIds.has(player.id);
@@ -13741,6 +13755,8 @@ function renderPlayersWorkspaceList(){
     emptyCopy='<section class="card workspace-roster-empty"><strong>Find a player</strong><span>Search for a player or choose a Playing Group to view their plans and record feedback.</span></section>';
   }else if(query&&!filtered.length){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>Try another name or clear your search.</strong><span>Your search found no players in this view. Only players you have permission to access are included.</span><div class="btnrow"><button class="btn ghost" id="clearPlayerSearch">Clear search</button></div></section>`;
+  }else if(overdueMode){
+    emptyCopy='<section class="card workspace-roster-empty"><strong>No overdue Player Plans.</strong></section>';
   }else if(discussionMode){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No coaching conversations waiting.</strong><span>When feedback creates something worth discussing, the player will appear here automatically.</span></section>`;
   }else if(unassignedMode){
@@ -13749,7 +13765,7 @@ function renderPlayersWorkspaceList(){
     emptyCopy=`<section class="card workspace-roster-empty"><strong>No players to show.</strong><span>There are no accessible players in this Playing Group.</span></section>`;
   }
 
-  page.innerHTML=`<style>.players-workspace-head.compact{padding:12px 14px;gap:8px 14px}.players-workspace-head.compact>div:first-child{min-width:0;flex:1}.workspace-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.workspace-title-row h2{margin:0;font-size:24px}.workspace-title-row h2:focus{outline:none}.workspace-title-row .btn{min-height:44px;font-size:12px;padding:8px 10px}.players-workspace-head .help{margin:3px 0 0;font-size:12px}.players-workspace-head.compact .section-label{font-size:9px;margin:0 0 3px}.players-workspace-head.compact>.btnrow{margin:0;gap:6px}.players-workspace-head.compact>.btnrow .btn{min-height:44px;font-size:11px;padding:8px}.players-workspace-tools.compact{padding:12px 14px;gap:8px;align-items:end}.players-workspace-tools.compact .field{margin:0;min-width:0}.players-workspace-tools.compact label{font-size:12px;margin:0 0 3px}.players-workspace-tools.compact input,.players-workspace-tools.compact select{min-height:44px;font-size:16px;padding:8px}.players-workspace-tools.compact .workspace-filter-count{padding:4px 7px;min-height:44px;font-size:11px}#workspaceAssignmentNotice:empty{display:none}@media(max-width:650px){.players-workspace-head.compact{display:block}.players-workspace-head.compact>.btnrow{margin-top:8px}.players-workspace-tools.compact{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.players-workspace-tools.compact .workspace-filter-count{grid-column:1/-1;min-height:0;padding:0;display:flex;gap:4px;align-items:baseline;justify-content:flex-end;background:none;border:0}}</style><section class="card players-workspace-head compact">
+  page.innerHTML=`<style>@media(max-width:420px){.players-workspace-tools.compact{grid-template-columns:minmax(0,1fr)!important}}.plan-reminder-selection{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}.plan-reminder-selection label,.plan-reminder-person{display:flex;align-items:center;gap:10px;min-height:44px;margin:0;font:inherit}.plan-reminder-selection input,.plan-reminder-person input{width:18px;height:18px;margin:0;flex-shrink:0}.players-workspace-head.compact{padding:12px 14px;gap:8px 14px}.players-workspace-head.compact>div:first-child{min-width:0;flex:1}.workspace-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.workspace-title-row h2{margin:0;font-size:24px}.workspace-title-row h2:focus{outline:none}.workspace-title-row .btn{min-height:44px;font-size:12px;padding:8px 10px}.players-workspace-head .help{margin:3px 0 0;font-size:12px}.players-workspace-head.compact .section-label{font-size:9px;margin:0 0 3px}.players-workspace-head.compact>.btnrow{margin:0;gap:6px}.players-workspace-head.compact>.btnrow .btn{min-height:44px;font-size:11px;padding:8px}.players-workspace-tools.compact{padding:12px 14px;gap:8px;align-items:end}.players-workspace-tools.compact .field{margin:0;min-width:0}.players-workspace-tools.compact label{font-size:12px;margin:0 0 3px}.players-workspace-tools.compact input,.players-workspace-tools.compact select{min-height:44px;font-size:16px;padding:8px}.players-workspace-tools.compact .workspace-filter-count{padding:4px 7px;min-height:44px;font-size:11px}#workspaceAssignmentNotice:empty{display:none}@media(max-width:650px){.players-workspace-head.compact{display:block}.players-workspace-head.compact>.btnrow{margin-top:8px}.players-workspace-tools.compact{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}.players-workspace-tools.compact .workspace-filter-count{grid-column:1/-1;min-height:0;padding:0;display:flex;gap:4px;align-items:baseline;justify-content:flex-end;background:none;border:0}}</style><section class="card players-workspace-head compact">
     <div>
       <div class="section-label">${esc(role)} workspace</div>
       <div class="workspace-title-row"><h2 aria-level="1">Players</h2><div class="btnrow"><button class="btn ghost" id="messagePlayersFromPlayers">Message players &amp; staff</button><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div></div>
@@ -13760,7 +13776,7 @@ function renderPlayersWorkspaceList(){
   </section>
 
   ${plansPublished?'':'<div class="notice" style="margin-top:14px"><strong>People can join now; Player Plans open after publication.</strong> Use People & Sign-up to register people and assign club roles. Choose the Philosophy Lead and contributors in the Workshop. Players without setup access will see a waiting message when they sign in.</div>'}
-  ${!discussionMode?renderCoachConversationsSummary(conversations):''}
+  ${!discussionMode&&!overdueMode?renderCoachConversationsSummary(conversations):''}
   ${playersWorkspaceFeedbackData?.action_alerts_error?'<div class="notice">Some Coach Conversations could not load. Reload to check the latest notes and review dates.</div>':''}
   <section class="card players-workspace-tools compact">
     <div class="field">
@@ -13773,7 +13789,7 @@ function renderPlayersWorkspaceList(){
         <option value="" ${!playersWorkspaceGroupFilter?'selected':''}>${query?'All Playing Groups':'Choose a Playing Group…'}</option>
         <option value="__unassigned__" ${unassignedMode?'selected':''}>Currently unassigned · ${unassignedCount}</option>
         ${(data.groups||[]).map(g=>`<option value="${g.id}" ${playersWorkspaceGroupFilter===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}
-        <option disabled>──────────</option><option value="__discussion__" ${discussionMode?'selected':''}>Coach Conversations · ${discussionPlayers}</option>
+        <option disabled>──────────</option>${plansPublished?`<option value="__overdue__" ${overdueMode?'selected':''}>Overdue Player Plans</option>`:''}<option value="__discussion__" ${discussionMode?'selected':''}>Coach Conversations · ${discussionPlayers}</option>
       </select>
     </div>
     ${hasSelection?`<div class="workspace-filter-count compact" role="status" aria-live="polite"><strong>${filtered.length}</strong><span>shown</span></div>`:''}
@@ -13781,13 +13797,15 @@ function renderPlayersWorkspaceList(){
 
   ${unassignedMode&&filtered.length?`<div class="notice compact" id="workspaceAssignmentHelp">${isAdmin()&&assignmentGroups.length?'Tick one or more Playing Groups on each card, then click Assign selected groups. Assigned players leave this list.':'These players have no active Playing Group.'}</div>`:''}
   ${isAdmin()?`<div class="help" id="workspaceAssignmentNotice" role="status" aria-live="polite">${esc(workspaceAssignmentState().notice)}</div>`:''}
-  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
+  ${plansPublished&&playersWorkspaceGroupFilter&&!discussionMode&&!unassignedMode&&!overdueMode&&filtered.length?`<div class="notice compact" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"><strong>Player Plan status</strong><span><strong>${planCompleteCount}/${filtered.length}</strong> have completed currently required sections</span>${planOverdueCount?`<span style="color:var(--accent,#D8232A)"><strong>${planOverdueCount}</strong> overdue</span>`:'<span>No overdue Player Plans</span>'}${isAdmin()&&planOverdueCount?`<button class="btn ghost" id="remindOverduePlayers" style="margin-left:auto">Remind overdue players</button>`:''}</div>`:''}
 
-  ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> Reminders can be queued and tracked here, but they will not leave Club Batting until Platform Admin switches email delivery to Live.</div>`:''}
+  ${isAdmin()&&playersWorkspaceReminderData?.email_mode==='prototype'?`<div class="notice compact"><strong>Email delivery is still in Prototype mode.</strong> In-app messages still work. Email fallbacks and copies will not be delivered until Platform Admin switches email delivery to Live.</div>`:''}
   ${isAdmin()&&playersWorkspaceReminderData?.error?`<div class="notice compact">Reminder history could not be loaded: ${esc(playersWorkspaceReminderData.error)}</div>`:''}
   ${playersWorkspaceFeedbackData?.error?`<div class="notice compact">Coaching feedback could not be loaded, so discussion flags are temporarily unavailable: ${esc(playersWorkspaceFeedbackData.error)}</div>`:''}
 
+  ${isAdmin()&&overdueMode&&filtered.length?renderPlanReminderSelection(filtered):''}
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
+  bindPlanReminderSelection(page,filtered);
 
   document.getElementById('messagePlayersFromPlayers')?.addEventListener('click',()=>openClubMessages({compose:true}));
   document.getElementById('openTrainingPreparation')?.addEventListener('click',()=>openTrainingPreparation());
@@ -13808,24 +13826,7 @@ function renderPlayersWorkspaceList(){
   });
   bindWorkspaceAssignments(page,assignmentGroups);
 
-  document.getElementById('remindOverduePlayers')?.addEventListener('click',async()=>{
-    if(!(data.groups||[]).some(g=>g.id===playersWorkspaceGroupFilter))return;
-    const ok=confirm(`Queue one Player Plan reminder for each overdue player in this Playing Group? Players still inside the 48-hour cooldown will be skipped.`);
-    if(!ok)return;
-    const btn=document.getElementById('remindOverduePlayers');
-    if(btn){btn.disabled=true;btn.textContent='Queuing reminders…';}
-    const {data:result,error}=await supabase.rpc('send_overdue_player_plan_reminders',{p_club_id:club.id,p_playing_group_id:playersWorkspaceGroupFilter});
-    if(error){alert(error.message);if(btn){btn.disabled=false;btn.textContent='Remind overdue players';}return;}
-    if(platformRole)await kickLiveEmailDelivery();
-    await new Promise(r=>setTimeout(r,500));
-    await refreshPlayersWorkspaceReminders();
-    renderPlayersWorkspaceList();
-    const queued=Number(result?.queued||0);
-    const cooldown=Number(result?.skipped_cooldown||0);
-    const noEmail=Number(result?.skipped_no_email||0);
-    const failed=Number(result?.failed||0);
-    alert(`${queued} reminder${queued===1?'':'s'} queued${cooldown?` · ${cooldown} skipped inside cooldown`:''}${noEmail?` · ${noEmail} without an email-linked account`:''}${failed?` · ${failed} failed`:''}.`);
-  });
+  document.getElementById('remindOverduePlayers')?.addEventListener('click',()=>openPlanReminders(filtered.filter(p=>playerPlanDeadlineState(p).overdue.length).map(p=>p.id)));
 
   const search=document.getElementById('workspacePlayerSearch');
   if(search)search.oninput=()=>{
@@ -13864,17 +13865,7 @@ function bindPlayersWorkspaceRosterActions(allSignals=workspaceDiscussionSignals
   document.querySelectorAll('[data-open-player-feedback]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.openPlayerFeedback,'development'));
   document.querySelectorAll('[data-quick-match-observation]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.quickMatchObservation,'development','match'));
   document.querySelectorAll('[data-quick-training-observation]').forEach(b=>b.onclick=()=>workspaceOpenPlayer(b.dataset.quickTrainingObservation,'development','training'));
-  document.querySelectorAll('[data-send-plan-reminder]').forEach(b=>b.onclick=async()=>{
-    if(!confirmLeaveFeedbackEntry())return;
-    const original=b.textContent;
-    b.disabled=true;b.textContent='Queuing…';
-    const {error}=await supabase.rpc('send_player_plan_reminder',{p_player_id:b.dataset.sendPlanReminder,p_format_key:b.dataset.reminderFormat||null});
-    if(error){alert(error.message);b.disabled=false;b.textContent=original;return;}
-    if(platformRole)await kickLiveEmailDelivery();
-    await new Promise(r=>setTimeout(r,500));
-    await refreshPlayersWorkspaceReminders();
-    renderPlayersWorkspaceList();
-  });
+  document.querySelectorAll('[data-send-plan-reminder]').forEach(b=>b.onclick=()=>openPlanReminders([b.dataset.sendPlanReminder]));
 
 
 }
@@ -17906,6 +17897,58 @@ async function engagementSave(s,op,values){
 
 
 /* PHONE MODULES */
+/* BEGIN PLAYER PLAN REMINDERS — maintained source */
+let workspaceReminderSelection=null;
+function planReminderSelection(){
+ const key=`${club?.id}:${session?.user?.id}`;
+ if(workspaceReminderSelection?.key!==key)workspaceReminderSelection={key,ids:new Set()};
+ return workspaceReminderSelection;
+}
+function workspaceCanRemind(player){
+ const due=playerPlanDeadlineState(player).overdue;
+ return isAdmin()&&due.length>0&&!workspaceReminderState(player.id).inCooldown;
+}
+function renderPlanReminderSelection(players){
+ const state=planReminderSelection(),eligible=players.filter(workspaceCanRemind),ids=new Set(eligible.map(p=>p.id));
+ state.ids=new Set([...state.ids].filter(id=>ids.has(id)));
+ return `<div class="plan-reminder-selection"><label><input type="checkbox" id="selectAllOverdue" ${eligible.length?'':'disabled'}>Select all</label><button class="btn" id="remindSelectedPlans" ${state.ids.size?'':'disabled'}>Remind selected${state.ids.size?` (${state.ids.size})`:''}</button></div>`;
+}
+function bindPlanReminderSelection(page,players){
+ if(!isAdmin()||playersWorkspaceGroupFilter!=='__overdue__')return;
+ const state=planReminderSelection(),eligible=players.filter(workspaceCanRemind),all=page.querySelector('#selectAllOverdue');
+ if(!all)return;
+ const sync=()=>{
+  all.checked=eligible.length>0&&state.ids.size===eligible.length;all.indeterminate=state.ids.size>0&&state.ids.size<eligible.length;
+  page.querySelectorAll('[data-select-overdue]').forEach(x=>x.checked=state.ids.has(x.dataset.selectOverdue));
+  const button=page.querySelector('#remindSelectedPlans');button.disabled=!state.ids.size;button.textContent=`Remind selected${state.ids.size?` (${state.ids.size})`:''}`;
+ };
+ all.onchange=()=>{state.ids=new Set(all.checked?eligible.map(p=>p.id):[]);sync();};
+ page.querySelectorAll('[data-select-overdue]').forEach(x=>x.onchange=()=>{x.checked?state.ids.add(x.dataset.selectOverdue):state.ids.delete(x.dataset.selectOverdue);sync();});
+ page.querySelector('#remindSelectedPlans').onclick=()=>openPlanReminders([...state.ids]);sync();
+}
+async function openPlanReminders(ids){
+ if(!isAdmin()||!ids.length||!await saveClubEditsBeforeNavigation())return;
+ const state=ensureClubMessages();
+ if(state.draft&&clubMessageDirty()&&!confirm('Replace your unsent message with this Player Plan reminder?'))return;
+ state.draft={...newClubMessageDraft(),kind:'plan_reminder',player_ids:[...new Set(ids)],reminder_candidate_ids:[...new Set(ids)],include_staff:false,staff_initialised:true,
+  title:'Player Plan reminder',body:'Please finish the overdue sections of your Player Plan. Open your plan to see what needs attention.',target:'myplan'};
+ state.mode='compose';state.notice='';state.openId=null;currentTab='messages';await renderTab();
+}
+function clubMessageEmailPeople(state){
+ const d=state.draft,people=new Map();
+ for(const p of state.context.players||[])if(d.player_ids.includes(p.id))people.set(p.user_id,{...p,user_id:p.user_id});
+ if(d.include_staff)for(const p of state.context.staff||[])if(d.staff_user_ids.includes(p.user_id))people.set(p.user_id,p);
+ return [...people.values()].filter(p=>p.user_id);
+}
+function messageEmailChoices(state){
+ const d=state.draft,people=clubMessageEmailPeople(state);
+ return people.map(p=>`<label class="message-check message-email-person"><span>${esc(p.name)}<small>${p.phone_ready?'Phone alerts enabled':'Email fallback'}</small></span><input type="checkbox" data-message-email="${esc(p.user_id)}" aria-label="Email also for ${esc(p.name)}" ${!p.phone_ready||d.email||d.email_user_ids.includes(p.user_id)?'checked':''} ${!p.phone_ready||d.email?'disabled':''}></label>`).join('')||'<p class="help">Choose recipients first.</p>';
+}
+function refreshMessageEmailChoices(state){
+ const host=document.getElementById('messageEmailPeople');if(host)host.innerHTML=messageEmailChoices(state);
+}
+/* END PLAYER PLAN REMINDERS */
+
 /* BEGIN CLUB MESSAGES — maintained source: tools/club_messages_ui.js */
 let clubMessageState=null,clubMessageUnread=0,clubMessageRefreshSequence=0;
 const clubMessageTargets=[['','No app link'],['myplan','My Player Plan'],['howwetrain','How We Train'],['prepare','Prepare for a Match'],['innings','My Innings'],['make_your_call','Make your prediction']];
@@ -17914,7 +17957,7 @@ function ensureClubMessages(){
  if(clubMessageState?.key!==key)clubMessageState={key,mode:'inbox',openId:null,context:null,data:null,draft:null,sending:false,notice:''};
  return clubMessageState;
 }
-function newClubMessageDraft(){return {request_id:crypto.randomUUID(),player_ids:[],staff_user_ids:[],include_staff:true,staff_initialised:false,recipients_changed:false,title:'',body:'',target:'',email:false};}
+function newClubMessageDraft(){return {request_id:crypto.randomUUID(),player_ids:[],staff_user_ids:[],include_staff:true,staff_initialised:false,recipients_changed:false,title:'',body:'',target:'',email:false,email_user_ids:[],kind:'general'};}
 function initialiseMessageStaff(state){
  const d=state.draft;if(!d||d.staff_initialised||!state.context)return;
  d.staff_user_ids=(state.context.staff||[]).filter(p=>p.default_included).map(p=>p.user_id);d.staff_initialised=true;
@@ -17935,7 +17978,7 @@ function confirmLeaveClubMessages(){
 }
 function clubMessageStyles(){return `<style>
  .messages-page{max-width:840px;margin:0 auto}.messages-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.messages-head h1{font-size:24px;margin:0}.messages-head .btn{padding:8px 12px;min-height:44px}.messages-tabs{display:flex;gap:8px;margin:12px 0}.messages-tabs button[aria-pressed=true]{background:var(--navy,#17245f);color:#fff}
- .messages-page .message-row{padding:0;border:1px solid #dce2ee;border-radius:10px;background:white;margin-bottom:8px}.messages-page .message-row>summary{margin:0;display:flex;align-items:center;gap:8px;padding:12px;min-height:44px;box-sizing:border-box;cursor:pointer;list-style:none}.message-row>summary::after{content:'View ⌄';font-size:12px;margin-left:auto;white-space:nowrap}.message-row[open]>summary::after{content:'Close ⌃'}.message-row strong{font-size:15px}.message-row small{display:block;font-size:12px;color:#59657c}.message-content{padding:0 12px 12px;border-top:1px solid #eef0f7}.message-content p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5;margin:12px 0}.message-unread{width:8px;height:8px;background:#d8232a;border-radius:50%;flex-shrink:0}.message-form{margin-top:12px}.message-form .field{margin-bottom:12px}.message-form input,.message-form textarea,.message-form select{font-size:16px}.message-form label{font-size:13px}.message-form .message-check{display:flex;align-items:center;gap:9px;min-height:44px;margin:0}.message-check input{width:18px;height:18px;margin:0;flex-shrink:0}.message-recipients{max-height:230px;overflow:auto;border:1px solid #dce2ee;border-radius:8px;padding:4px 10px}.message-recipient-tools{display:flex;gap:8px;align-items:center;margin:8px 0}.message-recipient-tools select{min-width:0;flex:1}.message-form fieldset{min-width:0;border:0;padding:0;margin:0}.message-form fieldset:disabled{opacity:.7}.message-form .btn{min-height:44px;padding:8px 10px}.message-form input,.message-form textarea,.message-form select{box-sizing:border-box;max-width:100%}.message-form .help{margin:5px 0;font-size:12px}.messages-status:empty{display:none}.messages-status{margin:8px 0;font-size:14px}.messages-empty{padding:16px;border:1px solid #dce2ee;border-radius:10px}.message-body-count{float:right;font-weight:400;color:#59657c}
+ .messages-page .message-row{padding:0;border:1px solid #dce2ee;border-radius:10px;background:white;margin-bottom:8px}.messages-page .message-row>summary{margin:0;display:flex;align-items:center;gap:8px;padding:12px;min-height:44px;box-sizing:border-box;cursor:pointer;list-style:none}.message-row>summary::after{content:'View ⌄';font-size:12px;margin-left:auto;white-space:nowrap}.message-row[open]>summary::after{content:'Close ⌃'}.message-row strong{font-size:15px}.message-row small{display:block;font-size:12px;color:#59657c}.message-content{padding:0 12px 12px;border-top:1px solid #eef0f7}.message-content p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5;margin:12px 0}.message-unread{width:8px;height:8px;background:#d8232a;border-radius:50%;flex-shrink:0}.message-form{margin-top:12px}.message-form .field{margin-bottom:12px}.message-form input,.message-form textarea,.message-form select{font-size:16px}.message-form label{font-size:13px}.message-form .message-check{display:flex;align-items:center;gap:9px;min-height:44px;margin:0}.message-check input{width:18px;height:18px;margin:0;flex-shrink:0}.message-recipients{max-height:230px;overflow:auto;border:1px solid #dce2ee;border-radius:8px;padding:4px 10px}.message-recipient-tools{display:flex;gap:8px;align-items:center;margin:8px 0}.message-recipient-tools select{min-width:0;flex:1}.message-form fieldset{min-width:0;border:0;padding:0;margin:0}.message-form fieldset:disabled{opacity:.7}.message-form .btn{min-height:44px;padding:8px 10px}.message-form input,.message-form textarea,.message-form select{box-sizing:border-box;max-width:100%}.message-form .help{margin:5px 0;font-size:12px}.message-email-person{justify-content:space-between}.message-email-person small{display:block;color:var(--muted);font-size:12px}.message-form summary{cursor:pointer;min-height:44px;align-content:center;font-size:13px}.messages-status:empty{display:none}.messages-status{margin:8px 0;font-size:14px}.messages-empty{padding:16px;border:1px solid #dce2ee;border-radius:10px}.message-body-count{float:right;font-weight:400;color:#59657c}
  </style>`;}
 async function openClubMessages({compose=false,id=null}={}){
  if(!await saveClubEditsBeforeNavigation())return;
@@ -17979,10 +18022,10 @@ async function renderClubMessages(){
 function drawClubMessages(page,state){
  initialiseMessageStaff(state);
  const data=state.data,staff=!!state.context.can_send,rows=state.mode==='sent'?data.sent:data.inbox;
- page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?'New message':'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players &amp; staff</button>':''}</div>
+ page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?(state.draft?.kind==='plan_reminder'?'Player Plan reminder':'New message'):'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players &amp; staff</button>':''}</div>
  ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
  <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
- ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}">${esc(clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
+ ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}">${esc(clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
  document.getElementById('newClubMessage')?.addEventListener('click',()=>{state.mode='compose';state.draft??=newClubMessageDraft();drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-mode]').forEach(b=>b.onclick=()=>{if(!confirmLeaveClubMessages())return;state.mode=b.dataset.messageMode;drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-target]').forEach(b=>b.onclick=()=>openClubMessageTarget(b.dataset.messageTarget));
@@ -17997,19 +18040,22 @@ function drawClubMessages(page,state){
  if(state.mode==='compose')bindClubMessageComposer(page,state);
 }
 function clubMessageComposer(state){
- const d=state.draft??=newClubMessageDraft();initialiseMessageStaff(state);const players=state.context.players||[],staff=state.context.staff||[],count=clubMessageRecipientCount(state),groups=new Map(players.flatMap(p=>p.groups||[]).map(g=>[g.id,g.name]));
+ const d=state.draft??=newClubMessageDraft();initialiseMessageStaff(state);const reminder=d.kind==='plan_reminder',players=(state.context.players||[]).filter(p=>!reminder||d.reminder_candidate_ids.includes(p.id)),staff=reminder?[]:state.context.staff||[],count=clubMessageRecipientCount(state),groups=new Map(players.flatMap(p=>p.groups||[]).map(g=>[g.id,g.name]));
  return `<form class="message-form" id="clubMessageForm"><fieldset ${state.sending?'disabled':''}>
  <details id="messageRecipientPicker" ${d.player_ids.length?'':'open'}><summary>To: <strong id="messageRecipientCount">${messagePeople(count)}</strong> · choose recipients</summary>
- <div class="message-recipient-tools"><select id="messageGroup" aria-label="Choose a Playing Group"><option value="">All players in my access</option><option value="unassigned">Currently unassigned</option>${[...groups].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><button type="button" class="btn ghost" id="messageSelectGroup">Select</button><button type="button" class="btn ghost" id="messageClearRecipients">Clear</button></div>
+ ${reminder?'':`<div class="message-recipient-tools"><select id="messageGroup" aria-label="Choose a Playing Group"><option value="">All players in my access</option><option value="unassigned">Currently unassigned</option>${[...groups].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><button type="button" class="btn ghost" id="messageSelectGroup">Select</button><button type="button" class="btn ghost" id="messageClearRecipients">Clear</button></div>`}
  <div class="message-recipients">${players.length?players.map(p=>`<label class="message-check"><input type="checkbox" data-message-player="${esc(p.id)}" ${d.player_ids.includes(p.id)?'checked':''}>${esc(p.name)}</label>`).join(''):'No players with messaging access. Ask your Club Admin to check your player access.'}</div></details>
  ${staff.length?`<label class="message-check"><input id="messageIncludeStaff" type="checkbox" ${d.include_staff?'checked':''}>Include coaching staff</label>
  <details id="messageStaffPicker" ${d.include_staff?'':'hidden'}><summary><span id="messageStaffCount">${d.staff_user_ids.length} staff included</span> · choose staff</summary>
  <div class="message-recipients">${staff.map(p=>`<label class="message-check"><input type="checkbox" data-message-staff="${esc(p.user_id)}" ${d.staff_user_ids.includes(p.user_id)?'checked':''}><span>${esc(p.name)} <small>· ${esc(messageStaffRole(p.role))}</small></span></label>`).join('')}</div></details>`:''}
  <div class="field" style="margin-top:12px"><label for="clubMessageTitle">Title</label><input id="clubMessageTitle" required maxlength="80" value="${esc(d.title)}" placeholder="e.g. Thursday training"></div>
  <div class="field"><label for="clubMessageBody">Message <span class="message-body-count" id="messageBodyCount">${d.body.length}/1500</span></label><textarea id="clubMessageBody" required maxlength="1500" rows="4" placeholder="What does everyone need to know or do?">${esc(d.body)}</textarea></div>
- <div class="field"><label for="clubMessageTarget">Link to</label><select id="clubMessageTarget">${clubMessageTargets.map(([key,label])=>`<option value="${key}" ${d.target===key?'selected':''}>${label}</option>`).join('')}</select></div>
- <label class="message-check"><input id="clubMessageEmail" type="checkbox" ${d.email?'checked':''}>Also send by email</label>
- <p class="help">Saved in each recipient’s inbox. Phone alerts go to those who have enabled them.</p>
+ <div class="field" ${reminder?'hidden':''}><label for="clubMessageTarget">Link to</label><select id="clubMessageTarget">${clubMessageTargets.map(([key,label])=>`<option value="${key}" ${d.target===key?'selected':''}>${label}</option>`).join('')}</select></div>
+ <label class="message-check"><input id="clubMessageEmail" type="checkbox" ${d.email?'checked':''}>Email also for everyone selected</label>
+ <details id="messageEmailPicker"><summary>Email also for selected people</summary><div id="messageEmailPeople">${messageEmailChoices(state)}</div></details>
+ <p class="help">Everyone receives this in Messages. Phone alerts where enabled; an email link otherwise.</p>
+ ${reminder?'<p class="help">Players who have finished or were reminded within 48 hours are skipped.</p>':''}
+ ${state.context.email_mode==='prototype'?'<p class="notice">Email delivery is in Prototype mode. In-app messages work; emails will not be delivered yet.</p>':''}
  <div class="btnrow"><button type="submit" class="btn" id="sendClubMessage">Send to ${messagePeople(count)}</button><button type="button" class="btn ghost" id="copyClubMessageDraft">Copy for WhatsApp</button><button type="button" class="btn ghost" id="discardClubMessageDraft">Discard draft</button></div>
  <p class="messages-status" id="clubMessageSendStatus" role="status"></p></fieldset></form>`;
 }
@@ -18024,18 +18070,18 @@ function bindClubMessageComposer(page,state){
   const staffCount=form.querySelector('#messageStaffCount');if(staffCount)staffCount.textContent=`${d.staff_user_ids.length} staff included`;
   const count=clubMessageRecipientCount(state);form.querySelector('#messageRecipientCount').textContent=messagePeople(count);form.querySelector('#sendClubMessage').textContent=`Send to ${messagePeople(count)}`;form.querySelector('#messageBodyCount').textContent=`${d.body.length}/1500`;
  };
- form.addEventListener('input',sync);form.addEventListener('change',event=>{if(event.target.matches('[data-message-player],[data-message-staff],#messageIncludeStaff'))d.recipients_changed=true;sync();});
- document.getElementById('messageSelectGroup').onclick=()=>{d.recipients_changed=true;const group=form.querySelector('#messageGroup').value;form.querySelectorAll('[data-message-player]').forEach(x=>{const p=state.context.players.find(p=>p.id===x.dataset.messagePlayer);if(!group||(group==='unassigned'?!p.groups.length:p.groups.some(g=>g.id===group)))x.checked=true;});sync();};
- document.getElementById('messageClearRecipients').onclick=()=>{d.recipients_changed=true;form.querySelectorAll('[data-message-player],[data-message-staff],#messageIncludeStaff').forEach(x=>x.checked=false);sync();};
+ form.addEventListener('input',sync);form.addEventListener('change',event=>{if(event.target.matches('[data-message-player],[data-message-staff],#messageIncludeStaff'))d.recipients_changed=true;if(event.target.matches('[data-message-email]')){const uid=event.target.dataset.messageEmail;d.email_user_ids=event.target.checked?[...new Set([...d.email_user_ids,uid])]:d.email_user_ids.filter(x=>x!==uid);}sync();if(!event.target.matches('[data-message-email]'))refreshMessageEmailChoices(state);});
+ document.getElementById('messageSelectGroup')?.addEventListener('click',()=>{d.recipients_changed=true;const group=form.querySelector('#messageGroup').value;form.querySelectorAll('[data-message-player]').forEach(x=>{const p=state.context.players.find(p=>p.id===x.dataset.messagePlayer);if(!group||(group==='unassigned'?!p.groups.length:p.groups.some(g=>g.id===group)))x.checked=true;});sync();refreshMessageEmailChoices(state);});
+ document.getElementById('messageClearRecipients')?.addEventListener('click',()=>{d.recipients_changed=true;form.querySelectorAll('[data-message-player],[data-message-staff],#messageIncludeStaff').forEach(x=>x.checked=false);sync();refreshMessageEmailChoices(state);});
  document.getElementById('discardClubMessageDraft').onclick=()=>{if(clubMessageDirty()&&!confirm('Discard this unsent draft?'))return;state.draft=null;state.mode='inbox';drawClubMessages(page,state);};
  document.getElementById('copyClubMessageDraft').onclick=e=>{sync();void copyClubMessage(d,e.currentTarget);};
  form.onsubmit=async event=>{
   event.preventDefault();if(state.sending)return;sync();if(!clubMessageRecipientCount(state)){status.textContent='Choose at least one person.';form.querySelector('#messageRecipientPicker').open=true;return;}
   if(!d.title.trim()||!d.body.trim()){status.textContent='Add a title and a message.';return;}
   const clubId=club.id;state.sending=true;form.querySelector('fieldset').disabled=true;status.textContent='Sending…';
-  try{const {data,error}=await supabase.rpc('club_messages_api',{p_club_id:clubId,p_action:'send',p_data:{request_id:d.request_id,player_ids:[...d.player_ids],staff_user_ids:d.include_staff?[...d.staff_user_ids]:[],title:d.title,body:d.body,target:d.target,email:d.email}});if(error)throw error;
+  try{const {data,error}=await supabase.rpc('club_messages_api',{p_club_id:clubId,p_action:'send',p_data:{request_id:d.request_id,player_ids:[...d.player_ids],staff_user_ids:d.include_staff?[...d.staff_user_ids]:[],title:d.title,body:d.body,target:d.target,email:d.email,kind:d.kind,email_user_ids:d.email_user_ids.filter(id=>clubMessageEmailPeople(state).some(p=>p.user_id===id))}});if(error)throw error;
    if(state!==clubMessageState||clubId!==club?.id)return;
-   state.draft=null;state.mode='sent';state.notice=`Sent to ${messagePeople(data.recipients)} ✓`;state.openId=data.id;state.sending=false;await renderClubMessages();
+   state.draft=null;state.mode='sent';const skipped=Number(data.skipped?.cooldown||0)+Number(data.skipped?.no_longer_overdue||0);state.notice=`In Messages for ${messagePeople(data.recipients)} ✓${data.email_queued?` · ${data.email_queued} email${data.email_queued===1?'':'s'} queued`:''}${skipped?` · ${skipped} no longer due or recently reminded`:''}`;state.openId=data.id;state.sending=false;await renderClubMessages();
   }catch(error){if(state===clubMessageState&&form.isConnected){status.textContent=`Couldn’t confirm sending. Your draft is here; retrying will not send it twice. ${error.message||''}`;form.querySelector('fieldset').disabled=false;}}
   finally{state.sending=false;}
  };
@@ -18166,7 +18212,7 @@ async function renderPhoneApp(){
  <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label></div>
  <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
  <p id="phoneAllowHint" class="help" hidden>Tap <strong>Allow</strong> when your phone asks.</p>
- <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages, and coaching updates stay in Coach Conversations.</p></details>
+ <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages. Club messages use an email link when no enabled device can receive them. Coaching updates stay in Coach Conversations.</p></details>
  <p id="phoneActionStatus" role="status" class="help"></p></div>${demo&&installFirst?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
  document.getElementById('installClubBatting')?.addEventListener('click',async()=>{const prompt=phoneInstallPrompt;phoneInstallPrompt=null;await prompt?.prompt();if(here())await renderPhoneApp();});
  if(demo)return;
@@ -18248,7 +18294,11 @@ async function syncPhoneDeviceSession(){
  if(phoneIsDemo()||!phonePushSupported()||!session?.user||!club)return;
  const key=session.user.id+':'+club.id;if(phoneSessionSync===key)return;phoneSessionSync=key;
  try{
-  await initialisePhoneApp();const reg=phoneRegistration||await navigator.serviceWorker.getRegistration('./');const sub=await reg?.pushManager.getSubscription();if(!sub)return;
+  await initialisePhoneApp();const reg=phoneRegistration||await navigator.serviceWorker.getRegistration('./');const sub=await reg?.pushManager.getSubscription();if(!sub||key!==session?.user?.id+':'+club?.id)return;
+  if(Notification.permission==='denied'){
+   await supabase.rpc('phone_app_api',{p_club_id:club.id,p_action:'disable',p_data:{endpoint:sub.endpoint}});
+   if(key===session?.user?.id+':'+club?.id)await phoneWorkerMessage('CB_SIGN_OUT');return;
+  }
   const {data,error}=await supabase.rpc('phone_app_api',{p_club_id:club.id,p_action:'get',p_data:{endpoint:sub.endpoint}});
   if(error){phoneSessionSync='';return;}
   if(key!==session?.user?.id+':'+club?.id)return;
