@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.95 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.96 — saved-price feedback and enabled-product navigation
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.95';
+const APP_UI_VERSION='0.8.62.96';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -5622,7 +5622,7 @@ function renderShell(){
   if(session&&membership&&club)nav.push(['make_your_call','Make your prediction','club']);
 
   }
-  nav.push(['teams','Teams & availability','selection']);
+  if(selectionsEnabled())nav.push(['teams','Teams & availability','selection']);
 
   // Workflow screens stay available internally when their prerequisites and
   // permissions are met. They do not each become another menu choice.
@@ -21922,23 +21922,37 @@ async function mountProductPriceSettings(){
  const {data:p,error}=await supabase.rpc('platform_product_pricing_api',{p_action:'context'});if(!host.isConnected)return;
  if(error){host.innerHTML=`<section class="admin-card"><h2>Product pricing</h2><p>${seEsc(error.message)}</p><button class="btn" id="cpPricingRetry">Retry</button></section>`;host.querySelector('button').onclick=mountProductPriceSettings;return;}
  const amount=v=>v==null?'':(v/100).toFixed(2);
- host.innerHTML=seStyles()+`<section class="admin-card form-wide se-page"><h2>Product pricing</h2><p class="cp-price-unit">${seEsc(p.currency)} per year</p><form id="cpProductPricingForm"><div class="cp-price-grid"><section class="cp-price-product" aria-labelledby="cpBattingPriceHeading"><h3 id="cpBattingPriceHeading">Club Batting</h3><label>Annual price<input name="batting_annual_price" type="number" min="0" step="0.01" required value="${amount(p.batting_annual_price_cents)}"></label></section><section class="cp-price-product" aria-labelledby="cpSelectionsPriceHeading"><h3 id="cpSelectionsPriceHeading">Selections</h3><label>Annual price<input name="selection_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.selection_annual_price_cents)}"></label></section><section class="cp-price-product" aria-labelledby="cpBothPriceHeading"><h3 id="cpBothPriceHeading">Both products <small>Optional</small></h3><label>Annual price<input name="bundle_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.bundle_annual_price_cents)}"></label></section></div><button class="btn" id="cpPricingSave" type="submit">Save prices</button><p role="status"></p></form></section>`;
+ host.innerHTML=seStyles()+`<section class="admin-card form-wide se-page"><h2>Product pricing</h2><p class="cp-price-unit">${seEsc(p.currency)} per year</p><form id="cpProductPricingForm"><div class="cp-price-grid"><section class="cp-price-product" aria-labelledby="cpBattingPriceHeading"><h3 id="cpBattingPriceHeading">Club Batting</h3><label>Annual price<input name="batting_annual_price" type="number" min="0" step="0.01" required value="${amount(p.batting_annual_price_cents)}"></label></section><section class="cp-price-product" aria-labelledby="cpSelectionsPriceHeading"><h3 id="cpSelectionsPriceHeading">Selections</h3><label>Annual price<input name="selection_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.selection_annual_price_cents)}"></label></section><section class="cp-price-product" aria-labelledby="cpBothPriceHeading"><h3 id="cpBothPriceHeading">Both products <small>Optional</small></h3><label>Annual price<input name="bundle_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.bundle_annual_price_cents)}"></label></section></div><button class="btn" id="cpPricingSave" type="submit" disabled>Saved</button><p role="status"></p></form></section>`;
  const form=host.querySelector('form'),status=form.querySelector('[role=status]'),save=form.querySelector('button');if(!p.can_manage){form.querySelectorAll('input').forEach(x=>x.disabled=true);save.hidden=true;return;}
- let pending=null,busy=false;
- form.onsubmit=async event=>{event.preventDefault();if(busy)return;
+ let pending=null,busy=false,dirty=false;
+ const edited=()=>{if(busy||pending)return;dirty=true;save.disabled=false;save.textContent='Save prices';status.textContent='';};
+ form.addEventListener('input',edited);form.addEventListener('change',edited);
+ form.onsubmit=async event=>{event.preventDefault();if(busy||(!dirty&&!pending))return;
  const value=name=>form.elements.namedItem(name).value,price=name=>value(name)===''?null:Math.round(Number(value(name))*100);
  pending??={batting_annual_price_cents:price('batting_annual_price'),selection_annual_price_cents:price('selection_annual_price'),bundle_annual_price_cents:price('bundle_annual_price'),selection_trial_days:null,state_token:p.state_token,request_id:crypto.randomUUID()};
- busy=true;form.querySelectorAll('input,button').forEach(x=>x.disabled=true);status.textContent='Saving…';
- try{const {error}=await supabase.rpc('platform_product_pricing_api',{p_action:'save',p_data:pending});if(error){if(error.code)pending=null;throw Error(error.message);}pending=null;await mountProductPriceSettings();const saved=document.querySelector('#cpProductPricingForm [role=status]');if(saved)saved.textContent='Saved';}
+ busy=true;form.querySelectorAll('input,button').forEach(x=>x.disabled=true);save.textContent='Saving…';status.textContent='';
+ try{const {error}=await supabase.rpc('platform_product_pricing_api',{p_action:'save',p_data:pending});if(error){if(error.code)pending=null;throw Error(error.message);}pending=null;dirty=false;await mountProductPriceSettings();}
  catch(e){status.textContent=(pending?'Save not confirmed. Retry. ':'')+e.message;}
- finally{busy=false;if(form.isConnected){form.querySelectorAll('input').forEach(x=>x.disabled=!!pending);save.disabled=false;save.textContent=pending?'Retry save':'Save prices';}}
+ finally{busy=false;if(form.isConnected){form.querySelectorAll('input').forEach(x=>x.disabled=!!pending);save.disabled=!pending&&!dirty;save.textContent=pending?'Retry save':dirty?'Save prices':'Saved';}}
  };
 }
 
 /* BEGIN TEAMS SELECTION — maintained source: tools/teams_selection_ui.js */
-let selectionAccess=null,selectionState=null,selectionRefreshTimer=null;
-function selectionsStandalone(){return selectionAccess?.key===`${session?.user?.id}:${club?.id}`&&selectionAccess.mode==='standalone';}
-async function loadSelectionsAccess(){const key=`${session?.user?.id}:${club?.id}`;const {data,error}=await supabase.rpc('club_selections_api',{p_club_id:club.id,p_action:'access'});if(key===`${session?.user?.id}:${club?.id}`)selectionAccess={key,...(data||{}),error:error?.message||''};return selectionAccess;}
+let selectionAccess=null,selectionState=null,selectionRefreshTimer=null,selectionAccessSequence=0;
+function selectionsScopeKey(){return session?.user?.id&&club?.id?`${session.user.id}:${club.id}`:null;}
+function selectionsEnabled(){const key=selectionsScopeKey();return !!(key&&membership&&selectionAccess?.key===key&&selectionAccess.enabled===true&&!selectionAccess.error);}
+function selectionsStandalone(){const key=selectionsScopeKey();return !!(key&&selectionAccess?.key===key&&selectionAccess.mode==='standalone');}
+async function loadSelectionsAccess(){
+ const key=selectionsScopeKey(),clubId=club?.id,sequence=++selectionAccessSequence;
+ if(!key){selectionAccess=null;return null;}
+ let result;
+ try{result=await supabase.rpc('club_selections_api',{p_club_id:clubId,p_action:'access'});}catch(error){result={error};}
+ if(key===selectionsScopeKey()&&sequence===selectionAccessSequence){
+  const {data,error}=result||{};
+  selectionAccess={...(data||{}),key,enabled:!error&&data?.enabled===true,error:error?(error.message||'Selections access could not be checked.') : ''};
+ }
+ return selectionAccess?.key===selectionsScopeKey()?selectionAccess:null;
+}
 function ensureSelections(){const key=`${session?.user?.id}:${club?.id}`;if(selectionState?.key!==key){let pending=null;try{pending=JSON.parse(fixtureSessionStorage.getItem('selections-pending-'+key)||'null');}catch{}selectionState={key,view:'published',data:null,notice:'',busy:false,pending,undo:[],date:'',search:'',role:'',active:null,pairs:false,formDirty:false};}return selectionState;}
 function seEsc(v){return esc(String(v??''));}
 function seOpt(opts,value){return opts.map(([v,label])=>`<option value="${seEsc(v)}" ${v===value?'selected':''}>${seEsc(label)}</option>`).join('');}
@@ -21947,7 +21961,7 @@ function seNotice(text){const s=ensureSelections();s.notice=text;const n=documen
 function sePersist(){const s=ensureSelections();try{const key='selections-pending-'+s.key;s.pending?fixtureSessionStorage.setItem(key,JSON.stringify(s.pending)):fixtureSessionStorage.removeItem(key);}catch{}}
 function confirmLeaveSelections(){const s=selectionState;if(currentTab!=='teams'||!s)return true;if(s.busy){alert('The selection change is saving. Please wait.');return false;}if(s.pending){alert('This save is not confirmed. Retry it or download the recovery file before leaving.');return false;}if(s.formDirty&&!confirm('Leave these unsaved form changes?'))return false;s.formDirty=false;return true;}
 async function seRPC(action,data={}){const {data:result,error}=await supabase.rpc('club_selections_api',{p_club_id:club.id,p_action:action,p_data:data});if(error)throw Error(error.message+(error.details&&error.details.startsWith('[')?' '+error.details:''));return result;}
-async function seReload(){const s=ensureSelections(),sequence=(s.loadSequence||0)+1;s.loadSequence=sequence;const result=await seRPC('context');if(s!==selectionState||sequence!==s.loadSequence)return false;s.data=result;selectionAccess={...selectionAccess,enabled:true,mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
+async function seReload(){const s=ensureSelections(),sequence=(s.loadSequence||0)+1;s.loadSequence=sequence;const result=await seRPC('context');if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence)return false;s.data=result;selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
 async function seMutate(action,data,{undo=null}={}){const s=ensureSelections();if(s.busy)return false;const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()}};s.pending=pending;s.busy=true;sePersist();seNotice('Saving…');seLock(true);
  try{const result=await seRPC(pending.action,pending.data);if(s!==selectionState)return false;s.pending=null;sePersist();if(undo)s.undo.push({before:undo,expected:result.revisions});s.formDirty=false;await seReload();s.notice=action==='publish'?`Published ✓${result.groups?.unlinked_players?.length?` · ${result.groups.unlinked_players.length} Playing Group additions need linked batting accounts.`:''}`:'Saved ✓';s.busy=false;drawSelections();return true;}catch(error){s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;s.busy=false;drawSelections();return false;}finally{s.busy=false;seLock(false);}}
 function seLock(disabled){document.querySelectorAll('#sePage button,#sePage input,#sePage select,#sePage textarea').forEach(x=>{if(disabled){x.dataset.seWasDisabled=x.disabled?'1':'0';x.disabled=true;}else if(x.dataset.seWasDisabled!==undefined){x.disabled=x.dataset.seWasDisabled==='1';delete x.dataset.seWasDisabled;}});}
@@ -21957,9 +21971,9 @@ function seStyles(){return `<style>
 @media(max-width:1100px){.se-board-layout{grid-template-columns:1fr}.se-picker{position:static;max-height:none}.se-roster-row{grid-template-columns:1fr 1fr}.se-roster-row>div:first-child{grid-column:1/-1}}@media(max-width:560px){.se-card{padding:12px}.se-top h1{font-size:23px}.se-tabs{gap:4px}.se-tabs .btn{padding:7px 8px;font-size:13px}.se-link-row{grid-template-columns:1fr}.se-actions .btn{flex-grow:1}.se-toolbar>label{width:100%}.se-toolbar select{width:100%}}
 </style>`;}
 async function renderSelections(){
- const page=document.getElementById('page'),s=ensureSelections();page.innerHTML='<div class="splash">Loading Selections…</div>';await loadSelectionsAccess();if(s!==selectionState||currentTab!=='teams')return;
- if(!selectionAccess.enabled){
-  const failed=!!selectionAccess.error,canSetup=seCanManageSubscriptions(),clubId=club.id,clubName=club.name;
+ const page=document.getElementById('page'),s=ensureSelections();page.innerHTML='<div class="splash">Loading Selections…</div>';await loadSelectionsAccess();if(s!==selectionState||s.key!==selectionsScopeKey()||currentTab!=='teams')return;
+ if(!selectionsEnabled()){
+  const failed=!!selectionAccess?.error,canSetup=seCanManageSubscriptions(),clubId=club.id,clubName=club.name;
   page.innerHTML=seStyles()+`<section class="se-page se-card"><h1>Club Selections</h1><p>${failed?`Access could not be checked. ${seEsc(selectionAccess.error)}`:canSetup?'Add Selections to your club.':'Ask your Club Admin to arrange Selections access.'}</p><div class="se-actions">${canSetup&&!failed?'<button class="btn" id="seSetupSelections">Manage club</button>':''}<button class="btn ghost" id="seRetryAccess">${failed?'Retry':'Refresh'}</button></div></section>`;
   document.getElementById('seRetryAccess').onclick=renderSelections;
   document.getElementById('seSetupSelections')?.addEventListener('click',()=>openClubSubscriptions(clubId,clubName,{onSelectionsSaved:async()=>{
@@ -21968,7 +21982,7 @@ async function renderSelections(){
    s.view=selectionAccess?.selector?'roster':'published';renderShell();
   }}));return;
  }
- try{await seReload();seStartLiveRefresh();if(s.view==='board'&&!s.data.selector)s.view='published';drawSelections();}catch(e){page.innerHTML=`<section class="card"><h2>Selections could not load</h2><p>${seEsc(e.message)}</p><button class="btn" id="seRetryAccess">Try again</button></section>`;document.getElementById('seRetryAccess').onclick=renderSelections;}
+ try{if(!await seReload()||s.key!==selectionsScopeKey()||currentTab!=='teams')return;seStartLiveRefresh();if(s.view==='board'&&!s.data.selector)s.view='published';drawSelections();}catch(e){if(s.key!==selectionsScopeKey()||currentTab!=='teams')return;page.innerHTML=`<section class="card"><h2>Selections could not load</h2><p>${seEsc(e.message)}</p><button class="btn" id="seRetryAccess">Try again</button></section>`;document.getElementById('seRetryAccess').onclick=renderSelections;}
 }
 function drawSelections(){if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const tabs=[['published','Teams'],...(d.selector?[['board','Selection board'],['roster','Playing list']]:[]),['availability','Availability'],...(d.admin?[['settings','Settings']]:[])];
  document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><button class="btn ghost" id="seRefresh">Refresh</button></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div><p id="seNotice" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}<div id="seContent"></div></section>`;
