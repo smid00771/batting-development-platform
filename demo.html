@@ -3182,7 +3182,7 @@ window.__fixtureDb={
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.92';
+const APP_UI_VERSION='0.8.62.93';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -5992,7 +5992,7 @@ function validAppNavigationMarker(marker){
     (marker.route?.scope==='platform'||(marker.route?.scope==='club'&&typeof marker.route.clubId==='string'&&typeof marker.route.tab==='string')));
 }
 function restorePlatformNavigationState(route){
-  platformView=['home','add_clubs','clubs','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
+  platformView=['home','add_clubs','clubs','selections','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
   platformSelectedProspectId=route.prospectId||null;
   platformSelectedOnboardingId=route.onboardingId||null;
 }
@@ -19777,14 +19777,14 @@ async function renderPlatformConsole(){
 
   app.innerHTML=`${accountMenuStyles()}<div class="platform-shell">
     <header class="platform-header">
-      <div><div class="section-label">Private Platform Administration</div><h1>Club Batting</h1><p>Find clubs, follow the few exceptions that need attention, and see each Club Trial through to activation.</p></div>
+      <div><div class="section-label">Private Platform Administration</div><h1>Club Batting</h1><p>Manage club outreach, Club Batting access and Selections subscriptions.</p></div>
       <div class="header-actions">
         ${allMemberships.length?contextSwitcherHtml('platformContextSwitch',`<option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}`):''}
         ${accountMenuHtml({allowJoin:false,outId:'platformOut'})}
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['home','Club Pipeline'],['add_clubs','Add club leads'],['clubs','Active Clubs'],['market','Market Discovery'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['home','Club Pipeline'],['add_clubs','Add club leads'],['clubs','Active Clubs'],['selections','Selections'],['market','Market Discovery'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
@@ -19806,6 +19806,7 @@ async function renderPlatformView(){
   if(platformView==='add_clubs')return renderPlatformLeadEntry();
   if(platformView==='market')return renderPlatformMarketDiscovery();
   if(platformView==='clubs')return renderPlatformActiveClubs();
+  if(platformView==='selections')return renderPlatformSelections();
   if(platformView==='outbox')return renderPlatformOutbox();
   if(platformView==='guide_requests')return renderPlatformGuideRequests();
   if(platformView==='settings')return renderPlatformSettings();
@@ -20503,7 +20504,7 @@ async function renderPlatformProspects(){
 
   page.innerHTML=`
   <section class="admin-card" style="margin-bottom:16px">
-    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Normal outreach responses and valid Interested responses move automatically. This page keeps the exceptions and live onboarding work visible.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length+deliveryExceptions.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn secondary" id="pipelineAddLeads">Add club leads</button><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
+    <div class="admin-card-head"><div><div class="section-label">Club Pipeline</div><h2>Attention, follow-up and Club Trial progress</h2><p class="help">Club Batting outreach and onboarding progress appear here. For Selections trials, access and subscription terms, choose Manage Selections.</p><div class="btnrow" style="margin-top:10px"><span class="status-pill">${needsAttention.length+deliveryExceptions.length} need attention</span><span class="status-pill">${revisit.length} revisit later</span><button class="btn ghost compact" id="openOnboardingList" ${currentOnboarding.length?'':'disabled'}>${currentOnboarding.length} currently onboarding →</button></div></div><div class="btnrow"><button class="btn ghost" id="pipelineSelections">Manage Selections</button><button class="btn secondary" id="pipelineAddLeads">Add club leads</button><button class="btn ghost" id="openMarketDiscovery">Open Market Discovery</button></div></div>
   </section>
 
   <section class="admin-card" style="margin-bottom:16px">
@@ -20532,6 +20533,7 @@ async function renderPlatformProspects(){
 
   <div class="btnrow" style="justify-content:flex-end"><button class="btn ghost compact" id="openEmailHistory">View email history →</button></div>`;
 
+  document.getElementById('pipelineSelections').onclick=openPlatformSelections;
   document.getElementById('pipelineAddLeads').onclick=()=>openPlatformLeadEntry();
   document.getElementById('openMarketDiscovery').onclick=()=>{platformView='market';renderPlatformConsole();};
   const renderList=()=>{
@@ -20906,36 +20908,40 @@ async function renderPlatformOnboardingDetail(p){
   };
 }
 
+let platformActiveClubsLoad=0;
 async function renderPlatformActiveClubs(message=''){
+  const load=++platformActiveClubsLoad,requestedUser=session?.user?.id;
   const page=document.getElementById('platformPage');page.innerHTML='<div class="splash">Loading clubs…</div>';
   const [subsRes,clubsRes,removedRes]=await Promise.all([
     supabase.from('club_subscriptions').select('*').is('retired_at',null).in('status',['active','grace']).order('active_until'),
     supabase.from('clubs').select('id,name,archived_at').is('archived_at',null).order('name'),
     supabase.from('platform_club_removals').select('club_id,club_name,contact_name,contact_email,removed_at').order('removed_at',{ascending:false})
   ]);
+  if(load!==platformActiveClubsLoad||platformView!=='clubs'||requestedUser!==session?.user?.id||page!==document.getElementById('platformPage'))return;
   const error=subsRes.error||clubsRes.error||removedRes.error;if(error){page.innerHTML=`<div class="notice">${esc(error.message)}</div>`;return;}
   const clubs=clubsRes.data||[],removed=removedRes.data||[];
   const byClub=new Map((subsRes.data||[]).map(s=>[s.club_id,s]));
   const canCommercial=['owner','commercial_admin'].includes(platformRole),canRemove=platformRole==='owner';
   page.innerHTML=`<style>.active-club-row{align-items:start;display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,3fr);padding:18px;gap:24px}.active-club-row>div:first-child strong{font-size:18px}.active-club-row .btn{font-size:13px}.active-club-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end}.active-club-controls label{min-width:145px;flex:1;font-size:13px;text-transform:none;color:var(--ink)}.active-club-controls input,.active-club-controls select{width:100%;max-width:none;font-size:15px;padding:10px}.active-club-controls label small{display:block;line-height:1.5;font-size:12px}.active-club-controls [hidden]{display:none}.active-club-controls input:disabled,.active-club-controls select:disabled{background:#f2f4f8;color:#73798a}@media(max-width:850px){.active-club-row{grid-template-columns:1fr;gap:14px}}.club-access-description{display:block;margin-top:8px;font-size:15px;line-height:1.5}.club-access-infinity{font-weight:700;color:#166f67}.club-access-header{display:flex;justify-content:space-between;align-items:start;gap:20px;flex-wrap:wrap}</style>
-    <section class="admin-card"><div class="club-access-header"><div><div class="section-label">Platform Admin</div><h2>Active clubs</h2><p>Every new club follows the same promo email and sign-up journey. Adjust its access and rate here once it is registered.</p></div><button class="btn ghost" id="activeAddLeads">Add clubs for promo email</button></div>
-      <div class="notice"><strong>Ongoing free access:</strong> choose <strong>100% rate reduction</strong> and <strong>Special rate ends: Never</strong>. The club keeps access with no renewal date, payment request or trial-expiry reminder. You can change that arrangement here later.</div>
+    <section class="admin-card"><div class="club-access-header"><div><div class="section-label">Platform Admin</div><h2>Active clubs</h2><p>Manage registered clubs and their Club Batting terms here. Use Selections for separate trials, access and subscription terms.</p></div><div class="btnrow"><button class="btn secondary" id="activeSelections">Manage Selections</button><button class="btn ghost" id="activeAddLeads">Add clubs for promo email</button></div></div>
+      <div class="notice"><strong>Club Batting — ongoing free access:</strong> choose <strong>100% rate reduction</strong> and <strong>Special rate ends: Never</strong>. The club keeps access with no renewal date, payment request or trial-expiry reminder. You can change that arrangement here later.</div>
       ${message?`<p class="notice success" role="status">${esc(message)}</p>`:''}
       <div class="active-club-list">${clubs.map(c=>{
         const s=byClub.get(c.id),forever=s?.special_rate_never_ends&&Number(s.adjustment_percent)===100;
-        return `<div class="active-club-row"><div><strong>${esc(c.name)}</strong><span data-sub-description="${c.id}" class="club-access-description ${forever?'club-access-infinity':''}">${forever?'Ongoing complimentary access · no expiry or renewal':s?`Access through ${esc(niceDate(s.active_until))}`:'No subscription record. Remove this test setup to restart through the promo-email journey.'}</span></div><div>
+        return `<div class="active-club-row"><div><strong>${esc(c.name)}</strong><small class="section-label" style="display:block;margin-top:12px">Club Batting</small><span data-sub-description="${c.id}" class="club-access-description ${forever?'club-access-infinity':''}">${forever?'Ongoing complimentary access · no expiry or renewal':s?`Access through ${esc(niceDate(s.active_until))}`:'No active Club Batting subscription. Selections can be set up independently.'}</span></div><div>
           ${s?`<div class="active-club-controls">
             <label>Rate reduction %<input data-sub-adjust="${c.id}" type="number" min="0" max="100" step="1" value="${Number(s.adjustment_percent)}" ${canCommercial?'':'disabled'}><small>0 = full price · 100 = free</small></label>
             <label>Special rate ends<select data-sub-end-mode="${c.id}" ${canCommercial?'':'disabled'}><option value="date" ${s.special_rate_never_ends?'':'selected'}>On a date</option><option value="never" ${s.special_rate_never_ends?'selected':''}>Never</option></select><input data-sub-adjend="${c.id}" type="date" aria-label="Special rate end date for ${esc(c.name)}" value="${esc(s.adjustment_end||'')}" ${s.special_rate_never_ends?'hidden':''} ${canCommercial?'':'disabled'}></label>
             <label>Access ends<input data-sub-active="${c.id}" type="date" value="${s.active_until==='infinity'?'':esc(String(s.active_until||'').slice(0,10))}" ${forever||!canCommercial?'disabled':''}><small data-sub-access-note="${c.id}">${forever?'Never — ongoing free access':'A separate date from the special rate.'}</small></label>
             <label>At expiry<select data-sub-expiry="${c.id}" ${forever||!canCommercial?'disabled':''}><option value="renewal_approval" ${s.expiry_action==='renewal_approval'?'selected':''}>Renewal approval</option><option value="return_standard" ${s.expiry_action==='return_standard'?'selected':''}>Return to standard rate</option><option value="end_subscription" ${s.expiry_action==='end_subscription'?'selected':''}>End access</option></select></label>
           </div>`:''}
-          <div class="btnrow" style="margin-top:12px">${canCommercial?`<button class="btn ghost" data-selections-access="${c.id}">Selections subscription</button>`:''}${s&&canCommercial?`<button class="btn ghost" data-save-access="${c.id}" disabled>Saved ✓</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
+          <div class="btnrow" style="margin-top:12px">${seCanReadSubscriptions()?`<button class="btn secondary" data-selections-access="${c.id}">${canCommercial?'Set up / manage Selections':'View Selections subscription'}</button>`:''}${s&&canCommercial?`<button class="btn ghost" data-save-access="${c.id}" disabled>Saved ✓</button>`:''}${canRemove?`<button class="btn ghost danger-lite" data-remove-club="${c.id}">End & remove</button>`:''}<span data-access-result="${c.id}" role="status" aria-live="polite"></span></div>
         </div></div>`;
       }).join('')||'<p>No active clubs. Add a lead and send its promo email to start the full journey.</p>'}</div>
     </section>
     ${removed.length?`<details class="admin-card" style="margin-top:16px"><summary><strong>Removed clubs</strong> · ${removed.length}</summary><p>These workspaces are closed and retained as archives. Adding a contact to the promo list starts a new journey; it does not restore the old setup.</p>${removed.map(row=>`<div class="message-row"><div><strong>${esc(row.club_name)}</strong><small>Removed ${esc(niceDate(row.removed_at))}${row.contact_email?` · ${esc(row.contact_email)}`:''}</small></div><button class="btn ghost" data-removed-promo="${row.club_id}">Add to promo list</button></div>`).join('')}</details>`:''}`;
   page.querySelectorAll('[data-selections-access]').forEach(b=>b.onclick=()=>openSelectionsAccess(b.dataset.selectionsAccess,clubs.find(c=>c.id===b.dataset.selectionsAccess)?.name||'Club'));
+  document.getElementById('activeSelections').onclick=openPlatformSelections;
   document.getElementById('activeAddLeads').onclick=()=>openPlatformLeadEntry();
   page.querySelectorAll('[data-remove-club]').forEach(button=>button.onclick=()=>openEndClubDialog(button.dataset.removeClub));
   page.querySelectorAll('[data-removed-promo]').forEach(button=>button.onclick=()=>openPlatformLeadEntry(removed.find(row=>row.club_id===button.dataset.removedPromo)));
@@ -21736,7 +21742,7 @@ function seTeamText(f,clubName){const s=f.published;if(!s)return '';const d=s.de
 /* END SELECTIONS MODEL */
 
 /* Selections commercial UI: shared calendars, independent product pricing and terms. */
-async function openSelectionsSubscription(clubId,clubName){
+async function openSelectionsSubscription(clubId,clubName,{onSaved}={}){
  const call=async(action,data={})=>{const {data:result,error}=await supabase.rpc('club_selections_api',{p_club_id:clubId,p_action:action,p_data:data});if(error){const failure=Error(error.message);failure.code=error.code;throw failure;}return result;};let context;
  try{context=await call('subscription_context');}catch(e){alert(e.message);return;}
  const p=context.pricing,s=context.subscription||{},a=context.access||{},trialDays=s.status==='trial'&&s.trial_started&&s.trial_ends?Math.round((new Date(s.trial_ends+'T12:00:00Z')-new Date(s.trial_started+'T12:00:00Z'))/86400000)+1:context.default_trial_days,today=new Date().toLocaleDateString('en-CA',{timeZone:a.timezone||'Australia/Sydney'}),initial={status:s.status||'trial',mode:a.mode||'bundle',calendar:s.calendar||context.calendars.find(x=>x.code==='australia')?.code||context.calendars[0]?.code||'',active_from:s.active_from||today,active_until:s.active_until||'',annual_price_cents:s.annual_price_cents??p.annual_price_cents,adjustment_percent:s.adjustment_percent??0,adjustment_end:s.adjustment_end||'',special_rate_never_ends:!!s.special_rate_never_ends,expiry_action:s.expiry_action||'renewal_approval',amount_paid_cents:s.amount_paid_cents||0,timezone:a.timezone||'Australia/Sydney',continuation_agreed:!!s.continuation_agreed};
@@ -21747,11 +21753,55 @@ async function openSelectionsSubscription(clubId,clubName){
  const sync=()=>{const d=values(),free=d.special_rate_never_ends&&d.adjustment_percent===100,displayedTrialDays=s.status==='trial'&&s.trial_started?trialDays:Number(p.trial_days||context.inherited_trial_days||60);field('active_until').disabled=d.status==='trial'||free;field('adjustment_end').hidden=d.special_rate_never_ends;dialog.querySelector('#seAgreementLabel').hidden=d.status!=='active'||free;dialog.querySelector('#seTrialTerms').textContent=d.status==='trial'?`${displayedTrialDays}-day Selections trial. It starts on the chosen date and does not restart when saved again.`:free?'Ongoing complimentary access · no expiry or renewal.':'Access and special-rate end dates are separate. Leaving Access ends blank uses the shared club-year calendar.';};form.addEventListener('change',sync);form.addEventListener('input',sync);sync();
  const preview=async()=>{status.textContent='Calculating…';try{const q=await call('preview_subscription',values());dialog.querySelector('#seQuote').textContent=q.trial?`${q.trial_days}-day free trial through ${q.active_until}. Nothing is charged.`:q.ongoing_complimentary?'Ongoing complimentary access. No renewal date or amount due.':`Current offer: ${money(q.amount_due_cents,q.currency)} · calculated access through ${q.active_until} · next club-year renewal ${q.next_renewal}${q.bundled_next_full_year?' · short remaining period included with the next full year':''}.`;status.textContent='';return q;}catch(e){status.textContent=e.message;return null;}};
  dialog.querySelector('#sePreviewTerms').onclick=preview;dialog.querySelector('#seRenewTerms')?.addEventListener('click',()=>{field('status').value='active';const next=s.active_until?new Date(s.active_until+'T12:00:00Z'):new Date(today+'T12:00:00Z');if(s.active_until)next.setUTCDate(next.getUTCDate()+1);field('active_from').value=next.toISOString().slice(0,10)>today?next.toISOString().slice(0,10):today;field('active_until').value='';field('amount_paid').value='0.00';field('continuation_agreed').checked=false;if(s.expiry_action==='return_standard'&&!s.special_rate_never_ends){field('adjustment_percent').value='0';field('adjustment_end').value='';}dirty=true;subscriptionDirty=true;sync();void preview();});
- const mutate=async(action,d)=>{if(busy)return;busy=true;const proposed={action,data:d};pending??={...proposed,data:{...d,request_id:crypto.randomUUID()}};if(pending.action!==action){status.textContent='Retry the unconfirmed save before changing another subscription setting.';busy=false;return;}dialog.querySelectorAll('button').forEach(b=>b.disabled=true);status.textContent='Saving…';try{await call(pending.action,pending.data);pending=null;if(action==='set_selection_pricing'){Object.assign(p,d,{revision:p.revision+1});pricingDirty=false;dirty=subscriptionDirty;dialog.querySelectorAll('[data-se-currency]').forEach(el=>el.textContent=s.currency||p.currency);sync();status.textContent='Product defaults saved. Club terms remain as entered.';}else{dirty=false;dialog.close();await openSelectionsSubscription(clubId,clubName);}}catch(e){if(e.code)pending=null;status.textContent=e.code?e.message:'Save not confirmed. Retry keeps the same request. '+e.message;}finally{busy=false;dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}};
+ const mutate=async(action,d)=>{if(busy)return;busy=true;const proposed={action,data:d};pending??={...proposed,data:{...d,request_id:crypto.randomUUID()}};if(pending.action!==action){status.textContent='Retry the unconfirmed save before changing another subscription setting.';busy=false;return;}dialog.querySelectorAll('button').forEach(b=>b.disabled=true);status.textContent='Saving…';try{const saved=await call(pending.action,pending.data);pending=null;if(action==='set_selection_pricing'){Object.assign(p,d,{revision:p.revision+1});pricingDirty=false;dirty=subscriptionDirty;dialog.querySelectorAll('[data-se-currency]').forEach(el=>el.textContent=s.currency||p.currency);sync();status.textContent='Product defaults saved. Club terms remain as entered.';}else{dirty=false;dialog.close();if(onSaved){try{await onSaved(saved);}catch(refreshError){alert('Subscription saved. This screen could not refresh; use Refresh access or Refresh status to reload. '+refreshError.message);}}else await openSelectionsSubscription(clubId,clubName);}}catch(e){if(e.code)pending=null;status.textContent=e.code?e.message:'Save not confirmed. Retry keeps the same request. '+e.message;}finally{busy=false;dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}};
  form.onsubmit=e=>{e.preventDefault();if(pricingDirty){status.textContent='Save the edited product defaults first, then save this club subscription.';return;}return mutate('save_subscription',values());};dialog.querySelector('#sePricingForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));return mutate('set_selection_pricing',{revision:p.revision,annual_price_cents:d.annual_price===''?null:Math.round(Number(d.annual_price)*100),currency:d.currency.toUpperCase(),trial_days:d.trial_days||null});};
  if(context.can_manage===false){dialog.querySelectorAll('form input,form select').forEach(el=>el.disabled=true);dialog.querySelectorAll('form button').forEach(el=>el.hidden=true);status.textContent='Read-only subscription view. An owner or commercial administrator can change these terms.';}
 }
 
+
+/* Selections product administration. Uses the existing guarded billing RPC. */
+function seCanManageSubscriptions(){return ['owner','commercial_admin'].includes(platformRole);}
+function seCanReadSubscriptions(){return ['owner','commercial_admin','support_admin'].includes(platformRole);}
+function openPlatformSelections(){platformView='selections';platformSelectedProspectId=null;platformSelectedOnboardingId=null;return renderPlatformConsole();}
+function seSubscriptionSummary(context){
+ const a=context.access||{},s=context.subscription||{},today=new Date().toLocaleDateString('en-CA',{timeZone:a.timezone||'Australia/Sydney'}),starts=a.active_from||s.active_from,ends=a.valid_until||s.active_until;
+ if(!a.status)return {label:'Not activated',detail:'Choose a free trial or agree subscription terms to get started.'};
+ if(a.status==='disabled')return {label:s.club_id?'Access ended':'Not activated',detail:'Access is disabled. Open the subscription to review the next step.'};
+ if(starts&&starts>today)return {label:'Scheduled',detail:`Access starts ${niceDate(starts)}${ends?` and ends ${niceDate(ends)}`:''}.`};
+ if(ends&&ends<today)return {label:'Expired',detail:`Access ended ${niceDate(ends)}. Review continuation or renewal terms.`};
+ if(s.status==='trial')return {label:'Free trial',detail:`Trial through ${niceDate(s.trial_ends||ends)}. Continuation needs approval.`};
+ if(s.special_rate_never_ends&&Number(s.adjustment_percent)===100)return {label:'Complimentary',detail:'Ongoing free access, with no expiry or renewal.'};
+ if(a.status==='pilot')return {label:'Pilot access',detail:ends?`Access through ${niceDate(ends)}.`:'Pilot access is enabled.'};
+ return {label:'Active',detail:ends?`Access through ${niceDate(ends)}.`:'Access is enabled.'};
+}
+let platformSelectionsLoad=0;
+async function renderPlatformSelections(){
+ const page=document.getElementById('platformPage'),sequence=++platformSelectionsLoad;
+ if(!page)return;
+ document.querySelector('[data-platform-view="selections"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
+ const current=()=>sequence===platformSelectionsLoad&&platformView==='selections'&&page===document.getElementById('platformPage');
+ if(!seCanReadSubscriptions()){page.innerHTML='<section class="admin-card"><h2>Selections</h2><p>A platform owner or commercial administrator can set up Selections subscriptions. Support administrators can view the terms.</p></section>';return;}
+ page.innerHTML='<div class="splash">Loading Selections subscriptions…</div>';
+ const {data:clubs,error}=await supabase.from('clubs').select('id,name,archived_at').is('archived_at',null).order('name');
+ if(!current())return;
+ if(error){page.innerHTML=`<section class="admin-card"><h2>Selections could not load</h2><p>${seEsc(error.message)}</p><button class="btn" id="sePlatformRetry">Try again</button></section>`;page.querySelector('#sePlatformRetry').onclick=renderPlatformSelections;return;}
+ const rows=(clubs||[]).map(club=>({club}));let next=0;
+ await Promise.all(Array.from({length:Math.min(4,rows.length)},async()=>{while(next<rows.length){const row=rows[next++];try{const result=await supabase.rpc('club_selections_api',{p_club_id:row.club.id,p_action:'subscription_context'});if(result.error)throw Error(result.error.message);if(!result.data)throw Error('No subscription details returned.');row.context=result.data;}catch(e){row.error=e.message;}}}));
+ if(!current())return;
+ const defaults=rows.find(row=>row.context)?.context;
+ page.innerHTML=seStyles()+`<section class="se-page"><div class="admin-card"><div class="se-top"><div><div class="section-label">Platform Admin · Selections</div><h1>Selections</h1></div><button class="btn ghost" id="sePlatformRefresh">Refresh status</button></div><p>Set up and manage each registered club’s Selections access, either alongside Club Batting or as a Selections-only subscription.</p><p><strong>To get started:</strong> find the club, choose <strong>Set up Selections</strong>, select <strong>Free club trial</strong>, check the dates and save. Club Admin can then open <strong>Teams &amp; availability → Playing list</strong> to import players.</p>${defaults?`<p class="se-form-note">Standard annual price: <strong>${defaults.pricing.annual_price_cents==null?'Not set':seEsc(money(defaults.pricing.annual_price_cents,defaults.pricing.currency))}</strong> · Default trial: <strong>${seEsc(defaults.default_trial_days)} days</strong>. Product defaults can be changed within a club’s subscription window.</p>`:''}<p class="se-form-note">Club Pipeline manages Club Batting outreach and onboarding. Selections trials and subscriptions are managed here; Selections sales emails and checkout are not connected yet.</p><label style="max-width:440px">Find a registered club<input id="sePlatformSearch" type="search" placeholder="Search club name"></label></div><div class="se-grid" id="sePlatformClubs"></div><p id="sePlatformEmpty" class="se-empty" hidden>No matching registered clubs.</p></section>`;
+ const renderRows=()=>{
+  const query=page.querySelector('#sePlatformSearch').value.trim().toLowerCase(),visible=rows.filter(row=>row.club.name.toLowerCase().includes(query));
+  page.querySelector('#sePlatformEmpty').hidden=visible.length>0;
+  page.querySelector('#sePlatformClubs').innerHTML=visible.map(({club:c,context,error})=>{
+   const summary=context?seSubscriptionSummary(context):null,canManage=seCanManageSubscriptions()&&context?.can_manage!==false,started=!!(context?.subscription||context?.access?.status),label=canManage?(started?'Manage Selections':'Set up Selections'):'View subscription';
+   return `<article class="se-card"><h2>${seEsc(c.name)}</h2>${error?`<p role="status"><strong>Status unavailable</strong></p><p class="se-form-note">${seEsc(error)}</p><button class="btn ghost" data-selection-retry>Retry status</button>`:`<span class="se-chip">${seEsc(summary.label)}</span><p>${seEsc(summary.detail)}</p><p class="se-muted">${context.access?.mode?context.access.mode==='standalone'?'Selections only':'With Club Batting':'Product arrangement chosen at setup'}</p><button class="btn ${canManage?'':'ghost'}" data-selection-subscription="${seEsc(c.id)}">${label}</button>`}</article>`;
+  }).join('');
+  page.querySelectorAll('[data-selection-subscription]').forEach(button=>button.onclick=()=>{const row=rows.find(row=>row.club.id===button.dataset.selectionSubscription);return openSelectionsSubscription(row.club.id,row.club.name,{onSaved:async()=>{if(current())await renderPlatformSelections();}});});
+  page.querySelectorAll('[data-selection-retry]').forEach(button=>button.onclick=renderPlatformSelections);
+ };
+ page.querySelector('#sePlatformSearch').oninput=renderRows;page.querySelector('#sePlatformRefresh').onclick=renderPlatformSelections;renderRows();
+}
 
 /* BEGIN TEAMS SELECTION — maintained source: tools/teams_selection_ui.js */
 let selectionAccess=null,selectionState=null,selectionRefreshTimer=null;
@@ -21774,7 +21824,20 @@ function seStyles(){return `<style>
 .se-page{max-width:1400px;margin:auto}.se-page h1{font-size:26px;margin:0}.se-page h2{font-size:19px;margin:0 0 12px}.se-page p{line-height:1.5}.se-page .btn{min-height:44px;padding:8px 12px}.se-top,.se-toolbar,.se-tabs,.se-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.se-top{justify-content:space-between}.se-top small{display:block;color:#64748b;margin:6px 0}.se-tabs{margin:14px 0;border-bottom:1px solid #dce2ee;padding-bottom:10px}.se-tabs [aria-pressed=true]{background:var(--navy,#17245f);color:white}.se-notice{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.se-notice:empty{display:none}.se-page input,.se-page select,.se-page textarea{font-size:16px;min-width:0;max-width:100%;box-sizing:border-box}.se-page label{font-size:13px;display:block}.se-page input:not([type=checkbox]),.se-page select,.se-page textarea{border:1px solid #cbd5e1;border-radius:7px;padding:9px 10px;background:white;color:#24344c;min-height:42px}.se-page textarea{width:100%}.se-month-tools{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:end;max-width:560px}.se-slot-captions{display:grid;grid-template-columns:repeat(var(--se-days,1),minmax(0,1fr));margin:10px 0 0 28px;font-size:11px;color:#64748b;gap:3px}.se-page label input:not([type=checkbox]),.se-page label select{margin-top:5px;width:100%}.se-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px;margin:14px 0}.se-card{background:white;border:1px solid #dce2ee;border-radius:12px;padding:16px;min-width:0}.se-team-head{padding-bottom:10px;border-bottom:1px solid #e7eaf1}.se-team-head p{font-size:13px;color:#64748b;margin:4px 0}.se-counts{display:flex;flex-wrap:wrap;gap:5px;font-size:12px;margin:8px 0}.se-chip{padding:4px 7px;border-radius:5px;background:#edf3f1;color:#285749}.se-warn{background:#fff2d9;color:#7a5319}.se-role{font-size:11px;color:#64748b;display:block;line-height:1.5}.se-slot{display:grid;grid-template-columns:22px 1fr;gap:6px;align-items:center;border-bottom:1px solid #eef0f7;padding:3px 0}.se-slot-number{font-size:12px;color:#64748b}.se-slot-names{display:grid;grid-template-columns:repeat(var(--se-days,1),minmax(0,1fr));gap:3px}.se-pick{border:1px solid transparent;border-radius:6px;background:transparent;text-align:left;font:inherit;font-size:13px;padding:8px 5px;min-height:48px;cursor:pointer;color:#24344c;overflow-wrap:anywhere}.se-pick:hover{background:#f4f6fb}.se-pick[aria-pressed=true]{border-color:#4e70bc;background:#edf2fe}.se-day-caption{font-size:11px;color:#64748b}.se-status{font-size:11px;display:block;color:#997027}.se-status.available{color:#33785b}.se-status.unavailable{color:#b03b35}.se-board-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}.se-picker{position:sticky;top:12px;max-height:82vh;overflow:auto}.se-picker input{width:100%}.se-candidate{width:100%;display:block;border:0;border-bottom:1px solid #e5eaf0;background:white;padding:10px 0;text-align:left;cursor:pointer;color:#24344c;min-height:52px;font-size:14px}.se-candidate:hover{background:#f5f8fe}.se-pair{border:1px solid #dce2ee;border-radius:8px;padding:10px;margin-top:8px}.se-pair p{font-size:12px;margin:5px 0}.se-empty{padding:28px 18px;text-align:center;color:#62738d}.se-issues{font-size:12px;margin:8px 0}.se-issues summary{cursor:pointer;min-height:36px;align-content:center}.se-issues p{margin:4px 0}.se-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}.se-check{display:flex!important;gap:9px;align-items:center;min-height:44px}.se-check input{width:18px;height:18px;flex:0 0 18px}.se-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;max-width:560px;margin:12px 0}.se-calendar button{border:1px solid #dce2ee;background:#fff;min-height:44px;border-radius:6px;font:inherit;cursor:pointer}.se-calendar button[aria-pressed=true]{background:#ffe5e2;border-color:#bf665d;color:#983d34}.se-calendar small{text-align:center;font-size:11px}.se-date-entry{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.se-date-entry label{flex:1;min-width:130px}.se-blackout{display:flex;align-items:center;gap:8px;border-bottom:1px solid #e6ebf1;padding:6px 0;font-size:13px}.se-blackout span{flex:1}.se-roster-row{display:grid;grid-template-columns:minmax(160px,1.4fr) repeat(3,minmax(120px,1fr)) 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #e6ebf1}.se-roster-row select{width:100%}.se-roster-row strong{font-size:14px;display:block}.se-published-name{font-size:14px;line-height:1.7}.se-date-tag{font-size:11px;background:#edf2fa;padding:2px 4px;border-radius:4px}.se-drawer{max-width:860px}.se-post{border-bottom:1px solid #e2e8f0;padding:12px 0}.se-post p{white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0}.se-post small{font-size:12px;color:#64748b}.se-preview-scroll{overflow:auto}.se-preview-scroll table{width:100%;font-size:13px}.se-recovery{border:1px solid #b88432;background:#fff7e8;border-radius:8px;padding:14px;margin:10px 0}.se-editor-actions{margin-top:16px}.se-link-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin:8px 0;align-items:end}.se-muted{color:#64748b;font-size:13px}.se-form-note{font-size:13px;color:#56657b;margin:10px 0}.se-page [hidden]{display:none!important}
 @media(max-width:1100px){.se-board-layout{grid-template-columns:1fr}.se-picker{position:static;max-height:none}.se-roster-row{grid-template-columns:1fr 1fr}.se-roster-row>div:first-child{grid-column:1/-1}}@media(max-width:560px){.se-card{padding:12px}.se-top h1{font-size:23px}.se-tabs{gap:4px}.se-tabs .btn{padding:7px 8px;font-size:13px}.se-link-row{grid-template-columns:1fr}.se-actions .btn{flex-grow:1}.se-toolbar>label{width:100%}.se-toolbar select{width:100%}}
 </style>`;}
-async function renderSelections(){const page=document.getElementById('page'),s=ensureSelections();page.innerHTML='<div class="splash">Loading Selections…</div>';await loadSelectionsAccess();if(s!==selectionState||currentTab!=='teams')return;if(!selectionAccess.enabled){page.innerHTML=seStyles()+`<section class="se-page se-card"><h1>Club Selections</h1><p>Playing lists, availability and team selection, available independently or alongside Club Batting.</p><p>${seEsc(selectionAccess.error||'Selections has not been activated for this club. Your Platform Admin can enable a pilot or subscription separately.')}</p><button class="btn ghost" id="seRetryAccess">Refresh access</button></section>`;document.getElementById('seRetryAccess').onclick=renderSelections;return;}try{await seReload();seStartLiveRefresh();if(s.view==='board'&&!s.data.selector)s.view='published';drawSelections();}catch(e){page.innerHTML=`<section class="card"><h2>Selections could not load</h2><p>${seEsc(e.message)}</p><button class="btn" id="seRetryAccess">Try again</button></section>`;document.getElementById('seRetryAccess').onclick=renderSelections;}}
+async function renderSelections(){
+ const page=document.getElementById('page'),s=ensureSelections();page.innerHTML='<div class="splash">Loading Selections…</div>';await loadSelectionsAccess();if(s!==selectionState||currentTab!=='teams')return;
+ if(!selectionAccess.enabled){
+  const failed=!!selectionAccess.error,canSetup=seCanManageSubscriptions(),clubId=club.id,clubName=club.name;
+  page.innerHTML=seStyles()+`<section class="se-page se-card"><h1>Club Selections</h1><p>Playing lists, availability and team selection, available independently or alongside Club Batting.</p>${failed?`<p><strong>Could not check Selections access.</strong> ${seEsc(selectionAccess.error)}</p>`:`<h2>Set up Selections for ${seEsc(clubName)}</h2><p>Selections access is not currently active for this club.</p><p>${canSetup?'Choose <strong>Set up Selections</strong> below, select <strong>Free club trial</strong>, check the dates and save. You can also agree ongoing subscription terms.':'Ask your club administrator to arrange Selections access with the Platform Admin.'}</p><p>The setup route is <strong>Platform Admin → Selections → ${seEsc(clubName)}</strong>. Once access is active, Club Admin can import the registered players under <strong>Teams &amp; availability → Playing list</strong>.</p>`}<div class="se-actions">${canSetup&&!failed?'<button class="btn" id="seSetupSelections">Set up Selections</button>':''}<button class="btn ghost" id="seRetryAccess">${failed?'Try again':'Refresh access'}</button></div></section>`;
+  document.getElementById('seRetryAccess').onclick=renderSelections;
+  document.getElementById('seSetupSelections')?.addEventListener('click',()=>openSelectionsSubscription(clubId,clubName,{onSaved:async()=>{
+   if(s!==selectionState||club?.id!==clubId||currentTab!=='teams')return;
+   await loadData();if(s!==selectionState||club?.id!==clubId||currentTab!=='teams')return;
+   s.view=selectionAccess?.selector?'roster':'published';renderShell();
+  }}));return;
+ }
+ try{await seReload();seStartLiveRefresh();if(s.view==='board'&&!s.data.selector)s.view='published';drawSelections();}catch(e){page.innerHTML=`<section class="card"><h2>Selections could not load</h2><p>${seEsc(e.message)}</p><button class="btn" id="seRetryAccess">Try again</button></section>`;document.getElementById('seRetryAccess').onclick=renderSelections;}
+}
 function drawSelections(){if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const tabs=[['published','Teams'],...(d.selector?[['board','Selection board'],['roster','Playing list']]:[]),['availability','Availability'],...(d.admin?[['settings','Settings']]:[])];
  document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><button class="btn ghost" id="seRefresh">Refresh</button></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div><p id="seNotice" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}<div id="seContent"></div></section>`;
  document.querySelectorAll('[data-se-view]').forEach(b=>b.onclick=()=>{if(!confirmLeaveSelections())return;s.view=b.dataset.seView;s.active=null;s.formDirty=false;s.notice='';drawSelections();});
@@ -21850,7 +21913,7 @@ let fixtureCurrent;
 const fixtureClone=value=>value===undefined?null:structuredClone(value);
 const fixtureNow=()=>new Date().toISOString();
 const fixtureDay=(offset=0)=>{const date=new Date();date.setDate(date.getDate()+offset);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
-const fixtureGroups=[{id:'group-first',club_id:'example-club',name:'First XI',active:true,sort_order:0},{id:'group-second',club_id:'example-club',name:'Second XI',active:true,sort_order:1}];
+const fixtureGroups=[{id:'group-first',club_id:'example-club',archived_at:null,name:'First XI',active:true,sort_order:0},{id:'group-second',club_id:'example-club',archived_at:null,name:'Second XI',active:true,sort_order:1}];
 function fixtureReadRows(table){
  const derived={philosophy_profiles:[publishedProfile],philosophy_dimension_catalogue:dimensions,club_philosophy_dimensions:[...publishedSelectedDims.values()],club_format_weights:[...publishedWeights.entries()].map(([key,weight])=>{const ix=key.indexOf(':');return {club_id:club.id,dimension_key:key.slice(0,ix),format_key:key.slice(ix+1),weight};}),philosophy_workshops:workshop?[workshop]:[],philosophy_versions:philosophyVersions,how_we_bat_drafts:howWeBatDraft?[howWeBatDraft]:[],how_we_bat_versions:howWeBatVersions,player_plan_structure_drafts:playerPlanStructureDraft?[playerPlanStructureDraft]:[],player_plan_structure_versions:playerPlanStructureVersions,playing_groups:fixtureGroups,clubs:[club]};
  return table in derived?derived[table]:fixtureRows[table];
@@ -21961,6 +22024,8 @@ function fixtureResetGlobals(){
 
 // All people, results and club records in this file are fictional examples.
 const demoStages=[
+  {key:'selection_setup',label:'Selections · club activation',tab:'teams',role:'admin',hint:'Example Platform Admin starts from an inactive club. Choose Set up Selections, check Free club trial and save to open the Playing list. Choosing this scenario resets the fictional Selections subscription.'},
+  {key:'selection_platform',label:'Platform Admin · Selections',tab:'teams',role:'admin',hint:'Manage Selections for the fictional club. Explore the Selections tab and shortcuts in Active Clubs and Club Pipeline. No live club access, price or payment is changed.'},
   {key:'selection_subscription',label:'Selections · subscription administration',tab:'teams',role:'admin',hint:'Example Platform Admin controls. Set a fictional annual price, preview a trial or special rate, and save separate Selections terms. No actual price, subscription, payment or email is changed.'},
   {key:'selections',label:'Selections · live team board',tab:'teams',role:'admin',hint:'Fictional registered players. Click First XI slot 1, then Find matching pair to fill its Day 2 place. Roles and calendars belong to Selections. Nothing is sent or saved outside this demo.'},
   {key:'availability',label:'Selections · player calendar',tab:'teams',role:'player',hint:'Alex blacks out unavailable dates once. Actual fixture dates determine Day 1 / Day 2 availability. Blank dates are not confirmed until normal availability is explicitly accepted.'},
@@ -22003,7 +22068,7 @@ const demoLabels={wicket_preservation:'Value your wicket',leaving_defending:'Lea
 function demoSeedClub(){
   demoPublishedSnapshot=null;demoClubMessageRecords=[];clubMessageState=null;clubMessageUnread=0;
   fixtureResetGlobals();fixtureLocalStorage.clear();fixtureSessionStorage.clear();
-  club={id:'example-club',name:'Harbour Example Cricket Club',primary_colour:'#203578',accent_colour:'#177c78',branding_updated_at:fixtureNow(),lead_admin_user_id:'user-admin',player_signup_open:true,player_join_token:'demo-only',join_code:'DEMO-ONLY'};
+  club={id:'example-club',archived_at:null,name:'Harbour Example Cricket Club',primary_colour:'#203578',accent_colour:'#177c78',branding_updated_at:fixtureNow(),lead_admin_user_id:'user-admin',player_signup_open:true,player_join_token:'demo-only',join_code:'DEMO-ONLY'};
   session={user:{id:'user-admin',email:'sam@example.test'}};userProfile={user_id:'user-admin',display_name:'Sam Taylor'};
   membership={club_id:club.id,user_id:'user-admin',permission_role:'admin',involvement:'coach_captain'};
   platformRole=null;platformAccessError=false;canBootstrapPlatform=false;
@@ -23529,6 +23594,9 @@ function seedDemoSelections(){
 function demoSelectionIssues(f){if(f.details.cancelled)return [];const out=[];f.details.days.forEach((d,i)=>{const c=seCounts(f,demoSelections.roster,i);if(c.players!==11)out.push({level:'error',text:`Day ${i+1}: ${c.players} of 11 places filled`});if(c.quicks<f.details.min_quicks)out.push({level:'warning',text:`Day ${i+1}: only ${c.quicks} frontline quicks`});if(!c.keepers)out.push({level:'warning',text:`Day ${i+1}: no wicketkeeper`});f.slots.forEach(sl=>{const p=demoSelections.roster.find(p=>p.id===sl['d'+(i+1)]);if(p&&seDayStatus(p,d)!=='available')out.push({level:'error',text:p.name+': '+seDayStatus(p,d)+' on '+d.date});});});return out;}
 const previousSelectionFixtureRpc=window.__fixtureRpc;
 window.__fixtureRpc=async(name,args={})=>{
+ if(name==='get_my_platform_role')return {data:platformRole,error:null};
+ if(name==='can_bootstrap_platform_owner')return {data:false,error:null};
+ if(name==='platform_expire_pending_club_invitations')return {data:null,error:null};
  if(name!=='club_selections_api')return previousSelectionFixtureRpc(name,args);
  if(!demoSelections)seedDemoSelections();const state=demoSelections,action=args.p_action,d=args.p_data||{},uid=session.user.id,selector=membership.permission_role==='admin'||membership.permission_role==='coach',admin=membership.permission_role==='admin';
  const audience=f=>selector||f.published?.slots.some(s=>state.roster.some(p=>p.user_id===uid&&(p.id===s.d1||p.id===s.d2)));
@@ -23660,12 +23728,20 @@ async function demoNavigate(key,{reset=false}={}){
     session={user:{id:userId,email:userId.slice(5)+'@example.test'}};
     membership=fixtureClone(fixtureRows.club_memberships.find(m=>m.user_id===userId));allMemberships=[{...membership,clubs:club}];
     document.getElementById('demoRole').textContent=userProfile.display_name+' · '+(stage.role==='admin'?'Philosophy Lead / Club Admin':stage.role==='coach'?'Coach':'Player');
+    if(['selection_setup','selection_platform','selection_subscription'].includes(stage.key)){
+      platformRole='owner';
+      document.getElementById('demoRole').textContent='Example Platform Admin';
+      for(const table of ['sales_prospects','club_prospects','club_trials','club_batting_guide_threads','outbound_messages','email_suppressions','club_subscriptions','platform_club_removals'])fixtureRows[table]=[];
+      fixtureRows.platform_settings=[{singleton:true,email_mode:'test',email_live_from:null}];
+    }
+    if(stage.key==='selection_setup'){seedDemoSelections();demoSelections.access.status='disabled';selectionAccess=null;selectionState=null;}
     await loadData();currentTab=stage.tab;resetPlayersWorkspaceForClub();
     if(stage.key==='feedback'){playersWorkspaceClubId=club.id;playersWorkspaceSelectedId='player-alex';playersWorkspaceSection='development';}
     if(stage.key==='unassigned'){playersWorkspaceClubId=club.id;playersWorkspaceGroupFilter='__unassigned__';}
     if(stage.key==='team_review'){demoSeedTeamReview();restoreTeamReviewState({match_date:fixtureDay(),format_key:'limited_overs',opposition:'Harbour Visitors',innings_number:1,group:'__all__',loaded:true});}
     if(stage.tab==='teams'){const s=ensureSelections();s.view=['selections','selection_subscription'].includes(stage.key)?'board':stage.key==='availability'?'availability':'published';}
     guideSelectedCapabilityKey='whole_process';renderShell();await window.__demoRenderDone;
+    if(stage.key==='selection_platform'){platformView='selections';await renderPlatformConsole();}
     if(stage.key==='involvement')renderFirstIdentitySetup();
     if(stage.key==='selection_subscription'){document.getElementById('demoRole').textContent='Example Platform Admin';await openSelectionsSubscription(club.id,club.name);}
     window.scrollTo({top:0,left:0,behavior:'instant'});
