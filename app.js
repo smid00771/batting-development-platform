@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.90 — current product Help, Tutorials and Guide knowledge
+// Club Batting 0.8.62.91 — current product Help, Tutorials and Guide knowledge
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.90';
+const APP_UI_VERSION='0.8.62.91';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -3352,6 +3352,11 @@ const CLUB_BATTING_HELP = {
         "target_tab": "workshop"
       },
       {
+        "title": "Receive your Workshop invitation",
+        "body": "Already a club member? Your invitation is in Account → Messages, with a Batting Philosophy Workshop button. Enabled Club messages phone alerts are used first; otherwise a brief email links to the message. Someone not yet in the club still receives a secure joining invitation by email.",
+        "target_tab": "messages"
+      },
+      {
         "title": "Complete your own contribution",
         "body": "Work through Club identity, Batting ideas, Format priorities and Review & submit. Save and continue moves to the top of the next screen. Back to Workshop saves answers without submitting them."
       },
@@ -3366,6 +3371,11 @@ const CLUB_BATTING_HELP = {
       {
         "title": "Let the Lead choose",
         "body": "Only the Philosophy Lead selects the working How We Bat version. All contributors submitted means responses are ready, not Workshop complete. The selected version then goes through How We Bat review and confirmation; other contributors cannot make the final choice."
+      },
+      {
+        "title": "Notice a late contribution",
+        "body": "If a contributor submits after the working How We Bat draft has been chosen, the Philosophy Lead receives a Club Batting message to review it. It uses the same phone-first delivery and email-link fallback. The contribution does not automatically change the chosen draft.",
+        "target_tab": "messages"
       }
     ],
     "sort_order": 60,
@@ -3510,7 +3520,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Tell registered players they can begin",
-        "body": "Publication queues the ready-to-start email for registered players. Delivery depends on the club’s email setup; the Guide should not claim an email has arrived just because it was queued."
+        "body": "Publication puts a ready-to-start notice in playing members’ Messages with a My Player Plan button. Enabled Club messages phone notifications are used first; otherwise a short email links to the message. A newly joining playing member is notified when the club is ready. Queueing an alert does not prove it was delivered or read."
       },
       {
         "title": "Keep the next step clear",
@@ -4226,7 +4236,11 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Check the latest state",
-        "body": "Refresh reloads the current screen. With phone notifications enabled, new eligible coaching updates can alert you while the app is closed; device settings and connectivity affect delivery. Alerts use a private preview and respect the same player access and independent-reflection rules. They do not send a new email for each coaching note."
+        "body": "New eligible coaching updates use enabled Coaching updates phone notifications first. Without a usable subscription, a brief email says an update needs attention and opens the relevant coaching area. It contains no assessment, comment or video. Read, closed or superseded updates are skipped; failed phone delivery can fall back once. Device settings affect delivery. Existing notes are not emailed as a backlog."
+      },
+      {
+        "title": "Know when a response is required",
+        "body": "Plan-related Match Observations ask for an independent innings reflection before showing staff feedback. General notes and Training Observations are immediately readable and have no separate compulsory response form. There is no fixed response deadline or observation-specific Send reminder button. A review date is a conversation follow-up date, not a reflection deadline."
       }
     ],
     "sort_order": 170,
@@ -4465,7 +4479,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "When an email is used instead",
-        "body": "Club messages and Player Plan reminders use an email link when there is no active Club messages subscription. The system checks your enabled devices, so using a laptop does not turn off phone alerts. No “I installed it” checkbox is needed. An installed icon alone does not mean notifications are enabled. This does not add emails for every coaching note."
+        "body": "Club messages, Player Plan and Workshop notices, and new unread coaching updates use enabled phone notifications first. Without a usable subscription for that type of alert, a short email links into Club Batting; it contains no message or observation details. Failed phone delivery can use the same fallback. Installing an icon alone is not enough: enable Club messages and Coaching updates. The system checks all enabled devices for your account and club."
       }
     ]
   },
@@ -4509,6 +4523,15 @@ const CLUB_BATTING_HELP = {
       {
         "title": "Copy for WhatsApp",
         "body": "Copy for WhatsApp copies the title, message and any app link so you can paste it into your club chat. It does not post automatically. Demo messages use fictional people and do not send email or phone notifications."
+      },
+      {
+        "title": "Player Plan ready notices",
+        "body": "When How We Bat and Player Plan questions are published, playing members receive a Club Batting message linking to My Player Plan. New playing members receive the same notice if the club is ready. Enabled Club messages notifications are used first; otherwise the email only links to the message. Repeated publication of the same version does not send another notice."
+      },
+      {
+        "title": "Workshop invitations and late contributions",
+        "body": "Registered contributors receive Workshop invitations in Messages. The Philosophy Lead receives late-contribution notices there too. Open the message, then Batting Philosophy Workshop. These notices use Club messages phone alerts first and a generic email link when needed. First-time club joining invitations still arrive by email.",
+        "target_tab": "messages"
       }
     ]
   }
@@ -4750,7 +4773,7 @@ async function renderClubDashboard(){
       ?'Your Club Admin needs to check the club look before publication. They can add the logo and colours or keep the current look.'
       :step?.key==='workshop'
         ?(!workshop?.philosophy_lead_user_id?'Your Club Admin needs to choose a Philosophy Lead before the club’s approach can be developed. You can check progress here.':'Your Philosophy Lead and invited contributors are preparing the club’s approach. This page will show the next stage when it is ready.')
-        :'Your Philosophy Lead needs to complete this step. You can check progress here; players will receive an email when the system is published.';
+        :'Your Philosophy Lead needs to complete this step. You can check progress here; players will be notified in Club Batting when the system is published.';
 
   page.innerHTML=`${clubSetupStyles()}
     <div class="section-label">Club Home</div>
@@ -8960,7 +8983,7 @@ function renderClubPublicationGate(title){
     <div class="section-label">${esc(title)}</div>
     <h2>${isPlayerUser()?'You’re registered. Your club is preparing its setup.':'Your club is preparing its setup.'}</h2>
     <p>${esc(club.name)} is completing its batting approach and Player Plan questions. ${isPlayerUser()?'Your Player Plan will open when the club publishes. You do not need to register again.':'You are registered as non-playing staff and do not receive a Player Plan.'}</p>
-    <div class="notice"><strong>What happens next?</strong><br>We’ll email registered players when they can start. Then you’ll build your Player Plan, use How We Train, and keep learning through feedback.</div>
+    <div class="notice"><strong>What happens next?</strong><br>We’ll notify registered players when they can start. Then you’ll build your Player Plan, use How We Train, and keep learning through feedback.</div>
     <p>${setupAccess?'You have assigned club access and can continue that work now.':'If your club needs you in the Workshop or another setup role, the Club Admin can assign that access to this account. Until then, you can explore the tutorials and ask the Guide.'}</p>
     <div class="btnrow">${setupAccess?'<button class="btn secondary" id="publicationSetupAccess">Open Club Home</button>':''}<button class="btn ${setupAccess?'ghost':'secondary'}" id="publicationHelp">Explore tutorials & Guide</button><button class="btn ghost" id="refreshPublication">Check for updates</button></div>
   </section>`;
@@ -14130,7 +14153,7 @@ async function renderPlayersWorkspacePlayer(){
     body=`${renderWorkspacePlayerDiscussionPanel(player)}<section class="card">
       <div class="section-label">Player Plan</div>
       <h2>Your club is preparing the Player Plan questions.</h2>
-      <p>The Philosophy Lead will publish How We Bat and the questions together. Registered players will receive an email when they can start.</p>
+      <p>The Philosophy Lead will publish How We Bat and the questions together. Registered players will be notified in Club Batting when they can start.</p>
       <p>${isAdmin()?'You can manage Playing Groups and use feedback now.':'You can use feedback for the players you have access to now.'} Training guidance will follow once the player has completed their plan.</p>
       <div class="btnrow"><button class="btn secondary" data-workspace-section="development">Open feedback</button></div>
     </section>${savedPlan&&Object.keys(savedPlan).length?`<section class="card workspace-plan-preview"><p class="help">Previously saved Player Plan · view only while the club prepares its questions.</p>${renderCuratedDraft(savedPlan,player.display_name,'Player Plan')}</section>`:''}`;
@@ -17968,7 +17991,7 @@ function clubMessageRecipientCount(state){
  return people.size;
 }
 function messagePeople(count){return `${count} ${count===1?'person':'people'}`;}
-function canOpenMessageTarget(target){return target==='make_your_call'||(isPlayerUser()&&clubMessageTargets.some(([key])=>key===target)&&!!target);}
+function canOpenMessageTarget(target){if(target==='workshop')return canOpenClubTab('workshop');return target==='make_your_call'||(isPlayerUser()&&clubMessageTargets.some(([key])=>key===target)&&!!target);}
 function messageStaffRole(role){return ({admin:'Admin',head_coach:'Head Coach',coach:'Coach',captain:'Captain'})[role]||'Staff';}
 function clubMessageDirty(){const d=clubMessageState?.draft;return !!(d&&(d.title||d.body||d.player_ids.length||d.recipients_changed||d.target||d.email));}
 function confirmLeaveClubMessages(){
@@ -18015,6 +18038,16 @@ async function renderClubMessages(){
  try{
   const [list,context]=await Promise.all([supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'list'}),supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'context'})]);
   if(list.error||context.error)throw list.error||context.error;if(!here())return;
+  // A Workshop invitation can arrive while this session is already open.
+  // Refresh that permission before drawing its link instead of using stale sign-in data.
+  if(list.data.inbox?.some(row=>row.target==='workshop')){
+   const [workshopResult,contributorResult]=await Promise.all([
+    supabase.from('philosophy_workshops').select('*').eq('club_id',club.id).maybeSingle(),
+    supabase.from('philosophy_contributors').select('*').eq('club_id',club.id).eq('user_id',session.user.id).maybeSingle()
+   ]);
+   if(workshopResult.error||contributorResult.error)throw workshopResult.error||contributorResult.error;if(!here())return;
+   workshop=workshopResult.data||null;myContributor=contributorResult.data||null;
+  }
   state.data=list.data;state.context=context.data;if(!context.data.can_send&&state.mode!=='inbox'){state.mode='inbox';state.draft=null;}
   drawClubMessages(page,state);void refreshClubMessageBadge();
  }catch(error){if(here()){page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><h1>Messages</h1><p>${esc(error.message||'Messages could not load.')}</p><button class="btn" id="retryClubMessages">Try again</button></section>`;document.getElementById('retryClubMessages').onclick=renderClubMessages;}}
@@ -18025,7 +18058,7 @@ function drawClubMessages(page,state){
  page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?(state.draft?.kind==='plan_reminder'?'Player Plan reminder':'New message'):'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players &amp; staff</button>':''}</div>
  ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
  <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
- ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}">${esc(clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
+ ${state.mode==='compose'?clubMessageComposer(state):rows.length?rows.map(row=>`<details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}">${esc(row.target==='workshop'?'Batting Philosophy Workshop':clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details>`).join(''):`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
  document.getElementById('newClubMessage')?.addEventListener('click',()=>{state.mode='compose';state.draft??=newClubMessageDraft();drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-mode]').forEach(b=>b.onclick=()=>{if(!confirmLeaveClubMessages())return;state.mode=b.dataset.messageMode;drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-target]').forEach(b=>b.onclick=()=>openClubMessageTarget(b.dataset.messageTarget));
@@ -18116,7 +18149,7 @@ Once you’ve finished registering:
 3. Turn on notifications
 Open the new Club Batting icon on your phone. Sign in if asked, then go to Account → App & notifications. Choose Club messages and Coaching updates, tap Enable notifications, then Allow.
 
-${plansReady?'Your Player Plan, training ideas and match preparation are now one tap away.':'Register now while the club prepares How We Bat and the Player Plan questions. We’ll email you when your plan is ready; anyone assigned a setup role can help with preparation now.'}`;
+${plansReady?'Your Player Plan, training ideas and match preparation are now one tap away.':'Register now while the club prepares How We Bat and the Player Plan questions. We’ll notify you when your plan is ready; anyone assigned a setup role can help with preparation now.'}`;
 }
 function phoneIOSInstallSteps(){
  return `<ol><li>Tap Safari’s <strong>three dots (…)</strong> at the bottom-right of your screen.</li><li>Tap <strong>Share</strong> — the square with an arrow pointing upwards.</li><li>Tap <strong>View More</strong> if shown, then <strong>Add to Home Screen</strong>. You may need to scroll down.</li><li>Keep <strong>Open as Web App</strong> switched on if shown, then tap <strong>Add</strong>.</li><li>Go to your phone’s Home Screen and open the <strong>Club Batting icon</strong>. Sign in with your existing account if asked.</li></ol>`;
@@ -18212,7 +18245,7 @@ async function renderPhoneApp(){
  <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label></div>
  <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
  <p id="phoneAllowHint" class="help" hidden>Tap <strong>Allow</strong> when your phone asks.</p>
- <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages. Club messages use an email link when no enabled device can receive them. Coaching updates stay in Coach Conversations.</p></details>
+ <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages. Messages and coaching updates use enabled phone alerts first; otherwise a brief email links you into the app without sharing the details. Coaching updates stay in Coach Conversations.</p></details>
  <p id="phoneActionStatus" role="status" class="help"></p></div>${demo&&installFirst?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
  document.getElementById('installClubBatting')?.addEventListener('click',async()=>{const prompt=phoneInstallPrompt;phoneInstallPrompt=null;await prompt?.prompt();if(here())await renderPhoneApp();});
  if(demo)return;
