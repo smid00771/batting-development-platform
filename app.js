@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.110 — two-product website and club enquiries
+// Club Batting 0.8.62.111 — First XI and lower-grade bracketing demo
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.110';
+const APP_UI_VERSION='0.8.62.111';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19264,6 +19264,10 @@ function seSettings(){const s=ensureSelections(),d=s.data;document.getElementByI
 async function openSelectionsAccess(clubId,clubName){return openClubSubscriptions(clubId,clubName);}
 function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTimer=setInterval(async()=>{const s=selectionState;if(!s||currentTab!=='teams'||s.view!=='board'||s.busy||s.pending||s.formDirty||s.active||document.activeElement?.matches('input,select,textarea')||(!document.querySelector('.se-board-layout')&&s.boardPanel!=='unselected'))return;try{const before=JSON.stringify(s.data);await seReload();if(s===selectionState&&currentTab==='teams'&&s.view==='board'&&!s.busy&&!s.pending&&!s.formDirty&&before!==JSON.stringify(s.data)){s.notice='Updated from the shared selection board.';drawSelections();}}catch{seNotice('Live refresh could not connect. Your saved selections are retained; use Refresh to reconnect.');}},20000);}
 /* END TEAMS SELECTION */
+
+
+
+
 
 
 

@@ -3150,6 +3150,10 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 .demo-hwb-inline .demo-hwb-body{overflow:visible}
 @media(max-width:600px){.demo-hwb-head{padding:14px}.demo-hwb-body{padding:8px}.demo-hwb-preview .hwb-public-hero{padding:20px!important}}
 @media(max-width:600px){#demoToolbar{padding:10px 12px}.demo-heading{gap:7px}.demo-heading strong{font-size:15px}.demo-controls{gap:7px}.demo-controls label{font-size:12px}.demo-controls select{font-size:13px}.demo-controls button{font-size:12px}.demo-meta{font-size:11px}#demoHint{padding:10px 16px;font-size:13px}}
+/* Emphasis for the fictional lower-grade bracketing example only. */
+.se-slot.demo-bracket{border:2px solid #237367;border-radius:10px;background:#ecfaf6;padding:8px;margin:4px 0 8px}
+.demo-bracket .se-pick{background:#fff;border-color:#a3d0c4}
+.demo-bracket-note{grid-column:1/-1;color:#18594f;font-size:11px;font-weight:800;line-height:1.4;margin:0 0 3px}
 </style></head><body><aside id="demoToolbar" aria-label="Club Batting demo controls"><div class="demo-heading"><strong>Explore Club Batting</strong><span class="demo-badge">Demo · fictional club and players</span><nav class="demo-site-links" aria-label="Club Batting website"><a href="https://clubbatting.com/">Club Batting home</a><a id="demoGetStarted" href="https://clubbatting.com/enquire.html">Get started with your club →</a></nav></div><div class="demo-controls"><label for="demoStage">Explore</label><select id="demoStage"></select><button type="button" id="demoReset">Reset demo</button></div><div class="demo-meta"><span id="demoRole"></span><span>Example changes stay here until reset or reload · Email and AI require a live club</span></div></aside><p id="demoHint"></p><p id="demoStatus" role="status" aria-live="polite" hidden></p><div id="app"></div>
 <script>
 // This demo has its own in-memory data and never reads the live application's storage.
@@ -3177,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.110 — two-product website and club enquiries
+// Club Batting 0.8.62.111 — First XI and lower-grade bracketing demo
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.110';
+const APP_UI_VERSION='0.8.62.111';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -22460,6 +22464,10 @@ function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTi
 
 
 
+
+
+
+
 /* BEGIN PRODUCT ENQUIRIES — maintained in tools/product_enquiries_ui.js */
 const PRODUCT_ENQUIRY_LABELS={batting:'Batting development',selections:'Teams & availability',both:'Both'};
 let productEnquiryDraft=null;
@@ -22689,7 +22697,7 @@ function fixtureResetGlobals(){
 // All people, results and club records in this file are fictional examples.
 const demoStages=[
   {key:'selection_admin',label:'Selections · club setup',tab:'teams',role:'admin',hint:'Club Admin manages fixtures, players and roles. The Selection Board requires an assigned selection role.'},
-  {key:'selections',label:'Selections · live team board',tab:'teams',role:'coach',hint:'Fictional registered players. Click First XI slot 1, then Find matching pair to fill its Day 2 place. Roles and calendars belong to Selections. Nothing is sent or saved outside this demo.'},
+  {key:'selections',label:'Selections · live team board',tab:'teams',role:'coach',hint:'Fifth Grade’s highlighted place pairs Luca Hayes on Day 1 with Tom Green on Day 2. Click it to try Find matching pair. Fictional data only.'},
   {key:'availability',label:'Selections · player calendar',tab:'teams',role:'player',hint:'Mark the dates you can play. Unmarked dates are not available for selection. Confirm Day 1 and Day 2 separately.'},
   {key:'selected_teams',label:'Selections · published teams',tab:'teams',role:'player',hint:'Publish the fictional teams from the selection board first, then view them as Alex. The current published players form each match conversation.'},
   {key:'messages',label:'Message players & staff',tab:'messages',role:'coach',hint:'Casey can message permitted players, with coaching staff included by default. Untick Include coaching staff or choose individual staff. This isolated demo sends nothing. Switch to Player inbox to see Alex’s example message.'},
@@ -24263,11 +24271,11 @@ function demoDuplicateSelection(fixtures,ids){
 }
 function seedDemoSelections(){
  const names=['Alex Morgan','Jordan Lee','Taylor Quinn','Riley Cooper','Sam Patel','Chris Bell','Jamie Ford','Blake Hall','Drew Mason','Noah Reed','Will Scott','Evan Brooks','Charlie Gray','Luca Hayes','Mitch Lane','Oliver King','Max Taylor','Isaac Wood','Leo James','Ben Parker','Jack Smith','Finn West','Oscar Hill','Harry Cole','Tom Green','Nathan Ross','Eli Ward','Kane Adams'];
- const roster=names.map((name,i)=>({id:'selection-player-'+i,name,grade:i<13?'First XI':'Second XI',external_id:'EXAMPLE-'+(100+i),active:true,user_id:i===0?'user-alex':i===1?'user-jordan':i===2?'user-taylor':null,batting:i%13<6?'top':'lower',bowling:i%13>=7?'pace':i%13===6?'spin':'none',bowling_load:'frontline',keeper:i%13===5,availability:{revision:1,usual_available:false,blocks:[],available_dates:['2026-10-10','2026-10-17'].filter(date=>!(i===0&&date==='2026-10-17')&&!(i===11&&date==='2026-10-10')),checked_at:'2026-10-06T08:00:00Z'}}));
- roster[11].batting=roster[0].batting;roster[11].bowling=roster[0].bowling;
+ const roster=names.map((name,i)=>({id:'selection-player-'+i,name,grade:i<13?'First XI':'Fifth Grade',external_id:'EXAMPLE-'+(100+i),active:true,user_id:i===0?'user-alex':i===1?'user-jordan':i===2?'user-taylor':null,batting:i%13<6?'top':'lower',bowling:i%13>=7?'pace':i%13===6?'spin':'none',bowling_load:'frontline',keeper:i%13===5,availability:{revision:1,usual_available:false,blocks:[],available_dates:['2026-10-10','2026-10-17'].filter(date=>!(i===13&&date==='2026-10-17')&&!(i===24&&date==='2026-10-10')),checked_at:'2026-10-06T08:00:00Z'}}));
+ for(const role of ['batting','bowling','bowling_load','keeper'])roster[24][role]=roster[13][role];
  const days=[{date:'2026-10-10',start:'12:00'},{date:'2026-10-17',start:'12:00'}];
- const f=(id,grade,n)=>({id,club_id:club.id,revision:1,publication:0,published:null,details:{grade,format:'long_form',overs:null,captain_id:'user-jordan',competition:'Example District',opposition:'Harbour Visitors',ground:'Example Oval',meeting:'Meet at 11:15 am.',days:structuredClone(days),brackets:true,min_quicks:3,min_batters:5,staff:['user-coach']},slots:Array.from({length:11},(_,i)=>({d1:roster[n+i].id,d2:n===0&&i===0?null:roster[n+i].id}))});
- demoSelections={access:{mode:'bundle',status:'pilot',timezone:'Australia/Sydney',revision:1,head_selector_id:null,fixture_defaults:{revision:0,rows:[]}},roster_revision:1,roster,fixtures:[f('selection-first','First XI',0),f('selection-second','Second XI',13)],group_links:[],selectors:['user-coach'],review_posts:{},posts:{},history:{},receipts:{},billing:{pricing:{annual_price_cents:null,currency:'AUD',trial_days:null,revision:1},subscription:null,history:[]}};
+ const f=(id,grade,n)=>({id,club_id:club.id,revision:1,publication:0,published:null,details:{grade,format:'long_form',overs:null,captain_id:null,match_roles:Object.fromEntries(['d1','d2'].map(day=>[day,{captain_id:roster[n+1].id,captain_manual:true,keeper_id:roster[n+5].id,keeper_manual:false}])),competition:'Example District',opposition:'Harbour Visitors',ground:'Example Oval',meeting:'Meet at 11:15 am.',days:structuredClone(days),brackets:n===13,min_quicks:3,min_batters:5,staff:['user-coach']},slots:Array.from({length:11},(_,i)=>({d1:roster[n+i].id,d2:roster[n===13&&i===0?24:n+i].id}))});
+ demoSelections={access:{mode:'bundle',status:'pilot',timezone:'Australia/Sydney',revision:1,head_selector_id:'user-coach',fixture_defaults:{revision:0,rows:[]}},roster_revision:1,roster,fixtures:[f('selection-first','First XI',0),f('selection-second','Fifth Grade',13)],group_links:[],selectors:['user-coach'],review_posts:{},posts:{},history:{},receipts:{},billing:{pricing:{annual_price_cents:null,currency:'AUD',trial_days:null,revision:1},subscription:null,history:[]}};
 }
 function demoMatchGroups(){return fixtureGroups.map(g=>({...g,captain_user_ids:g.captain_user_ids||fixtureRows.club_access_grants.filter(a=>a.club_id===club.id&&a.scope==='playing_group'&&a.playing_group_id===g.id&&(a.can_view||a.can_edit)&&fixtureRows.club_memberships.some(m=>m.user_id===a.user_id&&m.club_id===club.id&&m.permission_role==='captain')).map(a=>a.user_id)}));}
 function demoCaptainUsers(d){return d.match_roles?[...new Set(Object.values(d.match_roles).map(r=>demoSelections.roster.find(p=>p.id===r.captain_id&&p.active)?.user_id).filter(id=>id&&fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===id)))]:d.captain_id?[d.captain_id]:[];}
@@ -24430,6 +24438,15 @@ const demoProductInvoke=window.__fixtureDb.functions.invoke;
 window.__fixtureDb.functions.invoke=async(name,args)=>args?.body?.action==='status'&&['discover-clubs','dispatch-outbox','club-batting-guide'].includes(name)?{data:{configured:false},error:null}:demoProductInvoke(name,args);
 
 function demoDecorate(){
+  // Demo-only emphasis follows actual split selections, including after edits.
+  document.querySelectorAll('.se-slot').forEach(row=>{
+    const button=row.querySelector('[data-se-slot]'),fixture=demoSelections?.fixtures.find(f=>f.id===button?.dataset.seFixture),slot=fixture?.slots[Number(button?.dataset.seSlot)];
+    const split=fixture?.details.brackets&&fixture.details.days.length===2&&slot?.d1&&slot?.d2&&slot.d1!==slot.d2;
+    row.classList.toggle('demo-bracket',!!split);
+    const note=row.querySelector('.demo-bracket-note');
+    if(split&&!note)row.insertAdjacentHTML('afterbegin','<p class="demo-bracket-note">Bracketed place · one player each day</p>');
+    else if(!split&&note)note.remove();
+  });
   // Administrative actions are visible but not offered as working demo operations.
   for(const id of ['out','joinAnother','accountPassword','remindOverduePlayers','guideAsk','guideSendHandoff','guideHumanHandoff','copyPlayerWhatsApp','copyPlayerLink','copyStaffJoinLink','togglePlayerSignup','regeneratePlayerLink','openLeadHandover','sendLeadHandover','sendPhilosophyInvite','invitePhilosophyByEmail']){
     const node=document.getElementById(id);if(node){node.disabled=true;node.title='Available in your live club. These are fictional demo accounts.';}
