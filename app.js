@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.101 — player sign-up follow-up
+// Club Batting 0.8.62.102 — public demo club roles
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.101';
+const APP_UI_VERSION='0.8.62.102';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

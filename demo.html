@@ -3177,12 +3177,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.101 — player sign-up follow-up
+// Club Batting 0.8.62.102 — public demo club roles
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.101';
+const APP_UI_VERSION='0.8.62.102';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -22359,11 +22359,8 @@ function fixtureResetGlobals(){
 
 // All people, results and club records in this file are fictional examples.
 const demoStages=[
-  {key:'selection_setup',label:'Selections · club activation',tab:'teams',role:'admin',hint:'Manage the example club and add Selections. Fictional data only.'},
-  {key:'selection_platform',label:'Platform Admin · Clubs',tab:'teams',role:'admin',hint:'One club. Choose Club Batting, Selections or both. Fictional data only.'},
-  {key:'selection_subscription',label:'Club subscriptions',tab:'teams',role:'admin',hint:'Example Platform Admin controls. Set a fictional annual price, preview a trial or special rate, and save separate Selections terms. No actual price, subscription, payment or email is changed.'},
   {key:'selections',label:'Selections · live team board',tab:'teams',role:'admin',hint:'Fictional registered players. Click First XI slot 1, then Find matching pair to fill its Day 2 place. Roles and calendars belong to Selections. Nothing is sent or saved outside this demo.'},
-  {key:'availability',label:'Selections · player calendar',tab:'teams',role:'player',hint:'Alex blacks out unavailable dates once. Actual fixture dates determine Day 1 / Day 2 availability. Blank dates are not confirmed until normal availability is explicitly accepted.'},
+  {key:'availability',label:'Selections · player calendar',tab:'teams',role:'player',hint:'Mark the dates you can play. Unmarked dates are not available for selection. Confirm Day 1 and Day 2 separately.'},
   {key:'selected_teams',label:'Selections · published teams',tab:'teams',role:'player',hint:'Publish the fictional teams from the selection board first, then view them as Alex. The current published players form each match conversation.'},
   {key:'messages',label:'Message players & staff',tab:'messages',role:'coach',hint:'Casey can message permitted players, with coaching staff included by default. Untick Include coaching staff or choose individual staff. This isolated demo sends nothing. Switch to Player inbox to see Alex’s example message.'},
   {key:'staff_messages',label:'Non-playing staff inbox',tab:'messages',role:'admin',hint:'Sam is a non-playing Admin. Send a fictional message from the staff messaging example with Sam included, then open it here. Staff do not need a Player Plan to receive messages.'},
@@ -22468,7 +22465,6 @@ function demoSeedClub(){
   fixtureRows.feedback['player-alex'].coaching_actions=[{id:'alex-action',club_id:club.id,player_id:'player-alex',signal_key:'example-pull-execution',source_at:fixtureNow(),outcome:'adjust_training',format_key:'limited_overs',task:'Practise the pull against 24 mixed-length balls. Commit on the right length; leave, defend or take a single when it is not there. Discuss decision and contact separately.',review_on:fixtureDay(7),status:'open',recorded_by:'user-coach',recorded_by_name:'Casey Reid',created_at:fixtureNow(),updated_at:fixtureNow(),revision:1,can_review:true,reviews:[{id:'alex-agreement',request_id:'alex-original-agreement',outcome:'continue',note:'Agreed with Alex: retain the shot and practise executing it.',reviewed_by_name:'Casey Reid',reviewed_at:fixtureNow(),revision:1}]}];
   myPlayer=null;workflow=null;philosophyScenarioSelectedIds=new Set();philosophyScenarioStateKey='';guideSelectedCapabilityKey='whole_process';
 }
-
 
 // Demo-only persistence. Real renderers, validation and events remain in app.js.
 // No authentication, invitations, email, AI or production database is used.
@@ -23945,6 +23941,8 @@ window.__fixtureRpc=async(name,args={})=>{
  const captain=membership.permission_role==='captain'||state.fixtures.some(f=>f.details.captain_id===uid&&!f.details.cancelled&&f.details.days.some(d=>d.date>=new Date().toLocaleDateString('en-CA',{timeZone:state.access.timezone})));
  const audience=f=>selector||f.published?.details.captain_id===uid||f.published?.slots.some(s=>state.roster.some(p=>p.user_id===uid&&(p.id===s.d1||p.id===s.d2)));
  const ok=data=>({data:structuredClone(data),error:null}),bad=message=>({data:null,error:{message,code:'P0001'}});
+ if(['subscription_context','preview_subscription'].includes(action)&&!seCanReadSubscriptions())return bad('Platform subscription access required');
+ if(['set_selection_pricing','save_subscription'].includes(action)&&!seCanManageSubscriptions())return bad('Platform commercial permission required');
  if(action==='subscription_context')return ok({can_manage:seCanManageSubscriptions(),pricing:state.billing.pricing,subscription:state.billing.subscription,access:state.access,inherited_trial_days:60,default_trial_days:state.billing.pricing.trial_days||60,calendars:[{code:'demo',label:'Example club year · 1 July to 30 June'}],history:state.billing.history});
  if(action==='preview_subscription'){try{return ok(demoSelectionsQuote(d));}catch(e){return bad(e.message);}}
  if(action==='access')return ok({...state.access,enabled:state.access.status!=='disabled',selector,admin});
@@ -24126,6 +24124,8 @@ async function demoNavigate(key,{reset=false}={}){
   try{
     if(!reset&&!await saveClubEditsBeforeNavigation())return;
     if(reset){demoClubBatting=null;demoSelections=null;selectionState=null;selectionAccess=null;playerPlanEditScope='';demoSeedClub();callResultsState=null;callResultsSequence++;myInningsCache=null;myInningsState={scope:'',season:null,format:'',openId:null,editId:null};}else fixtureResetGlobals();
+    // Public examples always use club roles, including old saved demo routes.
+    platformRole=null;platformAccessError=false;canBootstrapPlatform=false;
     const stage=demoStages.find(s=>s.key===key)||demoStages[0];demoCurrentStage=stage.key;
     demoSetPreparation(!!stage.preparing);
     if(['match_preparation','training','training_preparation','feedback'].includes(stage.key)){demoSeedMatchPreparations();myInningsCache=null;}
@@ -24138,24 +24138,13 @@ async function demoNavigate(key,{reset=false}={}){
     session={user:{id:userId,email:userId.slice(5)+'@example.test'}};
     membership=fixtureClone(fixtureRows.club_memberships.find(m=>m.user_id===userId));allMemberships=[{...membership,clubs:club}];
     document.getElementById('demoRole').textContent=userProfile.display_name+' · '+(stage.role==='admin'?'Philosophy Lead / Club Admin':stage.role==='coach'?'Coach':'Player');
-    if(['selection_setup','selection_platform','selection_subscription'].includes(stage.key)){
-      platformRole='owner';
-      document.getElementById('demoRole').textContent='Example Platform Admin';
-      for(const table of ['sales_prospects','club_prospects','club_trials','club_batting_guide_threads','outbound_messages','email_suppressions','club_subscriptions','platform_club_removals'])fixtureRows[table]=[];
-      fixtureRows.platform_settings=[{singleton:true,currency:'AUD',standard_season_price_cents:79500,club_trial_days:60,minimum_prorata_days:30,payment_grace_days:14,commercial_adjustment_warning_days:30,payment_mode:'prototype',payment_provider:'stripe',email_mode:'prototype',email_provider:'resend',email_from_name:'Example Club',email_from_address:'example@example.test',email_reply_to:'example@example.test',email_live_from:null}];
-      fixtureRows.subscription_calendars=[{code:'demo',label:'Example club year',active:true,renewal_month:7,renewal_day:1}];
-    }
-    if(['selection_setup','selection_platform'].includes(stage.key)){seedDemoClubBatting();seedDemoSelections();demoSelections.access.status='disabled';selectionAccess=null;selectionState=null;}
-    if(stage.key==='selection_setup'){seedDemoSelections();demoSelections.access.status='disabled';selectionAccess=null;selectionState=null;}
     await loadData();currentTab=stage.tab;resetPlayersWorkspaceForClub();
     if(stage.key==='feedback'){playersWorkspaceClubId=club.id;playersWorkspaceSelectedId='player-alex';playersWorkspaceSection='development';}
     if(stage.key==='unassigned'){playersWorkspaceClubId=club.id;playersWorkspaceGroupFilter='__unassigned__';}
     if(stage.key==='team_review'){demoSeedTeamReview();restoreTeamReviewState({match_date:fixtureDay(),format_key:'limited_overs',opposition:'Harbour Visitors',innings_number:1,group:'__all__',loaded:true});}
-    if(stage.tab==='teams'){const s=ensureSelections();s.view=['selections','selection_subscription'].includes(stage.key)?'board':stage.key==='availability'?'availability':'published';}
+    if(stage.tab==='teams'){const s=ensureSelections();s.view=stage.key==='selections'?'board':stage.key==='availability'?'availability':'published';}
     guideSelectedCapabilityKey='whole_process';renderShell();await window.__demoRenderDone;
-    if(stage.key==='selection_platform'){platformView='clubs';await renderPlatformConsole();}
     if(stage.key==='involvement')renderFirstIdentitySetup();
-    if(stage.key==='selection_subscription'){document.getElementById('demoRole').textContent='Example Platform Admin';await openClubSubscriptions(club.id,club.name);}
     window.scrollTo({top:0,left:0,behavior:'instant'});
   }catch(error){window.__fixtureError(error.message||String(error));}
   finally{demoNavigationBusy=false;}
