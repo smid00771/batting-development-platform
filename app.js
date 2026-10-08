@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.115 — One sign-up message for the players chat
+// Club Batting 0.8.62.116 — Shared club branding for either product
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.115';
+const APP_UI_VERSION='0.8.62.116';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1826,11 +1826,11 @@ function clubSetupUnavailableReason(tab){
 
 function canOpenClubTab(tab){
   if(tab==='teams')return !!(session&&membership&&club);
-  if(selectionsStandalone()&&!['teams','permissions','messages','phone_app','guide','join_club'].includes(tab))return false;
+  if(selectionsStandalone()&&!['teams','permissions','club_settings','messages','phone_app','guide','join_club'].includes(tab))return false;
   if(['join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
   if(['playerhome','innings'].includes(tab))return isPlayerUser();
-  if(['permissions','groups'].includes(tab))return isAdmin();
+  if(['permissions','groups','club_settings'].includes(tab))return !!(session&&membership&&club&&isAdmin());
   if(['players','feedback','training_preparation'].includes(tab))return canUsePlayersWorkspace();
   if(tab==='team_review')return canUseTeamReview();
   if(tab==='workshop_preview')return !!workshopPreview&&workshopPreview.clubId===club?.id&&workshopPreview.userId===session?.user?.id;
@@ -1958,6 +1958,7 @@ async function expandClubHomeStage(key,progress){
 
 
 async function saveClubEditsBeforeNavigation(){
+  if(!confirmLeaveClubBranding())return false;
   if(!confirmLeaveSelections())return false;
   if(!confirmLeaveCoachingStaff())return false;
   if(!confirmLeaveClubMessages())return false;
@@ -2379,6 +2380,7 @@ function accountMenuHtml({allowJoin=true,allowCoaching=false,outId='out',joinId=
       <div class="account-menu-identity"><strong>${esc(name)}</strong>${email?`<span>${esc(email)}</span>`:''}</div>
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
+      ${allowCoaching&&isAdmin()?'<button class="account-menu-action" data-club-branding type="button">Club settings</button>':''}
       ${allowCoaching&&!selectionsStandalone()?'<button class="account-menu-action" id="accountCoaching" type="button">Coach Conversations</button>':''}
       ${allowCoaching?'<button class="account-menu-action" data-club-messages type="button">Messages</button><button class="account-menu-action" data-phone-open type="button">App & notifications</button>':''}
       <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
@@ -2447,7 +2449,6 @@ function renderShell(){
 
   }
   if(selectionsStandalone()&&isAdmin())nav.push(['permissions','People & sign-up','club']);
-  if(selectionsEnabled())nav.push(['teams','Teams & availability','selection']);
 
 
 
@@ -2463,6 +2464,7 @@ function renderShell(){
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
 
   nav.push(['guide','Help & Tutorials','help']);
+  if(selectionsEnabled())nav.push(['teams','Teams & availability','selection']);
 
   const contextOptions=[...allMemberships.map(m=>`<option value="club:${m.club_id}" ${m.club_id===club.id?'selected':''}>${esc(m.clubs?.name||'Club')}</option>`),platformRole?`<option value="platform">Platform Admin</option>`:''].join('');
 
@@ -2976,7 +2978,7 @@ function renderTab(){
     if(!['workshop','dashboard'].includes(currentTab))clearTimeout(workshopDiscussionTimer);
   }
   const arrived=()=>{
-    bindPhoneAppControls();
+    bindPhoneAppControls();bindClubBrandingLinks();
     if(scrollOnArrival&&`${club?.id}:${currentTab}`===route){
       const inningsFocus=currentTab==='innings'?(document.getElementById('myReflectionForm')||document.getElementById('innings-detail-'+ensureMyInningsState().openId)):null;
       if(inningsFocus){if(inningsFocus.id==='myReflectionForm')revealMyInningsForm();else{inningsFocus.setAttribute('tabindex','-1');inningsFocus.focus({preventScroll:true});inningsFocus.scrollIntoView({block:'start'});}bindWorkshopReturn();return;}
@@ -2990,7 +2992,7 @@ function renderTab(){
   const map={
     teams:renderSelections,messages:renderClubMessages,phone_app:renderPhoneApp,
     join_club:renderJoinAnotherClub,
-    dashboard:renderClubDashboard,
+    dashboard:renderClubDashboard,club_settings:renderClubBrandingSettings,
     playerhome:renderPlayerHome,
     innings:renderMyInnings,make_your_call:renderMakeYourCall,
     groups:renderPlayingGroups,
@@ -3155,7 +3157,7 @@ function guideHelpStyles(){
 
 // BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
 const CLUB_BATTING_HELP = {
-  "version": "0.8.62.115",
+  "version": "0.8.62.116",
   "reviewed": "2026-10-08",
   "topics": [
     {
@@ -3218,24 +3220,24 @@ const CLUB_BATTING_HELP = {
       ],
       "tutorial": [
         {
-          "title": "Choose a product",
-          "body": "On clubbatting.com, explore Batting development or Teams & availability. Each has its own fictional demo. Choose Get started, then Batting development, Teams & availability, or Both. Teams & availability works independently and does not require a batting subscription or Player Plans."
+          "body": "On clubbatting.com, explore Batting development or Teams & availability. Each has its own fictional demo. Choose Get started, then Batting development, Teams & availability, or Both. Teams & availability works independently and does not require a batting subscription or Player Plans.",
+          "title": "Choose a product"
         },
         {
-          "title": "Use the right account",
-          "body": "Enter your club and contact name. Sign in with your existing account or create an account and confirm its email. Check the signed-in email before submitting. Account details do not grant club or product access."
+          "body": "Enter your club and contact name. Sign in with your existing account or create an account and confirm its email. Check the signed-in email before submitting. Account details do not grant club or product access.",
+          "title": "Use the right account"
         },
         {
-          "title": "Send your enquiry",
-          "body": "Submit the product enquiry and check its confirmation. Platform Admin sees the requested products in Club Pipeline and arranges the next step. Sending an enquiry does not start a trial, activate subscriptions or charge the club."
+          "body": "Submit the product enquiry and check its confirmation. Platform Admin sees the requested products in Club Pipeline and arranges the next step. Sending an enquiry does not start a trial, activate subscriptions or charge the club.",
+          "title": "Send your enquiry"
         },
         {
-          "title": "Open your prepared club",
-          "body": "Return to your enquiry to check its status. Platform Admin can prepare a new club or use a club where you already have Admin permission. A new club starts with the confirmed contact as non-playing Club Admin; playing involvement and other roles can be assigned separately. Product access is managed by Platform Admin."
+          "body": "Return to your enquiry to check its status. Platform Admin can prepare a new club or use a club where you already have Admin permission. A new club starts with the confirmed contact as non-playing Club Admin; playing involvement and other roles can be assigned separately. Product access is managed by Platform Admin. Club Admin can optionally add the logo and colours straight away through Add club logo & colours or Account → Club settings, with either product.",
+          "title": "Open your prepared club"
         },
         {
-          "title": "Continue an existing invitation",
-          "body": "An existing Club Batting trial invitation or saved trial link still follows its original activation process. Its full 60-day batting trial starts on activation, with no upfront payment or automatic charge. It does not activate Teams & availability. Payment collection is not live in this beta; the Guide must not promise automatic Stripe billing or corporate tiers."
+          "body": "An existing Club Batting trial invitation or saved trial link still follows its original activation process. Its full 60-day batting trial starts on activation, with no upfront payment or automatic charge. It does not activate Teams & availability. Payment collection is not live in this beta; the Guide must not promise automatic Stripe billing or corporate tiers.",
+          "title": "Continue an existing invitation"
         }
       ],
       "sort_order": 20,
@@ -3528,7 +3530,7 @@ const CLUB_BATTING_HELP = {
       "capability_key": "club_look_publication",
       "title": "Check the club look and publish",
       "purpose": "Open the agreed system to players.",
-      "short_explanation": "Branding follows the cricket preparation. Publication is the final explicit preparation action.",
+      "short_explanation": "Club branding is shared by both products. Batting publication remains a separate preparation step.",
       "target_tab": "dashboard",
       "audience": [
         "admin",
@@ -3540,21 +3542,21 @@ const CLUB_BATTING_HELP = {
       ],
       "tutorial": [
         {
+          "body": "Club Admin can add the club logo and colours at any time through Account → Club settings. New clubs also see Add club logo & colours during setup; Teams & availability → Settings has the same link. This works with either subscription, with no batting preparation required. Choose Save or Keep current look. Save changes to Saved; later edits make Save available again. Colour suggestions are under Find colours. The saved look is shared across the club’s subscribed products.",
           "title": "Check the club look",
-          "body": "After How We Bat and Player Plan questions are confirmed, Club Admin reviews the logo and colours or chooses Keep this look & continue. Branding is not a prerequisite for people registering.",
-          "target_tab": "dashboard"
+          "target_tab": "club_settings"
         },
         {
-          "title": "Publish when ready",
-          "body": "The Philosophy Lead selects Publish & notify players after all preparation steps are ready. This publishes the club approach and questions together."
+          "body": "The Philosophy Lead selects Publish & notify players after all preparation steps are ready. This publishes the club approach and questions together.",
+          "title": "Publish when ready"
         },
         {
-          "title": "Tell registered players they can begin",
-          "body": "Publication puts a ready-to-start notice in playing members’ Messages with a My Player Plan button. Enabled Club messages phone notifications are used first; otherwise a short email links to the message. A newly joining playing member is notified when the club is ready. Queueing an alert does not prove it was delivered or read."
+          "body": "Publication puts a ready-to-start notice in playing members’ Messages with a My Player Plan button. Enabled Club messages phone notifications are used first; otherwise a short email links to the message. A newly joining playing member is notified when the club is ready. Queueing an alert does not prove it was delivered or read.",
+          "title": "Tell registered players they can begin"
         },
         {
-          "title": "Keep the next step clear",
-          "body": "Before publication, ordinary players see a waiting message. People with assigned Workshop/setup responsibilities can work during preparation. Club Home’s completed preparation stages stay available for review."
+          "body": "Before publication, ordinary players see a waiting message. People with assigned Workshop/setup responsibilities can work during preparation. Club Home’s completed preparation stages stay available for review.",
+          "title": "Keep the next step clear"
         }
       ],
       "sort_order": 100,
@@ -4586,7 +4588,7 @@ const CLUB_BATTING_HELP = {
       ],
       "tutorial": [
         {
-          "body": "Your club can use Club Batting, Teams & availability or both. Platform Admin → Clubs → Manage adds either product. Adding Teams & availability creates linked playing-list entries for existing verified playing members. Adding Club Batting gives existing player accounts access without a second sign-up. Imported players without an account still need to join. Neither switch marks anyone available or completes their Player Plan.",
+          "body": "Your club can use Club Batting, Teams & availability or both. Platform Admin → Clubs → Manage adds either product. Adding Teams & availability creates linked playing-list entries for existing verified playing members. Adding Club Batting gives existing player accounts access without a second sign-up. Imported players without an account still need to join. Neither switch marks anyone available or completes their Player Plan. Club Admin can set the shared logo and colours from Settings → Club logo & colours, including for Teams-only clubs. Teams & availability is the last item in the main menu.",
           "title": "Choose your club products",
           "target_tab": "teams"
         },
@@ -5003,7 +5005,7 @@ async function renderClubDashboard(){
   const progress=clubSetupProgress();
   const step=progress.steps[progress.currentIndex]||null;
   const showRoundReview=(isAdmin()||isPhilosophyLead())&&!!(workshop||howWeBatDraft||playerPlanStructureDraft||progress.systemLive);
-  const canReviewLook=isAdmin()&&(progress.structureReady||progress.systemLive);
+  const canReviewLook=isAdmin();
   const showBranding=false;
   if(clubHomeStageClubId!==club.id){clubHomeExpandedStage=null;clubHomeStageClubId=club.id;clubHomeNextPreparationKey=null;}
   if(!clubHomeRestoredStage&&!progress.published&&(!clubHomeExpandedStage||clubHomeNextPreparationKey!==step?.key))clubHomeExpandedStage=step?.key||null;
@@ -5028,6 +5030,7 @@ async function renderClubDashboard(){
   page.innerHTML=`${clubSetupStyles()}
     <div class="section-label">Club Home</div>
     <h1 class="club-progress-title">Your club’s progress</h1>
+    ${clubBrandingSetupPrompt()}
     <p class="club-home-intro">Build your club’s approach, bring players on board and keep connecting their plans, training and feedback.</p>
     ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">You are preparing a new philosophy round. Existing players can keep using the published How We Bat and Player Plans. People can still register and use the published version while you prepare its replacement.</div>':''}
     <section class="club-preparation" aria-labelledby="clubPreparationTitle">
@@ -5213,17 +5216,20 @@ function openClubTrialContinuationDialog(trial){
   dialog.showModal();
 }
 
-function wireClubBrandingControls(page){
-  const draft=ensureBrandingDraft();
+function wireClubBrandingControls(page,{shared=false}={}){
+  const draft=ensureBrandingDraft(),ownerClubId=club.id,ownerUserId=session?.user?.id,card=page.querySelector('.club-branding-card');
+  const current=()=>club?.id===ownerClubId&&session?.user?.id===ownerUserId&&card?.isConnected;
+  const busy=value=>{if(shared&&card)card.dataset.busy=String(value);};
   const zone=page.querySelector('#clubLogoPasteZone');
   const fileInput=page.querySelector('#clubLogoFile');
   const logoStatus=page.querySelector('#clubLogoStatus');
   const detectStatus=page.querySelector('#brandingDetectionStatus');
   const saveStatus=page.querySelector('#clubBrandingSaveStatus');
 
-  const setStatus=(el,text,kind='')=>{if(!el)return;el.textContent=text||'';el.className=(el.id==='brandingDetectionStatus'?'branding-detection-status':'help branding-inline-status')+(kind?` ${kind}`:'');};
+  const setStatus=(el,text,kind='')=>{if(!el)return;if(shared&&kind==='good')text=/^Logo/.test(text)?'Logo ready.':'Preview updated.';el.textContent=text||'';el.className=(el.id==='brandingDetectionStatus'?'branding-detection-status':'help branding-inline-status')+(kind?` ${kind}`:'');};
 
   const draw=()=>{
+    if(!current())return;
     const d=ensureBrandingDraft();
     const logo=page.querySelector('#clubLogoPreview');
     if(logo)logo.innerHTML=d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="Club logo preview">`:'<div class="club-logo-empty">LOGO</div>';
@@ -5286,14 +5292,17 @@ function wireClubBrandingControls(page){
       preview.style.setProperty('--preview-primary-contrast',contrastFor(primary));
       preview.style.setProperty('--preview-accent',accent);
       preview.style.setProperty('--preview-accent-contrast',contrastFor(accent));
-      preview.innerHTML=`<div class="club-brand-preview-head">${d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="">`:''}<div><span>${esc(club.name)}</span><strong>How We Bat</strong></div></div><div class="club-brand-preview-body"><span class="preview-brand-pill">Key Message</span><b>Player-facing preview</b><p>Your club colours and logo flow through the live system while the platform keeps the layout readable.</p><button type="button">Primary colour</button><em>Accent colour</em></div>`;
+      preview.innerHTML=shared?sharedBrandingPreview(d):`<div class="club-brand-preview-head">${d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="">`:''}<div><span>${esc(club.name)}</span><strong>How We Bat</strong></div></div><div class="club-brand-preview-body"><span class="preview-brand-pill">Key Message</span><b>Player-facing preview</b><p>Your club colours and logo flow through the live system while the platform keeps the layout readable.</p><button type="button">Primary colour</button><em>Accent colour</em></div>`;
     }
+    if(shared)sharedBrandingState(page);
   };
 
   const acceptLogo=async file=>{
+    if(shared&&card.dataset.busy==='true')return;busy(true);
     try{
       setStatus(logoStatus,'Reading image…');
       const result=await processClubLogoFile(file);
+      if(!current())return;
       draft.logo_data_url=result.dataUrl;
       clubBrandingLogoSuggestions=(result.palette||[]).filter(validHex).map(c=>c.toUpperCase());
       clubBrandingLogoPaletteSource=result.dataUrl;
@@ -5302,7 +5311,8 @@ function wireClubBrandingControls(page){
         setStatus(logoStatus,'Logo ready. Use the logo suggestion, assign any detected colour as Primary or Accent, or choose colours manually. Your current theme has not changed.','good');
       }else setStatus(logoStatus,'Logo ready. Choose colours manually or analyse the club website.','good');
       draw();
-    }catch(err){setStatus(logoStatus,err?.message||String(err),'bad');}
+    }catch(err){if(current())setStatus(logoStatus,err?.message||String(err),'bad');}
+    finally{busy(false);if(current())draw();}
   };
 
   zone?.addEventListener('paste',e=>{
@@ -5342,7 +5352,8 @@ function wireClubBrandingControls(page){
   page.querySelector('#applyAccentHex')?.addEventListener('click',()=>applyManualHex('accent_colour','#clubAccentHex','Accent'));
   page.querySelector('#clubPrimaryHex')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyManualHex('primary_colour','#clubPrimaryHex','Primary');}});
   page.querySelector('#clubAccentHex')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyManualHex('accent_colour','#clubAccentHex','Accent');}});
-  page.querySelector('#clubWebsiteUrl')?.addEventListener('input',e=>draft.website_url=e.target.value);
+  page.querySelector('#clubWebsiteUrl')?.addEventListener('input',e=>{draft.website_url=e.target.value;if(shared)sharedBrandingState(page);});
+  if(shared)for(const k of ['Primary','Accent']){const input=page.querySelector('#club'+k+'Hex');input.addEventListener('input',()=>{const v=input.value.trim().toUpperCase();if(validHex(v))syncHex(k.toLowerCase()+'_colour',v);else sharedBrandingState(page);});}
 
   page.querySelector('#swapBrandColours')?.addEventListener('click',()=>{
     const oldPrimary=draft.primary_colour;draft.primary_colour=draft.accent_colour;draft.accent_colour=oldPrimary;
@@ -5355,16 +5366,18 @@ function wireClubBrandingControls(page){
   });
 
   page.querySelector('#detectClubColours')?.addEventListener('click',async()=>{
+    if(shared&&card.dataset.busy==='true')return;
     const button=page.querySelector('#detectClubColours');
     const raw=page.querySelector('#clubWebsiteUrl')?.value||'';
     const url=normaliseWebsiteUrl(raw);
     if(!/^https?:\/\//i.test(url)){setStatus(detectStatus,'Enter a valid club website address.','bad');return;}
     draft.website_url=url;
     page.querySelector('#clubWebsiteUrl').value=url;
-    button.disabled=true;button.textContent='Checking…';
+    busy(true);button.disabled=true;button.textContent='Checking…';
     setStatus(detectStatus,'Looking for the website’s brand colours…');
     try{
       const {data,error}=await supabase.functions.invoke('detect-club-branding',{body:{club_id:club.id,url}});
+      if(!current())return;
       if(error)throw error;
       if(!data?.primary)throw new Error(data?.error||'No reliable colours were found.');
       const analysedHost=new URL(data.analysed_url||url).hostname;
@@ -5379,13 +5392,14 @@ function wireClubBrandingControls(page){
     }catch(err){
       setStatus(detectStatus,'Could not reliably read colours from that website. Your current theme has not changed. You can use colours detected from the logo or choose colours manually.','bad');
       console.warn('Brand website detection failed',err);
-    }finally{button.disabled=false;button.textContent='Find club colours';}
+    }finally{busy(false);button.disabled=false;button.textContent=shared?'Find colours':'Find club colours';if(shared&&current())sharedBrandingState(page);}
   });
 
   let brandingSavePending=false;
   const saveLook=async keepSaved=>{
     const progress=clubSetupProgress();
-    if(brandingSavePending||!isAdmin()||!(progress.structureReady||progress.systemLive))return;
+    if(brandingSavePending||!isAdmin()||!current()||(shared&&card.dataset.busy==='true'))return;
+    if(shared&&!keepSaved){for(const k of ['Primary','Accent']){const v=page.querySelector('#club'+k+'Hex').value.trim().toUpperCase();if(!validHex(v)){saveStatus.textContent='Check the two colour values.';return;}draft[k.toLowerCase()+'_colour']=v;}}
     const targetClubId=club.id;
     const targetUserId=session?.user?.id;
     const saveButton=page.querySelector('#saveClubBranding');
@@ -5403,7 +5417,7 @@ function wireClubBrandingControls(page){
     if(!validHex(savedLook.primary_colour)||!validHex(savedLook.accent_colour)){saveStatus.textContent='Check the two colour values.';return;}
     const controls=[...page.querySelectorAll('.club-branding-card button,.club-branding-card input')].map(el=>[el,el.disabled]);
     const oldLabel=button.textContent;
-    brandingSavePending=true;
+    brandingSavePending=true;busy(true);
     controls.forEach(([el])=>el.disabled=true);
     button.textContent='Saving…';saveStatus.textContent='';
     const stillCurrent=()=>club?.id===targetClubId&&session?.user?.id===targetUserId&&document.getElementById('saveClubBranding')===saveButton;
@@ -5419,15 +5433,16 @@ function wireClubBrandingControls(page){
       if(membership?.clubs)Object.assign(membership.clubs,savedLook,data);
       clubBrandingDraft={...savedLook};clubBrandingDraftClubId=targetClubId;
       applyClubTheme();
-      currentTab='dashboard';localStorage.setItem(`bdp-tab-${targetClubId}`,currentTab);
-      saveStatus.textContent='Club look saved. Ready for the final publication step.';
+      currentTab=shared?'club_settings':'dashboard';localStorage.setItem(`bdp-tab-${targetClubId}`,currentTab);
+      saveStatus.textContent=shared?'Saved':'Club look saved. Ready for the final publication step.';
       try{renderShell();}catch(error){saveStatus.textContent='Club look saved. Refresh Club Home to continue.';}
     }catch(error){
       if(stillCurrent())saveStatus.textContent=error?.message||'The club look could not be saved. Please try again.';
     }finally{
-      brandingSavePending=false;
+      brandingSavePending=false;busy(false);
       controls.forEach(([el,disabled])=>el.disabled=disabled);
       button.textContent=oldLabel;
+      if(shared&&current())sharedBrandingState(page);
     }
   };
   page.querySelector('#saveClubBranding')?.addEventListener('click',()=>saveLook(false));
@@ -5442,7 +5457,7 @@ function wireClubBrandingControls(page){
     draw();
     paletteFromLogoDataUrl(draft.logo_data_url)
       .then(palette=>{
-        if(ensureBrandingDraft().logo_data_url!==draft.logo_data_url)return;
+        if(!current()||ensureBrandingDraft().logo_data_url!==draft.logo_data_url)return;
         clubBrandingLogoSuggestions=(palette||[]).filter(validHex).map(c=>c.toUpperCase());
         clubBrandingLogoPaletteSource=draft.logo_data_url;
         clubBrandingLogoPaletteLoading=false;
@@ -5453,6 +5468,7 @@ function wireClubBrandingControls(page){
         draw();
       })
       .catch(err=>{
+        if(!current())return;
         clubBrandingLogoPaletteSource=draft.logo_data_url;
         clubBrandingLogoPaletteLoading=false;
         setStatus(logoStatus,'Logo is saved, but its colours could not be read. Use the website suggestion or choose colours manually.','bad');
@@ -19258,12 +19274,12 @@ async function renderSelections(){
 }
 function seHasAvailability(d){return seCanSetup(d)||d.can_view_club_availability||d.roster.some(p=>p.active&&p.user_id===session?.user?.id)||['player','both'].includes(membership?.involvement);}
 function drawSelections(){if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const tabs=[...(d.admin?[['settings','Settings']]:[]),...(seCanSetup(d)||d.signup_followup?.can_view?[['roster','Playing List']]:[]),...(seHasAvailability(d)?[['availability','Availability']]:[]),...(d.selector?[['board','Selection Board']]:d.admin?[['fixtures','Fixtures']]:[]),...(d.selector||d.reviews?.length?[['reviews','Captain Checks']]:[]),['published','Teams']];if(!tabs.some(([key])=>key===s.view))s.view='published';
- document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><button class="btn ghost" id="seRefresh">Refresh</button></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div><p id="seNotice" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}<div id="seContent"></div></section>`;
+ document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><button class="btn ghost" id="seRefresh">Refresh</button></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}<div id="seContent"></div></section>`;
  document.querySelectorAll('[data-se-view]').forEach(b=>b.onclick=()=>{if(!confirmLeaveSelections())return;s.view=b.dataset.seView;s.boardPanel=null;s.rosterPanel=null;s.active=null;s.formDirty=false;s.notice='';drawSelections();});
  document.getElementById('seRefresh').onclick=async()=>{if(!confirmLeaveSelections())return;s.notice='';await renderSelections();};
  document.getElementById('seRetrySave')?.addEventListener('click',()=>seMutate(s.pending.action,s.pending.data));
  document.getElementById('seRecovery')?.addEventListener('click',async()=>{seDownload('Selection-save-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;sePersist();s.notice='Proposal downloaded. Review it against the latest saved teams before making changes.';await seReload();drawSelections();});
- ({published:sePublished,reviews:seReviews,board:seBoard,fixtures:seFixtures,roster:seRoster,availability:seAvailability,settings:seSettings}[s.view]||sePublished)();
+ ({published:sePublished,reviews:seReviews,board:seBoard,fixtures:seFixtures,roster:seRoster,availability:seAvailability,settings:seSettings}[s.view]||sePublished)();bindClubBrandingLinks();
  if(s.pending)document.querySelectorAll('#seContent button,#seContent input,#seContent select,#seContent textarea').forEach(x=>x.disabled=true);
 }
 function seBoardFixtures(){const s=ensureSelections();const dates=[...new Set(s.data.fixtures.map(f=>f.details.days[0].date))].sort();if(!dates.includes(s.date))s.date=dates.find(x=>x>=new Date().toLocaleDateString('en-CA',{timeZone:s.data.access.timezone}))||dates.at(-1)||'';return s.data.fixtures.filter(f=>f.details.days[0].date===s.date);}
@@ -19334,8 +19350,8 @@ function sePlayerEditor(player=null){const s=ensureSelections(),p=player||{name:
 function seImport(){const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Refresh the registered playing list</h2><p>Upload your registration CSV. Existing players are matched; roles and availability stay.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|profile.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)],['email','Player email (optional)',guess(/^(?:(?:player|participant|account.?holder).?)?e.?mail$/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
  const preview=()=>{const map=Object.fromEntries([...document.querySelectorAll('[data-se-map]')].map(el=>[el.dataset.seMap,Number(el.value)]));if(map.id<0||map.name<0)throw Error('Choose both a stable ID and name column.');const data=rows.map(r=>({external_id:(r[map.id]||'').trim(),name:[r[map.name],map.last>=0&&map.last!==map.name?r[map.last]:''].filter(Boolean).join(' ').trim(),...(map.grade>=0?{grade:(r[map.grade]||'').trim()}:{}),...seCSVAccountEmail(r,headers,map.email)}));if(data.some(r=>!r.external_id||!r.name))throw Error('Every row must have a registration ID and name.');if(new Set(data.map(r=>r.external_id)).size!==data.length)throw Error('Duplicate registration IDs. Remove duplicate rows before importing.');seValidateRosterNames(data,s.data.roster,true);return data;};
  const draw=()=>{try{const data=preview(),matches=data.filter(r=>seImportMatch(r,s.data.roster)).length;document.getElementById('seCSVError').textContent='';document.getElementById('seCSVCommit').disabled=false;document.getElementById('seCSVPreview').innerHTML=`<p>${data.length} rows · ${matches} existing players · ${data.length-matches} new players</p><div class="se-preview-scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Grade</th></tr></thead><tbody>${data.slice(0,8).map(r=>`<tr><td>${seEsc(r.external_id)}</td><td>${seEsc(r.name)}</td><td>${seEsc(r.grade)}</td></tr>`).join('')}</tbody></table></div><p class="se-muted">Preview of the first ${Math.min(8,data.length)} rows. Matched players keep their account, roles and availability.</p>`;}catch(err){document.getElementById('seCSVError').textContent=err.message;document.getElementById('seCSVCommit').disabled=true;}};document.querySelectorAll('[data-se-map]').forEach(el=>el.onchange=draw);document.getElementById('seCSVCommit').onclick=()=>seMutate('import_roster',{revision:s.data.roster_revision,rows:preview()});draw();}catch(err){document.getElementById('seCSVError').textContent=err.message;}};}
-function seSettings(){const s=ensureSelections(),d=s.data;document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Selection permissions</h2><form id="seSelectors"><label>Head of Selections<select name="head_selector_id">${seOpt([['','Choose Head of Selections'],...d.members.map(m=>[m.user_id,m.name])],d.access.head_selector_id||'')}</select></label><p class="se-muted">The Head of Selections publishes teams to players.</p><details id="seOtherSelectors"><summary>Other selectors<span class="se-form-note" style="display:block;margin:6px 0" id="seSelectorNames"></span></summary>${d.members.map(m=>`<label class="se-check"><input name="users" type="checkbox" value="${m.user_id}" ${m.explicit_selector?'checked':''}>${seEsc(m.name)}${m.is_admin?' · Club Admin':''}</label>`).join('')}</details><button class="btn se-editor-actions" type="submit">Save permissions</button></form></section><details class="se-card se-drawer" id="seFixtureDefaults" style="margin-top:14px"></details>${d.access.mode==='bundle'?`<details class="se-card se-drawer" id="seBattingConnection" style="margin-top:14px"><summary>Club Batting connection (optional)</summary><p>Publishing teams can add linked players to Club Batting Playing Groups. Players without a link stay in the team.</p><p class="se-form-note">Group membership can affect Player Plan due dates and coaching access. Existing memberships stay.</p><form id="seGroupLinks"><div id="seGroupLinkRows"></div><div class="se-actions"><button class="btn ghost" type="button" id="seAddGroupLink">Add grade mapping</button><button class="btn" type="submit">Save group connections</button></div></form></details>`:''}`;
- const selectorForm=document.getElementById('seSelectors');seShowSelectorNames(selectorForm);selectorForm.addEventListener('change',()=>seShowSelectorNames(selectorForm));seSettingsSaveState(selectorForm,'Save permissions','selectors');selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users'),head_selector_id:selectorForm.elements.head_selector_id.value||null});};seRenderDefaults();if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks');
+function seSettings(){const s=ensureSelections(),d=s.data;document.getElementById('seContent').innerHTML=`<div class="btnrow" style="margin-bottom:14px"><button class="btn ghost" type="button" data-club-branding>Club logo &amp; colours</button></div><section class="se-card se-drawer"><h2>Selection permissions</h2><form id="seSelectors"><label>Head of Selections<select name="head_selector_id">${seOpt([['','Choose Head of Selections'],...d.members.map(m=>[m.user_id,m.name])],d.access.head_selector_id||'')}</select></label><p class="se-muted">The Head of Selections publishes teams to players.</p><details id="seOtherSelectors"><summary>Other selectors<span class="se-form-note" style="display:block;margin:6px 0" id="seSelectorNames"></span></summary>${d.members.map(m=>`<label class="se-check"><input name="users" type="checkbox" value="${m.user_id}" ${m.explicit_selector?'checked':''}>${seEsc(m.name)}${m.is_admin?' · Club Admin':''}</label>`).join('')}</details><button class="btn se-editor-actions" type="submit">Save permissions</button></form></section><details class="se-card se-drawer" id="seFixtureDefaults" style="margin-top:14px"></details>${d.access.mode==='bundle'?`<details class="se-card se-drawer" id="seBattingConnection" style="margin-top:14px"><summary>Club Batting connection (optional)</summary><p>Publishing teams can add linked players to Club Batting Playing Groups. Players without a link stay in the team.</p><p class="se-form-note">Group membership can affect Player Plan due dates and coaching access. Existing memberships stay.</p><form id="seGroupLinks"><div id="seGroupLinkRows"></div><div class="se-actions"><button class="btn ghost" type="button" id="seAddGroupLink">Add grade mapping</button><button class="btn" type="submit">Save group connections</button></div></form></details>`:''}`;
+ const selectorForm=document.getElementById('seSelectors');seShowSelectorNames(selectorForm);selectorForm.addEventListener('change',()=>seShowSelectorNames(selectorForm));seSettingsSaveState(selectorForm,'Save permissions','selectors');selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users'),head_selector_id:selectorForm.elements.head_selector_id.value||null});};seRenderDefaults();bindClubBrandingLinks();if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks');
  const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No group connections set.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);s.formDirty=true;renderLinks();});};
  const sync=()=>document.querySelectorAll('[data-se-link]').forEach(el=>{links[Number(el.dataset.seLink)]={competition:el.querySelector('[name=competition]').value.trim(),grade:el.querySelector('[name=grade]').value.trim(),group_id:el.querySelector('[name=group_id]').value};});form.oninput=()=>s.formDirty=true;document.getElementById('seAddGroupLink').onclick=()=>{sync();links.push({competition:'',grade:'',group_id:''});s.formDirty=true;renderLinks();};form.onsubmit=e=>{e.preventDefault();sync();return seMutate('group_links',{revision:d.access.revision,links});};renderLinks();}
 async function openSelectionsAccess(clubId,clubName){return openClubSubscriptions(clubId,clubName);}
@@ -19417,6 +19433,65 @@ function sharedSignupIntro(info){
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* BEGIN SHARED CLUB BRANDING */
+let clubBrandingReturn=null;
+function savedClubBranding(){return {logo_data_url:club?.logo_data_url||'',website_url:club?.website_url||'',primary_colour:normaliseHex(club?.primary_colour,PLATFORM_PRIMARY),accent_colour:normaliseHex(club?.accent_colour,PLATFORM_ACCENT)};}
+function sharedBrandingDirty(){
+ const card=document.querySelector('[data-shared-branding]');if(!card||clubBrandingDraftClubId!==club?.id)return false;
+ const saved=savedClubBranding(),draft=ensureBrandingDraft();
+ return Object.keys(saved).some(k=>(draft[k]||'')!==(saved[k]||''))||['Primary','Accent'].some(k=>card.querySelector('#club'+k+'Hex')?.value.trim().toUpperCase()!==draft[k.toLowerCase()+'_colour']);
+}
+function sharedBrandingState(page){
+ const card=page.querySelector('[data-shared-branding]'),button=page.querySelector('#saveClubBranding');if(!card||!button||card.dataset.busy==='true')return;
+ const status=page.querySelector('#clubBrandingSaveStatus');if(status?.textContent==='Check the two colour values.'&&['Primary','Accent'].every(k=>validHex(page.querySelector('#club'+k+'Hex').value.trim().toUpperCase())))status.textContent='';
+ const saved=!!club.branding_updated_at&&!sharedBrandingDirty();button.textContent=saved?'Saved':'Save';button.disabled=saved;button.classList.toggle('secondary',!saved);button.classList.toggle('ghost',saved);
+}
+function confirmLeaveClubBranding(){
+ const card=document.querySelector('[data-shared-branding]');if(!card)return true;
+ if(card.dataset.busy==='true'){card.querySelector('#clubBrandingSaveStatus').textContent='Please wait for the current change to finish.';return false;}
+ if(!sharedBrandingDirty())return true;
+ if(!confirm('Discard the unsaved club look?'))return false;
+ clubBrandingDraft=null;clubBrandingDraftClubId=null;return true;
+}
+function clubBrandingSetupPrompt(){return isAdmin()&&!clubSetupProgress().detailsReady?'<div class="btnrow" style="margin:10px 0"><button class="btn ghost" type="button" data-club-branding>Add club logo &amp; colours</button></div>':'';}
+async function openClubBrandingSettings(){
+ if(!canOpenClubTab('club_settings')||!await saveClubEditsBeforeNavigation())return;
+ if(currentTab!=='club_settings')clubBrandingReturn={clubId:club.id,tab:currentTab};
+ currentTab='club_settings';localStorage.setItem(`bdp-tab-${club.id}`,currentTab);await renderTab();
+ document.querySelector('[aria-label="Account menu"]')?.closest('.account-menu')?.removeAttribute('open');
+}
+function bindClubBrandingLinks(host=document){host.querySelectorAll('[data-club-branding]').forEach(b=>b.onclick=openClubBrandingSettings);}
+function sharedBrandingPreview(d){return `<div class="club-brand-preview-head">${d.logo_data_url?`<img src="${esc(d.logo_data_url)}" alt="">`:''}<strong>${esc(club.name)}</strong></div><div class="club-brand-preview-body"><button type="button" tabindex="-1">Primary colour</button><em>Accent colour</em></div>`;}
+function renderClubBrandingSettings(){
+ if(!canOpenClubTab('club_settings'))return;
+ const page=document.getElementById('page');
+ page.innerHTML=`<style>
+ .shared-branding-wrap{max-width:860px;margin:auto}.shared-branding-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.shared-branding-top h1{margin:0}.shared-branding h2{margin-top:0}.shared-branding .club-branding-grid{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:22px}.shared-branding .club-logo-paste-zone{display:block;padding:12px}.shared-branding .club-logo-preview{width:100%;height:125px;margin-bottom:8px}.shared-branding .club-logo-preview img{width:100%;height:100%;max-height:125px;object-fit:contain}.shared-branding .club-logo-paste-copy{font-size:12px;color:var(--muted)}.shared-branding .branding-colour-grid{grid-template-columns:1fr 1fr;gap:12px;margin:0}.shared-branding label{display:block}.shared-branding .shared-colour{display:flex;gap:8px;align-items:center;margin-top:6px}.shared-branding input[type=color]{width:46px;min-width:46px;height:42px;padding:3px}.shared-branding .shared-colour input[type=text]{width:100%;min-width:0;text-transform:uppercase}.shared-branding input{box-sizing:border-box;max-width:100%;min-height:42px}.shared-branding details{margin:16px 0}.shared-branding summary{cursor:pointer;font-weight:700}.shared-branding .branding-source-title span{display:none}.shared-branding .branding-url-row{display:flex;flex-wrap:wrap}.shared-branding .branding-url-row input{flex:1;min-width:130px}.shared-branding .club-brand-preview{grid-template-columns:1fr;margin:18px 0}.shared-branding .club-brand-preview-head{min-height:90px;padding:18px}.shared-branding .club-brand-preview-body{padding:12px;display:flex;align-items:center;gap:12px}.shared-branding .club-brand-preview-body button{margin:0}.shared-branding .branding-save-row{display:flex;flex-wrap:wrap;gap:10px}.shared-branding .branding-save-row .status:empty{display:none}
+ @media(max-width:620px){.shared-branding .club-branding-grid,.shared-branding .branding-colour-grid{grid-template-columns:1fr}.shared-branding-top{align-items:flex-start}.shared-branding-top h1{font-size:26px}.shared-branding .branding-palette-choice{max-width:100%;box-sizing:border-box;flex-wrap:wrap}.shared-branding .club-brand-preview-head strong{overflow-wrap:anywhere}}
+ </style><div class="shared-branding-wrap"><div class="shared-branding-top"><h1>Club settings</h1><button class="btn ghost" type="button" id="clubBrandingBack">Back</button></div><section class="card club-branding-card shared-branding" data-shared-branding><h2>Club logo &amp; colours</h2>
+ <div class="club-branding-grid"><div><div id="clubLogoPasteZone" class="club-logo-paste-zone" tabindex="0" aria-label="Paste or drop a club logo"><div id="clubLogoPreview" class="club-logo-preview"></div><div class="club-logo-paste-copy">Paste or drop a logo here.</div></div><input id="clubLogoFile" type="file" accept="image/png,image/jpeg,image/webp" hidden><div class="btnrow branding-logo-actions"><button class="btn ghost" type="button" id="chooseClubLogo">Choose image</button><button class="btn ghost" type="button" id="removeClubLogo">Remove</button></div><div id="clubLogoStatus" role="status"></div></div>
+ <div><div class="branding-colour-grid">${['Primary','Accent'].map(k=>`<label>${k} colour<div class="shared-colour"><input type="color" id="club${k}Picker" aria-label="${k} colour"><input type="text" id="club${k}Hex" maxlength="7" aria-label="${k} colour HEX"></div></label>`).join('')}</div><details><summary>Find colours</summary><div id="logoColourSuggestions"></div><label style="margin-top:14px">Club website<div class="branding-url-row"><input id="clubWebsiteUrl" placeholder="https://yourclub.com.au"><button class="btn ghost" type="button" id="detectClubColours">Find colours</button></div></label><div id="brandingDetectionStatus" role="status"></div><div id="websiteColourSuggestion"></div><button class="btn ghost" type="button" id="swapBrandColours">Swap colours</button><button class="btn ghost" type="button" id="resetBrandColours">Reset colours</button></details></div></div>
+ <div id="clubBrandPreview" class="club-brand-preview" aria-label="Club look preview"></div><div class="branding-save-row"><button class="btn secondary" type="button" id="saveClubBranding">Save</button>${!club.branding_updated_at?'<button class="btn ghost" type="button" id="keepClubLook">Keep current look</button>':''}<span id="clubBrandingSaveStatus" class="status" role="status" aria-live="polite"></span></div></section></div>`;
+ wireClubBrandingControls(page,{shared:true});
+ page.querySelector('#clubBrandingBack').onclick=async()=>{if(!await saveClubEditsBeforeNavigation())return;const tab=clubBrandingReturn?.clubId===club.id?clubBrandingReturn.tab:null;currentTab=tab&&canOpenClubTab(tab)?tab:selectionsStandalone()?'teams':'dashboard';await renderTab();};
+}
+window.addEventListener('beforeunload',e=>{if(document.querySelector('[data-shared-branding][data-busy="true"]')||sharedBrandingDirty()){e.preventDefault();e.returnValue='';}});
+/* END SHARED CLUB BRANDING */
 
 
 
