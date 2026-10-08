@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.113 — Simple prediction rows and separate score entry
+// Club Batting 0.8.62.114 — Shared player accounts across club products
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.113';
+const APP_UI_VERSION='0.8.62.114';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1531,6 +1531,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   if(!stillCurrent())return;
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
+  if(joinedAvailabilityClub===club.id&&selectionsEnabled()){ensureSelections().view='availability';currentTab='teams';joinedAvailabilityClub=null;}
   if(routeClub===club.id){
     if(['playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app','teams'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
@@ -1825,7 +1826,7 @@ function clubSetupUnavailableReason(tab){
 
 function canOpenClubTab(tab){
   if(tab==='teams')return !!(session&&membership&&club);
-  if(selectionsStandalone()&&!['teams','messages','phone_app','guide','join_club'].includes(tab))return false;
+  if(selectionsStandalone()&&!['teams','permissions','messages','phone_app','guide','join_club'].includes(tab))return false;
   if(['join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
   if(['playerhome','innings'].includes(tab))return isPlayerUser();
@@ -2445,12 +2446,13 @@ function renderShell(){
 
 
   }
+  if(selectionsStandalone()&&isAdmin())nav.push(['permissions','People & sign-up','club']);
   if(selectionsEnabled())nav.push(['teams','Teams & availability','selection']);
 
 
 
 
-  if(session&&membership&&club)nav.push(['make_your_call','Make your prediction','club']);
+  if(session&&membership&&club&&!selectionsStandalone())nav.push(['make_your_call','Make your prediction','club']);
 
   // Workflow screens stay available internally when their prerequisites and
   // permissions are met. They do not each become another menu choice.
@@ -2584,9 +2586,9 @@ async function renderPlayerJoinRoute(token){
     app.innerHTML=`<div class="login" style="max-width:650px">
       <div class="section-label">Player sign-up</div>
       <h1>Join ${esc(info.club_name)}</h1>
-      <p>This link registers you as a <strong>Player</strong>. If you are also a captain or coach, the Club Admin can add those permissions afterwards.</p>
-      ${info.plans_ready===false?'<div class="notice">You can register now. Your club is preparing its setup; we’ll email you when Player Plans are ready. Assigned workshop and setup roles can take part before then.</div>':''}
-      <p><strong>New to Club Batting?</strong> Enter your email to create your account. We’ll send a secure link to bring you back here to finish joining. You do not need a password yet.</p>
+      <p>One account for your club’s subscribed products.</p>
+      ${sharedSignupIntro(info)}
+      <p><strong>New here?</strong> Enter your email to create your account. We’ll send a secure link to bring you back here to finish joining. You do not need a password yet.</p>
       <form id="playerJoinAccountForm">
         <div class="field"><label for="playerJoinEmail">Your email</label><input id="playerJoinEmail" type="email" autocomplete="email" placeholder="you@example.com" required></div>
         <button class="btn secondary" id="playerJoinSignIn" type="submit">Email my sign-up link</button>
@@ -2623,8 +2625,8 @@ async function renderPlayerJoinRoute(token){
   app.innerHTML=`<div class="login" style="max-width:650px">
     <div class="section-label">Player sign-up</div>
     <h1>Join ${esc(info.club_name)}</h1>
-    <p>You’re joining as a <strong>Player</strong>. Captain/coach access and workshop participation are assigned separately by the club.</p>
-    ${info.plans_ready===false?'<div class="notice">Registration is available now. Player Plans open after the club publishes its setup. If you have been assigned a setup role, you can start that work now.</div>':''}
+    <p>You’re joining as a <strong>Player</strong>. Your club assigns any staff roles.</p>
+    ${sharedSignupIntro(info)}
     <div class="field"><label>Your name</label><input id="playerJoinName" value="${esc(profileData?.display_name||'')}" placeholder="Full name"></div>
     <button class="btn secondary" id="completePlayerJoin">Join ${esc(info.club_name)}</button>
     <div id="completePlayerJoinStatus" class="help"></div>
@@ -2645,7 +2647,8 @@ async function renderPlayerJoinRoute(token){
     localStorage.setItem('bdp-club-id',clubId);
     forgetClubSignupEntry();
     history.replaceState({},'',location.pathname);
-    currentTab='myplan';
+    joinedAvailabilityClub=info.products?.selections?clubId:null;
+    currentTab=joinedAvailabilityClub?'teams':'myplan';
     await loadPlatformContext();
     await loadContext();
   };
@@ -3152,8 +3155,8 @@ function guideHelpStyles(){
 
 // BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
 const CLUB_BATTING_HELP = {
-  "version": "0.8.62.113",
-  "reviewed": "2026-10-07",
+  "version": "0.8.62.114",
+  "reviewed": "2026-10-08",
   "topics": [
     {
       "capability_key": "whole_process",
@@ -3254,33 +3257,33 @@ const CLUB_BATTING_HELP = {
       ],
       "tutorial": [
         {
+          "body": "Club Admin opens People & sign-up in either product and uses Copy WhatsApp message, Copy player sign-up link or the QR code. Playing-list sign-up flags also offer WhatsApp invite to Club Admin, the Head of Selections and assigned captains. Review and share the generated message yourself. Players use one club account for the subscribed products. Playing coaches and captains use the player route.",
           "title": "Share the player link",
-          "body": "Club Admin opens People & Sign-up and uses Copy WhatsApp message, Copy player sign-up link or the QR code. The WhatsApp message includes sign-up, app installation and notification steps. Share the complete generated link; an empty player_join= link is not usable. Playing coaches and captains use the player route.",
           "target_tab": "permissions"
         },
         {
-          "title": "Create a new player account from the club link",
-          "body": "The player link and QR open Join [club name]. Enter your email and choose Email my sign-up link; no password is needed. Open the email, then enter your name to finish joining. Existing members can sign in with their password. If you reach password help before registering, choose Start player sign-up or reopen the original club link or QR. Password reset cannot create a new account."
+          "body": "The player link and QR open Join [club name]. Enter your email and choose Email my sign-up link; open the email and enter your name to finish joining. Existing members sign in to their existing account. Teams & availability players go to their availability calendar without a batting subscription or Player Plan. Verified name and personal-email matches link an imported playing-list entry automatically; uncertain matches need club checking.",
+          "title": "Create a new player account from the club link"
         },
         {
-          "title": "Put the app on your phone after joining",
-          "body": "After registration, open Account → App & notifications for the steps for your phone. Add the Club Batting icon, then open it and sign in with the same account if asked. Choose Club messages and/or Coaching updates, tap Enable notifications, then Allow. Installation and notification permission are separate steps; no new account is needed."
+          "body": "After registration, open Account → App & notifications for the steps for your phone. Add the Club Batting icon, then open it and sign in with the same account if asked. Choose Club messages and/or Coaching updates, tap Enable notifications, then Allow. Installation and notification permission are separate steps; no new account is needed.",
+          "title": "Put the app on your phone after joining"
         },
         {
-          "title": "Use the staff route for non-players",
-          "body": "Copy non-playing staff sign-up link is for someone who does not play and should not receive a Player Plan. New staff can create an account from that route; they do not need an existing account. The legacy coach_captain text in the URL does not assign a Captain role."
+          "body": "Copy non-playing staff sign-up link is for someone who does not play and should not receive a Player Plan. New staff can create an account from that route; they do not need an existing account. The legacy coach_captain text in the URL does not assign a Captain role.",
+          "title": "Use the staff route for non-players"
         },
         {
-          "title": "Confirm membership before expecting player access",
-          "body": "Follow sign-in/email confirmation and enter your name. Registration does not grant coaching access to other players. Club Admin assigns the role and player access after registration."
+          "body": "Follow sign-in/email confirmation and enter your name. Registration does not grant coaching access to other players. Club Admin assigns the role and player access after registration.",
+          "title": "Confirm membership before expecting player access"
         },
         {
-          "title": "Workshop invitees also choose involvement",
-          "body": "Someone joining through a Workshop invitation must say whether they play. A playing contributor gets their own Player Plan; a non-playing contributor does not. Contributing alone gives no Coach, Captain or Admin role."
+          "body": "Someone joining through a Workshop invitation must say whether they play. A playing contributor gets their own Player Plan; a non-playing contributor does not. Contributing alone gives no Coach, Captain or Admin role.",
+          "title": "Workshop invitees also choose involvement"
         },
         {
-          "title": "Manage club sign-up",
-          "body": "Club Admin can open or close player sign-up, or regenerate the link and QR. Regeneration invalidates the old player link. Members choose playing or non-playing involvement when they join. Before publication, ordinary players wait for the club’s ready-to-start notification."
+          "body": "Club Admin can open or close player sign-up, or regenerate the link and QR. Regeneration invalidates the old link. Members choose playing or non-playing involvement when they join. Adding the other product reuses existing player accounts without another sign-up. Imported players who have never joined remain flagged for an invitation. Batting plans follow the club’s readiness; availability does not wait for them.",
+          "title": "Manage club sign-up"
         }
       ],
       "sort_order": 30,
@@ -4583,78 +4586,78 @@ const CLUB_BATTING_HELP = {
       ],
       "tutorial": [
         {
+          "body": "Your club can use Club Batting, Teams & availability or both. Platform Admin → Clubs → Manage adds either product. Adding Teams & availability creates linked playing-list entries for existing verified playing members. Adding Club Batting gives existing player accounts access without a second sign-up. Imported players without an account still need to join. Neither switch marks anyone available or completes their Player Plan.",
           "title": "Choose your club products",
-          "body": "Your club can use Club Batting, Selections or both. Platform Admin → Clubs → Manage adds or changes either product. The playing list, cricket roles and availability do not require batting plans.",
           "target_tab": "teams"
         },
         {
-          "title": "Assign selection roles",
           "body": "Club Admin manages players, fixture setup, calendars and Settings without automatically becoming a selector. Settings → Selection permissions assigns the Head of Selections and other selectors. Assigned names stay visible when the list is collapsed. Only assigned selectors and the Head can use the Selection Board. A Club Admin can be explicitly assigned too.",
+          "title": "Assign selection roles",
           "target_tab": "teams"
         },
         {
+          "body": "Existing player accounts appear automatically. Playing list → Import / refresh registration CSV adds registered players and refreshes existing entries. Map a stable registration ID, name, optional grade and personal email. Matching IDs update the same player. A unique matching name with compatible email can attach the registration ID to an automatically created entry. Conflicting details stop for checking. Roles, availability and account links stay attached; omitted players and omitted grades/emails are retained. This is a manual refresh, not live PlayHQ sync. Inactive players are found separately and still prevent duplicates.",
           "title": "Refresh the registered playing list",
-          "body": "Teams & availability → Playing list → Import / refresh registration CSV. Map a stable registration ID, player name, optional grade and optional Player email. Review the preview before importing. Matching IDs refresh names and grades, preserving roles, calendars and links; supplied personal emails support automatic account matching. Missing emails preserve earlier matching details. Omitted players are retained. This is a manual refresh, not live PlayHQ sync. The playing list shows active players only. Club Admin and selectors use Inactive players to search separately, open a player and tick Active player to reactivate them. Inactive records still prevent duplicate additions.",
           "target_tab": "teams"
         },
         {
-          "title": "Code player roles once",
           "body": "Use the Playing list bulk editor for top, middle or lower order; quick, spinner or does not bowl; frontline or part time; and keeper. Save player roles. Not coded is distinct from does not bowl. Attributes stay separate from batting plans. Any active registered player with the relevant dates marked available is selectable across grades, including players without an app account.",
+          "title": "Code player roles once",
           "target_tab": "teams"
         },
         {
+          "body": "Imported players link automatically when their name and unique personal email match a verified playing member, including after that member signs up later. Existing linked accounts carry across products. Shared emails, different names and missing details need checking with Link. Existing links and deliberate unlinks are respected. The same club account handles availability and messages; a batting subscription or completed Player Plan is not required.",
           "title": "Link verified accounts",
-          "body": "The playing list links automatically to an existing club account when the player name and unique personal email match a verified playing member. Matching runs when Selections loads, including after import or later sign-up. Shared emails, different names and missing details remain for manual checking with Link. Existing links and deliberate unlinks are respected. This is the same app account used for availability and team messages; no Club Batting subscription or batting plan is required.",
           "target_tab": "teams"
         },
         {
+          "body": "Club Admin, the Head of Selections and assigned captains see Sign-up needed or Check account link beside relevant players; Inbox keeps one Players to follow up item. WhatsApp invite opens a ready-to-share message with the club sign-up link. Review it, then choose Open WhatsApp or Copy message. The app does not send it. Existing members sign in to their account. For Check account link, Admin or selectors verify the existing account with Link. Every player should join and mark their own available dates; selector entry is a rollout or exceptional fallback.",
           "title": "Follow up player sign-up",
-          "body": "Club Admin, the Head of Selections and captains assigned in People and sign-up see Sign-up / link needed beside active unlinked players. Inbox has one Players to follow up item. Verified matches clear automatically. For remaining players, Admin or selectors use Link and confirm the correct club account. Unlinked players remain selectable.",
           "target_tab": "teams"
         },
         {
-          "title": "Select against real fixture dates",
           "body": "Club Admin without a selection role uses Fixtures → Add fixture. Selectors use Selection board → Add fixture. Choose grade, format, overs, opposition and actual Day 1 / optional Day 2 dates. Active Playing Groups supply grades when both products are used. Start is optional; there is no fixed finish. Selectors appoint the match captain and keeper on the board. Admin fixture edits preserve selections and appointments.",
+          "title": "Select against real fixture dates",
           "target_tab": "teams"
         },
         {
-          "title": "Set grade and format defaults",
           "body": "Club Admin opens Settings → Grade & format defaults. Add a grade, format and overs per innings, then Save defaults. Fixtures auto-fill overs when grade or format changes; Admin and selectors can override overs for a particular fixture. Leave overs blank when there is no fixed limit. T20 starts at 20 unless a saved default says otherwise. Opening an existing fixture preserves its saved overs.",
+          "title": "Set grade and format defaults",
           "target_tab": "teams"
         },
         {
-          "title": "Use the meeting board",
           "body": "Click a slot, search and click a player. The choice saves automatically and the picker closes. Click the slot again to change it. Players already selected for that date stay hidden: clear their old slot before selecting them elsewhere. Both days requires availability on both dates; Copy previous team includes only confirmed players. Each day has 11 slots and role counts. Undo works unless a team has changed. The board refreshes every 20 seconds while the picker is closed; concurrent edits require review.",
+          "title": "Use the meeting board",
           "target_tab": "teams"
         },
         {
-          "title": "Choose the match captain and keeper",
           "body": "Use the Captain and Keeper choices on each team card; changes save immediately. With both products, the selected captain assigned to that Playing Group in Club Batting defaults automatically. If absent or ambiguous, choose a selected player. Selections-only clubs appoint a captain for each fixture. One selected keeper-capable player defaults automatically; two or more require a choice. Only the appointed keeper receives the gloves icon. Appointments can differ by day for bracketed teams. Match changes do not alter season permissions or player attributes. No batting account is needed.",
+          "title": "Choose the match captain and keeper",
           "target_tab": "teams"
         },
         {
-          "title": "See who remains available",
           "body": "Selection board → Available, not selected. Choose the date to see active players marked available who are not in any current draft on that date, across all grades. Day 1 and Day 2 are checked separately. Cancelled drafts do not use a player.",
+          "title": "See who remains available",
           "target_tab": "teams"
         },
         {
-          "title": "Find a bracketed pair",
           "body": "Enable bracketing only where competition rules permit it. Find matching pair suggests confirmed complementary Day 1 / Day 2 availability, ranking similar batting roles, bowling type/workload and keeping cover first. Keep a chosen Day 1 player to find a partner. Less similar options explain the differences. Both players fill one slot; declare the names before the toss. The software does not predict the toss or decide competition eligibility.",
+          "title": "Find a bracketed pair",
           "target_tab": "teams"
         },
         {
-          "title": "Invite captain input",
           "body": "Use Send to captains after appointing the match captain on the board. Linked match captains receive a private shared draft in Captain checks. Two-day matches can have different captains. An unlinked captain can still be selected and published; a club app account is needed for private checks and messages, without a batting plan. Selectors see account not linked where applicable. Replaced captains lose draft access. Captains give input, not approval; resending after edits is optional.",
+          "title": "Invite captain input",
           "target_tab": "teams"
         },
         {
-          "title": "Publish to players",
           "body": "Only the assigned Head of Selections publishes to players. Captain disagreement, no reply or later edits do not block publication or require resending. Each day needs 11 available players, an appointed captain and keeper, no duplicates or conflicts, and balance warnings acknowledged. Players retain the last published team until replacement. Published teams and Captain checks show (c) and the keeper icon; copied team lists use (c) and (wk), including distinct Day 1 and Day 2 appointments.",
+          "title": "Publish to players",
           "target_tab": "teams"
         },
         {
-          "title": "Use the changing match group",
           "body": "Publishing or revising creates an in-app update for linked current and removed players and current match staff. Existing phone-first messaging uses generic email-link fallback. Match conversations permit current published players, both bracket partners, selectors and nominated staff. Removed players lose conversation access. This does not edit WhatsApp group membership. Unlinked players do not receive app alerts.",
+          "title": "Use the changing match group",
           "target_tab": "teams"
         }
       ],
@@ -4677,23 +4680,23 @@ const CLUB_BATTING_HELP = {
       ],
       "tutorial": [
         {
-          "title": "Mark available dates",
           "body": "Teams & availability → Availability. Tap the dates you can play, then Save. You can only be selected for dates marked available. Marked dates show a green tick. Tap again to remove a date. Dates apply across competitions in the club time zone; mark Day 1 and Day 2 separately.",
+          "title": "Mark available dates",
           "target_tab": "teams"
         },
         {
+          "body": "Every player should join their club account and mark their own dates. Club Admin and selectors can use Individual player for rollout or exceptional cases, including unlinked players. Assigned captains can view club calendars and edit their own linked calendar unless also Admin or selectors. Other players see their own entry; non-playing staff need no personal calendar. Verified matches link automatically. Admin or a selector checks remaining links. No batting subscription or Player Plan is required.",
           "title": "View or record a player’s calendar",
-          "body": "Club Admin and selectors use Individual player to view or record confirmed dates, including for unlinked players. Assigned captains can view club calendars and edit their own linked calendar unless also Admin or selectors. Other players see their own entry. Non-playing staff need no personal calendar. Verified account matches link automatically. Admin or a selector handles remaining cases through Playing list → Link; no batting plan is required.",
           "target_tab": "teams"
         },
         {
+          "body": "During rollout or an exceptional week, Club Admin and selectors use Set all players for a date. Choose the date, tick Make all players available for this date, then tick unavailable players and Save date. No individual player needs to be chosen first. Only this date changes; players can still change their own dates. Normal use remains players marking themselves available.",
           "title": "Set a temporary date exception",
-          "body": "Club Admin and selectors use the separate Set all players for a date button above Individual player. Choose the date, tick Make all players available for this date, then tick unavailable players and Save date. No individual player needs to be chosen first. Only this date changes; players can still change their own dates afterwards.",
           "target_tab": "teams"
         },
         {
-          "title": "Change availability after selection",
           "body": "Changing a date used in a future draft or published team alerts selectors, Club Admin and the Head of Selections, excluding the person saving the change. Teams are not automatically changed or republished. Selectors resolve the issue before the Head publishes.",
+          "title": "Change availability after selection",
           "target_tab": "teams"
         }
       ],
@@ -9718,8 +9721,8 @@ async function renderPermissions(){
   <section class="card">
     <div class="section-label">Players · Club people</div>
     <h2 aria-level="1">People & Sign-up</h2>
-    <div class="help"><strong>Get people into Club Batting first. Give responsibilities second.</strong></div>
-    <div class="help">Players register as <strong>Players</strong>. Club roles such as Captain, Coach, Head Coach and Admin are assigned afterwards. Batting Philosophy Workshop invitations are separate again — contributing to the philosophy does <strong>not</strong> make somebody a coach, captain or Admin.</div>
+    <div class="help"><strong>One club account. Invite people, then assign their roles.</strong></div>
+    <div class="help">Players use the same account for Teams & availability and Club Batting. Assign staff roles after they join.</div>
   </section>
 
 
@@ -9727,7 +9730,7 @@ async function renderPermissions(){
     <section class="card player-signup-card">
       <div class="section-label">Player sign-up</div>
       <h2>Invite players to register</h2>
-      ${plansReady?'':`<div class="notice"><strong>You can register people during preparation.</strong> ${signupOpen?'Players can join now.':'Reopen sign-up when you want to invite players.'} Assign any club roles below, then choose workshop participants in the Workshop. Players without an assigned setup role will see a waiting message until How We Bat and Player Plans are published.</div>`}
+      ${selectionsEnabled()||plansReady?'':`<div class="notice"><strong>You can register people during preparation.</strong> ${signupOpen?'Players can join now.':'Reopen sign-up when you want to invite players.'} Assign any club roles below, then choose workshop participants in the Workshop. Players without an assigned setup role will see a waiting message until How We Bat and Player Plans are published.</div>`}
       <div class="help">Post the WhatsApp message in the players chat, or use the QR code at training / on a noticeboard. Everyone using this route joins as a <strong>Player</strong>. If they also captain or coach, assign that club role afterwards.</div>
 
       <div class="signup-status-row">
@@ -9757,7 +9760,7 @@ async function renderPermissions(){
 
           <div class="share-preview">
             <strong>What players experience</strong>
-            <span>Open link → enter email → secure sign-in → confirm name → joined as Player.</span><span>${plansReady?'Player Plans are available after joining.':'Before publication: registration is complete, with a waiting message for Player Plans. Assigned setup roles are available now.'}</span>
+            <span>Open link → enter email → secure sign-in → confirm name → joined as Player.</span><span>${selectionsEnabled()?'Players mark their available dates after joining.':plansReady?'Player Plans are available after joining.':'Player Plans open when your club is ready.'}</span>
           </div>
         </div>
       </div>
@@ -9775,7 +9778,7 @@ async function renderPermissions(){
       <div class="section-label">Non-playing staff</div>
       <h2>Invite non-playing staff</h2>
       <div class="notice"><strong>Playing coach or captain?</strong><br>They still use the normal <strong>Player sign-up</strong>. Do not give them a second account.</div>
-      <div class="help" style="margin-top:14px">Use the staff route for a genuinely non-playing coach or other staff member who needs to be in Club Batting but should not receive a Player Plan.</div>
+      <div class="help" style="margin-top:14px">Use this link for non-playing staff. Players who also help the club use the player link.</div>
       <div class="signup-count" style="margin-top:14px"><strong>${nonPlayingStaffCount}</strong> non-playing staff registered</div>
       <div class="btnrow"><button class="btn secondary" id="copyStaffJoinLink">Copy non-playing staff sign-up link</button></div>
       <div id="staffJoinStatus" class="help"></div>
@@ -9888,7 +9891,7 @@ async function renderPermissions(){
   </section>
 `;
 
-  const playerWhatsAppMessage=playerSignupWhatsAppMessage(club.name,playerJoinLink,plansReady);
+  const playerWhatsAppMessage=sharedSignupMessage(club.name,playerJoinLink,{selections:selectionsEnabled(),batting:!selectionsStandalone()});
 
   const copyText=async(text,label,statusId)=>{
     const st=document.getElementById(statusId);
@@ -18586,12 +18589,22 @@ function seFormatLabel(d){return [SE_FORMATS.find(([key])=>key===d.format)?.[1],
 const SE_BATTING=[['unknown','Not coded'],['top','Top order'],['middle','Middle order'],['lower','Lower order']];
 const SE_BOWLING=[['unknown','Not coded'],['pace','Quick'],['spin','Spinner'],['none','Does not bowl']];
 const SE_LOAD=[['unknown','Not coded'],['frontline','Frontline'],['part_time','Part time']];
+function seImportMatch(row,roster){
+ const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' '),old=roster.find(p=>p.external_id===row.external_id);
+ if(old)return old;
+ const matches=roster.filter(p=>key(p.name)===key(row.name));
+ if(matches.length>1)throw Error(row.name+' has more than one possible match. Check the playing list.');
+ if(matches.length){const p=matches[0];if(p.external_id||(row.account_email&&p.account_email&&key(row.account_email)!==key(p.account_email)))throw Error(row.name+' has different registration details. Check the existing player.');return p;}
+ if(row.account_email&&roster.some(p=>!p.external_id&&p.user_id&&key(p.account_email)===key(row.account_email)))throw Error(row.name+' shares an email with another playing-list entry. Check the name.');
+ return null;
+}
 function seValidateRosterNames(rows,roster,importing=false){
- const key=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' '),working=roster.map(p=>({id:p.id,external_id:p.external_id,name:p.name}));
+ const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' '),working=roster.map(p=>({...p})),seen=new Set();
  for(const [index,row] of rows.entries()){
-  const old=working.find(p=>importing?p.external_id===row.external_id:row.id&&p.id===row.id),name=key(row.name);
-  if((!old||key(old.name)!==name)&&working.some(p=>p!==old&&key(p.name)===name))throw Error(String(row.name).trim()+' is already on the playing list. Edit the existing entry.');
-  if(old)old.name=row.name;else working.push({id:row.id||'new:'+index,external_id:row.external_id,name:row.name});
+  const old=importing?seImportMatch(row,working):working.find(p=>row.id&&p.id===row.id),name=key(row.name);
+  if((!old||key(old.name)!==name)&&working.some(p=>p!==old&&key(p.name)===name))throw Error(row.name+' is already on the playing list. Edit the existing entry.');
+  if(old){if(seen.has(old.id))throw Error('Duplicate player in import.');seen.add(old.id);old.name=row.name;if(importing)old.external_id=row.external_id;}
+  else working.push({...row,id:row.id||'new:'+index});
  }
 }
 function seCSVAccountEmail(row,headers,column){
@@ -18919,7 +18932,7 @@ async function seFetchSignupFollowup(clubId){
  catch{return {can_view:false,players:[],error:true};}
 }
 function seNeedsAccountLink(p){const f=ensureSelections().data?.signup_followup;return !!(f?.can_view&&f.players.some(x=>x.id===p.id));}
-function seSignupFlag(p){return seNeedsAccountLink(p)?'<span class="se-signup-flag">Sign-up / link needed</span>':'';}
+function seSignupFlag(p){const item=ensureSelections().data?.signup_followup?.players.find(x=>x.id===p.id);return seNeedsAccountLink(p)?`<span class="se-signup-flag">${item?.status==='link'?'Check account link':'Sign-up needed'}</span>`:'';}
 function seSignupFilter(){const s=ensureSelections();return s.data.signup_followup?.can_view?`<label class="se-check"><input type="checkbox" id="seSignupOnly" ${s.signupOnly?'checked':''}>Sign-up / link needed (${s.data.signup_followup.players.length})</label>`:'';}
 async function seOpenSignupFollowup(){
  if(!await saveClubEditsBeforeNavigation())return;const s=ensureSelections();s.view='roster';s.rosterPanel=null;s.signupOnly=true;s.rosterGrade='';s.rosterSearch='';currentTab='teams';await renderTab();
@@ -18964,7 +18977,7 @@ function seRosterGradeEditor(p){
 }
 function seRosterRow(p){
  const open=ensureSelections().rosterOpen===p.id,id=seEsc(p.id);
- return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD]].map(([key,label,options])=>`<label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key])}</select></label>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions"><button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
+ return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD]].map(([key,label,options])=>`<label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key])}</select></label>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions">${seNeedsAccountLink(p)?seInviteButton(p):''}<button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
 }
 function seRosterEdits(){
  const s=ensureSelections();return [...document.querySelectorAll('#seRosterForm [data-se-roster-id]')].map(row=>{const p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);return {...p,grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked};}).filter(p=>{const old=s.data.roster.find(x=>x.id===p.id);return ['grade','batting','bowling','bowling_load','keeper'].some(key=>old[key]!==p[key]);});
@@ -18977,9 +18990,9 @@ function seRosterSaveState(){
 function seRoster(){
  const s=ensureSelections();if(!seCanSetup())return seReadonlyPlayingList();
  if(s.rosterPanel==='inactive')return seInactivePlayers();const players=s.data.roster.filter(p=>p.active);
- document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><button class="btn" id="seImportRoster">Import / refresh registration CSV</button><button class="btn ghost" id="seAddPlayer">Add player</button><button class="btn ghost" id="seRosterTemplate">CSV template</button><button class="se-inactive-link" id="seFindInactive" type="button">Inactive players</button></div>${s.data.signup_followup?.error?'<p class="se-muted">Player follow-up could not load. Use Refresh to check.</p>':''}<form id="seRosterForm" class="se-card" style="margin-top:12px">${seRosterFilters()}<div class="se-roster-head" aria-hidden="true"><span>Player</span><div class="se-roster-controls"><span>Usual grade</span><span>Batting role</span><span>Bowling role</span><span>Workload</span><span>WK</span></div><span></span></div><div id="seRosterRows">${players.map(seRosterRow).join('')}</div><p class="se-roster-empty" id="seRosterEmpty" hidden></p>${players.length?'<div class="se-roster-save"><button type="submit" class="btn" id="seSaveRosterRoles">Save changes</button></div>':''}</form>`;
+ document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><button class="btn" id="seImportRoster">Import / refresh registration CSV</button><button class="btn ghost" id="seAddPlayer">Add player</button><button class="btn ghost" id="seRosterTemplate">CSV template</button><button class="se-inactive-link" id="seFindInactive" type="button">Inactive players</button></div>${seInviteButton()}${s.data.signup_followup?.error?'<p class="se-muted">Player follow-up could not load. Use Refresh to check.</p>':''}<form id="seRosterForm" class="se-card" style="margin-top:12px">${seRosterFilters()}<div class="se-roster-head" aria-hidden="true"><span>Player</span><div class="se-roster-controls"><span>Usual grade</span><span>Batting role</span><span>Bowling role</span><span>Workload</span><span>WK</span></div><span></span></div><div id="seRosterRows">${players.map(seRosterRow).join('')}</div><p class="se-roster-empty" id="seRosterEmpty" hidden></p>${players.length?'<div class="se-roster-save"><button type="submit" class="btn" id="seSaveRosterRoles">Save changes</button></div>':''}</form>`;
  document.getElementById('seFindInactive').onclick=()=>{if(!confirmLeaveSelections())return;s.rosterPanel='inactive';s.inactiveSearch='';s.rosterOpen=null;seInactivePlayers();};
- seBindRosterSearch();document.getElementById('seImportRoster').onclick=()=>{if(confirmLeaveSelections())seImport();};document.getElementById('seAddPlayer').onclick=()=>{if(confirmLeaveSelections())sePlayerEditor();};document.getElementById('seRosterTemplate').onclick=()=>seDownload('Playing-list-template.csv','Registration ID,Player name,Usual grade,Player email\r\n','text/csv');
+ seBindInvites();seBindRosterSearch();document.getElementById('seImportRoster').onclick=()=>{if(confirmLeaveSelections())seImport();};document.getElementById('seAddPlayer').onclick=()=>{if(confirmLeaveSelections())sePlayerEditor();};document.getElementById('seRosterTemplate').onclick=()=>seDownload('Playing-list-template.csv','Registration ID,Player name,Usual grade,Player email\r\n','text/csv');
  document.querySelectorAll('[data-se-expand-player]').forEach(button=>button.onclick=()=>{s.rosterOpen=s.rosterOpen===button.dataset.seExpandPlayer?null:button.dataset.seExpandPlayer;document.querySelectorAll('#seRosterForm [data-se-roster-id]').forEach(row=>{const open=row.dataset.seRosterId===s.rosterOpen,toggle=row.querySelector('[data-se-expand-player]'),p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);row.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',(open?'Close':'Edit')+' roles for '+p.name);toggle.innerHTML=(open?'Close':'Edit')+' <span aria-hidden="true">⌄</span>';});});
  document.querySelectorAll('[data-se-edit-player]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){const p=s.data.roster.find(p=>p.id===button.dataset.seEditPlayer);sePlayerEditor(p);if(!p.user_id||seNeedsAccountLink(p))document.getElementById('seAccountLink').open=true;}});document.querySelectorAll('[data-se-player-calendar]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){s.view='availability';drawSelections();seAvailability(button.dataset.sePlayerCalendar);}});
  const form=document.getElementById('seRosterForm');form.addEventListener('change',event=>{const row=event.target.closest('[data-se-roster-id]');if(!row)return;const p={...s.data.roster.find(p=>p.id===row.dataset.seRosterId),grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked};row.querySelector('.se-roster-summary').textContent=seRosterSummary(p);row.querySelector('.se-roster-grade-label').textContent=p.grade||'No usual grade';seRosterSaveState();});
@@ -18996,7 +19009,7 @@ function seInactivePlayers(){
 }
 function seReadonlyPlayingList(){
  const s=ensureSelections();if(!s.data.signup_followup?.can_view)return;
- document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-roster-readonly">${seRosterFilters()}${s.data.roster.filter(p=>p.active).map(p=>`<div class="se-unselected-row" data-se-roster-id="${seEsc(p.id)}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><strong>${seEsc(p.name)}</strong>${seSignupFlag(p)}<span class="se-role">${seEsc(p.grade||'No usual grade')}</span></div>`).join('')}<p class="se-roster-empty" id="seRosterEmpty" hidden></p></section>`;seBindRosterSearch();
+ document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-roster-readonly">${seRosterFilters()}${s.data.roster.filter(p=>p.active).map(p=>`<div class="se-unselected-row" data-se-roster-id="${seEsc(p.id)}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><strong>${seEsc(p.name)}</strong>${seSignupFlag(p)}${seNeedsAccountLink(p)?seInviteButton(p):''}<span class="se-role">${seEsc(p.grade||'No usual grade')}</span></div>`).join('')}<p class="se-roster-empty" id="seRosterEmpty" hidden></p></section>`;seBindRosterSearch();seBindInvites();
 }
 
 function seBindPlayerNameCheck(form,player){
@@ -19318,9 +19331,9 @@ function seAvailability(playerId=null){
  form.onsubmit=async e=>{e.preventDefault();if(!editable||!s.formDirty)return;if(await seMutate('availability',{id:p.id,revision:a.revision||0,calendar_mode:'opt_in',available_dates:[...dates].sort()}))seAvailability(p.id);};paint();
 }
 function sePlayerEditor(player=null){const s=ensureSelections(),p=player||{name:'',grade:'',external_id:'',batting:'unknown',bowling:'unknown',bowling_load:'unknown',keeper:false,active:true,user_id:null};document.getElementById('seContent').innerHTML=`<form class="se-card se-drawer" id="sePlayerForm"><h2>${player?'Player details':'Add player'}</h2><div class="se-form-grid"><label>Name<input name="name" value="${seEsc(p.name)}" maxlength="120" required></label><label>Registration ID (optional)<input name="external_id" value="${seEsc(p.external_id)}" maxlength="120"></label>${seGradeFields('grade',p.grade,null,{label:'Usual grade (optional)',required:false,maxlength:80})}</div><div id="seNameMatch" class="se-form-note" hidden></div><p class="se-form-note">No player sign-up needed. A registration ID helps match future CSV imports.</p><details id="seAccountLink" ${p.user_id?'open':''}><summary>App account (optional)</summary><label>Player email (optional)<input name="account_email" type="email" maxlength="254" value="${seEsc(p.account_email||'')}"></label><p class="se-form-note">Verified email and name matches link automatically. Otherwise choose the account below.</p><label>Player’s club account<select name="user_id"><option value="">Not linked yet</option>${s.data.members.filter(m=>!s.data.roster.some(x=>x.user_id===m.user_id&&x.id!==p.id)).map(m=>`<option value="${m.user_id}" ${m.user_id===p.user_id?'selected':''}>${seEsc(m.name)}${m.email?' · '+seEsc(m.email):''}</option>`).join('')}</select></label><p class="se-form-note">For their availability and team messages. No Club Batting subscription needed.</p></details><label class="se-check"><input name="active" type="checkbox" ${p.active?'checked':''}>Active player</label><div class="se-actions se-editor-actions"><button class="btn" type="submit">Save player</button><button class="btn ghost" type="button" id="sePlayerCancel">Cancel</button></div></form>`;const form=document.getElementById('sePlayerForm');form.oninput=()=>s.formDirty=true;const confirmName=seBindPlayerNameCheck(form,p);seBindGrade(form,'grade',()=>s.formDirty=true);document.getElementById('sePlayerCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};form.onsubmit=e=>{e.preventDefault();if(!confirmName())return;const d=new FormData(form),user_id=d.get('user_id')||null;if(user_id!==p.user_id&&user_id&&!confirm('Confirm this account belongs to '+d.get('name')+'? It will receive this player’s selections and can edit their availability.'))return;return seMutate('save_roster',{revision:s.data.roster_revision,rows:[{...p,name:d.get('name').trim(),grade:seReadGrade(form,'grade').grade,external_id:d.get('external_id').trim(),account_email:d.get('account_email').trim(),user_id,active:d.has('active')}]});};}
-function seImport(){const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Refresh the registered playing list</h2><p>Upload a current registration CSV. Choose the ID and name columns, review the preview, then import. Existing roles and calendars stay. Missing rows are not deleted or deactivated.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|profile.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)],['email','Player email (optional)',guess(/^(?:(?:player|participant|account.?holder).?)?e.?mail$/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
- const preview=()=>{const map=Object.fromEntries([...document.querySelectorAll('[data-se-map]')].map(el=>[el.dataset.seMap,Number(el.value)]));if(map.id<0||map.name<0)throw Error('Choose both a stable ID and name column.');const data=rows.map(r=>({external_id:(r[map.id]||'').trim(),name:[r[map.name],map.last>=0&&map.last!==map.name?r[map.last]:''].filter(Boolean).join(' ').trim(),grade:map.grade>=0?(r[map.grade]||'').trim():'',...seCSVAccountEmail(r,headers,map.email)}));if(data.some(r=>!r.external_id||!r.name))throw Error('Every row must have a registration ID and name.');if(new Set(data.map(r=>r.external_id)).size!==data.length)throw Error('Duplicate registration IDs. Remove duplicate rows before importing.');seValidateRosterNames(data,s.data.roster,true);return data;};
- const draw=()=>{try{const data=preview(),matches=data.filter(r=>s.data.roster.some(p=>p.external_id===r.external_id)).length;document.getElementById('seCSVError').textContent='';document.getElementById('seCSVCommit').disabled=false;document.getElementById('seCSVPreview').innerHTML=`<p>${data.length} rows · ${matches} existing players · ${data.length-matches} new players</p><div class="se-preview-scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Grade</th></tr></thead><tbody>${data.slice(0,8).map(r=>`<tr><td>${seEsc(r.external_id)}</td><td>${seEsc(r.name)}</td><td>${seEsc(r.grade)}</td></tr>`).join('')}</tbody></table></div><p class="se-muted">Preview of the first ${Math.min(8,data.length)} rows. Imports refresh names, grades and supplied personal emails. Verified account matches link automatically.</p>`;}catch(err){document.getElementById('seCSVError').textContent=err.message;document.getElementById('seCSVCommit').disabled=true;}};document.querySelectorAll('[data-se-map]').forEach(el=>el.onchange=draw);document.getElementById('seCSVCommit').onclick=()=>seMutate('import_roster',{revision:s.data.roster_revision,rows:preview()});draw();}catch(err){document.getElementById('seCSVError').textContent=err.message;}};}
+function seImport(){const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Refresh the registered playing list</h2><p>Upload your registration CSV. Existing players are matched; roles and availability stay.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|profile.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)],['email','Player email (optional)',guess(/^(?:(?:player|participant|account.?holder).?)?e.?mail$/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
+ const preview=()=>{const map=Object.fromEntries([...document.querySelectorAll('[data-se-map]')].map(el=>[el.dataset.seMap,Number(el.value)]));if(map.id<0||map.name<0)throw Error('Choose both a stable ID and name column.');const data=rows.map(r=>({external_id:(r[map.id]||'').trim(),name:[r[map.name],map.last>=0&&map.last!==map.name?r[map.last]:''].filter(Boolean).join(' ').trim(),...(map.grade>=0?{grade:(r[map.grade]||'').trim()}:{}),...seCSVAccountEmail(r,headers,map.email)}));if(data.some(r=>!r.external_id||!r.name))throw Error('Every row must have a registration ID and name.');if(new Set(data.map(r=>r.external_id)).size!==data.length)throw Error('Duplicate registration IDs. Remove duplicate rows before importing.');seValidateRosterNames(data,s.data.roster,true);return data;};
+ const draw=()=>{try{const data=preview(),matches=data.filter(r=>seImportMatch(r,s.data.roster)).length;document.getElementById('seCSVError').textContent='';document.getElementById('seCSVCommit').disabled=false;document.getElementById('seCSVPreview').innerHTML=`<p>${data.length} rows · ${matches} existing players · ${data.length-matches} new players</p><div class="se-preview-scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Grade</th></tr></thead><tbody>${data.slice(0,8).map(r=>`<tr><td>${seEsc(r.external_id)}</td><td>${seEsc(r.name)}</td><td>${seEsc(r.grade)}</td></tr>`).join('')}</tbody></table></div><p class="se-muted">Preview of the first ${Math.min(8,data.length)} rows. Matched players keep their account, roles and availability.</p>`;}catch(err){document.getElementById('seCSVError').textContent=err.message;document.getElementById('seCSVCommit').disabled=true;}};document.querySelectorAll('[data-se-map]').forEach(el=>el.onchange=draw);document.getElementById('seCSVCommit').onclick=()=>seMutate('import_roster',{revision:s.data.roster_revision,rows:preview()});draw();}catch(err){document.getElementById('seCSVError').textContent=err.message;}};}
 function seSettings(){const s=ensureSelections(),d=s.data;document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Selection permissions</h2><form id="seSelectors"><label>Head of Selections<select name="head_selector_id">${seOpt([['','Choose Head of Selections'],...d.members.map(m=>[m.user_id,m.name])],d.access.head_selector_id||'')}</select></label><p class="se-muted">The Head of Selections publishes teams to players.</p><details id="seOtherSelectors"><summary>Other selectors<span class="se-form-note" style="display:block;margin:6px 0" id="seSelectorNames"></span></summary>${d.members.map(m=>`<label class="se-check"><input name="users" type="checkbox" value="${m.user_id}" ${m.explicit_selector?'checked':''}>${seEsc(m.name)}${m.is_admin?' · Club Admin':''}</label>`).join('')}</details><button class="btn se-editor-actions" type="submit">Save permissions</button></form></section><details class="se-card se-drawer" id="seFixtureDefaults" style="margin-top:14px"></details>${d.access.mode==='bundle'?`<details class="se-card se-drawer" id="seBattingConnection" style="margin-top:14px"><summary>Club Batting connection (optional)</summary><p>Publishing teams can add linked players to Club Batting Playing Groups. Players without a link stay in the team.</p><p class="se-form-note">Group membership can affect Player Plan due dates and coaching access. Existing memberships stay.</p><form id="seGroupLinks"><div id="seGroupLinkRows"></div><div class="se-actions"><button class="btn ghost" type="button" id="seAddGroupLink">Add grade mapping</button><button class="btn" type="submit">Save group connections</button></div></form></details>`:''}`;
  const selectorForm=document.getElementById('seSelectors');seShowSelectorNames(selectorForm);selectorForm.addEventListener('change',()=>seShowSelectorNames(selectorForm));seSettingsSaveState(selectorForm,'Save permissions','selectors');selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users'),head_selector_id:selectorForm.elements.head_selector_id.value||null});};seRenderDefaults();if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks');
  const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No group connections set.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);s.formDirty=true;renderLinks();});};
@@ -19353,6 +19366,50 @@ function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTi
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* BEGIN SHARED PLAYER SIGNUP */
+let joinedAvailabilityClub=null;
+function sharedSignupMessage(name,link,{selections=false,batting=true}={}){
+ return `${name}: please join your club account here:\n${link}\n\n${selections?'Every player needs to mark the dates they are available in Teams & availability. You can only be selected for dates confirmed as available.': 'Use your account to access Club Batting.'}\n${selections&&batting?'The same account also gives you Club Batting.\n':''}Already registered? Sign in with your existing account.\nOn your phone: Account → App & Notifications to set up app messages.`;
+}
+function sharedSignupLink(token){return token?`${location.origin}${location.pathname}?player_join=${encodeURIComponent(token)}`:'';}
+function seInviteButton(p=null){
+ const f=ensureSelections().data?.signup_followup;if(!f?.can_view||!f.player_join_token||f.signup_open===false)return '';
+ if(p&&f.players.find(x=>x.id===p.id)?.status==='link')return '';
+ return `<button class="btn ghost" type="button" data-se-invite="${p?seEsc(p.id):'all'}">WhatsApp invite</button>`;
+}
+function seBindInvites(){
+ document.querySelectorAll('[data-se-invite]').forEach(button=>button.onclick=()=>{
+  const s=ensureSelections(),f=s.data.signup_followup,p=f.players.find(x=>x.id===button.dataset.seInvite);
+  const text=(p?`Hi ${p.name},\n\n`:'')+sharedSignupMessage(club.name,sharedSignupLink(f.player_join_token),{selections:true,batting:!selectionsStandalone()});
+  // Open a reviewable draft. The club chooses its WhatsApp recipient and sends it.
+  const dialog=document.createElement('dialog');dialog.className='se-card';dialog.style.cssText='max-width:560px;width:calc(100% - 32px)';
+  dialog.innerHTML=`<h2>Invite ${p?seEsc(p.name):'players'}</h2><textarea readonly aria-label="WhatsApp invitation" style="width:100%;min-height:210px">${seEsc(text)}</textarea><div class="se-actions"><a class="btn" data-invite-whatsapp href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener noreferrer">Open WhatsApp</a><button class="btn ghost" type="button" data-invite-copy>Copy message</button><button class="btn ghost" type="button" data-invite-close>Close</button></div><p role="status" data-invite-status></p>`;
+  document.body.appendChild(dialog);dialog.querySelector('[data-invite-close]').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());
+  dialog.querySelector('[data-invite-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(text);dialog.querySelector('[data-invite-status]').textContent='Copied';}catch{dialog.querySelector('textarea').select();dialog.querySelector('[data-invite-status]').textContent='Select and copy the message above.';}};
+  dialog.showModal();
+ });
+}
+function sharedSignupIntro(info){
+ if(info.products?.selections)return '<p>Join your club, then mark your available dates.</p>';
+ return info.products?.batting&&info.plans_ready===false?'<p>You can join now. Player Plans open when your club is ready.</p>':'';
+}
+/* END SHARED PLAYER SIGNUP */
 
 
 
