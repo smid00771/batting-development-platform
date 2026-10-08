@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.114 — Shared player accounts across club products
+// Club Batting 0.8.62.115 — One sign-up message for the players chat
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.114';
+const APP_UI_VERSION='0.8.62.115';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -6337,7 +6337,7 @@ function guideHelpStyles(){
 
 // BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
 const CLUB_BATTING_HELP = {
-  "version": "0.8.62.114",
+  "version": "0.8.62.115",
   "reviewed": "2026-10-08",
   "topics": [
     {
@@ -6439,7 +6439,7 @@ const CLUB_BATTING_HELP = {
       ],
       "tutorial": [
         {
-          "body": "Club Admin opens People & sign-up in either product and uses Copy WhatsApp message, Copy player sign-up link or the QR code. Playing-list sign-up flags also offer WhatsApp invite to Club Admin, the Head of Selections and assigned captains. Review and share the generated message yourself. Players use one club account for the subscribed products. Playing coaches and captains use the player route.",
+          "body": "Club Admin opens People & sign-up and uses Copy WhatsApp message, Copy player sign-up link or the QR code. The Playing list also offers Players’ WhatsApp message to Club Admin, the Head of Selections and assigned captains. Share the message in the general players’ WhatsApp chat, then use the outstanding sign-up flags to chase individuals. The app does not send messages to unsigned players. Players use one club account for the subscribed products; playing coaches and captains use the player route.",
           "title": "Share the player link",
           "target_tab": "permissions"
         },
@@ -7793,7 +7793,7 @@ const CLUB_BATTING_HELP = {
           "target_tab": "teams"
         },
         {
-          "body": "Club Admin, the Head of Selections and assigned captains see Sign-up needed or Check account link beside relevant players; Inbox keeps one Players to follow up item. WhatsApp invite opens a ready-to-share message with the club sign-up link. Review it, then choose Open WhatsApp or Copy message. The app does not send it. Existing members sign in to their account. For Check account link, Admin or selectors verify the existing account with Link. Every player should join and mark their own available dates; selector entry is a rollout or exceptional fallback.",
+          "body": "Club Admin, the Head of Selections and assigned captains see Sign-up needed or Check account link beside relevant players; Inbox keeps one Players to follow up item. Players’ WhatsApp message opens one club sign-up message to share in the general players’ WhatsApp chat. Choose Open WhatsApp or Copy message, then share it yourself. Club officials use the outstanding sign-up flags to chase individuals outside the app. Existing members use their existing account; Admin or selectors check remaining account links. Every player should join and mark their own available dates.",
           "title": "Follow up player sign-up",
           "target_tab": "teams"
         },
@@ -22159,7 +22159,7 @@ function seRosterGradeEditor(p){
 }
 function seRosterRow(p){
  const open=ensureSelections().rosterOpen===p.id,id=seEsc(p.id);
- return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD]].map(([key,label,options])=>`<label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key])}</select></label>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions">${seNeedsAccountLink(p)?seInviteButton(p):''}<button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
+ return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD]].map(([key,label,options])=>`<label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key])}</select></label>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions"><button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
 }
 function seRosterEdits(){
  const s=ensureSelections();return [...document.querySelectorAll('#seRosterForm [data-se-roster-id]')].map(row=>{const p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);return {...p,grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked};}).filter(p=>{const old=s.data.roster.find(x=>x.id===p.id);return ['grade','batting','bowling','bowling_load','keeper'].some(key=>old[key]!==p[key]);});
@@ -22191,7 +22191,7 @@ function seInactivePlayers(){
 }
 function seReadonlyPlayingList(){
  const s=ensureSelections();if(!s.data.signup_followup?.can_view)return;
- document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-roster-readonly">${seRosterFilters()}${s.data.roster.filter(p=>p.active).map(p=>`<div class="se-unselected-row" data-se-roster-id="${seEsc(p.id)}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><strong>${seEsc(p.name)}</strong>${seSignupFlag(p)}${seNeedsAccountLink(p)?seInviteButton(p):''}<span class="se-role">${seEsc(p.grade||'No usual grade')}</span></div>`).join('')}<p class="se-roster-empty" id="seRosterEmpty" hidden></p></section>`;seBindRosterSearch();seBindInvites();
+ document.getElementById('seContent').innerHTML=`${seInviteButton()}<section class="se-card se-drawer se-roster-readonly">${seRosterFilters()}${s.data.roster.filter(p=>p.active).map(p=>`<div class="se-unselected-row" data-se-roster-id="${seEsc(p.id)}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><strong>${seEsc(p.name)}</strong>${seSignupFlag(p)}<span class="se-role">${seEsc(p.grade||'No usual grade')}</span></div>`).join('')}<p class="se-roster-empty" id="seRosterEmpty" hidden></p></section>`;seBindRosterSearch();seBindInvites();
 }
 
 function seBindPlayerNameCheck(form,player){
@@ -22570,18 +22570,17 @@ function sharedSignupMessage(name,link,{selections=false,batting=true}={}){
  return `${name}: please join your club account here:\n${link}\n\n${selections?'Every player needs to mark the dates they are available in Teams & availability. You can only be selected for dates confirmed as available.': 'Use your account to access Club Batting.'}\n${selections&&batting?'The same account also gives you Club Batting.\n':''}Already registered? Sign in with your existing account.\nOn your phone: Account → App & Notifications to set up app messages.`;
 }
 function sharedSignupLink(token){return token?`${location.origin}${location.pathname}?player_join=${encodeURIComponent(token)}`:'';}
-function seInviteButton(p=null){
+function seInviteButton(){
  const f=ensureSelections().data?.signup_followup;if(!f?.can_view||!f.player_join_token||f.signup_open===false)return '';
- if(p&&f.players.find(x=>x.id===p.id)?.status==='link')return '';
- return `<button class="btn ghost" type="button" data-se-invite="${p?seEsc(p.id):'all'}">WhatsApp invite</button>`;
+ return '<button class="btn ghost" type="button" data-se-invite="all">Players’ WhatsApp message</button>';
 }
 function seBindInvites(){
  document.querySelectorAll('[data-se-invite]').forEach(button=>button.onclick=()=>{
-  const s=ensureSelections(),f=s.data.signup_followup,p=f.players.find(x=>x.id===button.dataset.seInvite);
-  const text=(p?`Hi ${p.name},\n\n`:'')+sharedSignupMessage(club.name,sharedSignupLink(f.player_join_token),{selections:true,batting:!selectionsStandalone()});
-  // Open a reviewable draft. The club chooses its WhatsApp recipient and sends it.
+  const f=ensureSelections().data.signup_followup;
+  const text=sharedSignupMessage(club.name,sharedSignupLink(f.player_join_token),{selections:true,batting:!selectionsStandalone()});
+  // The club shares one message in its existing general players' WhatsApp chat.
   const dialog=document.createElement('dialog');dialog.className='se-card';dialog.style.cssText='max-width:560px;width:calc(100% - 32px)';
-  dialog.innerHTML=`<h2>Invite ${p?seEsc(p.name):'players'}</h2><textarea readonly aria-label="WhatsApp invitation" style="width:100%;min-height:210px">${seEsc(text)}</textarea><div class="se-actions"><a class="btn" data-invite-whatsapp href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener noreferrer">Open WhatsApp</a><button class="btn ghost" type="button" data-invite-copy>Copy message</button><button class="btn ghost" type="button" data-invite-close>Close</button></div><p role="status" data-invite-status></p>`;
+  dialog.innerHTML=`<h2>Players’ WhatsApp chat</h2><textarea readonly aria-label="WhatsApp invitation" style="width:100%;min-height:210px">${seEsc(text)}</textarea><div class="se-actions"><a class="btn" data-invite-whatsapp href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener noreferrer">Open WhatsApp</a><button class="btn ghost" type="button" data-invite-copy>Copy message</button><button class="btn ghost" type="button" data-invite-close>Close</button></div><p role="status" data-invite-status></p>`;
   document.body.appendChild(dialog);dialog.querySelector('[data-invite-close]').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());
   dialog.querySelector('[data-invite-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(text);dialog.querySelector('[data-invite-status]').textContent='Copied';}catch{dialog.querySelector('textarea').select();dialog.querySelector('[data-invite-status]').textContent='Select and copy the message above.';}};
   dialog.showModal();
@@ -22592,6 +22591,11 @@ function sharedSignupIntro(info){
  return info.products?.batting&&info.plans_ready===false?'<p>You can join now. Player Plans open when your club is ready.</p>':'';
 }
 /* END SHARED PLAYER SIGNUP */
+
+
+
+
+
 
 
 
