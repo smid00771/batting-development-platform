@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.117 — Phone notification status
+// Club Batting 0.8.62.118 — Captain prompts and temporary access
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.117';
+const APP_UI_VERSION='0.8.62.118';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1764,7 +1764,7 @@ function isPlayerUser(){
   return ['player','both'].includes(membership.involvement);
 }
 function canUsePlayersWorkspace(){
-  return isAdmin() || ['captain','coach','head_coach'].includes(membership.permission_role);
+  return isAdmin() || ['captain','coach','head_coach'].includes(membership.permission_role) || hasMatchCaptainAccess();
 }
 function isPhilosophyLead(){
   return !!workshop && workshop.philosophy_lead_user_id===session.user.id;
@@ -3039,6 +3039,7 @@ function renderTab(){
 function guideAudienceKey(){
   const role=membership?.permission_role||'';
   if(['admin','head_coach','coach','captain'].includes(role))return role;
+  if(hasMatchCaptainAccess())return 'captain';
   return isPlayerUser()?'player':'member';
 }
 
@@ -3157,7 +3158,7 @@ function guideHelpStyles(){
 
 // BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
 const CLUB_BATTING_HELP = {
-  "version": "0.8.62.117",
+  "version": "0.8.62.118",
   "reviewed": "2026-10-08",
   "topics": [
     {
@@ -12044,7 +12045,7 @@ async function mountMatchTrainingFocus(host,{playerId=myPlayer?.id,isOwner=true,
 let teamReviewState=null,teamReviewCache=null,teamReviewSequence=0;
 const TEAM_REVIEW_CHOICES=[['yes','Yes'],['mostly','Mostly'],['no','Not really'],['no_plan','Has no plan'],['did_not_bat','DNB']];
 const TEAM_REVIEW_DISMISSALS=[['plan_execution','Within plan · execution to improve'],['outside_plan','Decision outside plan'],['not_applicable','No dismissal decision to review']];
-function canUseTeamReview(){return !!club?.id&&!!session?.user?.id&&['admin','head_coach','coach','captain'].includes(membership?.permission_role);}
+function canUseTeamReview(){return !!club?.id&&!!session?.user?.id&&canUsePlayersWorkspace();}
 function resetTeamReviewState(){teamReviewSequence++;teamReviewState=null;teamReviewCache=null;}
 function ensureTeamReviewState(){
   const scope=`${club?.id||''}:${session?.user?.id||''}`;
@@ -19180,7 +19181,7 @@ function seReviews(){
 async function seReviewScreen(id){
  const s=ensureSelections(),r=s.data.reviews?.find(x=>x.id===id);if(!r)return;
  try{const posts=await seRPC('review_posts',{id});if(s!==selectionState||currentTab!=='teams')return;const snap=r.snapshot,d=snap.details,name=pid=>snap.players.find(p=>p.id===pid)?.name||'Vacant';
-  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(d.grade)} · captain input</h2><button class="btn ghost" id="seReviewClose">Back</button></div><p class="se-muted">Private to this captain and selectors. Final selection rests with the Head of Selections.</p><p>v ${seEsc(d.opposition)} · ${seEsc(seFormatLabel(d))}</p><p>${d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}${d.meeting?' · '+seEsc(d.meeting):''}</p>${r.draft_changed?'<p class="se-warn">Selectors have since changed this draft.</p>':''}<ol>${snap.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(snap,slot.d1,0)}${seSnapshotSplit(snap,slot)?` (Day 1) / ${seSnapshotName(snap,slot.d2,1)} (Day 2)`:''}</li>`).join('')}</ol><button class="btn ghost" id="seReviewRefresh">Refresh comments</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}${p.review_revision!==snap.draft_revision?' · earlier draft':''}</small><p>${seEsc(p.body)}</p></article>`).join('')}<form id="seReviewPostForm"><label>Comment<textarea name="body" required maxlength="1500" rows="3"></textarea></label><button class="btn se-editor-actions" type="submit">Add comment</button></form></section>`;
+  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(d.grade)} · captain input</h2><button class="btn ghost" id="seReviewClose">Back</button></div><p class="se-muted">Private to this captain and selectors. Final selection rests with the Head of Selections.</p><p>v ${seEsc(d.opposition)} · ${seEsc(seFormatLabel(d))}</p><p>${d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}${d.meeting?' · '+seEsc(d.meeting):''}</p>${r.draft_changed?'<p class="se-warn">Selectors have since changed this draft.</p>':''}<ol>${snap.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(snap,slot.d1,0)}${seSnapshotSplit(snap,slot)?` (Day 1) / ${seSnapshotName(snap,slot.d2,1)} (Day 2)`:''}</li>`).join('')}</ol><p class="se-muted se-review-prompt">Please check the draft and add any thoughts here.</p><button class="btn ghost" id="seReviewRefresh">Refresh comments</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}${p.review_revision!==snap.draft_revision?' · earlier draft':''}</small><p>${seEsc(p.body)}</p></article>`).join('')}<form id="seReviewPostForm"><label>Comment<textarea name="body" required maxlength="1500" rows="3"></textarea></label><button class="btn se-editor-actions" type="submit">Add comment</button></form></section>`;
   document.getElementById('seReviewClose').onclick=()=>{if(confirmLeaveSelections()){s.view='reviews';drawSelections();}};
   document.getElementById('seReviewRefresh').onclick=async()=>{if(confirmLeaveSelections()){await seReload();if(s.data.reviews.some(x=>x.id===id))await seReviewScreen(id);else drawSelections();}};
   const form=document.getElementById('seReviewPostForm');form.oninput=()=>s.formDirty=true;form.onsubmit=async e=>{e.preventDefault();if(await seMutate('review_post',{id,body:form.elements.body.value,review_revision:snap.draft_revision}))await seReviewScreen(id);};
@@ -19245,6 +19246,7 @@ async function loadSelectionsAccess(){
   const {data,error}=result||{};
   selectionAccess={...(data||{}),key,enabled:!error&&data?.enabled===true,error:error?(error.message||'Selections access could not be checked.') : ''};
  }
+ if(key===selectionsScopeKey()&&sequence===selectionAccessSequence)await loadMatchCaptainAccess();
  return selectionAccess?.key===selectionsScopeKey()?selectionAccess:null;
 }
 function ensureSelections(){const key=`${session?.user?.id}:${club?.id}`;if(selectionState?.key!==key){let pending=null;try{pending=JSON.parse(sessionStorage.getItem('selections-pending-'+key)||'null');}catch{}selectionState={key,view:'published',data:null,notice:'',busy:false,pending,undo:[],date:'',search:'',role:'',active:null,pairs:false,formDirty:false};}return selectionState;}
@@ -19544,6 +19546,44 @@ async function mountMemberPhoneStatuses(host){
  host.querySelectorAll('[data-member-phone]').forEach(el=>{const ready=state.rows.get(el.dataset.memberPhone),value=ready===true?'on':ready===false?'off':'unknown';if(el.querySelector('[data-phone-status-icon]')?.dataset.phoneState!==value)el.innerHTML=phoneStatusBadge(ready);});
 }
 /* END MEMBER PHONE STATUS */
+
+
+
+
+/* BEGIN TEMPORARY MATCH CAPTAIN — maintained source: tools/temporary_captain_ui.js */
+let matchCaptainAccess=null,matchCaptainAccessSequence=0,matchCaptainPending=null;
+function hasMatchCaptainAccess(){
+ return !!(matchCaptainAccess?.key===selectionsScopeKey()&&selectionsEnabled()&&!selectionsStandalone()&&matchCaptainAccess.batting&&matchCaptainAccess.appointments?.some(d=>Date.parse(d.expires_at)>Date.now()));
+}
+async function loadMatchCaptainAccess(){
+ const key=selectionsScopeKey(),clubId=club?.id;
+ if(!key||!selectionsEnabled()){matchCaptainAccess=null;return null;}
+ if(matchCaptainPending?.key===key)return matchCaptainPending.promise;
+ const sequence=++matchCaptainAccessSequence;
+ const promise=(async()=>{
+  let result;try{result=await supabase.rpc('get_my_match_captain_access',{p_club_id:clubId});}catch(error){result={error};}
+  if(key!==selectionsScopeKey()||sequence!==matchCaptainAccessSequence)return null;
+  matchCaptainAccess={key,batting:!result?.error&&result?.data?.batting===true,appointments:!result?.error&&Array.isArray(result?.data?.appointments)?result.data.appointments:[]};
+  syncMatchCaptainNavigation();return matchCaptainAccess;
+ })();
+ matchCaptainPending={key,promise};try{return await promise;}finally{if(matchCaptainPending?.promise===promise)matchCaptainPending=null;}
+}
+function syncMatchCaptainNavigation(){
+ const nav=document.querySelector('.shell>.nav');if(!nav||!club?.id||!session?.user?.id)return;
+ for(const [tab,label] of [['players','Players'],['team_review','Match review']]){
+  const permitted=!selectionsStandalone()&&(tab==='players'?canUsePlayersWorkspace():canUseTeamReview());
+  let button=nav.querySelector(`[data-tab="${tab}"]`);
+  if(!button&&permitted){
+   button=document.createElement('button');button.dataset.tab=tab;button.dataset.navGroup='club';button.textContent=label;
+   button.onclick=async()=>{if(!canOpenClubTab(tab)||!await saveClubEditsBeforeNavigation())return;if(tab==='players'){playersWorkspaceSelectedId=null;clearPlayersWorkspaceSearch();}currentTab=tab;localStorage.setItem(`bdp-tab-${club.id}`,tab);await renderTab();};
+   nav.insertBefore(button,nav.querySelector('[data-nav-group="player"]')||nav.firstChild);
+  }
+  if(button)button.hidden=!permitted;
+ }
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id)void loadMatchCaptainAccess();});
+setInterval(()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id){syncMatchCaptainNavigation();void loadMatchCaptainAccess();}},60000);
+/* END TEMPORARY MATCH CAPTAIN */
 
 /* BEGIN PRODUCT ENQUIRIES — maintained in tools/product_enquiries_ui.js */
 const PRODUCT_ENQUIRY_LABELS={batting:'Batting development',selections:'Teams & availability',both:'Both'};

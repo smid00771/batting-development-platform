@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.117 — Phone notification status
+// Club Batting 0.8.62.118 — Captain prompts and temporary access
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.117';
+const APP_UI_VERSION='0.8.62.118';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -4946,7 +4946,7 @@ function isPlayerUser(){
   return ['player','both'].includes(membership.involvement);
 }
 function canUsePlayersWorkspace(){
-  return isAdmin() || ['captain','coach','head_coach'].includes(membership.permission_role);
+  return isAdmin() || ['captain','coach','head_coach'].includes(membership.permission_role) || hasMatchCaptainAccess();
 }
 function isPhilosophyLead(){
   return !!workshop && workshop.philosophy_lead_user_id===session.user.id;
@@ -6221,6 +6221,7 @@ function renderTab(){
 function guideAudienceKey(){
   const role=membership?.permission_role||'';
   if(['admin','head_coach','coach','captain'].includes(role))return role;
+  if(hasMatchCaptainAccess())return 'captain';
   return isPlayerUser()?'player':'member';
 }
 
@@ -6339,7 +6340,7 @@ function guideHelpStyles(){
 
 // BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
 const CLUB_BATTING_HELP = {
-  "version": "0.8.62.117",
+  "version": "0.8.62.118",
   "reviewed": "2026-10-08",
   "topics": [
     {
@@ -15226,7 +15227,7 @@ async function mountMatchTrainingFocus(host,{playerId=myPlayer?.id,isOwner=true,
 let teamReviewState=null,teamReviewCache=null,teamReviewSequence=0;
 const TEAM_REVIEW_CHOICES=[['yes','Yes'],['mostly','Mostly'],['no','Not really'],['no_plan','Has no plan'],['did_not_bat','DNB']];
 const TEAM_REVIEW_DISMISSALS=[['plan_execution','Within plan · execution to improve'],['outside_plan','Decision outside plan'],['not_applicable','No dismissal decision to review']];
-function canUseTeamReview(){return !!club?.id&&!!session?.user?.id&&['admin','head_coach','coach','captain'].includes(membership?.permission_role);}
+function canUseTeamReview(){return !!club?.id&&!!session?.user?.id&&canUsePlayersWorkspace();}
 function resetTeamReviewState(){teamReviewSequence++;teamReviewState=null;teamReviewCache=null;}
 function ensureTeamReviewState(){
   const scope=`${club?.id||''}:${session?.user?.id||''}`;
@@ -22362,7 +22363,7 @@ function seReviews(){
 async function seReviewScreen(id){
  const s=ensureSelections(),r=s.data.reviews?.find(x=>x.id===id);if(!r)return;
  try{const posts=await seRPC('review_posts',{id});if(s!==selectionState||currentTab!=='teams')return;const snap=r.snapshot,d=snap.details,name=pid=>snap.players.find(p=>p.id===pid)?.name||'Vacant';
-  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(d.grade)} · captain input</h2><button class="btn ghost" id="seReviewClose">Back</button></div><p class="se-muted">Private to this captain and selectors. Final selection rests with the Head of Selections.</p><p>v ${seEsc(d.opposition)} · ${seEsc(seFormatLabel(d))}</p><p>${d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}${d.meeting?' · '+seEsc(d.meeting):''}</p>${r.draft_changed?'<p class="se-warn">Selectors have since changed this draft.</p>':''}<ol>${snap.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(snap,slot.d1,0)}${seSnapshotSplit(snap,slot)?` (Day 1) / ${seSnapshotName(snap,slot.d2,1)} (Day 2)`:''}</li>`).join('')}</ol><button class="btn ghost" id="seReviewRefresh">Refresh comments</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}${p.review_revision!==snap.draft_revision?' · earlier draft':''}</small><p>${seEsc(p.body)}</p></article>`).join('')}<form id="seReviewPostForm"><label>Comment<textarea name="body" required maxlength="1500" rows="3"></textarea></label><button class="btn se-editor-actions" type="submit">Add comment</button></form></section>`;
+  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(d.grade)} · captain input</h2><button class="btn ghost" id="seReviewClose">Back</button></div><p class="se-muted">Private to this captain and selectors. Final selection rests with the Head of Selections.</p><p>v ${seEsc(d.opposition)} · ${seEsc(seFormatLabel(d))}</p><p>${d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}${d.meeting?' · '+seEsc(d.meeting):''}</p>${r.draft_changed?'<p class="se-warn">Selectors have since changed this draft.</p>':''}<ol>${snap.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(snap,slot.d1,0)}${seSnapshotSplit(snap,slot)?` (Day 1) / ${seSnapshotName(snap,slot.d2,1)} (Day 2)`:''}</li>`).join('')}</ol><p class="se-muted se-review-prompt">Please check the draft and add any thoughts here.</p><button class="btn ghost" id="seReviewRefresh">Refresh comments</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}${p.review_revision!==snap.draft_revision?' · earlier draft':''}</small><p>${seEsc(p.body)}</p></article>`).join('')}<form id="seReviewPostForm"><label>Comment<textarea name="body" required maxlength="1500" rows="3"></textarea></label><button class="btn se-editor-actions" type="submit">Add comment</button></form></section>`;
   document.getElementById('seReviewClose').onclick=()=>{if(confirmLeaveSelections()){s.view='reviews';drawSelections();}};
   document.getElementById('seReviewRefresh').onclick=async()=>{if(confirmLeaveSelections()){await seReload();if(s.data.reviews.some(x=>x.id===id))await seReviewScreen(id);else drawSelections();}};
   const form=document.getElementById('seReviewPostForm');form.oninput=()=>s.formDirty=true;form.onsubmit=async e=>{e.preventDefault();if(await seMutate('review_post',{id,body:form.elements.body.value,review_revision:snap.draft_revision}))await seReviewScreen(id);};
@@ -22427,6 +22428,7 @@ async function loadSelectionsAccess(){
   const {data,error}=result||{};
   selectionAccess={...(data||{}),key,enabled:!error&&data?.enabled===true,error:error?(error.message||'Selections access could not be checked.') : ''};
  }
+ if(key===selectionsScopeKey()&&sequence===selectionAccessSequence)await loadMatchCaptainAccess();
  return selectionAccess?.key===selectionsScopeKey()?selectionAccess:null;
 }
 function ensureSelections(){const key=`${session?.user?.id}:${club?.id}`;if(selectionState?.key!==key){let pending=null;try{pending=JSON.parse(fixtureSessionStorage.getItem('selections-pending-'+key)||'null');}catch{}selectionState={key,view:'published',data:null,notice:'',busy:false,pending,undo:[],date:'',search:'',role:'',active:null,pairs:false,formDirty:false};}return selectionState;}
@@ -22726,6 +22728,44 @@ async function mountMemberPhoneStatuses(host){
  host.querySelectorAll('[data-member-phone]').forEach(el=>{const ready=state.rows.get(el.dataset.memberPhone),value=ready===true?'on':ready===false?'off':'unknown';if(el.querySelector('[data-phone-status-icon]')?.dataset.phoneState!==value)el.innerHTML=phoneStatusBadge(ready);});
 }
 /* END MEMBER PHONE STATUS */
+
+
+
+
+/* BEGIN TEMPORARY MATCH CAPTAIN — maintained source: tools/temporary_captain_ui.js */
+let matchCaptainAccess=null,matchCaptainAccessSequence=0,matchCaptainPending=null;
+function hasMatchCaptainAccess(){
+ return !!(matchCaptainAccess?.key===selectionsScopeKey()&&selectionsEnabled()&&!selectionsStandalone()&&matchCaptainAccess.batting&&matchCaptainAccess.appointments?.some(d=>Date.parse(d.expires_at)>Date.now()));
+}
+async function loadMatchCaptainAccess(){
+ const key=selectionsScopeKey(),clubId=club?.id;
+ if(!key||!selectionsEnabled()){matchCaptainAccess=null;return null;}
+ if(matchCaptainPending?.key===key)return matchCaptainPending.promise;
+ const sequence=++matchCaptainAccessSequence;
+ const promise=(async()=>{
+  let result;try{result=await supabase.rpc('get_my_match_captain_access',{p_club_id:clubId});}catch(error){result={error};}
+  if(key!==selectionsScopeKey()||sequence!==matchCaptainAccessSequence)return null;
+  matchCaptainAccess={key,batting:!result?.error&&result?.data?.batting===true,appointments:!result?.error&&Array.isArray(result?.data?.appointments)?result.data.appointments:[]};
+  syncMatchCaptainNavigation();return matchCaptainAccess;
+ })();
+ matchCaptainPending={key,promise};try{return await promise;}finally{if(matchCaptainPending?.promise===promise)matchCaptainPending=null;}
+}
+function syncMatchCaptainNavigation(){
+ const nav=document.querySelector('.shell>.nav');if(!nav||!club?.id||!session?.user?.id)return;
+ for(const [tab,label] of [['players','Players'],['team_review','Match review']]){
+  const permitted=!selectionsStandalone()&&(tab==='players'?canUsePlayersWorkspace():canUseTeamReview());
+  let button=nav.querySelector(`[data-tab="${tab}"]`);
+  if(!button&&permitted){
+   button=document.createElement('button');button.dataset.tab=tab;button.dataset.navGroup='club';button.textContent=label;
+   button.onclick=async()=>{if(!canOpenClubTab(tab)||!await saveClubEditsBeforeNavigation())return;if(tab==='players'){playersWorkspaceSelectedId=null;clearPlayersWorkspaceSearch();}currentTab=tab;fixtureLocalStorage.setItem(`bdp-tab-${club.id}`,tab);await renderTab();};
+   nav.insertBefore(button,nav.querySelector('[data-nav-group="player"]')||nav.firstChild);
+  }
+  if(button)button.hidden=!permitted;
+ }
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id)void loadMatchCaptainAccess();});
+setInterval(()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id){syncMatchCaptainNavigation();void loadMatchCaptainAccess();}},60000);
+/* END TEMPORARY MATCH CAPTAIN */
 
 /* BEGIN PRODUCT ENQUIRIES — maintained in tools/product_enquiries_ui.js */
 const PRODUCT_ENQUIRY_LABELS={batting:'Batting development',selections:'Teams & availability',both:'Both'};
@@ -23170,7 +23210,7 @@ function demoPlayerRequirements(playerId){
   }
   return [...byFormat.values()];
 }
-function demoPlayerAccess(playerId){if(membership?.permission_role==='admin')return {view:true,edit:true};const groups=demoPlayerGroups(playerId);const grants=fixtureRows.club_access_grants.filter(g=>g.user_id===session.user.id&&(g.scope==='whole_club'||groups.some(group=>group.id===g.playing_group_id)));return {view:grants.some(g=>g.can_view||g.can_edit)||myPlayer?.id===playerId,edit:grants.some(g=>g.can_edit)};}
+function demoPlayerAccess(playerId){if(demoTemporaryCaptainPlayer(playerId))return {view:true,edit:true};if(membership?.permission_role==='admin')return {view:true,edit:true};const groups=demoPlayerGroups(playerId);const grants=fixtureRows.club_access_grants.filter(g=>g.user_id===session.user.id&&(g.scope==='whole_club'||groups.some(group=>group.id===g.playing_group_id)));return {view:grants.some(g=>g.can_view||g.can_edit)||myPlayer?.id===playerId,edit:grants.some(g=>g.can_edit)};}
 fixtureWorkspacePlayers=function(){return fixtureRows.players.filter(p=>p.active!==false&&demoPlayerAccess(p.id).view).map(player=>({...fixtureClone(player),can_edit:demoPlayerAccess(player.id).edit,groups:fixtureClone(demoPlayerGroups(player.id)),workflow:fixtureClone(fixtureRows.player_plan_workflows.find(w=>w.player_id===player.id)||{}),requirements:demoPlayerRequirements(player.id)}));};
 // Shared innings identity mirrors the live contract. Names are normalised only
 // for exact matching; a nearby differently named opponent needs explicit choice.
@@ -23212,7 +23252,7 @@ function demoSharedMatchProjection(playerId,match){
 }
 function demoObservationContext(playerId){
  const f=fixtureRows.feedback[playerId]||demoEmptyFeedback();
- return {matches:f.matches.map(m=>({id:m.id,updated_at:m.updated_at,can_edit_details:membership.permission_role!=='player'})),feedback:f.matches.flatMap(m=>m.coach_feedback.map(n=>({...n,match_id:m.id,match_updated_at:m.updated_at,can_edit:n.author_user_id===session.user.id}))),training_observations:f.training_observations.map(n=>({...n,can_edit:n.observer_user_id===session.user.id}))};
+ return {matches:f.matches.map(m=>({id:m.id,updated_at:m.updated_at,can_edit_details:demoPlayerAccess(playerId).edit})),feedback:f.matches.flatMap(m=>m.coach_feedback.map(n=>({...n,match_id:m.id,match_updated_at:m.updated_at,can_edit:n.author_user_id===session.user.id}))),training_observations:f.training_observations.map(n=>({...n,can_edit:n.observer_user_id===session.user.id}))};
 }
 function demoAlerts(){
  const actions=Object.values(fixtureRows.feedback).flatMap(f=>f.coaching_actions||[]).filter(a=>demoPlayerAccess(a.player_id).view);
@@ -23584,7 +23624,7 @@ window.__fixtureRpc=async(name,args={})=>{
     if(name==='get_player_current_focus')return ok(demoFocusView(args.p_player_id));
     if(name==='save_player_focus')return ok(demoSaveFocus(args));
     if(name==='get_training_preparation'){
-      if(args.p_club_id!==club.id||club.archived_at||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===session?.user?.id&&['admin','head_coach','coach','captain'].includes(m.permission_role)))throw Error('Training preparation is available to authorised club staff.');
+      if(args.p_club_id!==club.id||club.archived_at||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===session?.user?.id&&(['admin','head_coach','coach','captain'].includes(m.permission_role)||demoTemporaryBattingCaptain())))throw Error('Training preparation is available to authorised club staff.');
       return ok({groups:fixtureGroups.filter(g=>g.active).map(g=>({id:g.id,name:g.name})),players:fixtureWorkspacePlayers().filter(p=>fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===p.user_id)).map(p=>({player_id:p.id,display_name:p.display_name,group_ids:p.groups.map(g=>g.id),groups:p.groups.map(g=>({id:g.id,name:g.name})),focuses:demoFocusView(p.id).active,match_training_focus:demoPlayerMatchTrainingFocus(p.id).preparations,can_write:p.can_edit,conversations:(fixtureRows.feedback[p.id]?.coaching_actions||[]).filter(a=>a.status==='open'&&a.follow_up_requested&&demoFocusSourceVisible(p.id,'conversation',a.id)).map(a=>({id:a.id,task:a.task,source_kind:a.match_feedback_id?'match':a.training_observation_id?'training':'conversation',review_on:a.review_on,status:a.status,player_id:p.id}))}))});
     }
     return demoPreLoopRpc(name,args);
@@ -24164,7 +24204,7 @@ window.__fixtureRpc=async(name,args={})=>{
  const ok=data=>({data:fixtureClone(data),error:null}),fail=message=>({data:null,error:{code:'P0001',message}});
  try{
   const staff=fixtureRows.club_memberships.find(m=>m.club_id===args.p_club_id&&m.user_id===session.user.id);
-  if(args.p_club_id!==club.id||!staff||!['admin','head_coach','coach','captain'].includes(staff.permission_role))throw Error('Staff access is required for Match review.');
+  if(args.p_club_id!==club.id||!staff||!(['admin','head_coach','coach','captain'].includes(staff.permission_role)||demoTemporaryBattingCaptain()))throw Error('Staff access is required for Match review.');
   const groups=fixtureGroups.filter(g=>g.active),editable=fixtureWorkspacePlayers().filter(p=>p.can_edit);
   if(!editable.length)throw Error('Coaching edit access is required.');
   if(name==='get_team_match_review'){
@@ -24215,7 +24255,7 @@ const demoBeforeTeamWorkflowSeed=demoSeedClub;
 demoSeedClub=function(){demoBeforeTeamWorkflowSeed();resetTeamReviewState();fixtureRows.team_review_sessions=[];fixtureRows.team_workflow_receipts={};fixtureRows.team_delete_previews={};};
 function demoTeamStaff(clubId){
  const staff=fixtureRows.club_memberships.find(m=>m.club_id===clubId&&m.user_id===session.user.id);
- if(clubId!==club.id||!staff||!['admin','head_coach','coach','captain'].includes(staff.permission_role))throw Error('Staff access is required for Match review.');return staff;
+ if(clubId!==club.id||!staff||!(['admin','head_coach','coach','captain'].includes(staff.permission_role)||demoTemporaryBattingCaptain()))throw Error('Staff access is required for Match review.');return staff;
 }
 function demoTeamEditable(){return fixtureWorkspacePlayers().filter(p=>p.can_edit);}
 function demoTeamMetadata(review){
@@ -24492,7 +24532,7 @@ window.__fixtureRpc=async(name,args={})=>{
  if(name!=='club_messages_api'&&name!=='phone_app_api')return previousPhoneFixtureRpc(name,args);
  window.__fixtureLog(name,args);
  if(name==='phone_app_api')return {data:{configured:false,preferences:{messages:true,coaching:true}},error:null};
- const staff=['admin','head_coach','coach','captain'].includes(membership.permission_role),uid=session.user.id,action=args.p_action;
+ const staff=['admin','head_coach','coach','captain'].includes(membership.permission_role)||demoTemporaryBattingCaptain(),uid=session.user.id,action=args.p_action;
  if(!demoClubMessageRecords.length)demoClubMessageRecords=[{id:'demo-message-welcome',sender_id:'user-coach',sender:'Casey Reid',title:'Ready for Thursday?',body:'Have a look at the training ideas from your plan before our next session. Bring one thing you want to work on.',target:'howwetrain',created_at:fixtureNow(),user_ids:['user-alex','user-jordan'],opened:{},email_requested:false}];
  const staffMembers=[...new Map(fixtureRows.club_memberships.map(m=>[m.user_id,m])).values()].filter(m=>m.club_id===club.id&&m.user_id!==uid&&(['admin','head_coach','coach','captain'].includes(m.permission_role)||['coach_captain','both'].includes(m.involvement))).map(m=>({user_id:m.user_id,name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name||'Club staff',phone_ready:demoPhoneReady(m.user_id),role:m.permission_role,default_included:['admin','head_coach','coach','captain'].includes(m.permission_role)}));
  if(action==='context')return {data:{can_send:staff,can_remind:membership.permission_role==='admin',email_mode:'preview',players:staff?fixtureWorkspacePlayers().filter(p=>p.can_edit).map(p=>({id:p.id,user_id:fixtureRows.players.find(x=>x.id===p.id)?.user_id,name:p.display_name,groups:p.groups||[],phone_ready:demoPhoneReady(fixtureRows.players.find(x=>x.id===p.id)?.user_id),overdue_plan_sections:playerPlanDeadlineState(p).overdue,next_reminder_at:null})):[],staff:staff?staffMembers:[]},error:null};
@@ -24556,7 +24596,7 @@ window.__fixtureRpc=async(name,args={})=>{
  const snapshot=f=>({details:structuredClone(f.details),slots:structuredClone(f.details.cancelled?[]:f.slots),players:state.roster.filter(p=>f.slots.some(s=>s.d1===p.id||s.d2===p.id)).map(p=>({id:p.id,name:p.name,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,keeper:p.keeper}))});
  const current=f=>f.review?.draft_revision===f.revision&&JSON.stringify({...f.review,draft_revision:undefined})===JSON.stringify(snapshot(f));
  const reviewAudience=f=>!!f?.review&&(selector||demoCaptainUsers(f.details).includes(uid)&&demoCaptainUsers(f.review.details).includes(uid));
- const captain=membership.permission_role==='captain'||state.fixtures.some(f=>demoCaptainUsers(f.details).includes(uid)&&!f.details.cancelled&&f.details.days.some(d=>d.date>=new Date().toLocaleDateString('en-CA',{timeZone:state.access.timezone})));
+ const captain=membership.permission_role==='captain'||demoTemporaryCaptainDays(uid).length>0;
  const audience=f=>selector||f.published?.details.captain_id===uid||f.published?.slots.some(s=>state.roster.some(p=>p.user_id===uid&&(p.id===s.d1||p.id===s.d2)));
  const ok=data=>({data:structuredClone(data),error:null}),bad=message=>({data:null,error:{message,code:'P0001'}});
  if(['subscription_context','preview_subscription'].includes(action)&&!seCanReadSubscriptions())return bad('Platform subscription access required');
@@ -24697,6 +24737,36 @@ window.__fixtureRpc=async(name,args={})=>{
 
 const demoProductInvoke=window.__fixtureDb.functions.invoke;
 window.__fixtureDb.functions.invoke=async(name,args)=>args?.body?.action==='status'&&['discover-clubs','dispatch-outbox','club-batting-guide'].includes(name)?{data:{configured:false},error:null}:demoProductInvoke(name,args);
+
+// Fictional data only. Time-limited access mirrors the server's selected-team rule.
+function demoTemporaryCaptainDays(uid=session?.user?.id){
+ const state=demoSelections;if(!state||club?.archived_at||!['pilot','active'].includes(state.access.status)||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===uid))return [];
+ const zone=state.access.timezone||'Australia/Sydney',now=new Date(),today=now.toLocaleDateString('en-CA',{timeZone:zone});
+ if(state.access.active_from&&today<state.access.active_from||state.access.valid_until&&today>state.access.valid_until)return [];
+ const midnight=date=>{let guess=Date.parse(date+'T00:00:00Z');for(let i=0;i<3;i++){const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(guess)),p=k=>parts.find(v=>v.type===k).value;guess+=Date.parse(date+'T00:00:00Z')-Date.parse(`${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}Z`);}return new Date(guess).toISOString();};
+ return state.fixtures.flatMap(f=>f.details.cancelled?[]:f.details.days.flatMap((day,i)=>{
+  const key='d'+(i+1),captain=state.roster.find(r=>r.active&&r.user_id===uid&&(f.details.match_roles?r.id===f.details.match_roles[key]?.captain_id:uid===f.details.captain_id));
+  if(!captain||!f.slots.some(s=>s[key]===captain.id))return [];
+  const date=new Date(day.date+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+((8-date.getUTCDay())%7||7));const expires_at=midnight(date.toISOString().slice(0,10));
+  return Date.parse(expires_at)>now.getTime()?[{fixture_id:f.id,day_key:key,match_date:day.date,expires_at,grade:f.details.grade,group_id:f.details.grade_group_id||null}]:[];
+ }));
+}
+function demoTemporaryBattingCaptain(){return demoSelections?.access.mode==='bundle'&&demoTemporaryCaptainDays().length>0;}
+function demoTemporaryCaptainPlayer(playerId){
+ const p=fixtureRows.players.find(p=>p.id===playerId&&p.active!==false&&p.club_id===club.id);if(!p||!demoTemporaryBattingCaptain())return false;
+ const r=demoSelections.roster.find(r=>r.active&&r.user_id===p.user_id);return !!r&&demoTemporaryCaptainDays().some(d=>demoSelections.fixtures.find(f=>f.id===d.fixture_id).slots.some(s=>s[d.day_key]===r.id));
+}
+const previousTemporaryCaptainRpc=window.__fixtureRpc;
+window.__fixtureRpc=async(name,args={})=>{
+ if(name==='get_my_match_captain_access'){
+  if(!demoSelections)seedDemoSelections();
+  if(args.p_club_id!==club?.id||!fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===session?.user?.id))return {data:null,error:{message:'Club membership required'}};
+  return {data:{batting:demoTemporaryBattingCaptain(),timezone:demoSelections.access.timezone,appointments:demoTemporaryCaptainDays()},error:null};
+ }
+ const result=await previousTemporaryCaptainRpc(name,args);
+ if(!result?.error&&['get_players_workspace','get_feedback_workspace'].includes(name)&&demoTemporaryBattingCaptain())result.data.role=['admin','head_coach','coach','captain'].includes(membership.permission_role)?membership.permission_role:'captain';
+ return result;
+};
 
 function demoDecorate(){
   // Demo-only emphasis follows actual split selections, including after edits.
