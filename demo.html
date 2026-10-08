@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.116 — Shared club branding for either product
+// Club Batting 0.8.62.117 — Phone notification status
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.116';
+const APP_UI_VERSION='0.8.62.117';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -6339,7 +6339,7 @@ function guideHelpStyles(){
 
 // BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
 const CLUB_BATTING_HELP = {
-  "version": "0.8.62.116",
+  "version": "0.8.62.117",
   "reviewed": "2026-10-08",
   "topics": [
     {
@@ -12857,7 +12857,7 @@ async function renderPermissions(){
     if(isLead){
       return `<div class="member" id="assignedRole-${esc(m.user_id)}" tabindex="-1">
         <div>
-          <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
+          <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}${memberPhoneStatusIcon(m.user_id)}</strong>
           <small>${esc(registrationLabel(m))}</small><small data-person-coaching="${esc(m.user_id)}" hidden></small><button class="btn ghost" data-edit-person-duties="${esc(m.user_id)}">Edit coaching duties</button>
         </div>
         <div class="primary-admin-summary lead">
@@ -12870,7 +12870,7 @@ async function renderPermissions(){
     if(selfAdmin){
       return `<div class="member" id="assignedRole-${esc(m.user_id)}" tabindex="-1">
         <div>
-          <strong>${esc(name)} · You</strong>
+          <strong>${esc(name)} · You${memberPhoneStatusIcon(m.user_id)}</strong>
           <small>${esc(registrationLabel(m))}</small><small data-person-coaching="${esc(m.user_id)}" hidden></small><button class="btn ghost" data-edit-person-duties="${esc(m.user_id)}">Edit coaching duties</button>
         </div>
         <div class="primary-admin-summary">
@@ -12882,7 +12882,7 @@ async function renderPermissions(){
 
     return `<div class="member" id="assignedRole-${esc(m.user_id)}" tabindex="-1">
       <div>
-        <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}</strong>
+        <strong>${esc(name)}${m.user_id===session.user.id?' · You':''}${memberPhoneStatusIcon(m.user_id)}</strong>
         <small>${esc(registrationLabel(m))}</small><small data-person-coaching="${esc(m.user_id)}" hidden></small><button class="btn ghost" data-edit-person-duties="${esc(m.user_id)}">Edit coaching duties</button>
         ${m.permission_role!=='admin'&&access==='pending'?'<span class="pending">PLAYER ACCESS NOT SET</span>':''}
       </div>
@@ -13153,9 +13153,9 @@ async function renderPermissions(){
       .slice(0,12);
     wrap.innerHTML=matches.length?matches.map(m=>{
       const name=pMap.get(m.user_id)?.display_name||'Profile not completed';
-      if(roleMemberIds.has(m.user_id))return `<div class="member"><div><strong>${esc(name)}</strong><small>Already assigned — ${esc(coachingPermissionLabel(m.permission_role))}</small></div><button class="btn ghost" data-find-assigned="${esc(m.user_id)}">Edit roles</button></div>`;
+      if(roleMemberIds.has(m.user_id))return `<div class="member"><div><strong>${esc(name)}${memberPhoneStatusIcon(m.user_id)}</strong><small>Already assigned — ${esc(coachingPermissionLabel(m.permission_role))}</small></div><button class="btn ghost" data-find-assigned="${esc(m.user_id)}">Edit roles</button></div>`;
       return `<div class="member">
-        <div><strong>${esc(name)}</strong><small>${esc(registrationLabel(m))}</small></div>
+        <div><strong>${esc(name)}${memberPhoneStatusIcon(m.user_id)}</strong><small>${esc(registrationLabel(m))}</small></div>
         <div class="member-controls">
           <select data-new-club-role="${m.user_id}">
             <option value="captain">Captain</option>
@@ -13168,6 +13168,7 @@ async function renderPermissions(){
       </div>`;
     }).join(''):'<div class="notice">No registered member matches that name. Check the spelling, or invite them using the player or staff link.</div>';
 
+    void mountMemberPhoneStatuses(wrap);
     wrap.querySelectorAll('[data-find-assigned]').forEach(button=>button.onclick=()=>{const row=document.getElementById('assignedRole-'+button.dataset.findAssigned);row?.scrollIntoView({block:'center',behavior:'smooth'});row?.focus({preventScroll:true});editPersonCoachingDuties(button.dataset.findAssigned);});
 
     wrap.querySelectorAll('[data-assign-club-role]').forEach(b=>b.onclick=async()=>{
@@ -13186,6 +13187,7 @@ async function renderPermissions(){
     });
   };
 
+  void mountMemberPhoneStatuses(document.getElementById('page'));
   renderCoachingStaffSetup();
   document.querySelectorAll('[data-edit-person-duties]').forEach(button=>button.onclick=()=>editPersonCoachingDuties(button.dataset.editPersonDuties));
   document.getElementById('clubPersonSearch').oninput=renderPersonSearch;
@@ -16866,7 +16868,7 @@ async function renderPlayersWorkspace(){
     supabase.rpc('get_players_workspace',{p_club_id:club.id}),
     supabase.rpc('get_feedback_workspace',{p_club_id:club.id}),
     reminderPromise,
-    supabase.from('players').select('id').eq('club_id',club.id).eq('active',true),
+    supabase.from('players').select('id,user_id').eq('club_id',club.id).eq('active',true),
     Promise.resolve(supabase.rpc('get_coaching_action_alerts',{p_club_id:club.id})).catch(error=>({error}))
   ]);
 
@@ -16882,6 +16884,8 @@ async function renderPlayersWorkspace(){
 
   playersWorkspaceData=playersRes.data||{role:membership.permission_role,groups:[],players:[]};
   const activePlayerIds=new Set((rosterRes.data||[]).map(p=>p.id));
+  const playerAccounts=new Map((rosterRes.data||[]).map(p=>[p.id,p.user_id]));
+  for(const player of playersWorkspaceData.players||[])player.user_id=playerAccounts.get(player.id)||null;
   playersWorkspaceData.players=(Array.isArray(playersWorkspaceData.players)?playersWorkspaceData.players:[]).filter(p=>activePlayerIds.has(p.id));
   playersWorkspaceData.groups=Array.isArray(playersWorkspaceData.groups)?playersWorkspaceData.groups:[];
 
@@ -17175,7 +17179,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
   return `<article class="workspace-roster-row" data-workspace-roster-player="${player.id}" ${overdue?'style="border-left:4px solid var(--accent,#D8232A)"':''}>
     <div class="workspace-roster-person">
       <div>
-        <h3>${selectReminder?`<label class="plan-reminder-person"><input type="checkbox" data-select-overdue="${esc(player.id)}" aria-label="Select ${esc(player.display_name||'player')}" ${workspaceCanRemind(player)?'':'disabled'}>${esc(player.display_name||'Player')}</label>`:esc(player.display_name||'Player')}</h3>
+        <h3>${selectReminder?`<label class="plan-reminder-person"><input type="checkbox" data-select-overdue="${esc(player.id)}" aria-label="Select ${esc(player.display_name||'player')}" ${workspaceCanRemind(player)?'':'disabled'}>${esc(player.display_name||'Player')}</label>`:esc(player.display_name||'Player')}${memberPhoneStatusIcon(player.user_id)}</h3>
         <div class="workspace-roster-groups">${groups||'<span>Unassigned</span>'}</div>
       </div>
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
@@ -17338,6 +17342,7 @@ function renderPlayersWorkspaceList(){
   ${isAdmin()&&overdueMode&&filtered.length?renderPlanReminderSelection(filtered):''}
   <div class="workspace-roster-list">${roster||emptyCopy}</div>`;
   bindPlanReminderSelection(page,filtered);
+  void mountMemberPhoneStatuses(page);
 
   document.getElementById('messagePlayersFromPlayers')?.addEventListener('click',()=>openClubMessages({compose:true}));
   document.getElementById('openTrainingPreparation')?.addEventListener('click',()=>openTrainingPreparation());
@@ -21439,6 +21444,7 @@ function confirmLeaveClubMessages(){
  return true;
 }
 function clubMessageStyles(){return `<style>
+ .message-recipient-row{display:flex;align-items:center;gap:4px}.message-recipient-row .message-check{flex:1;min-width:0}.message-recipient-row .message-check span{overflow-wrap:anywhere}
  .messages-page{max-width:840px;margin:0 auto}.messages-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.messages-head h1{font-size:24px;margin:0}.messages-head .btn{padding:8px 12px;min-height:44px}.messages-tabs{display:flex;gap:8px;margin:12px 0}.messages-tabs button[aria-pressed=true]{background:var(--navy,#17245f);color:#fff}
  .messages-page .message-row{padding:0;border:1px solid #dce2ee;border-radius:10px;background:white;margin-bottom:8px}.messages-page .message-row>summary{margin:0;display:flex;align-items:center;gap:8px;padding:12px;min-height:44px;box-sizing:border-box;cursor:pointer;list-style:none}.message-row>summary::after{content:'View ⌄';font-size:12px;margin-left:auto;white-space:nowrap}.message-row[open]>summary::after{content:'Close ⌃'}.message-row strong{font-size:15px}.message-row small{display:block;font-size:12px;color:#59657c}.message-content{padding:0 12px 12px;border-top:1px solid #eef0f7}.message-content p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5;margin:12px 0}.message-unread{width:8px;height:8px;background:#d8232a;border-radius:50%;flex-shrink:0}.message-form{margin-top:12px}.message-form .field{margin-bottom:12px}.message-form input,.message-form textarea,.message-form select{font-size:16px}.message-form label{font-size:13px}.message-form .message-check{display:flex;align-items:center;gap:9px;min-height:44px;margin:0}.message-check input{width:18px;height:18px;margin:0;flex-shrink:0}.message-recipients{max-height:230px;overflow:auto;border:1px solid #dce2ee;border-radius:8px;padding:4px 10px}.message-recipient-tools{display:flex;gap:8px;align-items:center;margin:8px 0}.message-recipient-tools select{min-width:0;flex:1}.message-form fieldset{min-width:0;border:0;padding:0;margin:0}.message-form fieldset:disabled{opacity:.7}.message-form .btn{min-height:44px;padding:8px 10px}.message-form input,.message-form textarea,.message-form select{box-sizing:border-box;max-width:100%}.message-form .help{margin:5px 0;font-size:12px}.message-email-person{justify-content:space-between}.message-email-person small{display:block;color:var(--muted);font-size:12px}.message-form summary{cursor:pointer;min-height:44px;align-content:center;font-size:13px}.se-inbox-followup{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:12px!important}.se-inbox-followup .btn{min-height:44px}.messages-status:empty{display:none}.messages-status{margin:8px 0;font-size:14px}.messages-empty{padding:16px;border:1px solid #dce2ee;border-radius:10px}.message-body-count{float:right;font-weight:400;color:#59657c}
  </style>`;}
@@ -21518,10 +21524,10 @@ function clubMessageComposer(state){
  return `<form class="message-form" id="clubMessageForm"><fieldset ${state.sending?'disabled':''}>
  <details id="messageRecipientPicker" ${d.player_ids.length?'':'open'}><summary>To: <strong id="messageRecipientCount">${messagePeople(count)}</strong> · choose recipients</summary>
  ${reminder?'':`<div class="message-recipient-tools"><select id="messageGroup" aria-label="Choose a Playing Group"><option value="">All players in my access</option><option value="unassigned">Currently unassigned</option>${[...groups].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><button type="button" class="btn ghost" id="messageSelectGroup">Select</button><button type="button" class="btn ghost" id="messageClearRecipients">Clear</button></div>`}
- <div class="message-recipients">${players.length?players.map(p=>`<label class="message-check"><input type="checkbox" data-message-player="${esc(p.id)}" ${d.player_ids.includes(p.id)?'checked':''}>${esc(p.name)}</label>`).join(''):'No players with messaging access. Ask your Club Admin to check your player access.'}</div></details>
+ <div class="message-recipients">${players.length?players.map(p=>`<div class="message-recipient-row"><label class="message-check"><input type="checkbox" data-message-player="${esc(p.id)}" ${d.player_ids.includes(p.id)?'checked':''}><span>${esc(p.name)}</span></label>${phoneStatusBadge(p.phone_ready)}</div>`).join(''):'No players with messaging access. Ask your Club Admin to check your player access.'}</div></details>
  ${staff.length?`<label class="message-check"><input id="messageIncludeStaff" type="checkbox" ${d.include_staff?'checked':''}>Include coaching staff</label>
  <details id="messageStaffPicker" ${d.include_staff?'':'hidden'}><summary><span id="messageStaffCount">${d.staff_user_ids.length} staff included</span> · choose staff</summary>
- <div class="message-recipients">${staff.map(p=>`<label class="message-check"><input type="checkbox" data-message-staff="${esc(p.user_id)}" ${d.staff_user_ids.includes(p.user_id)?'checked':''}><span>${esc(p.name)} <small>· ${esc(messageStaffRole(p.role))}</small></span></label>`).join('')}</div></details>`:''}
+ <div class="message-recipients">${staff.map(p=>`<div class="message-recipient-row"><label class="message-check"><input type="checkbox" data-message-staff="${esc(p.user_id)}" ${d.staff_user_ids.includes(p.user_id)?'checked':''}><span>${esc(p.name)} <small>· ${esc(messageStaffRole(p.role))}</small></span></label>${phoneStatusBadge(p.phone_ready)}</div>`).join('')}</div></details>`:''}
  <div class="field" style="margin-top:12px"><label for="clubMessageTitle">Title</label><input id="clubMessageTitle" required maxlength="80" value="${esc(d.title)}" placeholder="e.g. Thursday training"></div>
  <div class="field"><label for="clubMessageBody">Message <span class="message-body-count" id="messageBodyCount">${d.body.length}/1500</span></label><textarea id="clubMessageBody" required maxlength="1500" rows="4" placeholder="What does everyone need to know or do?">${esc(d.body)}</textarea></div>
  <div class="field" ${reminder?'hidden':''}><label for="clubMessageTarget">Link to</label><select id="clubMessageTarget">${clubMessageTargets.map(([key,label])=>`<option value="${key}" ${d.target===key?'selected':''}>${label}</option>`).join('')}</select></div>
@@ -22175,7 +22181,7 @@ function seRosterGradeEditor(p){
 }
 function seRosterRow(p){
  const open=ensureSelections().rosterOpen===p.id,id=seEsc(p.id);
- return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD]].map(([key,label,options])=>`<label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key])}</select></label>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions"><button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
+ return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}${memberPhoneStatusIcon(p.user_id)}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD]].map(([key,label,options])=>`<label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key])}</select></label>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions"><button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
 }
 function seRosterEdits(){
  const s=ensureSelections();return [...document.querySelectorAll('#seRosterForm [data-se-roster-id]')].map(row=>{const p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);return {...p,grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked};}).filter(p=>{const old=s.data.roster.find(x=>x.id===p.id);return ['grade','batting','bowling','bowling_load','keeper'].some(key=>old[key]!==p[key]);});
@@ -22194,7 +22200,7 @@ function seRoster(){
  document.querySelectorAll('[data-se-expand-player]').forEach(button=>button.onclick=()=>{s.rosterOpen=s.rosterOpen===button.dataset.seExpandPlayer?null:button.dataset.seExpandPlayer;document.querySelectorAll('#seRosterForm [data-se-roster-id]').forEach(row=>{const open=row.dataset.seRosterId===s.rosterOpen,toggle=row.querySelector('[data-se-expand-player]'),p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);row.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',(open?'Close':'Edit')+' roles for '+p.name);toggle.innerHTML=(open?'Close':'Edit')+' <span aria-hidden="true">⌄</span>';});});
  document.querySelectorAll('[data-se-edit-player]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){const p=s.data.roster.find(p=>p.id===button.dataset.seEditPlayer);sePlayerEditor(p);if(!p.user_id||seNeedsAccountLink(p))document.getElementById('seAccountLink').open=true;}});document.querySelectorAll('[data-se-player-calendar]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){s.view='availability';drawSelections();seAvailability(button.dataset.sePlayerCalendar);}});
  const form=document.getElementById('seRosterForm');form.addEventListener('change',event=>{const row=event.target.closest('[data-se-roster-id]');if(!row)return;const p={...s.data.roster.find(p=>p.id===row.dataset.seRosterId),grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked};row.querySelector('.se-roster-summary').textContent=seRosterSummary(p);row.querySelector('.se-roster-grade-label').textContent=p.grade||'No usual grade';seRosterSaveState();});
- form.onsubmit=async event=>{event.preventDefault();const rows=seRosterEdits();if(!rows.length||s.pending||s.busy)return;const ok=await seMutate('save_roster',{revision:s.data.roster_revision,rows});if(ok&&s===selectionState){s.rosterSaved=true;if(s.view==='roster')seRosterSaveState();}};seRosterSaveState();
+ form.onsubmit=async event=>{event.preventDefault();const rows=seRosterEdits();if(!rows.length||s.pending||s.busy)return;const ok=await seMutate('save_roster',{revision:s.data.roster_revision,rows});if(ok&&s===selectionState){s.rosterSaved=true;if(s.view==='roster')seRosterSaveState();}};seRosterSaveState();void mountMemberPhoneStatuses(document.getElementById('seContent'));
 }
 function seInactivePlayers(){
  const s=ensureSelections();if(!seCanSetup())return seReadonlyPlayingList();
@@ -22608,28 +22614,6 @@ function sharedSignupIntro(info){
 }
 /* END SHARED PLAYER SIGNUP */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* BEGIN SHARED CLUB BRANDING */
 let clubBrandingReturn=null;
 function savedClubBranding(){return {logo_data_url:club?.logo_data_url||'',website_url:club?.website_url||'',primary_colour:normaliseHex(club?.primary_colour,PLATFORM_PRIMARY),accent_colour:normaliseHex(club?.accent_colour,PLATFORM_ACCENT)};}
@@ -22675,10 +22659,73 @@ function renderClubBrandingSettings(){
 window.addEventListener('beforeunload',e=>{if(document.querySelector('[data-shared-branding][data-busy="true"]')||sharedBrandingDirty()){e.preventDefault();e.returnValue='';}});
 /* END SHARED CLUB BRANDING */
 
-
-
-
-
+/* BEGIN MEMBER PHONE STATUS — maintained source: tools/member_phone_status_ui.js */
+let memberPhoneStatusState=null;
+function memberPhoneStatusContext(){
+ if(!isAdmin()||!club?.id||!session?.user?.id)return null;
+ const key=`${session.user.id}:${club.id}`;
+ if(memberPhoneStatusState?.key!==key)memberPhoneStatusState={key,rows:new Map(),checkedAt:0,pending:null};
+ return memberPhoneStatusState;
+}
+function phoneStatusStyles(){
+ if(document.getElementById('phoneStatusStyles'))return;
+ const style=document.createElement('style');style.id='phoneStatusStyles';style.textContent=`
+ .phone-status-slot{display:inline-flex;vertical-align:middle;margin-left:4px}
+ button.phone-status-icon{display:inline-flex!important;align-items:center;justify-content:center;vertical-align:middle;flex:0 0 28px;width:28px;height:28px;min-height:28px!important;padding:3px!important;margin:0 0 0 4px;border:0;border-radius:5px;background:transparent;color:#64748b;cursor:pointer;box-sizing:border-box;line-height:1}
+ .phone-status-slot button.phone-status-icon{margin:0}
+ button.phone-status-icon[data-phone-state=on]{color:#207044}
+ button.phone-status-icon:hover,button.phone-status-icon:focus-visible{background:#edf2f7;outline:2px solid currentColor;outline-offset:1px}
+ .phone-status-icon svg{width:22px;height:22px;flex:none;pointer-events:none}
+ #phoneStatusTooltip{position:fixed;z-index:10000;max-width:min(240px,calc(100vw - 16px));padding:8px 10px;border-radius:6px;background:#263445;color:white;font:13px/1.4 system-ui,sans-serif;box-shadow:0 3px 12px #0003;box-sizing:border-box;pointer-events:none}
+ #phoneStatusTooltip[hidden]{display:none}
+ .workspace-roster-person h3:has(.phone-status-slot){display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+ `;document.head.append(style);
+ const tooltip=document.createElement('div');tooltip.id='phoneStatusTooltip';tooltip.setAttribute('role','tooltip');tooltip.hidden=true;document.body.append(tooltip);
+ let active=null,position=null;
+ const hide=()=>{active?.removeAttribute('aria-describedby');active=null;tooltip.hidden=true;};
+ const show=button=>{
+  if(!button)return;hide();active=button;tooltip.textContent=button.getAttribute('aria-label');tooltip.hidden=false;button.setAttribute('aria-describedby',tooltip.id);
+  const rect=button.getBoundingClientRect(),box=tooltip.getBoundingClientRect();position={left:rect.left,top:rect.top};
+  tooltip.style.left=Math.max(8,Math.min(rect.left,innerWidth-box.width-8))+'px';
+  tooltip.style.top=Math.max(8,rect.bottom+6+box.height>innerHeight?rect.top-box.height-6:rect.bottom+6)+'px';
+ };
+ document.addEventListener('pointerover',e=>{const b=e.target.closest?.('[data-phone-status-icon]');if(b&&e.pointerType!=='touch')show(b);});
+ document.addEventListener('pointerout',e=>{if(e.target.closest?.('[data-phone-status-icon]')&&!e.relatedTarget?.closest?.('[data-phone-status-icon]'))hide();});
+ document.addEventListener('focusin',e=>{const b=e.target.closest?.('[data-phone-status-icon]');if(b)show(b);else hide();});
+ document.addEventListener('click',e=>{const b=e.target.closest?.('[data-phone-status-icon]');if(b){e.preventDefault();e.stopPropagation();show(b);}else hide();},true);
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')hide();});
+ document.addEventListener('scroll',()=>{if(active){const r=active.getBoundingClientRect();if(r.left!==position?.left||r.top!==position?.top)hide();}},true);window.addEventListener('resize',hide);
+ new MutationObserver(()=>{if(active&&!active.isConnected)hide();}).observe(document.getElementById('page')||document.body,{childList:true,subtree:true});
+}
+function phoneStatusBadge(ready){
+ phoneStatusStyles();
+ const state=ready===true?'on':ready===false?'off':'unknown';
+ const label=ready===true?'Phone alerts enabled for club messages':ready===false?'Phone alerts not enabled for club messages':'Phone notification status unavailable';
+ const mark=ready===true?'<path d="m15 13 3 3 5-6"/>':ready===false?'<path d="m3 3 18 18"/>':'<path d="M15 10a2 2 0 1 1 3 1.7c-.7.4-1 1-1 1.8"/><path d="M17 17h.01"/>';
+ return `<button type="button" class="phone-status-icon" data-phone-status-icon data-phone-state="${state}" aria-label="${label}"><svg viewBox="0 0 26 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="10" height="20" rx="2"/><path d="M9 5h2M10 19h.01"/>${mark}</svg></button>`;
+}
+function memberPhoneStatusIcon(userId){
+ const state=memberPhoneStatusContext();if(!state||!userId)return '';
+ return `<span class="phone-status-slot" data-member-phone="${esc(userId)}">${phoneStatusBadge(state.rows.get(userId))}</span>`;
+}
+async function mountMemberPhoneStatuses(host){
+ const state=memberPhoneStatusContext();if(!state||!host?.querySelector('[data-member-phone]'))return;
+ const clubId=club.id;
+ if(!state.pending&&Date.now()-state.checkedAt>=15000){
+  state.pending=(async()=>{
+   try{
+    const {data,error}=await supabase.rpc('get_club_member_phone_status',{p_club_id:clubId});
+    if(error||!Array.isArray(data)||data.some(r=>typeof r.user_id!=='string'||typeof r.phone_ready!=='boolean'))throw error||Error('Status unavailable');
+    state.rows=new Map(data.map(r=>[r.user_id,r.phone_ready]));
+   }catch{state.rows=new Map();}
+   finally{state.checkedAt=Date.now();state.pending=null;}
+  })();
+ }
+ if(state.pending)await state.pending;
+ if(state!==memberPhoneStatusContext()||!host.isConnected)return;
+ host.querySelectorAll('[data-member-phone]').forEach(el=>{const ready=state.rows.get(el.dataset.memberPhone),value=ready===true?'on':ready===false?'off':'unknown';if(el.querySelector('[data-phone-status-icon]')?.dataset.phoneState!==value)el.innerHTML=phoneStatusBadge(ready);});
+}
+/* END MEMBER PHONE STATUS */
 
 /* BEGIN PRODUCT ENQUIRIES — maintained in tools/product_enquiries_ui.js */
 const PRODUCT_ENQUIRY_LABELS={batting:'Batting development',selections:'Teams & availability',both:'Both'};
@@ -24437,16 +24484,18 @@ window.__fixtureRpc=async(name,args={})=>{
 
 // Fictional inbox and sends. Never registers a service worker or contacts a delivery provider.
 let demoClubMessageRecords=[];
+const demoPhoneReady=userId=>['user-alex','user-coach'].includes(userId);
 const previousPhoneFixtureRpc=window.__fixtureRpc;
 window.__fixtureRpc=async(name,args={})=>{
+ if(name==='get_club_member_phone_status'){window.__fixtureLog(name,args);return membership.permission_role==='admin'&&args.p_club_id===club.id?{data:fixtureRows.club_memberships.filter(m=>m.club_id===club.id).map(m=>({user_id:m.user_id,phone_ready:demoPhoneReady(m.user_id)})),error:null}:{data:null,error:{message:'Club Admin access required'}};}
  if(name==='get_player_plan_reminder_overview')return {data:{cooldown_hours:48,email_mode:'preview',reminders:demoClubMessageRecords.filter(m=>m.kind==='plan_reminder').flatMap(m=>(m.player_ids||[]).map(id=>({id:m.id,player_id:id,format_key:'',created_at:m.created_at,in_app_at:m.created_at})))},error:null};
  if(name!=='club_messages_api'&&name!=='phone_app_api')return previousPhoneFixtureRpc(name,args);
  window.__fixtureLog(name,args);
  if(name==='phone_app_api')return {data:{configured:false,preferences:{messages:true,coaching:true}},error:null};
  const staff=['admin','head_coach','coach','captain'].includes(membership.permission_role),uid=session.user.id,action=args.p_action;
  if(!demoClubMessageRecords.length)demoClubMessageRecords=[{id:'demo-message-welcome',sender_id:'user-coach',sender:'Casey Reid',title:'Ready for Thursday?',body:'Have a look at the training ideas from your plan before our next session. Bring one thing you want to work on.',target:'howwetrain',created_at:fixtureNow(),user_ids:['user-alex','user-jordan'],opened:{},email_requested:false}];
- const staffMembers=[...new Map(fixtureRows.club_memberships.map(m=>[m.user_id,m])).values()].filter(m=>m.club_id===club.id&&m.user_id!==uid&&(['admin','head_coach','coach','captain'].includes(m.permission_role)||['coach_captain','both'].includes(m.involvement))).map(m=>({user_id:m.user_id,name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name||'Club staff',phone_ready:false,role:m.permission_role,default_included:['admin','head_coach','coach','captain'].includes(m.permission_role)}));
- if(action==='context')return {data:{can_send:staff,can_remind:membership.permission_role==='admin',email_mode:'preview',players:staff?fixtureWorkspacePlayers().filter(p=>p.can_edit).map(p=>({id:p.id,user_id:fixtureRows.players.find(x=>x.id===p.id)?.user_id,name:p.display_name,groups:p.groups||[],phone_ready:p.id==='player-alex',overdue_plan_sections:playerPlanDeadlineState(p).overdue,next_reminder_at:null})):[],staff:staff?staffMembers:[]},error:null};
+ const staffMembers=[...new Map(fixtureRows.club_memberships.map(m=>[m.user_id,m])).values()].filter(m=>m.club_id===club.id&&m.user_id!==uid&&(['admin','head_coach','coach','captain'].includes(m.permission_role)||['coach_captain','both'].includes(m.involvement))).map(m=>({user_id:m.user_id,name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name||'Club staff',phone_ready:demoPhoneReady(m.user_id),role:m.permission_role,default_included:['admin','head_coach','coach','captain'].includes(m.permission_role)}));
+ if(action==='context')return {data:{can_send:staff,can_remind:membership.permission_role==='admin',email_mode:'preview',players:staff?fixtureWorkspacePlayers().filter(p=>p.can_edit).map(p=>({id:p.id,user_id:fixtureRows.players.find(x=>x.id===p.id)?.user_id,name:p.display_name,groups:p.groups||[],phone_ready:demoPhoneReady(fixtureRows.players.find(x=>x.id===p.id)?.user_id),overdue_plan_sections:playerPlanDeadlineState(p).overdue,next_reminder_at:null})):[],staff:staff?staffMembers:[]},error:null};
  if(action==='badge')return {data:{unread:demoClubMessageRecords.filter(r=>r.user_ids.includes(uid)&&!r.opened[uid]).length},error:null};
  if(action==='list')return {data:{can_send:staff,inbox:demoClubMessageRecords.filter(r=>r.user_ids.includes(uid)).map(r=>({...r,opened_at:r.opened[uid]||null})),unread:demoClubMessageRecords.filter(r=>r.user_ids.includes(uid)&&!r.opened[uid]).length,sent:staff?demoClubMessageRecords.filter(r=>r.sender_id===uid).map(r=>({...r,recipients:r.user_ids.length,opened:Object.keys(r.opened).length,email_total:r.email_queued||0,email_sent:0,push_sent:0,email_failed:0})):[]},error:null};
  if(action==='open'){const r=demoClubMessageRecords.find(r=>r.id===args.p_data?.id&&r.user_ids.includes(uid));if(!r)return {data:null,error:{message:'Message unavailable'}};r.opened[uid]=fixtureNow();return {data:{opened:true},error:null};}
@@ -24455,7 +24504,7 @@ window.__fixtureRpc=async(name,args={})=>{
   const d=args.p_data,previous=demoClubMessageRecords.find(r=>r.request_id===d.request_id&&r.sender_id===uid);if(previous)return {data:{id:previous.id,recipients:previous.user_ids.length,already_sent:true},error:null};
   if(d.kind==='plan_reminder'&&membership.permission_role!=='admin')return {data:null,error:{message:'Club Admin access required'}};
   const ids=[...new Set([...fixtureRows.players.filter(p=>d.player_ids.includes(p.id)).map(p=>p.user_id),...(d.staff_user_ids||[])])];
-  const email_queued=ids.filter(id=>d.email||(d.email_user_ids||[]).includes(id)||id!=='user-alex').length;
+  const email_queued=ids.filter(id=>d.email||(d.email_user_ids||[]).includes(id)||!demoPhoneReady(id)).length;
   const r={...d,email_queued,id:'demo-message-'+crypto.randomUUID(),sender_id:uid,sender:userProfile.display_name,user_ids:ids,created_at:fixtureNow(),opened:{},email_requested:d.email};demoClubMessageRecords.unshift(r);
   return {data:{id:r.id,recipients:ids.length,already_sent:false,email_queued},error:null};
  }
