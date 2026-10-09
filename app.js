@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.120';
+const APP_UI_VERSION='0.8.62.121';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2500,6 +2500,7 @@ function renderShell(){
       </div>
     </header>
     <nav class="nav">${(()=>{let previousGroup=null;return nav.map(([k,l,g])=>{const startsNewGroup=previousGroup!==null&&previousGroup!==g;previousGroup=g;return `<button data-tab="${k}" class="${startsNewGroup?'nav-group-start':''}" data-nav-group="${g||''}">${l}</button>`;}).join('');})()}</nav>
+    <aside id="phoneSetupPromptHost" class="phone-setup-prompt" aria-label="Phone notification setup" hidden></aside>
     <main class="page" id="page"></main>
   </div>`;
 
@@ -18464,7 +18465,7 @@ async function initialisePhoneApp(){
   window.addEventListener('appinstalled',()=>{phoneInstallPrompt=null;if(currentTab==='phone_app')void renderPhoneApp();});
   navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='CB_OPEN')void openPhoneNotification(event.data.url);});
   // Setup never asks for notification permission; only the explicit Enable click does.
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();if(phoneSetupPromptState)phoneSetupPromptState.checkedAt=0;void refreshPhoneSetupPrompt();}});
   setInterval(()=>{if(document.visibilityState==='visible'&&session&&club){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}},60000);
  }
  if(phoneRegistrationTask)return phoneRegistrationTask;
@@ -18506,6 +18507,7 @@ function phoneAppPrompt(){
  return `<div class="phone-install-prompt"><button class="btn ghost" data-phone-open>Get Club Batting on your phone ↗</button><button type="button" class="btn ghost" data-phone-dismiss aria-label="Dismiss phone installation suggestion">×</button></div>`;
 }
 function bindPhoneAppControls(){
+ void refreshPhoneSetupPrompt();
  document.querySelectorAll('[data-phone-open]').forEach(b=>b.onclick=openPhoneApp);
  document.querySelector('[data-phone-dismiss]')?.addEventListener('click',e=>{localStorage.setItem('cb-hide-install','yes');e.currentTarget.closest('.phone-install-prompt').remove();});
  document.querySelectorAll('[data-club-messages]').forEach(b=>b.onclick=()=>openClubMessages());
@@ -18526,6 +18528,7 @@ async function renderPhoneApp(){
  ${installed?'<p class="phone-installed">✓ You’re using the Club Batting app.</p>':phoneInstallHelp(ios,android)}
  <div id="phoneNotificationPanel" ${installFirst?'hidden':''}>
  <p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
+ <p class="phone-next">Enable phone alerts for club messages and coaching updates. Until phone alerts are enabled, we’ll keep sending email notifications.</p>
  <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label></div>
  <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
  <p id="phoneAllowHint" class="help" hidden>Tap <strong>Allow</strong> when your phone asks.</p>
@@ -18570,7 +18573,7 @@ async function renderPhoneApp(){
     if(!sub){const padded=data.public_key.replace(/-/g,'+').replace(/_/g,'/');const key=Uint8Array.from(atob(padded+'='.repeat((4-padded.length%4)%4)),c=>c.charCodeAt(0));sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});}
     if(!here())return;
     const json=sub.toJSON(),saved=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'register',p_data:{endpoint:sub.endpoint,p256dh:json.keys.p256dh,auth:json.keys.auth,messages:document.getElementById('phoneMessages').checked,coaching:document.getElementById('phoneCoaching').checked}});
-    if(saved.error)throw saved.error;if(!here())return;await phoneWorkerMessage('CB_BIND',saved.data.binding);await renderPhoneApp();
+    if(saved.error)throw saved.error;if(!here())return;await phoneWorkerMessage('CB_BIND',saved.data.binding);await renderPhoneApp();invalidatePhoneSetupPrompt();
    }catch(e){if(here()){result.textContent=`Notifications could not be enabled. ${e.message||'Please try again.'}`;button.disabled=false;}}
    finally{phoneSettingsBusy=false;}
   };
@@ -19951,4 +19954,56 @@ async function renderScheduledClubProducts(message=''){
 }
 /* END SCHEDULED TRIALS */
 
+/* BEGIN PHONE SETUP PROMPT — no permission request until the member chooses Enable */
+let phoneSetupPromptState=null;
+function phoneSetupPromptKey(){return session?.user?.id&&club?.id?`${session.user.id}:${club.id}`:null;}
+function phoneSetupSnoozed(key){try{return Number(localStorage.getItem('cb-phone-setup-later:'+key)||0)>Date.now();}catch{return false;}}
+function invalidatePhoneSetupPrompt(){phoneSetupPromptState=null;void refreshPhoneSetupPrompt();}
+function paintPhoneSetupPrompt(host,state,key){
+ if(!host?.isConnected||key!==phoneSetupPromptKey()||currentTab==='phone_app'||phoneSetupSnoozed(key)){if(host)host.hidden=true;return;}
+ if(state==='ready'||state==='chosen_off'){host.hidden=true;host.innerHTML='';return;}
+ const copy=state==='blocked'
+  ?['Phone notifications are blocked','Open notification settings to see how to allow Club Batting alerts.','Review notification settings']
+  :state==='unknown'
+   ?['Check your phone notifications','We couldn’t confirm this phone’s notification setup. Open settings to check.','Check notification setup']
+   :['Finish setting up notifications','Your app is installed. Turn on notifications to receive team and club updates on your phone. Until phone alerts are enabled, we’ll keep sending email notifications.','Set up notifications'];
+ host.innerHTML=`<style>.phone-setup-prompt{margin:12px 16px 0;padding:14px 16px;border:1px solid #c9d2ee;border-radius:10px;background:#f0f4ff;color:#172033}.phone-setup-prompt strong{display:block;font-size:16px}.phone-setup-prompt p{margin:7px 0 10px;font-size:14px;line-height:1.5}.phone-setup-prompt .btnrow{display:flex;gap:8px;flex-wrap:wrap}.phone-setup-prompt button{min-height:44px;max-width:100%;white-space:normal}.phone-setup-prompt[hidden]{display:none}</style><strong>${copy[0]}</strong><p>${copy[1]}</p><div class="btnrow"><button type="button" class="btn secondary" data-phone-setup-open>${copy[2]}</button><button type="button" class="btn ghost" data-phone-setup-later>Remind me later</button></div>`;
+ host.hidden=false;
+ host.querySelector('[data-phone-setup-open]').onclick=openPhoneApp;
+ host.querySelector('[data-phone-setup-later]').onclick=()=>{
+  try{localStorage.setItem('cb-phone-setup-later:'+key,String(Date.now()+7*86400000));}catch{}
+  host.hidden=true;
+ };
+}
+async function refreshPhoneSetupPrompt(){
+ const host=document.getElementById('phoneSetupPromptHost'),key=phoneSetupPromptKey();
+ if(!host)return;
+ if(!key||phoneIsDemo()||!phoneIsInstalled()||!(phoneIsIOS()||phoneIsAndroid())||currentTab==='phone_app'||phoneSetupSnoozed(key)){host.hidden=true;return;}
+ if(!phonePushSupported()){host.hidden=true;return;}
+ let state=phoneSetupPromptState;
+ if(!state||state.key!==key){state={key,checkedAt:0,result:null,pending:null};phoneSetupPromptState=state;}
+ if(!state.pending&&Date.now()-state.checkedAt>=45000){
+  const clubId=club.id;
+  state.pending=Promise.resolve().then(async()=>{
+   try{
+    if(Notification.permission==='denied'){state.result='blocked';return;}
+    const reg=await initialisePhoneApp();if(!reg)throw Error('Registration unavailable');
+    await waitForPhoneWorker(reg);
+    const sub=await reg.pushManager.getSubscription();
+    if(key!==phoneSetupPromptKey())return;
+    const {data,error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'get',p_data:{endpoint:sub?.endpoint||null}});
+    if(error||!data||!data.configured)throw Error('Notification status unavailable');
+    // A saved choice to turn both categories off is respected. Browser permission
+    // alone is not enough: the device must be registered for this member and club.
+    state.result=sub&&data.subscription_id&&data.club_enabled&&Notification.permission==='granted'
+     ?(data.preferences.messages||data.preferences.coaching?'ready':'chosen_off'):'incomplete';
+   }catch{state.result='unknown';}
+   finally{state.checkedAt=Date.now();state.pending=null;}
+  });
+ }
+ if(state.pending)await state.pending;
+ if(state!==phoneSetupPromptState||key!==phoneSetupPromptKey()||document.getElementById('phoneSetupPromptHost')!==host)return;
+ paintPhoneSetupPrompt(host,state.result||'unknown',key);
+}
+/* END PHONE SETUP PROMPT */
 boot();

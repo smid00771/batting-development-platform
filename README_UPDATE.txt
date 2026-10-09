@@ -1,35 +1,44 @@
-CLUB BATTING 0.8.62.120 — SCHEDULED TRIALS & STARTER GUIDES
+CLUB BATTING 0.8.62.121 — FINISH PHONE NOTIFICATION SETUP
 
-This cumulative package includes .119 and .118. You do not need either older
-package first.
+This cumulative package includes .120 and .119. Upload the CONTENTS of
+Website_Files to your existing GitHub Pages root, replacing matching files.
+Keep config.js, styles.css and CNAME. No SQL is needed.
 
-Unzip Website_Files. Upload its CONTENTS into your existing GitHub Pages root,
-replacing matching files. Keep your existing config.js, styles.css and CNAME.
-Do not upload the enclosing Website_Files folder as a new subfolder.
-No SQL is required: scheduled trials, automatic start notices and built-in Help
-are deployed and verified. The website still needs your manual upload.
+An installed phone app now shows Finish setting up notifications when the
+member has not completed notification registration for the current club.
+It appears across the club app, including Teams & availability, so the Head
+of Selections sees it too. Set up notifications opens Account > App &
+notifications. The member chooses Enable notifications and then Allow.
+Both the reminder and setup screen explain that email notifications continue
+until phone alerts are enabled. This is visible without opening About notifications.
 
-Clubs choose Start now or a future start date for either product or both.
-They confirm their email and see the full trial dates. A future trial can be
-moved earlier or later before it begins. Running or used trials cannot reset.
-The full 60 days begin on the chosen date in the club time zone.
+Nothing requests permission automatically. Registered devices and saved
+choices to turn updates off are respected. Remind me later snoozes the banner
+for seven days for that account and club. Blocked permissions and unavailable
+status are described honestly. Status is rechecked after returning to the app.
 
-Account > Products & trials contains the dates and Getting started resources.
-At commencement, current Club Admins receive a club message linked to their
-starter guide. Registered phones receive app alerts; otherwise an email points
-to the message. Products starting together use one combined start notice.
-The starter guide is tailored to Batting, Teams & availability, or both.
+After upload: close and reopen the installed app, sign in if needed, and open
+Teams or another club screen. The reminder is hidden on the notification
+settings page itself and in the fictional demo.
 
-Newcastle City remains permanently free for both products. Existing clubs'
-terms and prices are unchanged. Payments and overseas pricing are still deferred.
+The live audit found 3 of Newcastle City's 27 linked accounts registered for
+club-message phone alerts. That is a snapshot from 9 October 2026, not an
+installation count. The scheduled worker returned successful responses with
+no eligible push jobs. No real push delivery has been verified by this audit.
+No messages or test notifications were sent to members.
 
-The AI Guide's scheduled-trial guidance is deployed and verified as version 38.
-It explains choosing the start date, commencement alerts and relevant starter
-guides. This wording-only update keeps existing authentication and data handling.
-No extra website update is needed beyond this .120 package.
+20 browser checks passed: three phone widths plus the full app shell at phone
+and desktop widths, explicit Enable registration, saved off choices, seven-day
+snooze, blocked permissions, failed status/retry and stale account responses.
 
-Checked: 33 isolated database checks, phone/desktop signup and rescheduling,
-email-confirmation return, network retries, the complete demo shell, entitlement
-boundaries, daylight saving, permanent free access, and the live scheduled job.
-No live test clubs or real messages were created. All 131 historical migrations
-are unchanged.
+COMMERCIAL STATUS
+The agreed direction is 60 days for Batting and 21 days for Teams, chosen start
+dates, independent product continuation, self-service payment and retained
+read-only records after expiry. The new 21-day default, updated promo journey,
+checkout, trial-end notices and complete read-only expiry are NOT delivered
+by this phone-only fix. Live trial defaults still give both products 60 days.
+
+Stripe is not yet connected here. Payment mode remains prototype and existing
+prices remain provisional. No charge, repricing or trial shortening was made.
+Newcastle City remains permanently free for both products.
+The source backup includes the detailed commercial implementation specification.
