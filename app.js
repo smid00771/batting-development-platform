@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.121';
+const APP_UI_VERSION='0.8.62.122';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2992,7 +2992,7 @@ function renderTab(){
     if(!['workshop','dashboard'].includes(currentTab))clearTimeout(workshopDiscussionTimer);
   }
   const arrived=()=>{
-    bindPhoneAppControls();bindClubBrandingLinks();bindProductTrialLinks();
+    bindPhoneAppControls();bindClubBrandingLinks();bindProductTrialLinks();bindContextHelpVideos();bindContextHelpVideos();bindContextHelpVideos();
     if(scrollOnArrival&&`${club?.id}:${currentTab}`===route){
       const inningsFocus=currentTab==='innings'?(document.getElementById('myReflectionForm')||document.getElementById('innings-detail-'+ensureMyInningsState().openId)):null;
       if(inningsFocus){if(inningsFocus.id==='myReflectionForm')revealMyInningsForm();else{inningsFocus.setAttribute('tabindex','-1');inningsFocus.focus({preventScroll:true});inningsFocus.scrollIntoView({block:'start'});}bindWorkshopReturn();return;}
@@ -20006,4 +20006,61 @@ async function refreshPhoneSetupPrompt(){
  paintPhoneSetupPrompt(host,state.result||'unknown',key);
 }
 /* END PHONE SETUP PROMPT */
+/* BEGIN HELP VIDEOS — maintained source: tools/help_videos_ui.js */
+// Catalogue is generated from verified recordings; media is requested only on Watch.
+const HELP_VIDEOS=[{"id":"phone-iphone","title":"iPhone: app and alerts","topics":["phone_app","notifications","navigation_account"],"tabs":[],"duration":42.166667,"bytes":1272990,"captions":["Account →\nApp & notifications.","On iPhone, open\nClub Batting in Safari.","Safari: … → Share.","Add to Home Screen.\nKeep Open as Web App on.","Open the new app icon.\nSign in if asked.","Return to Account →\nApp & notifications.","Keep Club messages\nand Coaching updates ticked.","Tap Enable notifications.","Choose Allow when\nyour phone asks.","Check for\nNotifications on ✓.","Until alerts are enabled,\nyou’ll keep getting emails."]},{"id":"phone-android","title":"Android: app and alerts","topics":["phone_app","notifications","navigation_account"],"tabs":[],"duration":42.065011,"bytes":1228680,"captions":["Account →\nApp & notifications.","On Android, open\nClub Batting in Chrome.","Chrome: ⋮ →\nInstall and create shortcut.","Choose Install.\nFollow the phone’s prompts.","Open the new app icon.\nSign in if asked.","Return to Account →\nApp & notifications.","Keep Club messages\nand Coaching updates ticked.","Tap Enable notifications.","Choose Allow when\nyour phone asks.","Check for\nNotifications on ✓.","Until alerts are enabled,\nyou’ll keep getting emails."]},{"id":"availability","title":"Mark the dates you can play","topics":["selections","selection_availability"],"tabs":[],"duration":17.98,"bytes":403601,"captions":["Teams → Availability.\nMark the dates you can play.","Tap each available day.","Green ticks mean available.\nUnmarked dates mean unavailable.","Save your availability.","Saved ✓\nSelectors can now use these dates."]},{"id":"select-publish","title":"Select, check and publish a team","topics":["selections","selection_playing_groups"],"tabs":[],"duration":47.817007,"bytes":2427863,"captions":["Head of Selections:\ncheck the draft team.","Open a slot to compare\nplayers and availability.","Choose an available player.\nThe draft saves immediately.","Send the draft to\nlinked captains for their input.","Captain Checks keeps\nthe draft conversation together.","Selectors can add a note.","Head of Selections\nmakes the final decision.","Publish when the team is ready.","Players can now see the team\nand match details."]},{"id":"workshop","title":"Choose the club’s How We Bat","topics":["philosophy_workshop","how_we_bat","workshop_changes"],"tabs":["workshop","howwebat"],"duration":25.777007,"bytes":1288310,"captions":["The Workshop brings\nyour club’s ideas together.","Compare a combination\nof contributors.","Open its How We Bat preview.","Check the approach\nfor each playing format.","The Philosophy Lead\nchooses the club’s version.","Review the wording next,\nthen confirm it for the season."]},{"id":"player-plan","title":"Make the plan your own","topics":["player_plan","player_plan_structure"],"tabs":["myplan"],"duration":25.791667,"bytes":1316606,"captions":["Your Player Plan:\nhow you want to bat.","Use Edit to make it your own.","Choose scoring options\nthat belong to your game.","Add a useful detail\nin your own words.","Done editing returns you\nto the plan you can use.","Take your plan into training."]},{"id":"prepare-predict","title":"Prepare and make your prediction","topics":["my_innings","make_your_call"],"tabs":["innings","make_your_call"],"duration":28.770998,"bytes":1655187,"captions":["Predict your score\nwith a plan behind it.","Choose the upcoming match.","Enter your score prediction\nbefore the match day.","Add one useful match-up.","Choose a scoring option\nfrom your own Player Plan.","Save preparation\nto enter your prediction.","Your preparation is saved.\nReturn to it before you bat."]},{"id":"training","title":"Take a focus into training","topics":["how_we_train","current_focus","training_preparation"],"tabs":["howwetrain","training_preparation"],"duration":27.625,"bytes":1352373,"captions":["How We Train turns\nyour plan into practice.","Open My Current Focus.","Bring this focus\nto your next session.","Coach view:\nprepare a session for the group.","See each player’s focus\nand spot shared training needs.","Open a player’s training plan\nfor the detail."]},{"id":"match-review","title":"Review a team after the match","topics":["team_review","feedback_loop"],"tabs":["team_review"],"duration":20.666667,"bytes":1266131,"captions":["After the match:\na short captain or coach review.","Check the grade, date,\nformat and opposition.","Did Alex bat to his plan?\nChoose your observation.","Leave other players blank\nif you are not reviewing them.","Save the match review.","Match review saved ✓\nIt is available for follow-up."]},{"id":"conversation","title":"Turn feedback into a conversation","topics":["coach_conversations","request_conversation"],"tabs":["conversations"],"duration":20.708333,"bytes":1371649,"captions":["Turn a training question\ninto a Coach Conversation.","Say what you want\nto work on.","Choose someone in your club,\nor leave it for any coach.","Request the conversation.","The request stays here\nwith your follow-up conversation."]},{"id":"messages","title":"Send a club message","topics":["club_messages","notifications"],"tabs":["messages"],"duration":36.818005,"bytes":949673,"captions":["Messages keeps club updates\nand their app links together.","Choose the people\nwho need this message.","Give the update a clear title.","Link straight to\nthe relevant app screen.","Phone alerts where enabled.\nAn email link otherwise.","Player view:\nopen the message in the app."]}];
+function helpVideosForContext(){
+ if(currentTab==='guide')return guideSelectedCapabilityKey==='whole_process'?HELP_VIDEOS:HELP_VIDEOS.filter(v=>v.topics.includes(guideSelectedCapabilityKey));
+ if(currentTab==='phone_app')return HELP_VIDEOS.filter(v=>v.id.startsWith('phone-')&&(!phoneIsIOS()&&!phoneIsAndroid()||v.id===`phone-${phoneIsIOS()?'iphone':'android'}`));
+ if(currentTab==='teams')return HELP_VIDEOS.filter(v=>v.id===(selectionState?.view==='availability'?'availability':selectionState?.data?.selector?'select-publish':'availability'));
+ if(currentTab==='messages'&&isPlayerUser())return [];
+ return HELP_VIDEOS.filter(v=>v.tabs.includes(currentTab));
+}
+function helpVideoStyles(){return `<style id="helpVideoStyles">
+ .help-video-links{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:8px 0 14px}.help-video-links button{border:0;background:none;padding:8px 0;color:var(--navy,#202f78);font-family:inherit;font-size:13px;font-weight:600;line-height:1.4;text-align:left;min-height:40px;cursor:pointer}.help-video-links button:focus-visible{outline:3px solid #6679dd;outline-offset:3px}.help-video-links small{font-size:12px;color:#5e6678;font-weight:400}.help-video-catalogue{margin:12px 0}.help-video-catalogue>summary{min-height:44px;cursor:pointer;font-weight:700;align-content:center}.help-video-catalogue .help-video-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+ .help-video-dialog{width:min(760px,calc(100vw - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;overflow:auto;border:1px solid #cbd2e4;border-radius:14px;padding:16px;background:white;color:#172033}.help-video-dialog::backdrop{background:#10172cd9}.help-video-dialog header{display:flex;gap:12px;align-items:center;justify-content:space-between}.help-video-dialog h2{font-size:19px;margin:0}.help-video-dialog header button{flex-shrink:0;min-width:44px;min-height:44px}.help-video-dialog video{display:block;max-width:100%;max-height:min(65dvh,640px);width:auto;height:auto;aspect-ratio:9/16;margin:12px auto;background:#17245f}.help-video-dialog p,.help-video-dialog li{font-size:14px;line-height:1.5}.help-video-dialog summary{min-height:44px;align-content:center;cursor:pointer}.help-video-dialog a{color:#202f78}.help-video-dialog [hidden]{display:none!important}
+ </style>`;}
+function bindContextHelpVideos(){
+ const page=document.getElementById('page');if(!page)return;
+ const existing=page.querySelector('#contextHelpVideos'),videos=helpVideosForContext();
+ const heading=currentTab==='guide'?(guideSelectedCapabilityKey==='whole_process'?page.querySelector('#guideProcessHeading'):page.querySelector('.guide-tutorial-card h2')):page.querySelector('h1')||page.querySelector('h2');
+ if(!videos.length||!heading){existing?.remove();return;}
+ const signature=currentTab+':'+(currentTab==='guide'?guideSelectedCapabilityKey:'')+':'+videos.map(v=>v.id).join(',');
+ if(existing?.dataset.signature===signature&&existing.previousElementSibling===heading)return;
+ existing?.remove();
+ if(!document.getElementById('helpVideoStyles'))document.head.insertAdjacentHTML('beforeend',helpVideoStyles());
+ const links=videos.map(v=>`<button type="button" data-help-video="${esc(v.id)}">▶ Watch: ${esc(v.title)} <small>· ${Math.round(v.duration)} sec</small></button>`).join('');
+ const host=document.createElement('div');host.id='contextHelpVideos';host.dataset.signature=signature;
+ host.innerHTML=currentTab==='guide'&&guideSelectedCapabilityKey==='whole_process'?`<details class="help-video-catalogue"><summary>Short how-to videos</summary><div class="help-video-links">${links}</div></details>`:`<div class="help-video-links">${links}</div>`;
+ heading.insertAdjacentElement('afterend',host);
+ host.querySelectorAll('[data-help-video]').forEach(b=>b.onclick=()=>openHelpVideo(b.dataset.helpVideo,b));
+}
+function openHelpVideo(id,opener){
+ const v=HELP_VIDEOS.find(v=>v.id===id);if(!v)return;
+ document.getElementById('helpVideoDialog')?.close();
+ const dialog=document.createElement('dialog');dialog.id='helpVideoDialog';dialog.className='help-video-dialog';dialog.setAttribute('aria-labelledby','helpVideoTitle');
+ dialog.innerHTML=`<header><h2 id="helpVideoTitle">${esc(v.title)}</h2><button type="button" class="btn ghost" data-video-close aria-label="Close video">✕</button></header><p>Fictional club demonstration · captions included.</p><video controls playsinline preload="none" poster="videos/${esc(v.id)}.jpg" aria-label="${esc(v.title)}"><source src="videos/${esc(v.id)}.mp4" type="video/mp4"><track kind="captions" src="videos/${esc(v.id)}.vtt" srclang="en" label="English"></video><p data-video-error hidden>The video could not load. Try the download link or use the written steps below.</p><details><summary>Written steps</summary><ol>${v.captions.map(c=>`<li>${esc(c.replace(/\n/g,' '))}</li>`).join('')}</ol></details><p><a href="videos/${esc(v.id)}.mp4" download>Download video</a> <small>(${(v.bytes/1000000).toFixed(1)} MB)</small></p>`;
+ document.body.append(dialog);const video=dialog.querySelector('video');
+ dialog.querySelector('[data-video-close]').onclick=()=>dialog.close();
+ const showError=()=>dialog.querySelector('[data-video-error]').hidden=false;
+ video.addEventListener('error',showError);video.querySelector('source').addEventListener('error',showError);
+ dialog.addEventListener('close',()=>{video.pause();video.removeAttribute('src');video.querySelectorAll('source,track').forEach(s=>s.removeAttribute('src'));video.load();dialog.remove();if(opener?.isConnected)opener.focus();},{once:true});
+ dialog.showModal();dialog.querySelector('[data-video-close]').focus();
+ // Playback follows this explicit Watch click; opening an app screen loads no media.
+ void video.play().catch(()=>{});
+}
+// These screens also redraw themselves without a main-tab navigation.
+for(const [get,set] of [[()=>renderPhoneApp,v=>renderPhoneApp=v],[()=>renderClubBattingGuide,v=>renderClubBattingGuide=v],[()=>renderSelections,v=>renderSelections=v]]){
+ const original=get();set(async function(...args){const result=await original.apply(this,args);bindContextHelpVideos();return result;});
+}
+// Forms and Teams subviews can redraw without calling renderTab. Reuse an
+// unchanged link block, so observing those redraws cannot create a render loop.
+if(document.body){
+ let scheduled=false;
+ new MutationObserver(()=>{if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;bindContextHelpVideos();});}).observe(document.body,{childList:true,subtree:true});
+}
+/* END HELP VIDEOS */
+
+
+
 boot();
