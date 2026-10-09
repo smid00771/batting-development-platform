@@ -1,69 +1,73 @@
-CLUB BATTING 0.8.62.128 — THE PLAYERS FOR THIS MATCH
+CLUB BATTING 0.8.62.129 — SHARED MATCHES AND RELIABLE REVIEWS
 
-THE DATABASE UPDATE HAS ALREADY BEEN APPLIED AND VERIFIED.
-Only the website upload remains. This cumulative package replaces .127 and
-includes the earlier fixture/date fixes, phone videos and product trial changes.
-Do not rerun the database SQL on the live project.
+THE DATABASE, NOTIFICATION FIX AND GUIDE UPDATE ARE ALREADY DEPLOYED.
+The remaining step is your normal website upload. This cumulative package
+includes all previous updates; use this package instead of .128.
 
 UPLOAD
-1. Unzip Website_Files. Upload everything INSIDE that folder to the existing
-   GitHub Pages root, including the videos folder. Replace matching files.
-   Keep the existing config.js, styles.css and CNAME files.
-2. Refresh/reopen the app and confirm version 0.8.62.128.
+1. Unzip Website_Files. Upload everything INSIDE that folder to your existing
+   GitHub Pages root, including videos. Replace matching files.
+2. Keep your existing config.js, styles.css and CNAME files.
+3. Reopen/refresh the app and confirm version 0.8.62.129.
+Do not rerun the supplied database SQL on the live project.
+
+WHAT CHANGED
+- Saved Match Reviews keep earlier contributors separately from the current
+  selected team. Changing or cancelling a selection does not erase the review.
+- Preparation, My Innings and reflection can use the same shared fixture.
+  Its date, opposition and format remain together. Standalone entries remain.
+- Club Admin can use Correct match details, preview the affected records and
+  give a reason. Existing observations retain their IDs. Published Teams
+  snapshots remain unchanged until the Head deliberately republishes.
+- Unfinished observations, preparation/reflection and Match Review work can
+  be restored after reopening. Changed records are checked before restoration;
+  uncertain saves retry the same request without creating duplicate records.
+- Teams shows publication changes and explains why a player is excluded.
+- Help uses shorter steps suited to the product and role. Three new actual-app
+  videos cover published Teams, Batting-only match players and observation-first.
+  The existing iPhone and Android installation guides remain in their sections.
+- Notification routing is completed, including fallback collection when no
+  phone is registered. The Guide no longer quotes unsettled public prices.
+- New detailed Match Observations require deliberate answers; Mostly is no
+  longer preselected.
 
 MATCH PLAYERS
-- A club using Teams gets its match players ONLY from the published selection
-  for that fixture. Before publication it shows Team not finalised with no
-  player rows. Draft edits stay out of Match Review until republished.
-- A Club Batting-only club chooses the fixture (or enters its grade, date,
-  format and opposition), opens Choose players for this match, ticks the
-  actual players and clicks Save match players. This is a simple match list,
-  without a Teams availability/selection workflow or a Teams subscription.
-- Playing Groups and name search help find names. They never select anyone.
-- Click a listed player to enter their full observation, or use the quick
-  review choices. Scores can only be mapped to the match's selected players.
-- Where a published Teams player is not linked to an active Club Batting
-  account, their name is shown with an explanation instead of guessing a link.
-- A two-day published fixture includes both days' selected players once each,
-  labelled by playing day.
+Teams clubs use published selections only. Unpublished selections show no
+players. Batting-only clubs explicitly choose the players for each match.
+Playing Groups only help find players. An early individual observation joins
+the same fixture when the normal selection is later completed.
 
-OBSERVATION FIRST
-From Players, open an individual Match Observation. Choose its fixture, or
-choose its grade and enter the match details. Saving creates/reuses the same
-match but DOES NOT select that player. Teams can later complete its ordinary
-selection on that fixture. A Club Batting-only coach can later save the match
-player list. The original observation and innings remain the same records.
-The first fixture keeps its date, opposition, format and grade together.
-Existing unlinked individual innings can still be edited without inventing a
-team. Different opposition abbreviations are not guessed.
-
-SAVING AND CHANGING PLAYERS
-Refresh team loads a newly published or changed match list. If someone changes
-the list while you are editing, stale changes stop for review. Earlier saved
-observations remain in the individual player's record if they leave the list.
-Lost-response retries confirm the same save without creating duplicates.
-Historical Teams publications remain the source if Teams access later ends.
-If a Batting-only club enables Teams, publication supplies the team from then
-on; its earlier observations and shared fixture are preserved.
+SAFE CORRECTIONS AND RECOVERY
+Conflicting records, published predictions/results/awards and confirmed
+scorecard imports can block a correction; the preview explains the reason.
+Drafts are local to that browser/device, retained for up to 14 days and cleared
+on sign-out/account change. Clearing browser data removes them. They are not
+cross-device backups. Correction forms have navigation/retry protection but
+do not yet recover their unsaved form after full browser closure.
 
 VERIFIED
-45 isolated PostgreSQL checks and Chromium checks in Australian/Sydney desktop
-and US/Los Angeles phone-sized settings. Covered unpublished teams, availability,
-published/draft separation, republication, explicit manual choice, search-only
-groups, stale edits, permissions, earlier observations and safe retries.
-No physical Android/iPhone test or live observation save was performed.
+58 combined PostgreSQL checks; additional feature, notification and Guide
+checks; Australian/Sydney desktop and US/Los Angeles phone-sized browser flows.
+Checked original record IDs, date-only handling, permission boundaries,
+selection changes, stale edits, lost-response retries and reload recovery.
+New videos were fully decoded and visually reviewed.
 
-Live migration: 20261009095149 / published_and_manual_match_players_v128.
-Read-only live checks confirm all four Newcastle City fixtures are still
-10 October 2026 v Toronto Workers, unpublished, with no selected Match Review
-players. Complete fixture records, memberships, Teams access and existing
-observation counts were unchanged. No new security warning was introduced.
-The two affected Help topics are updated; Guide function remains version 39.
+Live checks confirm all four Newcastle City fixtures are still 10 October
+2026 v Toronto Workers, unpublished, with no selected Match Review players.
+Existing fixtures, observations, memberships, product access/subscriptions and
+platform settings are byte-for-byte unchanged. No new security warning.
 
-All 33 media files are unchanged. Prices remain unsettled; Stripe payment mode
-and Newcastle City's editable free terms are unchanged. Club Batting's trial
-is 60 days and Teams' trial is 21 days. The unrelated .122 notification SQL
-remains outstanding.
+Club Batting trial: 60 days. Teams trial: 21 days. Prices remain unsettled.
+Stripe remains Prototype. Newcastle City's editable ongoing free terms remain.
+Guide version 40 is live. The notification worker schedule is active.
 
-Database_Update.sql records what was already applied. Source/tests and the
-complete project handover are supplied separately.
+PHONE DELIVERY CHECK
+Physical iPhone/Android notification receipt still needs a real-device check
+after upload. Automated/server checks do not prove receipt on a phone.
+No live test messages, team publication, observation save or payment was made.
+Use the normal authorised message workflow and an opted-in test recipient's
+phone, then check the alert opens the correct inbox message. Android hardware
+was unavailable during development.
+
+Database_Update.sql is an applied record, not a step to run. Source/tests and
+the complete project handover are provided separately.
