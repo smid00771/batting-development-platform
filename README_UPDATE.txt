@@ -1,46 +1,36 @@
-CLUB BATTING 0.8.62.122 — SHORT HELP VIDEOS
+CLUB BATTING 0.8.62.123 — SEPARATE TRIAL SETTINGS
 
-Upload the CONTENTS of Website_Files to the existing GitHub Pages root,
-including the new videos folder. Replace matching files. Keep config.js,
-styles.css and CNAME. This is cumulative and includes .121, .120 and .119.
+Upload the CONTENTS of Website_Files to your existing GitHub Pages root.
+Replace matching files. Keep your existing config.js, styles.css and CNAME.
+This update includes .122 and its videos. David confirmed deploying .122 on
+9 October; .123 is the subsequent trial-settings update.
 
-App & notifications now offers the relevant iPhone or Android setup video.
-Desktop users can choose either. The clips cover installing the app, opening
-its icon, Enable notifications, the phone's Allow prompt, and the final
-Notifications on check. They explicitly say email notifications continue
-until alerts are enabled. Each phone clip is about 42 seconds / 1.3 MB.
+After the upload, refresh/reopen the app and check version 0.8.62.123.
+Platform Admin > Platform Settings > Product pricing & trials now has:
+  Club Batting: 60 free-trial days
+  Teams & availability: 21 free-trial days
+Each product has its own field. Selecting Both keeps two separate trial lengths.
+Signup date previews, product pages, Help, the Guide and demo use the new policy.
+Saving prices keeps the trial settings. Existing agreed terms are preserved.
 
-Help & Tutorials contains all 11 clips. Relevant screens also have Watch links:
-Teams availability and selection, Workshop, Player Plan, match preparation and
-predictions, training, Match Review, Coach Conversations, and club messages.
-Videos load only after Watch. They have visible captions, written steps,
-native full-screen controls and a download link. Total video size is 14.5 MB;
-individual clips are 18–48 seconds and 0.4–2.5 MB.
+The backend change and Help/Guide update have already been deployed and verified.
+DO NOT run SQL or reapply old migrations from the source backup.
 
-All records and actions in the recordings are fictional. No messages were
-sent to real members. The phone screens use fictional device APIs; actual
-phone installation and the OS permission prompt are explained rather than
-recorded on a physical device. Receipt of a real push remains unverified.
+Newcastle City's current free access for both products is unchanged and editable
+by an authorised Platform Admin. David clarified that it is free while he owns
+Club Batting; a later owner may choose different terms. No ownership-triggered
+billing or automatic change has been introduced.
 
-COMMITTEE DEMO
-Unzip Committee_Demo and open index.html for the video menu. Keep videos beside
-it. demo.html is the interactive fictional club and needs no account.
-Allow about five minutes of playback if showing only one phone setup clip.
-The demo performs no live database writes, invitations or message sends.
+Leave PAYMENT MODE on PROTOTYPE. The Club Batting Stripe live account is enabled,
+but app Checkout and verified payment fulfilment still need implementation and
+testing before Live provider is appropriate. Connecting Stripe does not complete
+the app integration. No prices or Stripe products were created by this update.
 
-NOTIFICATION AUDIT — TWO FIXES STILL NEED BACKEND DEPLOYMENT
-The member-message routes are app-first with phone alerts and email fallback,
-except two gaps found in the audit: admin-handover confirmations to existing
-members still use direct email; the worker can skip fallback collection when
-there are no registered phones. The prepared migration passed 21 isolated
-checks, but Supabase rejected both deployment attempts with an expired-session
-error. Read-only checks confirmed that it has NOT been installed.
-The Website upload adds videos but does not install these database fixes.
+Current saved app prices were left unchanged. Pricing has not been finalised.
+The previous notification migration, promotion rewrite, trial-end warnings and
+complete read-only expiry work remain separate outstanding items.
 
-COMMERCIAL STATUS
-Stripe account security review is in progress according to David; this session
-has not verified a working payment connection. The 21-day Teams trial default,
-updated promo journey, payment fulfilment, trial-end warnings and complete
-read-only expiry are still outstanding. Both live trial defaults remain 60 days.
-Prices are provisional. Newcastle City remains permanently free for both products.
-The source backup contains the audit, prepared migration and commercial scope.
+Checks: 33 isolated database checks; pricing/settings and signup browser checks
+at 320 and 1280 pixels; no real signup or messages. Live readback confirms all
+existing trial, subscription and access records are unchanged, as are prices and
+payment mode. The migration adds no new security-advisor findings.

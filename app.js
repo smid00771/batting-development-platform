@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.120 — Scheduled trials and starter guides
+// Club Batting 0.8.62.123 — Separate product trial settings
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.122';
+const APP_UI_VERSION='0.8.62.123';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -3241,7 +3241,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Start when your club is ready",
-        "body": "The selected products run for the full 60 days from the chosen date, without Platform Admin approval. Until then, Account → Products & trials shows Trial scheduled, the start and end dates, and Change start date. You can bring the date forward or postpone it before it begins. A running or used trial cannot restart. No card is required and nothing is automatically charged."
+        "body": "New trials run for 60 days for Club Batting and 21 days for Teams & availability from the chosen start date, without Platform Admin approval. When choosing both, each product keeps its own duration. Existing arranged trial dates are honoured. Until then, Account → Products & trials shows Trial scheduled, the start and end dates, and Change start date. You can bring the date forward or postpone it before it begins. A running or used trial cannot restart. No card is required and nothing is automatically charged."
       },
       {
         "title": "Use your own branding and add the other product",
@@ -4789,7 +4789,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Set Selections terms",
-        "body": "Choose Subscription and confirm the club agreement for paid access. Annual prices are set in Platform Settings → Product pricing; the club screen shows the applicable price. Existing agreed prices stay unchanged. Term details contains discounts, access dates, payment recorded and renewal settings. Preview amount uses the club-year calendar. Recording payment does not collect it."
+        "body": "Choose Subscription and confirm the club agreement for paid access. Annual prices are set in Platform Settings → Product pricing & trials; the club screen shows the applicable price. Existing agreed prices stay unchanged. Term details contains discounts, access dates, payment recorded and renewal settings. Preview amount uses the club-year calendar. Recording payment does not collect it."
       },
       {
         "title": "Renew or end Selections",
@@ -4797,7 +4797,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Change product defaults",
-        "body": "Platform Settings → Product pricing. Set Club Batting, Selections and an optional Both products annual price. Existing agreed club prices stay unchanged."
+        "body": "Platform Settings → Product pricing & trials. Set Club Batting, Teams & availability and an optional Both products annual price. Set each product’s Free trial (days) separately: currently 60 for Club Batting and 21 for Teams. Changes apply to new trials; existing trial dates and agreed prices stay unchanged. Ongoing free terms remain editable by an authorised Platform Admin."
       },
       {
         "title": "Know the current scope",
@@ -17960,8 +17960,6 @@ async function renderPlatformSettings(){
   if(error||calendarError){page.innerHTML=`<div class="notice">${esc(error?.message||calendarError?.message)}</div>`;return;}
   const canCommercial=['owner','commercial_admin'].includes(platformRole);
   page.innerHTML=`${clubPlatformSettingsStyles()}<div id="productPriceSettings"></div><details id="cpPlatformSettingsAdvanced" class="cp-settings-disclosure"><summary>More settings</summary><div class="cp-settings-body"><details id="cpAdvancedBilling" class="cp-settings-disclosure"><summary>Advanced billing</summary><div class="cp-settings-body"><div class="form-grid">
-    
-    <div class="field"><label>Free trial days</label><input id="settingTrialDays" type="number" min="1" max="180" value="${Number(s.club_trial_days||60)}" ${canCommercial?'':'disabled'}><small>Default launch model: full product, no payment upfront, explicit decision at the end.</small></div>
     <div class="field"><label>Minimum days before renewal for a pro-rata term</label><input id="settingMinDays" type="number" value="${s.minimum_prorata_days}" ${canCommercial?'':'disabled'}><small>If fewer days remain, those days are included and the club is charged for the next full Club Year instead.</small></div>
     <div class="field"><label>Payment grace period</label><input id="settingGrace" type="number" value="${s.payment_grace_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
@@ -18039,7 +18037,7 @@ async function renderPlatformSettings(){
       ? ((s.email_mode==='live'&&s.email_live_from)?s.email_live_from:new Date().toISOString())
       : s.email_live_from;
     const {error}=await supabase.from('platform_settings').update({
-      club_trial_days:Number(val('settingTrialDays')||60),minimum_prorata_days:Number(val('settingMinDays')),
+      minimum_prorata_days:Number(val('settingMinDays')),
       payment_grace_days:Number(val('settingGrace')),commercial_adjustment_warning_days:Number(val('settingWarn')),payment_mode:document.getElementById('settingMode').value,
       payment_provider:document.getElementById('settingPaymentProvider').value,discovery_provider:document.getElementById('settingDiscoveryProvider').value,
       email_mode:newEmailMode,email_provider:document.getElementById('settingEmailProvider').value,
@@ -18922,6 +18920,7 @@ function clubPlatformSettingsStyles(){return `<style>
  .cp-price-product h3{font-size:16px;margin:0 0 16px;color:var(--navy2,#172544)}
  .cp-price-product h3 small{display:inline;margin-left:4px;font-size:12px;font-weight:400;color:var(--muted,#667085)}
  .cp-price-product label{display:grid;gap:7px;font-size:13px}
+ .cp-price-product label+label{margin-top:16px}
  .cp-price-product input{min-width:0;width:100%;box-sizing:border-box}
  .cp-price-unit{margin:0;color:var(--muted,#667085);font-size:13px}
  details.cp-settings-disclosure{display:block;border:1px solid var(--line,#d8deea);border-radius:12px;background:#fff;padding:0;overflow:hidden}
@@ -18937,22 +18936,22 @@ function clubPlatformSettingsStyles(){return `<style>
  </style>`;}
 async function mountProductPriceSettings(){
  const host=document.getElementById('productPriceSettings');if(!host||!seCanReadSubscriptions())return;
- host.innerHTML='<section class="admin-card"><h2>Product pricing</h2><p>Loading…</p></section>';
+ host.innerHTML='<section class="admin-card"><h2>Product pricing &amp; trials</h2><p>Loading…</p></section>';
  const {data:p,error}=await supabase.rpc('platform_product_pricing_api',{p_action:'context'});if(!host.isConnected)return;
- if(error){host.innerHTML=`<section class="admin-card"><h2>Product pricing</h2><p>${seEsc(error.message)}</p><button class="btn" id="cpPricingRetry">Retry</button></section>`;host.querySelector('button').onclick=mountProductPriceSettings;return;}
+ if(error){host.innerHTML=`<section class="admin-card"><h2>Product pricing &amp; trials</h2><p>${seEsc(error.message)}</p><button class="btn" id="cpPricingRetry">Retry</button></section>`;host.querySelector('button').onclick=mountProductPriceSettings;return;}
  const amount=v=>v==null?'':(v/100).toFixed(2);
- host.innerHTML=seStyles()+`<section class="admin-card form-wide se-page"><h2>Product pricing</h2><p class="cp-price-unit">${seEsc(p.currency)} per year</p><form id="cpProductPricingForm"><div class="cp-price-grid"><section class="cp-price-product" aria-labelledby="cpBattingPriceHeading"><h3 id="cpBattingPriceHeading">Club Batting</h3><label>Annual price<input name="batting_annual_price" type="number" min="0" step="0.01" required value="${amount(p.batting_annual_price_cents)}"></label></section><section class="cp-price-product" aria-labelledby="cpSelectionsPriceHeading"><h3 id="cpSelectionsPriceHeading">Selections</h3><label>Annual price<input name="selection_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.selection_annual_price_cents)}"></label></section><section class="cp-price-product" aria-labelledby="cpBothPriceHeading"><h3 id="cpBothPriceHeading">Both products <small>Optional</small></h3><label>Annual price<input name="bundle_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.bundle_annual_price_cents)}"></label></section></div><button class="btn" id="cpPricingSave" type="submit" disabled>Saved</button><p role="status"></p></form></section>`;
+ host.innerHTML=seStyles()+`<section class="admin-card form-wide se-page"><h2>Product pricing &amp; trials</h2><p class="cp-price-unit">${seEsc(p.currency)} per year</p><form id="cpProductPricingForm"><div class="cp-price-grid"><section class="cp-price-product" aria-labelledby="cpBattingPriceHeading"><h3 id="cpBattingPriceHeading">Club Batting</h3><label>Annual price<input name="batting_annual_price" type="number" min="0" step="0.01" required value="${amount(p.batting_annual_price_cents)}"></label><label>Free trial (days)<input name="batting_trial_days" type="number" min="1" max="180" step="1" required value="${Number(p.trial_days??60)}"></label></section><section class="cp-price-product" aria-labelledby="cpSelectionsPriceHeading"><h3 id="cpSelectionsPriceHeading">Teams &amp; availability</h3><label>Annual price<input name="selection_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.selection_annual_price_cents)}"></label><label>Free trial (days)<input name="selection_trial_days" type="number" min="1" max="365" step="1" required value="${Number(p.selection_trial_days??21)}"></label></section><section class="cp-price-product" aria-labelledby="cpBothPriceHeading"><h3 id="cpBothPriceHeading">Both products <small>Optional</small></h3><label>Annual price<input name="bundle_annual_price" type="number" min="0" step="0.01" placeholder="Not set" value="${amount(p.bundle_annual_price_cents)}"></label><p>Each product keeps its own trial length.</p></section></div><p class="help">Trial lengths apply to new trials. Existing trial dates and agreed club terms stay unchanged.</p><button class="btn" id="cpPricingSave" type="submit" disabled>Saved</button><p role="status"></p></form></section>`;
  const form=host.querySelector('form'),status=form.querySelector('[role=status]'),save=form.querySelector('button');if(!p.can_manage){form.querySelectorAll('input').forEach(x=>x.disabled=true);save.hidden=true;return;}
  let pending=null,busy=false,dirty=false;
- const edited=()=>{if(busy||pending)return;dirty=true;save.disabled=false;save.textContent='Save prices';status.textContent='';};
+ const edited=()=>{if(busy||pending)return;dirty=true;save.disabled=false;save.textContent='Save settings';status.textContent='';};
  form.addEventListener('input',edited);form.addEventListener('change',edited);
  form.onsubmit=async event=>{event.preventDefault();if(busy||(!dirty&&!pending))return;
  const value=name=>form.elements.namedItem(name).value,price=name=>value(name)===''?null:Math.round(Number(value(name))*100);
- pending??={batting_annual_price_cents:price('batting_annual_price'),selection_annual_price_cents:price('selection_annual_price'),bundle_annual_price_cents:price('bundle_annual_price'),selection_trial_days:null,state_token:p.state_token,request_id:crypto.randomUUID()};
+ pending??={batting_annual_price_cents:price('batting_annual_price'),selection_annual_price_cents:price('selection_annual_price'),bundle_annual_price_cents:price('bundle_annual_price'),batting_trial_days:Number(value('batting_trial_days')),selection_trial_days:Number(value('selection_trial_days')),state_token:p.state_token,request_id:crypto.randomUUID()};
  busy=true;form.querySelectorAll('input,button').forEach(x=>x.disabled=true);save.textContent='Saving…';status.textContent='';
  try{const {error}=await supabase.rpc('platform_product_pricing_api',{p_action:'save',p_data:pending});if(error){if(error.code)pending=null;throw Error(error.message);}pending=null;dirty=false;await mountProductPriceSettings();}
  catch(e){status.textContent=(pending?'Save not confirmed. Retry. ':'')+e.message;}
- finally{busy=false;if(form.isConnected){form.querySelectorAll('input').forEach(x=>x.disabled=!!pending);save.disabled=!pending&&!dirty;save.textContent=pending?'Retry save':dirty?'Save prices':'Saved';}}
+ finally{busy=false;if(form.isConnected){form.querySelectorAll('input').forEach(x=>x.disabled=!!pending);save.disabled=!pending&&!dirty;save.textContent=pending?'Retry save':dirty?'Save settings':'Saved';}}
  };
 }
 
@@ -19794,7 +19793,7 @@ async function renderProductTrialEntry(message='',skipContinuation=false){
   try{await productTrialStart(saved);return;}catch(error){message=error.message;productTrialDraft={...saved};}
   finally{productTrialBusy=false;}
  }
- let options={clubs:[],trial_days:{batting:60,selections:60}};
+ let options={clubs:[],trial_days:{batting:60,selections:21}};
  if(session){
   app.innerHTML=productEnquiryStyles()+'<section class="card pe-entry"><h1>Start your free trial.</h1><p>Loading your clubs…</p></section>';
   try{options=await productTrialRPC('options');if(session?.user?.id!==userId)return;}
@@ -19818,7 +19817,7 @@ async function renderProductTrialEntry(message='',skipContinuation=false){
   document.getElementById('ptTrialTerms').textContent=chosen.map(k=>c?.products?.[k]?.active?`${PRODUCT_ENQUIRY_LABELS[k]} is already active.`:
    c?.products?.[k]?.scheduled?`${PRODUCT_ENQUIRY_LABELS[k]} is scheduled for ${niceDate(c.products[k].starts_on)}.`:
    c?.products?.[k]&&!c.products[k].trial_available?`${PRODUCT_ENQUIRY_LABELS[k]} has already been tried. Open your club to continue.`:
-   `${options.trial_days?.[k]||60} days to try ${PRODUCT_ENQUIRY_LABELS[k]}.`).join(' ')+(c?' Your accounts, branding and current access stay in place.':'');
+   `${options.trial_days?.[k]||(k==='selections'?21:60)} days to try ${PRODUCT_ENQUIRY_LABELS[k]}.`).join(' ')+(c?' Your accounts, branding and current access stay in place.':'');
  };
  form.elements.product.onchange=terms;form.elements.club_id?.addEventListener('change',()=>{if(!form.elements.club_id.value)form.elements.club_name.value='';terms();});terms();
  document.getElementById('ptShowSignIn')?.addEventListener('click',()=>{productTrialRemember();renderProductTrialSignIn();});
@@ -19908,7 +19907,7 @@ function bindTrialScheduleFields(form,clubs,days){
   document.getElementById('ptStartDateField').hidden=!later;form.elements.starts_on.required=later;form.elements.starts_on.min=today;
   const start=later?form.elements.starts_on.value:today,product=form.elements.product.value;
   const keys=product==='both'?['batting','selections']:product?[product]:[];
-  document.getElementById('ptDateSummary').textContent=!form.elements.start_mode.value?'Your full trial begins on your chosen date.':start?keys.map(k=>`${PRODUCT_ENQUIRY_LABELS[k]}: ${niceDate(start)} – ${niceDate(trialEndDate(start,days?.[k]||60))}.`).join(' ')+' We’ll alert your Club Admin when it begins.':'Choose a date that suits your club’s season.';
+  document.getElementById('ptDateSummary').textContent=!form.elements.start_mode.value?'Your full trial begins on your chosen date.':start?keys.map(k=>`${PRODUCT_ENQUIRY_LABELS[k]}: ${niceDate(start)} – ${niceDate(trialEndDate(start,days?.[k]||(k==='selections'?21:60)))}.`).join(' ')+' We’ll alert your Club Admin when it begins.':'Choose a date that suits your club’s season.';
   document.getElementById('ptSubmit').textContent=later?'Schedule free trial':'Start free trial';
  };
  for(const key of ['start_mode','starts_on','timezone','product','club_id'])form.elements[key]?.addEventListener('change',refresh);
@@ -19929,7 +19928,7 @@ async function renderScheduledClubProducts(message=''){
   page.innerHTML=productEnquiryStyles()+`<section class="card"><h1>Products & trials</h1><p>Choose when your club is ready. Each trial runs for the full period from its start date.</p><p role="status">${esc(message)}</p><div class="pt-products">${['selections','batting'].map(k=>{
    const p=products[k]||{},free=p.active&&p.complimentary;
    const label=free?'Permanently free':p.scheduled?'Trial scheduled':p.active&&p.on_trial?'Free trial':p.active?'Active':p.trial_available?'Ready to try':'Access ended';
-   const detail=free?'No expiry or payment required.':p.scheduled?`${niceDate(p.starts_on)} – ${niceDate(p.trial_ends)}. Your trial has not started.`:p.active&&p.on_trial?`Trial ends ${niceDate(p.trial_ends)}.`:p.active?(p.access_ends?`Access until ${niceDate(p.access_ends)}.`:'Available for your club.'):p.trial_available?`${r.trial_days?.[k]||60} days free. Start now or choose a date.`:p.access_ends?`Access ended ${niceDate(p.access_ends)}.`:p.trial_ends?`Your trial ended ${niceDate(p.trial_ends)}.`:'This product has already been used by your club.';
+   const detail=free?'No expiry or payment required.':p.scheduled?`${niceDate(p.starts_on)} – ${niceDate(p.trial_ends)}. Your trial has not started.`:p.active&&p.on_trial?`Trial ends ${niceDate(p.trial_ends)}.`:p.active?(p.access_ends?`Access until ${niceDate(p.access_ends)}.`:'Available for your club.'):p.trial_available?`${r.trial_days?.[k]||(k==='selections'?21:60)} days free. Start now or choose a date.`:p.access_ends?`Access ended ${niceDate(p.access_ends)}.`:p.trial_ends?`Your trial ended ${niceDate(p.trial_ends)}.`:'This product has already been used by your club.';
    const target=new URL('./app.html',location.href);target.searchParams.set('trial_product',k);target.searchParams.set('trial_club',cid);
    return `<article class="pt-product"><h2>${esc(PRODUCT_ENQUIRY_LABELS[k])}</h2><p class="pt-status"><strong>${label}</strong></p><p>${esc(detail)}</p>${p.scheduled?`<p class="help">${esc(p.timezone)} · We’ll send your Club Admin a start alert and the starter guide.</p>`:''}${p.trial_available?`<a class="btn secondary" href="${esc(target.href)}">Choose trial start</a>`:''}${p.can_reschedule?`<button class="btn ghost" data-change-trial="${k}">Change start date</button><form class="pt-date-edit" data-trial-edit="${k}" hidden><label for="ptEdit-${k}">New start date</label><input id="ptEdit-${k}" name="starts_on" type="date" required min="${trialLocalDate(p.timezone)}" value="${esc(p.starts_on)}"><p class="help" data-date-end></p><div class="btnrow"><button class="btn secondary" type="submit">Save date</button><button class="btn ghost" type="button" data-start-today>Start today</button><button class="btn ghost" type="button" data-cancel-date>Cancel</button></div><p role="status" data-edit-status></p></form>`:''}${p.active?`<button class="btn ghost" data-trial-open="${k==='selections'?'teams':'dashboard'}">Open ${k==='selections'?'Teams':'Club Home'}</button>`:''}</article>`;
   }).join('')}</div>${Object.values(products).some(p=>p.scheduled)?'<p>Your club is registered. You can read the starter guide now and change a future start date here.</p>':''}${Object.values(products).some(p=>p.on_trial&&!p.complimentary)?'<p class="help">Online payments are not enabled during this pilot. Nothing is automatically charged when a trial ends.</p>':''}</section>${trialPrimerHtml(products)}<style>.pt-products{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:16px;margin:24px 0}.pt-product{padding:20px;border:1px solid #dce2ee;border-radius:12px}.pt-product h2{font-size:22px;margin:0 0 16px}.pt-product p,.pt-primer p,.pt-primer li{line-height:1.55}.pt-product .btn{display:inline-block;min-height:44px;margin:4px 4px 4px 0;text-decoration:none}.pt-primer{margin-top:16px}.pt-primer h3{margin-top:24px}.pt-primer li{margin:8px 0}.pt-date-edit input{max-width:100%;box-sizing:border-box;font-size:16px}.pt-date-edit{margin-top:16px}.pt-date-edit[hidden]{display:none}</style>`;
