@@ -1,39 +1,28 @@
-CLUB BATTING 0.8.62.124 — REAL IPHONE WALKTHROUGH
+CLUB BATTING 0.8.62.125 — PHONE VIDEO PREVIEWS
 
-Upload everything INSIDE Website_Files to the existing GitHub Pages root,
-including the videos folder. Replace matching files. Keep your existing
-config.js, styles.css and CNAME. Then refresh/reopen the app and check .124.
+Upload everything INSIDE Website_Files to your existing GitHub Pages root,
+including videos. Replace matching files. Keep config.js, styles.css and CNAME.
+Refresh/reopen the app and check version 0.8.62.125.
 
-The iPhone: app and alerts tutorial now uses David's two actual iPhone screen
-recordings. It shows Safari > Share > View More > Add to Home Screen, opening
-the app, enabling notifications, tapping Allow and the Notifications on result.
-The 43-second video has captions, close-ups and highlights for the key controls.
-The password/autofill interaction is omitted; personal sharing contacts are
-cropped out. The original recordings are unchanged. There is no narration.
+On Account > App & notifications, the iPhone or iPad and Android sections each
+contain their own preview image and Watch video button above the written steps.
+The old pair of video links above the device sections is removed. On a phone,
+the matching device video also has a preview image. Tap the image or Watch video
+to open the existing captioned player. Full videos load only when selected.
 
-The new video is in App & notifications and Help & Tutorials. A separate MP4 is
-included for previewing or sharing. The existing Android video remains an
-illustrated guide; no real Android recording has been supplied.
+The videos themselves are unchanged: the real 43-second iPhone walkthrough and
+the existing illustrated Android guide. David approved the iPhone edit.
 
-This is a cumulative website update: it also includes .123's separate 60-day
-Batting and 21-day Teams trials, and all 11 Help videos. There is no need to
-upload .123 separately. The website has NOT been published by the assistant.
+This ZIP includes .124 and the earlier 60-day Batting / 21-day Teams trial update.
+You do not need to upload .124 separately. No database or Stripe changes are
+required. Leave payment mode on Prototype; do not rerun old SQL migrations.
 
-No SQL or Stripe changes are required. The .123 backend trial settings and
-Guide v39 are already deployed. Payment mode remains Prototype, prices remain
-unsettled, and Newcastle City's current editable free arrangement is preserved.
-Do not apply old source migrations. The separately prepared .122 notification
-migration is still outstanding; this video update does not deploy it.
+Checked: correct video inside each device section; matching posters and playback;
+phone layouts at 320/390 pixels and desktop at 1280 pixels; no app exceptions.
+All 33 video assets are byte-for-byte unchanged. Notification and trial logic
+is preserved. The website awaits your manual upload.
 
-Verification: full MP4 decode; actual video playback and seeking in the app at
-320, 390 and 1280 pixels; written steps, load-error fallback and no overflow.
-These are desktop Chromium checks using phone-sized viewports, not testing on
-a physical iPhone. The raw recordings show the actual iPhone permission flow.
-Receipt of a test push notification is not shown or claimed.
-
-Maintenance: tools/videos/iphone_recording.py renders from the two originals.
-Run tools/build_iphone_walkthrough.py after earlier builders. It preserves .123
-and rebuilds the demo. The source backup contains source identifiers and hashes,
-but not the personal original recordings. Current video QA is in
-tests/iphone_video_v124; earlier simulated iPhone QA is archived under
-video-authoring/archive-v122/phone-iphone.
+Maintenance: run tools/build_phone_video_sections.py after earlier builders.
+It preserves the later notification patches and rebuilds the demo. Package with
+tools/package_phone_video_sections.py. Screenshots and the verification record
+are in tests/phone_video_sections_v125.

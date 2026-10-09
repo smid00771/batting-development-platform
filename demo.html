@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.124 — Real iPhone installation and alerts walkthrough
+// Club Batting 0.8.62.125 — Video previews inside phone device sections
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.124';
+const APP_UI_VERSION='0.8.62.125';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -21626,7 +21626,7 @@ function phoneInstallHelp(ios,android){
  const next='<p class="phone-next"><strong>Then turn on alerts:</strong> open <strong>Account → App &amp; notifications</strong> from the new app.</p>';
  if(ios)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneIOSInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If Safari shows the <strong>Share icon</strong> directly, tap it and continue from step 3. If <strong>Add to Home Screen</strong> is missing, scroll to <strong>Edit Actions</strong> and add it. On iPad, Share may be at the top.</p><p>If you opened Club Batting inside WhatsApp or another browser, open this page in <strong>Safari</strong> first. Already added the icon? Open that icon instead of adding it again.</p></details>`;
  if(android)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Club Batting</button><details><summary>Or use Chrome’s menu</summary>'+phoneAndroidInstallSteps()+'</details>':phoneAndroidInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If you opened Club Batting inside WhatsApp, use its menu to open this page in <strong>Chrome</strong>. Already added the icon? Open that icon instead of adding it again.</p></details>`;
- return `<details class="phone-other-devices"><summary>iPhone or iPad</summary><p>On your phone, open Club Batting in <strong>Safari</strong>.</p>${phoneIOSInstallSteps()}<p class="help">If Share is visible directly, start there. If Add to Home Screen is missing, scroll down or use Edit Actions. On iPad, Share may be at the top.</p>${next}</details><details class="phone-other-devices"><summary>Android</summary><p>On your phone, open Club Batting in <strong>Chrome</strong>.</p>${phoneAndroidInstallSteps()}${next}</details>`;
+ return `<details class="phone-other-devices" data-phone-device="iphone"><summary>iPhone or iPad</summary><p>On your phone, open Club Batting in <strong>Safari</strong>.</p>${phoneIOSInstallSteps()}<p class="help">If Share is visible directly, start there. If Add to Home Screen is missing, scroll down or use Edit Actions. On iPad, Share may be at the top.</p>${next}</details><details class="phone-other-devices" data-phone-device="android"><summary>Android</summary><p>On your phone, open Club Batting in <strong>Chrome</strong>.</p>${phoneAndroidInstallSteps()}${next}</details>`;
 }
 async function phoneWorkerMessage(type,binding=null){
  if(phoneIsDemo()||!('serviceWorker'in navigator))return;
@@ -23198,12 +23198,31 @@ function helpVideosForContext(){
  return HELP_VIDEOS.filter(v=>v.tabs.includes(currentTab));
 }
 function helpVideoStyles(){return `<style id="helpVideoStyles">
+ .phone-video-preview{display:flex;align-items:center;gap:14px;box-sizing:border-box;width:100%;margin:8px 0 16px;padding:12px;border:1px solid #ccd5e8;border-radius:12px;background:#f5f7fc;color:#17245f;text-align:left;font:inherit;cursor:pointer}.phone-video-preview:hover{background:#eef2fb;border-color:#8598c7}.phone-video-preview:focus-visible{outline:3px solid #6679dd;outline-offset:3px}.phone-video-thumb{position:relative;display:block;flex:0 0 88px}.phone-video-thumb img{display:block;width:88px;height:156px;object-fit:cover;border-radius:7px;background:#101d3b}.phone-video-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#fffffff2;color:#17245f;font-size:20px;box-shadow:0 2px 8px #101d3b55}.phone-video-copy{display:flex;flex-direction:column;gap:7px;min-width:0}.phone-video-copy strong{font-size:16px}.phone-video-copy>span{font-size:14px;line-height:1.4}.phone-video-copy small{font-size:12px;color:#5e6678}
  .help-video-links{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:8px 0 14px}.help-video-links button{border:0;background:none;padding:8px 0;color:var(--navy,#202f78);font-family:inherit;font-size:13px;font-weight:600;line-height:1.4;text-align:left;min-height:40px;cursor:pointer}.help-video-links button:focus-visible{outline:3px solid #6679dd;outline-offset:3px}.help-video-links small{font-size:12px;color:#5e6678;font-weight:400}.help-video-catalogue{margin:12px 0}.help-video-catalogue>summary{min-height:44px;cursor:pointer;font-weight:700;align-content:center}.help-video-catalogue .help-video-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
  .help-video-dialog{width:min(760px,calc(100vw - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;overflow:auto;border:1px solid #cbd2e4;border-radius:14px;padding:16px;background:white;color:#172033}.help-video-dialog::backdrop{background:#10172cd9}.help-video-dialog header{display:flex;gap:12px;align-items:center;justify-content:space-between}.help-video-dialog h2{font-size:19px;margin:0}.help-video-dialog header button{flex-shrink:0;min-width:44px;min-height:44px}.help-video-dialog video{display:block;max-width:100%;max-height:min(65dvh,640px);width:auto;height:auto;aspect-ratio:9/16;margin:12px auto;background:#17245f}.help-video-dialog p,.help-video-dialog li{font-size:14px;line-height:1.5}.help-video-dialog summary{min-height:44px;align-content:center;cursor:pointer}.help-video-dialog a{color:#202f78}.help-video-dialog [hidden]{display:none!important}
  </style>`;}
+function phoneVideoPreview(v){
+ const suffix=v.asset_version?'?v='+encodeURIComponent(v.asset_version):'';
+ return `<button type="button" class="phone-video-preview" data-help-video="${esc(v.id)}" aria-label="Watch ${esc(v.title)}"><span class="phone-video-thumb" aria-hidden="true"><img src="videos/${esc(v.id)}.jpg${suffix}" alt="" width="88" height="156" loading="lazy"><span class="phone-video-play">▶</span></span><span class="phone-video-copy"><strong>Watch video</strong><span>${esc(v.title)}</span><small>${Math.round(v.duration)} seconds</small></span></button>`;
+}
 function bindContextHelpVideos(){
  const page=document.getElementById('page');if(!page)return;
  const existing=page.querySelector('#contextHelpVideos'),videos=helpVideosForContext();
+ const deviceSections=currentTab==='phone_app'?[...page.querySelectorAll('[data-phone-device]')]:[];
+ if(deviceSections.length){
+  existing?.remove();
+  if(!document.getElementById('helpVideoStyles'))document.head.insertAdjacentHTML('beforeend',helpVideoStyles());
+  for(const section of deviceSections){
+   const v=HELP_VIDEOS.find(v=>v.id==='phone-'+section.dataset.phoneDevice);if(!v)continue;
+   let host=section.querySelector('.phone-device-video');
+   if(host?.dataset.videoId===v.id)continue;
+   host?.remove();host=document.createElement('div');host.className='phone-device-video';host.dataset.videoId=v.id;host.innerHTML=phoneVideoPreview(v);
+   section.querySelector('summary').insertAdjacentElement('afterend',host);
+   const button=host.querySelector('[data-help-video]');button.onclick=()=>openHelpVideo(v.id,button);
+  }
+  return;
+ }
  const heading=currentTab==='guide'?(guideSelectedCapabilityKey==='whole_process'?page.querySelector('#guideProcessHeading'):page.querySelector('.guide-tutorial-card h2')):page.querySelector('h1')||page.querySelector('h2');
  if(!videos.length||!heading){existing?.remove();return;}
  const signature=currentTab+':'+(currentTab==='guide'?guideSelectedCapabilityKey:'')+':'+videos.map(v=>v.id).join(',');
@@ -23212,7 +23231,7 @@ function bindContextHelpVideos(){
  if(!document.getElementById('helpVideoStyles'))document.head.insertAdjacentHTML('beforeend',helpVideoStyles());
  const links=videos.map(v=>`<button type="button" data-help-video="${esc(v.id)}">▶ Watch: ${esc(v.title)} <small>· ${Math.round(v.duration)} sec</small></button>`).join('');
  const host=document.createElement('div');host.id='contextHelpVideos';host.dataset.signature=signature;
- host.innerHTML=currentTab==='guide'&&guideSelectedCapabilityKey==='whole_process'?`<details class="help-video-catalogue"><summary>Short how-to videos</summary><div class="help-video-links">${links}</div></details>`:`<div class="help-video-links">${links}</div>`;
+ host.innerHTML=currentTab==='phone_app'?videos.map(phoneVideoPreview).join(''):currentTab==='guide'&&guideSelectedCapabilityKey==='whole_process'?`<details class="help-video-catalogue"><summary>Short how-to videos</summary><div class="help-video-links">${links}</div></details>`:`<div class="help-video-links">${links}</div>`;
  heading.insertAdjacentElement('afterend',host);
  host.querySelectorAll('[data-help-video]').forEach(b=>b.onclick=()=>openHelpVideo(b.dataset.helpVideo,b));
 }
