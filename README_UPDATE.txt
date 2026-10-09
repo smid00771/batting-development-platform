@@ -1,36 +1,39 @@
-CLUB BATTING 0.8.62.123 — SEPARATE TRIAL SETTINGS
+CLUB BATTING 0.8.62.124 — REAL IPHONE WALKTHROUGH
 
-Upload the CONTENTS of Website_Files to your existing GitHub Pages root.
-Replace matching files. Keep your existing config.js, styles.css and CNAME.
-This update includes .122 and its videos. David confirmed deploying .122 on
-9 October; .123 is the subsequent trial-settings update.
+Upload everything INSIDE Website_Files to the existing GitHub Pages root,
+including the videos folder. Replace matching files. Keep your existing
+config.js, styles.css and CNAME. Then refresh/reopen the app and check .124.
 
-After the upload, refresh/reopen the app and check version 0.8.62.123.
-Platform Admin > Platform Settings > Product pricing & trials now has:
-  Club Batting: 60 free-trial days
-  Teams & availability: 21 free-trial days
-Each product has its own field. Selecting Both keeps two separate trial lengths.
-Signup date previews, product pages, Help, the Guide and demo use the new policy.
-Saving prices keeps the trial settings. Existing agreed terms are preserved.
+The iPhone: app and alerts tutorial now uses David's two actual iPhone screen
+recordings. It shows Safari > Share > View More > Add to Home Screen, opening
+the app, enabling notifications, tapping Allow and the Notifications on result.
+The 43-second video has captions, close-ups and highlights for the key controls.
+The password/autofill interaction is omitted; personal sharing contacts are
+cropped out. The original recordings are unchanged. There is no narration.
 
-The backend change and Help/Guide update have already been deployed and verified.
-DO NOT run SQL or reapply old migrations from the source backup.
+The new video is in App & notifications and Help & Tutorials. A separate MP4 is
+included for previewing or sharing. The existing Android video remains an
+illustrated guide; no real Android recording has been supplied.
 
-Newcastle City's current free access for both products is unchanged and editable
-by an authorised Platform Admin. David clarified that it is free while he owns
-Club Batting; a later owner may choose different terms. No ownership-triggered
-billing or automatic change has been introduced.
+This is a cumulative website update: it also includes .123's separate 60-day
+Batting and 21-day Teams trials, and all 11 Help videos. There is no need to
+upload .123 separately. The website has NOT been published by the assistant.
 
-Leave PAYMENT MODE on PROTOTYPE. The Club Batting Stripe live account is enabled,
-but app Checkout and verified payment fulfilment still need implementation and
-testing before Live provider is appropriate. Connecting Stripe does not complete
-the app integration. No prices or Stripe products were created by this update.
+No SQL or Stripe changes are required. The .123 backend trial settings and
+Guide v39 are already deployed. Payment mode remains Prototype, prices remain
+unsettled, and Newcastle City's current editable free arrangement is preserved.
+Do not apply old source migrations. The separately prepared .122 notification
+migration is still outstanding; this video update does not deploy it.
 
-Current saved app prices were left unchanged. Pricing has not been finalised.
-The previous notification migration, promotion rewrite, trial-end warnings and
-complete read-only expiry work remain separate outstanding items.
+Verification: full MP4 decode; actual video playback and seeking in the app at
+320, 390 and 1280 pixels; written steps, load-error fallback and no overflow.
+These are desktop Chromium checks using phone-sized viewports, not testing on
+a physical iPhone. The raw recordings show the actual iPhone permission flow.
+Receipt of a test push notification is not shown or claimed.
 
-Checks: 33 isolated database checks; pricing/settings and signup browser checks
-at 320 and 1280 pixels; no real signup or messages. Live readback confirms all
-existing trial, subscription and access records are unchanged, as are prices and
-payment mode. The migration adds no new security-advisor findings.
+Maintenance: tools/videos/iphone_recording.py renders from the two originals.
+Run tools/build_iphone_walkthrough.py after earlier builders. It preserves .123
+and rebuilds the demo. The source backup contains source identifiers and hashes,
+but not the personal original recordings. Current video QA is in
+tests/iphone_video_v124; earlier simulated iPhone QA is archived under
+video-authoring/archive-v122/phone-iphone.
