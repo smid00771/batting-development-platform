@@ -1,59 +1,36 @@
-CLUB BATTING / TEAMS — UPDATE .143
-10 October 2026
+CLUB BATTING / TEAMS — UPDATE .144
+11 October 2026 (Sydney)
 
-REVIEW, THEN POST TO FACEBOOK & INSTAGRAM
-Choose published team graphics, review the exact images and caption,
-select the club accounts, then click Post once. There is no second
-confirmation screen. Each destination has its own result and history.
+START WITH START_HERE.txt
 
-Club Admins connect the Facebook Page and linked Instagram professional
-account once. Existing authorised socials managers can review and post.
-PNG downloads and the .142 artwork improvements are retained.
+This release makes account connection a guided club flow and moves the
+one-time Club Batting activation into Platform Admin > Platform Settings.
 
-INSTALL THE WEBSITE
-1. Unzip Club_Batting_143_Website.zip.
-2. Upload the contents of Website_Files to the usual website folder,
-   keeping the assets and videos subfolders.
-3. Keep the existing config.js, styles.css and CNAME; they are excluded.
-4. Refresh and check version 0.8.62.143.
-5. Open Teams & availability > Social graphics.
+For clubs: Connect Facebook & Instagram > sign in > choose the club Page.
+The linked account and permissions are checked automatically. Missing or
+expired access gets a specific instruction. Facebook-only clubs can proceed.
 
-IMPORTANT: INCLUDE THESE THREE NEW FILES
-social-publishing.js
-social-connect.html
-social-connect.js
+For the Platform Owner: the setup panel supplies copy buttons for the
+required addresses and links to Meta and secure settings. It verifies saved
+app details without pretending Meta approval is complete.
 
-BACKEND STATUS
-The database changes and club-social-publish Edge Function are already
-installed in the existing Club Batting Supabase project. The private image
-bucket and background runner are installed too. Do not rerun the SQL files.
-The Database and supabase folders are reference/source files, not website
-uploads. Only upload Website_Files to the website.
+Upload Website_Files as usual. Keep config.js, styles.css and CNAME.
+New in .144: social-platform-setup.js. Include the updated social-publishing.js,
+social-connect.js and social-connect.html from .143 as well.
+Refresh and check version 0.8.62.144.
 
-META SETUP STILL REQUIRED
-META_SETUP.txt has the exact account setup, callback URLs and server secret
-names. The platform needs its Meta app configured before clubs can connect.
-This release has NOT been uploaded to the website by this delivery.
-No real Meta account has been connected and no real post has been sent.
+The team artwork and deliberate player-photo marker are unchanged.
+The private publishing backend and new connection check are installed.
+Do not rerun the database scripts. Website deployment is still pending.
+Meta account activation, live sign-in and a real reviewed post remain pending.
 
-BEHAVIOUR
-- Review up to ten JPEG images in order; edit the shared caption.
-- One click approves the exact images, caption and destinations.
-- Saved requests continue in the background if the browser closes.
-- Retry only destinations confirmed not to have posted.
-- An unconfirmed result asks the user to check the account; it is not
-  automatically posted again.
-- Refreshing artwork invalidates an old review before it can be posted.
-- The public demo is preview only and cannot post to real accounts.
+VERIFIED
+24 mocked server tests passed, including account expiry, partial permissions,
+Facebook-only setup, connection changes, owner-only access and post recovery.
+Browser checks passed for the guided flow, automatic checks, role controls,
+caption recovery, one-click publishing and history. Desktop and phone layouts
+were checked. The database access checks passed; no new security advisories
+were reported for the added connection-check functions.
 
-CHECKED
-13 mocked server tests passed, covering encryption, request authentication,
-image integrity, duplicate prevention, uncertain sends and partial failures.
-Database transaction tests passed and were rolled back. They covered club
-permissions, private storage, repeated approvals, worker ownership, stale
-artwork and retry behaviour. No test posts remain.
-Browser checks passed at desktop and phone widths: review rendering,
-caption preservation, repeated clicks, partial results and posting history.
-No JavaScript page errors, unexpected external requests or horizontal
-page overflow were found in those checks.
-Live Meta OAuth and publishing remain to be tested after app setup.
+Maintenance contains the optional technical reference. It is not a club
+installation guide. No real social post was sent during this work.

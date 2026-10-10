@@ -1,11 +1,12 @@
-// Club Batting 0.8.62.143 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.144 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.143';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.144';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.144';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.143';
+const APP_UI_VERSION='0.8.62.144';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -18633,7 +18634,7 @@ async function renderPlatformSettings(){
   ]);
   if(error||calendarError){page.innerHTML=`<div class="notice">${esc(error?.message||calendarError?.message)}</div>`;return;}
   const canCommercial=['owner','commercial_admin'].includes(platformRole);
-  page.innerHTML=`${clubPlatformSettingsStyles()}<div id="productPriceSettings"></div>${canCommercial?'<details class="cp-settings-disclosure"><summary>AI artwork allowances</summary><div class="cp-settings-body" id="socialPlatformAI"></div></details>':''}<details id="cpPlatformSettingsAdvanced" class="cp-settings-disclosure"><summary>More settings</summary><div class="cp-settings-body"><details id="cpAdvancedBilling" class="cp-settings-disclosure"><summary>Advanced billing</summary><div class="cp-settings-body"><div class="form-grid">
+  page.innerHTML=`${clubPlatformSettingsStyles()}<div id="productPriceSettings"></div>${platformRole==='owner'?'<div id="socialPlatformPublishing"></div>':''}${canCommercial?'<details class="cp-settings-disclosure"><summary>AI artwork allowances</summary><div class="cp-settings-body" id="socialPlatformAI"></div></details>':''}<details id="cpPlatformSettingsAdvanced" class="cp-settings-disclosure"><summary>More settings</summary><div class="cp-settings-body"><details id="cpAdvancedBilling" class="cp-settings-disclosure"><summary>Advanced billing</summary><div class="cp-settings-body"><div class="form-grid">
     <div class="field"><label>Minimum days before renewal for a pro-rata term</label><input id="settingMinDays" type="number" value="${s.minimum_prorata_days}" ${canCommercial?'':'disabled'}><small>If fewer days remain, those days are included and the club is charged for the next full Club Year instead.</small></div>
     <div class="field"><label>Payment grace period</label><input id="settingGrace" type="number" value="${s.payment_grace_days}" ${canCommercial?'':'disabled'}></div>
     <div class="field"><label>Private-rate expiry warning</label><input id="settingWarn" type="number" value="${s.commercial_adjustment_warning_days}" ${canCommercial?'':'disabled'}></div>
@@ -18665,6 +18666,7 @@ async function renderPlatformSettings(){
   ${canCommercial?'<button class="btn secondary" id="savePlatformSettings">Save settings</button>':''}<div id="settingsStatus" class="help"></div></div></details>`;
 
   void mountProductPriceSettings();if(canCommercial)void socialPlatformAI();
+  if(platformRole==='owner')void renderSocialPlatformSetup({supabase,host:document.getElementById('socialPlatformPublishing'),escape:esc});
   document.getElementById('checkDiscoveryProvider').onclick=async()=>{
     const box=document.getElementById('discoveryProviderCheck');box.textContent='Checking…';
     const {data,error}=await supabase.functions.invoke('discover-clubs',{body:{action:'status'}});

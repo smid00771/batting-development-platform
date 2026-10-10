@@ -10,9 +10,19 @@ async function start(){
  if(error){status.textContent='Meta sign-in was cancelled or access was not granted. You can close this window and try again.';return;}
  if(!code||!state){status.textContent='Open Social graphics → Social accounts in Club Batting to start connecting.';return;}
  try{
-  const result=await call('oauth_complete',{code,state});status.textContent='Choose the club Facebook Page. Its linked Instagram professional account will be connected too.';
-  for(const page of result.pages){const label=document.createElement('label'),radio=document.createElement('input');radio.type='radio';radio.name='page';radio.value=page.id;radio.required=true;if(result.pages.length===1)radio.checked=true;label.append(radio,document.createTextNode(page.name));const note=document.createElement('small');note.textContent=page.instagram_name?'Instagram: @'+page.instagram_name:'Facebook only — no linked Instagram professional account was returned.';label.append(note);choices.append(label);}
-  form.hidden=false;form.onsubmit=async e=>{e.preventDefault();const selected=form.querySelector('[name=page]:checked');if(!selected)return;const button=form.querySelector('button');button.disabled=true;status.textContent='Saving the club connection…';try{const saved=await call('choose_page',{id:result.id,page_id:selected.value});form.hidden=true;status.textContent='Connected. Your club can now review and post team announcements.';const u=new URL(saved.return_url);if(u.origin===location.origin){document.getElementById('back').href=u.href;if(window.opener)window.opener.postMessage({type:'club-social-connected',club_id:saved.club_id},u.origin);}const done=document.createElement('button');done.textContent='Done — return to Club Batting';done.onclick=()=>{if(window.opener){window.opener.focus();window.close();}else location.href=document.getElementById('back').href;};status.after(done);}catch(e){status.textContent=e.message;button.disabled=false;}};
+  const result=await call('oauth_complete',{code,state});status.textContent='Choose your club. We found these Facebook Pages and their linked Instagram accounts. Nothing will be posted while you connect.';
+  for(const page of result.pages){const label=document.createElement('label'),radio=document.createElement('input');radio.type='radio';radio.name='page';radio.value=page.id;radio.required=true;if(result.pages.length===1)radio.checked=true;label.append(radio,document.createTextNode(page.name));const note=document.createElement('small');note.textContent=page.instagram_name?'Instagram: @'+page.instagram_name:'Facebook only. You can connect Instagram later.';label.append(note);choices.append(label);}
+  form.hidden=false;
+  const button=form.querySelector('button'),selection=()=>{const selected=form.querySelector('[name=page]:checked'),page=result.pages.find(p=>p.id===selected?.value);button.disabled=!page;button.textContent=page?.instagram_name?'Connect Facebook & Instagram':page?'Connect Facebook only':'Choose a club above';};form.onchange=selection;selection();
+  form.onsubmit=async e=>{
+   e.preventDefault();const selected=form.querySelector('[name=page]:checked');if(!selected||button.disabled)return;button.disabled=true;status.textContent='Saving the club connection…';
+   try{
+    const saved=await call('choose_page',{id:result.id,page_id:selected.value}),page=result.pages.find(p=>p.id===selected.value);form.hidden=true;
+    status.textContent='Saved: '+page.name+(page.instagram_name?' and @'+page.instagram_name:'. You can add Instagram later')+'. Return to Club Batting for the automatic connection check.';
+    const u=new URL(saved.return_url);if(u.origin===location.origin){document.getElementById('back').href=u.href;if(window.opener)window.opener.postMessage({type:'club-social-connected',club_id:saved.club_id},u.origin);}
+    const done=document.createElement('button');done.textContent='Return to Club Batting';done.onclick=()=>{if(window.opener){window.opener.focus();window.close();}else location.href=document.getElementById('back').href;};status.after(done);
+   }catch(e){status.textContent=e.message+' You can return to Club Batting and choose Check connection.';button.disabled=false;}
+  };
  }catch(e){status.textContent=e.message;}
 }
 void start();
