@@ -1,34 +1,40 @@
-CLUB BATTING / TEAMS — UPDATE .140
+CLUB BATTING / TEAMS — UPDATE .141
 10 October 2026
 
-ONE GUIDED SETUP
+ONE LINEAR SETUP
 Style > Background > Players > Finish.
 
-Set up the club's look once, then reuse it each round.
-The separate Club artwork and Player photos screens are gone.
-Finished backgrounds and cutout photos go through preview and approval
-without using AI credits. AI help is an optional choice in that same step.
-For a normal player photo, choose Remove the background for me. Review
-and save the cutout, then reuse it in team graphics or download its PNG.
+Choose an image and its preview appears automatically.
+Use this background saves it and moves to Players.
+Save photo & next saves the photo and moves to Finish.
+Save & add another player lets you add more photos in the same step.
+Back keeps the file, preview, instructions and player you selected.
 
-WEEKLY USE
-Open Team graphics. Published teams fill the saved template.
-Return to Guided setup when branding changes or you want to add photos.
+Uploads show progress beside the image, then a clear saved confirmation.
+Selecting the same image again reuses the saved copy.
+Finished backgrounds and cutouts use no AI credits.
+AI cleanup is optional and starts only when explicitly requested.
+
+The blank-preview case caused by a missing font file is fixed.
+The app includes a fallback copy of the intended sporting font.
+Other preview failures show an error and Retry preview.
 
 INSTALL
-1. Unzip Club_Batting_140_Website.zip.
+1. Unzip Club_Batting_141_Website.zip.
 2. Upload the contents of Website_Files to the usual website folder.
    Keep the assets and videos subfolders.
-3. Keep the existing config.js, styles.css and CNAME.
-   They are deliberately excluded.
-4. Refresh and check version 0.8.62.140.
+3. Keep the existing config.js, styles.css and CNAME; they are excluded.
+4. Refresh and check version 0.8.62.141.
 
-Cumulative update from .139. No database or Edge Function update required.
+Cumulative from .140. No database or Edge Function update required.
 The website has not been deployed by this delivery.
 
 CHECKED
-Desktop and phone: guided steps, approval, finished images without AI
-credits, safe save retry, captain defaults, returning photos to the correct
-team, and image download. AI provider responses were simulated; the first
-real in-app preparation still needs the live verification noted in .138.
+Desktop and phone: slow uploads, repeat uploads, missing font, automatic
+previews, Back/Next, switching players, failed save retry, unreadable
+images, preview recovery, no-credit supplied images and team PNG export.
+AI responses were simulated; real cutout generation still needs a live trial.
+
+Draft images are retained while navigating within the current app tab.
+Save images before closing or refreshing the browser.
 
