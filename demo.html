@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.130 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.131 — shared grades, season captains and flexible match teams
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.130';
+const APP_UI_VERSION='0.8.62.131';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -7433,6 +7433,11 @@ const CLUB_BATTING_HELP = {
         "body": "For a general note, select This isn’t about their Player Plan. The player reads it immediately. For plan-related match feedback, the player records their own view before seeing staff answers or video. Has no plan points to completing the Player Plan without demanding a fictional reflection. Did not bat records participation without a reflection request. Training observations remain immediately visible."
       },
       {
+        "title": "Record before signup",
+        "body": "Selected players do not need an account before a captain or coach records scores and observations. The person-and-clock icon means signup is pending. Choose Has no plan when appropriate, or use a general observation. Signup through Club Batting or Teams uses the same verified club account and keeps the earlier history. A name alone never claims a record.",
+        "quick_start": true
+      },
+      {
         "title": "Compare decisions and execution",
         "body": "For plan-related feedback, consider the whole innings and the dismissal ball separately. Recognise preparation and commitment, even when execution falls short. Use different perspectives to start a useful conversation."
       },
@@ -7826,6 +7831,11 @@ const CLUB_BATTING_HELP = {
         "products": [
           "teams"
         ],
+        "quick_start": true
+      },
+      {
+        "title": "Record before signup",
+        "body": "Selected players do not need an account before a captain or coach records scores and observations. The person-and-clock icon means signup is pending. Choose Has no plan when appropriate, or use a general observation. Signup through Club Batting or Teams uses the same verified club account and keeps the earlier history. A name alone never claims a record.",
         "quick_start": true
       },
       {
@@ -15699,7 +15709,7 @@ function teamReviewRowHtml(player){
   if(player.selection_only)return `<tr data-team-review-row="${esc(player.player_id)}"><td><strong>${esc(player.display_name)}</strong><div class="team-review-meta">${teamReviewPlayerMeta(player)}</div></td><td colspan="3">${teamReviewSelectionHelp(player)}</td></tr>`;
   if(player.historical_only){const base=teamReviewBase(player);return `<tr data-team-review-row="${esc(player.player_id)}" data-historical-observation><td><strong>${esc(player.display_name||player.name||'Player')}</strong><div class="team-review-meta">${teamReviewPlayerMeta(player)}</div></td><td>${esc(TEAM_REVIEW_CHOICES.find(([value])=>value===base.batting_to_plan)?.[1]||'Not recorded')}<p class="help">Saved in this review · read only</p></td><td>${esc(TEAM_REVIEW_DISMISSALS.find(([value])=>value===base.dismissal_classification)?.[1]||'No dismissal assessment recorded')}</td><td>${esc(player.score_text||'Not recorded')}</td></tr>`;}
   const s=ensureTeamReviewState(),base=teamReviewBase(player),draft=s.drafts[player.player_id],row=draft||base,name=player.display_name||player.name||'Player',locked=teamReviewControlsLocked()||!s.loaded||(!!s.sessionId&&!s.editReview)||s.removed.includes(player.player_id),suppressed=['did_not_bat','no_plan'].includes(row.batting_to_plan),candidates=player.candidates||[],saved=s.saved.includes(player.player_id)||(!draft&&!!row.batting_to_plan),baseLabel=TEAM_REVIEW_CHOICES.find(([value])=>value===base.batting_to_plan)?.[1]||'Not recorded';
-  return `<tr data-team-review-row="${esc(player.player_id)}"><td><button type="button" class="team-review-player team-review-player-link" data-team-observation="${esc(player.player_id)}" aria-label="Add or edit match observation for ${esc(name)}" ${teamReviewControlsLocked()||!s.loaded||player.can_edit===false?'disabled':''}>${esc(name)}</button><div class="team-review-meta">${teamReviewPlayerMeta(player)}</div>${player.other_observer_count?`<div class="team-review-meta">${player.other_observer_count} other ${player.other_observer_count===1?'observer':'observers'} · views kept separately</div>`:''}</td><td>${candidates.length&&!player.match_id?`<div class="team-review-candidate"><label for="teamCandidate-${esc(player.player_id)}">Choose the existing innings for ${esc(name)}</label><select id="teamCandidate-${esc(player.player_id)}" data-team-candidate="${esc(player.player_id)}" ${locked?'disabled':''}><option value="">Choose before saving</option>${candidates.map(c=>`<option value="${esc(c.id)}" ${row.match_id===c.id?'selected':''}>${esc(c.opposition||'Opposition not recorded')} · ${esc(c.score_text||'Score not recorded')} · innings ${Number(c.innings_number)||1}</option>`).join('')}</select><p class="help">Similar records already exist. Choose the correct one so everyone’s views stay together.</p></div>`:''}<div class="team-review-options" role="group" aria-label="Did ${esc(name)} bat to their plan?">${TEAM_REVIEW_CHOICES.map(([value,label])=>`<button type="button" class="team-review-option" data-team-player="${esc(player.player_id)}" data-team-choice="${value}" aria-pressed="${row.batting_to_plan===value}" ${locked?'disabled':''}>${label}</button>`).join('')}</div><p class="team-review-row-status ${saved?'team-review-saved':''}" role="status">${s.removed.includes(player.player_id)?'Will be removed when you save':draft?'Ready to save':s.saved.includes(player.player_id)?'Saved in this review ✓':saved?'Previously recorded':'Not yet entered'}</p>${suppressed?`<p class="help">${row.batting_to_plan==='did_not_bat'?'Did not bat · no innings reflection is requested.':'The player is prompted to complete their Player Plan.'}</p>`:''}${draft?._conflict?`<div class="team-review-conflict" role="alert"><p>${esc(draft._conflict)}</p><p>Currently saved: <strong>${esc(baseLabel)}</strong>${base.dismissal_classification?` · ${esc(TEAM_REVIEW_DISMISSALS.find(([key])=>key===base.dismissal_classification)?.[1]||base.dismissal_classification)}`:''}. Your choices are still above.</p><button type="button" class="btn ghost" data-team-adopt="${esc(player.player_id)}" ${locked?'disabled':''}>I’ve checked — use my choices</button></div>`:''}</td><td><label class="sr-only" for="teamDismissal-${esc(player.player_id)}">Dismissal decision for ${esc(name)}</label>${suppressed?'<p class="help">No dismissal assessment needed.</p>':`<select id="teamDismissal-${esc(player.player_id)}" data-team-dismissal="${esc(player.player_id)}" ${locked?'disabled':''}><option value="">Dismissal decision · optional</option>${TEAM_REVIEW_DISMISSALS.map(([value,label])=>`<option value="${value}" ${row.dismissal_classification===value?'selected':''}>${esc(label)}</option>`).join('')}</select>`}<div class="team-review-actions">${s.loaded?`<button type="button" class="btn ghost" data-team-detail="${esc(player.player_id)}" ${teamReviewControlsLocked()||player.can_edit===false?'disabled':''}>${row.match_id?'Add / edit observation':'Add observation'}</button>`:''}${s.sessionId&&s.editReview&&player.included_in_review?`<button type="button" class="btn ghost" data-team-remove="${esc(player.player_id)}" ${teamReviewControlsLocked()?'disabled':''}>${s.removed.includes(player.player_id)?'Keep in this review':'Remove from this review'}</button>`:''}${draft?`<button type="button" class="btn ghost" data-team-discard="${esc(player.player_id)}" ${locked?'disabled':''}>Discard my changes</button>`:''}</div></td>${matchReviewScoreCell(player)}</tr>`;
+  return `<tr data-team-review-row="${esc(player.player_id)}"><td><button type="button" class="team-review-player team-review-player-link" data-team-observation="${esc(player.player_id)}" aria-label="Add or edit match observation for ${esc(name)}" ${teamReviewControlsLocked()||!s.loaded||player.can_edit===false?'disabled':''}>${esc(name)}</button>${teamReviewSignupIcon(player)}<div class="team-review-meta">${teamReviewPlayerMeta(player)}</div>${player.other_observer_count?`<div class="team-review-meta">${player.other_observer_count} other ${player.other_observer_count===1?'observer':'observers'} · views kept separately</div>`:''}</td><td>${candidates.length&&!player.match_id?`<div class="team-review-candidate"><label for="teamCandidate-${esc(player.player_id)}">Choose the existing innings for ${esc(name)}</label><select id="teamCandidate-${esc(player.player_id)}" data-team-candidate="${esc(player.player_id)}" ${locked?'disabled':''}><option value="">Choose before saving</option>${candidates.map(c=>`<option value="${esc(c.id)}" ${row.match_id===c.id?'selected':''}>${esc(c.opposition||'Opposition not recorded')} · ${esc(c.score_text||'Score not recorded')} · innings ${Number(c.innings_number)||1}</option>`).join('')}</select><p class="help">Similar records already exist. Choose the correct one so everyone’s views stay together.</p></div>`:''}<div class="team-review-options" role="group" aria-label="Did ${esc(name)} bat to their plan?">${TEAM_REVIEW_CHOICES.map(([value,label])=>`<button type="button" class="team-review-option" data-team-player="${esc(player.player_id)}" data-team-choice="${value}" aria-pressed="${row.batting_to_plan===value}" ${locked?'disabled':''}>${label}</button>`).join('')}</div><p class="team-review-row-status ${saved?'team-review-saved':''}" role="status">${s.removed.includes(player.player_id)?'Will be removed when you save':draft?'Ready to save':s.saved.includes(player.player_id)?'Saved in this review ✓':saved?'Previously recorded':'Not yet entered'}</p>${suppressed?`<p class="help">${row.batting_to_plan==='did_not_bat'?'Did not bat · no innings reflection is requested.':player.account_pending?'No plan recorded. These observations stay with the player when they sign up.':'The player is prompted to complete their Player Plan.'}</p>`:''}${draft?._conflict?`<div class="team-review-conflict" role="alert"><p>${esc(draft._conflict)}</p><p>Currently saved: <strong>${esc(baseLabel)}</strong>${base.dismissal_classification?` · ${esc(TEAM_REVIEW_DISMISSALS.find(([key])=>key===base.dismissal_classification)?.[1]||base.dismissal_classification)}`:''}. Your choices are still above.</p><button type="button" class="btn ghost" data-team-adopt="${esc(player.player_id)}" ${locked?'disabled':''}>I’ve checked — use my choices</button></div>`:''}</td><td><label class="sr-only" for="teamDismissal-${esc(player.player_id)}">Dismissal decision for ${esc(name)}</label>${suppressed?'<p class="help">No dismissal assessment needed.</p>':`<select id="teamDismissal-${esc(player.player_id)}" data-team-dismissal="${esc(player.player_id)}" ${locked?'disabled':''}><option value="">Dismissal decision · optional</option>${TEAM_REVIEW_DISMISSALS.map(([value,label])=>`<option value="${value}" ${row.dismissal_classification===value?'selected':''}>${esc(label)}</option>`).join('')}</select>`}<div class="team-review-actions">${s.loaded?`<button type="button" class="btn ghost" data-team-detail="${esc(player.player_id)}" ${teamReviewControlsLocked()||player.can_edit===false?'disabled':''}>${row.match_id?'Add / edit observation':'Add observation'}</button>`:''}${s.sessionId&&s.editReview&&player.included_in_review?`<button type="button" class="btn ghost" data-team-remove="${esc(player.player_id)}" ${teamReviewControlsLocked()?'disabled':''}>${s.removed.includes(player.player_id)?'Keep in this review':'Remove from this review'}</button>`:''}${draft?`<button type="button" class="btn ghost" data-team-discard="${esc(player.player_id)}" ${locked?'disabled':''}>Discard my changes</button>`:''}</div></td>${matchReviewScoreCell(player)}</tr>`;
 }
 function teamReviewSavedGroupName(review){return review?.group_scope==='legacy'?'Grade not recorded':review?.group_name||(review?.group_scope==='unassigned'?'Currently unassigned':review?.group_scope==='group'?'Recorded grade':'All permitted players');}
 function teamReviewGradeOptions(s,placeholder=false){return `${s.sessionGroupScope==='legacy'?'<option value="__legacy__" selected>Grade not recorded</option>':''}${placeholder?'<option value="">Choose a grade</option>':'<option value="">All grades</option>'}<option value="__all__" ${s.group==='__all__'?'selected':''}>All players I can edit</option><option value="__unassigned__" ${s.group==='__unassigned__'?'selected':''}>Currently unassigned</option>${(s.groups||teamReviewCache?.groups||[]).map(g=>`<option value="${esc(g.id)}" ${g.id===s.group?'selected':''}>${esc(g.name)}</option>`).join('')}`;}
@@ -15720,7 +15730,6 @@ function renderTeamReviewContent(){
   document.getElementById('retryTeamReviewLoad')?.addEventListener('click',()=>renderTeamReview());
   bindTeamReviewRosterEditor();
   wireFixtureCorrectionActions(page);
-  page.querySelectorAll('[data-review-open-playing-list]').forEach(button=>button.onclick=teamReviewOpenPlayingList);
   document.getElementById('saveTeamReview')?.addEventListener('click',()=>saveTeamReview());
   document.getElementById('refreshTeamSelection')?.addEventListener('click',()=>renderTeamReview());
   document.getElementById('editSavedTeamReview')?.addEventListener('click',()=>{s.editReview=true;s.message='Editing this saved review. Changes are saved only when you click Save match review.';renderTeamReviewContent();});document.getElementById('newSavedTeamReview')?.addEventListener('click',clearTeamReviewEntry);
@@ -15834,7 +15843,7 @@ async function openTeamReviewPlayer(playerId){
   if(base.match_id&&!match||matches.length>1&&!base.match_id)throw Error('Reload the match and choose the correct existing innings.');
   if(match&&!matches.some(m=>m.id===match.id))throw Error('That innings has different match details. Check the selected fixture first.');
   const feedback=(match?.coach_feedback||[]).find(f=>f.author_user_id===session.user.id);
-  s.observation={player:{id:playerId,display_name:player.display_name||player.name||'Player'},data,matchId:match?.id||null,feedbackId:feedback?.id||null,pending:false};s.message='';
+  s.observation={player:{id:playerId,display_name:player.display_name||player.name||'Player',account_pending:!!player.account_pending,account_link_review:!!player.account_link_review},data,matchId:match?.id||null,feedbackId:feedback?.id||null,pending:false};s.message='';
  }catch(error){s.message=error?.message||'Could not open this observation.';}
  s.loading=false;renderTeamReviewContent();document.getElementById('fixtureObservationHeading')?.focus();
 }
@@ -15846,7 +15855,7 @@ function closeTeamReviewObservation(){
 }
 function renderTeamReviewObservation(){
  const s=ensureTeamReviewState(),o=s.observation,page=document.getElementById('page');if(!o||!page)return;
- page.innerHTML=teamReviewStyles()+`<section class="card"><div class="team-review-heading"><div><div class="section-label">Match observation</div><h1 id="fixtureObservationHeading" tabindex="-1">${esc(o.player.display_name)}</h1><p><strong>${esc(s.opposition)} · ${esc(formatDateShort(s.match_date))}</strong></p><p class="help">${esc((s.groups||[]).find(g=>g.id===s.group)?.name||'Match review')} · ${esc(formatLabel(s.format_key))} · innings ${s.innings_number}</p></div><button type="button" class="btn ghost" id="backToFixture">Back to match</button></div><p class="help">The match details are already filled in. Save this player’s observation, then return to the match to choose another player.</p></section>`+renderStaffMatchFeedbackForm(o.player,o.data,o.matchId,o.feedbackId);
+ page.innerHTML=teamReviewStyles()+`<section class="card"><div class="team-review-heading"><div><div class="section-label">Match observation</div><h1 id="fixtureObservationHeading" tabindex="-1">${esc(o.player.display_name)}${teamReviewSignupIcon(o.player)}</h1><p><strong>${esc(s.opposition)} · ${esc(formatDateShort(s.match_date))}</strong></p><p class="help">${esc((s.groups||[]).find(g=>g.id===s.group)?.name||'Match review')} · ${esc(formatLabel(s.format_key))} · innings ${s.innings_number}</p></div><button type="button" class="btn ghost" id="backToFixture">Back to match</button></div><p class="help">The match details are already filled in. Save this player’s observation, then return to the match to choose another player.</p></section>`+renderStaffMatchFeedbackForm(o.player,o.data,o.matchId,o.feedbackId);
  const form=document.getElementById('staffDevelopmentForm');if(!form)return;
  const fields={staffMatchDate:s.match_date,staffMatchFormat:s.format_key,staffMatchOpposition:s.opposition,staffMatchInningsNumber:s.innings_number};
  for(const [id,value] of Object.entries(fields)){const field=document.getElementById(id);if(id==='staffMatchFormat'&&![...field.options].some(x=>x.value===value))field.add(new Option(formatLabel(value),value));field.value=value;field.disabled=true;}
@@ -15875,9 +15884,9 @@ function teamReviewSelectedRows(s,players){
  const selection=teamReviewSelection(s);
  const current=(['published','manual'].includes(selection?.status)?selection.players||[]:[]).map(selected=>{
   const player=players.find(p=>p.player_id===selected.player_id&&p.can_edit!==false);
-  const shared={current_selection:true,match_captain:selection.roles?.captain_player_id===selected.player_id,match_keeper:selection.roles?.keeper_player_id===selected.player_id,selected_in_teams:selection.status==='published',chosen_for_match:selection.status==='manual',selection_days:selected.days||[],selection_slot:selected.slot};
+  const shared={current_selection:true,account_pending:!!selected.account_pending,account_link_review:!!selected.account_link_review,match_captain:selection.roles?.captain_player_id===selected.player_id,match_keeper:selection.roles?.keeper_player_id===selected.player_id,selected_in_teams:selection.status==='published',chosen_for_match:selection.status==='manual',selection_days:selected.days||[],selection_slot:selected.slot};
   if(player&&selected.can_edit)return {...player,...shared};
-  return {...shared,player_id:selected.player_id||'roster:'+selected.roster_id,display_name:selected.name,name:selected.name,can_edit:false,selection_only:true,selection_issue:selected.link_status||(selected.player_id?'no_coaching_access':'unresolved_account'),selection_message:selected.player_id?'Your coaching access does not include this player.':'This selected player is not yet linked to an active Club Batting player account.'};
+  return {...shared,roster_id:selected.roster_id,player_id:selected.player_id||'roster:'+selected.roster_id,display_name:selected.name,name:selected.name,can_edit:false,selection_only:true,selection_issue:selected.link_status||(selected.player_id?'no_coaching_access':'unresolved_account'),selection_message:selected.player_id?'Your coaching access does not include this player.':'This selected player’s observation record needs an account check.'};
  });
  if(!s.sessionId)return current;
  // The server has already checked access to each returned saved contribution.
@@ -15888,15 +15897,20 @@ function teamReviewSelectedRows(s,players){
  });
  return [...saved,...current.filter(p=>!saved.some(saved=>saved.player_id===p.player_id))];
 }
+function teamReviewSignupIcon(player){
+ if(!player.account_pending)return '';
+ const label=player.account_link_review?'Club Batting account link needs review. Earlier observations are safely held with this player.':'No Club Batting account yet. Observations are saved and will follow their verified signup through either product.';
+ return `<span class="team-review-signup" role="img" tabindex="0" title="${esc(label)}" aria-label="${esc(label)}" style="display:inline-flex;vertical-align:middle;margin-left:7px;color:#85620d;cursor:help"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="7" r="3"/><path d="M3 19v-2a6 6 0 0 1 9-5"/><circle cx="17" cy="17" r="5"/><path d="M17 14v3l2 1"/></svg></span>`;
+}
 function teamReviewPlayerMeta(player){
  if(player.historical_only)return 'Saved observation · no longer in the current team';
  return player.selected_in_teams?'Selected in Teams'+((player.selection_days||[]).length?` · ${player.selection_days.length>1?'Days':'Day'} ${player.selection_days.join(' & ')}`:''):player.chosen_for_match?'Chosen for this match'+(player.match_captain?' · Captain':'')+(player.match_keeper?' · Wicketkeeper':''):'Saved observation';
 }
 function teamReviewSelectionHelp(player){
  const issue=player.selection_issue,admin=typeof isAdmin==='function'&&isAdmin();
- const fixes={missing_account:'In Teams → Playing List, open this player’s details and link their verified club account.',missing_batting_account:'In Club Batting → Players, check that this same club account has a player record.',inactive_batting_account:'In Club Batting → Players, check this player’s inactive record before restoring access.',ambiguous_batting_account:'Ask Club Admin to resolve the duplicate active player records linked to this account.',no_coaching_access:'Club Admin needs to check your coaching access to this player.',unresolved_account:'Club Admin needs to check the player’s account link in Teams → Playing List and their active Club Batting player record.'};
+ const fixes={missing_account:'Refresh this match to prepare the selected player’s observation record. If it is still unavailable, ask Club Admin to check the playing-list record.',missing_batting_account:'In Club Batting → Players, check that this same club account has a player record.',inactive_batting_account:'In Club Batting → Players, check this player’s inactive record before restoring access.',ambiguous_batting_account:'Ask Club Admin to resolve the duplicate active player records linked to this account.',no_coaching_access:'Club Admin needs to check your coaching access to this player.',unresolved_account:'Club Admin needs to check the player’s account link in Teams → Playing List and their active Club Batting player record.'};
  const labels={missing_account:'No app account is linked.',missing_batting_account:'The linked account has no Club Batting player record.',inactive_batting_account:'The linked Club Batting player record is inactive.',ambiguous_batting_account:'More than one active Club Batting player record uses this account.',no_coaching_access:'You do not have coaching access to this player.'};
- return `<p class="help">${esc(labels[issue]||player.selection_message)} ${esc(fixes[issue]||fixes.unresolved_account)}</p>${admin&&issue==='missing_account'?'<button type="button" class="btn ghost" data-review-open-playing-list>Open Teams playing list</button>':''}`;
+ return `<p class="help">${esc(labels[issue]||player.selection_message)} ${esc(fixes[issue]||fixes.unresolved_account)}</p>`;
 }
 function teamReviewTableRows(rows){
  const s=ensureTeamReviewState();if(!s.sessionId)return rows.map(teamReviewRowHtml).join('');
@@ -15906,10 +15920,6 @@ function teamReviewTableRows(rows){
 function teamReviewHistoryNotice(){
  const s=ensureTeamReviewState();if(!s.sessionId)return '';
  return `<p class="help">${s.reviewFixture?.cancelled?'This fixture is cancelled. ':''}Saved observations remain below when the team changes. Players outside the current selection are shown as read-only history; this does not select them for the match.</p>`;
-}
-async function teamReviewOpenPlayingList(){
- if(teamReviewControlsLocked()||typeof isAdmin!=='function'||!isAdmin()||!canOpenClubTab('teams')||!await saveClubEditsBeforeNavigation())return;
- ensureSelections().view='roster';currentTab='teams';await renderTab();
 }
 function teamReviewEmptyMessage(){
  const s=ensureTeamReviewState(),selection=teamReviewSelection(s);
@@ -15921,7 +15931,7 @@ function teamReviewEmptyMessage(){
  if(s.fixtureId)return '<p>The published team could not be checked. Use Refresh team to try again.</p>';
  return '<p>Choose a fixture from Teams. Its players appear after the team is published. Individual observations can still be recorded from Players.</p>';
 }
-function teamReviewRosterHelp(){return 'A team published in Teams supplies this match’s players. Until then, use Set match team in Club Batting to choose players, captain and keeper. Playing Groups provide a starting list only when you choose to add them.';}
+function teamReviewRosterHelp(){return 'A team published in Teams supplies this match’s players. You can record observations before players sign up; the small person-and-clock icon marks those still to join. Until a team is published, use Set match team in Club Batting to choose players, captain and keeper.';}
 function teamReviewCanChoosePlayers(s=ensureTeamReviewState()){
  return !!s.loaded&&!!s.group&&!s.group.startsWith('__')&&(!s.fixtureId||['manual','unpublished'].includes(teamReviewSelection(s)?.status));
 }
@@ -26069,7 +26079,7 @@ function demoPublishedReviewSelection(f){
  if(demoSharedFixtureKey(f)!==demoSharedFixtureKey({details:f.published.details}))return {status:'changed_fixture',publication:f.publication,players:[]};
  const picked=new Map(),editable=new Set(demoTeamEditable().map(p=>p.id));
  f.published.slots.forEach((slot,index)=>f.published.details.days.forEach((_,day)=>{const id=slot['d'+(day+1)];if(!id)return;const selected=picked.get(id)||{roster_id:id,slot:index+1,days:[]};if(!selected.days.includes(day+1))selected.days.push(day+1);picked.set(id,selected);}));
- const players=[...picked.values()].map(p=>{const r=demoSelections.roster.find(r=>r.id===p.roster_id),matches=fixtureRows.players.filter(x=>x.club_id===club.id&&x.active!==false&&x.user_id&&x.user_id===r?.user_id),linked=matches.length===1?matches[0]:null;return {...p,player_id:linked?.id||null,name:f.published.players.find(x=>x.id===p.roster_id)?.name||r?.name||'Selected player',can_edit:!!linked&&editable.has(linked.id)};});
+ const players=[...picked.values()].map(p=>{const r=demoSelections.roster.find(r=>r.id===p.roster_id),matches=fixtureRows.players.filter(x=>x.club_id===club.id&&x.active!==false&&(r?.review_player_id===x.id||(x.user_id&&x.user_id===r?.user_id))),linked=matches.length===1?matches[0]:null;return {...p,player_id:linked?.id||null,account_pending:!!linked&&!linked.user_id,name:f.published.players.find(x=>x.id===p.roster_id)?.name||r?.name||'Selected player',can_edit:!!linked&&editable.has(linked.id)};});
  return {status:'published',publication:f.publication,players};
 }
 function demoPublishedReviewFixtures(){
@@ -26249,6 +26259,23 @@ window.__fixtureRpc=async(name,args={})=>{
  const result=await beforeSeasonSetupRpc(name,args);
  if(!result.error&&result.data&&['get_team_review_roster','get_team_match_review','get_team_review_session'].includes(name))result.data.groups=fixtureGroups.filter(g=>g.active).map(demoSharedGroup);
  return result;
+};
+
+// Fictional-only identity provisioning. The production path is enforced by SQL.
+function demoEnsurePendingPlayers(){
+ if(!demoSelections)return;
+ const ids=new Set(demoSelections.fixtures.filter(f=>f.published&&!f.published.details.cancelled).flatMap(f=>f.published.slots.flatMap(s=>[s.d1,...(f.published.details.days.length>1?[s.d2]:[])]).filter(Boolean)));
+ for(const rid of ids){const r=demoSelections.roster.find(r=>r.id===rid&&r.active!==false);if(!r)continue;
+  let p=fixtureRows.players.find(p=>p.id===r.review_player_id)||(r.user_id?fixtureRows.players.find(p=>p.user_id===r.user_id):null);
+  if(!p){p={id:'review-'+r.id,club_id:club.id,user_id:r.user_id||null,display_name:r.name,active:true};fixtureRows.players.push(p);fixtureRows.feedback[p.id]=demoEmptyFeedback();}
+  r.review_player_id=p.id;
+  if(r.user_id&&!p.user_id)p.user_id=r.user_id;
+ }
+}
+const demoBeforePendingPlayersRpc=window.__fixtureRpc;
+window.__fixtureRpc=async(name,args={})=>{
+ if(['get_team_review_roster','get_team_match_review','get_team_review_session'].includes(name))demoEnsurePendingPlayers();
+ return demoBeforePendingPlayersRpc(name,args);
 };
 
 function demoDecorate(){
