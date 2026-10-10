@@ -1,10 +1,10 @@
-// Club Batting 0.8.62.129 — shared fixtures, retained reviews and recoverable match work
+// Club Batting 0.8.62.130 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.129';
+const APP_UI_VERSION='0.8.62.130';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1869,14 +1869,15 @@ function clubSetupUnavailableReason(tab){
 }
 
 function canOpenClubTab(tab){
-  if(productTrialWaiting()&&!['products','guide','club_settings','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
-  if(productTrialWaiting()&&!['products','guide','club_settings','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
-  if(productTrialWaiting()&&!['products','guide','club_settings','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
-  if(productTrialWaiting()&&!['products','guide','club_settings','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
+  if(tab==='club_teams')return !!(session&&membership&&club&&isAdmin());
   if(tab==='teams')return !!(session&&membership&&club);
   if(selectionsStandalone()&&!['teams','permissions','club_settings','messages','phone_app','guide','join_club'].includes(tab))return false;
   if(['join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
@@ -2010,6 +2011,7 @@ async function expandClubHomeStage(key,progress){
 
 
 async function saveClubEditsBeforeNavigation(){
+  if(currentTab==='club_teams'&&sharedTeamsDirty()){const s=sharedTeams();if(s.busy||s.pending){alert('Confirm the pending grade and captain save before leaving.');return false;}if(!confirm('Discard unsaved grade and captain changes?'))return false;s.drafts={};s.settings=null;}
   if(!confirmLeaveClubBranding())return false;
   if(!confirmLeaveSelections())return false;
   if(!confirmLeaveCoachingStaff())return false;
@@ -2433,7 +2435,7 @@ function accountMenuHtml({allowJoin=true,allowCoaching=false,outId='out',joinId=
       ${showPlatform&&platformAccessError?'<div class="account-access-status" role="status">We couldn’t check your account access.<button class="account-menu-action" id="retryAccountAccess" type="button">Try again</button></div>':''}
       ${allowCoaching&&isAdmin()?'<button class="account-menu-action" data-product-trials type="button">Products & trials</button>':''}
       ${allowJoin?`<button class="account-menu-action" id="${joinId}" type="button">Join another club</button>`:''}
-      ${allowCoaching&&isAdmin()?'<button class="account-menu-action" data-club-branding type="button">Club settings</button>':''}
+      ${allowCoaching&&isAdmin()?'<button class="account-menu-action" data-club-branding type="button">Club settings</button><button class="account-menu-action" data-shared-teams type="button">Grades &amp; season captains</button>':''}
       ${allowCoaching&&!selectionsStandalone()?'<button class="account-menu-action" id="accountCoaching" type="button">Coach Conversations</button>':''}
       ${allowCoaching?'<button class="account-menu-action" data-club-messages type="button">Messages</button><button class="account-menu-action" data-phone-open type="button">App & notifications</button>':''}
       <button class="account-menu-action" id="accountPassword" type="button">Set / change password</button>
@@ -3048,7 +3050,7 @@ function renderTab(){
   const map={
     products:renderMyClubProducts,teams:renderSelections,messages:renderClubMessages,phone_app:renderPhoneApp,
     join_club:renderJoinAnotherClub,
-    dashboard:renderClubDashboard,club_settings:renderClubBrandingSettings,
+    dashboard:renderClubDashboard,club_settings:renderClubBrandingSettings,club_teams:renderSharedTeams,
     playerhome:renderPlayerHome,
     innings:renderMyInnings,make_your_call:renderMakeYourCall,
     groups:renderPlayingGroups,
@@ -3124,7 +3126,7 @@ async function openClubBattingGuideTopic(capabilityKey='whole_process',{focus='t
 }
 
 function guideTargetLabel(tab){
-  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',innings:'My Innings',make_your_call:'Make your prediction',howwetrain:'How We Train',conversations:'Coach Conversations',messages:'Messages',phone_app:'App & notifications',teams:'Teams & availability',team_review:'Match Review',groups:'Playing Groups',training_preparation:'Training preparation'}[tab]||'this area');
+  return ({dashboard:'Club Home',permissions:'People & Sign-up',workshop:'Batting Philosophy Workshop',howwebat:'How We Bat',plan:'Player Plan Structure',players:'Players',playerhome:'Player Home',myplan:'My Player Plan',innings:'My Innings',make_your_call:'Make your prediction',howwetrain:'How We Train',conversations:'Coach Conversations',messages:'Messages',phone_app:'App & notifications',teams:'Teams & availability',team_review:'Match Review',groups:'Playing Groups',club_teams:'Grades & season captains',training_preparation:'Training preparation'}[tab]||'this area');
 }
 
 function guideTargetUnavailableReason(tab,focus=''){
@@ -3400,7 +3402,7 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Choose the role and scope",
-        "body": "Assign Captain, Coach, Head Coach or Admin. For coaching roles, choose no assigned player access, whole-club view/edit, or selected Playing Groups with view/edit. Admin has full club access. Being a Head Coach or Captain does not itself make someone a registered player."
+        "body": "Assign Captain, Coach, Head Coach or Admin. For coaching roles, choose no assigned player access, whole-club view/edit, or selected Playing Groups with view/edit. Admin has full club access. Being a Head Coach or Captain does not itself make someone a registered player. A Captain permission role alone is not a season appointment. Use Account → Grades & season captains to appoint the captain for each grade. Existing explicitly assigned coaching access remains separate."
       },
       {
         "title": "Save one or several changes",
@@ -3695,6 +3697,12 @@ const CLUB_BATTING_HELP = {
       {
         "title": "Keep a group separate from a match team",
         "body": "A Playing Group is a saved way to organise players. A grade is the team named on a fixture. Choosing a grade or filtering by a Playing Group never selects everyone in that group. With Teams, the published selection supplies the match players; without Teams, the captain or coach chooses them for that match."
+      },
+      {
+        "title": "Appoint a season captain in shared setup",
+        "body": "Club Admin opens Account → Grades & season captains (also in Teams Settings). Create or edit the shared grade, choose a registered club member and Save grade & captain. The same grade and captain are used by either product, including Teams-only clubs. The appointment lasts until changed or removed. It does not grant selector powers or select anyone for a match.",
+        "target_tab": "club_teams",
+        "quick_start": true
       },
       {
         "title": "Find unassigned players",
@@ -4632,19 +4640,24 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Use the published team",
-        "body": "For a club using Teams, Match Review lists only that fixture’s published selection. Before publication it shows Team not finalised. A saved draft does not change the published team; changes appear after the Head of Selections republishes. An unavailable player is not substituted automatically. Ask the selectors to resolve the team.",
+        "body": "A published Teams selection supplies the current Match Review team. Before publication the team is empty unless authorised staff deliberately save a match team in Club Batting. Draft selections do not populate Match Review. Once Teams publishes this fixture, that selection becomes the current team, while saved observations stay on the same innings.",
         "products": [
           "teams"
         ],
         "quick_start": true
       },
       {
-        "title": "Choose players without Teams",
-        "body": "For a Club Batting-only club, choose the fixture or enter its grade, date, format and opposition. Open Choose players for this match, tick the players who are playing and Save match players. Playing Group and name filters only narrow the search; they do not tick anyone. The list is shared by the club’s authorised coaches and captains.",
+        "title": "Set a team without waiting for Teams",
+        "body": "Choose the fixture or enter its grade, date, format and opposition. Open Set match team in Club Batting. Use Add players from the Playing Group for a starting list, then tick or untick players and search for additional names. A selected season captain is assigned automatically; otherwise choose a stand-in captain. Allocate the wicketkeeper and final playing date, including a second day when needed. Save match team. This works for Batting-only clubs and while Teams is enabled but not yet publishing teams. Only the saved list selects players. A later Teams publication takes over for that same fixture and retains observations.",
         "products": [
-          "batting_only"
+          "batting"
         ],
         "quick_start": true
+      },
+      {
+        "title": "Keep both captains involved",
+        "body": "The appointed season captain can observe their grade’s players even when injured or not selected. A stand-in has access to the selected match players until the club’s deadline after the final playing date. Each person’s observations keep their own authorship; appointing another captain never overwrites existing assessments. Admin can change the expiry allowance and club time zone in Grades & season captains.",
+        "quick_start": false
       },
       {
         "title": "Record an individual observation first",
@@ -4697,7 +4710,7 @@ const CLUB_BATTING_HELP = {
         "quick_start": true
       },
       {
-        "body": "Choose New match review after saving, or open Saved match reviews and choose New match review there. Confirm before discarding unsaved answers. Starting a new entry does not delete a saved review or a player’s innings. Loading a match saves nothing. Save match players confirms a Club Batting-only player list; Save match review confirms observations and selected scores.",
+        "body": "Choose New match review after saving, or open Saved match reviews and choose New match review there. Confirm before discarding unsaved answers. Starting a new entry does not delete a saved review or a player’s innings. Loading a match saves nothing. Save match team confirms an explicitly chosen player list before any Teams publication; Save match review confirms observations and selected scores.",
         "title": "Start a new team entry",
         "quick_start": false
       },
@@ -4912,7 +4925,7 @@ const CLUB_BATTING_HELP = {
         "quick_start": false
       },
       {
-        "body": "Club Admin without a selection role uses Fixtures → Add fixture. Selectors use Selection board → Add fixture. Choose grade, format, overs, opposition and actual Day 1 / optional Day 2 dates. Active Playing Groups supply grades when both products are used. Start is optional; there is no fixed finish. Selectors appoint the match captain and keeper on the board. Admin fixture edits preserve selections and appointments. If a coach already created this match through an individual observation, open that existing fixture and complete the ordinary selection there.",
+        "body": "Club Admin without a selection role uses Fixtures → Add fixture. Selectors use Selection board → Add fixture. Choose grade, format, overs, opposition and actual Day 1 / optional Day 2 dates. Shared active grades supply the list for every club, including Teams-only clubs. Start is optional; there is no fixed finish. Selectors appoint the match captain and keeper on the board. Admin fixture edits preserve selections and appointments. If a coach already created this match through an individual observation, open that existing fixture and complete the ordinary selection there.",
         "title": "Select against real fixture dates",
         "target_tab": "teams",
         "quick_start": false
@@ -4932,7 +4945,7 @@ const CLUB_BATTING_HELP = {
         "staff_only": true
       },
       {
-        "body": "Use the Captain and Keeper choices on each team card; changes save immediately. With both products, the selected captain assigned to that Playing Group in Club Batting defaults automatically. If absent or ambiguous, choose a selected player. Selections-only clubs appoint a captain for each fixture. One selected keeper-capable player defaults automatically; two or more require a choice. Only the appointed keeper receives the gloves icon. Appointments can differ by day for bracketed teams. Match changes do not alter season permissions or player attributes. No batting account is needed.",
+        "body": "Club Admin first appoints each grade’s season captain in Account → Grades & season captains, also linked from Teams Settings. If that person is selected on a playing day, they are automatically Captain. If absent, use the Stand-in captain dropdown for a selected player. Keeper uses its own selected-player choice. Appointments can differ by day. Both captains have the appropriate messaging and, when Club Batting is used, observation access. The season captain keeps their grade access even while injured or not selected. Stand-in captain privileges end after the final playing date plus the club’s configured allowance; ordinary player access remains. Default: midnight after one additional day. Saturday → Sunday midnight; Wednesday → Thursday midnight; two-day matches use their last scheduled date.",
         "title": "Choose the match captain and keeper",
         "target_tab": "teams",
         "quick_start": false
@@ -4957,14 +4970,14 @@ const CLUB_BATTING_HELP = {
         "staff_only": true
       },
       {
-        "body": "Only the assigned Head of Selections publishes to players. Captain disagreement, no reply or later edits do not block publication or require resending. Each day needs 11 available players, an appointed captain and keeper, no duplicates or conflicts, and balance warnings acknowledged. Players retain the last published team until replacement. Published teams and Captain checks show (c) and the keeper icon; copied team lists use (c) and (wk), including distinct Day 1 and Day 2 appointments. Check the changes shown before confirming a republication. Match Review uses this published selection; Playing Groups and unpublished drafts cannot populate it.",
+        "body": "Only the assigned Head of Selections publishes to players. Captain disagreement, no reply or later edits do not block publication or require resending. Each day needs 11 available players, an appointed captain and keeper, no duplicates or conflicts, and balance warnings acknowledged. Players retain the last published team until replacement. Published teams and Captain checks show (c) and the keeper icon; copied team lists use (c) and (wk), including distinct Day 1 and Day 2 appointments. Check the changes shown before confirming a republication. Match Review uses this published selection; Unpublished drafts never populate it. Before a Teams publication, authorised staff may explicitly save a match team in Club Batting while Teams is being trialled.",
         "title": "Publish to players",
         "target_tab": "teams",
         "quick_start": true,
         "staff_only": true
       },
       {
-        "body": "Publishing or revising creates an in-app update for linked current and removed players and current match staff. Existing phone-first messaging uses generic email-link fallback. Match conversations permit current published players, both bracket partners, selectors and nominated staff. Removed players lose conversation access. This does not edit WhatsApp group membership. Unlinked players do not receive app alerts.",
+        "body": "Publishing or revising creates an in-app update for linked current and removed players and current match staff. Existing phone-first messaging uses generic email-link fallback. Match conversations permit current published players, both bracket partners, selectors and nominated staff. Removed players lose conversation access. This does not edit WhatsApp group membership. Unlinked players do not receive app alerts. The appointed season captain can join their grade’s published match conversation even when not selected. Stand-in captain privileges expire automatically; being a selected player still permits ordinary participation in that match conversation.",
         "title": "Use the changing match group",
         "target_tab": "teams",
         "quick_start": true
@@ -5029,10 +5042,10 @@ const CLUB_BATTING_HELP = {
   },
   "selection_playing_groups": {
     "capability_key": "selection_playing_groups",
-    "title": "Selections and Playing Groups",
-    "purpose": "Add missing Playing Group memberships when teams are published.",
-    "short_explanation": "An optional published-team connection can add Playing Group memberships. Groups never create the match selection.",
-    "target_tab": "teams",
+    "title": "Shared grades and season captains",
+    "purpose": "Define each grade and its season captain once, for either product.",
+    "short_explanation": "Both products use the same grade IDs and season captain appointments. Group membership helps organise players; each match has a separately saved selection.",
+    "target_tab": "club_teams",
     "audience": [
       "admin",
       "head_coach",
@@ -5043,13 +5056,18 @@ const CLUB_BATTING_HELP = {
     ],
     "tutorial": [
       {
-        "title": "Choose the optional connection",
-        "body": "When both products are enabled, Club Admin opens Teams & availability → Settings → Club Batting connection (optional). Map the exact competition and grade to an active Playing Group. The fixture Grade dropdown also uses active Playing Group names; choosing a grade alone does not create a membership mapping. Standalone clubs use their own grade names and need no connection. This is a one-way connection from a published team into player organisation, not a way to choose a team from a group.",
-        "target_tab": "teams"
+        "title": "Use one shared setup",
+        "body": "For either product, Club Admin opens Account → Grades & season captains or the link in Teams Settings. Create, rename or reactivate grades, appoint the registered season captain, then Save grade & captain. Existing Club Batting Playing Groups are already here; do not create a second list. Captains are not inferred from general Captain permissions. The selected season captain automatically captains their match; otherwise selectors choose a stand-in.",
+        "target_tab": "club_teams"
+      },
+      {
+        "title": "Set the stand-in access period",
+        "body": "Choose 1–7 days after the final playing date and the club time zone. With the default 1 day, Saturday ends Sunday midnight and Wednesday ends Thursday midnight. For a two-day game, the last scheduled date determines the end for both match captains. Season appointments continue until changed or removed. Changes apply to current appointments.",
+        "target_tab": "club_teams"
       },
       {
         "title": "Add memberships on publication",
-        "body": "Final player publication of the latest fixture for each mapped competition and grade adds any missing membership for linked active batting accounts. Both bracketed players are included. Existing Playing Groups remain. Draft saves, captain sharing and comments do not alter Playing Groups. Players without a batting-account link remain selectable.",
+        "body": "When both products are used, the optional Teams Settings → Club Batting connection maps a competition/grade to the shared Playing Group. Publication adds missing memberships for linked active players; it does not remove other memberships. This mapping is about player organisation and plan priorities. It is separate from the shared grade/captain setup and from the actual match selection.",
         "target_tab": "teams"
       },
       {
@@ -5064,7 +5082,8 @@ const CLUB_BATTING_HELP = {
       "select-publish"
     ],
     "products": [
-      "both"
+      "batting",
+      "teams"
     ],
     "quick_start_count": 5
   },
@@ -5905,7 +5924,7 @@ async function renderPlayingGroups(){
   page.innerHTML=`<div class="grid playing-groups-top">
     <section class="card">
       <div class="section-label">Players · Admin tool</div>
-      <h2 aria-level="1">Playing Groups</h2>
+      <h2 aria-level="1">Playing Groups</h2><button class="btn secondary" type="button" data-shared-teams>Grades &amp; season captains</button>
       <div class="help"><strong>Use the groups your club actually uses.</strong> This is roster administration and can be updated whenever players, grades or development groups change.</div>
       <div class="help">Playing Groups can be grades, junior sides, XI teams, development pools or competition eligibility groups. A player can belong to more than one.</div>
       <div class="btnrow compact" style="margin-top:10px"><button class="btn ghost" id="backToPlayersFromGroups">← Back to Players</button></div>
@@ -12473,7 +12492,7 @@ function teamReviewSelectCandidate(id,matchId){
 function teamReviewReconcile(data){
   if(!Array.isArray(data?.groups)||!Array.isArray(data?.players))throw new Error('The saved team data could not be verified. Please refresh.');
   const s=ensureTeamReviewState();s.needsReload=false;s.reviewFixture=s.sessionId?(data.review_fixture||null):null;s.groups=data.groups;if(typeof data.teams_enabled==='boolean')s.teamsEnabled=data.teams_enabled;if(Array.isArray(data.fixtures))s.fixtures=data.fixtures;teamReviewCache={groups:data.groups,players:data.players};matchReviewRestoreScorecard(data);
-  if(s.rosterDraft&&(s.rosterDraft.baseRevision!==(teamReviewSelection(s)?.revision||0)||!teamReviewCanChoosePlayers(s)))s.rosterConflict='The match player list or Teams access changed while you were editing.';
+  if(s.rosterDraft&&(s.rosterDraft.baseRevision!==(teamReviewSelection(s)?.revision||0)||(s.rosterDraft.baseFixtureRevision!==undefined&&s.rosterDraft.baseFixtureRevision!==teamReviewSelection(s)?.fixture_revision)||!teamReviewCanChoosePlayers(s)))s.rosterConflict='The match player list or Teams access changed while you were editing.';
   for(const [id,draft] of Object.entries(s.drafts)){
     const player=teamReviewPlayer(id);if(!player){draft._conflict='This player is no longer in the match player list, or your coaching access changed.';continue;}
     const base=teamReviewBase(player);
@@ -12674,7 +12693,7 @@ function teamReviewSelectedRows(s,players){
  const selection=teamReviewSelection(s);
  const current=(['published','manual'].includes(selection?.status)?selection.players||[]:[]).map(selected=>{
   const player=players.find(p=>p.player_id===selected.player_id&&p.can_edit!==false);
-  const shared={current_selection:true,selected_in_teams:selection.status==='published',chosen_for_match:selection.status==='manual',selection_days:selected.days||[],selection_slot:selected.slot};
+  const shared={current_selection:true,match_captain:selection.roles?.captain_player_id===selected.player_id,match_keeper:selection.roles?.keeper_player_id===selected.player_id,selected_in_teams:selection.status==='published',chosen_for_match:selection.status==='manual',selection_days:selected.days||[],selection_slot:selected.slot};
   if(player&&selected.can_edit)return {...player,...shared};
   return {...shared,player_id:selected.player_id||'roster:'+selected.roster_id,display_name:selected.name,name:selected.name,can_edit:false,selection_only:true,selection_issue:selected.link_status||(selected.player_id?'no_coaching_access':'unresolved_account'),selection_message:selected.player_id?'Your coaching access does not include this player.':'This selected player is not yet linked to an active Club Batting player account.'};
  });
@@ -12689,7 +12708,7 @@ function teamReviewSelectedRows(s,players){
 }
 function teamReviewPlayerMeta(player){
  if(player.historical_only)return 'Saved observation · no longer in the current team';
- return player.selected_in_teams?'Selected in Teams'+((player.selection_days||[]).length?` · ${player.selection_days.length>1?'Days':'Day'} ${player.selection_days.join(' & ')}`:''):player.chosen_for_match?'Chosen for this match':'Saved observation';
+ return player.selected_in_teams?'Selected in Teams'+((player.selection_days||[]).length?` · ${player.selection_days.length>1?'Days':'Day'} ${player.selection_days.join(' & ')}`:''):player.chosen_for_match?'Chosen for this match'+(player.match_captain?' · Captain':'')+(player.match_keeper?' · Wicketkeeper':''):'Saved observation';
 }
 function teamReviewSelectionHelp(player){
  const issue=player.selection_issue,admin=typeof isAdmin==='function'&&isAdmin();
@@ -12712,68 +12731,78 @@ async function teamReviewOpenPlayingList(){
 }
 function teamReviewEmptyMessage(){
  const s=ensureTeamReviewState(),selection=teamReviewSelection(s);
- if(selection?.status==='manual'||s.teamsEnabled===false&&!s.fixtureId)return '<strong>Choose the players for this match</strong><p>Use Choose players above. Only the names you tick and save become this match’s team.</p>';
- if(s.fixtureId&&selection?.status==='unpublished')return '<strong>Team not finalised</strong><p>The players will appear here after the team is published in Teams. Playing Groups do not determine this team.</p><p class="help">Individual observations can still be recorded from Players.</p>';
+ if(selection?.status==='manual'||s.teamsEnabled===false&&!s.fixtureId)return '<strong>Choose the players for this match</strong><p>Use Set match team in Club Batting above. Only the names you choose and save become this match’s team.</p>';
+ if(s.fixtureId&&selection?.status==='unpublished')return '<strong>Team not finalised</strong><p>Publish the team in Teams, or use Set match team in Club Batting above while Teams is being trialled. Playing Groups do not select anyone automatically.</p><p class="help">Individual observations can still be recorded from Players.</p>';
  if(selection?.status==='changed_fixture')return '<strong>Awaiting updated team</strong><p>The fixture details have changed. The players will appear when that fixture is published in Teams.</p>';
  if(selection?.status==='cancelled')return '<strong>Match cancelled</strong><p>Teams has published this fixture as cancelled.</p>';
  if(selection?.status==='published')return '<p>No players are listed in the published team.</p>';
  if(s.fixtureId)return '<p>The published team could not be checked. Use Refresh team to try again.</p>';
  return '<p>Choose a fixture from Teams. Its players appear after the team is published. Individual observations can still be recorded from Players.</p>';
 }
-function teamReviewRosterHelp(){return ensureTeamReviewState().teamsEnabled===false?'Choose the players for each match below. Playing Groups help you find names; choosing a group does not select its players.':'The player list comes from the team published in Teams for this fixture. Playing Groups help find fixtures and players; they do not select a team.';}
+function teamReviewRosterHelp(){return 'A team published in Teams supplies this match’s players. Until then, use Set match team in Club Batting to choose players, captain and keeper. Playing Groups provide a starting list only when you choose to add them.';}
 function teamReviewCanChoosePlayers(s=ensureTeamReviewState()){
- return !s.sessionId&&s.teamsEnabled===false&&!!s.loaded&&!!s.group&&!s.group.startsWith('__')&&(!s.fixtureId||teamReviewSelection(s)?.status==='manual');
+ return !!s.loaded&&!!s.group&&!s.group.startsWith('__')&&(!s.fixtureId||['manual','unpublished'].includes(teamReviewSelection(s)?.status));
 }
 function teamReviewRosterIds(s=ensureTeamReviewState()){return s.rosterDraft?.ids||(teamReviewSelection(s)?.players||[]).map(p=>p.player_id).filter(Boolean);}
+function teamReviewRosterDraft(s=ensureTeamReviewState()){
+ if(!s.rosterDraft){const selection=teamReviewSelection(s),f=s.fixtures?.find(f=>f.id===s.fixtureId);s.rosterDraft={ids:[...teamReviewRosterIds(s)],baseRevision:selection?.revision||0,baseFixtureRevision:selection?.fixture_revision, captain_player_id:selection?.roles?.captain_player_id||null,keeper_player_id:selection?.roles?.keeper_player_id||null,final_playing_date:f?.days?.at(-1)||s.loaded.match_date};}
+ return s.rosterDraft;
+}
+function teamReviewManualRoles(s=ensureTeamReviewState()){
+ const ids=teamReviewRosterIds(s),group=s.groups?.find(g=>g.id===s.group),season=(group?.captain_player_ids||[]).filter(id=>ids.includes(id)).sort()[0],saved=s.rosterDraft||teamReviewSelection(s)?.roles||{};
+ return {captain_player_id:season||(ids.includes(saved.captain_player_id)?saved.captain_player_id:null),keeper_player_id:ids.includes(saved.keeper_player_id)?saved.keeper_player_id:null,season:!!season};
+}
 function teamReviewRosterEditor(){
  const s=ensureTeamReviewState();if(!teamReviewCanChoosePlayers(s)&&!s.rosterDraft&&!s.rosterPending)return '';
- const locked=teamReviewControlsLocked(),ids=teamReviewRosterIds(s);
- return `<details id="matchPlayersEditor" ${s.rosterOpen||s.rosterDraft||s.rosterPending?'open':''}><summary>Choose players for this match · ${ids.length} chosen</summary><p class="help">Tick the players who are playing in this match, then save the list. You can find names using a Playing Group or search.</p><div class="team-review-toolbar"><div class="field"><label for="matchPlayerGroup">Find names in a Playing Group</label><select id="matchPlayerGroup" ${locked?'disabled':''}><option value="">All players I can edit</option>${(s.groups||[]).map(g=>`<option value="${esc(g.id)}" ${s.rosterGroup===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div><div class="field"><label for="matchPlayerSearch">Find a player</label><input type="search" id="matchPlayerSearch" value="${esc(s.rosterSearch||'')}" ${locked?'disabled':''}></div></div><p id="matchPlayerCount" class="help">${ids.length} chosen for this match</p><div id="matchPlayerChoices"></div>${s.rosterConflict?`<p role="alert">${esc(s.rosterConflict)} Discard these changes, then choose from the current list.</p>`:''}<div class="btnrow"><button type="button" class="btn secondary" id="saveMatchPlayers" ${s.saving||s.loading||s.rosterConflict||!s.rosterDraft&&!s.rosterPending?'disabled':''}>${s.saving?'Saving…':s.rosterPending?'Retry player list save':'Save match players'}</button><button type="button" class="btn ghost" id="discardMatchPlayers" ${locked||!s.rosterDraft?'disabled':''}>Discard player list changes</button></div></details>`;
+ const locked=teamReviewControlsLocked(),ids=teamReviewRosterIds(s),roles=teamReviewManualRoles(s),f=s.fixtures?.find(f=>f.id===s.fixtureId),group=s.groups?.find(g=>g.id===s.group);
+ const chosen=ids.map(id=>({id,name:teamReviewCache?.players.find(p=>p.player_id===id)?.display_name||(teamReviewSelection(s)?.players||[]).find(p=>p.player_id===id)?.name||'Player'}));
+ const roleOptions=(value)=>`<option value="">Choose a selected player</option>${chosen.map(p=>`<option value="${esc(p.id)}" ${value===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}`;
+ return `<style>#matchPlayersEditor .team-review-toolbar{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));align-items:end}#matchPlayersEditor .team-review-toolbar .field{min-width:0}@media(max-width:600px){#matchPlayersEditor .team-review-toolbar{grid-template-columns:1fr}}</style><details id="matchPlayersEditor" ${s.rosterOpen||s.rosterDraft||s.rosterPending?'open':''}><summary>Set match team in Club Batting · ${ids.length} chosen</summary><p class="help">Start from a Playing Group, then add or remove players for this match. Only the list you save becomes the team.${s.teamsEnabled?' If Teams later publishes this fixture, its selected team takes over and saved observations stay attached.':''}</p><div class="team-review-toolbar"><div class="field"><label for="matchPlayerGroup">Playing Group</label><select id="matchPlayerGroup" ${locked?'disabled':''}><option value="">All players I can edit</option>${(s.groups||[]).map(g=>`<option value="${esc(g.id)}" ${s.rosterGroup===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div><button type="button" class="btn ghost" id="addMatchGroupPlayers" ${locked?'disabled':''}>Add players from ${esc(s.groups?.find(g=>g.id===(s.rosterGroup||s.group))?.name||'this group')}</button><div class="field"><label for="matchPlayerSearch">Find a player</label><input type="search" id="matchPlayerSearch" value="${esc(s.rosterSearch||'')}" ${locked?'disabled':''}></div></div><p id="matchPlayerCount" class="help">${ids.length} chosen for this match${s.rosterDraft?' · unsaved':''}</p><div id="matchPlayerChoices"></div><div class="team-review-toolbar"><div class="field">${roles.season?`<label>Captain</label><p><strong>${esc(chosen.find(p=>p.id===roles.captain_player_id)?.name)}</strong> · season captain, assigned automatically</p>`:`<label for="manualMatchCaptain">${group?.captain_name?'Stand-in captain':'Match captain'}</label><select id="manualMatchCaptain" ${locked?'disabled':''}>${roleOptions(roles.captain_player_id)}</select>${group?.captain_name?`<p class="help">${esc(group.captain_name)} keeps season captain access while not selected.</p>`:''}`}</div><div class="field"><label for="manualMatchKeeper">Wicketkeeper</label><select id="manualMatchKeeper" ${locked?'disabled':''}>${roleOptions(roles.keeper_player_id)}</select></div><div class="field"><label for="manualMatchFinalDate">Final playing date</label><input type="date" id="manualMatchFinalDate" min="${esc(s.loaded.match_date)}" value="${esc(s.rosterDraft?.final_playing_date||f?.days?.at(-1)||s.loaded.match_date)}" ${locked?'disabled':''}><p class="help">Use the second date for a two-day match. Stand-in access runs from this date.</p></div></div>${teamReviewSelection(s)?.expires_at&&!s.rosterDraft?`<p class="help">Stand-in captain access ends ${esc(new Date(teamReviewSelection(s).expires_at).toLocaleString('en-AU',{timeZone:matchCaptainAccess?.timezone||'Australia/Sydney',dateStyle:'medium',timeStyle:'short'}))} (club time).</p>`:''}${s.rosterConflict?`<p role="alert">${esc(s.rosterConflict)} Discard these changes, then choose from the current list.</p>`:''}<div class="btnrow"><button type="button" class="btn secondary" id="saveMatchPlayers" ${s.saving||s.loading||s.rosterConflict||!s.rosterDraft&&!s.rosterPending?'disabled':''}>${s.saving?'Saving…':s.rosterPending?'Retry player list save':'Save match team'}</button><button type="button" class="btn ghost" id="discardMatchPlayers" ${locked||!s.rosterDraft?'disabled':''}>Discard team changes</button></div></details>`;
 }
 function renderTeamReviewRosterChoices(){
  const s=ensureTeamReviewState(),container=document.getElementById('matchPlayerChoices');if(!container)return;
  const ids=teamReviewRosterIds(s),selected=teamReviewSelection(s)?.players||[],query=String(s.rosterSearch||'').trim().toLocaleLowerCase();
  const players=[...(teamReviewCache?.players||[])];for(const p of selected)if(!players.some(x=>x.player_id===p.player_id))players.push({player_id:p.player_id,display_name:p.name,can_edit:false});
- const visible=players.filter(p=>(!s.rosterGroup||(p.group_ids||[]).includes(s.rosterGroup))&&String(p.display_name||p.name||'').toLocaleLowerCase().includes(query));
+ const visible=players.filter(p=>(!s.rosterGroup||(p.group_ids||[]).includes(s.rosterGroup)||ids.includes(p.player_id))&&String(p.display_name||p.name||'').toLocaleLowerCase().includes(query));
  container.innerHTML=visible.length?visible.map(p=>`<label style="display:flex;gap:10px;align-items:center;min-height:44px"><input style="width:auto" type="checkbox" data-match-player="${esc(p.player_id)}" ${ids.includes(p.player_id)?'checked':''} ${teamReviewControlsLocked()||p.can_edit===false?'disabled':''}><span>${esc(p.display_name||p.name||'Player')}${p.can_edit===false?' · outside your edit access':''}</span></label>`).join(''):'<p>No names match this search.</p>';
  container.querySelectorAll('[data-match-player]').forEach(input=>input.onchange=()=>{
   if(teamReviewControlsLocked())return;const player=(teamReviewCache?.players||[]).find(p=>p.player_id===input.dataset.matchPlayer&&p.can_edit!==false);if(!player)return;
-  if(!s.rosterDraft)s.rosterDraft={ids:[...teamReviewRosterIds(s)],baseRevision:teamReviewSelection(s)?.revision||0};
-  if(input.checked&&!s.rosterDraft.ids.includes(player.player_id))s.rosterDraft.ids.push(player.player_id);else if(!input.checked)s.rosterDraft.ids=s.rosterDraft.ids.filter(id=>id!==player.player_id);
-  document.querySelector('#matchPlayersEditor summary').textContent=`Choose players for this match · ${s.rosterDraft.ids.length} chosen`;
-  document.getElementById('matchPlayerCount').textContent=`${s.rosterDraft.ids.length} chosen for this match · unsaved`;
-  document.getElementById('saveMatchPlayers').disabled=!!s.rosterConflict;document.getElementById('discardMatchPlayers').disabled=false;
+  const draft=teamReviewRosterDraft(s);if(input.checked&&!draft.ids.includes(player.player_id))draft.ids.push(player.player_id);else if(!input.checked)draft.ids=draft.ids.filter(id=>id!==player.player_id);
+  s.rosterOpen=true;renderTeamReviewContent();
  });
 }
 function bindTeamReviewRosterEditor(){
  const s=ensureTeamReviewState();document.getElementById('matchPlayersEditor')?.addEventListener('toggle',e=>{if(e.currentTarget.isConnected)s.rosterOpen=e.currentTarget.open;});
- document.getElementById('matchPlayerGroup')?.addEventListener('change',e=>{s.rosterGroup=e.target.value;renderTeamReviewRosterChoices();});
+ document.getElementById('matchPlayerGroup')?.addEventListener('change',e=>{s.rosterGroup=e.target.value;s.rosterOpen=true;renderTeamReviewContent();});
  document.getElementById('matchPlayerSearch')?.addEventListener('input',e=>{s.rosterSearch=e.target.value;renderTeamReviewRosterChoices();});
+ document.getElementById('addMatchGroupPlayers')?.addEventListener('click',()=>{if(teamReviewControlsLocked())return;const gid=s.rosterGroup||s.group,players=(teamReviewCache?.players||[]).filter(p=>p.can_edit!==false&&p.group_ids?.includes(gid)),d=teamReviewRosterDraft(s);d.ids=[...new Set([...d.ids,...players.map(p=>p.player_id)])];s.rosterOpen=true;renderTeamReviewContent();});
+ for(const [id,field] of [['manualMatchCaptain','captain_player_id'],['manualMatchKeeper','keeper_player_id'],['manualMatchFinalDate','final_playing_date']])document.getElementById(id)?.addEventListener('change',e=>{if(teamReviewControlsLocked())return;teamReviewRosterDraft(s)[field]=e.target.value||null;s.rosterOpen=true;renderTeamReviewContent();});
  document.getElementById('saveMatchPlayers')?.addEventListener('click',saveTeamReviewPlayers);
- document.getElementById('discardMatchPlayers')?.addEventListener('click',()=>{if(teamReviewControlsLocked())return;s.rosterDraft=null;s.rosterConflict=null;renderTeamReviewContent();});
- renderTeamReviewRosterChoices();
+ document.getElementById('discardMatchPlayers')?.addEventListener('click',()=>{if(teamReviewControlsLocked())return;s.rosterDraft=null;s.rosterConflict=null;renderTeamReviewContent();});renderTeamReviewRosterChoices();
 }
 async function saveTeamReviewPlayers(){
  const s=ensureTeamReviewState(),scope=s.scope;if(s.saving||s.loading||s.pending||s.deletePending||s.observation?.pending)return;
  if(!s.rosterPending){
   if(!teamReviewCanChoosePlayers(s)||!s.rosterDraft||s.rosterConflict)return;
-  if(Object.keys(s.drafts).length||s.removed.length||matchReviewImportCount()){s.message='Save or discard the observation changes before changing the match player list.';renderTeamReviewContent();return;}
-  s.rosterPending={p_club_id:club.id,p_group_id:s.group,p_fixture_id:s.fixtureId,p_request_id:teamReviewRequestId(),p_expected_revision:s.rosterDraft.baseRevision,p_values:{...teamReviewIdentity(s),player_ids:[...s.rosterDraft.ids]}};
+  if(Object.keys(s.drafts).length||s.removed.length||matchReviewImportCount()){s.message='Save or discard the observation changes before changing the match team.';renderTeamReviewContent();return;}
+  const roles=teamReviewManualRoles(s),d=s.rosterDraft;
+  s.rosterPending={p_club_id:club.id,p_group_id:s.group,p_fixture_id:s.fixtureId,p_request_id:teamReviewRequestId(),p_expected_revision:d.baseRevision,p_values:{...teamReviewIdentity(s),player_ids:[...d.ids],captain_player_id:roles.captain_player_id,keeper_player_id:roles.keeper_player_id,final_playing_date:d.final_playing_date,...(s.fixtureId&&Number.isInteger(d.baseFixtureRevision)?{expected_fixture_revision:d.baseFixtureRevision}:{})}};
  }
- const command=s.rosterPending;s.saving=true;s.message='Saving match players…';renderTeamReviewContent();
+ const command=s.rosterPending;s.saving=true;s.message='Saving match team…';renderTeamReviewContent();
  try{
   const {data,error}=await matchDraftRpc(null,'save_match_review_players',command,{team:s});if(error)throw error;
-  if(!data?.fixture_id||!Number.isInteger(data.revision)||!Array.isArray(data.player_ids)||JSON.stringify(data.player_ids)!==JSON.stringify(command.p_values.player_ids))throw Error('The player list save could not be confirmed.');
+  if(!data?.fixture_id||!Number.isInteger(data.revision)||!Array.isArray(data.player_ids)||JSON.stringify(data.player_ids)!==JSON.stringify(command.p_values.player_ids))throw Error('The team save could not be confirmed.');
   if(ensureTeamReviewState().scope!==scope)return;
   matchDraftConfirmed(null,data,{team:s});s.rosterPending=null;s.rosterDraft=null;s.rosterConflict=null;s.fixtureId=data.fixture_id;s.fixtureMode='saved';s.saving=false;s.rosterOpen=false;
-  await renderTeamReview();s.message='Match player list saved.';renderTeamReviewContent();
+  await renderTeamReview();s.message='Match team saved.';renderTeamReviewContent();
  }catch(error){
   if(ensureTeamReviewState().scope!==scope)return;s.saving=false;
   if(/^(?:P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(String(error?.code||''))){s.rosterPending=null;s.message=`Nothing was saved. ${error.message}`;s.needsReload=true;}
-  else s.message='The player list save could not be confirmed. Use Retry player list save to safely confirm the same request.';
+  else s.message='The team save could not be confirmed. Use Retry player list save to safely confirm the same request.';
   renderTeamReviewContent();
  }
 }
+
 // END PUBLISHED TEAM REVIEW ROSTER
 
 // END TEAM REVIEW
@@ -19689,7 +19718,6 @@ function seAvailableUnselected(){
 
 /* Match appointments are roster identities, independent of batting accounts. */
 function seMatchGroup(f,data){
- if(data.access.mode!=='bundle')return null;
  const d=f.details,groups=data.groups||[],link=(data.group_links||[]).find(l=>l.grade===d.grade&&l.competition===(d.competition||''));
  return groups.find(g=>g.id===d.grade_group_id)||groups.find(g=>g.id===link?.group_id)||groups.find(g=>g.name.toLowerCase()===d.grade.toLowerCase());
 }
@@ -19698,8 +19726,9 @@ function seMatchRoles(f,data){
  f.details.days.forEach((day,i)=>{
   const key='d'+(i+1),ps=f.slots.map(s=>data.roster.find(p=>p.id===s[key]&&p.active)).filter(Boolean),old=f.details.match_roles?.[key]||{},role={};
   for(const kind of ['captain','keeper']){
-   const manual=old[kind+'_manual']===true&&ps.some(p=>p.id===old[kind+'_id']);
+   let manual=old[kind+'_manual']===true&&ps.some(p=>p.id===old[kind+'_id']);
    const choices=kind==='keeper'?ps.filter(p=>p.keeper):ps.filter(p=>p.user_id&&(group?.captain_user_ids||[]).includes(p.user_id));
+   if(kind==='captain'&&choices.length===1)manual=false;
    role[kind+'_id']=manual?old[kind+'_id']:choices.length===1?choices[0].id:null;role[kind+'_manual']=manual;
   }
   out[key]=role;
@@ -19717,7 +19746,7 @@ function seSnapshotSplit(snap,slot){return snap.details.days.length>1&&(slot.d1!
 function seMatchRoleFields(f,roles){
  const data=ensureSelections().data;if(f.details.cancelled)return '';
  const shared=f.details.days.length===2&&f.slots.every(slot=>slot.d1===slot.d2)&&['captain','keeper'].every(kind=>roles.d1[kind+'_id']===roles.d2[kind+'_id']),days=shared?[0]:f.details.days.map((_,i)=>i);
- return `<div class="se-match-roles">${days.map(i=>{const key='d'+(i+1),ps=f.slots.map(s=>data.roster.find(p=>p.id===s[key]&&p.active)).filter(Boolean);return `<div>${days.length>1?`<small>Day ${i+1}</small>`:''}${['captain','keeper'].map(kind=>{const value=roles[key][kind+'_id']||'',label=kind==='captain'?'Captain':'Keeper';return `<label>${label}<select data-se-match-role="${kind}" data-se-role-fixture="${f.id}" data-se-role-day="${key}" data-se-role-all="${shared?'1':'0'}" aria-label="${seEsc(f.details.grade)} ${label}${days.length>1?' Day '+(i+1):''}" class="${value?'':'se-role-needed'}" ${ps.length?'':'disabled'}>${seOpt([['',kind==='captain'?'Choose captain':'Who is keeping?'],...ps.map(p=>[p.id,p.name])],value)}</select></label>`;}).join('')}</div>`;}).join('')}</div>`;
+ return `<div class="se-match-roles">${days.map(i=>{const key='d'+(i+1),ps=f.slots.map(s=>data.roster.find(p=>p.id===s[key]&&p.active)).filter(Boolean);return `<div>${days.length>1?`<small>Day ${i+1}</small>`:''}${['captain','keeper'].map(kind=>{const value=roles[key][kind+'_id']||'',label=kind==='captain'?(seMatchGroup(f,data)?.captain_user_ids?.length?'Stand-in captain':'Captain'):'Keeper';if(kind==='captain'&&value&&ps.some(p=>p.id===value&&(seMatchGroup(f,data)?.captain_user_ids||[]).includes(p.user_id)))return `<div><small>Captain</small><p><strong>${seEsc(ps.find(p=>p.id===value).name)}</strong> · season captain</p></div>`;return `<label>${label}<select data-se-match-role="${kind}" data-se-role-fixture="${f.id}" data-se-role-day="${key}" data-se-role-all="${shared?'1':'0'}" aria-label="${seEsc(f.details.grade)} ${label}${days.length>1?' Day '+(i+1):''}" class="${value?'':'se-role-needed'}" ${ps.length?'':'disabled'}>${seOpt([['',kind==='captain'?'Choose captain':'Who is keeping?'],...ps.map(p=>[p.id,p.name])],value)}</select></label>`;}).join('')}</div>`;}).join('')}</div>`;
 }
 function seBindMatchRoles(){document.querySelectorAll('[data-se-match-role]').forEach(el=>el.onchange=async()=>{const s=ensureSelections();if(s.busy||s.pending)return;const f=s.data.fixtures.find(f=>f.id===el.dataset.seRoleFixture),copy=sePrepareMatch(f),kind=el.dataset.seMatchRole,day=el.dataset.seRoleDay;copy.details.match_roles[day][kind+'_id']=el.value||null;copy.details.match_roles[day][kind+'_manual']=!!el.value;
  // A shared control edits the whole match; separate day controls preserve other manual choices.
@@ -19803,6 +19832,7 @@ async function openFixtureCorrection(fixtureId,options={}){
 }
 window.addEventListener('beforeunload',event=>{if(fixtureCorrectionState?.dirty||fixtureCorrectionIsPending()){event.preventDefault();event.returnValue='';}});
 /* END CONTROLLED FIXTURE CORRECTION V129 */
+
 function seFixtureEditor(f=null){
  if(!seCanSetup())return;
  const s=ensureSelections(),d=f?.details||{grade:'',competition:'',opposition:'',ground:'',meeting:'',format:'',overs:null,days:[{date:s.date||'',start:'12:00'}],brackets:false,min_quicks:3,min_batters:5,staff:[]};
@@ -20104,7 +20134,7 @@ function sePlayerEditor(player=null){const s=ensureSelections(),p=player||{name:
 function seImport(){const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Refresh the registered playing list</h2><p>Upload your registration CSV. Existing players are matched; roles and availability stay.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|profile.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)],['email','Player email (optional)',guess(/^(?:(?:player|participant|account.?holder).?)?e.?mail$/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
  const preview=()=>{const map=Object.fromEntries([...document.querySelectorAll('[data-se-map]')].map(el=>[el.dataset.seMap,Number(el.value)]));if(map.id<0||map.name<0)throw Error('Choose both a stable ID and name column.');const data=rows.map(r=>({external_id:(r[map.id]||'').trim(),name:[r[map.name],map.last>=0&&map.last!==map.name?r[map.last]:''].filter(Boolean).join(' ').trim(),...(map.grade>=0?{grade:(r[map.grade]||'').trim()}:{}),...seCSVAccountEmail(r,headers,map.email)}));if(data.some(r=>!r.external_id||!r.name))throw Error('Every row must have a registration ID and name.');if(new Set(data.map(r=>r.external_id)).size!==data.length)throw Error('Duplicate registration IDs. Remove duplicate rows before importing.');seValidateRosterNames(data,s.data.roster,true);return data;};
  const draw=()=>{try{const data=preview(),matches=data.filter(r=>seImportMatch(r,s.data.roster)).length;document.getElementById('seCSVError').textContent='';document.getElementById('seCSVCommit').disabled=false;document.getElementById('seCSVPreview').innerHTML=`<p>${data.length} rows · ${matches} existing players · ${data.length-matches} new players</p><div class="se-preview-scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Grade</th></tr></thead><tbody>${data.slice(0,8).map(r=>`<tr><td>${seEsc(r.external_id)}</td><td>${seEsc(r.name)}</td><td>${seEsc(r.grade)}</td></tr>`).join('')}</tbody></table></div><p class="se-muted">Preview of the first ${Math.min(8,data.length)} rows. Matched players keep their account, roles and availability.</p>`;}catch(err){document.getElementById('seCSVError').textContent=err.message;document.getElementById('seCSVCommit').disabled=true;}};document.querySelectorAll('[data-se-map]').forEach(el=>el.onchange=draw);document.getElementById('seCSVCommit').onclick=()=>seMutate('import_roster',{revision:s.data.roster_revision,rows:preview()});draw();}catch(err){document.getElementById('seCSVError').textContent=err.message;}};}
-function seSettings(){const s=ensureSelections(),d=s.data;document.getElementById('seContent').innerHTML=`<div class="btnrow" style="margin-bottom:14px"><button class="btn ghost" type="button" data-club-branding>Club logo &amp; colours</button></div><section class="se-card se-drawer"><h2>Selection permissions</h2><form id="seSelectors"><label>Head of Selections<select name="head_selector_id">${seOpt([['','Choose Head of Selections'],...d.members.map(m=>[m.user_id,m.name])],d.access.head_selector_id||'')}</select></label><p class="se-muted">The Head of Selections publishes teams to players.</p><details id="seOtherSelectors"><summary>Other selectors<span class="se-form-note" style="display:block;margin:6px 0" id="seSelectorNames"></span></summary>${d.members.map(m=>`<label class="se-check"><input name="users" type="checkbox" value="${m.user_id}" ${m.explicit_selector?'checked':''}>${seEsc(m.name)}${m.is_admin?' · Club Admin':''}</label>`).join('')}</details><button class="btn se-editor-actions" type="submit">Save permissions</button></form></section><details class="se-card se-drawer" id="seFixtureDefaults" style="margin-top:14px"></details>${d.access.mode==='bundle'?`<details class="se-card se-drawer" id="seBattingConnection" style="margin-top:14px"><summary>Club Batting connection (optional)</summary><p>Publishing teams can add linked players to Club Batting Playing Groups. Players without a link stay in the team.</p><p class="se-form-note">Group membership can affect Player Plan due dates and coaching access. Existing memberships stay.</p><form id="seGroupLinks"><div id="seGroupLinkRows"></div><div class="se-actions"><button class="btn ghost" type="button" id="seAddGroupLink">Add grade mapping</button><button class="btn" type="submit">Save group connections</button></div></form></details>`:''}`;
+function seSettings(){const s=ensureSelections(),d=s.data;document.getElementById('seContent').innerHTML=`<div class="btnrow" style="margin-bottom:14px"><button class="btn ghost" type="button" data-club-branding>Club logo &amp; colours</button><button class="btn secondary" type="button" data-shared-teams>Grades &amp; season captains</button></div><section class="se-card se-drawer"><h2>Selection permissions</h2><form id="seSelectors"><label>Head of Selections<select name="head_selector_id">${seOpt([['','Choose Head of Selections'],...d.members.map(m=>[m.user_id,m.name])],d.access.head_selector_id||'')}</select></label><p class="se-muted">The Head of Selections publishes teams to players.</p><details id="seOtherSelectors"><summary>Other selectors<span class="se-form-note" style="display:block;margin:6px 0" id="seSelectorNames"></span></summary>${d.members.map(m=>`<label class="se-check"><input name="users" type="checkbox" value="${m.user_id}" ${m.explicit_selector?'checked':''}>${seEsc(m.name)}${m.is_admin?' · Club Admin':''}</label>`).join('')}</details><button class="btn se-editor-actions" type="submit">Save permissions</button></form></section><details class="se-card se-drawer" id="seFixtureDefaults" style="margin-top:14px"></details>${d.access.mode==='bundle'?`<details class="se-card se-drawer" id="seBattingConnection" style="margin-top:14px"><summary>Club Batting connection (optional)</summary><p>Publishing teams can add linked players to Club Batting Playing Groups. Players without a link stay in the team.</p><p class="se-form-note">Group membership can affect Player Plan due dates and coaching access. Existing memberships stay.</p><form id="seGroupLinks"><div id="seGroupLinkRows"></div><div class="se-actions"><button class="btn ghost" type="button" id="seAddGroupLink">Add grade mapping</button><button class="btn" type="submit">Save group connections</button></div></form></details>`:''}`;
  const selectorForm=document.getElementById('seSelectors');seShowSelectorNames(selectorForm);selectorForm.addEventListener('change',()=>seShowSelectorNames(selectorForm));seSettingsSaveState(selectorForm,'Save permissions','selectors');selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users'),head_selector_id:selectorForm.elements.head_selector_id.value||null});};seRenderDefaults();bindClubBrandingLinks();if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks');
  const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No group connections set.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);s.formDirty=true;renderLinks();});};
  const sync=()=>document.querySelectorAll('[data-se-link]').forEach(el=>{links[Number(el.dataset.seLink)]={competition:el.querySelector('[name=competition]').value.trim(),grade:el.querySelector('[name=grade]').value.trim(),group_id:el.querySelector('[name=group_id]').value};});form.oninput=()=>s.formDirty=true;document.getElementById('seAddGroupLink').onclick=()=>{sync();links.push({competition:'',grade:'',group_id:''});s.formDirty=true;renderLinks();};form.onsubmit=e=>{e.preventDefault();sync();return seMutate('group_links',{revision:d.access.revision,links});};renderLinks();}
@@ -20299,17 +20329,17 @@ async function mountMemberPhoneStatuses(host){
 /* BEGIN TEMPORARY MATCH CAPTAIN — maintained source: tools/temporary_captain_ui.js */
 let matchCaptainAccess=null,matchCaptainAccessSequence=0,matchCaptainPending=null;
 function hasMatchCaptainAccess(){
- return !!(matchCaptainAccess?.key===selectionsScopeKey()&&selectionsEnabled()&&!selectionsStandalone()&&matchCaptainAccess.batting&&matchCaptainAccess.appointments?.some(d=>Date.parse(d.expires_at)>Date.now()));
+ return !!(matchCaptainAccess?.key===selectionsScopeKey()&&!selectionsStandalone()&&matchCaptainAccess.batting&&(matchCaptainAccess.season_groups?.length||matchCaptainAccess.appointments?.some(d=>Date.parse(d.expires_at)>Date.now())));
 }
 async function loadMatchCaptainAccess(){
  const key=selectionsScopeKey(),clubId=club?.id;
- if(!key||!selectionsEnabled()){matchCaptainAccess=null;return null;}
+ if(!key||!clubId||!session?.user?.id){matchCaptainAccess=null;return null;}
  if(matchCaptainPending?.key===key)return matchCaptainPending.promise;
  const sequence=++matchCaptainAccessSequence;
  const promise=(async()=>{
   let result;try{result=await supabase.rpc('get_my_match_captain_access',{p_club_id:clubId});}catch(error){result={error};}
   if(key!==selectionsScopeKey()||sequence!==matchCaptainAccessSequence)return null;
-  matchCaptainAccess={key,batting:!result?.error&&result?.data?.batting===true,appointments:!result?.error&&Array.isArray(result?.data?.appointments)?result.data.appointments:[]};
+  matchCaptainAccess={key,timezone:result?.data?.timezone||'Australia/Sydney',batting:!result?.error&&result?.data?.batting===true,season_groups:!result?.error&&Array.isArray(result?.data?.season_groups)?result.data.season_groups:[],appointments:!result?.error&&Array.isArray(result?.data?.appointments)?result.data.appointments:[]};
   syncMatchCaptainNavigation();return matchCaptainAccess;
  })();
  matchCaptainPending={key,promise};try{return await promise;}finally{if(matchCaptainPending?.promise===promise)matchCaptainPending=null;}
@@ -20836,5 +20866,33 @@ if(document.body){
 /* END HELP VIDEOS */
 
 
+
+/* BEGIN SHARED GRADES AND CAPTAINS */
+let sharedTeamsState=null;
+function sharedTeams(){const key=selectionsScopeKey();if(sharedTeamsState?.key!==key)sharedTeamsState={key,data:null,drafts:{},settings:null,pending:null,busy:false,message:''};return sharedTeamsState;}
+function sharedTeamsDirty(){const s=sharedTeamsState;return s?.key===selectionsScopeKey()&&(Object.keys(s.drafts).length>0||s.settings||s.pending);}
+async function openSharedTeams(){if(!isAdmin()||!await saveClubEditsBeforeNavigation())return;currentTab='club_teams';await renderTab();}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-shared-teams]');if(b){e.preventDefault();void openSharedTeams();}});
+async function renderSharedTeams(reload=false){
+ const s=sharedTeams(),key=s.key,page=document.getElementById('page');if(!isAdmin()){page.innerHTML='<div class="notice">Club Admin manages grades and season captains.</div>';return;}
+ if(!s.data||reload){page.innerHTML='<div class="splash">Loading grades and captains…</div>';try{const {data,error}=await supabase.rpc('club_team_setup',{p_club_id:club.id,p_action:'get',p_data:{}});if(error)throw error;if(key!==selectionsScopeKey()||currentTab!=='club_teams')return;if(!Array.isArray(data?.groups)||!Array.isArray(data.members))throw Error('Shared setup could not be checked.');s.data=data;}catch(error){if(key!==selectionsScopeKey())return;s.message=error.message||'Could not load shared setup.';}}
+ const d=s.data,locked=s.busy||!!s.pending;if(!d){page.innerHTML=`<div class="notice" role="alert">${esc(s.message)}</div><button class="btn" id="retrySharedTeams">Try again</button>`;document.getElementById('retrySharedTeams').onclick=()=>renderSharedTeams(true);return;}
+ const opts=value=>`<option value="">No season captain appointed</option>${d.members.map(m=>`<option value="${esc(m.user_id)}" ${m.user_id===value?'selected':''}>${esc(m.name)}${d.members.some(x=>x.user_id!==m.user_id&&x.name===m.name)?' · '+esc(m.email||m.user_id):''}</option>`).join('')}`;
+ const row=(g)=>{const draft=s.drafts[g.id]||g;return `<form class="card" data-shared-grade="${g.id}" style="margin-bottom:14px"><div class="field"><label>Grade / Playing Group name<input name="name" value="${esc(draft.name)}" maxlength="100" required ${locked?'disabled':''}></label></div><div class="field"><label>Season captain<select name="captain_user_id" ${locked?'disabled':''}>${opts(draft.captain_user_id)}</select></label></div>${g.id!=='new'?`<label style="display:flex;gap:10px;align-items:center"><input style="width:auto" type="checkbox" name="active" ${draft.active?'checked':''} ${locked?'disabled':''}>Active grade</label>`:''}<div class="btnrow"><button class="btn secondary" type="submit" ${locked||!s.drafts[g.id]?'disabled':''}>${g.id==='new'?'Add grade':'Save grade & captain'}</button></div></form>`;};
+ const settings=s.settings||d;
+ page.innerHTML=`<section class="card"><div class="section-label">Club setup · Admin</div><h1>Grades & season captains</h1><p>One shared list for Club Batting and Teams. Appoint a registered club member to each grade. Their captain access continues until you change the appointment, including when they are injured or not selected.</p><p class="help">A Playing Group helps organise players. Each match still needs its own selected team. Appointing a captain does not make them a selector or publish a team.</p>${!selectionsStandalone()?'<button class="btn ghost" id="sharedManageMembers">Manage Playing Group members</button>':''}</section><p role="status">${esc(s.message)}</p>${s.pending?'<div class="notice">The last save has not been confirmed. Retry the same save before making another change.<button class="btn" id="sharedRetry">Retry save</button></div>':''}<div class="grid"><section><h2>Club grades</h2>${d.groups.map(row).join('')}<details open><summary>Add a grade / Playing Group</summary>${row({id:'new',name:'',captain_user_id:null,active:true})}</details></section><section class="card" style="align-self:start"><h2>Stand-in captain access</h2><p>Ends at midnight after the chosen number of days following the final playing date. A two-day match uses its last date.</p><form id="sharedCaptainSettings"><div class="field"><label>Days after the final playing day<select name="standin_days" ${locked?'disabled':''}>${[1,2,3,4,5,6,7].map(n=>`<option value="${n}" ${Number(settings.standin_days)===n?'selected':''}>${n} day${n===1?'':'s'}</option>`).join('')}</select></label></div><div class="field"><label>Club time zone<input name="timezone" list="sharedTimeZones" value="${esc(settings.timezone)}" required ${locked?'disabled':''}></label><datalist id="sharedTimeZones">${['Australia/Sydney','Australia/Melbourne','Australia/Brisbane','Australia/Adelaide','Australia/Perth','Australia/Darwin','Australia/Hobart','Europe/London','Pacific/Auckland'].map(v=>`<option value="${v}">`).join('')}</datalist></div><p class="help">With 1 day: a Saturday match ends Sunday midnight; a Wednesday match ends Thursday midnight. The season captain keeps their ongoing access. Stand-ins retain their normal player access after captain privileges expire.</p><button class="btn secondary" type="submit" ${locked||!s.settings?'disabled':''}>Save access period</button></form><p class="help">Deactivating a grade suspends its captain appointment and active plan due-date requirements.</p><button class="btn ghost" id="sharedReload" ${locked?'disabled':''}>Reload saved setup</button></section></div>`;
+ page.querySelectorAll('[data-shared-grade]').forEach(form=>{const gid=form.dataset.sharedGrade;form.oninput=()=>{s.drafts[gid]={name:form.elements.name.value,captain_user_id:form.elements.captain_user_id.value||null,active:gid==='new'||form.elements.active.checked};form.querySelector('[type=submit]').disabled=false;};form.onsubmit=e=>{e.preventDefault();const draft=s.drafts[gid];if(!draft||s.busy||s.pending)return;void saveSharedTeams('save_group',{...draft,group_id:gid==='new'?null:gid,expected_name:d.groups.find(g=>g.id===gid)?.name||null,...(gid!=='new'?{expected_active:d.groups.find(g=>g.id===gid)?.active}:{})},gid);};});
+ const form=document.getElementById('sharedCaptainSettings');form.oninput=()=>{s.settings={standin_days:Number(form.elements.standin_days.value),timezone:form.elements.timezone.value};form.querySelector('[type=submit]').disabled=false;};form.onsubmit=e=>{e.preventDefault();if(s.settings&&!locked)void saveSharedTeams('settings',s.settings);};
+ document.getElementById('sharedRetry')?.addEventListener('click',()=>saveSharedTeams());document.getElementById('sharedReload').onclick=()=>{if(sharedTeamsDirty()&&!confirm('Discard unsaved grade and captain changes and reload?'))return;s.drafts={};s.settings=null;s.message='';void renderSharedTeams(true);};
+ document.getElementById('sharedManageMembers')?.addEventListener('click',async()=>{if(!await saveClubEditsBeforeNavigation())return;currentTab='groups';await renderTab();});
+}
+async function saveSharedTeams(action,values,gid){
+ const s=sharedTeams(),key=s.key;if(s.busy)return;if(!s.pending)s.pending={p_club_id:club.id,p_action:action,p_data:{...values,revision:s.data.revision,request_id:crypto.randomUUID()},gid};
+ const {gid:savedGroup,...command}=s.pending;s.busy=true;s.message='Saving…';await renderSharedTeams();
+ try{const {data,error}=await supabase.rpc('club_team_setup',command);if(error)throw error;if(key!==selectionsScopeKey())return;if(!Array.isArray(data?.groups)||!Number.isInteger(data.revision))throw Error('Save could not be confirmed.');s.data=data;s.pending=null;if(command.p_action==='settings')s.settings=null;else delete s.drafts[savedGroup];s.message='Saved. Both products now use this setup.';if(typeof selectionState!=='undefined')selectionState=null;void loadMatchCaptainAccess();}
+ catch(error){if(key!==selectionsScopeKey())return;if(/^(?:P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(String(error?.code||''))){s.pending=null;s.message=`Nothing was saved. ${error.message}`;}else s.message='The save could not be confirmed. Retry save to confirm the same request.';}
+ finally{if(key===selectionsScopeKey()){s.busy=false;if(currentTab==='club_teams')await renderSharedTeams();}}
+}
+/* END SHARED GRADES AND CAPTAINS */
 
 boot();

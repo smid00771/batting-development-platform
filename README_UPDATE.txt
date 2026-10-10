@@ -1,73 +1,54 @@
-CLUB BATTING 0.8.62.129 — SHARED MATCHES AND RELIABLE REVIEWS
+CLUB BATTING 0.8.62.130 — SHARED CAPTAINS AND MATCH TEAMS
 
-THE DATABASE, NOTIFICATION FIX AND GUIDE UPDATE ARE ALREADY DEPLOYED.
-The remaining step is your normal website upload. This cumulative package
-includes all previous updates; use this package instead of .128.
+The backend and Guide are already live. Upload this cumulative website update.
 
-UPLOAD
-1. Unzip Website_Files. Upload everything INSIDE that folder to your existing
-   GitHub Pages root, including videos. Replace matching files.
-2. Keep your existing config.js, styles.css and CNAME files.
-3. Reopen/refresh the app and confirm version 0.8.62.129.
-Do not rerun the supplied database SQL on the live project.
+1. Unzip Club_Batting_130_Website.zip.
+2. Upload everything INSIDE Website_Files to your existing GitHub Pages root,
+   including videos. Replace matching files.
+3. Keep your existing config.js, styles.css and CNAME.
+4. Refresh/reopen the app and check version 0.8.62.130.
+Do not rerun Database_Update.sql; it records migrations already applied.
 
-WHAT CHANGED
-- Saved Match Reviews keep earlier contributors separately from the current
-  selected team. Changing or cancelling a selection does not erase the review.
-- Preparation, My Innings and reflection can use the same shared fixture.
-  Its date, opposition and format remain together. Standalone entries remain.
-- Club Admin can use Correct match details, preview the affected records and
-  give a reason. Existing observations retain their IDs. Published Teams
-  snapshots remain unchanged until the Head deliberately republishes.
-- Unfinished observations, preparation/reflection and Match Review work can
-  be restored after reopening. Changed records are checked before restoration;
-  uncertain saves retry the same request without creating duplicate records.
-- Teams shows publication changes and explains why a player is excluded.
-- Help uses shorter steps suited to the product and role. Three new actual-app
-  videos cover published Teams, Batting-only match players and observation-first.
-  The existing iPhone and Android installation guides remain in their sections.
-- Notification routing is completed, including fallback collection when no
-  phone is registered. The Guide no longer quotes unsettled public prices.
-- New detailed Match Observations require deliberate answers; Mostly is no
-  longer preselected.
+APPOINT YOUR SEASON CAPTAINS
+Club Admin: Account → Grades & season captains (also in Teams Settings).
+Your existing Playing Groups are already there. Select a registered member as
+each grade's season captain and Save grade & captain. The same setup serves
+Batting-only, Teams-only and combined clubs. No captain has been guessed for you.
+Existing separately assigned coaching permissions remain separate.
 
-MATCH PLAYERS
-Teams clubs use published selections only. Unpublished selections show no
-players. Batting-only clubs explicitly choose the players for each match.
-Playing Groups only help find players. An early individual observation joins
-the same fixture when the normal selection is later completed.
+Season captains keep grade messaging/observation access when injured or absent.
+If selected, they automatically become match captain. Otherwise selectors choose
+a stand-in. A captain appointment does not make someone a selector or publisher.
 
-SAFE CORRECTIONS AND RECOVERY
-Conflicting records, published predictions/results/awards and confirmed
-scorecard imports can block a correction; the preview explains the reason.
-Drafts are local to that browser/device, retained for up to 14 days and cleared
-on sign-out/account change. Clearing browser data removes them. They are not
-cross-device backups. Correction forms have navigation/retry protection but
-do not yet recover their unsaved form after full browser closure.
+STAND-IN ACCESS
+Default: until midnight after the day following the final playing date.
+Saturday → Sunday midnight; Wednesday → Thursday midnight. Two-day matches use
+their last date. Club Admin can choose 1–7 days and the club time zone in shared
+setup. Changes apply to current appointments. Ordinary player access continues.
 
-VERIFIED
-58 combined PostgreSQL checks; additional feature, notification and Guide
-checks; Australian/Sydney desktop and US/Los Angeles phone-sized browser flows.
-Checked original record IDs, date-only handling, permission boundaries,
-selection changes, stale edits, lost-response retries and reload recovery.
-New videos were fully decoded and visually reviewed.
+CREATE A TEAM IN CLUB BATTING
+Match Review → choose/create the fixture → Set match team in Club Batting.
+Add players from a Playing Group, then add/remove the actual players. Choose a
+stand-in captain if needed, allocate the keeper and set the final playing date.
+Save match team. A group does not select anyone automatically.
 
-Live checks confirm all four Newcastle City fixtures are still 10 October
-2026 v Toronto Workers, unpublished, with no selected Match Review players.
-Existing fixtures, observations, memberships, product access/subscriptions and
-platform settings are byte-for-byte unchanged. No new security warning.
+This works while Teams is enabled but not yet publishing selections, as well as
+for Batting-only clubs. The list uses players within your coaching edit access.
+It does not fill the draft Teams selection board. If Teams later publishes the
+same fixture, that published team takes over; existing observations stay attached
+with their original authorship. Both captains can contribute independently.
 
-Club Batting trial: 60 days. Teams trial: 21 days. Prices remain unsettled.
-Stripe remains Prototype. Newcastle City's editable ongoing free terms remain.
-Guide version 40 is live. The notification worker schedule is active.
+Help, Guide and the fictional demo are updated. All earlier .129 improvements
+and videos are included. Both date conventions/time zones were checked, along
+with captain permissions, two-day expiry, stale saves, retry safety and the
+transition from a manual list to a published team. Older tabs preserve existing
+manual captain/keeper appointments when they omit those fields.
 
-PHONE DELIVERY CHECK
-Physical iPhone/Android notification receipt still needs a real-device check
-after upload. Automated/server checks do not prove receipt on a phone.
-No live test messages, team publication, observation save or payment was made.
-Use the normal authorised message workflow and an opted-in test recipient's
-phone, then check the alert opens the correct inbox message. Android hardware
-was unavailable during development.
+Backend: shared_season_captains_v130 and preserve_manual_match_appointments_v130.
+Guide 41 is live with JWT verification. 76 integrated database checks, 10 browser
+scenarios and 13 Guide checks passed. No new security warning. No live test
+messages, team publication, observation save or payment was made.
 
-Database_Update.sql is an applied record, not a step to run. Source/tests and
-the complete project handover are provided separately.
+Batting trial remains 60 days; Teams 21 days. Prices remain undecided.
+Source, applied SQL, preview and the updated full project handover are supplied
+separately. This ZIP was closed and verified before being made available.
