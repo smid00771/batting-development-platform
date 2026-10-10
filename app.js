@@ -1,10 +1,11 @@
-// Club Batting 0.8.62.142 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.143 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.143';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.142';
+const APP_UI_VERSION='0.8.62.143';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -5006,13 +5007,13 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Download the published graphics",
-        "body": "Open Team graphics for weekly use. Published teams automatically fill the saved club template. Choose the featured player and a saved photo. Add their photo opens the Players step of Guided setup with that player selected; save the image and return to the team. The pictured player is marked in the list. Download one grade or a pack of PNGs and captions. Names and match details come from the published fixture. Different two-day line-ups, roles or featured photos produce separate images. Changed artwork is flagged and stale exports are blocked. Downloading does not post to social media.",
+        "body": "Open Team graphics for weekly use. Published teams automatically fill the saved club template. Choose the featured player and a saved photo. Add their photo opens the Players step of Guided setup with that player selected; save the image and return to the team. The pictured player is marked in the list. Download one grade or a pack of PNGs and captions, or choose Review selected post to publish to connected Facebook and Instagram accounts. Names and match details come from the published fixture. Different two-day line-ups, roles or featured photos produce separate images. Changed artwork is flagged and stale exports are blocked. Downloading does not post to social media.",
         "target_tab": "teams",
         "quick_start": false
       },
       {
         "title": "Assign the socials manager",
-        "body": "Club Admin opens Social graphics → Socials managers and selects an existing club member. This grants artwork and published-team export access without adding selector, publishing, coaching or draft access. It works for Teams-only and combined clubs. The socials manager reviews the download and posts it through the club’s usual account. Social account connection, scheduling and automatic posting are not included.",
+        "body": "Club Admin opens Social graphics → Socials managers and selects an existing club member. This grants artwork and published-team export access without adding selector, publishing, coaching or draft access. It works for Teams-only and combined clubs. A Club Admin connects the Facebook Page and its linked Instagram professional account in Social accounts. The socials manager opens Review selected post, checks the images and caption, then clicks Post to Facebook & Instagram. Posting history shows each destination separately. Scheduling is not included.",
         "target_tab": "teams",
         "quick_start": false
       },
@@ -20998,11 +20999,11 @@ function socialStyles(){return `<style>
  </style>`;}
 function socialDraw(s){
  if(!socialHere(s)||!s.data)return;const host=document.getElementById('seContent');if(['artwork','photos'].includes(s.view)){const g=socialGuideState(s);g.step=s.view==='photos'?2:1;g.kind=g.step===2?'photo':'master';s.view='guide';}s.render++;
- host.innerHTML=socialStyles()+`<section id="socialPage"><div class="social-top"><div><h2>Social graphics</h2><p class="se-muted">Your club’s look. Ready for every round.</p></div><button class="btn ghost" id="socialRefresh">Refresh graphics</button></div><div class="social-tabs">${[...(s.data.admin?[['managers','Socials managers']]:[]),['guide','Guided setup'],['graphics','Team graphics']].map(([key,title])=>`<button class="btn ghost" data-social-view="${key}" aria-pressed="${s.view===key}">${title}</button>`).join('')}</div><p id="socialNotice" class="social-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?'<div class="se-recovery"><strong>Artwork save not confirmed</strong><p>Your change is retained in this tab. Retry it, or keep a copy and reload the saved version.</p><div class="social-actions"><button class="btn" id="socialRetrySave">Retry save</button><button class="btn ghost" id="socialRecover">Download changes &amp; reload</button></div></div>':''}<div id="socialContent"></div></section>`;
+ host.innerHTML=socialStyles()+`<section id="socialPage"><div class="social-top"><div><h2>Social graphics</h2><p class="se-muted">Your club’s look. Ready for every round.</p></div><button class="btn ghost" id="socialRefresh">Refresh graphics</button></div><div class="social-tabs">${[...(s.data.admin?[['managers','Socials managers']]:[]),['guide','Guided setup'],['graphics','Team graphics'],['accounts','Social accounts']].map(([key,title])=>`<button class="btn ghost" data-social-view="${key}" aria-pressed="${s.view===key}">${title}</button>`).join('')}</div><p id="socialNotice" class="social-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?'<div class="se-recovery"><strong>Artwork save not confirmed</strong><p>Your change is retained in this tab. Retry it, or keep a copy and reload the saved version.</p><div class="social-actions"><button class="btn" id="socialRetrySave">Retry save</button><button class="btn ghost" id="socialRecover">Download changes &amp; reload</button></div></div>':''}<div id="socialContent"></div></section>`;
  document.querySelectorAll('[data-social-view]').forEach(b=>b.onclick=()=>{if(!socialCanLeave())return;s.view=b.dataset.socialView;s.notice='';socialDraw(s);});
  document.getElementById('socialRefresh').onclick=()=>{if(socialCanLeave())socialOpen();};document.getElementById('socialRetrySave')?.addEventListener('click',()=>socialSave(s,s.pending.action,s.pending.data));
  document.getElementById('socialRecover')?.addEventListener('click',()=>{seDownload('Social-artwork-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;s.dirty=false;s.notice='Proposed changes downloaded. Review the current saved artwork.';void socialOpen();});
- ({guide:socialGuide,graphics:socialGraphics,artwork:socialArtwork,photos:socialPhotos,managers:socialManagers}[s.view]||socialGraphics)(s);
+ ({guide:socialGuide,graphics:socialGraphics,accounts:socialPublishing.accounts,publish_review:socialPublishing.review,artwork:socialArtwork,photos:socialPhotos,managers:socialManagers}[s.view]||socialGraphics)(s);
  if(s.busy||s.pending){document.querySelectorAll('#socialContent button,#socialContent input,#socialContent select,#socialContent textarea').forEach(e=>e.disabled=true);document.getElementById('socialRetrySave')?.removeAttribute('disabled');}
 }
 function socialCards(f){
@@ -21032,7 +21033,7 @@ function socialGraphics(s){
  const cardFor=key=>fs.flatMap(socialCards).find(c=>c.key===key);
  document.querySelectorAll('[data-social-person]').forEach(e=>e.onchange=()=>{const card=cardFor(e.dataset.socialPerson),value=e.value,mode=['default','none'].includes(value)?value:'player';void socialSave(s,'feature',socialFeatureRequest(card,mode,mode==='player'?value:null,mode==='player'?(socialPlayerPhotos(s,value)[0]?.id||null):null));});
  document.querySelectorAll('[data-social-photo]').forEach(e=>e.onchange=()=>{const card=cardFor(e.dataset.socialPhoto),person=socialFeatured(s,card).id;void socialSave(s,'feature',socialFeatureRequest(card,'player',person,e.value||null));});
- document.querySelectorAll('[data-social-guide-player]').forEach(b=>b.onclick=()=>socialGuideEnter(s,2,b.dataset.socialGuidePlayer,b.dataset.socialGuideCard));void socialPaintAll(s,fs);
+ document.querySelectorAll('[data-social-guide-player]').forEach(b=>b.onclick=()=>socialGuideEnter(s,2,b.dataset.socialGuidePlayer,b.dataset.socialGuideCard));void socialPaintAll(s,fs);socialPublishing.mount(s);
 }
 function socialAsset(s,kind,roster=null){return s.data.assets.find(a=>a.kind===kind&&(kind!=='portrait'||a.roster_id===roster));}
 async function socialAssetURL(s,asset){if(!asset)return null;if(s.urls.has(asset.path))return s.urls.get(asset.path);const r=await supabase.storage.from('club-socials').download(asset.path);if(r.error||!r.data)throw Error('An artwork image could not load. Refresh and try again.');if((s!==socialState&&s.previewOf!==socialState)||s.scope!==selectionsScopeKey())throw Error('Club changed');const url=URL.createObjectURL(r.data);s.urls.set(asset.path,url);return url;}
@@ -21092,7 +21093,7 @@ function socialCaption(s,f){const d=f.published.details;return [s.data.brand.nam
 function socialUploadCard(s,kind,title,description,roster=null){const a=socialAsset(s,kind,roster);return `<section class="social-upload"><h3>${title}</h3><p>${description}</p>${a?`<img data-social-asset="${seEsc(a.id)}" alt="${title}"><p class="social-status">Image saved</p>`:''}<label>${a?'Replace image':'Choose image'}<input type="file" accept="image/png,image/jpeg,image/webp" data-social-upload="${kind}" ${roster?'data-roster="'+seEsc(roster)+'"':''}></label>${a?`<button class="btn ghost" data-social-remove="${seEsc(a.id)}" style="margin-top:10px">Remove image</button>`:''}</section>`;}
 function socialArtwork(s){socialGuideEnter(s,1);}
 function socialPhotos(s){socialGuideEnter(s,2,s.player||'');}
-function socialManagers(s){if(!s.data.admin)return;document.getElementById('socialContent').innerHTML=`<section class="se-card social-editor"><h3>Socials managers</h3><p>Choose existing club members who can manage artwork and download published team graphics. Selection permissions are managed separately.</p>${s.data.members.map(m=>`<label class="social-manager"><input type="checkbox" data-social-manager="${seEsc(m.user_id)}" ${m.manager||m.admin?'checked':''} ${m.admin?'disabled':''}><span>${seEsc(m.name)}${m.admin?' · Club Admin':''}</span></label>`).join('')}</section>`;document.querySelectorAll('[data-social-manager]:not(:disabled)').forEach(e=>e.onchange=()=>socialSave(s,'manager',{user_id:e.dataset.socialManager,enabled:e.checked}));}
+function socialManagers(s){if(!s.data.admin)return;document.getElementById('socialContent').innerHTML=`<section class="se-card social-editor"><h3>Socials managers</h3><p>Choose existing club members who can manage artwork, download graphics and publish reviewed posts to the connected club accounts. Selection permissions are managed separately.</p>${s.data.members.map(m=>`<label class="social-manager"><input type="checkbox" data-social-manager="${seEsc(m.user_id)}" ${m.manager||m.admin?'checked':''} ${m.admin?'disabled':''}><span>${seEsc(m.name)}${m.admin?' · Club Admin':''}</span></label>`).join('')}</section>`;document.querySelectorAll('[data-social-manager]:not(:disabled)').forEach(e=>e.onchange=()=>socialSave(s,'manager',{user_id:e.dataset.socialManager,enabled:e.checked}));}
 async function socialNormaliseUpload(file){if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>15*1024*1024)throw Error('Choose a PNG, JPG or WebP image under 15 MB.');const url=URL.createObjectURL(file);try{const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error('This image could not be read.'));i.src=url;});if(img.width*img.height>65000000)throw Error('Choose a smaller image.');let limit=1400;while(limit>=450){const c=document.createElement('canvas'),scale=Math.min(1,limit/Math.max(img.width,img.height));c.width=Math.max(1,Math.round(img.width*scale));c.height=Math.max(1,Math.round(img.height*scale));c.getContext('2d').drawImage(img,0,0,c.width,c.height);const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));if(blob&&blob.size<=2097152)return blob;limit=Math.floor(limit*.78);}throw Error('This image is too detailed. Try a smaller copy.');}finally{URL.revokeObjectURL(url);}}
 function socialBindUploads(s){document.querySelectorAll('[data-social-download-image]').forEach(b=>b.onclick=()=>socialDownloadImage(s,b.dataset.socialDownloadImage));
  document.querySelectorAll('[data-social-asset]').forEach(async e=>{const render=s.render;try{const a=s.data.assets.find(a=>a.id===e.dataset.socialAsset),url=await socialAssetURL(s,a);if(socialHere(s)&&s.render===render)e.src=url;}catch(error){socialMessage(s,error.message);}});
@@ -21504,5 +21505,7 @@ function socialGuideRemember(g){
 function socialGuideDraftKey(g){return g.step+':'+(g.step===2?g.person||'':'');}
 window.addEventListener('beforeunload',e=>{if(socialState?.scope===selectionsScopeKey()&&(socialState.dirty||socialState.busy||socialState.pending)){e.preventDefault();e.returnValue='';}});
 /* END TEAMS SOCIAL GRAPHICS */
+
+const socialPublishing=createSocialPublishing({supabase,escape:seEsc,date:socialDate,here:socialHere,draw:socialDraw,message:socialMessage,lock:socialLock,selection:socialSelection,cards:socialCards,renderImage:socialRender,artwork:socialRPC,current:()=>socialState,demo:false});
 
 boot();
