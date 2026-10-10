@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.141 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.142 — shared grades, season captains and flexible match teams
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.141';
+const APP_UI_VERSION='0.8.62.142';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -24151,7 +24151,7 @@ async function saveSharedTeams(action,values,gid){
 }
 /* END SHARED GRADES AND CAPTAINS */
 
-/* BEGIN TEAMS SOCIAL GRAPHICS — tools/social_graphics_v141.js */
+/* BEGIN TEAMS SOCIAL GRAPHICS — tools/social_graphics_v142.js */
 let socialState=null;
 function socialEnsure(){
  const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState)for(const u of socialState.urls.values())URL.revokeObjectURL(u);socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
@@ -24243,8 +24243,8 @@ async function socialRender(s,card,canvas){
  if(combined)socialFitImage(ctx,sponsors,0,0,1080,headerH);
  else if(!integrated){if(logo)socialFitImage(ctx,logo,45,28,185,200);else{ctx.fillStyle=ink;socialText(ctx,s.data.brand.name.toUpperCase(),50,105,sponsors?230:975,sponsors?27:44,'700');}if(sponsors)socialFitImage(ctx,sponsors,265,24,765,225);else if(logo){ctx.fillStyle=ink;const t=socialWrap(ctx,s.data.brand.name.toUpperCase(),730,38,2);t.lines.forEach((l,i)=>socialText(ctx,l,282,100+i*(t.size+10),730,t.size));}}
  const bounds=portrait?socialPhotoBounds(portrait):null,largeCutout=!!bounds?.transparent&&design.frame==='cutout',listX=showPortrait&&left?581:52,listWidth=showPortrait?447:972,detailsX=largeCutout?listX:52,detailsWidth=largeCutout?listWidth:970;
- const metaY=headerH+39,titleY=headerH+166,footer=String(design.footer||'').trim(),bottom=footer?1275:1315;
- let photoX=left?20:590,photoY=titleY+100,photoW=470,photoH=(footer?1300:1350)-photoY;
+ const metaY=headerH+39,titleY=headerH+130,footer=String(design.footer||'').trim(),bottom=footer?1275:1315;
+ let photoX=left?20:590,photoY=headerH+266,photoW=470,photoH=(footer?1300:1350)-photoY;
  if(showPortrait&&portrait){
   ctx.save();if(largeCutout){const scale=Math.max(.8,Math.min(1.25,(Number(design.photo_scale)||100)/100)),shift=Math.max(-100,Math.min(100,Number(design.photo_shift)||0)),end=footer?1300:1350;
    photoH=(end-(headerH+95))*scale;photoW=photoH*bounds.w/bounds.h;photoY=end-photoH;photoX=(left?1080-1160:1160-photoW)+shift;
@@ -24255,10 +24255,10 @@ async function socialRender(s,card,canvas){
  }
  ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:52,headingWidth=largeCutout?690:975,textLines=[];
  const meta=[d.round?'ROUND '+d.round:'',d.competition].filter(Boolean).join(' · ');textLines.push([meta.toUpperCase(),52,metaY,970,29,'700']);
- textLines.push([d.grade.toUpperCase()+(card.split?' · DAY '+(card.day+1):''),headingX-4,titleY,showPortrait&&left?447:headingWidth,design.font==='bold'?145:100,'700',35]);
- let y=titleY+38;const detailLines=['v '+d.opposition,seFormatLabel(d),...socialFixtureDates(card),d.ground].filter(Boolean);
- for(const [i,text] of detailLines.entries()){const wrapped=socialWrap(ctx,text,detailsWidth,i===0?29:27,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+5;}}
- const names=socialNames(card),baseY=Math.max(headerH+330,y+19),line=Math.min(60,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?51:40,line*.88),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
+ textLines.push([d.grade.toUpperCase()+(card.split?' · DAY '+(card.day+1):''),headingX-4,titleY,showPortrait&&left?447:headingWidth,design.font==='bold'?108:78,'700',35]);
+ let y=titleY+44;const detailLines=['v '+d.opposition,seFormatLabel(d),...socialFixtureDates(card),d.ground].filter(Boolean);
+ for(const [i,text] of detailLines.entries()){const wrapped=socialWrap(ctx,text,detailsWidth,i===0?40:36,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+7;}}
+ const names=socialNames(card),baseY=Math.max(headerH+330,y+24),line=Math.min(60,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?51:40,line*.88),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
  socialDrawNameProtection(ctx,{x:listX-12,y:baseY-font-10,w:listWidth+24,h:(names.length-1)*line+font+24},protection);ctx.fillStyle=ink;textLines.forEach(args=>socialText(ctx,...args));
  if(d.cancelled){socialText(ctx,'MATCH',52,baseY+100,960,76,'700');socialText(ctx,'CANCELLED',52,baseY+190,960,76,'700');}
  else names.forEach((p,i)=>{const row=baseY+i*line,marked=!!portrait&&p.id===featured.id;socialText(ctx,(p.name+p.marks).toUpperCase(),listX,row,listWidth,font,'700',18);if(marked)socialMarker(ctx,design.marker,left?listX-28:listX+listWidth+26,row-font*.30,design.marker==='arrows'?ink:design.accent,ink,left);});
