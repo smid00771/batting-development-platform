@@ -1,43 +1,43 @@
-CLUB BATTING 0.8.62.131 — OBSERVATIONS BEFORE SIGNUP
+CLUB BATTING 0.8.62.132 — TEAM LOADING, PUBLICATION NOTICES AND CAPTAINS
 
-The database update and Guide are already live. Upload this cumulative website update.
+The database fixes and updated Guide are already live. Upload this cumulative
+website update to see the new automatic saving and captain signup controls.
 
-1. Unzip Club_Batting_131_Website.zip.
+1. Unzip Club_Batting_132_Website.zip.
 2. Upload everything INSIDE Website_Files to your existing GitHub Pages root,
    including videos. Replace matching files.
 3. Keep your existing config.js, styles.css and CNAME.
-4. Refresh/reopen the app and check version 0.8.62.131.
-Do not rerun Database_Update.sql; it records the migration already applied.
+4. Refresh/reopen the app and check version 0.8.62.132.
+Do not rerun Database_Update.sql; all three migrations are already applied.
 
-RECORD THE WHOLE SELECTED TEAM
-Match Review now lets you enter scores and observations for published Teams
-players before they sign up. A small person-and-clock icon beside the name means
-signup is pending. The old Open Teams playing list button has been removed.
-No account or formal Player Plan is needed to record an observation. Choose
-Has no plan, or use a general observation, when appropriate.
+TEAM LOADING
+Fixed the database read-only error behind Could not load players / Refresh team.
+The live City check loads all four published teams, with all 44 selected entries
+editable in Match Review, including players who have not signed up yet.
 
-ONE ACCOUNT THROUGH EITHER PRODUCT
-Where the club has both products, the player can sign up through either Club
-Batting or Teams. A verified unique email and matching full name attach the
-original player record and its earlier history. The icon disappears; the
-player, innings and attributed observations keep their IDs.
+PUBLICATION MESSAGES
+One notification per person for a batch of published teams. First publication
+says Teams published; later changes say Teams updated. Selector wording differs
+for playing and non-playing selectors. Players are told to check selection and
+playing dates, or contact a selector. Notices name the grade, opposition, format
+and actual playing dates, including midweek and two-day matches.
+Existing messages remain in history; the change applies to future publication.
 
-If the original email is missing or details differ, Club Admin/authorised
-selectors can verify the account in Teams > Playing list > Link. A name alone
-never claims another player's record. An empty duplicate registration is
-consolidated safely. Separate populated or inactive duplicate records require
-reconciliation; neither history is overwritten. The icon explains this state.
+GRADES AND SEASON CAPTAINS
+Existing grade/captain changes save automatically and show Saved. A grade name
+saves when you leave its field; dropdown and active-grade changes save at once.
+Add a captain who has not signed up by full name, with an optional email. The
+appointment shows signup needed. An existing playing-list entry can be chosen.
+When selected, the season captain is automatically captain in Teams. Both
+products share the appointment. Verified signup/account linking attaches the
+same record and captain access; a name alone does not grant account access.
+Adding a new grade or a new captain still uses its explicit Add button.
 
-Your season captains, stand-ins, manually chosen match teams, shared fixtures,
-dates and video tutorials from .130 remain included. Stand-in access still ends
-after the final playing date using the club's existing allowance/time zone.
-Batting trial: 60 days. Teams trial: 21 days. Pricing remains undecided.
+All previous features and installation videos remain included. Trials remain
+60 days for Club Batting and 21 days for Teams; pricing is still undecided.
 
-Verified: 87 database checks, 8 browser scenarios and 13 isolated Guide checks.
-The live rolled-back City check found 27 editable pending selected entries and
-zero blocked entries. No test observations, messages or team publication saved.
-All 15 monitored live collections were unchanged by installation.
-
-The website upload is still required. This ZIP was closed and checked before
-delivery. Source, applied database SQL and the updated project handover are
-supplied separately.
+Verified: 113 database checks, 12 browser scenarios and 13 isolated Guide checks.
+All 23 monitored live collections retained their existing data. No test messages,
+observations, appointments or publications were saved to your live club.
+The website upload is still required. Source and the updated project handover
+are supplied separately. The database SQL is an already-applied archive only.
