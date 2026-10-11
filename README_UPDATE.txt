@@ -1,36 +1,34 @@
-CLUB BATTING / TEAMS — UPDATE .144
+CLUB BATTING / TEAMS — UPDATE .145
 11 October 2026 (Sydney)
 
-START WITH START_HERE.txt
+WHAT CHANGED
+- Drag a selected player's six-dot handle to change batting position.
+- The intervening slots shift along, including vacant places.
+- Tap/click the handle to choose a position, or use keyboard arrows.
+- Bracketed pairs move as a whole slot, keeping both days together.
+- Moves use the existing draft save, revision check, retry and Undo flow.
+- Edge scrolling supports long lists. Escape or dropping outside cancels.
+- Captain/keeper assignments follow players; publication remains explicit.
+- The demo and contextual help include the same controls.
 
-This release makes account connection a guided club flow and moves the
-one-time Club Batting activation into Platform Admin > Platform Settings.
-
-For clubs: Connect Facebook & Instagram > sign in > choose the club Page.
-The linked account and permissions are checked automatically. Missing or
-expired access gets a specific instruction. Facebook-only clubs can proceed.
-
-For the Platform Owner: the setup panel supplies copy buttons for the
-required addresses and links to Meta and secure settings. It verifies saved
-app details without pretending Meta approval is complete.
-
+INSTALL
 Upload Website_Files as usual. Keep config.js, styles.css and CNAME.
-New in .144: social-platform-setup.js. Include the updated social-publishing.js,
-social-connect.js and social-connect.html from .143 as well.
-Refresh and check version 0.8.62.144.
+Refresh and check version 0.8.62.145. No new files or database steps are
+required for batting-order changes. The complete .144 social setup is included.
+This delivery does not upload the website or publish any team.
 
-The team artwork and deliberate player-photo marker are unchanged.
-The private publishing backend and new connection check are installed.
-Do not rerun the database scripts. Website deployment is still pending.
-Meta account activation, live sign-in and a real reviewed post remain pending.
+VERIFICATION
+11 local behavioural checks passed, including all 110 distinct moves in an
+11-slot team, sparse lists, bracket pairs, role preservation, permissions,
+Undo, revision conflicts, offline retries and a lost response after saving.
+App and demo code match for ordering, rendering and saving; syntax checks pass.
+The existing live save endpoint was inspected read-only to confirm its atomic
+save, revision guard and separate publishing behaviour.
 
-VERIFIED
-24 mocked server tests passed, including account expiry, partial permissions,
-Facebook-only setup, connection changes, owner-only access and post recovery.
-Browser checks passed for the guided flow, automatic checks, role controls,
-caption recovery, one-click publishing and history. Desktop and phone layouts
-were checked. The database access checks passed; no new security advisories
-were reported for the added connection-check functions.
+The browser interaction suite is included but NOT RUN successfully: Chromium
+was unavailable, its download was inaccessible, and the cloud browser could
+not reach the local preview. Mouse/touch behaviour and visual layout still
+need a browser check. Earlier social-release test results are historical.
+No live club data was changed by these tests.
 
-Maintenance contains the optional technical reference. It is not a club
-installation guide. No real social post was sent during this work.
+See START_HERE.txt for the short usage guide and Tests/README.txt for checks.
