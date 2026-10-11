@@ -1,12 +1,12 @@
-// Club Batting 0.8.62.150 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.151 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.150';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.150';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.151';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.151';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.150';
+const APP_UI_VERSION='0.8.62.151';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19957,9 +19957,9 @@ function seFixtureEditor(f=null){
  form.onsubmit=async e=>{e.preventDefault();const data=new FormData(form),grade=seReadGrade(form,'grade'),days=[0,1].filter(i=>data.get('date'+i)).map(i=>({date:data.get('date'+i),start:data.get('start'+i)}));
   if(days.length===2&&days[1].date<=days[0].date){document.getElementById('seFormError').textContent='Day 2 must follow Day 1.';return;}
   const details={...d,...Object.fromEntries(['competition','opposition','ground','meeting'].map(k=>[k,data.get(k).trim()])),grade:grade.grade,grade_group_id:grade.grade_group_id,format:data.get('format'),overs:data.get('overs')===''?null:Number(data.get('overs')),overs_source:data.has('overs_override')?'fixture':'default',captain_id:d.captain_id||null,days,brackets:data.has('brackets'),min_quicks:Number(data.get('min_quicks')),min_batters:Number(data.get('min_batters')),staff:data.getAll('staff'),cancelled:data.has('cancelled')};
-  if(!s.data.selector){s.date=days[0].date;return seMutate('save_fixture',{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details});}
+  if(!s.data.selector){s.date=days[0].date;s.boardDateChosen=true;return seMutate('save_fixture',{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details});}
   let slots=structuredClone(f?.slots||seBlankSlots());if(f&&f.details.days.length===2&&days.length===1&&slots.some(x=>x.d2&&x.d1!==x.d2)&&!confirm('Changing to one day removes Day 2 selections from this draft. Continue?'))return;
-  if(days.length===1)slots=slots.map(x=>({...x,d2:null}));else if(!details.brackets)slots=slots.map(x=>({...x,d2:x.d1}));s.date=days[0].date;
+  if(days.length===1)slots=slots.map(x=>({...x,d2:null}));else if(!details.brackets)slots=slots.map(x=>({...x,d2:x.d1}));s.date=days[0].date;s.boardDateChosen=true;
   await seMutate('save_board',{fixtures:[{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details,slots}]});
  };
 }
@@ -19994,7 +19994,7 @@ function seBindPublicationWorkflow(){
  const s=ensureSelections();
  document.getElementById('seDelegate')?.addEventListener('click',()=>{if(confirmLeaveSelections())seDelegationEditor();});
  document.getElementById('seHandBack')?.addEventListener('click',()=>{if(confirmLeaveSelections())void seMutate('publication_delegate',{revision:s.data.access.revision,operation:'hand_back'});});
- document.querySelectorAll('[data-se-republication]').forEach(button=>button.onclick=()=>{if(!confirmLeaveSelections())return;const fixture=s.data.fixtures.find(f=>f.id===button.dataset.seRepublication);if(!fixture)return;s.view='board';s.date=fixture.details.days[0].date;s.boardPanel=null;s.active=null;drawSelections();});
+ document.querySelectorAll('[data-se-republication]').forEach(button=>button.onclick=()=>{if(!confirmLeaveSelections())return;const fixture=s.data.fixtures.find(f=>f.id===button.dataset.seRepublication);if(!fixture)return;s.view='board';s.date=fixture.details.days[0].date;s.boardDateChosen=true;s.boardPanel=null;s.active=null;drawSelections();});
 }
 function seDelegationEditor(){
  const s=ensureSelections(),d=s.data,a=d.access;if(!d.can_delegate)return;
@@ -20201,13 +20201,22 @@ function drawSelections(){selectionState?.cancelOrder?.();if(currentTab!=='teams
  ({socials:socialOpen,published:sePublished,reviews:seReviews,board:seBoard,fixtures:seFixtures,roster:seRoster,availability:seAvailability,settings:seSettings}[s.view]||sePublished)();bindClubBrandingLinks();seBindPublicationWorkflow();
  if(s.pending)document.querySelectorAll('#seContent button,#seContent input,#seContent select,#seContent textarea').forEach(x=>x.disabled=true);
 }
-function seBoardFixtures(){const s=ensureSelections();const dates=[...new Set(s.data.fixtures.map(f=>f.details.days[0].date))].sort();if(!dates.includes(s.date))s.date=dates.find(x=>x>=new Date().toLocaleDateString('en-CA',{timeZone:s.data.access.timezone}))||dates.at(-1)||'';return s.data.fixtures.filter(f=>f.details.days[0].date===s.date);}
+function seBoardFixtures(){
+ const s=ensureSelections(),fixtures=s.data.fixtures,dates=[...new Set(fixtures.map(f=>f.details.days[0].date))].sort();
+ if((!s.boardDateInitialised&&!s.boardDateChosen)||!dates.includes(s.date)){
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:s.data.access.timezone||'Australia/Sydney'});
+  const active=fixtures.filter(f=>!f.details.cancelled&&(f.details.days.map(d=>d.date).filter(Boolean).sort().at(-1)||'')>=today);
+  s.date=active.map(f=>f.details.days[0].date).sort()[0]||dates.at(-1)||'';
+ }
+ s.boardDateInitialised=true;
+ return fixtures.filter(f=>f.details.days[0].date===s.date);
+}
 function seBoard(){const s=ensureSelections();s.cancelOrder?.();if(!s.data.selector){s.view=s.data.admin?'fixtures':'published';return drawSelections();}if(s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(s.data.fixtures.map(f=>f.details.days[0].date))].sort();
  if(!dates.length){document.getElementById('seContent').innerHTML='<section class="se-card se-drawer"><p>Add a fixture and its playing dates to start selecting.</p><button class="btn" id="seNewFixture">Add first fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';document.getElementById('seNewFixture').onclick=()=>seFixtureEditor();document.getElementById('seUnselected').onclick=seAvailableUnselected;return;}
  document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label>Show fixtures starting <select id="seBoardDate">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label><button class="btn" id="seNewFixture">Add fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button><button class="btn ghost" id="seUndo" ${s.undo.length?'':'disabled'}>Undo last change</button>${fs.some(f=>!seFixtureLocked(f))?'<button class="btn secondary" id="seSendReview">Send to captains</button>':''}${fs.some(f=>!seFixtureLocked(f))&&s.data.head_selector?`<button class="btn" id="sePublish">${sePublishLabel(fs.filter(f=>!seFixtureLocked(f)))}</button>`:''}</div>${!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}<p id="seOrderHelp" class="se-muted se-order-help">Drag the handle beside a player to change the batting order, or tap it to choose a position. Changes save to the draft. Keyboard: use the arrow keys on a handle.</p><div class="se-board-layout"><div class="se-grid">${fs.map(f=>seTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
  document.getElementById('seUnselected').onclick=seAvailableUnselected;
  document.getElementById('seAssignHead')?.addEventListener('click',()=>{s.view='settings';drawSelections();});
- document.getElementById('seBoardDate').onchange=e=>{s.date=e.target.value;s.active=null;seBoard();};document.getElementById('seNewFixture').onclick=()=>seFixtureEditor();document.getElementById('seSendReview')?.addEventListener('click',()=>seWithSavedRoles(fs,seSendReview));document.getElementById('sePublish')?.addEventListener('click',()=>seWithSavedRoles(fs,sePublishReview));
+ document.getElementById('seBoardDate').onchange=e=>{s.date=e.target.value;s.boardDateChosen=true;s.active=null;seBoard();};document.getElementById('seNewFixture').onclick=()=>seFixtureEditor();document.getElementById('seSendReview')?.addEventListener('click',()=>seWithSavedRoles(fs,seSendReview));document.getElementById('sePublish')?.addEventListener('click',()=>seWithSavedRoles(fs,sePublishReview));
  document.getElementById('seUndo').onclick=()=>{const previous=s.undo.at(-1);if(!previous)return;if(previous.before.some(f=>s.data.fixtures.find(x=>x.id===f.id)?.revision!==previous.expected?.[f.id])){seNotice('A team has changed since your edit. Review it before undoing anything.');return;}s.undo.pop();const fixtures=previous.before.map(f=>({...f,revision:previous.expected[f.id]}));void seMutate('save_board',{fixtures});};
  document.querySelectorAll('[data-se-slot]').forEach(b=>b.onclick=()=>{if(s.busy||s.pending||seFixtureLocked(s.data.fixtures.find(f=>f.id===b.dataset.seFixture)))return;const a={id:b.dataset.seFixture,slot:Number(b.dataset.seSlot),day:Number(b.dataset.seDay)};if(s.active?.id===a.id&&s.active.slot===a.slot&&(b.dataset.seBoth==='1'||s.active.day===a.day))return seClosePicker();s.active=a;s.pairs=false;s.search='';s.role='';const f=s.data.fixtures.find(f=>f.id===a.id),slot=f.slots[a.slot];s.both=f.details.days.length===2&&(!f.details.brackets||slot.d1===slot.d2);seBoard();seFocusPicker();});
  document.querySelectorAll('[data-se-edit]').forEach(b=>b.onclick=()=>seFixtureEditor(s.data.fixtures.find(f=>f.id===b.dataset.seEdit)));
@@ -21123,7 +21132,7 @@ function socialEnsure(){
  const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState)for(const u of socialState.urls.values())URL.revokeObjectURL(u);socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
 }
 function socialHere(s){return s===socialState&&s.scope===selectionsScopeKey()&&currentTab==='teams'&&ensureSelections().view==='socials';}
-function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending){alert(s.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(s.dirty&&!confirm('Discard unsaved artwork settings?'))return false;s.dirty=false;s.design=s.data?socialDefaults(s.data):null;return true;}
+function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending){alert(s.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(s.dirty&&!confirm('Discard unsaved artwork settings?'))return false;s.dirty=false;s.design=s.data?socialDefaults(s.data):null;return true;}
 async function socialRPC(s,action,data={}){if(action==='guide:import')return socialGuideImportSave(s,data);if(action.startsWith('prepare:'))return socialPrepRPC(s,action.slice(8),data);const clubId=s.scope.split(':').slice(1).join(':'),r=await supabase.rpc('club_socials_api',{p_club_id:clubId,p_action:action,p_data:data});if(r.error)throw Error(r.error.message||'Could not load social artwork.');return r.data;}
 function socialDefaults(d){
  return {header_layout:'separate',header_height:310,photo_scale:100,photo_shift:0,layout:'portrait',photo_policy:'choose',primary:normaliseHex(d.brand?.primary,'#073554'),accent:normaliseHex(d.brand?.accent,'#128FD2'),footer:'',theme:'gradient',frame:'cutout',font:'bold',marker:'arrows',brief:'',...(d.design||{})};
@@ -21150,7 +21159,7 @@ function socialDraw(s){
  document.querySelectorAll('[data-social-view]').forEach(b=>b.onclick=()=>{if(!socialCanLeave())return;s.view=b.dataset.socialView;s.notice='';socialDraw(s);});
  document.getElementById('socialRefresh').onclick=()=>{if(socialCanLeave())socialOpen();};document.getElementById('socialRetrySave')?.addEventListener('click',()=>socialSave(s,s.pending.action,s.pending.data));
  document.getElementById('socialRecover')?.addEventListener('click',()=>{seDownload('Social-artwork-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;s.dirty=false;s.notice='Proposed changes downloaded. Review the current saved artwork.';void socialOpen();});
- ({guide:socialGuide,graphics:socialGraphics,accounts:socialPublishing.accounts,publish_review:socialPublishing.review,artwork:socialArtwork,photos:socialPhotos,managers:socialManagers}[s.view]||socialGraphics)(s);
+ ({guide:socialGuide,graphics:socialGraphics,accounts:socialPublishing.accounts,publish_review:socialPublishing.review,social_attention:socialPublishing.attention,publish_handover:socialPublishing.handover,artwork:socialArtwork,photos:socialPhotos,managers:socialManagers}[s.view]||socialGraphics)(s);
  if(s.busy||s.pending){document.querySelectorAll('#socialContent button,#socialContent input,#socialContent select,#socialContent textarea').forEach(e=>e.disabled=true);document.getElementById('socialRetrySave')?.removeAttribute('disabled');}
 }
 function socialCards(f){
@@ -21169,7 +21178,7 @@ function socialFixtureCalendar(s){
  return s.data.fixture_calendar||s.data.fixtures.map(f=>({id:f.id,date:f.published.details.days[0].date,grade:f.published.details.grade,opposition:f.published.details.opposition,published:true}));
 }
 function socialOpenSelectionDate(s){
- if(!socialCanLeave())return;const board=ensureSelections();board.date=s.date;board.view=board.data.selector?'board':'fixtures';drawSelections();
+ if(!socialCanLeave())return;const board=ensureSelections();board.date=s.date;board.boardDateChosen=true;board.view=board.data.selector?'board':'fixtures';drawSelections();
 }
 function socialGraphics(s){
  const calendar=socialFixtureCalendar(s),dates=[...new Set(calendar.map(f=>f.date).filter(Boolean))].sort(),today=new Date().toLocaleDateString('en-CA',{timeZone:ensureSelections().data.access.timezone||'Australia/Sydney'});
@@ -21675,6 +21684,6 @@ function socialGuideDraftKey(g){return g.step+':'+(g.step===2?g.person||'':'');}
 window.addEventListener('beforeunload',e=>{if(socialState?.scope===selectionsScopeKey()&&(socialState.dirty||socialState.busy||socialState.pending)){e.preventDefault();e.returnValue='';}});
 /* END TEAMS SOCIAL GRAPHICS */
 
-const socialPublishing=createSocialPublishing({supabase,escape:seEsc,date:socialDate,here:socialHere,draw:socialDraw,message:socialMessage,lock:socialLock,selection:socialSelection,cards:socialCards,renderImage:socialRender,artwork:socialRPC,current:()=>socialState,returnToTeams:()=>{ensureSelections().view='published';drawSelections();void seReload().then(()=>drawSelections()).catch(()=>seNotice('Refresh Teams to check your current access.'));},demo:false});
+const socialPublishing=createSocialPublishing({supabase,escape:seEsc,date:socialDate,here:socialHere,draw:socialDraw,message:socialMessage,lock:socialLock,selection:socialSelection,cards:socialCards,renderImage:socialRender,artwork:socialRPC,refresh:socialRefresh,current:()=>socialState,returnToTeams:()=>{ensureSelections().view='published';drawSelections();void seReload().then(()=>drawSelections()).catch(()=>seNotice('Refresh Teams to check your current access.'));},demo:false});
 
 boot();
