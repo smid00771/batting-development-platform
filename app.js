@@ -1,12 +1,12 @@
-// Club Batting 0.8.62.146 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.147 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.146';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.146';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.147';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.147';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.146';
+const APP_UI_VERSION='0.8.62.147';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
