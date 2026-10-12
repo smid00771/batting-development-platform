@@ -5,3 +5,5 @@ Use direct action labels. Avoid repeated explanations, filler and unnecessary wa
 Include extra detail only when needed for a decision, an error or a requested explanation.
 
 User preference recorded 12 October 2026.
+
+Every button must have one clear action and a visible result. Labels must describe the actual action; avoid inert or ambiguous controls.
