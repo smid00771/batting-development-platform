@@ -25,7 +25,7 @@ function setup(overrides={}){
   const calls=[],renders=[];let elements=new Map(),c;
   function render(){
     const html=c.renderMatchReviewImporter();elements=new Map();
-    for(const tag of html.matchAll(/<(?:input|button|select)\b[^>]*\bid="([^"]+)"[^>]*>/g)){
+    for(const tag of html.matchAll(/<(?:input|button|select|p)\b[^>]*\bid="([^"]+)"[^>]*>/g)){
       const listeners={};
       elements.set(tag[1],{disabled:/\sdisabled(?:\s|>)/.test(tag[0]),
         value:tag[0].match(/\bvalue="([^"]*)"/)?.[1]||'',
@@ -35,7 +35,7 @@ function setup(overrides={}){
     renders.push({loading:s.loading,inputDisabled:elements.get('matchScorecardUrl').disabled});
     return html;
   }
-  c=vm.createContext({teamReviewState:s,ensureTeamReviewState:()=>s,teamReviewRows:()=>[],
+  c=vm.createContext({URL,teamReviewState:s,ensureTeamReviewState:()=>s,teamReviewRows:()=>[],
     esc:escape,formatDateShort:x=>x,todayIso:()=> '2026-10-12',currentTab:'team_review',
     club:{id:'test-club'},confirm:()=>true,renderTeamReviewContent:render,
     document:{getElementById:id=>elements.get(id),querySelectorAll:()=>[]},
@@ -45,7 +45,12 @@ function setup(overrides={}){
           dates:['2026-10-10'],grade:'First XI',format_label:'Limited Overs',innings:[]}}};}}});
   vm.runInContext(locks+importer(app),c);
   render();
-  return {s,c,calls,renders,render,element:id=>elements.get(id),enter:value=>{
+  return {s,c,calls,renders,render,element:id=>elements.get(id),paste:formats=>{
+    const input=elements.get('matchScorecardUrl');let prevented=false;
+    input.listeners.paste?.({target:input,clipboardData:{getData:type=>formats[type]||''},preventDefault:()=>{prevented=true;}});
+    if(!prevented){input.value=formats['text/plain']||'';input.listeners.input({target:input});}
+    return prevented;
+  },enter:value=>{
     const input=elements.get('matchScorecardUrl');
     assert.equal(input.disabled,false,'The match link must accept typing/pasting');
     input.value=value;input.listeners.input({target:input});
@@ -100,4 +105,44 @@ test('a new review and an explicitly edited saved review still accept the link',
 
 test('the public demo retains the same scorecard input and loading implementation',()=>{
   assert.equal(importer(app),importer(demo));
+});
+
+test('a phone paste recovers the link attached to team names and then offers our-team selection',async()=>{
+  const h=setup();
+  assert.equal(h.element('matchScorecardTeam'),undefined);
+  assert.equal(h.paste({'text/plain':'Example CC v Visitors','text/html':`<a href="${url}/scorecard?x=1&amp;y=2">Example CC v Visitors</a>`}),true);
+  assert.equal(h.element('matchScorecardUrl').value,url);
+  assert.equal(h.c.matchReviewImportState().url,url);
+  await h.element('loadMatchScorecard').listeners.click();
+  assert.equal(h.calls[0].args.body.url,url);
+  assert.equal(h.element('matchScorecardTeam').disabled,false);
+});
+
+test('URI-list, encoded HTML and shared plain text all retain the full match address',()=>{
+  for(const formats of [
+    {'text/uri-list':`# Match link\r\n${url}`,'text/plain':'Example CC v Visitors'},
+    {'text/html':`<a href="${url.replace('https://','https&colon;&sol;&sol;')}">Teams</a>`,'text/plain':'Teams'},
+    {'text/plain':`Example CC v Visitors\n${url}`},
+    {'text/plain':url,'text/html':`<a href="${url}">Teams</a>`}
+  ]){
+    const h=setup();assert.equal(h.paste(formats),true);assert.equal(h.c.matchReviewImportState().url,url);
+  }
+});
+
+test('names without an address show phone instructions without making an import request',async()=>{
+  const h=setup();assert.equal(h.paste({'text/plain':'Example CC v Visitors'}),false);
+  await h.element('loadMatchScorecard').listeners.click();
+  assert.equal(h.calls.length,0);assert.equal(h.s.loading,false);
+  assert.match(h.c.matchReviewImportState().message,/web address/i);
+  assert.match(h.c.matchReviewImportState().message,/phone.*browser/i);
+  assert.equal(h.element('matchScorecardTeam'),undefined);
+});
+
+test('foreign, ambiguous and incomplete URLs never reach the import endpoint',async()=>{
+  for(const value of ['https://evil.example/match/00000000-0000-4000-8000-000000000001',
+    'https://play.cricket.com.au/match/not-a-match',url.replace('https:','http:'),
+    url.replace('play.cricket.com.au','play.cricket.com.au.evil.example'),
+    `${url}\n${url.replace(/1$/,'2')}`]){
+    const h=setup();h.enter(value);await h.c.loadMatchReviewScorecard();assert.equal(h.calls.length,0);
+  }
 });
