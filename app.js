@@ -1,12 +1,12 @@
-// Club Batting 0.8.62.155 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.156 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.155';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.155';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.156';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.156';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.155';
+const APP_UI_VERSION='0.8.62.156';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -113,6 +113,7 @@ let accountReturnTab='dashboard';
 let playersWorkspaceClubId=null;
 let playersWorkspaceUserId=null;
 let playersWorkspaceRenderSequence=0;
+let playersWorkspacePlayerRenderSequence=0;
 let playersWorkspaceData=null;
 let playersWorkspaceSelectedId=null;
 let playersWorkspaceSection='summary';
@@ -2942,7 +2943,7 @@ function restoreClubNavigationState(route){
     resetPlayersWorkspaceForClub();
     playersWorkspaceSelectedId=route.playerId||null;
     playersWorkspaceSection=route.playerSection||'summary';
-    playersWorkspaceSearch=route.search||'';
+    playersWorkspaceSearch='';
     playersWorkspaceGroupFilter=route.group==='__actions__'?'__discussion__':route.group||'';
     playersWorkspaceShowAll=!!route.showAll;
     playersWorkspaceMatchFormat=FORMATS.some(([key])=>key===route.matchFormat)?route.matchFormat:'';
@@ -3029,7 +3030,7 @@ function renderTab(){
     currentTab=productTrialWaiting()?'products':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   }
-  if(currentTab==='players')resetPlayersWorkspaceForClub();
+  if(currentTab==='players'){resetPlayersWorkspaceForClub();if(!playersWorkspaceSelectedId)playersWorkspaceSearch='';}
   recordAppNavigation(clubNavigationRoute());
   const route=`${club?.id}:${currentTab}`;
   const scrollOnArrival=route!==workshopLastRoute;
@@ -11096,12 +11097,6 @@ function captureFeedbackEntryBaseline(){
 }
 function confirmLeaveFeedbackEntry(){if(fixtureCorrectionState&&!fixtureCorrectionAbandon())return false;
   if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
-  if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
-  if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
-  if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
-  if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
-  if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
-  if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
   if(!confirmLeaveTeamReview())return false;
   if(!confirmLeaveEngagement())return false;
   if(!confirmLeaveWeeklyLoop())return false;
@@ -13609,6 +13604,27 @@ async function wireIndividualFixtureObservation(player,onSaved){
 }
 // END INDIVIDUAL FIXTURE OBSERVATION
 
+function staffObservationStatus(form,message,error=false){
+  const status=form?.querySelector('#staffDevelopmentStatus');if(!status)return;
+  status.textContent=message;status.setAttribute('role',error?'alert':'status');
+  if(error){status.scrollIntoView({block:'center'});status.focus({preventScroll:true});}
+}
+function ownMatchFeedback(match){
+  return (match?.coach_feedback||[]).filter(f=>f.author_user_id===session?.user?.id)
+    .sort((a,b)=>String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||'')))[0]||null;
+}
+function closeStaffDevelopmentForm(){
+  if(!confirmLeaveFeedbackEntry())return false;
+  const form=document.getElementById('staffDevelopmentForm'),matchId=playersWorkspaceDevelopmentMatchId;
+  if(form)matchDraftDiscardForm(form);
+  ++playersWorkspacePlayerRenderSequence;
+  staffObservationEditId=null;playersWorkspaceDevelopmentMode=null;playersWorkspaceDevelopmentMatchId=null;
+  form?.remove();
+  const target=[...document.querySelectorAll('[data-add-coach-feedback]')].find(b=>b.dataset.addCoachFeedback===matchId)||document.getElementById('addNewMatchFeedback');
+  target?.scrollIntoView({block:'center'});target?.focus({preventScroll:true});
+  return true;
+}
+
 function wireObservationSave(player,kind,onSaved,options={}){
   const form=document.getElementById('staffDevelopmentForm');
   const button=document.getElementById(kind==='match'?'saveStaffMatchFeedback':'saveTrainingObservation');
@@ -13623,6 +13639,8 @@ function wireObservationSave(player,kind,onSaved,options={}){
   const sync=()=>{review.disabled=closed;review.required=false;const questions=document.getElementById('staffObservationPlanQuestions');if(questions)questions.hidden=!!general?.checked;const dismissal=document.getElementById('staffMatchDismissalAssessment');if(dismissal)dismissal.hidden=document.querySelector('input[name="staffBattingToPlan"]:checked')?.value==='no_plan';};
   focus.addEventListener('input',sync);general?.addEventListener('change',sync);form.querySelectorAll('input[name="staffBattingToPlan"]').forEach(input=>input.addEventListener('change',sync));sync();
   queueMicrotask(()=>{if(stillCurrent())matchDraftAttachObservation(form,player,kind);});
+  const idleLabel=button.textContent;
+  const report=(message,error=false)=>staffObservationStatus(form,message,error);
   let requestId=null,requestPayload=null,uncertainArgs=null,uncertainRestore=null;
   button.onclick=async()=>{
     if(coachingActionSavePending||button.disabled||!stillCurrent())return;
@@ -13640,34 +13658,34 @@ function wireObservationSave(player,kind,onSaved,options={}){
       observation_type:document.querySelector('input[name="staffObservationType"]:checked')?.value,
       next_training_focus:val('staffTrainingNextFocus'),note:val('staffTrainingNote')
     };
-    try{Object.assign(values,coachingVideoValues('staffObservation'));}catch(error){status.textContent=error.message;return;}
+    try{Object.assign(values,coachingVideoValues('staffObservation'));}catch(error){report(error.message,true);return;}
     values.plan_related=!general?.checked;
     values.needs_conversation=!!document.getElementById('staffObservationConversation')?.checked;
     if(kind==='match'&&values.plan_related&&values.batting_to_plan==='no_plan'){values.dismissal_classification='not_applicable';values.main_issue=null;}
-    if(kind==='match'&&(!Number.isInteger(values.innings_number)||values.innings_number<1||values.innings_number>10)){status.textContent='Choose an innings number from 1 to 10.';return;}
-    if(!values.plan_related&&!values.note&&!values.next_training_focus){status.textContent='Add a coaching note or training focus.';return;}
-    if(values.plan_related&&(kind==='match'?(!values.batting_to_plan||!values.dismissal_classification):(!values.training_to_plan||!values.observation_type))){status.textContent='Choose the two quick observation answers first.';return;}
+    if(kind==='match'&&(!Number.isInteger(values.innings_number)||values.innings_number<1||values.innings_number>10)){report('Choose an innings number from 1 to 10.',true);return;}
+    if(!values.plan_related&&!values.note&&!values.next_training_focus){report('Add a coaching note or training focus.',true);return;}
+    if(values.plan_related&&(kind==='match'?(!values.batting_to_plan||!values.dismissal_classification):(!values.training_to_plan||!values.observation_type))){report('Choose the two quick observation answers first.',true);return;}
     const reviewOn=review.value||null;
-    if(!closed&&reviewOn&&reviewOn<todayIso()&&reviewOn!==form.dataset.originalReview){status.textContent='Choose a review date from today onwards.';return;}
-    try{if(!uncertainArgs)options.validate?.(values);}catch(error){status.textContent=error.message;return;}
+    if(!closed&&reviewOn&&reviewOn<todayIso()&&reviewOn!==form.dataset.originalReview){report('Choose a review date from today onwards.',true);return;}
+    try{if(!uncertainArgs)options.validate?.(values);}catch(error){report(error.message,true);return;}
     const args=uncertainArgs||{...options.extraArgs,p_player_id:player.id,p_kind:kind,p_observation_id:form.dataset.observationId||null,p_expected_updated_at:form.dataset.observationUpdatedAt||null,
       p_values:values,p_review_on:reviewOn,p_expected_action_revision:form.dataset.actionRevision?Number(form.dataset.actionRevision):null};
     const payload=JSON.stringify(args);
     // Retrying an uncertain response reuses the same receipt. Changed fields get a new receipt.
     if(payload!==requestPayload){requestId=globalThis.crypto.randomUUID();requestPayload=payload;}
-    coachingActionSavePending=true;const restore=uncertainRestore||freezeCoachingForm(form);options.onSaveState?.('saving');status.textContent='Saving…';
+    coachingActionSavePending=true;const restore=uncertainRestore||freezeCoachingForm(form);options.onSaveState?.('saving');button.textContent='Saving…';report('Saving your observation…');
     try{
       const {data:result,error}=await matchDraftRpc(form,options.rpcName||'save_coach_observation',{...args,p_request_id:requestId});
       if(error)throw error;
       if(options.lockUncertain&&(!result?.observation_id||(kind==='match'&&!result.match_id)||(['save_fixture_match_observation','save_individual_fixture_observation'].includes(options.rpcName)&&(!result.fixture_id||result.fixture?.id!==result.fixture_id))))throw Error('The saved observation could not be confirmed.');
       matchDraftConfirmed(form,result);
-      uncertainArgs=null;uncertainRestore=null;options.onSaveState?.('saved');feedbackEntryBaselines.set(form,feedbackEntryValues(form));status.textContent='Saved.';coachingActionSavePending=false;
+      uncertainArgs=null;uncertainRestore=null;options.onSaveState?.('saved');feedbackEntryBaselines.set(form,feedbackEntryValues(form));button.textContent='Saved ✓';report('Observation saved.');coachingActionSavePending=false;
       if(!stillCurrent())return;
-      try{await onSaved(result);}catch(error){status.textContent='Saved successfully. Reload this page to see the latest observation and action.';}
+      try{await onSaved(result);}catch(error){report('Saved successfully. Reload this page to see the latest observation and action.');}
     }catch(error){
       const rejected=/^(?:P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(String(error?.code||''));
-      if(options.lockUncertain&&!rejected){uncertainArgs=args;uncertainRestore=restore;options.onSaveState?.('uncertain');button.disabled=false;button.textContent='Retry save';status.textContent='The save could not be confirmed. Retry save checks the same observation safely.';}
-      else{uncertainArgs=null;uncertainRestore=null;restore();options.onSaveState?.('idle');status.textContent=error?.message||'Could not confirm the save. Your observation is still here; try Save again.';}
+      if(options.lockUncertain&&!rejected){uncertainArgs=args;uncertainRestore=restore;options.onSaveState?.('uncertain');button.disabled=false;button.textContent='Retry save';report('The save could not be confirmed. Check previous save safely; your observation is kept here.',true);}
+      else{uncertainArgs=null;uncertainRestore=null;restore();button.textContent=idleLabel;options.onSaveState?.('idle');report(error?.message||'Could not confirm the save. Your observation is still here; try Save again.',true);}
     }
     finally{coachingActionSavePending=false;matchDraftAfterAttempt(form);}
   };
@@ -13694,14 +13712,15 @@ function renderStaffTrainingObservationForm(player,data={},observationId=null){
     ${observationReviewField(action)}
     ${closed?'<p class="notice">This follow-up is closed. You can correct the observation; add a new observation for a new follow-up.</p>':''}
     ${editError?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
-    <div class="btnrow"><button class="btn secondary" id="saveTrainingObservation" ${editError?'disabled':''}>${observation?'Save changes':'Save observation'}</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
+    <div class="btnrow"><button type="button" class="btn secondary" id="saveTrainingObservation" ${editError?'disabled':''}>${observation?'Save changes':'Save observation'}</button><button type="button" class="btn ghost" id="cancelStaffDevelopment">Cancel</button></div><p class="status" id="staffDevelopmentStatus" role="status" aria-live="polite" tabindex="-1" style="margin:10px 0 0;white-space:normal;overflow-wrap:anywhere"></p>
   </section>`;
 }
 
 function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelopmentMatchId,feedbackId=staffObservationEditId){
   const match=matchId?data?.matches?.find(m=>m.id===matchId)||null:null;
-  const feedback=feedbackId?match?.coach_feedback?.find(f=>f.id===feedbackId&&f.author_user_id===session?.user?.id):null;
+  const feedback=feedbackId?match?.coach_feedback?.find(f=>f.id===feedbackId&&f.author_user_id===session?.user?.id):ownMatchFeedback(match);
   if(feedbackId&&!feedback)return '<section class="card notice">This observation is no longer available to edit. Return to Feedback and reload.</section>';
+  if(match&&(data?.coaching_actions_error||data?.observation_edit_error))return '<section class="card notice" role="alert">Your saved observation could not be checked. Reopen this innings to try again before adding feedback.</section>';
   const action=feedback?(data?.coaching_actions||[]).find(a=>a.match_feedback_id===feedback.id):null;
   const closed=!!action&&action.status!=='open';
   const sharedReadonly=!!match&&!match.edit_context?.can_edit_details;
@@ -13722,7 +13741,7 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","Not really","The approach moved away from the plan"],["no_plan","Has no plan","Ask the player to complete their Player Plan"]],feedback?.batting_to_plan||'')}</div>
     <div id="staffMatchDismissalAssessment"><div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],feedback?.dismissal_classification||'')}</div>
     <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${feedback?.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div></div>
-    <div class="field"><label>Short coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
+    <div class="field"><label for="staffMatchNote">Coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
     ${observationConversationField(feedback?.needs_conversation)}
     ${coachingVideoFields('staffObservation',action?.video)}
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" value="${esc(feedback?.next_training_focus||'')}" ${closed?'disabled':''} maxlength="240" placeholder="One useful focus is enough"></div>
@@ -13730,7 +13749,7 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
     <p class="help">The training focus is shared straight away. For Player Plan observations, the match answers, note and video wait for the player’s reflection.</p>
     ${closed?'<p class="notice">This follow-up is closed. You can correct the observation; add a new observation for a new follow-up.</p>':''}
     ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
-    <div class="btnrow"><button class="btn secondary" id="saveStaffMatchFeedback" ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'disabled':''}>${feedback?'Save changes':'Save observation'}</button><button class="btn ghost" id="cancelStaffDevelopment">Cancel</button><span class="status" id="staffDevelopmentStatus"></span></div>
+    <div class="btnrow"><button type="button" class="btn secondary" id="saveStaffMatchFeedback" ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'disabled':''}>${feedback?'Save changes':'Save observation'}</button><button type="button" class="btn ghost" id="cancelStaffDevelopment">Cancel</button></div><p class="status" id="staffDevelopmentStatus" role="status" aria-live="polite" tabindex="-1" style="margin:10px 0 0;white-space:normal;overflow-wrap:anywhere"></p>
   </section>`;
 }
 
@@ -13812,9 +13831,13 @@ function wireStaffDevelopmentControls(player,canEdit,data){
   wireStaffMatchObservationControls(player,canEdit,data);
   if(!canEdit)return;
 
-  const rerenderStaffDevelopmentAt=async(targetId)=>{
+  const rerenderStaffDevelopmentAt=async(targetId,focus=false)=>{
     await renderPlayersWorkspacePlayer();
-    requestAnimationFrame(()=>document.getElementById(targetId)?.scrollIntoView({behavior:'smooth',block:'start'}));
+    requestAnimationFrame(()=>{
+      if(currentTab!=='players'||playersWorkspaceSelectedId!==player.id)return;
+      const target=document.getElementById(targetId);target?.scrollIntoView({block:'center'});
+      if(focus){target?.focus({preventScroll:true});if(target?.setSelectionRange)target.setSelectionRange(target.value.length,target.value.length);}
+    });
   };
 
   if(document.getElementById('addTrainingObservation'))document.getElementById('addTrainingObservation').onclick=async()=>{
@@ -13833,10 +13856,11 @@ function wireStaffDevelopmentControls(player,canEdit,data){
   };
   page.querySelectorAll('[data-add-coach-feedback]').forEach(b=>b.onclick=async()=>{
     if(!confirmLeaveFeedbackEntry())return;
-    staffObservationEditId=null;
+    const match=(data.matches||[]).find(m=>m.id===b.dataset.addCoachFeedback);if(!match)return;
+    staffObservationEditId=ownMatchFeedback(match)?.id||null;
     playersWorkspaceDevelopmentMode='match';
-    playersWorkspaceDevelopmentMatchId=b.dataset.addCoachFeedback;
-    await rerenderStaffDevelopmentAt('staffDevelopmentForm');
+    playersWorkspaceDevelopmentMatchId=match.id;
+    await rerenderStaffDevelopmentAt('staffMatchNote',true);
   });
   page.querySelectorAll('[data-edit-coach-feedback]').forEach(button=>button.onclick=async()=>{
     if(!confirmLeaveFeedbackEntry())return;
@@ -13850,17 +13874,15 @@ function wireStaffDevelopmentControls(player,canEdit,data){
     staffObservationEditId=button.dataset.editTrainingObservation;playersWorkspaceDevelopmentMatchId=null;playersWorkspaceDevelopmentMode='training';
     await rerenderStaffDevelopmentAt('staffDevelopmentForm');
   });
-  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=async()=>{
-    if(!confirmLeaveFeedbackEntry())return;
-    playersWorkspaceDevelopmentMode=null;
-    playersWorkspaceDevelopmentMatchId=null;
-    await refreshPlayersWorkspaceFeedback();
-    await rerenderStaffDevelopmentAt('developmentOverview');
-  };
+  if(document.getElementById('cancelStaffDevelopment'))document.getElementById('cancelStaffDevelopment').onclick=closeStaffDevelopmentForm;
 
   const afterSave=async()=>{
     staffObservationEditId=null;playersWorkspaceDevelopmentMode=null;playersWorkspaceDevelopmentMatchId=null;
     await refreshPlayersWorkspaceFeedback();await rerenderStaffDevelopmentAt('developmentOverview');
+    if(currentTab==='players'&&playersWorkspaceSelectedId===player.id){
+      const saved=document.createElement('p');saved.className='notice';saved.setAttribute('role','status');saved.textContent='Observation saved ✓';
+      document.getElementById('developmentOverview')?.prepend(saved);
+    }
   };
   wireObservationSave(player,'training',afterSave);
   wireObservationSave(player,'match',afterSave);
@@ -14645,27 +14667,28 @@ function bindWorkspaceAssignments(page,groups){
 }
 
 function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assignmentGroups=[]}={}){
-  const selectReminder=isAdmin()&&playersWorkspaceGroupFilter==='__overdue__';
+  const hasAccount=!!player.user_id;
+  const selectReminder=hasAccount&&isAdmin()&&playersWorkspaceGroupFilter==='__overdue__';
   const groups=(player.groups||[]).map(g=>`<span>${esc(g.name)}</span>`).join('');
   const feedbackCount=workspaceFeedbackCount(player.id);
   const conversationAlert=renderPlayerActionAlert(player.id,signals);
   const plansPublished=workspacePlayerPlansPublished();
   const planState=plansPublished?playerPlanDeadlineState(player):{firstOverdue:null,nextIncomplete:null};
-  const overdue=planState.firstOverdue;
-  const next=planState.nextIncomplete;
+  const overdue=hasAccount?planState.firstOverdue:null;
+  const next=hasAccount?planState.nextIncomplete:null;
   const coreComplete=plansPublished&&sectionProgress('core',planState.raw).complete;
   const formatProgress=plansPublished?publishedEnabledFormats().map(([key,label])=>({label,complete:sectionProgress(key,planState.raw).complete})):[];
   const completedFormats=formatProgress.filter(format=>format.complete).map(format=>format.label);
   const reminder=overdue?workspaceReminderState(player.id):{history:[],count:0,inCooldown:false,latest:null,delivery:''};
-  const planHeadline=!plansPublished
+  const planHeadline=!hasAccount?'Awaiting sign-up / account link':!plansPublished
     ?'Player Plan questions are being prepared'
     :coreComplete?'Core complete ✓':'Core still to complete';
-  const planDetail=!plansPublished
+  const planDetail=!hasAccount?'Coaches can record observations now. This player has no sign-in account linked yet.':!plansPublished
     ?'Registration, club roles and Playing Groups are available now. Player Plans open after publication.'
     :formatProgress.length
       ?`${completedFormats.length}/${formatProgress.length} format plans complete${completedFormats.length?` · ${completedFormats.join(', ')}`:''}`
       :'No format plans available yet.';
-  const deadlineDetail=!plansPublished?'':overdue
+  const deadlineDetail=!hasAccount||!plansPublished?'':overdue
     ?`Overdue: ${overdue.label} · due ${niceDate(overdue.due_date)}`
     :next?.due_date
       ?`${next.label} due ${niceDate(next.due_date)}`
@@ -14695,7 +14718,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
     <div class="workspace-roster-person">
       <div>
         <h3>${selectReminder?`<label class="plan-reminder-person"><input type="checkbox" data-select-overdue="${esc(player.id)}" aria-label="Select ${esc(player.display_name||'player')}" ${workspaceCanRemind(player)?'':'disabled'}>${esc(player.display_name||'Player')}</label>`:esc(player.display_name||'Player')}${memberPhoneStatusIcon(player.user_id)}</h3>
-        <div class="workspace-roster-groups">${groups||'<span>Unassigned</span>'}</div>
+        <div class="workspace-roster-groups">${groups||'<span>Unassigned</span>'}${!player.user_id?'<span title="This player record is not yet linked to a sign-in account.">Account not linked</span>':''}</div>
       </div>
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
@@ -14752,6 +14775,8 @@ function renderPlayersWorkspaceList(){
   const page=document.getElementById('page');
   const data=playersWorkspaceData||{players:[],groups:[]};
   const players=data.players||[];
+  const linkedAccounts=players.filter(p=>!!p.user_id).length;
+  const unlinkedAccounts=players.length-linkedAccounts;
   const assignmentGroups=(data.groups||[]).filter(g=>g.active!==false);
   const role=permissionRoleLabel(data.role||membership.permission_role);
   const query=playersWorkspaceSearch.trim().toLowerCase();
@@ -14767,7 +14792,7 @@ function renderPlayersWorkspaceList(){
 
   let filtered=[];
   if(overdueMode){
-    filtered=plansPublished?players.filter(p=>(!query||String(p.display_name||'').toLowerCase().includes(query))&&playerPlanDeadlineState(p).overdue.length):[];
+    filtered=plansPublished?players.filter(p=>p.user_id&&(!query||String(p.display_name||'').toLowerCase().includes(query))&&playerPlanDeadlineState(p).overdue.length):[];
   }else if(discussionMode){
     filtered=players.filter(player=>{
       const matchesName=!query || String(player.display_name||'').toLowerCase().includes(query);
@@ -14821,7 +14846,8 @@ function renderPlayersWorkspaceList(){
       <div class="section-label">${esc(role)} workspace</div>
       <div class="workspace-title-row"><h2 aria-level="1">Players</h2><div class="btnrow"><button class="btn ghost" id="messagePlayersFromPlayers">Message players &amp; staff</button><button class="btn secondary" id="openTrainingPreparation">Training preparation</button></div></div>
       <div class="help">${plansPublished?'Open plans and pick up coaching conversations.':'Register people, assign club roles and organise Playing Groups while the club prepares its setup. Player Plans open after publication.'}</div>
-      <div class="btnrow compact" style="margin-top:8px"><span class="help" id="workspaceRegisteredCount"><strong>${players.length}</strong> ${isAdmin()?'registered':'accessible'} player${players.length===1?'':'s'}</span>${players.length?`<button type="button" class="workspace-text-link" id="workspaceShowAllPlayers">${playersWorkspaceShowAll?'Hide player list':'Show all players'}</button>`:''}${query||playersWorkspaceGroupFilter?'<button type="button" class="workspace-text-link" id="workspaceClearSelection">Clear selection</button>':''}</div>
+      <div class="btnrow compact" style="margin-top:8px"><span class="help" id="workspaceRegisteredCount"><strong>${players.length}</strong> player record${players.length===1?'':'s'} · ${linkedAccounts} linked account${linkedAccounts===1?'':'s'}${unlinkedAccounts?` · ${unlinkedAccounts} not linked`:''}</span>${players.length?`<button type="button" class="workspace-text-link" id="workspaceShowAllPlayers">${playersWorkspaceShowAll?'Hide player list':'Show all players'}</button>`:''}${query||playersWorkspaceGroupFilter?'<button type="button" class="workspace-text-link" id="workspaceClearSelection">Clear selection</button>':''}</div>
+      ${unlinkedAccounts?'<p class="help">Player records can exist before sign-up. A linked account lets the player use the app; a name in this list alone does not confirm sign-up.</p>':''}
     </div>
     ${isAdmin()?`<div class="btnrow compact"><button class="btn ghost" id="managePeopleFromPlayers">People & Sign-up</button>${plansPublished?'<button class="btn ghost" id="managePlanDatesFromPlayers">Plan dates</button>':''}<button class="btn ghost" id="managePlayingGroupsFromPlayers">Manage Playing Groups</button></div>`:''}
   </section>
@@ -15117,6 +15143,8 @@ function renderWorkspacePlayerDiscussionPanel(player){
 async function returnToPlayersWorkspaceList(){
   if(await saveWorkspacePlayerPlanSilently()===false)return;
   if(!confirmLeaveFeedbackEntry())return;
+  playersWorkspaceSearch='';
+  staffObservationEditId=null;
   playersWorkspaceSelectedId=null;
   playersWorkspaceSection='summary';
   playersWorkspaceDevelopmentMode=null;
@@ -15126,6 +15154,7 @@ async function returnToPlayersWorkspaceList(){
 }
 
 async function renderPlayersWorkspacePlayer(){
+  const renderSequence=++playersWorkspacePlayerRenderSequence;
   const page=document.getElementById('page');
   const player=workspaceSelectedPlayer();
   if(!player){
@@ -15163,7 +15192,7 @@ async function renderPlayersWorkspacePlayer(){
     }
   }
 
-  if(club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!=='players'||playersWorkspaceSelectedId!==targetPlayer||playersWorkspaceSection!==targetSection||document.getElementById('page')!==page)return;
+  if(renderSequence!==playersWorkspacePlayerRenderSequence||club?.id!==targetClub||session?.user?.id!==targetUser||currentTab!=='players'||playersWorkspaceSelectedId!==targetPlayer||playersWorkspaceSection!==targetSection||document.getElementById('page')!==page)return;
   const visibleSections=['summary','training'].includes(playersWorkspaceSection)?sections.filter(([key])=>['summary','training','development'].includes(key)):sections;
   const sectionTabs=visibleSections.map(([key,label])=>{
     if(key==='summary'||key==='training'||key==='development'){
@@ -21217,12 +21246,12 @@ function socialEnsure(){
  const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState)for(const u of socialState.urls.values())URL.revokeObjectURL(u);socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
 }
 function socialHere(s){return s===socialState&&s.scope===selectionsScopeKey()&&currentTab==='teams'&&ensureSelections().view==='socials';}
-function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending){alert(s.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(s.dirty&&!confirm('Discard unsaved artwork settings?'))return false;s.dirty=false;s.design=s.data?socialDefaults(s.data):null;return true;}
+function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending){alert(s.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
 async function socialRPC(s,action,data={}){if(action==='guide:import')return socialGuideImportSave(s,data);if(action.startsWith('prepare:'))return socialPrepRPC(s,action.slice(8),data);const clubId=s.scope.split(':').slice(1).join(':'),r=await supabase.rpc('club_socials_api',{p_club_id:clubId,p_action:action,p_data:data});if(r.error)throw Error(r.error.message||'Could not load social artwork.');return r.data;}
 function socialDefaults(d){
  return {header_layout:'separate',header_height:310,photo_scale:100,photo_shift:0,layout:'portrait',photo_policy:'choose',primary:normaliseHex(d.brand?.primary,'#073554'),accent:normaliseHex(d.brand?.accent,'#128FD2'),footer:'',theme:'gradient',frame:'cutout',font:'bold',marker:'arrows',brief:'',...(d.design||{})};
 }
-async function socialRefresh(s){const data=await socialRPC(s,'context');if(!socialHere(s))return false;s.data=data;s.design=socialDefaults(data);s.dirty=false;return true;}
+async function socialRefresh(s){const data=await socialRPC(s,'context');if(!socialHere(s))return false;s.data=data;s.design=socialDefaults(data);s.dirty=false;s.photoPositions={};return true;}
 async function socialOpen(){const s=socialEnsure(),host=document.getElementById('seContent');host.innerHTML='<div class="se-card">Loading social graphics…</div>';try{if(await socialRefresh(s)){if(s.guide){s.guide.context=null;s.guide.available=null;s.guide.error='';}s.styleStatus=null;socialDraw(s);}}catch(e){if(!socialHere(s))return;host.innerHTML=`<section class="se-card"><h2>Social graphics</h2><p>${seEsc(e.message)}</p><button class="btn" id="socialRetry">Try again</button></section>`;document.getElementById('socialRetry').onclick=socialOpen;}}
 function socialMessage(s,message){s.notice=message;if(socialHere(s)){const e=document.getElementById('socialNotice');if(e)e.textContent=message;}}
 async function socialSave(s,action,data){
@@ -21236,6 +21265,7 @@ async function socialSave(s,action,data){
 function socialLock(locked){document.querySelectorAll('#socialPage button,#socialPage input,#socialPage select,#socialPage textarea').forEach(e=>{if(locked){e.dataset.socialDisabled=e.disabled?'1':'0';e.disabled=true;}else if(e.dataset.socialDisabled!==undefined){e.disabled=e.dataset.socialDisabled==='1';delete e.dataset.socialDisabled;}});}
 function socialStyles(){return `<style>
  .social-guide label{display:block;margin:12px 0}.social-guide input,.social-guide select,.social-guide textarea{box-sizing:border-box;max-width:100%;width:100%}.social-guide input[type=color]{height:42px}.social-guide textarea{font:inherit}.social-tabs [aria-current=step]{background:var(--navy,#17245f);color:white}.social-comparison{display:grid;grid-template-columns:1fr 1fr;gap:15px}.social-comparison img{width:100%;height:auto;object-fit:contain}.social-comparison canvas{width:100%;height:auto}.social-comparison figcaption{font-size:13px;margin:8px 0}.social-comparison figure{margin:0;min-width:0} .social-feature{padding:10px;background:#f4f7fb;border-radius:7px;margin:10px 0}.social-card .social-feature label{display:block;font-size:13px;margin:8px 0}.social-feature select,.social-feature input{display:block;width:100%;box-sizing:border-box;min-width:0;max-width:100%}.social-feature input{font-size:12px}.social-fields textarea{width:100%;box-sizing:border-box;font:inherit}.social-presets{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 18px}.social-small{font-weight:400!important} .social-top{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}.social-top p{margin:6px 0 14px}.social-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 18px}.social-tabs [aria-pressed=true]{background:var(--navy,#17245f);color:white}.social-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:18px}.social-card{padding:12px;min-width:0;background:white;border:1px solid #dce2ee;border-radius:10px}.social-card canvas{display:block;width:100%;height:auto;background:#073554;border-radius:6px;margin:10px 0}.social-card label{font-weight:700;display:flex;gap:9px;align-items:center}.social-card input[type=checkbox]{width:20px;height:20px;flex-shrink:0}.social-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:16px 0}.social-controls{display:flex;gap:14px;align-items:end;flex-wrap:wrap}.social-controls select{max-width:100%}.social-status{font-size:13px;line-height:1.5;margin:8px 0;color:#52627a}.social-changed{color:#814912;background:#fff3dc;padding:6px 8px;border-radius:5px}.social-editor{max-width:950px}.social-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.social-fields input[type=text],.social-fields select{width:100%}.social-colour{display:flex;align-items:center;gap:8px}.social-colour input[type=color]{height:44px;width:62px;min-width:62px;padding:3px}.social-upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:18px}.social-upload{padding:14px;border:1px solid #dce2ee;border-radius:9px;background:#f8fafc}.social-upload h3{margin:0 0 5px;font-size:16px}.social-upload p{font-size:13px;color:#52627a}.social-upload img{display:block;max-width:100%;max-height:230px;object-fit:contain;margin:10px auto;background:repeating-conic-gradient(#e3e7ed 0% 25%,white 0% 50%) 50%/18px 18px}.social-upload input{width:100%;font-size:13px}.social-manager{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e4e8ef}.social-manager input{width:20px;height:20px}.social-preview{max-width:430px;margin:20px auto}.social-preview canvas{width:100%;height:auto;display:block}.social-notice{white-space:pre-wrap;overflow-wrap:anywhere}.social-reference-note{max-width:680px;font-size:14px;color:#52627a}.social-empty{padding:24px 0}.social-captions{width:100%;box-sizing:border-box;min-height:170px;font-family:inherit}.social-download-state{min-height:20px}.social-card .btn{width:100%}
+ .social-photo-position{margin-top:12px;border-top:1px solid #dce2ee;padding-top:10px}.social-photo-position summary{cursor:pointer;font-weight:700;min-height:34px}.social-card .social-photo-position label{display:block;font-weight:600}.social-photo-position output{display:block;font-size:12px;font-weight:400;color:#52627a}.social-photo-position input[type=range]{width:100%;min-height:36px;cursor:ew-resize;accent-color:var(--navy,#17245f)}
  @media(min-width:1200px){.social-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:600px){.social-fields{grid-template-columns:1fr}.social-actions .btn{flex-grow:1}.social-controls{display:block}.social-controls label{margin:10px 0}.social-top h2{font-size:23px}}
  </style>`;}
 function socialDraw(s){
@@ -21249,7 +21279,7 @@ function socialDraw(s){
 }
 function socialCards(f){
  const snap=f.published,d=snap.details,roles=d.match_roles||{},choices=f.features||[];
- const signature=day=>{const a=choices.find(x=>x.day===day);return JSON.stringify([a?.mode||'default',a?.roster_id||null,a?.asset_id||null]);};
+ const signature=day=>{const a=choices.find(x=>x.day===day);return JSON.stringify([a?.mode||'default',a?.roster_id||null,a?.asset_id||null,a?.photo_x||0,a?.photo_y||0]);};
  const shared=d.days.length<2||snap.slots.every(slot=>slot.d1===slot.d2)&&['captain_id','keeper_id'].every(k=>roles.d1?.[k]===roles.d2?.[k])&&signature(1)===signature(2);
  return (shared?[0]:d.days.map((_,i)=>i)).map(day=>({f,day,split:!shared,key:f.id+':'+day}));
 }
@@ -21281,7 +21311,7 @@ function socialGraphics(s){
  const cardFor=key=>fs.flatMap(socialCards).find(c=>c.key===key);
  document.querySelectorAll('[data-social-person]').forEach(e=>e.onchange=()=>{const card=cardFor(e.dataset.socialPerson),value=e.value,mode=['default','none'].includes(value)?value:'player';void socialSave(s,'feature',socialFeatureRequest(card,mode,mode==='player'?value:null,mode==='player'?(socialPlayerPhotos(s,value)[0]?.id||null):null));});
  document.querySelectorAll('[data-social-photo]').forEach(e=>e.onchange=()=>{const card=cardFor(e.dataset.socialPhoto),person=socialFeatured(s,card).id;void socialSave(s,'feature',socialFeatureRequest(card,'player',person,e.value||null));});
- document.querySelectorAll('[data-social-guide-player]').forEach(b=>b.onclick=()=>socialGuideEnter(s,2,b.dataset.socialGuidePlayer,b.dataset.socialGuideCard));void socialPaintAll(s,fs);socialPublishing.mount(s);
+ document.querySelectorAll('[data-social-guide-player]').forEach(b=>b.onclick=()=>socialGuideEnter(s,2,b.dataset.socialGuidePlayer,b.dataset.socialGuideCard));socialBindPhotoPosition(s,cardFor);void socialPaintAll(s,fs);socialPublishing.mount(s);
 }
 function socialAsset(s,kind,roster=null){return s.data.assets.find(a=>a.kind===kind&&(kind!=='portrait'||a.roster_id===roster));}
 async function socialAssetURL(s,asset){if(!asset)return null;if(s.urls.has(asset.path))return s.urls.get(asset.path);const r=await supabase.storage.from('club-socials').download(asset.path);if(r.error||!r.data)throw Error('An artwork image could not load. Refresh and try again.');if((s!==socialState&&s.previewOf!==socialState)||s.scope!==selectionsScopeKey())throw Error('Club changed');const url=URL.createObjectURL(r.data);s.urls.set(asset.path,url);return url;}
@@ -21312,9 +21342,12 @@ async function socialRender(s,card,canvas){
  const bounds=portrait?socialPhotoBounds(portrait):null,largeCutout=!!bounds?.transparent&&design.frame==='cutout',listX=showPortrait&&left?581:52,listWidth=showPortrait?447:972,detailsX=largeCutout?listX:52,detailsWidth=largeCutout?listWidth:970;
  const metaY=headerH+39,titleY=headerH+130,footer=String(design.footer||'').trim(),bottom=footer?1275:1315;
  let photoX=left?20:590,photoY=headerH+266,photoW=470,photoH=(footer?1300:1350)-photoY;
+ if(largeCutout){const scale=Math.max(.8,Math.min(1.25,(Number(design.photo_scale)||100)/100)),shift=Math.max(-100,Math.min(100,Number(design.photo_shift)||0)),end=footer?1300:1350;
+  photoH=(end-(headerH+95))*scale;photoW=photoH*bounds.w/bounds.h;photoY=end-photoH;photoX=(left?1080-1160:1160-photoW)+shift;
+ }
+ const position=socialPhotoPosition(s,card);photoX+=1080*position.x/100;photoY+=1350*position.y/100;
  if(showPortrait&&portrait){
-  ctx.save();if(largeCutout){const scale=Math.max(.8,Math.min(1.25,(Number(design.photo_scale)||100)/100)),shift=Math.max(-100,Math.min(100,Number(design.photo_shift)||0)),end=footer?1300:1350;
-   photoH=(end-(headerH+95))*scale;photoW=photoH*bounds.w/bounds.h;photoY=end-photoH;photoX=(left?1080-1160:1160-photoW)+shift;
+  ctx.save();if(largeCutout){
    // Height controls the player's presence. Natural overflow crops at the poster edge, like a club-designed post.
    ctx.drawImage(portrait,bounds.x,bounds.y,bounds.w,bounds.h,photoX,photoY,photoW,photoH);
   }else if(design.frame==='circle'){ctx.beginPath();ctx.ellipse(photoX+photoW/2,photoY+photoH/2,photoW/2,photoW/2,0,0,Math.PI*2);ctx.clip();socialFitImage(ctx,portrait,photoX,photoY+(photoH-photoW)/2,photoW,photoW,true);}
@@ -21331,7 +21364,7 @@ async function socialRender(s,card,canvas){
  else names.forEach((p,i)=>{const row=baseY+i*line,marked=!!portrait&&p.id===featured.id;socialText(ctx,(p.name+p.marks).toUpperCase(),listX,row,listWidth,font,'700',18);if(marked)socialMarker(ctx,design.marker,left?listX-28:listX+listWidth+26,row-font*.30,design.marker==='arrows'?ink:design.accent,ink,left);});
  if(portrait&&!d.cancelled&&design.marker==='badge')socialMarker(ctx,'badge',left?55:1025,photoY+40,design.accent,ink);
  if(footer){ctx.fillStyle=design.primary;ctx.fillRect(0,1300,1080,50);ctx.fillStyle=ink;socialText(ctx,footer,52,1331,975,21,'500');}
- Object.assign(canvas.dataset,{featuredPlayer:portrait?featured.id||'':'',photoMarker:portrait?design.marker:'',headerLayout:integrated?'integrated':combined?'banner':'separate',headerHeight:String(headerH),nameProtection:protection.alpha?'automatic':'none',nameProtectionAlpha:protection.alpha.toFixed(2),largeCutout:String(largeCutout),photoTop:photoY.toFixed(1),photoHeight:photoH.toFixed(1),photoWidth:photoW.toFixed(1),typeface:design.font==='bold'?(fontLoaded?'Club Sporting':'Arial'):design.font});
+ Object.assign(canvas.dataset,{featuredPlayer:portrait?featured.id||'':'',photoMarker:portrait?design.marker:'',headerLayout:integrated?'integrated':combined?'banner':'separate',headerHeight:String(headerH),nameProtection:protection.alpha?'automatic':'none',nameProtectionAlpha:protection.alpha.toFixed(2),largeCutout:String(largeCutout),photoLeft:photoX.toFixed(1),photoTop:photoY.toFixed(1),photoShiftX:String(position.x),photoShiftY:String(position.y),photoHeight:photoH.toFixed(1),photoWidth:photoW.toFixed(1),typeface:design.font==='bold'?(fontLoaded?'Club Sporting':'Arial'):design.font});
  return {warnings,missingPhoto:showPortrait&&!portrait,photoExpected:!!featured.asset,invalid:featured.invalid};
 }
 async function socialPaintAll(s,fs){
@@ -21386,10 +21419,46 @@ function socialOversNotice(s,f){
  if(!r||String(r.overs??'')===String(d.overs??''))return '';
  return `<p class="social-status social-changed">This published fixture uses ${seEsc(d.overs==null?'no fixed overs limit':d.overs+' overs')}; the grade default is ${seEsc(r.overs==null?'no fixed limit':r.overs+' overs')}. ${d.overs_source==='fixture'?'A fixture override is set.':'Check the fixture details if this difference is unintended.'}</p>`;
 }
-function socialFeatureRequest(card,mode,person=null,asset=null){
+function socialFeatureRequest(card,mode,person=null,asset=null,position=null){
  const days=card.split?[card.day+1]:card.f.published.details.days.map((_,i)=>i+1),revisions={};
  for(const day of days)revisions['d'+day]=(card.f.features||[]).find(a=>a.day===day)?.revision||0;
- return {fixture_id:card.f.id,publication:card.f.publication,days,revisions,mode,roster_id:person,asset_id:asset};
+ return {fixture_id:card.f.id,publication:card.f.publication,days,revisions,mode,roster_id:person,asset_id:asset,photo_x:socialPhotoOffset(position?.x),photo_y:socialPhotoOffset(position?.y)};
+}
+function socialPhotoOffset(value){const number=Number(value);return Number.isFinite(number)?Math.max(-30,Math.min(30,Math.round(number))):0;}
+function socialPhotoPosition(s,card){
+ const choice=(card.f.features||[]).find(x=>x.day===card.day+1),draft=s.photoPositions?.[card.key];
+ return {x:socialPhotoOffset(draft?.x??choice?.photo_x),y:socialPhotoOffset(draft?.y??choice?.photo_y)};
+}
+function socialPhotoPositionLabel(axis,value){return value?`${Math.abs(value)}% ${axis==='x'?(value<0?'left':'right'):(value<0?'up':'down')}`:'Original position';}
+function socialPhotoPositionControls(s,card){
+ const featured=socialFeatured(s,card);if(!featured.asset||s.design.layout==='list')return '';
+ const position=socialPhotoPosition(s,card),key=seEsc(card.key),name=seEsc(featured.person?.name||'player');
+ return `<details class="social-photo-position" data-social-position-panel="${key}" ${s.photoPositionOpen?.[card.key]?'open':''}><summary>Move photo</summary><p class="social-status">Move the sliders to place ${name}. Saves when you release.</p>${[['x','Left / right'],['y','Up / down']].map(([axis,label])=>`<label>${label}<output data-social-position-value="${key}" data-axis="${axis}">${socialPhotoPositionLabel(axis,position[axis])}</output><input type="range" min="-30" max="30" step="1" value="${position[axis]}" data-social-position="${key}" data-axis="${axis}" aria-label="Move ${name} ${axis==='x'?'left or right':'up or down'}" aria-valuetext="${socialPhotoPositionLabel(axis,position[axis])}"></label>`).join('')}<button type="button" class="btn ghost" data-social-position-reset="${key}" ${position.x||position.y?'':'disabled'}>Reset position</button></details>`;
+}
+function socialPreviewPhotoPosition(s,card,position){
+ (s.photoPositions||={})[card.key]={x:socialPhotoOffset(position.x),y:socialPhotoOffset(position.y)};
+ const value=s.photoPositions[card.key],key=CSS.escape(card.key);
+ document.querySelectorAll(`[data-social-position="${key}"]`).forEach(input=>{input.value=value[input.dataset.axis];input.setAttribute('aria-valuetext',socialPhotoPositionLabel(input.dataset.axis,Number(input.value)));});
+ document.querySelectorAll(`[data-social-position-value="${key}"]`).forEach(output=>{output.textContent=socialPhotoPositionLabel(output.dataset.axis,value[output.dataset.axis]);});
+ const reset=document.querySelector(`[data-social-position-reset="${key}"]`);if(reset)reset.disabled=!value.x&&!value.y;
+ s.photoPaintScheduled||=new Set();if(s.photoPaintScheduled.has(card.key))return;s.photoPaintScheduled.add(card.key);
+ requestAnimationFrame(()=>{s.photoPaintScheduled.delete(card.key);const canvas=document.querySelector(`[data-social-canvas="${key}"]`);if(canvas&&socialHere(s))void socialRender(s,card,canvas).catch(e=>socialMessage(s,e.message));});
+}
+async function socialSavePhotoPosition(s,card,position,axis=null){
+ if(s.busy||s.pending||!card)return false;
+ const featured=socialFeatured(s,card);if(!featured.asset)return false;
+ const choice=featured.choice,mode=choice?.mode||'default';
+ const result=await socialSave(s,'feature',socialFeatureRequest(card,mode,mode==='player'?choice.roster_id:null,mode==='player'?choice.asset_id:null,position));
+ if(result&&axis&&socialHere(s))document.querySelector(`[data-social-position="${CSS.escape(card.key)}"][data-axis="${axis}"]`)?.focus({preventScroll:true});
+ return result;
+}
+function socialBindPhotoPosition(s,cardFor){
+ document.querySelectorAll('[data-social-position-panel]').forEach(panel=>panel.ontoggle=()=>{(s.photoPositionOpen||={})[panel.dataset.socialPositionPanel]=panel.open;});
+ document.querySelectorAll('[data-social-position]').forEach(input=>{
+  input.oninput=()=>{if(s.busy||s.pending)return;const card=cardFor(input.dataset.socialPosition);if(card)socialPreviewPhotoPosition(s,card,{...socialPhotoPosition(s,card),[input.dataset.axis]:Number(input.value)});};
+  input.onchange=()=>{const card=cardFor(input.dataset.socialPosition);if(card)void socialSavePhotoPosition(s,card,socialPhotoPosition(s,card),input.dataset.axis);};
+ });
+ document.querySelectorAll('[data-social-position-reset]').forEach(button=>button.onclick=()=>{if(s.busy||s.pending)return;const card=cardFor(button.dataset.socialPositionReset);if(!card)return;socialPreviewPhotoPosition(s,card,{x:0,y:0});void socialSavePhotoPosition(s,card,{x:0,y:0});});
 }
 function socialPhotoControls(s,card){
  const featured=socialFeatured(s,card),choice=featured.choice,people=[...new Map(socialNames(card).filter(p=>p.id).map(p=>[p.id,p])).values()],photos=socialPlayerPhotos(s,featured.id),selected=choice?.mode==='player'?choice.roster_id:choice?.mode||'default';
@@ -21399,7 +21468,7 @@ function socialPhotoControls(s,card){
  else if(selected==='default'&&(match||season))guidance=featured.person
   ? `${featured.person.name} · ${match?'captain for '+(card.split?'this day':'this game'):'season captain'}.`
   : `No ${match?'match':'season'} captain is in this published team. Choose a player to feature.`;
- return `<div class="social-feature"><label>Featured player${card.split?' · Day '+(card.day+1):''}<select data-social-person="${seEsc(card.key)}"><option value="default" ${selected==='default'?'selected':''}>${defaultLabel}</option><option value="none" ${selected==='none'?'selected':''}>No player photo</option>${featured.invalid?`<option selected value="${seEsc(selected)}">Previously featured player is no longer selected</option>`:''}${people.map(p=>`<option value="${seEsc(p.id)}" ${selected===p.id?'selected':''}>${seEsc(p.name)}</option>`).join('')}</select></label>${featured.invalid?'<p class="social-status social-changed">Choose a currently selected player before downloading.</p>':selected==='default'||!featured.person?`<p class="social-status">${seEsc(guidance)}</p>`:''}${featured.person?`${photos.length?`<label>Photo of ${seEsc(featured.person.name)}<select data-social-photo="${seEsc(card.key)}"><option value="">Choose a saved photo</option>${photos.map((a,i)=>`<option value="${seEsc(a.id)}" ${featured.asset?.id===a.id?'selected':''}>${seEsc(a.label||'Photo '+(i+1))}</option>`).join('')}</select></label>`:`<p class="social-status">No saved photo for ${seEsc(featured.person.name)} yet.</p>`}<button class="btn ghost" data-social-guide-player="${seEsc(featured.person.id)}" data-social-guide-card="${seEsc(card.key)}">${photos.length?'Add or update photo':'Add their photo'}</button>`:''}</div>`;
+ return `<div class="social-feature"><label>Featured player${card.split?' · Day '+(card.day+1):''}<select data-social-person="${seEsc(card.key)}"><option value="default" ${selected==='default'?'selected':''}>${defaultLabel}</option><option value="none" ${selected==='none'?'selected':''}>No player photo</option>${featured.invalid?`<option selected value="${seEsc(selected)}">Previously featured player is no longer selected</option>`:''}${people.map(p=>`<option value="${seEsc(p.id)}" ${selected===p.id?'selected':''}>${seEsc(p.name)}</option>`).join('')}</select></label>${featured.invalid?'<p class="social-status social-changed">Choose a currently selected player before downloading.</p>':selected==='default'||!featured.person?`<p class="social-status">${seEsc(guidance)}</p>`:''}${featured.person?`${photos.length?`<label>Photo of ${seEsc(featured.person.name)}<select data-social-photo="${seEsc(card.key)}"><option value="">Choose a saved photo</option>${photos.map((a,i)=>`<option value="${seEsc(a.id)}" ${featured.asset?.id===a.id?'selected':''}>${seEsc(a.label||'Photo '+(i+1))}</option>`).join('')}</select></label>`:`<p class="social-status">No saved photo for ${seEsc(featured.person.name)} yet.</p>`}<button class="btn ghost" data-social-guide-player="${seEsc(featured.person.id)}" data-social-guide-card="${seEsc(card.key)}">${photos.length?'Add or update photo':'Add their photo'}</button>`:''}${socialPhotoPositionControls(s,card)}</div>`;
 }
 function socialInk(hex){const v=hex.match(/[a-f0-9]{2}/gi)?.map(x=>parseInt(x,16)/255)||[0,0,0],l=v.map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return .2126*l[0]+.7152*l[1]+.0722*l[2]>.179?'#101E30':'#FFFFFF';}
 function socialMarker(ctx,kind,x,y,accent,ink,left=false){
