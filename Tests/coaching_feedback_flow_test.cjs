@@ -5,7 +5,7 @@ const app=fs.readFileSync(path.join(__dirname,base,'app.js'),'utf8'),demo=fs.rea
 function part(text,a,b){const i=text.indexOf(a),j=text.indexOf(b,i);assert(i>=0&&j>i);return text.slice(i,j);}
 const pieces=[['function staffObservationStatus(','function renderStaffTrainingObservationForm('],['function renderStaffMatchFeedbackForm(','function staffMatchObservationsInView('],['function wireStaffDevelopmentControls(','/* ---------------- FEEDBACK WORKSPACE ---------------- */'],['async function returnToPlayersWorkspaceList(){','async function renderPlayersWorkspacePlayer(){']];
 const code=pieces.map(([a,b])=>part(app,a,b)).join('\n');
-function element(value=''){return {value,checked:false,disabled:false,textContent:'',dataset:{},addEventListener(){},setAttribute(k,v){this[k]=v;},scrollIntoView(){this.scrolled=true;},focus(){this.focused=true;},setSelectionRange(a,b){this.selection=[a,b];},remove(){this.removed=true;}};}
+function element(value=''){return {value,checked:false,disabled:false,textContent:'',dataset:{},style:{},prepend(child){this.firstChild=child;child.isConnected=true;},addEventListener(){},setAttribute(k,v){this[k]=v;},scrollIntoView(options){this.scrolled=true;this.scrollOptions=options;},focus(){this.focused=true;},setSelectionRange(a,b){this.selection=[a,b];},remove(){this.removed=true;}};}
 function setup({own=true,answers=true,general=false}={}){
  const elements={},fields={staffMatchDate:'2026-10-10',staffMatchFormat:'limited_overs',staffMatchInningsNumber:'1',staffMatchOpposition:'Visitors',staffMatchScore:'34',staffMatchDismissal:'Saved innings note',staffMatchMainIssue:'execution',staffMatchNextFocus:'Saved training focus',staffMatchNote:'Existing note\nAdded comment',staffObservationReviewOn:'2026-10-20'};
  for(const [k,v]of Object.entries(fields))elements[k]=element(v);
@@ -88,4 +88,12 @@ test('provisional player records show account status without an overdue-plan war
  assert.match(pending,/Awaiting sign-up \/ account link/);assert.doesNotMatch(pending,/border-left:4px|Overdue:|Core still to complete/);
  const registered=ctx.renderWorkspaceRosterRow({id:'registered',display_name:'Example Player',user_id:'login',can_edit:true});
  assert.match(registered,/border-left:4px/);assert.match(registered,/Overdue: Limited Overs/);assert.doesNotMatch(registered,/Awaiting sign-up/);
+});
+
+test('after saving, the visible success notice receives focus and scrolls below the navigation',async()=>{
+ const h=setup();let afterSave;h.c.wireObservationSave=(player,kind,callback)=>{afterSave=callback;};
+ h.c.wireStaffDevelopmentControls({id:'player'},true,h.data);await afterSave();
+ const notice=h.e.developmentOverview.firstChild;
+ assert.equal(notice.textContent,'Observation saved ✓');assert.equal(notice.scrolled,true);assert.equal(notice.focused,true);
+ assert.equal(notice.scrollOptions.block,'start');assert.equal(notice.style.scrollMarginTop,'16px');assert.equal(h.c.playersWorkspaceDevelopmentMode,null);
 });

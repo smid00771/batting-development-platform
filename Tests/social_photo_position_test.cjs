@@ -75,7 +75,7 @@ test('a lost save response retries the identical request and increments the save
  assert.equal(h.s.data.fixtures[0].features[0].revision,2);assert.equal(h.s.pending,null);
 });
 
-test('slider input previews locally, releasing saves, and reset saves both original offsets',async()=>{
+test('sliders and reset only preview until Confirm saves the photo position',async()=>{
  const h=setup(),card=h.card();
  for(const axis of ['x','y']){h.inputs.push({dataset:{socialPosition:card.key,axis},value:0,setAttribute(){},focus(){}});h.outputs.push({dataset:{axis},textContent:''});}
  h.resets.push({dataset:{socialPositionReset:card.key},disabled:true});h.panels.push({dataset:{socialPositionPanel:card.key},open:true});
@@ -84,10 +84,28 @@ test('slider input previews locally, releasing saves, and reset saves both origi
  assert.equal(h.calls.length,0);assert.equal(h.outputs[0].textContent,'9% left');assert.equal(h.outputs[1].textContent,'5% down');
  assert.equal(h.frames.length,1);h.frames.shift()();await new Promise(setImmediate);
  assert.equal(h.preview.dataset.photoShiftX,'-9');assert.equal(h.preview.dataset.photoShiftY,'5');
- h.inputs[1].onchange();await new Promise(setImmediate);assert.equal(h.calls[0].data.photo_y,5);
+ h.inputs[1].onchange();await new Promise(setImmediate);assert.equal(h.calls.length,0);
+ await h.c.socialSavePhotoPosition(h.s,h.card(),h.c.socialPhotoPosition(h.s,h.card()));assert.equal(h.calls[0].data.photo_y,5);
+ assert.match(h.s.notice,/Photo position confirmed/);assert.ok(h.s.photoPositionConfirmed[card.key]);
  const fresh=h.card();h.c.socialBindPhotoPosition(h.s,key=>key===fresh.key?fresh:null);h.resets[0].onclick();await new Promise(setImmediate);
+ assert.equal(h.s.data.fixtures[0].features[0].photo_x,-9);assert.equal(h.s.data.fixtures[0].features[0].photo_y,5);
+ await h.c.socialSavePhotoPosition(h.s,h.card(),h.c.socialPhotoPosition(h.s,h.card()));
  assert.equal(h.s.data.fixtures[0].features[0].photo_x,0);assert.equal(h.s.data.fixtures[0].features[0].photo_y,0);
- assert.equal(h.s.photoPositionOpen[card.key],true);
+ assert.equal(h.s.photoPositionOpen[card.key],false);
+ assert.doesNotMatch(h.c.socialPhotoPositionControls(h.s,h.card()),/data-social-position-panel="[^"]+" open/);
+ assert.match(h.c.socialPhotoPositionControls(h.s,h.card()),/Photo position confirmed ✓ · Adjust/);
+});
+
+test('confirming one grade preserves another grade’s unconfirmed photo preview',async()=>{
+ const h=setup(),other=structuredClone(h.f);other.id='other-fixture';h.s.data.fixtures.push(other);
+ // The fixture context is refreshed after every save, including unrelated grade previews.
+ const originalRPC=h.c.socialRPC;
+ h.c.socialRPC=async(s,action,data)=>{const result=await originalRPC(s,action,data);if(action==='context')result.fixtures.push(structuredClone(other));return result;};
+ h.c.socialPreviewPhotoPosition(h.s,h.card(),{x:-3,y:2});
+ h.c.socialPreviewPhotoPosition(h.s,h.c.socialCards(other)[0],{x:7,y:-2});
+ await h.c.socialSavePhotoPosition(h.s,h.card(),{x:-3,y:2});
+ assert.equal(h.s.photoPositions['other-fixture:0'].x,7);assert.equal(h.s.photoPositions['other-fixture:0'].y,-2);
+ assert.equal(h.s.photoPositions['fixture:0'],undefined);
 });
 
 test('switching a player or photo starts at original placement and missing photos have no controls',()=>{
@@ -103,4 +121,11 @@ test('busy or unconfirmed saves cannot be overwritten by a new position',async()
 
 test('production and demo use the same saved-position controls and renderer',()=>{
  for(const [a,b] of boundaries)assert.equal(part(app,a,b),part(demo,a,b));
+});
+
+test('a delayed preview uses the saved position after save replaces the fixture context',async()=>{
+ const h=setup();const oldCard=h.card();h.c.socialPreviewPhotoPosition(h.s,oldCard,{x:-4,y:5});
+ await h.c.socialSavePhotoPosition(h.s,oldCard,{x:-4,y:5});
+ h.frames.shift()();await new Promise(setImmediate);
+ assert.equal(h.preview.dataset.photoShiftX,'-4');assert.equal(h.preview.dataset.photoShiftY,'5');
 });
