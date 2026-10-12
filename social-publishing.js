@@ -161,7 +161,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
   const p=state(s),fixtures=h.selection(s);if(s.busy||s.pending)return;
   if(!fixtures.length){h.message(s,(s.data.fixture_calendar||[]).some(f=>f.date===s.date&&!f.published)?'Publish the teams for this date in Selection board first.':'Choose at least one grade first.');return;}
   if(completedFixtures(s,fixtures)){completedWarning(s);return;}
-  const cards=fixtures.flatMap(h.cards);if(cards.length>10){h.message(s,'Choose up to ten images for one post. Different two-day line-ups count as separate images.');return;}
+  const cards=fixtures.flatMap(h.cards);if(cards.some(card=>s.photoPositions?.[card.key])){h.message(s,'Confirm the photo position before preparing your post.');return;}if(cards.length>10){h.message(s,'Choose up to ten images for one post. Different two-day line-ups count as separate images.');return;}
   if(fixtures.some(f=>f.feature_valid===false)){h.message(s,'Choose a featured player who is in the current team, then review again.');return;}
   s.busy=true;h.lock(true);h.message(s,'Preparing the exact images for your review…');
   let r;
