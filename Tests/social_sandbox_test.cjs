@@ -20,13 +20,14 @@ test('old pages cannot save a completed feature, attached photo or regenerated e
  }
  assert.equal(writes.length,0);await c.socialRPC(s,'settings',{design:{}});assert.equal(writes.length,1);
 });
-test('past fixtures render as records with no photo controls, canvas or download action',()=>{
- const nodes=new Map(),painted=[];const node=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',addEventListener(){}});return nodes.get(id);};
- const c=vm.createContext({Date:FixedDate,document:{getElementById:node,querySelectorAll:()=>[]},seEsc:String,seFormatLabel:()=>'',socialDate:x=>x,socialCaption:()=> 'Published team',socialBindPhotoPosition(){},socialPaintAll:(s,fs)=>painted.push(...fs),socialPublishing:{mount(){}}});
+test('completed fixtures stay out of the working view and appear only in closed history',()=>{
+ const nodes=new Map(),painted=[],archived=[];const node=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',dataset:{},addEventListener(event,fn){this['on'+event]=fn;}});return nodes.get(id);};
+ const c=vm.createContext({Date:FixedDate,document:{getElementById:node,querySelectorAll:()=>[]},seEsc:String,seFormatLabel:()=>'',socialDate:x=>x,socialCaption:()=> 'Published team',socialBindPhotoPosition(){},socialPaintAll:(s,fs)=>painted.push(...fs),socialPublishing:{mount(){}},socialShowHistory:(s,fs)=>archived.push(...fs)});
  vm.runInContext(part(app,'function socialFixtureCompleted(','async function socialRPC(')+part(app,'function socialSelection(','function socialOpenSelectionDate(')+part(app,'function socialGraphics(','function socialAsset('),c);
  const s={data:{timezone:'Australia/Sydney',fixtures:[fixture('past',['2026-10-10'])]},date:'2026-10-10',selected:new Set(['past'])};c.socialGraphics(s);
- const html=node('socialContent').innerHTML;assert.match(html,/Completed · read only/);assert.match(html,/Open Design sandbox/);assert.doesNotMatch(html,/<canvas|data-social-person|data-social-download|id="socialPack"/);assert.equal(painted.length,0);assert.equal(c.socialSelection(s).length,0);
- s.date='';c.socialGraphics(s);assert.equal(s.date,'');assert.match(node('socialContent').innerHTML,/Choose a past fixture to view/);
+ const html=node('socialContent').innerHTML;assert.equal(s.date,'');assert.match(html,/No upcoming fixtures to prepare/);assert.match(html,/Open Design sandbox/);assert.doesNotMatch(html,/Completed · read only|<canvas|data-social-person|data-social-download|id="socialPack"|id="socialDate"/);assert.equal(painted.length,0);assert.equal(c.socialSelection(s).length,0);
+ assert.match(html,/<details id="socialPast"[^>]*><summary>Past fixtures/);assert.doesNotMatch(html,/<details id="socialPast"[^>]* open/);assert.equal(node('socialPastRecords').innerHTML,'');
+ node('socialPast').ontoggle({target:{open:true}});assert.equal(archived.length,1);assert.equal(archived[0].id,'past');assert.equal(s.historyDate,'2026-10-10');
 });
 function sandbox(){
  const nodes=new Map(),stamps=[],draws=[],applied=[],downloads=[],revoked=[],inputs=[{dataset:{sandboxSetting:'primary'},type:'color',value:'#AA3344'}];const positions=['x','y'].map(axis=>({dataset:{sandboxPosition:axis},value:0}));let confirmed=false;
