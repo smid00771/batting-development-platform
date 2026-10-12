@@ -56,6 +56,14 @@ test('position survives saving, context refresh and a newly rendered download ca
  assert.ok(Math.abs(Number(output.dataset.photoTop)-Number(before.dataset.photoTop)-81)<1e-8);
  assert.equal(h.s.data.fixtures[0].features[0].revision,2);
 });
+test('Size changes the visible photo dimensions in every photo treatment',async()=>{
+ for(const frame of ['cutout','circle','rectangle']){
+  const h=setup({frame}),before=h.canvas(),after=h.canvas();h.s.design.photo_scale=100;await h.c.socialRender(h.s,h.card(),before);
+  h.s.design.photo_scale=120;await h.c.socialRender(h.s,h.card(),after);
+  for(const key of ['photoWidth','photoHeight'])assert.ok(Math.abs(Number(after.dataset[key])/Number(before.dataset[key])-1.2)<0.001);
+  assert.equal(after.dataset.photoShiftX,before.dataset.photoShiftX);assert.equal(after.dataset.photoShiftY,before.dataset.photoShiftY);
+ }
+});
 
 test('shared two-day graphics save both days, while independent days remain separate',async()=>{
  const h=setup({twoDay:true});assert.equal(h.c.socialCards(h.f).length,1);

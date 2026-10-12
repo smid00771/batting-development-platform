@@ -20,35 +20,72 @@ test('old pages cannot save a completed feature, attached photo or regenerated e
  }
  assert.equal(writes.length,0);await c.socialRPC(s,'settings',{design:{}});assert.equal(writes.length,1);
 });
-test('past fixtures render as records with no photo controls, canvas or download action',()=>{
- const nodes=new Map(),painted=[];const node=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',addEventListener(){}});return nodes.get(id);};
- const c=vm.createContext({Date:FixedDate,document:{getElementById:node,querySelectorAll:()=>[]},seEsc:String,seFormatLabel:()=>'',socialDate:x=>x,socialCaption:()=> 'Published team',socialBindPhotoPosition(){},socialPaintAll:(s,fs)=>painted.push(...fs),socialPublishing:{mount(){}}});
+test('completed fixtures stay out of the working view and appear only in closed history',()=>{
+ const nodes=new Map(),painted=[],archived=[];const node=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',dataset:{},addEventListener(event,fn){this['on'+event]=fn;}});return nodes.get(id);};
+ const c=vm.createContext({Date:FixedDate,document:{getElementById:node,querySelectorAll:()=>[]},seEsc:String,seFormatLabel:()=>'',socialDate:x=>x,socialCaption:()=> 'Published team',socialBindPhotoPosition(){},socialPaintAll:(s,fs)=>painted.push(...fs),socialPublishing:{mount(){}},socialShowHistory:(s,fs)=>archived.push(...fs)});
  vm.runInContext(part(app,'function socialFixtureCompleted(','async function socialRPC(')+part(app,'function socialSelection(','function socialOpenSelectionDate(')+part(app,'function socialGraphics(','function socialAsset('),c);
  const s={data:{timezone:'Australia/Sydney',fixtures:[fixture('past',['2026-10-10'])]},date:'2026-10-10',selected:new Set(['past'])};c.socialGraphics(s);
- const html=node('socialContent').innerHTML;assert.match(html,/Completed · read only/);assert.match(html,/Open Design sandbox/);assert.doesNotMatch(html,/<canvas|data-social-person|data-social-download|id="socialPack"/);assert.equal(painted.length,0);assert.equal(c.socialSelection(s).length,0);
- s.date='';c.socialGraphics(s);assert.equal(s.date,'');assert.match(node('socialContent').innerHTML,/Choose a past fixture to view/);
+ const html=node('socialContent').innerHTML;assert.equal(s.date,'');assert.match(html,/No upcoming fixtures to prepare/);assert.match(html,/Open Design sandbox/);assert.doesNotMatch(html,/Completed · read only|<canvas|data-social-person|data-social-download|id="socialPack"|id="socialDate"/);assert.equal(painted.length,0);assert.equal(c.socialSelection(s).length,0);
+ assert.match(html,/<details id="socialPast"[^>]*><summary>Past fixtures/);assert.doesNotMatch(html,/<details id="socialPast"[^>]* open/);assert.equal(node('socialPastRecords').innerHTML,'');
+ node('socialPast').ontoggle({target:{open:true}});assert.equal(archived.length,1);assert.equal(archived[0].id,'past');assert.equal(s.historyDate,'2026-10-10');
 });
 function sandbox(){
- const nodes=new Map(),stamps=[],draws=[],applied=[],downloads=[],revoked=[],inputs=[{dataset:{sandboxSetting:'primary'},type:'color',value:'#AA3344'}];let confirmed=false;
- const node=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',isConnected:true,width:1080,height:1350,dataset:{},addEventListener(){},querySelectorAll:selector=>selector==='[data-sandbox-setting]'?inputs:[],getContext:()=>({save(){},restore(){},fillRect(){},fillText:text=>stamps.push(text),drawImage(){}}),toBlob:fn=>fn({type:'image/png'})});return nodes.get(id);};
+ const nodes=new Map(),stamps=[],draws=[],applied=[],downloads=[],revoked=[],inputs=[{dataset:{sandboxSetting:'primary'},type:'color',value:'#AA3344'}];const positions=['x','y'].map(axis=>({dataset:{sandboxPosition:axis},value:0}));let confirmed=false;
+ const node=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',isConnected:true,width:1080,height:1350,dataset:{},addEventListener(event,fn){this['on'+event]=fn;},querySelectorAll:selector=>selector==='[data-sandbox-setting]'?inputs:selector==='[data-sandbox-position]'?positions:[],getContext:()=>({save(){},restore(){},fillRect(){},fillText:text=>stamps.push(text),drawImage(){}}),toBlob:fn=>fn({type:'image/png'})});return nodes.get(id);};
  const c=vm.createContext({console,Date:FixedDate,crypto:webcrypto,document:{getElementById:node,createElement:()=>node('temp-'+nodes.size)},window:{confirm:()=>confirmed},URL:{createObjectURL:()=> 'blob:trial-'+nodes.size,revokeObjectURL:url=>revoked.push(url)}});
- vm.runInContext(moduleSource.replace('export function','function'),c);
- const api=c.createSocialSandbox({here:()=>true,escape:String,defaults:d=>({...d.design}),renderImage:async(s,card)=>draws.push({s,card}),normalize:async()=>({type:'image/png'}),message(){},download:(...args)=>downloads.push(args),applyDesign:async(s,d)=>applied.push(d)});
+ vm.runInContext(part(app,'function socialCards(','function socialDate(')+part(app,'function socialNames(','function socialPhotoId(')+part(app,'function socialPlayerPhotos(','function socialOversNotice(')+moduleSource.replace('export function','function'),c);
+ const api=c.createSocialSandbox({here:()=>true,escape:String,defaults:d=>({...d.design}),groups:s=>s.data.groups||[],cards:c.socialCards,featured:c.socialFeatured,renderImage:async(s,card)=>draws.push({s,card}),normalize:async()=>({type:'image/png'}),message(){},download:(...args)=>downloads.push(args),applyDesign:async(s,d)=>applied.push(d)});
  const s={view:'sandbox',urls:new Map(),images:new Map(),data:{design:{layout:'portrait',frame:'cutout',primary:'#123456',accent:'#abcdef',font:'clean',marker:'arrows',photo_scale:100,photo_shift:0,theme:'solid',header_layout:'integrated',header_height:310,footer:''},brand:{name:'Example Club'},players:[{id:'real-player',name:'Real Player'}],assets:[{id:'real-photo',kind:'photo',roster_id:'real-player',path:'saved-photo',label:'Saved'}],fixtures:[fixture('real-fixture',['2026-10-10'])]}};
- return {api,s,node,draws,stamps,applied,downloads,inputs,revoked,confirm:()=>{confirmed=true;}};
+ const f=s.data.fixtures[0];f.published.players=structuredClone(s.data.players);f.published.slots=[{d1:'real-player',d2:null}];f.features=[{day:1,mode:'player',roster_id:'real-player',asset_id:'real-photo',photo_x:4,photo_y:-3}];s.design={...s.data.design};
+ return {api,s,node,draws,stamps,applied,downloads,inputs,positions,revoked,confirm:()=>{confirmed=true;}};
 }
 test('sandbox edits, player choices and uploads remain isolated from real club data',async()=>{
  const h=sandbox(),before=JSON.stringify(h.s.data);h.api.render(h.s);h.inputs[0].oninput();h.node('sandboxPhoto').onchange({target:{value:'real-photo'}});
  await h.node('sandboxPhotoUpload').onchange({target:{files:[{name:'Trial.png'}]}});await new Promise(setImmediate);
- const p=h.api.preview(h.s);assert.match(p.card.f.id,/^sandbox-/);assert.ok(p.state.data.players.every(x=>x.name.endsWith('Sample')));
- assert.equal(p.state.design.primary,'#AA3344');assert.ok(p.state.data.assets.some(a=>a.id==='sandbox-photo'&&a.roster_id.startsWith('sandbox-')));
- assert.equal(JSON.stringify(h.s.data),before);assert.equal(h.applied.length,0);assert.ok(h.stamps.every(x=>x==='SAMPLE · DESIGN SANDBOX'));
- h.node('sandboxDownload').onclick();assert.equal(h.downloads[0][0],'Club-design-SAMPLE.png');
+ const p=h.api.preview(h.s);assert.match(p.card.f.id,/^sandbox-/);assert.equal(p.state.data.players[0].name,'Real Player');assert.equal(p.card.f.published.details.grade,'Test XI');
+ assert.equal(p.state.design.primary,'#AA3344');assert.ok(p.state.data.assets.some(a=>a.id==='sandbox-photo'&&a.roster_id==='real-player'));
+ assert.equal(JSON.stringify(h.s.data),before);assert.equal(h.applied.length,0);assert.ok(h.stamps.every(x=>x==='TRIAL · DESIGN SANDBOX'));
+ h.node('sandboxDownload').onclick();assert.equal(h.downloads[0][0],'Club-design-TRIAL.png');
  h.api.release(h.s);assert.ok(h.revoked.length>0);
 });
 test('saving a sandbox design requires the explicit confirmed Apply action',async()=>{
- const h=sandbox();h.api.render(h.s);await h.node('sandboxApply').onclick();assert.equal(h.applied.length,0);
- h.confirm();await h.node('sandboxApply').onclick();assert.equal(h.applied.length,1);assert.equal(h.applied[0].primary,'#123456');assert.equal(h.applied[0].fixtures,undefined);assert.equal(h.applied[0].assets,undefined);
+ const h=sandbox();h.api.render(h.s);h.inputs[0].oninput();await h.node('sandboxApply').onclick();assert.equal(h.applied.length,0);
+ h.confirm();await h.node('sandboxApply').onclick();assert.equal(h.applied.length,1);assert.equal(h.applied[0].primary,'#AA3344');assert.equal(h.applied[0].fixtures,undefined);assert.equal(h.applied[0].assets,undefined);
+});
+test('team choices reuse club grades, prefer upcoming lineups and isolate copies',()=>{
+ const h=sandbox(),past=h.s.data.fixtures[0],next=structuredClone(past),later=structuredClone(past);
+ next.id='next';next.published.details.days=[{date:'2026-10-15'}];next.published.details.opposition='Next visitors';
+ later.id='later';later.published.details.days=[{date:'2026-11-01'}];
+ h.s.data.fixtures.push(later,next);h.s.data.groups=[{name:'Test XI',active:true},{name:'New XI',active:true},{name:'Inactive XI',active:false}];
+ h.s.data.grade_defaults=[{grade:'Test XI',format:'t20'},{grade:'Test XI',format:'limited_overs'}];
+ h.api.render(h.s);assert.equal(h.s.sandbox.teams.length,2);
+ const p=h.api.preview(h.s);assert.equal(p.card.f.published.details.opposition,'Next visitors');
+ assert.equal(p.state.photoPositions[p.card.key].x,4);assert.equal(p.state.photoPositions[p.card.key].y,-3);
+ p.card.f.published.players[0].name='Trial only';p.card.f.published.details.grade='Trial grade';p.state.data.assets[0].label='Trial asset';
+ assert.equal(next.published.players[0].name,'Real Player');assert.equal(next.published.details.grade,'Test XI');assert.equal(h.s.data.assets[0].label,'Saved');
+ h.node('sandboxTeam').onchange({target:{value:h.s.sandbox.teams[1].id}});
+ const sample=h.api.preview(h.s);assert.equal(sample.card.f.published.details.grade,'New XI');assert.ok(sample.state.data.players.every(p=>p.name.endsWith('Sample')));
+ assert.match(h.node('socialContent').innerHTML,/Sample lineup until a team is published/);
+});
+test('a club without grades or fixtures starts with one sample team',()=>{
+ const h=sandbox();h.s.data.fixtures=[];h.s.data.assets=[];h.api.render(h.s);
+ assert.equal(h.s.sandbox.teams.length,1);assert.equal(h.api.preview(h.s).card.f.published.details.grade,'Sample team');
+});
+test('two-day copies keep the correct player photos and independent slider positions',()=>{
+ const h=sandbox(),f=h.s.data.fixtures[0];f.published.details.days.push({date:'2026-10-17'});
+ f.published.players.push({id:'day-two',name:'Day Two Player'});f.published.slots[0].d2='day-two';
+ h.s.data.assets.push({id:'day-two-photo',roster_id:'day-two',kind:'photo',path:'day-two-photo'});
+ h.api.render(h.s);h.positions[0].value=-8;h.positions[0].oninput();
+ h.node('sandboxDay').onchange({target:{value:'1'}});let p=h.api.preview(h.s);
+ assert.equal(p.card.day,1);assert.equal(p.card.split,true);assert.equal(p.card.f.features[1].roster_id,'day-two');assert.equal(p.state.photoPositions[p.card.key].x,0);
+ h.positions[1].value=6;h.positions[1].oninput();h.node('sandboxDay').onchange({target:{value:'0'}});p=h.api.preview(h.s);
+ assert.equal(p.state.photoPositions[p.card.key].x,-8);assert.equal(p.state.photoPositions[p.card.key].y,-3);assert.equal(f.features[0].photo_x,4);
+});
+test('the photo adjustment group has one size slider and one control for each axis',()=>{
+ const h=sandbox();h.api.render(h.s);const html=h.node('socialContent').innerHTML;
+ const group=html.slice(html.indexOf('<div class="sandbox-sliders">'),html.indexOf('</div></div><div class="sandbox-fields">'));
+ assert.match(group,/data-sandbox-setting="photo_scale"/);assert.match(group,/data-sandbox-position="x"/);assert.match(group,/data-sandbox-position="y"/);assert.doesNotMatch(html,/data-sandbox-setting="photo_shift"/);
+ assert.equal(h.node('sandboxApply').disabled,true);h.inputs[0].oninput();assert.equal(h.node('sandboxApply').disabled,false);
 });
 test('general club-design previews use fictional teams even when real fixtures exist',()=>{
  const c=vm.createContext({Date:FixedDate,socialGuideState:s=>s.guide});vm.runInContext(part(app,'function socialPrepCard(','async function socialPrepPaint('),c);
