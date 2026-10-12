@@ -3,20 +3,20 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
 const app=fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8'),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
 function part(text,start,end){const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a);return text.slice(a,b);}
-const boundaries=[['function socialCards(','function socialDate('],['function socialNames(','function socialPhotoId('],
+const boundaries=[['function socialFixtureCompleted(','async function socialRPC('],['function socialCards(','function socialDate('],['function socialNames(','function socialPhotoId('],
  ['function socialPlayerPhotos(','function socialOversNotice('],['function socialFeatureRequest(','function socialInk('],
  ['async function socialRender(','async function socialPaintAll('],['async function socialRefresh(','async function socialOpen('],
  ['async function socialSave(','function socialLock(']];
 const code=boundaries.map(([a,b])=>part(app,a,b)).join('\n');
 function setup({twoDay=false,split=false,frame='cutout',left=false}={}){
  const people=[{id:'scotty',name:'Scotty Example'},{id:'other',name:'Other Player'}],asset={id:'photo',path:'test-photo',roster_id:'scotty',kind:'photo'};
- const f={id:'fixture',publication:2,features:[],published:{details:{grade:'Third Grade',opposition:'Visitors',format:'t20',days:[{date:'2026-10-10'},...(twoDay?[{date:'2026-10-17'}]:[])],match_roles:{d1:{captain_id:'scotty'},d2:{captain_id:'scotty'}}},players:people,slots:people.map(p=>({d1:p.id,d2:twoDay?p.id:null}))}};
+ const f={id:'fixture',publication:2,features:[],published:{details:{grade:'Third Grade',opposition:'Visitors',format:'t20',days:[{date:'2099-10-10'},...(twoDay?[{date:'2099-10-17'}]:[])],match_roles:{d1:{captain_id:'scotty'},d2:{captain_id:'scotty'}}},players:people,slots:people.map(p=>({d1:p.id,d2:twoDay?p.id:null}))}};
  f.features=[{day:1,mode:'player',roster_id:'scotty',asset_id:'photo',revision:1,photo_x:0,photo_y:0},...(twoDay?[{day:2,mode:'player',roster_id:split?'other':'scotty',asset_id:split?null:'photo',revision:1,photo_x:0,photo_y:0}]:[])];
  const s={scope:'user:club',data:{brand:{name:'Example Club'},fixtures:[f],assets:[asset]},design:{layout:left?'portrait_left':'portrait',frame,photo_scale:110,photo_shift:20,font:'clean',primary:'#073554',accent:'#128FD2',marker:'arrows'},photoPositions:{},urls:new Map(),busy:false,pending:null};
  s.data.design={...s.design};let server=structuredClone(s.data),fail=false;const calls=[],receipts=new Map(),photo={width:500,height:1000},inputs=[],outputs=[],resets=[],panels=[],frames=[];
  const canvas=()=>{const draws=[],ctx={drawImage:(...args)=>draws.push(args),fillRect(){},save(){},restore(){},beginPath(){},rect(){},clip(){},ellipse(){},fillText(){},measureText:()=>({width:10})};return {width:1080,height:1350,dataset:{},getContext:()=>ctx,draws};};
- const preview=canvas();
- const document={querySelectorAll:selector=>selector.includes('position-panel')?panels:selector.includes('position-value')?outputs:selector.includes('position-reset')?resets:selector.includes('data-social-position')?inputs:[],querySelector:selector=>selector.includes('data-social-canvas')?preview:selector.includes('position-reset')?resets[0]:inputs.find(i=>selector.includes(`data-axis="${i.dataset.axis}"`))||null};
+ const preview=canvas(),summary={textContent:'Move photo',focus(){}};
+ const document={querySelectorAll:selector=>selector.includes('position-panel')?panels:selector.includes('position-value')?outputs:selector.includes('position-reset')?resets:selector.includes('data-social-position')?inputs:[],querySelector:selector=>selector.includes('position-panel')?summary:selector.includes('data-social-canvas')?preview:selector.includes('position-reset')?resets[0]:inputs.find(i=>selector.includes(`data-axis="${i.dataset.axis}"`))||null};
  const c=vm.createContext({console,URL,crypto:webcrypto,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;},
   socialHere:()=>true,socialMessage:(s,message)=>s.notice=message,socialLock(){},socialDraw(){},socialGuideSaved(){},socialGuideUploadNote(){},socialGuideState:()=>({}),socialGuideRemember(){},
   socialDefaults:d=>({...d.design}),socialAsset:()=>null,socialAssetURL:async(s,a)=>a?'photo-url':null,socialImage:async(s,url)=>url?photo:null,
@@ -30,7 +30,7 @@ function setup({twoDay=false,split=false,frame='cutout',left=false}={}){
   }});
  vm.runInContext(code,c);
  const card=()=>c.socialCards(s.data.fixtures[0])[0];
- return {c,s,f,asset,calls,card,canvas,preview,inputs,outputs,resets,panels,frames,fail:()=>{fail=true;}};
+ return {c,s,f,asset,calls,card,canvas,preview,summary,inputs,outputs,resets,panels,frames,fail:()=>{fail=true;}};
 }
 
 test('horizontal and vertical offsets move only the photo in cutout, circle and rectangle layouts',async()=>{
@@ -87,7 +87,9 @@ test('sliders and reset only preview until Confirm saves the photo position',asy
  h.inputs[1].onchange();await new Promise(setImmediate);assert.equal(h.calls.length,0);
  await h.c.socialSavePhotoPosition(h.s,h.card(),h.c.socialPhotoPosition(h.s,h.card()));assert.equal(h.calls[0].data.photo_y,5);
  assert.match(h.s.notice,/Photo position confirmed/);assert.ok(h.s.photoPositionConfirmed[card.key]);
+ h.summary.textContent='Photo position confirmed ✓ · Adjust';
  const fresh=h.card();h.c.socialBindPhotoPosition(h.s,key=>key===fresh.key?fresh:null);h.resets[0].onclick();await new Promise(setImmediate);
+ assert.equal(h.summary.textContent,'Move photo');
  assert.equal(h.s.data.fixtures[0].features[0].photo_x,-9);assert.equal(h.s.data.fixtures[0].features[0].photo_y,5);
  await h.c.socialSavePhotoPosition(h.s,h.card(),h.c.socialPhotoPosition(h.s,h.card()));
  assert.equal(h.s.data.fixtures[0].features[0].photo_x,0);assert.equal(h.s.data.fixtures[0].features[0].photo_y,0);
@@ -128,4 +130,11 @@ test('a delayed preview uses the saved position after save replaces the fixture 
  await h.c.socialSavePhotoPosition(h.s,oldCard,{x:-4,y:5});
  h.frames.shift()();await new Promise(setImmediate);
  assert.equal(h.preview.dataset.photoShiftX,'-4');assert.equal(h.preview.dataset.photoShiftY,'5');
+});
+
+test('a completed-fixture rejection clears the pending save and expired photo draft',async()=>{
+ const h=setup();h.s.photoPositions[h.card().key]={x:-4,y:5};h.s.data.fixtures[0].completed=true;
+ h.c.socialRPC=async()=>{throw Object.assign(Error('Completed fixtures are read-only.'),{code:'P0159'});};
+ assert.equal(await h.c.socialSavePhotoPosition(h.s,h.card(),{x:-4,y:5}),false);
+ assert.equal(h.s.pending,null);assert.equal(Object.keys(h.s.photoPositions).length,0);assert.equal(h.s.notice,'Completed fixtures are read-only.');
 });
