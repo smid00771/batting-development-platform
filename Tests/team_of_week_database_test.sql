@@ -16,7 +16,7 @@ begin
   perform set_config('request.jwt.claim.sub',adm::text,true);
   select array_agg(gen_random_uuid()) into ids from generate_series(1,14);
   select jsonb_agg(jsonb_build_object('player_id',ids[n],'name','Test player '||n,'runs',n*5,'not_out',n=1,'status','played','importable',true)) into batters from generate_series(1,14) n;
-  select jsonb_agg(jsonb_build_object('player_id',ids[n],'name','Test player '||n,'team_id',our_id,'wickets',3,'runs',20+n,'balls',30,'importable',true)) into bowlers from generate_series(8,14) n;
+  select jsonb_agg(jsonb_build_object('player_id',ids[n],'name','Test player '||n,'team_id',our_id,'wickets',case when n=14 then 0 else 3 end,'runs',20+n,'balls',30,'importable',true)) into bowlers from generate_series(8,14) n;
   card:=jsonb_build_object('schema_version',2,'provider','playcricket_au','status','completed','match_id',source_id,'url','https://play.cricket.com.au/match/'||source_id,'dates',jsonb_build_array('2026-10-10'),'grade','4th Grade',
    'teams',jsonb_build_array(jsonb_build_object('id',our_id,'name','Weekly Test Club'),jsonb_build_object('id',their_id,'name','Visitors')),
    'innings',jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'team_id',our_id,'number',1,'complete',true,'batters',batters,'bowlers','[]'::jsonb,'bowling_available',true),
@@ -39,7 +39,8 @@ begin
   rejected:=false;begin perform public.team_of_week_api(c,'save_design',jsonb_build_object('revision',2,'background_path',bg,'layout','{"includes_title":false,"top":620,"bottom":1200,"logo_x":101}'::jsonb));exception when raise_exception then rejected:=true;end;assert rejected,'Logo must stay inside the image';
   rejected:=false;begin perform public.team_of_week_api(c,'save_design',jsonb_build_object('revision',2,'background_path',bg,'layout','{"includes_title":false,"top":1190,"bottom":1200}'::jsonb));exception when raise_exception then rejected:=true;end;assert rejected,'Player rows need space';
   rejected:=false;begin perform public.team_of_week_api(c,'save_design',jsonb_build_object('revision',2,'background_path',bg,'layout','{"includes_title":false,"top":620,"bottom":1200,"reference":{"names":[{"name":""}]}}'::jsonb));exception when raise_exception then rejected:=true;end;assert rejected,'Empty example names rejected';
-  select jsonb_agg(jsonb_build_object('key',x->>'key','display','batting')) into rows_json from (select x from jsonb_array_elements(result->'candidates') x limit 11) q;
+  select jsonb_agg(jsonb_build_object('key',x->>'key','display',case when x->>'player_id'=ids[14]::text then 'bowling' else 'batting' end)) into rows_json from (select x from jsonb_array_elements(result->'candidates') x limit 11) q;
+  assert exists(select 1 from jsonb_array_elements(rows_json) x where x->>'display'='bowling'),'Include a wicketless spell in the saved graphic';
   request:=jsonb_build_object('id',edition,'week_end','2026-10-11','title','Week 1','blurb','Great efforts across all grades.','rows',rows_json,'sha256',repeat('a',64),'bytes',1000);
   result:=public.team_of_week_api(c,'reserve_image',request);path:=result->>'path';
   assert (public.team_of_week_api(c,'reserve_image',request)->>'path')=path,'Retry must reuse the edition';
