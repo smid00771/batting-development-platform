@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.167 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.168 — shared grades, season captains and flexible match teams
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.167';
+const APP_UI_VERSION='0.8.62.168';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -28368,15 +28368,22 @@ function createSelectionRoom(h){
   finally{s.savingBackup=false;if(same(s)){el(s,'saveBackup').disabled=false;text(s,'saveBackup','Save call link');}}
  }
  function videoControls(s){
-  el(s,'join').hidden=!s.videoReady||!!s.frame;el(s,'join').disabled=s.joining;text(s,'join',s.joining?'Connecting…':'Join video');
+  el(s,'join').hidden=!s.videoReady||!!s.frame&&!s.videoError;el(s,'join').disabled=s.joining;text(s,'join',s.joining?'Connecting…':s.videoError?'Retry video':'Join video');
   el(s,'leave').hidden=!s.frame&&!s.joining;el(s,'video').hidden=!s.frame;el(s,'checkVideo').hidden=s.videoReady||s.joining||!!s.frame;
  }
+ function videoFailure(s,error){
+  const detail=typeof error==='string'?error:error?.errorMsg||error?.error?.msg||error?.message;
+  const message=typeof detail==='string'?detail.replace(/https?:\/\/[^\s]+/gi,'[video address]').replace(/\b[A-Za-z0-9_-]{40,}(?:\.[A-Za-z0-9_-]+)*\b/g,'[hidden]').replace(/\s+/g,' ').trim().slice(0,320):'';
+  s.videoError=message||'Video could not connect. Try again.';s.joining=false;
+  if(['exp-room','exp-token'].includes(error?.error?.type)||/call has ended|room has expired|token has expired/i.test(s.videoError))s.videoRequest=null;
+  text(s,'videoStatus',s.videoError);text(s,'subtitle','Selectors only · '+s.scope.club_name);videoControls(s);
+ }
  async function videoStatus(s){
-  if(!same(s)||s.statusLoading)return;s.statusLoading=true;el(s,'checkVideo').disabled=true;if(!s.frame&&!s.joining)text(s,'videoStatus','Checking video…');
+  if(!same(s)||s.statusLoading)return;s.statusLoading=true;el(s,'checkVideo').disabled=true;if(!s.frame&&!s.joining&&!s.videoError)text(s,'videoStatus','Checking video…');
   try{
    const result=await h.video(s.scope,'status',{});if(!same(s))return;s.videoReady=result.available===true;
-   if(!s.frame&&!s.joining)text(s,'videoStatus',s.videoReady?'Video ready · calls last up to 90 minutes.':result.reason==='demo'?'Demo: chat is local. Live video is available in your club.':'Video is not connected yet. Chat is ready.');
-  }catch{if(same(s)&&!s.frame)text(s,'videoStatus','Video connection could not be checked. Chat is still available.');}
+   if(!s.frame&&!s.joining&&!s.videoError)text(s,'videoStatus',s.videoReady?'Video ready · calls last up to 90 minutes.':result.reason==='demo'?'Demo: chat is local. Live video is available in your club.':'Video is not connected yet. Chat is ready.');
+  }catch{if(same(s)&&!s.frame&&!s.videoError)text(s,'videoStatus','Video connection could not be checked. Chat is still available.');}
   finally{s.statusLoading=false;s.statusChecked=Date.now();if(same(s)){el(s,'checkVideo').disabled=false;videoControls(s);}}
  }
  async function daily(){
@@ -28385,24 +28392,27 @@ function createSelectionRoom(h){
   return dailyPromise;
  }
  function leave(s,show=true){
-  ++s.joinSequence;const frame=s.frame;s.frame=null;s.joining=false;s.videoRequest=null;
-  if(frame)try{Promise.resolve(frame.destroy()).catch(()=>{});}catch{}
+  ++s.joinSequence;const frame=s.frame;s.frame=null;s.joining=false;s.videoRequest=null;s.videoError='';
+  if(frame)try{s.videoCleanup=Promise.resolve(frame.destroy()).catch(()=>{});}catch{s.videoCleanup=Promise.resolve();}
   if(show&&same(s)){el(s,'video').replaceChildren();videoControls(s);text(s,'videoStatus','You left the call.');text(s,'subtitle','Selectors only · '+s.scope.club_name);}
  }
  async function join(s){
-  if(!same(s)||s.joining||s.frame||!s.videoReady)return;
-  s.joining=true;const sequence=++s.joinSequence;s.videoRequest ||= crypto.randomUUID();videoControls(s);text(s,'videoStatus','Preparing video…');
+  if(!same(s)||s.joining||s.frame&&!s.videoError||!s.videoReady)return;
+  if(s.frame){const request=s.videoRequest;leave(s,false);s.videoRequest=request;}
+  s.videoError='';s.joining=true;const sequence=++s.joinSequence;s.videoRequest ||= crypto.randomUUID();videoControls(s);text(s,'videoStatus','Preparing video…');
   try{
+   await s.videoCleanup;if(!same(s)||sequence!==s.joinSequence)return;
    const provider=await daily();if(!same(s)||sequence!==s.joinSequence)return;
    const data=await h.video(s.scope,'join',{request_id:s.videoRequest});if(!same(s)||sequence!==s.joinSequence)return;
    const u=new URL(data.url);if(u.protocol!=='https:'||!u.hostname.endsWith('.daily.co')||u.username||u.password)throw Error('The video room could not be verified.');
    const frame=provider.createFrame(el(s,'video'),{iframeStyle:{width:'100%',height:'100%',border:'0'},showLeaveButton:true});s.frame=frame;videoControls(s);text(s,'videoStatus','Check your camera and microphone below.');
    frame.on('joined-meeting',()=>{if(same(s)&&s.frame===frame){s.joining=false;videoControls(s);text(s,'subtitle','In video call · '+s.scope.club_name);text(s,'videoStatus','Connected · call ends '+new Date(data.expires_at).toLocaleTimeString('en-AU',{timeZone:s.scope.timezone||'Australia/Sydney',hour:'numeric',minute:'2-digit'}));}});
-   frame.on('left-meeting',()=>{if(same(s)&&s.frame===frame)leave(s);});
-   frame.on('error',()=>{if(same(s)&&s.frame===frame){leave(s);text(s,'videoStatus','Video disconnected. Join again or use the backup call.');}});
+   frame.on('left-meeting',()=>{if(same(s)&&s.frame===frame&&!s.videoError)leave(s);});
+   frame.on('error',error=>{if(same(s)&&s.frame===frame)videoFailure(s,error);});
+   frame.on('camera-error',()=>{if(same(s)&&s.frame===frame&&!s.videoError)text(s,'videoStatus','Camera or microphone unavailable. Check the device controls below.');});
    await frame.join({url:u.href,token:data.token,userName:data.user_name});
   }catch(error){
-   if(same(s)&&sequence===s.joinSequence){const request=s.videoRequest;leave(s);s.videoRequest=/call has ended/i.test(error.message)?null:request;text(s,'videoStatus',error.message||'Video could not connect. Try again or use the backup call.');}
+   if(same(s)&&sequence===s.joinSequence&&!s.videoError)videoFailure(s,error);
   }finally{if(same(s)&&sequence===s.joinSequence){s.joining=false;videoControls(s);}}
  }
  async function open(){
