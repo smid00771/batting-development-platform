@@ -1,15 +1,16 @@
-// Club Batting 0.8.62.171 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.172 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.171';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.171';
-import {createTeamOfWeek} from './team-of-week.js?v=0.8.62.171';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.171';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.171';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.172';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.172';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.172';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.172';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.172';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.172';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.171';
+const APP_UI_VERSION='0.8.62.172';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -21320,7 +21321,7 @@ function socialEnsure(){
  const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState){socialSandbox.release(socialState);for(const u of socialState.urls.values())URL.revokeObjectURL(u);}socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
 }
 function socialHere(s){return s===socialState&&s.scope===selectionsScopeKey()&&currentTab==='teams'&&ensureSelections().view==='socials';}
-function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending){alert(s.busy||s.week?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
+function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending){alert(s.busy||s.week?.busy||s.playerWeek?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
 function socialFixtureCompleted(s,f,now=new Date()){
  const dates=(f.published?.details?.days||f.details?.days||[]).map(d=>d.date).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')).sort();
  return f.completed===true||!!dates.length&&dates.at(-1)<now.toLocaleDateString('en-CA',{timeZone:s.data?.timezone||'Australia/Sydney'});
@@ -21365,11 +21366,11 @@ function socialStyles(){return `<style>
  </style>`;}
 function socialDraw(s){
  if(!socialHere(s)||!s.data)return;const host=document.getElementById('seContent');if(['artwork','photos'].includes(s.view)){const g=socialGuideState(s);g.step=s.view==='photos'?2:1;g.kind=g.step===2?'photo':'master';s.view='guide';}s.render++;
- host.innerHTML=socialStyles()+`<section id="socialPage"><div class="social-top"><div><h2>Social graphics</h2><p class="se-muted">Your club’s look. Ready for every round.</p></div><button class="btn ghost" id="socialRefresh">Refresh graphics</button></div><div class="social-tabs">${[...(s.data.admin?[['managers','Socials responsibility']]:[]),['guide','Guided setup'],['sandbox','Design sandbox'],['graphics','Team graphics'],['team_week','Team of the Week'],['accounts','Social accounts']].map(([key,title])=>`<button class="btn ghost" data-social-view="${key}" aria-pressed="${(s.view==='guide'&&socialGuideState(s).step===2?'graphics':s.view)===key}">${title}</button>`).join('')}</div><p id="socialNotice" class="social-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?'<div class="se-recovery"><strong>Artwork save not confirmed</strong><p>Your change is retained in this tab. Retry it, or keep a copy and reload the saved version.</p><div class="social-actions"><button class="btn" id="socialRetrySave">Retry save</button><button class="btn ghost" id="socialRecover">Download changes &amp; reload</button></div></div>':''}<div id="socialContent"></div></section>`;
+ host.innerHTML=socialStyles()+`<section id="socialPage"><div class="social-top"><div><h2>Social graphics</h2><p class="se-muted">Your club’s look. Ready for every round.</p></div><button class="btn ghost" id="socialRefresh">Refresh graphics</button></div><div class="social-tabs">${[...(s.data.admin?[['managers','Socials responsibility']]:[]),['guide','Guided setup'],['sandbox','Design sandbox'],['graphics','Team graphics'],['team_week','Team of the Week'],['player_week','Player of the Week'],['accounts','Social accounts']].map(([key,title])=>`<button class="btn ghost" data-social-view="${key}" aria-pressed="${(s.view==='guide'&&socialGuideState(s).step===2?'graphics':s.view)===key}">${title}</button>`).join('')}</div><p id="socialNotice" class="social-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?'<div class="se-recovery"><strong>Artwork save not confirmed</strong><p>Your change is retained in this tab. Retry it, or keep a copy and reload the saved version.</p><div class="social-actions"><button class="btn" id="socialRetrySave">Retry save</button><button class="btn ghost" id="socialRecover">Download changes &amp; reload</button></div></div>':''}<div id="socialContent"></div></section>`;
  document.querySelectorAll('[data-social-view]').forEach(b=>b.onclick=()=>{if(!socialCanLeave())return;if(b.dataset.socialView==='guide'){const g=socialGuideState(s);if(g.step===2)socialGuideSwitch(g,0);g.returnCard='';}s.view=b.dataset.socialView;s.notice='';socialDraw(s);});
  document.getElementById('socialRefresh').onclick=()=>{if(socialCanLeave())socialOpen();};document.getElementById('socialRetrySave')?.addEventListener('click',()=>socialSave(s,s.pending.action,s.pending.data));
  document.getElementById('socialRecover')?.addEventListener('click',()=>{seDownload('Social-artwork-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;s.dirty=false;s.notice='Proposed changes downloaded. Review the current saved artwork.';void socialOpen();});
- ({team_week:socialWeek.render,sandbox:socialSandbox.render,guide:socialGuide,graphics:socialGraphics,accounts:socialPublishing.accounts,publish_review:socialPublishing.review,social_attention:socialPublishing.attention,publish_handover:socialPublishing.handover,artwork:socialArtwork,photos:socialPhotos,managers:socialManagers}[s.view]||socialGraphics)(s);
+ ({player_week:socialPlayerWeek.render,team_week:socialWeek.render,sandbox:socialSandbox.render,guide:socialGuide,graphics:socialGraphics,accounts:socialPublishing.accounts,publish_review:socialPublishing.review,social_attention:socialPublishing.attention,publish_handover:socialPublishing.handover,artwork:socialArtwork,photos:socialPhotos,managers:socialManagers}[s.view]||socialGraphics)(s);
  if(s.busy||s.pending){document.querySelectorAll('#socialContent button,#socialContent input,#socialContent select,#socialContent textarea').forEach(e=>e.disabled=true);document.getElementById('socialRetrySave')?.removeAttribute('disabled');}
 }
 function socialCards(f){
@@ -22002,6 +22003,7 @@ function socialGuideDraftKey(g){return g.step+':'+(g.step===2?g.person||'':'');}
 window.addEventListener('beforeunload',e=>{if(socialState?.scope===selectionsScopeKey()&&(socialState.dirty||socialState.busy||socialState.pending||Object.keys(socialState.photoPositions||{}).length)){e.preventDefault();e.returnValue='';}});
 /* END TEAMS SOCIAL GRAPHICS */
 
+const socialPlayerWeek=createPlayerOfWeek({supabase,escape:seEsc,here:socialHere,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,text:socialText,openScores:(s,end)=>{s.view='team_week';if(s.week?.end!==end)s.week={end,title:'',context:null,selectedSources:new Set(),rows:[],message:'',busy:false,layout:teamWeekLayout(),blurb:'',background:null,pending:null,render:0};socialDraw(s);},savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),savedPhoto:async(s,id)=>{const asset=s.data.assets.find(a=>a.id===id);if(!asset)throw Error('Photo not found');return await (await fetch(await socialAssetURL(s,asset))).blob();}});
 const socialWeek=createTeamOfWeek({supabase,escape:seEsc,here:socialHere,extractUrl:matchReviewExtractUrl,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,fitImage:socialFitImage,text:socialText});
 const socialSandbox=createSocialSandbox({here:socialHere,escape:seEsc,defaults:socialDefaults,groups:()=>ensureSelections().data?.groups||[],cards:socialCards,featured:socialFeatured,renderImage:socialRender,normalize:socialNormaliseUpload,message:socialMessage,download:socialBlobDownload,applyDesign:async(s,design)=>{if(s.busy||s.pending)return;if(await socialSave(s,'settings',{revision:s.data.revision,design}))socialMessage(s,'Club layout saved for upcoming teams.');}});
 const socialPublishing=createSocialPublishing({supabase,escape:seEsc,date:socialDate,here:socialHere,draw:socialDraw,message:socialMessage,lock:socialLock,selection:socialSelection,cards:socialCards,renderImage:socialRender,artwork:socialRPC,refresh:socialRefresh,current:()=>socialState,returnToTeams:()=>{ensureSelections().view='published';drawSelections();void seReload().then(()=>drawSelections()).catch(()=>seNotice('Refresh Teams to check your current access.'));},demo:false});
