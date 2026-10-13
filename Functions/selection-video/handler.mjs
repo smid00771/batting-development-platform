@@ -1,0 +1,53 @@
+const origins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function createSelectionVideoHandler({env,fetcher=fetch}){
+ return async req=>{
+  const origin=req.headers.get('origin')||'',cors={'Access-Control-Allow-Origin':origins.has(origin)?origin:'https://clubbatting.com','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin'};
+  const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json','Cache-Control':'no-store'}});
+  if(origin&&!origins.has(origin))return reply({error:'Open Selection Room in Club Batting.'},403);
+  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
+  if(req.method!=='POST')return reply({error:'POST required'},405);
+  try{
+   const auth=req.headers.get('authorization')||'';
+   if(!/^Bearer \S+$/.test(auth))return reply({error:'Sign in to Club Batting.'},401);
+   const raw=await req.text();if(raw.length>2000)return reply({error:'Request too large'},400);
+   const input=JSON.parse(raw);
+   if(!uuid.test(input.club_id||'')||!['status','join'].includes(input.action))return reply({error:'Choose a club and video action.'},400);
+   if(input.action==='join'&&!uuid.test(input.request_id||''))return reply({error:'Video request required.'},400);
+   const base=env('SUPABASE_URL'),anon=env('SUPABASE_ANON_KEY'),key=env('DAILY_API_KEY');
+   const headers={apikey:anon,Authorization:auth,'Content-Type':'application/json'};
+   const user=await fetcher(base+'/auth/v1/user',{headers,signal:AbortSignal.timeout(10000)});
+   if(!user.ok)return reply({error:'Sign in again to join Selection Room.'},401);
+   const rpc=async(action,data={})=>{
+    const r=await fetcher(base+'/rest/v1/rpc/selection_room_api',{method:'POST',headers,body:JSON.stringify({p_club_id:input.club_id,p_action:action,p_data:data}),signal:AbortSignal.timeout(10000)});
+    const d=await r.json();if(!r.ok){const e=Error(d.message||'Selection Room could not connect.');e.status=d.code==='42501'?403:400;throw e;}return d;
+   };
+   const access=await rpc('access');
+   if(input.action==='status')return reply({available:!!key&&access.video_enabled===true,reason:!access.video_enabled?'not_enabled':!key?'not_connected':'ready'});
+   if(!key)return reply({error:'Video is not connected yet. You can use chat or the backup call.'},503);
+   if(!access.video_enabled)return reply({error:'Video is not enabled for this club yet.'},403);
+   const reservation=await rpc('reserve_video',{request_id:input.request_id});
+   const name=reservation.room_name,exp=Math.floor(new Date(reservation.expires_at).getTime()/1000);
+   if(!/^cb-[0-9a-f]{32}$/.test(name)||!Number.isFinite(exp)||exp<=Date.now()/1000)throw Error('This call has ended. Join a new call.');
+   const daily=async(path,method='GET',body)=>{
+    const r=await fetcher('https://api.daily.co/v1'+path,{method,redirect:'error',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
+    let data;try{data=await r.json();}catch{data={};}return {ok:r.ok,status:r.status,data};
+   };
+   let room=await daily('/rooms/'+name);
+   if(room.status===404){
+    room=await daily('/rooms','POST',{name,privacy:'private',properties:{exp,eject_at_room_exp:true,max_participants:12,enable_knocking:false,enable_chat:false,enable_prejoin_ui:true,enable_screenshare:true,start_audio_off:true,start_video_off:true,enable_live_captions_ui:false,enable_noise_cancellation_ui:false,enable_dialout:false,enforce_unique_user_ids:true}});
+    // Two selectors can be the first to join. Only accept the same private, expiring room.
+    if(!room.ok&&room.status===400)room=await daily('/rooms/'+name);
+   }
+   if(!room.ok)throw Error('Video could not connect to Daily. Try again or use the backup call.');
+   const url=new URL(room.data.url);
+   if(room.data.name!==name||room.data.privacy!=='private'||Number(room.data.config?.exp)!==exp||url.protocol!=='https:'||!url.hostname.endsWith('.daily.co')||url.pathname!=='/'+name||url.username||url.password)throw Error('The private video room could not be verified.');
+   const token=await daily('/meeting-tokens','POST',{properties:{room_name:name,exp,eject_at_token_exp:true,is_owner:false,user_id:reservation.entry_id,user_name:reservation.user_name,start_audio_off:true,start_video_off:true,enable_prejoin_ui:true,enable_screenshare:true,enable_live_captions_ui:false,enable_recording_ui:false,start_cloud_recording:false,auto_start_transcription:false,permissions:{canAdmin:false}}});
+   if(!token.ok||typeof token.data.token!=='string'||token.data.token.length<20)throw Error('Video could not prepare your place. Try again.');
+   return reply({url:url.href,token:token.data.token,expires_at:reservation.expires_at,user_name:reservation.user_name});
+  }catch(error){
+   return reply({error:error instanceof SyntaxError?'Check the video request.':error?.message||'Video could not connect.'},error?.status||400);
+  }
+ };
+}

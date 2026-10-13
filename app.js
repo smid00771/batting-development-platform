@@ -1,14 +1,15 @@
-// Club Batting 0.8.62.166 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.167 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.166';
-import {createTeamOfWeek} from './team-of-week.js?v=0.8.62.166';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.166';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.166';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.167';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.167';
+import {createTeamOfWeek} from './team-of-week.js?v=0.8.62.167';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.167';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.167';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.166';
+const APP_UI_VERSION='0.8.62.167';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -20266,6 +20267,19 @@ async function seAssign(id,pairDay2=undefined){const s=ensureSelections();if(s.b
 
 /* BEGIN TEAMS SELECTION — maintained source: tools/teams_selection_ui.js */
 let selectionAccess=null,selectionState=null,selectionRefreshTimer=null,selectionAccessSequence=0;
+let selectionRoomController=null;
+function seSelectionRoom(){
+ if(!selectionRoomController)selectionRoomController=createSelectionRoom({
+  scope(){const key=selectionsScopeKey();if(!key||!selectionsEnabled()||selectionState?.key!==key||!selectionState?.data?.selector)return null;return {key,club_id:club.id,user_id:session.user.id,club_name:club.name,timezone:selectionState.data.access.timezone};},
+  async rpc(scope,action,data){const result=await supabase.rpc('selection_room_api',{p_club_id:scope.club_id,p_action:action,p_data:data});if(result.error)throw result.error;return result.data;},
+  async video(scope,action,data){
+   const result=await supabase.functions.invoke('selection-video',{body:{club_id:scope.club_id,action,...data}});
+   if(result.error||result.data?.error){let detail;try{detail=await result.error?.context?.json();}catch{}const error=Error(detail?.error||result.data?.error||result.error?.message||'Video could not connect.');error.status=result.error?.context?.status;throw error;}return result.data;
+  },notice:seNotice
+ });
+ return selectionRoomController;
+}
+
 function selectionsScopeKey(){return session?.user?.id&&club?.id?`${session.user.id}:${club.id}`:null;}
 function selectionsEnabled(){const key=selectionsScopeKey();return !!(key&&membership&&selectionAccess?.key===key&&selectionAccess.enabled===true&&!selectionAccess.error);}
 function selectionsStandalone(){const key=selectionsScopeKey();return !!(key&&selectionAccess?.key===key&&selectionAccess.mode==='standalone');}
@@ -20324,8 +20338,9 @@ async function renderSelections(){
 }
 function seHasAvailability(d){return seCanSetup(d)||d.can_view_club_availability||d.roster.some(p=>p.active&&p.user_id===session?.user?.id)||['player','both'].includes(membership?.involvement);}
 function drawSelections(){selectionState?.cancelOrder?.();if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const tabs=[...(d.admin?[['settings','Settings']]:[]),...(seCanSetup(d)||d.signup_followup?.can_view?[['roster','Playing List']]:[]),...(seHasAvailability(d)?[['availability','Availability']]:[]),...(d.selector?[['board','Selection Board']]:d.admin?[['fixtures','Fixtures']]:[]),...(d.selector||d.reviews?.length?[['reviews','Captain Checks']]:[]),['published','Teams'],...(d.socials?[['socials','Social graphics']]:[])];if(!tabs.some(([key])=>key===s.view))s.view='published';
- document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><button class="btn ghost" id="seRefresh">Refresh</button></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${sePublicationWorkflow(d)}<div id="seContent"></div></section>`;
+ document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><div class="se-actions">${d.selector?'<button class="btn" id="seOpenRoom">Selection Room</button>':''}<button class="btn ghost" id="seRefresh">Refresh</button></div></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${sePublicationWorkflow(d)}<div id="seContent"></div></section>`;
  document.querySelectorAll('[data-se-view]').forEach(b=>b.onclick=()=>{if(!confirmLeaveSelections())return;s.view=b.dataset.seView;s.boardPanel=null;s.rosterPanel=null;s.active=null;s.formDirty=false;s.notice='';drawSelections();});
+ selectionRoomController?.sync();document.getElementById('seOpenRoom')?.addEventListener('click',()=>void seSelectionRoom().open());
  document.getElementById('seRefresh').onclick=async()=>{if(!confirmLeaveSelections())return;s.notice='';await renderSelections();};
  document.getElementById('seRetrySave')?.addEventListener('click',()=>seMutate(s.pending.action,s.pending.data));
  document.getElementById('seRecovery')?.addEventListener('click',async()=>{seDownload('Selection-save-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;sePersist();s.notice='Proposal downloaded. Review it against the latest saved teams before making changes.';await seReload();drawSelections();});
@@ -20492,7 +20507,7 @@ function seSettings(){const s=ensureSelections(),d=s.data;document.getElementByI
  const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No group connections set.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);s.formDirty=true;renderLinks();});};
  const sync=()=>document.querySelectorAll('[data-se-link]').forEach(el=>{links[Number(el.dataset.seLink)]={competition:el.querySelector('[name=competition]').value.trim(),grade:el.querySelector('[name=grade]').value.trim(),group_id:el.querySelector('[name=group_id]').value};});form.oninput=()=>s.formDirty=true;document.getElementById('seAddGroupLink').onclick=()=>{sync();links.push({competition:'',grade:'',group_id:''});s.formDirty=true;renderLinks();};form.onsubmit=e=>{e.preventDefault();sync();return seMutate('group_links',{revision:d.access.revision,links});};renderLinks();}
 async function openSelectionsAccess(clubId,clubName){return openClubSubscriptions(clubId,clubName);}
-function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTimer=setInterval(async()=>{const s=selectionState;if(!s||currentTab!=='teams'||s.view!=='board'||s.busy||s.pending||s.formDirty||s.active||s.ordering||document.activeElement?.matches('input,select,textarea')||(!document.querySelector('.se-board-layout')&&s.boardPanel!=='unselected'))return;try{const before=JSON.stringify(s.data);await seReload();if(s===selectionState&&currentTab==='teams'&&s.view==='board'&&!s.busy&&!s.pending&&!s.formDirty&&!s.active&&!s.ordering&&before!==JSON.stringify(s.data)){s.notice='Updated from the shared selection board.';drawSelections();}}catch{seNotice('Live refresh could not connect. Your saved selections are retained; use Refresh to reconnect.');}},20000);}
+function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTimer=setInterval(async()=>{const s=selectionState;if(!s||currentTab!=='teams'||s.view!=='board'||s.busy||s.pending||s.formDirty||s.active||s.ordering||(document.activeElement?.closest('#sePage')&&document.activeElement.matches('input,select,textarea'))||(!document.querySelector('.se-board-layout')&&s.boardPanel!=='unselected'))return;try{const before=JSON.stringify(s.data);await seReload();if(s===selectionState&&currentTab==='teams'&&s.view==='board'&&!s.busy&&!s.pending&&!s.formDirty&&!s.active&&!s.ordering&&before!==JSON.stringify(s.data)){s.notice='Updated from the shared selection board.';drawSelections();}}catch{seNotice('Live refresh could not connect. Your saved selections are retained; use Refresh to reconnect.');}},20000);}
 /* END TEAMS SELECTION */
 
 
