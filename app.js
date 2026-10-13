@@ -1,15 +1,15 @@
-// Club Batting 0.8.62.170 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.171 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.170';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.170';
-import {createTeamOfWeek} from './team-of-week.js?v=0.8.62.170';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.170';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.170';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.171';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.171';
+import {createTeamOfWeek} from './team-of-week.js?v=0.8.62.171';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.171';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.171';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.170';
+const APP_UI_VERSION='0.8.62.171';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -21381,7 +21381,17 @@ function socialCards(f){
 function socialDate(v){return new Intl.DateTimeFormat('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(v+'T12:00:00Z'));}
 function socialTime(v){if(!/^\d{2}:\d{2}$/.test(v||''))return v||'';const [h,m]=v.split(':').map(Number);return `${h%12||12}${m?':'+String(m).padStart(2,'0'):''}${h<12?'am':'pm'}`;}
 function socialFixtureDates(card){const ds=card.f.published.details.days;return (card.split?[ds[card.day]]:ds).map((d,i)=>(ds.length>1?'Day '+(card.split?card.day+1:i+1)+' · ':'')+socialDate(d.date)+(d.start?' · '+socialTime(d.start):''));}
-function socialNames(card){const snap=card.f.published,role=snap.details.match_roles?.['d'+(card.day+1)]||{};return (snap.slots||[]).map(slot=>{const id=slot['d'+(card.day+1)],p=snap.players.find(x=>x.id===id);return {id,name:p?.name||'To be confirmed',marks:(id&&role.captain_id===id?' (C)':'')+(id&&role.keeper_id===id?' (WK)':'')};});}
+// Social team lists use surname order; role marks remain attached to the player.
+function socialSurname(name){
+ const text=String(name||'').trim();if(text.includes(','))return text.split(',')[0].trim();
+ const words=text.split(/\s+/);while(words.length>1&&/^(jr\.?|sr\.?|ii|iii|iv)$/i.test(words.at(-1)))words.pop();
+ return words.at(-1)||'';
+}
+function socialNames(card){
+ const snap=card.f.published,role=snap.details.match_roles?.['d'+(card.day+1)]||{},compare=(a,b)=>a.localeCompare(b,'en-AU',{sensitivity:'base',ignorePunctuation:true,numeric:true});
+ return (snap.slots||[]).map(slot=>{const id=slot['d'+(card.day+1)],p=snap.players.find(x=>x.id===id);return {id,name:p?.name||'To be confirmed',marks:(id&&role.captain_id===id?' (C)':'')+(id&&role.keeper_id===id?' (WK)':'')};})
+  .sort((a,b)=>Number(!a.id)-Number(!b.id)||compare(socialSurname(a.name),socialSurname(b.name))||compare(a.name,b.name));
+}
 function socialPhotoId(s,card){return socialFeatured(s,card).id;}
 function socialSelection(s){return s.data.fixtures.filter(f=>s.selected.has(f.id)&&f.published.details.days[0].date===s.date&&!socialFixtureCompleted(s,f));}
 function socialFixtureCalendar(s){
