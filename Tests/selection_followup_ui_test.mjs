@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {createRequire} from 'node:module';
+const {JSDOM}=createRequire(import.meta.url)('jsdom');
+const app=fs.readFileSync(new URL('../Website_Files/app.js',import.meta.url),'utf8');
+const demo=fs.readFileSync(new URL('../Website_Files/demo.html',import.meta.url),'utf8');
+function get(name){const start=app.indexOf('function '+name+'(');assert.ok(start>=0,name);const next=app.slice(start+1).search(/\n(?:async )?function /);return app.slice(start,start+1+next);}
+const names=['seMovement','seConversationControl','seBindConversations','seConversations','seShortTeams','seTeamNumbers','seGradeLevel','seFixtureCompleted','seFixtureLocked','seFixtureLockControls','seSendReview','sePublishReview','seBoardSlot'];
+for(const name of names)assert.ok(demo.includes(get(name)),'Demo shares '+name);
+const dom=new JSDOM('<main id="sePage"><div id="seContent"></div></main>'),document=dom.window.document,calls=[];
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let notice='',s={data:{access:{timezone:'UTC',head_selector_id:'head',grade_levels:[]},selector:true,head_selector:true,roster:[],members:[{user_id:'cap',name:'Captain'}],conversations:[]},active:null};
+const ctx=vm.createContext({document,Date,structuredClone,session:{user:{id:'head'}},ensureSelections:()=>s,seEsc:esc,seDate:x=>x,seOpt:(xs,v)=>xs.map(([id,label])=>`<option value="${id}" ${id===v?'selected':''}>${label}</option>`).join(''),seReviewCaptains:f=>f.captains||[],seBoard:()=>{},seDraftChanged:()=>true,sePublishLabel:()=> 'Publish teams',seReviewLabel:()=> 'Not shared',sePublicationChangeSummary:()=>'',seNotice:x=>notice=x,seMutate:async(action,data)=>{calls.push({action,data});return true;},seBoardRoleMarks:()=>'',seDayStatus:()=> 'available',seOrderHandle:()=>'',seStyles:()=>'',seMatchRoles:()=>({d1:{captain_id:'p1',keeper_id:'p1'}})});
+vm.runInContext(names.map(get).join('\n'),ctx);
+const team=(id,count=9)=>({id,revision:4,details:{grade:id,competition:'NDCA',days:[{date:'2099-10-17'}]},slots:Array.from({length:11},(_,i)=>({d1:i<count?'p'+i:null,d2:null})),captains:[{name:'Captain',user_id:'cap'}],issues:count<11?[{level:'warning',code:'short_team',text:count+'/11'}]:[]});
+// Short drafts send even when another draft has no captain; no full-XI gate.
+const a=team('Second Grade'),b=team('Third Grade',0);b.captains=[];
+ctx.seSendReview([a,b]);assert.equal(document.getElementById('seConfirmReview').disabled,false);document.getElementById('seConfirmReview').click();assert.equal(calls.at(-1).action,'send_review');assert.deepEqual(Array.from(calls.at(-1).data.ids),[a.id]);assert.match(document.body.textContent,/9\/11/);
+// The short-team acknowledgement is independent and explicit.
+calls.length=0;ctx.sePublishReview([a]);assert.equal(document.getElementById('seConfirmPublish').disabled,false);document.getElementById('seConfirmPublish').click();assert.equal(calls.length,0);assert.match(notice,/vacant/);document.querySelector('[data-se-ack-short]').checked=true;document.getElementById('seConfirmPublish').click();assert.equal(calls.at(-1).action,'publish');assert.deepEqual(Array.from(calls.at(-1).data.acknowledge_short),[a.id]);
+const two=team('Two-day',11);two.details.days.push({date:'2099-10-24'});two.slots.forEach((slot,i)=>slot.d2=i<8?slot.d1:null);assert.equal(ctx.seShortTeams([two])[0].days[0].count,8,'Day 2 checked separately');
+const invalid=team('Invalid',9);invalid.issues.push({level:'error',text:'Player unavailable'});ctx.sePublishReview([invalid]);assert.equal(document.getElementById('seConfirmPublish').disabled,true,'Availability still blocks publication');
+// Published future teams now require an explicit head unlock.
+const published={...a,published:{details:a.details,slots:a.slots}};assert.equal(ctx.seFixtureLocked(published),true);assert.match(ctx.seFixtureLockControls(published),/Unlock for changes/);s.data.head_selector=false;ctx.session.user.id='selector';assert.doesNotMatch(ctx.seFixtureLockControls(published),/<button/);published.selection_unlocked_until=new Date(Date.now()+60000).toISOString();assert.equal(ctx.seFixtureLocked(published),false);s.data.head_selector=true;ctx.session.user.id='head';
+// Shared marker is separate from the player picker, escaped, and works when selection is locked.
+const movement={fixture_id:a.id,roster_id:'p0',name:'Player <img src=x>',previous_grade:'1st <svg>',grade:a.details.grade,competition:'NDCA',date:'2099-10-17',movement_key:'key',revision:0,spoken_at:null};s.data.conversations=[movement];s.data.roster=[{id:'p0',name:movement.name}];
+document.getElementById('seContent').innerHTML=ctx.seBoardSlot(published,{d1:'p0',d2:null},0,{d1:{}});assert.ok(document.querySelector('.se-dropped'));assert.equal(document.querySelectorAll('button button').length,0);assert.equal(document.querySelectorAll('img,svg').length,0);ctx.seBindConversations();document.querySelector('[data-se-conversation]').click();assert.equal(calls.at(-1).action,'conversation');assert.equal(calls.at(-1).data.spoken,true);assert.equal(calls.at(-1).data.revision,0);
+movement.spoken_at='2026-10-13T11:00:00Z';movement.spoken_by='Previous captain';movement.revision=1;ctx.seConversations();assert.ok(document.querySelector('.se-spoken'));assert.match(document.body.textContent,/Previous captain/);document.querySelector('[data-se-conversation]').click();assert.equal(calls.at(-1).data.spoken,false);assert.equal(calls.at(-1).data.revision,1);
+assert.equal(ctx.seGradeLevel('NDCA','1st Grade'),1);assert.equal(ctx.seGradeLevel('NDCA','Dev League Navy'),null);s.data.access.grade_levels=[{competition:'NDCA',grade:'Dev League Navy',level:5},{competition:'NDCA',grade:'Dev League Sky',level:5}];assert.equal(ctx.seGradeLevel('ndca','Dev League Navy'),ctx.seGradeLevel('NDCA','Dev League Sky'));
+for(const script of demo.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
+console.log('Selection follow-up UI checks passed.');
