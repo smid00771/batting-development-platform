@@ -1,5 +1,8 @@
 const origins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// The existing Daily account belongs only to the Newcastle City pilot.
+// Keep all other clubs blocked until Club Batting managed billing is ready.
+const pilotClub='c6022ec7-00d9-4c91-a208-710272a0b866';
 
 export function createSelectionVideoHandler({env,fetcher=fetch}){
  return async req=>{
@@ -15,7 +18,8 @@ export function createSelectionVideoHandler({env,fetcher=fetch}){
    const input=JSON.parse(raw);
    if(!uuid.test(input.club_id||'')||!['status','join'].includes(input.action))return reply({error:'Choose a club and video action.'},400);
    if(input.action==='join'&&!uuid.test(input.request_id||''))return reply({error:'Video request required.'},400);
-   const base=env('SUPABASE_URL'),anon=env('SUPABASE_ANON_KEY'),key=env('DAILY_API_KEY');
+   input.club_id=input.club_id.toLowerCase();
+   const base=env('SUPABASE_URL'),anon=env('SUPABASE_ANON_KEY');
    const headers={apikey:anon,Authorization:auth,'Content-Type':'application/json'};
    const user=await fetcher(base+'/auth/v1/user',{headers,signal:AbortSignal.timeout(10000)});
    if(!user.ok)return reply({error:'Sign in again to join Selection Room.'},401);
@@ -24,9 +28,10 @@ export function createSelectionVideoHandler({env,fetcher=fetch}){
     const d=await r.json();if(!r.ok){const e=Error(d.message||'Selection Room could not connect.');e.status=d.code==='42501'?403:400;throw e;}return d;
    };
    const access=await rpc('access');
-   if(input.action==='status')return reply({available:!!key&&access.video_enabled===true,reason:!access.video_enabled?'not_enabled':!key?'not_connected':'ready'});
-   if(!key)return reply({error:'Video is not connected yet. You can use chat or the backup call.'},503);
+   const key=input.club_id===pilotClub?env('DAILY_API_KEY'):null;
+   if(input.action==='status')return reply({available:!!key&&access.video_enabled===true,reason:!access.video_enabled?'not_enabled':!key?'billing_required':'ready'});
    if(!access.video_enabled)return reply({error:'Video is not enabled for this club yet.'},403);
+   if(!key)return reply({error:'Club Batting video is not enabled for this club yet. Chat and the backup call are available.'},503);
    const reservation=await rpc('reserve_video',{request_id:input.request_id});
    const name=reservation.room_name,exp=Math.floor(new Date(reservation.expires_at).getTime()/1000);
    if(!/^cb-[0-9a-f]{32}$/.test(name)||!Number.isFinite(exp)||exp<=Date.now()/1000)throw Error('This call has ended. Join a new call.');

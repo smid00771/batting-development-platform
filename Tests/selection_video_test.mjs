@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import {createSelectionVideoHandler} from '../Functions/selection-video/handler.mjs';
-const club='11111111-1111-4111-8111-111111111111',request='22222222-2222-4222-8222-222222222222';
+const club='c6022ec7-00d9-4c91-a208-710272a0b866',request='22222222-2222-4222-8222-222222222222';
 const roomName='cb-'+club.replaceAll('-',''),exp=Math.floor(Date.now()/1000)+5400;
 const roomData={name:roomName,privacy:'private',url:'https://club-test.daily.co/'+roomName,config:{exp}};
 let calls=[],key='server-only-key',allowed=true,enabled=true,missing=true,race=false,roomOverride={},failToken=false;
 const response=(body,status=200)=>new Response(JSON.stringify(body),{status});
-const handler=createSelectionVideoHandler({env:n=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon',DAILY_API_KEY:key})[n],fetcher:async(url,options)=>{
+const handler=createSelectionVideoHandler({env:n=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon',DAILY_API_KEY:key,DAILY_PLATFORM_API_KEY:key})[n],fetcher:async(url,options)=>{
  const body=options.body&&JSON.parse(options.body);calls.push({url,...options,body});
  if(url.endsWith('/auth/v1/user'))return response({id:'selector'});
  if(url.includes('/rest/')){
@@ -32,7 +32,20 @@ const token=calls.find(c=>c.url.endsWith('/meeting-tokens')).body.properties;ass
 missing=true;race=true;calls=[];r=await invoke();assert.equal(r.status,200,'Concurrent first join reuses the same room');assert.equal(calls.filter(c=>c.url.endsWith('/rooms/'+roomName)).length,2);race=false;
 for(const bad of [{privacy:'public'},{url:'https://evil.test/'+roomName},{config:{exp:exp+100}}]){roomOverride=bad;calls=[];r=await invoke();assert.equal(r.status,400);assert.equal(calls.some(c=>c.url.endsWith('/meeting-tokens')),false);}roomOverride={};
 failToken=true;r=await invoke();assert.equal(r.status,400);assert.match((await r.json()).error,/prepare your place/);failToken=false;
+// Other clubs cannot fall back to the pilot's personal billing, even when enabled.
+const otherClub='33333333-3333-4333-8333-333333333333';
+for(const action of ['status','join']){
+ calls=[];r=await invoke(action,{club_id:otherClub,api_key:key,billing_club_id:'c6022ec7-00d9-4c91-a208-710272a0b866'});
+ assert.equal(r.status,action==='status'?200:503);
+ const blocked=await r.json();if(action==='status')assert.deepEqual(blocked,{available:false,reason:'billing_required'});
+ assert.equal(calls.some(c=>c.url.includes('api.daily.co')),false,'No provider request without club billing');
+ assert.equal(calls.some(c=>c.body?.p_action==='reserve_video'),false,'Do not reserve minutes for unconfigured clubs');
+ assert.ok(!JSON.stringify(blocked).includes(key));
+}
+// The existing City key still works and UUID case cannot change its billing scope.
+calls=[];r=await invoke('status',{club_id:'C6022EC7-00D9-4C91-A208-710272A0B866'});assert.deepEqual(await r.json(),{available:true,reason:'ready'});
+assert.equal(calls.find(c=>c.body?.p_action==='access').body.p_club_id,'c6022ec7-00d9-4c91-a208-710272a0b866');
 calls=[];r=await invoke('join',{}, {authorization:''});assert.equal(r.status,401);assert.equal(calls.length,0);
 r=await invoke('join',{}, {origin:'https://evil.test'});assert.equal(r.status,403);assert.equal(calls.length,0);
 r=await invoke('join',{club_id:'not-a-club'});assert.equal(r.status,400);assert.equal(calls.length,0);
-console.log('Selection video: user authorization, disabled/missing setup, private expiring room/tokens, race retry, provider failure and CORS passed.');
+console.log('Selection video: club billing isolation, user authorization, disabled/missing setup, private expiring room/tokens, race retry, provider failure and CORS passed.');
