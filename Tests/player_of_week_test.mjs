@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {playerWeekRecommendations as suggest,playerWeekFigures} from '../Website_Files/player-week-ranking.js';
+const player=(id,name,grade,runs,wickets=0,extra={})=>({key:id,player_id:id,name,grade,runs,wickets,conceded:20,batting:runs?[{runs,not_out:false}]:[],bowling:wickets?[{wickets,runs:20}]:[],format:'limited_overs',...extra});
+const rows=[player('veteran','Senior First','1st Grade',50),player('junior','Emerging Fourth','4th Grade',50),player('bowler','Five Wickets','2nd Grade',0,5),player('allround','Both Skills','3rd Grade',40,3),player('small','Modest Score','4th Grade',10),player('spell','Wicketless Bowler','4th Grade',0,0,{bowling:[{wickets:0,runs:22}]})];
+const unchanged=JSON.stringify(rows),profile={junior:{stage:'emerging',note:'First senior fifty'}},end='2026-10-11';
+let r=suggest(rows,profile,[],end);
+for(const id of ['veteran','junior','bowler','allround'])assert.ok(r.shortlist.some(p=>p.player_id===id),id+' deserves an option');
+assert.equal(r.winner,undefined,'Human chooses the winner');assert.equal(r.all.find(p=>p.player_id==='veteran').profile.stage,undefined,'Experience is not inferred');
+assert.equal(r.all.find(p=>p.player_id==='junior').profile.stage,'emerging');assert.ok(r.all.some(p=>p.player_id==='spell'));assert.equal(playerWeekFigures(rows.at(-1)).bowling,'0/22');assert.equal(JSON.stringify(rows),unchanged);
+const previous=Array.from({length:3},()=>player('junior','Emerging Fourth','4th Grade',15));
+r=suggest(rows.map(p=>p.player_id==='junior'?{...p,previous}:p),profile,[],end);assert.equal(r.all.find(p=>p.player_id==='junior').aboveForm,true);
+r=suggest(rows.map(p=>p.player_id==='junior'?{...p,previous:previous.slice(1)}:p),profile,[],end);assert.equal(r.all.find(p=>p.player_id==='junior').aboveForm,false,'Two matches cannot create a baseline');
+r=suggest(rows.map(p=>p.player_id==='junior'?{...p,previous:previous.map(q=>({...q,format:'t20'}))}:p),profile,[],end);assert.equal(r.all.find(p=>p.player_id==='junior').runAverage,null,'Do not mix formats');
+r=suggest(rows,profile,[{week_end:'2026-10-04',created_at:'2026-10-05',winner:rows[0]},{week_end:'2026-10-04',created_at:'2026-10-06',winner:rows[1]},{week_end:'2026-10-18',created_at:'2026-10-19',winner:rows[0]}],end,true);
+assert.equal(r.all.find(p=>p.player_id==='veteran').recentWins.length,0,'Superseded and future winners do not count');assert.equal(r.all.find(p=>p.player_id==='junior').recentWins.length,1);assert.ok(r.all.some(p=>p.player_id==='junior'),'Repeat winners stay eligible');
+r=suggest([...rows,{...rows[0],key:'second-game'}],profile,[],end);assert.equal(r.shortlist.filter(p=>p.player_id==='veteran').length,1);
+assert.deepEqual(suggest([],{},[],end).shortlist,[]);
+console.log('Passed: grades, emerging context, both skills, comparable history, recent winners, uniqueness and no automatic winner.');
