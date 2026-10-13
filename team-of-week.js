@@ -1,4 +1,4 @@
-import {readTeamWeekReference} from './team-week-reference.js?v=0.8.62.164';
+import {readTeamWeekReference} from './team-week-reference.js?v=0.8.62.165';
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 export function teamWeekGrade(value){
  const ordinal=String(value||'').match(/\b(\d+)(st|nd|rd|th)\s+grade\b/i);
@@ -73,6 +73,11 @@ export function createTeamOfWeek(h){
  const current=(s,w)=>h.here(s)&&s.view==='team_week'&&s.week===w;
  async function rpc(s,action,data={}){const r=await h.supabase.rpc('team_of_week_api',{p_club_id:clubId(s),p_action:action,p_data:data});if(r.error)throw Error(r.error.message||'Could not load Team of the Week.');return r.data;}
  function message(s,text){const w=state(s);w.message=text;if(current(s,w)){const status=document.getElementById('twStatus');if(status)status.textContent=text;}}
+ function designControls(s){
+  const w=state(s);if(!current(s,w))return;const button=document.getElementById('twSaveDesign');if(!button)return;
+  button.textContent=w.designSaving?'Saving…':!w.designDirty&&w.context?.design?.revision>0?'Saved':'Save layout';
+  button.disabled=w.busy||!!w.pending||w.designSaving||!w.designDirty;
+ }
  function imageKey(s,w){return JSON.stringify([w.end,w.title,w.blurb,w.rows.map(p=>[p.key,p.display]),w.background,w.layout,s.data.brand.logo,s.design.primary,s.design.accent]);}
  function saveControls(s){
   const w=state(s),key=imageKey(s,w),saved=w.savedImage?.key===key,button=document.getElementById('twSave'),status=document.getElementById('twSaveStatus');
@@ -130,7 +135,7 @@ export function createTeamOfWeek(h){
   for(const [attr,direction] of [['up',-1],['down',1]])host.querySelectorAll(`[data-tw-${attr}]`).forEach(e=>e.onclick=()=>{const i=Number(e.dataset[attr==='up'?'twUp':'twDown']);[w.rows[i],w.rows[i+direction]]=[w.rows[i+direction],w.rows[i]];render(s);});
   host.querySelectorAll('[data-tw-remove]').forEach(e=>e.onclick=()=>{w.rows.splice(Number(e.dataset.twRemove),1);render(s);});
   host.querySelectorAll('[data-tw-display]').forEach(e=>e.onchange=()=>{w.rows[Number(e.dataset.twDisplay)].display=e.value;w.rows=teamWeekOrder(w.rows);render(s);});
-  const dirty=()=>{w.designDirty=true;const b=el('twSaveDesign');if(b)b.disabled=false;};
+  const dirty=()=>{w.designDirty=true;designControls(s);};
   for(const [id,key] of [['twIncludesTitle','includes_title'],['twShowLogo','show_logo']])el(id).onchange=e=>{w.layout[key]=e.target.checked;dirty();render(s);};
   for(const [id,key] of [['twTitleY','title_y'],['twTitleSize','title_size'],['twWeekY','week_y'],['twTop','top'],['twBottom','bottom'],['twFont','font_scale'],['twLogoX','logo_x'],['twLogoY','logo_y'],['twLogoSize','logo_width']])if(el(id))el(id).oninput=e=>{w.layout[key]=Number(e.target.value);if(key==='top'&&w.layout.bottom<w.layout.top+100)w.layout.bottom=Math.min(1320,w.layout.top+100);if(key==='bottom'&&w.layout.top>w.layout.bottom-100)w.layout.top=Math.max(50,w.layout.bottom-100);for(const [field,k] of [['twTop','top'],['twBottom','bottom']]){el(field).value=w.layout[k];el(field+'Value').textContent=w.layout[k];}el(id+'Value').textContent=w.layout[key];dirty();void paint(s);};
   el('twSaveDesign').onclick=()=>void run(s,async()=>{await saveDesign(s);w.message='Layout saved.';});
@@ -155,7 +160,7 @@ export function createTeamOfWeek(h){
   el('twSaveNames').onclick=()=>{const names=el('twExampleNames').value.split('\n').map(line=>{const [name,grade='']=line.split('|');return {name:name.trim(),grade:grade.trim()};}).filter(p=>p.name).slice(0,20);void run(s,async()=>{w.layout.reference={...w.layout.reference,names,matches:{}};dirty();await saveDesign(s);recommend(w);w.message='Example names saved.';});};
   host.querySelectorAll('[data-tw-match]').forEach(e=>e.onchange=()=>{if(!e.value)return;const name=ref.unmatched[Number(e.dataset.twMatch)].name,id=e.value;void run(s,async()=>{w.layout.reference.matches={...w.layout.reference.matches,[name]:id};dirty();await saveDesign(s);recommend(w);w.message='Player matched.';});});
   el('twClubLogo')?.addEventListener('click',()=>void run(s,async()=>{delete w.layout.logo_path;delete w.layout.logo_name;w.layout.show_logo=true;dirty();await saveDesign(s);w.message='Club look logo added.';}));
-  el('twColour').oninput=e=>{w.layout.text_colour=e.target.value;w.designDirty=true;el('twSaveDesign').disabled=false;void paint(s);};
+  el('twColour').oninput=e=>{w.layout.text_colour=e.target.value;dirty();void paint(s);};
   el('twBlurb').oninput=e=>{w.blurb=e.target.value;el('twDownloadBlurb').disabled=!w.blurb.trim();saveControls(s);};
   el('twDownloadBlurb').onclick=()=>{h.download('Team-of-the-Week-'+w.end+'-blurb.txt',new Blob([w.blurb],{type:'text/plain;charset=utf-8'}));message(s,'Blurb downloaded.');};
   el('twClearBackground')?.addEventListener('click',()=>void run(s,async()=>{w.background=null;delete w.layout.background_name;w.layout.includes_title=false;w.designDirty=true;await saveDesign(s);w.message='Club colours selected.';}));
@@ -163,7 +168,7 @@ export function createTeamOfWeek(h){
   host.querySelectorAll('[data-tw-download]').forEach(e=>e.onclick=()=>void run(s,async()=>{const item=w.context.history.find(x=>x.id===e.dataset.twDownload),blob=await download(s,item.image_path);h.download('Team-of-the-Week-'+item.week_end+'.png',blob);w.message='Saved image downloaded.';}));
   host.querySelectorAll('[data-tw-saved-blurb]').forEach(e=>e.onclick=()=>{const item=w.context.history.find(x=>x.id===e.dataset.twSavedBlurb);h.download('Team-of-the-Week-'+item.week_end+'-blurb.txt',new Blob([item.blurb],{type:'text/plain;charset=utf-8'}));message(s,'Saved blurb downloaded.');});
   const history=host.querySelector('.tw-history');history.ontoggle=()=>{if(history.open)for(const img of history.querySelectorAll('[data-tw-history]'))if(!img.src)void urlFor(s,img.dataset.twHistory).then(url=>{if(img.isConnected)img.src=url;}).catch(error=>message(s,error.message));};
-  void paint(s);if(typeof window!=='undefined')window.scrollTo({top:scroll,behavior:'instant'});
+  designControls(s);void paint(s);if(typeof window!=='undefined')window.scrollTo({top:scroll,behavior:'instant'});
  }
  async function exactBackground(s,file){
   if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>15*1024*1024)throw Error('Choose a PNG, JPG or WebP under 15 MB.');
@@ -175,7 +180,11 @@ export function createTeamOfWeek(h){
   w.layout={...w.layout,...result.layout,reference:{...w.layout.reference,names:result.names,path,matches:{}}};w.designDirty=true;await saveDesign(s);recommend(w);w.message=`Example layout applied · ${example(w).matched.length} player names matched. Review the XI.`;
  }
  async function fetchCard(s,url){const r=await h.supabase.functions.invoke('playcricket-scorecard',{body:{club_id:clubId(s),url,purpose:'team_of_week'}});if(r.error){let detail;try{detail=await r.error.context?.json();}catch{}throw Error(detail?.error||r.error.message);}if(r.data?.error)throw Error(r.data.error);if(!r.data?.snapshot_id)throw Error('Scorecard load was not confirmed.');return r.data;}
- async function saveDesign(s){const w=state(s);await rpc(s,'save_design',{background_path:w.background,layout:w.layout,revision:w.context.design.revision});w.context.design={background_path:w.background,layout:{...w.layout},revision:w.context.design.revision+1};w.designDirty=false;}
+ async function saveDesign(s){
+  const w=state(s);w.designSaving=true;designControls(s);
+  try{await rpc(s,'save_design',{background_path:w.background,layout:w.layout,revision:w.context.design.revision});w.context.design={background_path:w.background,layout:{...w.layout},revision:w.context.design.revision+1};w.designDirty=false;}
+  finally{w.designSaving=false;designControls(s);}
+ }
  async function download(s,path){const r=await h.supabase.storage.from(bucket).download(path);if(r.error||!r.data)throw Error('The saved image could not load. Try again.');return r.data;}
  async function urlFor(s,path){const key='team-week:'+path;if(s.urls.has(key))return s.urls.get(key);const blob=await download(s,path);if(!h.here(s))throw Error('Club changed');const url=URL.createObjectURL(blob);s.urls.set(key,url);return url;}
  async function draw(s,canvas,rows,title,layout,background){
