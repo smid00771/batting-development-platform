@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.172 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.173 — shared grades, season captains and flexible match teams
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.172';
+const APP_UI_VERSION='0.8.62.173';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -28508,6 +28508,15 @@ function selectionCallLink(value){
  return u.href;
 }
 
+// Fit the visible viewport, including browser zoom and the on-screen keyboard.
+function selectionRoomGeometry(viewport,docked=true){
+ const width=Math.max(1,viewport.width),height=Math.max(1,viewport.height),left=viewport.left||0,top=viewport.top||0;
+ const gap=Math.min(width/8,height/8,width<600?8:12),wide=width>=900;
+ const panelWidth=Math.min(width-2*gap,wide?(docked?Math.max(320,Math.min(420,width*.34)):1100):440);
+ const inset=wide&&height>=650?76:gap,panelHeight=wide?height-inset-gap:Math.min(720,height*.8,height-2*gap);
+ return {left:left+width-gap-panelWidth,top:top+(wide?inset:height-gap-panelHeight),width:panelWidth,height:panelHeight,gap,wide};
+}
+
 function createSelectionRoom(h){
  let room=null,dailyPromise=null;
  const same=s=>room===s&&h.scope()?.key===s.scope.key;
@@ -28517,33 +28526,44 @@ function createSelectionRoom(h){
   if(document.getElementById('selection-room-style'))return;
   const style=document.createElement('style');style.id='selection-room-style';
   style.textContent=`
-  .sr-room{position:fixed;right:16px;top:86px;bottom:16px;width:min(1160px,calc(100vw - 32px));z-index:90;display:flex;flex-direction:column;box-sizing:border-box;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 30px #14244726;color:#24344c;font:14px/1.45 system-ui,sans-serif;overflow:hidden}
+  .sr-room{position:fixed;right:12px;top:76px;bottom:12px;width:min(1100px,calc(100% - 24px));max-width:calc(100% - 16px);max-height:calc(100dvh - 16px);min-width:0;min-height:0;z-index:90;display:flex;flex-direction:column;box-sizing:border-box;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 30px #14244726;color:#24344c;font:14px/1.45 system-ui,sans-serif;overflow:hidden}
   .sr-room *{box-sizing:border-box}.sr-room [hidden]{display:none!important}
   .sr-room button,.sr-room .sr-link{min-height:40px;border:1px solid #cbd5e1;border-radius:7px;padding:8px 10px;background:white;color:#24344c;font-family:inherit;font-weight:600;font-size:13px;line-height:1.25;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
   .sr-room button:disabled{opacity:.55;cursor:default}.sr-room button:focus-visible,.sr-room a:focus-visible{outline:2px solid #335ba7;outline-offset:2px}.sr-room .sr-primary{background:#17245f;color:white;border-color:#17245f}
-  .sr-room header{display:flex;align-items:center;gap:7px;padding:12px 16px;border-bottom:1px solid #e2e8f0;flex:none}.sr-room header>div{flex:1;min-width:0}.sr-room h2{font-size:17px;line-height:1.25;margin:0}.sr-room small{display:block;font-size:11px;color:#64748b}.sr-room header button{padding:6px 8px}
+  .sr-room header{display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:10px 12px;border-bottom:1px solid #e2e8f0;flex:none;min-width:0}.sr-room header>div{flex:1;min-width:0;overflow-wrap:anywhere}.sr-room h2{font-size:17px;line-height:1.25;margin:0}.sr-room small{display:block;font-size:11px;color:#64748b}.sr-room header button{padding:6px 8px;flex-shrink:0}.sr-room [data-sr=close]{min-width:36px}
   .sr-room .sr-body{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 290px;flex:1}
   .sr-video-section{min-width:0;min-height:0;display:flex;flex-direction:column;padding:14px 16px;overflow:auto;border-right:1px solid #e2e8f0}
   .sr-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;flex:none}.sr-status{font-size:12px;color:#52647b;margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere;flex:none}.sr-status:empty{display:none}
   .sr-join-help{font-size:12px;color:#52647b;margin:0 0 8px;flex:none}.sr-presence{flex:none;margin:0 0 8px}.sr-presence p{font-weight:600;font-size:13px;margin:0}.sr-people{list-style:none;display:flex;flex-wrap:wrap;gap:5px;max-height:72px;overflow:auto;margin:6px 0 0;padding:0}.sr-people li{font-size:12px;background:#edf5f1;border:1px solid #cfdfd6;border-radius:20px;padding:3px 9px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .sr-video{flex:1;min-height:300px;margin-top:4px;background:#15243d;border-radius:8px;overflow:hidden}.sr-video iframe{display:block;width:100%;height:100%;border:0}.sr-video-empty{flex:1;min-height:220px;display:grid;place-items:center;padding:24px;border:1px dashed #cbd5e1;border-radius:8px;background:#f6f8fb;color:#64748b;text-align:center;font-size:14px}
+  .sr-video{flex:1;min-height:160px;margin-top:4px;background:#15243d;border-radius:8px;overflow:hidden}.sr-video iframe{display:block;width:100%;height:100%;border:0}.sr-video-empty{flex:1;min-height:100px;display:grid;place-items:center;padding:24px;border:1px dashed #cbd5e1;border-radius:8px;background:#f6f8fb;color:#64748b;text-align:center;font-size:14px}
   .sr-backup{margin-top:10px;flex:none}.sr-backup form{margin-top:8px}.sr-room input,.sr-room textarea{width:100%;font:16px/1.4 system-ui,sans-serif;border:1px solid #bdc9da;border-radius:7px;padding:9px;color:#24344c;background:white}.sr-room label{font-size:12px;display:block;margin-bottom:5px}.sr-backup form .sr-actions{margin-top:7px}
   .sr-chat-section{min-width:0;min-height:0;display:flex;flex-direction:column}.sr-chat-heading{display:flex;justify-content:space-between;align-items:center;padding:14px 12px 0;gap:8px;flex:none}.sr-chat-heading h3{font-size:14px;margin:0}.sr-chat-heading button{font-size:11px;min-height:30px;padding:5px 8px}.sr-chat-section>.sr-status{margin:7px 12px}
   .sr-messages{flex:1;min-height:80px;overflow:auto;padding:8px 12px;overscroll-behavior:contain}.sr-message{padding:8px 0;border-bottom:1px solid #eef2f6}.sr-message>div{display:flex;gap:6px;align-items:baseline;justify-content:space-between}.sr-message strong{font-size:12px;overflow-wrap:anywhere;min-width:0}.sr-message time{font-size:10px;color:#64748b;white-space:nowrap}.sr-message p{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.sr-empty{color:#64748b;font-size:13px}
   .sr-compose{padding:9px 12px 12px;border-top:1px solid #e2e8f0;flex:none}.sr-compose textarea{resize:vertical;min-height:65px;max-height:160px}.sr-compose .sr-actions{justify-content:space-between;margin-top:6px}.sr-compose .sr-status{flex:1;margin:0}
-  @media(min-width:900px){.sr-room.sr-docked{width:clamp(400px,38vw,520px)}.sr-room.sr-docked .sr-body{display:flex;flex-direction:column;overflow:auto}.sr-room.sr-docked .sr-video-section{display:block;flex:none;overflow:visible;border-right:0;border-bottom:1px solid #e2e8f0;padding:12px}.sr-room.sr-docked .sr-video{height:clamp(280px,38vh,360px);min-height:0}.sr-room.sr-docked .sr-video-empty{display:none}.sr-room.sr-docked .sr-chat-section{flex:1;min-height:235px}body.sr-docked:not(.sr-minimized) #sePage{margin-right:calc(clamp(400px,38vw,520px) + 8px);max-width:none}body.sr-docked:not(.sr-minimized) .se-board-layout{grid-template-columns:minmax(0,1fr)}}
-  .sr-room.sr-minimized{top:auto;bottom:12px;height:auto;width:370px;max-width:calc(100vw - 24px)}.sr-room.sr-minimized .sr-body,.sr-room.sr-minimized [data-sr=layout]{display:none}.sr-room.sr-minimized header{border-bottom:0}
-  @media(max-width:899px){.sr-room [data-sr=layout]{display:none}.sr-room{right:12px;top:auto;bottom:12px;max-height:80dvh;width:min(440px,calc(100vw - 24px))}.sr-room:not(.sr-minimized){height:720px}.sr-room header{padding:12px}.sr-room .sr-body{display:flex;flex-direction:column;overflow:auto}.sr-video-section{display:block;flex:none;overflow:visible;padding:10px 12px;border-right:0;border-bottom:1px solid #e2e8f0}.sr-video{height:230px;min-height:0;max-height:28dvh;margin-top:8px}.sr-video-empty{display:none}.sr-chat-section{flex:1;min-height:235px}.sr-chat-heading{padding-top:8px}.sr-room .sr-compose textarea{max-height:100px}}
+  .sr-room.sr-wide.sr-docked header{display:grid;grid-template-columns:minmax(0,1fr) auto auto}.sr-room.sr-wide.sr-docked header>div{grid-column:1/3;grid-row:1}.sr-room.sr-wide.sr-docked [data-sr=close]{grid-column:3;grid-row:1}.sr-room.sr-wide.sr-docked [data-sr=layout]{grid-column:1;grid-row:2;justify-self:start}.sr-room.sr-wide.sr-docked [data-sr=toggle]{grid-column:2/4;grid-row:2;justify-self:end}
+  .sr-room.sr-wide.sr-docked .sr-body{display:flex;flex-direction:column;overflow:hidden}.sr-room.sr-wide.sr-docked .sr-video-section{display:block;flex:0 1 auto;max-height:52%;min-height:0;overflow:auto;border-right:0;border-bottom:1px solid #e2e8f0;padding:10px 12px}.sr-room.sr-wide.sr-docked .sr-video{height:clamp(140px,30dvh,280px);min-height:0}.sr-room.sr-wide.sr-docked .sr-video-empty{display:none}.sr-room.sr-wide.sr-docked .sr-chat-section{flex:1;min-height:0;overflow:auto}.sr-room.sr-wide.sr-docked .sr-messages{min-height:30px}.sr-room.sr-wide.sr-docked .sr-compose textarea{min-height:46px;max-height:80px;resize:none}.sr-room.sr-wide.sr-docked .sr-chat-heading{padding-top:8px}.sr-room.sr-wide.sr-docked small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sr-room.sr-wide.sr-short.sr-docked .sr-video-section{max-height:44%}.sr-room.sr-wide.sr-short .sr-compose{padding:7px 12px}.sr-room.sr-wide.sr-short .sr-compose label{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden}.sr-room.sr-wide.sr-short .sr-compose textarea{height:46px;min-height:46px;max-height:46px}
+  body.sr-wide.sr-docked:not(.sr-minimized) #sePage{margin-right:calc(var(--selection-room-width,420px) + 20px);max-width:none;min-width:0}body.sr-wide.sr-docked:not(.sr-minimized) .se-board-layout{grid-template-columns:minmax(0,1fr)}
+  .sr-room.sr-minimized{height:auto;max-width:calc(100% - 16px)}.sr-room.sr-minimized .sr-body,.sr-room.sr-minimized [data-sr=layout]{display:none}.sr-room.sr-minimized header{border-bottom:0}.sr-room.sr-wide.sr-minimized header{display:flex}.sr-room.sr-wide.sr-minimized header>div{flex:1}
+  .sr-room:not(.sr-wide) header{padding:12px}.sr-room:not(.sr-wide) .sr-body{display:flex;flex-direction:column;overflow:auto}.sr-room:not(.sr-wide) .sr-video-section{display:block;flex:none;overflow:visible;padding:10px 12px;border-right:0;border-bottom:1px solid #e2e8f0}.sr-room:not(.sr-wide) .sr-video{height:230px;min-height:0;max-height:28dvh;margin-top:8px}.sr-room:not(.sr-wide) .sr-video-empty{display:none}.sr-room:not(.sr-wide) .sr-chat-section{flex:1;min-height:235px}.sr-room:not(.sr-wide) .sr-chat-heading{padding-top:8px}.sr-room:not(.sr-wide) .sr-compose textarea{max-height:100px}
   `;document.head.append(style);
  }
+ function fit(s){
+  if(!same(s))return;const v=window.visualViewport,viewport={width:Math.min(document.documentElement.clientWidth||window.innerWidth,v?.width||window.innerWidth),height:v?.height||window.innerHeight,left:v?.offsetLeft||0,top:v?.offsetTop||0},g=selectionRoomGeometry(viewport,s.docked);
+  s.panel.classList.toggle('sr-wide',g.wide);s.panel.classList.toggle('sr-short',viewport.height<650);document.body.classList.toggle('sr-wide',g.wide);document.body.style.setProperty('--selection-room-width',g.width+'px');
+  const width=s.minimized?Math.min(g.width,380):g.width;Object.assign(s.panel.style,{left:(g.left+g.width-width)+'px',right:'auto',bottom:'auto',width:width+'px',height:s.minimized?'auto':g.height+'px',maxHeight:(viewport.height-2*g.gap)+'px'});
+  s.panel.style.top=(s.minimized?viewport.top+viewport.height-g.gap-Math.min(s.panel.getBoundingClientRect().height,viewport.height-2*g.gap):g.top)+'px';
+  el(s,'layout').hidden=!g.wide;
+ }
+ function scheduleFit(s){if(s.layoutFrame)return;s.layoutFrame=window.requestAnimationFrame(()=>{s.layoutFrame=null;fit(s);});}
  function persist(s){try{sessionStorage.setItem('selection-room-draft-'+s.scope.key,JSON.stringify({draft:s.draft,pending:s.pending}));}catch{}}
- function setMinimized(s,value){s.minimized=value;s.panel.classList.toggle('sr-minimized',value);document.body.classList.toggle('sr-minimized',value);text(s,'toggle',value?'Show room':'Hide room');el(s,'toggle').setAttribute('aria-expanded',String(!value));}
- function setDocked(s,value){s.docked=value;s.panel.classList.toggle('sr-docked',value);document.body.classList.toggle('sr-docked',value);text(s,'layout',value?'Expand video':'Board + video');el(s,'layout').setAttribute('aria-pressed',String(!value));}
+ function setMinimized(s,value){s.minimized=value;s.panel.classList.toggle('sr-minimized',value);document.body.classList.toggle('sr-minimized',value);text(s,'toggle',value?'Show room':'Hide room');el(s,'toggle').setAttribute('aria-expanded',String(!value));fit(s);}
+ function setDocked(s,value){s.docked=value;s.panel.classList.toggle('sr-docked',value);document.body.classList.toggle('sr-docked',value);text(s,'layout',value?'Expand video':'Board + video');el(s,'layout').setAttribute('aria-pressed',String(!value));fit(s);}
  function sync(){if(room&&!same(room))close(true);}
  function close(force=false){
   const s=room;if(!s)return true;
   if(!force&&(s.frame||s.joining)&&!window.confirm('Leave the video call and close Selection Room?'))return false;
-  room=null;persist(s);clearInterval(s.timer);s.observer?.disconnect();leave(s,false);s.panel.remove();document.body.classList.remove('sr-open','sr-minimized','sr-docked');window.removeEventListener('beforeunload',s.unload);return true;
+  room=null;persist(s);clearInterval(s.timer);s.observer?.disconnect();if(s.layoutFrame)window.cancelAnimationFrame(s.layoutFrame);window.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('scroll',s.resize);leave(s,false);s.panel.remove();document.body.classList.remove('sr-open','sr-minimized','sr-docked','sr-wide');document.body.style.removeProperty('--selection-room-width');window.removeEventListener('beforeunload',s.unload);return true;
  }
  function messageRows(s,messages,{older=false}={}){
   const box=el(s,'messages'),height=box.scrollHeight,scroll=box.scrollTop,atBottom=height-scroll-box.clientHeight<70;
@@ -28675,6 +28695,7 @@ function createSelectionRoom(h){
   const s={scope,panel,messages:new Map(),draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');
   text(s,'subtitle','Selectors only · '+scope.club_name);el(s,'message').value=s.draft;compose(s);
   setDocked(s,true);el(s,'layout').onclick=()=>{setMinimized(s,false);setDocked(s,!s.docked);};
+  s.resize=()=>scheduleFit(s);window.addEventListener('resize',s.resize);window.visualViewport?.addEventListener('resize',s.resize);window.visualViewport?.addEventListener('scroll',s.resize);
   el(s,'close').onclick=()=>close();el(s,'toggle').onclick=()=>setMinimized(s,!s.minimized);
   el(s,'message').oninput=e=>{s.draft=e.target.value;persist(s);compose(s);text(s,'sendStatus','');};
   el(s,'message').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();void send(s);}};
