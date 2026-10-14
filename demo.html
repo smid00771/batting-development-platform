@@ -3181,12 +3181,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.173 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.174 — shared grades, season captains and flexible match teams
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.173';
+const APP_UI_VERSION='0.8.62.174';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -28513,7 +28513,7 @@ function selectionRoomGeometry(viewport,docked=true){
  const width=Math.max(1,viewport.width),height=Math.max(1,viewport.height),left=viewport.left||0,top=viewport.top||0;
  const gap=Math.min(width/8,height/8,width<600?8:12),wide=width>=900;
  const panelWidth=Math.min(width-2*gap,wide?(docked?Math.max(320,Math.min(420,width*.34)):1100):440);
- const inset=wide&&height>=650?76:gap,panelHeight=wide?height-inset-gap:Math.min(720,height*.8,height-2*gap);
+ const inset=Math.min(height-2*gap,Math.max(wide&&height>=650?76:gap,(viewport.insetTop||0)+gap)),available=height-inset-gap,panelHeight=wide?available:Math.min(720,height*.8,available);
  return {left:left+width-gap-panelWidth,top:top+(wide?inset:height-gap-panelHeight),width:panelWidth,height:panelHeight,gap,wide};
 }
 
@@ -28549,7 +28549,7 @@ function createSelectionRoom(h){
   `;document.head.append(style);
  }
  function fit(s){
-  if(!same(s))return;const v=window.visualViewport,viewport={width:Math.min(document.documentElement.clientWidth||window.innerWidth,v?.width||window.innerWidth),height:v?.height||window.innerHeight,left:v?.offsetLeft||0,top:v?.offsetTop||0},g=selectionRoomGeometry(viewport,s.docked);
+  if(!same(s))return;const v=window.visualViewport,viewport={width:Math.min(document.documentElement.clientWidth||window.innerWidth,v?.width||window.innerWidth),height:v?.height||window.innerHeight,left:v?.offsetLeft||0,top:v?.offsetTop||0};viewport.insetTop=Math.max(0,(document.getElementById('demoToolbar')?.getBoundingClientRect().bottom||0)-viewport.top);const g=selectionRoomGeometry(viewport,s.docked);
   s.panel.classList.toggle('sr-wide',g.wide);s.panel.classList.toggle('sr-short',viewport.height<650);document.body.classList.toggle('sr-wide',g.wide);document.body.style.setProperty('--selection-room-width',g.width+'px');
   const width=s.minimized?Math.min(g.width,380):g.width;Object.assign(s.panel.style,{left:(g.left+g.width-width)+'px',right:'auto',bottom:'auto',width:width+'px',height:s.minimized?'auto':g.height+'px',maxHeight:(viewport.height-2*g.gap)+'px'});
   s.panel.style.top=(s.minimized?viewport.top+viewport.height-g.gap-Math.min(s.panel.getBoundingClientRect().height,viewport.height-2*g.gap):g.top)+'px';

@@ -15,6 +15,9 @@ assert.equal(selectionCallLink(''), '');
 for(const [width,height,left,top] of [[1366,768,0,0],[1280,600,0,0],[1093,614,0,0],[911,512,0,0],[900,400,0,0],[390,320,0,180],[320,568,0,0],[700,450,120,90]]){
  for(const docked of [true,false]){const box=selectionRoomGeometry({width,height,left,top},docked);assert.ok(box.left>=left&&box.top>=top);assert.ok(box.left+box.width<=left+width);assert.ok(box.top+box.height<=top+height);assert.ok(box.width>0&&box.height>0);}
 }
+for(const [width,height] of [[1366,768],[911,512],[390,560]]){
+ for(const docked of [true,false]){const box=selectionRoomGeometry({width,height,insetTop:145},docked);assert.ok(box.top>=153,'Room header clears the demo toolbar');assert.ok(box.top+box.height<=height);}
+}
 let scope={key:'selector:club',user_id:'selector',club_id:'club',club_name:'Test club',timezone:'Australia/Sydney'},ready=true,posts=[],messages=[],revision=0,backup='',failPost=true,joinCount=0,destroyCount=0,frame,joinDelay,failExpired=false,joinFailure=null,destroyDelay=null;
 const videoRequests=[];
 let roster={local:{local:true,user_name:'Selector',session_id:'local'}},rosterUnavailable=false;
