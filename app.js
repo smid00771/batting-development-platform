@@ -1,16 +1,16 @@
-// Club Batting 0.8.62.174 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.175 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.174';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.174';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.174';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.174';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.174';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.174';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.175';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.175';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.175';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.175';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.175';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.175';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.174';
+const APP_UI_VERSION='0.8.62.175';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

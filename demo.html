@@ -3117,6 +3117,28 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 .guide-context-bar span{color:var(--muted);font-size:10px;line-height:1.45}.guide-context-bar strong{color:var(--navy2)}
 @media(max-width:680px){.guide-context-bar{align-items:flex-start;flex-direction:column}.guide-context-bar .btn{width:100%}}
 
+/* Split-screen: let the app shrink to its window and keep controls reachable. */
+#app{min-width:0;max-width:100%}
+#app .shell{width:100%;min-width:0}
+#app :is(.page,.grid,.workshop-grid,.form-grid,.se-page,.se-grid,.se-form-grid){min-width:0;max-width:100%}
+#app :is(.grid,.workshop-grid,.form-grid,.se-grid,.se-form-grid)>*{min-width:0;max-width:100%}
+#app .compact-club-header .topline{flex-wrap:wrap}
+#app .compact-club-header .shell-brand-lockup{flex:1 1 220px;max-width:100%}
+#app .compact-club-header .header-actions{flex:0 1 auto;min-width:0;max-width:100%;flex-wrap:wrap}
+#app .compact-club-header .header-actions>*{min-width:0;max-width:100%}
+#app .shell .nav{min-width:0;max-width:100%;flex-wrap:wrap}
+#app .shell .nav button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+#app .page :is(input,select,textarea){max-width:100%;min-width:0}
+#app .se-page{overflow-wrap:anywhere}
+#app :is(.se-top,.se-toolbar,.se-actions,.se-tabs,.se-publication-responsibility)>*{min-width:0;max-width:100%}
+#app :is(.se-link-row,.se-default-row,.se-roster-row)>*{min-width:0;max-width:100%}
+#app .se-link-row{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+#app .se-default-row{grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(0,1fr)) auto}
+#app .se-match-roles{flex-wrap:wrap}
+#app .se-match-roles>div{flex:1 1 170px;grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1100px){#app .se-roster-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){#app .se-link-row,#app .se-default-row{grid-template-columns:minmax(0,1fr)}}
+
 
 :root{--primary:var(--navy);--text:var(--ink);--accent:var(--red)}
 #demoToolbar{position:sticky;top:0;z-index:1100;background:#f0f7f7;color:#142e42;border-bottom:1px solid #b9d7d5;font:14px/1.4 system-ui,sans-serif;padding:12px max(16px,calc((100vw - 1120px)/2))}
@@ -3181,12 +3203,12 @@ window.__fixtureDb={
 };
 
 
-// Club Batting 0.8.62.174 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.175 — shared grades, season captains and flexible match teams
 
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.174';
+const APP_UI_VERSION='0.8.62.175';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
