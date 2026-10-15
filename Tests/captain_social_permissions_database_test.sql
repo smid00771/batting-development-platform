@@ -41,6 +41,10 @@ begin
   assert (public.club_socials_api(c,'access')->>'handover_count')::int=1,'Pending handover is visible on Teams';
   perform public.club_socials_api(c,'manager',jsonb_build_object('user_id',second_mgr,'enabled',true,'request_id',gen_random_uuid()));
   assert exists(select 1 from club_selection_private.social_managers where club_id=c and user_id=second_mgr),'Manager can appoint another manager';
+  insert into club_selection_private.social_posting_delegations(club_id,delegated_by,delegate_id,starts_on,ends_on) values(c,mgr,ordinary,current_date-1,current_date+1);
+  denied:=false;begin perform public.club_socials_api(c,'manager',jsonb_build_object('user_id',mgr,'enabled',false,'request_id',gen_random_uuid()));exception when sqlstate 'P0192' then denied:=sqlerrm like 'Hand back temporary cover%';end;assert denied,'A manager cannot strand their current temporary cover';
+  assert club_selection_private.social_allowed_at(c,ordinary),'Cover access remains active while its manager hands over';
+  delete from club_selection_private.social_posting_delegations where club_id=c;
   -- A scheduled post cannot be orphaned by removing its approver.
   insert into club_selection_private.social_posts(id,club_id,created_by,renderer,fixtures,images,caption,state,approved_by,approved_at,scheduled_for)
    values(post,c,mgr,'0.8.62.143','[]','[]','Synthetic scheduled post','approved',mgr,now(),now()+interval '1 day');
