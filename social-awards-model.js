@@ -14,6 +14,10 @@ export function awardLayout(kind,saved={}){
 export function awardFigures(item){return item.kind==='century'?`${item.stat.runs}${item.stat.not_out?'*':''}`:`${item.stat.wickets}/${item.stat.runs}`;}
 export function awardCaption(items){return items.map(x=>x.label).join('\n');}
 export function awardBatches(items,size=10){if(!Number.isInteger(size)||size<1)throw Error('Invalid batch size');const batches=[];for(let i=0;i<items.length;i+=size)batches.push(items.slice(i,i+size));return batches;}
+export function resultsShareOpponent(items,keys={}){
+ const clubs=items.map(item=>{const team=(item.teams||[]).find(t=>t.id!==item.our_team);return keys[item.key]||team?.organisation_id||team?.name?.trim().toLowerCase()||team?.id;});
+ return clubs.length>0&&clubs.every(key=>key&&key===clubs[0]);
+}
 export function resultsSummary(item){
  const ours=(item.innings||[]).filter(i=>i.team_id===item.our_team),theirs=(item.innings||[]).filter(i=>i.team_id!==item.our_team);
  const names=item.teams||[],ourName=names.find(t=>t.id===item.our_team)?.name||'Our club',opposition=names.filter(t=>t.id!==item.our_team).map(t=>t.name).join(' / ');
@@ -44,7 +48,15 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  }
  if(!layout.includes_title)text('RESULTS',540,height*layout.title_y/100,990,layout.title_size);
  text(week,540,height*layout.week_y/100,970,28);
- if(logo)image(logo,layout.logo_x,layout.logo_y,layout.logo_size,.11);
+ const sharedOpponent=resultsShareOpponent(items,images.opponentKeys);
+ const logoPair=(opponent,summary,x,y,size,gap,colour)=>{
+  const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/iw,size/ih);ctx.drawImage(img,cx-iw*fit/2,y-ih*fit/2,iw*fit,ih*fit);};
+  badge(logo,summary.ourName,x-(size+gap)/2);text('VS',x,y,gap-8,Math.min(60,size*.5),colour);badge(opponent,summary.opposition,x+(size+gap)/2);
+ };
+ if(sharedOpponent){
+  const size=Math.min(1080*layout.logo_size/100,height*.11),gap=Math.max(50,size*.6),width=size*2+gap;
+  logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),(1080-width)*layout.logo_x/100+width/2,(height-size)*layout.logo_y/100+size/2,size,gap,layout.text_colour);
+ }
  const top=height*layout.rows_top/100,bottom=height*layout.rows_bottom/100,gap=28,rowHeight=(bottom-top-gap*(Math.max(items.length,1)-1))/Math.max(items.length,1);
  for(let n=0;n<items.length;n++){
   const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap),outcome=outcomes[item.key]||r.outcome;
@@ -58,8 +70,8 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
    if(bat)text(bat.name,62,y+95+j*line,340,font,'#10253f');if(bowl)text(bowl.name,678,y+95+j*line,270,font,'#10253f');
    ctx.textAlign='right';if(bat)text(`${bat.runs}${bat.not_out?'*':''}`,458,y+95+j*line,70,font,'#10253f');if(bowl)text(`${bowl.wickets}/${bowl.runs}`,1019,y+95+j*line,100,font,'#10253f');ctx.textAlign='center';
   }
-  const opponent=images.opponents?.[item.key];if(opponent){const size=Math.min(68,rowHeight*.27),fit=Math.min(size/(opponent.naturalWidth||opponent.width),size/(opponent.naturalHeight||opponent.height)),ow=(opponent.naturalWidth||opponent.width)*fit,oh=(opponent.naturalHeight||opponent.height)*fit;ctx.drawImage(opponent,552-ow/2,y+38,ow,oh);}
+  if(!sharedOpponent){const size=Math.max(12,Math.min(72,rowHeight*.3));logoPair(images.opponents?.[item.key],r,552,y+38+size/2,size,30,'#17395a');}
   text(outcome||'RESULT',552,y+rowHeight*.62,180,outcome==='NO RESULT'?26:38,outcome==='WIN'?'#087947':outcome==='LOSS'?'#a0313d':'#17395a');
-  text('v '+r.opposition,552,y+rowHeight*.87,195,18,'#17395a');
+  if(!sharedOpponent)text(r.opposition,552,y+rowHeight*.87,195,18,'#17395a');
  }
 }
