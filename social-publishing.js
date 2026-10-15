@@ -19,7 +19,7 @@ export function createSocialPublishing(h){
 </style>`;
  function state(s){return s.publishing||(s.publishing={context:null,loading:false,error:'',review:null,poll:null});}
  function clubId(s){return s.scope.split(':').slice(1).join(':');}
- function remember(s,r){try{localStorage.setItem('social-post-caption:'+s.scope+':'+r.id,r.caption);}catch{}}
+ function remember(s,r){try{localStorage.setItem('social-post-caption:'+s.scope+':'+r.id,r.caption);}catch{}if(r.selectionDate)saveTeamCaption(s,r.caption,r.selectionDate);}
  function recall(s,r){try{return localStorage.getItem('social-post-caption:'+s.scope+':'+r.id)??r.caption;}catch{return r.caption;}}
  function savePost(p,post){if(!p.context||!post)return;const posts=p.context.posts||(p.context.posts=[]),i=posts.findIndex(j=>j.id===post.id);if(i>=0)posts[i]=post;else posts.unshift(post);p.context.posts=posts.slice(0,20);}
  function acceptPost(p,r,post){if(!post)return;const caption=r.caption,selected=r.targets;Object.assign(r,post);if(post.state==='draft'){r.caption=caption;r.targets=selected;}savePost(p,post);}
@@ -30,6 +30,8 @@ export function createSocialPublishing(h){
   if(r.error||r.data?.error){let message=r.data?.error;try{message||=(await r.error.context?.clone().json())?.error;}catch{}throw Error(message||r.error?.message||'Could not connect. Check Posting history before retrying.');}return r.data;
  }
  function defaultCaption(s){return ['🏏 THIS WEEK’S TEAMS 🏏','','Here are our team lists for the round.','Best of luck to everyone taking the field!',s.design.footer?'\n'+s.design.footer:''].filter((line,i)=>line||i===1).join('\n');}
+ function teamCaption(s){const p=state(s);p.teamCaptions||={};if(Object.hasOwn(p.teamCaptions,s.date))return p.teamCaptions[s.date];let saved;try{saved=localStorage.getItem('social-team-caption:'+s.scope+':'+s.date);}catch{}return p.teamCaptions[s.date]=p.nextCaption??saved??(p.review?.state==='draft'&&p.review.selectionDate===s.date?p.review.caption:defaultCaption(s));}
+ function saveTeamCaption(s,caption,date=s.date){const p=state(s);(p.teamCaptions||={})[date]=caption;try{localStorage.setItem('social-team-caption:'+s.scope+':'+date,caption);}catch{}}
  function connected(p){return p.context?.connection?.status==='connected';}
  function label(t){return t==='facebook'?'Facebook':'Instagram';}
  function targets(p){const c=p.context?.connection,health=p.context?.health;return c?.status==='connected'?['facebook',...(c.instagram_id?['instagram']:[])].filter(t=>!health||health[t]?.state==='ready'):[];}
@@ -62,7 +64,7 @@ export function createSocialPublishing(h){
   const p=state(s),d=p.context?.delegation||{},today=localTime(Date.now(),zone(s)).slice(0,10),active=d.delegate_id&&d.starts_on<=today&&d.ends_on>=today,future=d.delegate_id&&d.starts_on>today;
   if(!p.context?.can_delegate&&!p.context?.can_hand_back)return '';
   const pending=p.coverPending;
-  return `<section class="sp-panel"><h3>Socials responsibility</h3><p>Club Admin keeps access. Socials managers can connect accounts, review, schedule and publish posts.</p>${d.delegate_id?`<p><strong>${esc(d.name||'Club member')}</strong> · ${active?'Covering now':future?'Upcoming cover':'Cover ended'}<br><span class="sp-count">${esc(d.starts_on)} to ${esc(d.ends_on)} · ${esc(zone(s).replaceAll('_',' '))}</span></p>`:''}<div class="social-actions">${p.context.can_delegate?'<button class="btn ghost" id="spArrangeCover">Arrange temporary cover</button>':''}${p.context.can_hand_back&&d.delegate_id?'<button class="btn ghost" id="spHandBack">Hand back responsibility</button>':''}${p.context.admin?'<button class="btn ghost" id="spManageSocials">Choose who handles socials</button>':''}</div>
+  return `<section class="sp-panel"><h3>Temporary cover</h3><p>Choose who handles socials while you are away.</p>${d.delegate_id?`<p><strong>${esc(d.name||'Club member')}</strong> · ${active?'Covering now':future?'Upcoming cover':'Cover ended'}<br><span class="sp-count">${esc(d.starts_on)} to ${esc(d.ends_on)} · ${esc(zone(s).replaceAll('_',' '))}</span></p>`:''}<div class="social-actions">${p.context.can_delegate?'<button class="btn ghost" id="spArrangeCover">Arrange temporary cover</button>':''}${p.context.can_hand_back&&d.delegate_id?'<button class="btn ghost" id="spHandBack">Hand back responsibility</button>':''}</div>
    ${p.coverEditing?`<form id="spCoverForm"><div class="se-form-grid"><label>Replacement<select name="user_id" required ${pending?'disabled':''}><option value="">Choose a club member</option>${(p.context.delegation_members||[]).map(m=>`<option value="${esc(m.user_id)}" ${m.user_id===(p.coverChoice?.user_id||d.delegate_id)?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label><label>From<input name="from" type="date" required min="${today}" value="${esc(p.coverChoice?.from||today)}" ${pending?'disabled':''}></label><label>Until<input name="until" type="date" required min="${today}" value="${esc(p.coverChoice?.until||today)}" ${pending?'disabled':''}></label></div><p class="sp-count">Both dates are included. They can hand back early; their temporary access ends automatically. Existing Admin and permanent Socials Manager access is retained.</p><button class="btn secondary" ${pending?'disabled':''}>Save cover period</button></form>`:''}
 ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class="btn ghost" id="spRetryCover">Retry responsibility change</button>':''}<p id="spCoverStatus" role="status" aria-live="polite">${esc(p.coverMessage||'')}</p></section>`;
  }
@@ -71,7 +73,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
   try{
    if(demo){const m=(p.context.delegation_members||[]).find(m=>m.user_id===request.user_id);p.demoDelegation={revision:request.revision+1,delegate_id:request.operation==='delegate'?request.user_id:null,name:m?.name,starts_on:request.from,ends_on:request.until};p.context.delegation=p.demoDelegation;p.context.can_hand_back=!!p.demoDelegation.delegate_id;}
    else {await rpc(s,'delegate',request);p.coverPending=null;if(request.operation==='hand_back'&&!p.context.can_delegate){returned=true;}else{try{p.context={...p.context,...await rpc(s,'context')};}catch{p.coverMessage='Responsibility saved. Refresh to load the current status.';p.coverEditing=false;return;}}}
-   p.coverPending=null;p.coverEditing=false;p.coverChoice=null;if(request.operation==='hand_back')s.view='accounts';p.coverMessage=demo?'Demo responsibility changed. No notification was sent.':request.operation==='hand_back'?'Responsibility handed back.':'Temporary cover saved. The replacement has a Teams notification.';
+   p.coverPending=null;p.coverEditing=false;p.coverChoice=null;if(request.operation==='hand_back')s.view='managers';p.coverMessage=demo?'Demo responsibility changed. No notification was sent.':request.operation==='hand_back'?'Responsibility handed back.':'Temporary cover saved. The replacement has a Teams notification.';
   }catch(e){if(request.operation==='hand_back'&&/access required/.test(e.message)){p.coverPending=null;returned=true;p.coverMessage='Your temporary Socials Manager access has ended.';}else{if(/^(Socials responsibility changed|Only |Choose |Another manager|Review [0-9]+ scheduled)/.test(e.message))p.coverPending=null;p.coverMessage=e.message;}}
   finally{s.busy=false;if(h.here(s)){if(returned)h.returnToTeams?.();else h.draw(s);}}
  }
@@ -136,8 +138,8 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
  }
  function handover(s){
   const p=state(s),jobs=p.context?.handover_posts||[],blocking=jobs.some(j=>j.blocks_hand_back),host=document.getElementById('socialContent');
-  host.innerHTML=css+`<div class="sp-heading"><h3>Hand back socials</h3><button class="btn ghost" id="spHandoverBack">← Social accounts</button></div>${jobs.length?`<p>${blocking?'Review these scheduled posts before handing back. Another manager can take responsibility after checking them, or you can cancel them.':'These posts need attention. Club Admin and the Socials Manager will retain their alerts after hand-back.'}</p>${jobs.map(j=>`<div class="sp-result"><div><strong>${esc(j.images?.map(i=>i.label).join(', ')||'Team announcement')}</strong><p class="sp-count">${esc(scheduleLabel(s,j.scheduled_for))} · ${j.blocks_hand_back?'Review before hand-back':'Needs attention'}</p></div><button class="btn ghost" data-sp-open="${esc(j.id)}">Review</button></div>`).join('')}`:'<p>No scheduled posts need transferring.</p>'}<div class="social-actions"><button class="btn secondary" id="spConfirmHandBack" ${blocking||!p.context?.can_hand_back||s.busy?'disabled':''}>Hand back responsibility</button><button class="btn ghost" id="spRefreshHandover">Refresh</button></div><p id="spCoverStatus" role="status" aria-live="polite">${esc(p.coverMessage||'')}</p>${p.coverPending?'<button class="btn ghost" id="spRetryCover">Retry hand-back</button>':''}`;
-  document.getElementById('spHandoverBack').onclick=()=>{if(s.busy||p.coverPending)return;s.view='accounts';h.draw(s);};
+  host.innerHTML=css+`<div class="sp-heading"><h3>Hand back socials</h3><button class="btn ghost" id="spHandoverBack">← Socials responsibility</button></div>${jobs.length?`<p>${blocking?'Review these scheduled posts before handing back. Another manager can take responsibility after checking them, or you can cancel them.':'These posts need attention. Club Admin and the Socials Manager will retain their alerts after hand-back.'}</p>${jobs.map(j=>`<div class="sp-result"><div><strong>${esc(j.images?.map(i=>i.label).join(', ')||'Team announcement')}</strong><p class="sp-count">${esc(scheduleLabel(s,j.scheduled_for))} · ${j.blocks_hand_back?'Review before hand-back':'Needs attention'}</p></div><button class="btn ghost" data-sp-open="${esc(j.id)}">Review</button></div>`).join('')}`:'<p>No scheduled posts need transferring.</p>'}<div class="social-actions"><button class="btn secondary" id="spConfirmHandBack" ${blocking||!p.context?.can_hand_back||s.busy?'disabled':''}>Hand back responsibility</button><button class="btn ghost" id="spRefreshHandover">Refresh</button></div><p id="spCoverStatus" role="status" aria-live="polite">${esc(p.coverMessage||'')}</p>${p.coverPending?'<button class="btn ghost" id="spRetryCover">Retry hand-back</button>':''}`;
+  document.getElementById('spHandoverBack').onclick=()=>{if(s.busy||p.coverPending)return;s.view='managers';h.draw(s);};
   document.querySelectorAll('[data-sp-open]').forEach(b=>b.onclick=()=>{p.returnView='publish_handover';void openPost(s,b.dataset.spOpen);});
   document.getElementById('spConfirmHandBack').onclick=()=>changeCover(s,{operation:'hand_back'});
   document.getElementById('spRefreshHandover').onclick=()=>openHandover(s);
@@ -145,11 +147,13 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
  }
 
  function mount(s){
-  const p=state(s),host=document.getElementById('socialContent');if(!host)return;
-  const status=p.loading?'Checking accounts…':p.error?esc(p.error):connected(p)?esc(p.context.connection.page_name)+(p.context.connection.instagram_name?' · @'+esc(p.context.connection.instagram_name):''):p.context?.configured===false?'Direct posting setup pending. You can still prepare your post.':'Connect your club accounts to post directly.';
-  const available=s.data.fixtures.filter(f=>f.published.details.days[0].date===s.date&&!completedFixtures(s,[f]));
-  const box=document.createElement('section');box.className='sp-postbar';box.setAttribute('aria-label','Team posting');box.innerHTML=css+`<div class="sp-postbar-main"><div class="sp-postbar-copy"><h3>${available.length?'Team post':'Posting history'}</h3><p>${available.length?'One blurb with all selected team lists.':'Completed team announcements are read-only.'}</p></div><div class="sp-postbar-actions">${available.length?'<button class="btn secondary" id="spReview">Review &amp; post</button>':''}<button class="btn ghost" id="spAccounts">Social accounts</button>${attentionButton(s)}</div></div><div class="sp-postbar-meta"><p class="sp-count" role="status">${status}</p>${history(s)}</div>`;
-  host.prepend(box);document.getElementById('spReview')?.addEventListener('click',()=>startReview(s));document.getElementById('spAccounts').onclick=()=>{s.view='accounts';h.draw(s);};document.getElementById('spAttention')?.addEventListener('click',()=>openAttention(s));bindHistory(s);
+  const p=state(s),host=document.getElementById('socialTeamPost')||document.getElementById('socialContent');if(!host)return;
+  const available=s.data.fixtures.filter(f=>f.published.details.days[0].date===s.date&&!completedFixtures(s,[f])),selected=h.selection(s),count=selected.flatMap(h.cards).length,caption=teamCaption(s);
+  const status=p.loading?'Checking accounts…':p.error?esc(p.error):connected(p)?esc(p.context.connection.page_name)+(p.context.connection.instagram_name?' · @'+esc(p.context.connection.instagram_name):''):p.context?.configured===false?'Direct posting setup pending. You can download the graphics and blurb.':'Connect your club accounts in Social accounts to post directly.';
+  host.innerHTML=css+`<section class="sp-panel" aria-label="Team posting">${available.length?`<h3>One post for the selected teams</h3><label for="spTeamCaption">Blurb for the whole post</label><textarea class="sp-caption" id="spTeamCaption" rows="4" maxlength="2200">${esc(caption)}</textarea><p class="sp-count" id="spTeamCaptionCount">${Array.from(caption).length} / 2,200 characters</p><div class="social-actions"><button class="btn secondary" id="spReview" ${!count||count>10?'disabled':''}>Review post · ${count} ${count===1?'image':'images'}</button><button class="btn ghost" id="spCopyTeamBlurb">Copy blurb</button></div>${count>10?'<p class="sp-warning">Choose up to ten images for one post. Different two-day line-ups count separately.</p>':''}<p id="spTeamCopyStatus" class="sp-count" role="status"></p><p class="sp-count">${status}</p>`:''}${attentionButton(s)}${history(s)}</section>`;
+  document.getElementById('spTeamCaption')?.addEventListener('input',e=>{saveTeamCaption(s,e.target.value);document.getElementById('spTeamCaptionCount').textContent=Array.from(e.target.value).length+' / 2,200 characters';});
+  document.getElementById('spCopyTeamBlurb')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(teamCaption(s));document.getElementById('spTeamCopyStatus').textContent='Blurb copied.';}catch{document.getElementById('spTeamCopyStatus').textContent='Select the blurb above and copy it.';}});
+  document.getElementById('spReview')?.addEventListener('click',()=>startReview(s));document.getElementById('spAttention')?.addEventListener('click',()=>openAttention(s));bindHistory(s);
   if((!p.context||p.loadedAt&&Date.now()-p.loadedAt>60000)&&!p.loading&&!p.error)void load(s);
  }
  function completedFixtures(s,fixtures){
@@ -198,8 +202,8 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
    if(!demo&&(!p.checkedAt||Date.now()-p.checkedAt>60000))await load(s,false,true);
    const checks=fixtures.map(f=>({id:f.id,artwork_key:f.artwork_key}));
    if(!demo)await h.artwork(s,'validate_export',{fixtures:checks});
-   if(p.review?.state==='draft'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
-   const caption=p.review?.state==='draft'&&p.review.selectionDate===s.date?p.review.caption:p.nextCaption||defaultCaption(s);
+   if(p.review?.state==='draft'&&p.review.renderer!=='social-awards.178'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){p.review.caption=teamCaption(s);p.returnView=null;s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
+   const caption=teamCaption(s);
    if(p.review)for(const u of p.review.urls||[])URL.revokeObjectURL(u);
    r={id:crypto.randomUUID(),renderer:'0.8.62.143',fixtures:checks,images:[],blobs:[],urls:[],caption,selectionDate:s.date,targets:targets(p),state:'draft',destinations:[],uploaded:false};
    for(let i=0;i<cards.length;i++){
@@ -271,31 +275,36 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
    if(e.message.includes('fixture is completed'))window.alert(e.message);r.error=e.message;h.message(s,e.message+' Check this saved request before trying again.');
   }finally{s.busy=false;h.lock(false);if(h.here(s))review(s);}
  }
+ function responsibility(s,host){
+  const p=state(s);if(!host)return;
+  host.innerHTML=css+(p.context?coverPanel(s):'<p role="status">Loading temporary cover…</p>')+(p.error?`<p role="alert">${esc(p.error)}</p><button class="btn ghost" id="spRetryResponsibility">Retry loading cover</button>`:'');
+  document.getElementById('spArrangeCover')?.addEventListener('click',()=>{p.coverEditing=!p.coverEditing;h.draw(s);});
+  document.getElementById('spHandBack')?.addEventListener('click',()=>p.context?.attention_supported?openHandover(s):changeCover(s,{operation:'hand_back'}));
+  document.getElementById('spRetryCover')?.addEventListener('click',()=>changeCover(s));
+  document.getElementById('spCoverForm')?.addEventListener('input',e=>{p.coverChoice=Object.fromEntries(new FormData(e.currentTarget));});
+  document.getElementById('spCoverForm')?.addEventListener('submit',e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));if(!data.user_id||!data.from||data.until<data.from){p.coverMessage='Choose a replacement and a valid date range.';document.getElementById('spCoverStatus').textContent=p.coverMessage;return;}void changeCover(s,{operation:'delegate',...data});});
+  document.getElementById('spRetryResponsibility')?.addEventListener('click',()=>load(s));
+  if(!p.loading&&!p.error&&(!p.context||Date.now()-p.loadedAt>60000))void load(s);
+ }
  function accounts(s){
   const p=state(s),c=p.context?.connection,health=p.context?.health,host=document.getElementById('socialContent');
   const active=!!c&&c.status!=='disconnected',ready=targets(p),isReady=active&&health&&ready.length>0;
   const step=p.connecting?1:isReady?3:active?2:1;
   const row=t=>{const value=health?.[t],name=t==='facebook'?c?.page_name:c?.instagram_name?'@'+c.instagram_name:'Not connected';const labels={ready:'Ready to post',reconnect:'Reconnect needed',available:'Available to connect',not_connected:'Optional',unavailable:'Check again'};return `<div class="sp-result"><div><strong>${label(t)}</strong><p>${esc(name||'Not connected')}</p><small>${esc(value?.message||'Checking the saved connection…')}</small></div><span class="${value?.state==='ready'?'sp-success':'sp-warning'}">${esc(labels[value?.state]||'Checking…')}</span></div>`;};
   host.innerHTML=css+`<style>.sp-steps{display:flex;list-style:none;gap:12px;padding:0;margin:20px 0 26px}.sp-steps li{flex:1;border-top:3px solid #dce2ee;padding-top:10px;color:#58687d;font-size:14px}.sp-steps li[aria-current=step]{border-color:#17245f;color:#17245f;font-weight:700}.sp-steps li.is-done{border-color:#26834f;color:#11633d}.sp-help{margin-top:20px;padding-top:16px;border-top:1px solid #dce2ee}.sp-help summary{cursor:pointer;font-weight:700}.sp-help h4{margin-bottom:6px}.sp-help p{margin-top:6px}</style>
-   ${coverPanel(s)}<section class="sp-panel"><h3>${isReady?'Your club accounts are connected':'Connect your club accounts'}</h3><p>Connect once. Then your socials managers can review and post team selections and awards.</p>
+   <section class="sp-panel"><h3>${isReady?'Your club accounts are connected':'Connect your club accounts'}</h3><p>Connect once. Then your socials managers can review and post team selections and awards.</p>
    <ol class="sp-steps" aria-label="Connection progress">${['Sign in','Choose your club','Ready to post'].map((name,i)=>`<li ${i+1===step?'aria-current="step"':''} class="${i+1<step?'is-done':''}">${i+1}. ${name}</li>`).join('')}</ol>
    ${demo?'<p class="sp-count">This is an example connection. The demo cannot connect accounts or send posts.</p>':''}
    ${p.context?.configured===false?'<div class="notice"><strong>Teams is getting direct posting ready.</strong><p>There is nothing for your club to install. You can keep downloading your graphics while this is activated.</p></div>':active?row('facebook')+row('instagram'):'<p>Sign in with the Facebook account you use to manage the club Page. We will find your Pages and any linked Instagram account for you.</p><p class="sp-count">Nothing is posted while you connect. You approve each post separately after reviewing it.</p>'}
    ${p.error?`<p role="alert">${esc(p.error)}</p>`:''}
    <p id="spLive" role="status" aria-live="polite">${p.connecting?'Finish the connection in the Facebook window. This screen will update when you return.':p.loading?'Checking the connection automatically…':health?.checked_at?'Connection checked '+esc(new Date(health.checked_at).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit'}))+'.':''}</p>
-   <div class="social-actions">${(p.context?.can_connect??p.context?.admin)&&p.context?.configured!==false?`<button class="btn ${isReady?'ghost':'secondary'}" id="spConnect" ${demo||p.loading||p.connecting||s.busy?'disabled':''}>${active?(ready.length===2?'Change connected accounts':'Reconnect / add Instagram'):'Connect Facebook & Instagram'}</button>`:p.context&&!p.context.admin?'<p>A Socials Manager or Club Admin can connect the accounts, review the team post and publish or schedule it.</p>':''}<button class="btn ${isReady?'secondary':'ghost'}" id="spAccountBack">${p.review?'Back to review':'Choose team graphics'}</button><button class="btn ghost" id="spReloadAccounts" ${p.loading||p.connecting?'disabled':''}>Check connection</button></div>
+   <div class="social-actions">${(p.context?.can_connect??p.context?.admin)&&p.context?.configured!==false?`<button class="btn ${isReady?'ghost':'secondary'}" id="spConnect" ${demo||p.loading||p.connecting||s.busy?'disabled':''}>${active?(ready.length===2?'Change connected accounts':'Reconnect / add Instagram'):'Connect Facebook & Instagram'}</button>`:p.context&&!p.context.admin?'<p>A Socials Manager or Club Admin can connect the accounts, review the team post and publish or schedule it.</p>':''}${p.review?'<button class="btn ghost" id="spAccountBack">Back to review</button>':''}<button class="btn ghost" id="spReloadAccounts" ${p.loading||p.connecting?'disabled':''}>Check connection</button></div>
    ${p.context?.configured!==false?`<details class="sp-help"><summary>Need a hand connecting?</summary><h4>My club Page is missing</h4><p>Use the Facebook account with permission to create posts for the club. During sign-in, include the club Page and allow the requested access. Then try connecting again.</p><h4>Instagram is missing</h4><p>Facebook can work on its own. To add Instagram, link the club’s professional Instagram account in the Facebook Page’s settings, then reconnect here.</p><h4>Does the club need to install anything?</h4><p>No. Sign in, choose the club Page and allow access. The Teams connection is shared by Club Admin and your authorised socials managers.</p>${!demo&&p.context?.admin&&active?'<button class="btn ghost" id="spDisconnect">Disconnect accounts</button>':''}</details>`:''}
    </section>`;
   document.getElementById('spReloadAccounts').onclick=()=>load(s,true,true);
-  document.getElementById('spAccountBack').onclick=()=>{s.view=p.review?'publish_review':p.returnView||'graphics';h.draw(s);};
+  document.getElementById('spAccountBack')?.addEventListener('click',()=>{s.view='publish_review';h.draw(s);});
   document.getElementById('spConnect')?.addEventListener('click',()=>connect(s));
   document.getElementById('spDisconnect')?.addEventListener('click',async()=>{if(!confirm('Disconnect the club accounts? New posts will stop until a Socials Manager or Club Admin reconnects them.'))return;try{await rpc(s,'disconnect');await load(s,true,true);}catch(e){live(s,e.message);}});
-  document.getElementById('spArrangeCover')?.addEventListener('click',()=>{p.coverEditing=!p.coverEditing;h.draw(s);});
-  document.getElementById('spHandBack')?.addEventListener('click',()=>p.context?.attention_supported?openHandover(s):changeCover(s,{operation:'hand_back'}));
-  document.getElementById('spRetryCover')?.addEventListener('click',()=>changeCover(s));
-  document.getElementById('spManageSocials')?.addEventListener('click',()=>{if(!s.busy){s.view='managers';h.draw(s);}});
-  document.getElementById('spCoverForm')?.addEventListener('input',e=>{p.coverChoice=Object.fromEntries(new FormData(e.currentTarget));});
-  document.getElementById('spCoverForm')?.addEventListener('submit',e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));if(!data.user_id||!data.from||data.until<data.from){p.coverMessage='Choose a replacement and a valid date range.';document.getElementById('spCoverStatus').textContent=p.coverMessage;return;}void changeCover(s,{operation:'delegate',...data});});
   if(!p.loading&&!p.error&&(!p.context||p.context.configured!==false&&(!p.checkedAt||Date.now()-p.checkedAt>60000)))void load(s,true,true);
  }
  async function connect(s){
@@ -319,5 +328,5 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
   clearInterval(p.connectionTimer);p.connecting=false;p.checkedAt=0;void load(s,true,true);
  });
  window.addEventListener('focus',()=>{const s=h.current();if(!s||!h.here(s))return;const p=state(s);if(p.connectStarted&&Date.now()-p.connectStarted<15*60000&&!p.loading&&(!p.checkedAt||Date.now()-p.checkedAt>3000))void load(s,true,true);});
- return {mount,review,accounts,load,attention,handover,startAwards,awardsHistory};
+ return {mount,review,accounts,responsibility,load,attention,handover,startAwards,awardsHistory};
 }

@@ -27,7 +27,7 @@ let module;const h={supabase:api,here:x=>x===s,escape:v=>String(v??'').replaceAl
 module=createSocialAwards(h);module.state(s).end='2026-10-11';
 const tick=()=>new Promise(r=>setTimeout(r,5)),until=async pred=>{for(let i=0;i<1000;i++){if(pred())return;await tick();}throw Error('Timed out: '+document.getElementById('saStatus')?.textContent);},id=x=>document.getElementById(x),settled=()=>until(()=>!s.awards.busy&&!s.awards.loading&&(s.view==='awards'||s.awards.previewReady));
 h.draw();await settled();assert.ok(document.querySelector('[data-sa-open="choices"]').open);
-for(const key of ['century','five_wickets','results'])document.querySelector(`[data-sa-choice="${key}"]`).click();id('saSaveChoices').click();await settled();assert.equal(id('socialCreateMenu').options.length,7);
+for(const key of ['century','five_wickets','results'])document.querySelector(`[data-sa-choice="${key}"]`).click();id('saSaveChoices').click();await settled();assert.equal(id('socialCreateMenu').options.length,6);
 id('socialCreateMenu').value='century';id('socialCreateMenu').dispatchEvent(new window.Event('change'));await settled();assert.equal(document.querySelectorAll('[data-sa-edit]').length,3);
 const photo=createCanvas(320,400);photo.getContext('2d').fillStyle='#87c677';photo.getContext('2d').fillRect(0,0,320,400);const file=new File([photo.toBuffer('image/png')],'Alex <cutout>.png',{type:'image/png'});
 const input=id('saPhotoFile');Object.defineProperty(input,'files',{value:[file]});input.dispatchEvent(new window.Event('change'));await settled();assert.ok(s.awards.context.photos[0].photo.path);assert.equal(document.querySelector('cutout'),null);
