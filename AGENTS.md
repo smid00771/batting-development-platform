@@ -11,3 +11,5 @@ Every button must have one clear action and a visible result. Labels must descri
 Keep each item's current state, actions and relevant help together in its own section. Show saved content where it is managed. Use the same layout for similar tasks, and arrange the page in the order people complete the task.
 
 User design preference recorded 15 October 2026.
+
+Treat vertical space as valuable: avoid empty status areas and repeated controls, and collapse secondary collections by default. Reuse saved club branding across post types.

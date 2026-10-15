@@ -7,7 +7,7 @@ export const SOCIAL_AWARDS = [
 ];
 export const awardLabel=kind=>SOCIAL_AWARDS.find(x=>x.key===kind)?.label||'Social graphic';
 export function awardLayout(kind,saved={}){
- return {includes_title:false,show_logo:kind==='results',text_panel:true,text_colour:'#FFFFFF',title_y:9,title_size:kind==='results'?112:104,
+ return {includes_title:false,show_logo:!saved.background_path,text_panel:true,text_colour:'#FFFFFF',title_y:9,title_size:kind==='results'?112:104,
   week_y:kind==='results'?15:18,name_y:77,name_size:76,figures_y:86,figures_size:94,grade_y:94,rows_top:29,rows_bottom:96,
   logo_x:50,logo_y:19,logo_size:11,opponent_logos:{},...saved};
 }
