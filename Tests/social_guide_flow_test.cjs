@@ -91,3 +91,21 @@ test('failed return keeps the prepared photo available for retry',async()=>{
  const h=setup(2);h.s.guide.awardReturn={view:'five_wickets',savedAsset:{path:'saved.png'},apply:async()=>{throw Error('Connection lost');}};
  assert.equal(await h.c.socialGuideReturnToTeam(h.s),false);assert.equal(h.s.view,'guide');assert.ok(h.s.guide.awardReturn.savedAsset);assert.equal(h.s.busy,false);
 });
+
+test('reusing an example opens that source and does not substitute an older prepared image',()=>{
+ for(const source of [app,demo])for(const loaded of [false,true]){
+  const prepare=part(source,'function socialGuidePrepare(','async function socialPrepStart(');
+  const h=setup(1),jobs=[{id:'old-ready',kind:'master',state:'ready'}];
+  h.s.data.assets.push({id:'example',kind:'reference_extra',label:'Previous team list'});
+  h.s.guide.context=loaded?{jobs}:null;
+  Object.assign(h.c,{socialGuideSources:s=>s.data.assets,socialPlayerPhotos:()=>[],socialGalleryCard:()=>'',socialGuidePreview:()=>'',socialGuideUploadStatus:()=>'',socialBindUploads(){},socialGuideSourcePaint:async()=>{},socialPrepPaint:async()=>{}});
+  h.element('prepStep').querySelectorAll=()=>[];
+  vm.runInContext(part(app,'function socialGuideResetImage(','function socialGuideReturnToTeam(')+prepare,h.c);
+  h.c.socialGuideEnter(h.s,1,'','','example');
+  h.s.guide.context={jobs};h.c.socialGuidePrepare(h.s);
+  assert.equal(h.s.guide.source,'asset:example');assert.equal(h.s.guide.preview,null);
+  assert.equal(h.s.guide.workflowReturn,'artwork');assert.match(h.element('prepStep').innerHTML,/<form id="prepForm" >/);
+  jobs.push({id:'new-ready',kind:'master',state:'ready'});h.c.socialGuidePrepare(h.s);
+  assert.equal(h.s.guide.preview,'new-ready','A subsequent preparation still opens for review');
+ }
+});

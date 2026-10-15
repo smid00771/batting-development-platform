@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),{JSDOM}=require('jsdom'),{createCanvas,GlobalFonts,loadImage}=require('@napi-rs/canvas');
-const {createSocialAwards}=await import('../social-awards.js');
+const {createSocialAwards,renderSocialAwardRequests}=await import('../social-awards.js');
 const dom=new JSDOM('<main><div id="menu"></div><div id="socialContent"></div></main>',{url:'https://clubbatting.com/'});
-globalThis.window=dom.window;globalThis.document=dom.window.document;globalThis.localStorage=window.localStorage;window.HTMLElement.prototype.scrollIntoView=()=>{};
+globalThis.window=dom.window;globalThis.document=dom.window.document;globalThis.localStorage=window.localStorage;globalThis.FormData=window.FormData;window.HTMLElement.prototype.scrollIntoView=()=>{};
 const font=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(i,...args)=>draw(i.backing||i,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 window.HTMLCanvasElement.prototype.toBlob=function(cb,type='image/png'){cb(new Blob([this.backing.toBuffer(type)],{type}));};
@@ -20,14 +20,16 @@ const api={storage:{from:bucket=>({upload:async(path,data)=>{if(files.has(bucket
  else if(a==='save_photo'){const old=context.photos.find(p=>p.kind===d.kind&&p.player_id===d.player_id),value={kind:d.kind,player_id:d.player_id,photo:structuredClone(d.photo),revision:(old?.revision||0)+1};if(old)Object.assign(old,value);else context.photos.push(value);data=value;}
  else if(a==='reserve_image'){if(!pending.has(d.id))pending.set(d.id,{...d,path:'club/editions/'+d.id+'.png'});const p=pending.get(d.id);data={id:d.id,path:p.path,sealed:context.editions.some(e=>e.id===d.id)};}
  else if(a==='finish_image'){const p=pending.get(d.id);assert.ok(files.has('club-social-awards'+p.path));if(!context.editions.some(e=>e.id===d.id))context.editions.push({id:d.id,kind:p.kind,week_end:p.week_end,label:p.label,bucket:'club-social-awards',image_path:p.path,image_sha:p.sha256,performance_keys:p.sources.map(x=>x.key)});if(loseFinish){loseFinish=false;return {error:{message:'Simulated lost confirmation'}};}data={saved:true};}
- else if(a==='request'){context.requests.push({...d,status:'requested',reply:''});data={saved:true};}
+ else if(a==='request'){context.requests.push({...d,status:'requested',reply:'',revision:1,updated_at:'2026-10-15T09:00:00Z'});data={saved:true};}
+ else if(a==='admin_context')data={requests:context.requests.map(r=>({...r,club_name:'Test Club'}))};
+ else if(a==='admin_update'){const r=context.requests.find(r=>r.id===d.id);assert.equal(d.revision,r.revision);Object.assign(r,{status:d.status,reply:d.reply,revision:r.revision+1,updated_at:'2026-10-15T10:00:00Z'});data={revision:r.revision};}
  else throw Error('Unexpected action '+a);return {data};}};
 const s={scope:'user:club',view:'awards',data:{brand:{name:'Test Club',logo:null},awards:context.settings,timezone:'Australia/Sydney'},design:{primary:'#073554',accent:'#128fd2'},urls:new Map()};
 let module;const h={supabase:api,here:x=>x===s,escape:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),draw:()=>{document.getElementById('menu').innerHTML=module.menu(s);module.bindMenu(s);module.render(s);},message:(_,text)=>s.notice=text,canLeave:()=>module.canLeave(s),image:async(_,url)=>loadImage(Buffer.from(await (await fetch(url)).arrayBuffer())),fontReady:async()=>{},text:(ctx,text,x,y,width,size)=>{ctx.font=`700 ${size}px "Club Sporting"`;while(ctx.measureText(String(text)).width>width&&size>10)ctx.font=`700 ${--size}px "Club Sporting"`;ctx.fillText(String(text),x,y);},download:()=>{},savedPhotos:()=>[],reviewAwards:(_,items,caption)=>review={items,caption},openScores:()=>{},openCutout:()=>{s.cutoutOpened=true;}};
 module=createSocialAwards(h);module.state(s).end='2026-10-11';
-const tick=()=>new Promise(r=>setTimeout(r,5)),until=async pred=>{for(let i=0;i<1000;i++){if(pred())return;await tick();}throw Error('Timed out: '+document.getElementById('saStatus')?.textContent);},id=x=>document.getElementById(x),settled=()=>until(()=>!s.awards.busy&&!s.awards.loading&&(s.view==='awards'||s.awards.previewReady));
-h.draw();await settled();assert.ok(document.querySelector('[data-sa-open="choices"]').open);
-for(const key of ['century','five_wickets','results'])document.querySelector(`[data-sa-choice="${key}"]`).click();id('saSaveChoices').click();await settled();assert.equal(id('socialCreateMenu').options.length,6);
+const tick=()=>new Promise(r=>setTimeout(r,5)),until=async pred=>{for(let i=0;i<1000;i++){if(pred())return;await tick();}throw Error('Timed out: '+document.getElementById('saStatus')?.textContent);},id=x=>document.getElementById(x),settled=()=>until(()=>!s.awards.busy&&!s.awards.loading&&(['awards','award_collection'].includes(s.view)||s.awards.previewReady));
+h.draw();await settled();assert.equal(document.querySelector('#socialContent h3').textContent,'Awards your club uses');assert.equal(id('saRequest').closest('details'),null);for(const name of ['saEnd','saImport','saCaption','saReviewPost','saPostingHistory'])assert.equal(id(name),null,'Settings excludes creation controls: '+name);
+for(const key of ['century','five_wickets','results'])document.querySelector(`[data-sa-choice="${key}"]`).click();id('saSaveChoices').click();await settled();assert.equal(id('socialCreateMenu').options.length,7);
 id('socialCreateMenu').value='century';id('socialCreateMenu').dispatchEvent(new window.Event('change'));await settled();assert.equal(document.querySelectorAll('[data-sa-edit]').length,3);
 const photo=createCanvas(320,400);photo.getContext('2d').fillStyle='#87c677';photo.getContext('2d').fillRect(0,0,320,400);const file=new File([photo.toBuffer('image/png')],'Alex <cutout>.png',{type:'image/png'});
 const input=id('saPhotoFile');Object.defineProperty(input,'files',{value:[file]});input.dispatchEvent(new window.Event('change'));await settled();assert.ok(s.awards.context.photos[0].photo.path);assert.equal(document.querySelector('cutout'),null);
@@ -42,5 +44,19 @@ id('saCaption').value='An outstanding round: two centuries and a six-wicket haul
 id('socialCreateMenu').value='results';id('socialCreateMenu').dispatchEvent(new window.Event('change'));await settled();document.querySelectorAll('[data-sa-result]').forEach(e=>e.click());await settled();assert.match(id('saPreviewStatus').textContent,/2 Results images/);
 if(process.env.AWARDS_PREVIEW_DIR)fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results.png',id('saCanvas').backing.toBuffer('image/png'));
 id('saConfirmGraphic').click();await settled();assert.equal(context.editions.filter(e=>e.kind==='results').length,2);assert.equal(context.editions.find(e=>e.kind==='results').performance_keys.length,4);
-id('saHome').click();await settled();const form=id('saRequest');form.elements.name.value='Spirit of cricket';form.elements.criteria.value='Chosen by the club for sportsmanship.';form.dispatchEvent(new window.Event('input'));form.dispatchEvent(new window.Event('submit',{cancelable:true}));await settled();assert.equal(context.requests.length,1);assert.match(id('saStatus').textContent,/submitted/);
-console.log('Passed: award choices/dropdown, per-player photos and sliders, confirm closes controls, lost-response retry, Needs creation to collection, mixed multi-image post with one blurb, Results batching, custom request.');
+id('socialCreateMenu').value='award_collection';id('socialCreateMenu').dispatchEvent(new window.Event('change'));await settled();assert.equal(id('saRequest'),null);assert.equal(document.querySelectorAll('[data-sa-select]').length,5);assert.match(id('saCaption').value,/outstanding round/);s.view='awards';h.draw();await settled();const form=id('saRequest');form.elements.name.value='Spirit of cricket';form.elements.criteria.value='Chosen by the club for sportsmanship.';form.dispatchEvent(new window.Event('input'));form.dispatchEvent(new window.Event('submit',{cancelable:true}));await settled();assert.equal(context.requests.length,1);assert.match(id('saStatus').textContent,/submitted/);
+assert.ok(id('saRequestUpdates'));assert.equal(id('saRequestUpdates').closest('details'),null);assert.match(id('saRequestUpdates').textContent,/Submitted/);assert.equal(id('saRequestUpdates').querySelector('select'),null,'Club cannot change the owner’s response');
+const owner=document.createElement('div');document.body.append(owner);
+await renderSocialAwardRequests({supabase:api,escape:h.escape},owner);
+assert.deepEqual([...owner.querySelector('select').options].map(o=>o.textContent),['Submitted','Will do','Not right now','Completed']);
+const response=owner.querySelector('form');
+for(const [status,label,reply] of [['in_progress','Will do','We will add this award.'],['closed','Not right now','Please send a clearer example.'],['ready','Completed','Choose Spirit of cricket from Create posts.']]){
+ response.elements.status.value=status;response.elements.reply.value=reply;response.dispatchEvent(new window.Event('input'));response.dispatchEvent(new window.Event('submit',{cancelable:true}));await until(()=>owner.querySelector('[role=status]').textContent.includes('Update saved')&&context.requests[0].status===status);
+ id('saRefreshRequests').click();await settled();assert.match(id('saRequestUpdates').textContent,new RegExp(label));assert.ok(id('saRequestUpdates').textContent.includes(reply));assert.match(id('saRequestUpdates').textContent,/Updated/);
+}
+owner.remove();
+// A refreshed collection must not silently select a replacement for an older revision.
+context.editions.push({id:'latest-team',kind:'team_week',week_end:'2026-10-11',label:'Latest Team of the Week',bucket:'club-team-week',image_path:'latest.png',performance_keys:[]});
+s.awards.selected.add('old-team-version');await module.load(s,false);assert.equal(s.awards.selected.has('old-team-version'),false);assert.equal(s.awards.selected.has('latest-team'),false);assert.equal(s.awards.selected.size,5,'All individual milestones and Results batches retain their selection');
+assert.match(s.awards.message,/Select the current version/);
+console.log('Passed: settings-only awards page, choices/dropdown, photos/sliders, save retry, milestone collection, mixed post, Results batches, visible request status/reply, owner updates and stale revision selection.');
