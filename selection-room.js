@@ -1,4 +1,4 @@
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.176';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.177';
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 export function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -46,6 +46,9 @@ export function createSelectionRoom(h){
   body.sr-wide.sr-docked:not(.sr-minimized) #sePage{margin-right:calc(var(--selection-room-width,420px) + 20px);max-width:none;min-width:0}body.sr-wide.sr-docked:not(.sr-minimized) .se-board-layout{grid-template-columns:minmax(0,1fr)}
   .sr-room.sr-minimized{height:auto;max-width:calc(100% - 16px)}.sr-room.sr-minimized .sr-body,.sr-room.sr-minimized [data-sr=layout]{display:none}.sr-room.sr-minimized header{border-bottom:0}.sr-room.sr-wide.sr-minimized header{display:flex}.sr-room.sr-wide.sr-minimized header>div{flex:1}
   .sr-room:not(.sr-wide) header{padding:12px}.sr-room:not(.sr-wide) .sr-body{display:flex;flex-direction:column;overflow:auto}.sr-room:not(.sr-wide) .sr-video-section{display:block;flex:none;overflow:visible;padding:10px 12px;border-right:0;border-bottom:1px solid #e2e8f0}.sr-room:not(.sr-wide) .sr-video{height:230px;min-height:0;max-height:28dvh;margin-top:8px}.sr-room:not(.sr-wide) .sr-video-empty{display:none}.sr-room:not(.sr-wide) .sr-chat-section{flex:1;min-height:235px}.sr-room:not(.sr-wide) .sr-chat-heading{padding-top:8px}.sr-room:not(.sr-wide) .sr-compose textarea{max-height:100px}
+  .sr-room.sr-in-call .sr-join-help,.sr-room.sr-in-call .sr-backup{display:none}
+  .sr-room.sr-in-call.sr-docked .sr-video-section{display:flex;flex:0 1 52%;max-height:52%;overflow:auto}.sr-room.sr-in-call.sr-docked .sr-video{flex:1;min-height:80px;height:auto;max-height:none}.sr-room.sr-in-call.sr-docked [data-sr=credits]{flex:none}
+  .sr-room.sr-in-call:not(.sr-wide) .sr-body{overflow:hidden}.sr-room.sr-in-call:not(.sr-wide) .sr-chat-section{min-height:0;overflow:auto}.sr-room.sr-in-call:not(.sr-wide) .sr-messages{min-height:30px}.sr-room.sr-in-call:not(.sr-wide) .sr-compose textarea{min-height:46px;max-height:80px;resize:none}
   `;document.head.append(style);
  }
  function fit(s){
@@ -122,6 +125,7 @@ export function createSelectionRoom(h){
   finally{s.savingBackup=false;if(same(s)){el(s,'saveBackup').disabled=false;text(s,'saveBackup','Save call link');}}
  }
  function videoControls(s){
+  s.panel.classList.toggle('sr-in-call',s.joining||!!s.frame&&!s.videoError);
   el(s,'join').hidden=!s.videoReady||!!s.frame&&!s.videoError;el(s,'join').disabled=s.joining;text(s,'join',s.joining?'Connecting…':s.videoError?'Retry video':'Join video');
   el(s,'leave').hidden=!s.frame&&!s.joining;el(s,'video').hidden=!s.frame;el(s,'checkVideo').hidden=s.videoReady||s.joining||!!s.frame;
   el(s,'videoEmpty').hidden=!!s.frame;text(s,'videoEmpty',s.joining?'Preparing video…':s.videoReady?'Join video to see who is in the call.':'Selection chat is ready.');
@@ -166,7 +170,7 @@ export function createSelectionRoom(h){
  async function join(s){
   if(!same(s)||s.joining||s.frame&&!s.videoError||!s.videoReady)return;
   if(s.frame){const request=s.videoRequest;leave(s,false);s.videoRequest=request;}
-  s.videoError='';s.joining=true;const sequence=++s.joinSequence;s.videoRequest ||= crypto.randomUUID();videoControls(s);text(s,'videoStatus','Preparing video…');
+  s.videoError='';s.joining=true;const sequence=++s.joinSequence;s.videoRequest ||= crypto.randomUUID();s.credits?.collapse();videoControls(s);text(s,'videoStatus','Preparing video…');
   try{
    await s.videoCleanup;if(!same(s)||sequence!==s.joinSequence)return;
    const provider=await daily();if(!same(s)||sequence!==s.joinSequence)return;

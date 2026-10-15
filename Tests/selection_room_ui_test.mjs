@@ -27,6 +27,7 @@ globalThis.setInterval=(fn,ms,...args)=>{if(ms===3000){refreshCallback=fn;return
 const q=key=>document.querySelector('[data-sr="'+key+'"]');
 const room=createSelectionRoom({
  scope:()=>scope,
+ credit:async(_,action)=>{assert.equal(action,'balance','Viewing the room and balance cannot create a purchase');return {kind:'complimentary',available_seconds:86400,held_seconds:5460,low:false,can_manage:true,can_top_up:false,payments_ready:false};},
  rpc:async(_,action,data)=>{
   if(action==='context')return {messages:structuredClone(messages),has_older:false,can_manage:true,backup_url:backup,revision};
   if(action==='post'){posts.push(structuredClone(data));if(!messages.some(m=>m.request_id===data.request_id))messages.push({id:String(messages.length+1),request_id:data.request_id,author_name:'<img src=x onerror=alert(1)>',body:data.body,created_at:new Date().toISOString()});if(failPost){failPost=false;throw Error('Network interrupted after commit');}return {message:messages.at(-1)};}
@@ -37,12 +38,19 @@ const room=createSelectionRoom({
 });
 try{
  await room.open();assert.equal(room.isOpen(),true);assert.equal(q('join').hidden,false);assert.equal(q('presence').hidden,true,'Do not claim the call is empty before joining');
+ assert.equal(joinCount,0,'Opening Selection Room does not reserve video time');
+ const creditDetails=()=>q('credits').querySelector('[data-vc="details"]');
+ assert.equal(creditDetails().open,false,'Balance starts as a compact row');
+ creditDetails().open=true;await tick();
  const draft='Keep this draft <script>bad()</script>';q('message').value=draft;q('message').dispatchEvent(new window.Event('input'));
  refreshCallback();await tick();assert.equal(q('message').value,draft,'Polling preserves draft');
  q('send').click();await until(()=>q('send').textContent==='Retry send');assert.equal(q('message').disabled,true);assert.ok(q('sendStatus').textContent.includes('not confirmed'));
  q('send').click();await until(()=>q('sendStatus').textContent==='Sent');assert.equal(posts[0].request_id,posts[1].request_id,'Retry is exactly the same request');assert.equal(document.querySelectorAll('.sr-message').length,1);assert.equal(q('message').value,'');assert.equal(document.querySelector('.sr-message img'),null);assert.equal(document.querySelector('.sr-message script'),null);
  q('editBackup').click();q('backupUrl').value='https://meet.google.com/abc-defg-hij';q('saveBackup').click();await until(()=>q('backupForm').hidden);assert.equal(q('backupLink').href,backup);assert.equal(q('backupStatus').textContent,'Backup call saved.');
  q('join').click();await until(()=>q('subtitle').textContent.startsWith('In video'));const initialFrame=frame.iframe;
+ assert.equal(creditDetails().open,false,'Joining video closes balance details');
+ assert.equal(document.querySelector('.sr-room').classList.contains('sr-in-call'),true);
+ assert.equal(q('message').disabled,false,'Chat remains usable in a call');
  assert.equal(q('callPresence').textContent,'Only you are in the call.');assert.equal(q('people').hidden,true);
  roster.other={local:false,user_name:'Alex',session_id:'other'};frame.handlers['participant-joined']();
  assert.equal(q('callPresence').textContent,'In this call · 2');assert.deepEqual([...q('people').children].map(n=>n.textContent),['You','Alex']);
@@ -60,6 +68,7 @@ try{
  q('toggle').click();assert.equal(initialFrame.isConnected,true);assert.equal(q('toggle').textContent,'Show room');q('toggle').click();assert.equal(q('toggle').textContent,'Hide room');
  window.confirm=()=>false;assert.equal(room.close(),false);assert.equal(initialFrame.isConnected,true);
  q('leave').click();assert.equal(initialFrame.isConnected,false);assert.equal(q('videoStatus').textContent,'You left the call.');assert.equal(q('presence').hidden,true);assert.equal(q('people').children.length,0);frame.handlers['participant-joined']();assert.equal(q('presence').hidden,true,'Late participant events cannot restore a call after leaving');
+ assert.equal(document.querySelector('.sr-room').classList.contains('sr-in-call'),false);
  ready=false;q('checkVideo').click();await tick();assert.equal(q('join').hidden,true);assert.match(q('videoStatus').textContent,/not connected/);ready=true;q('checkVideo').click();await tick();
  failExpired=true;q('join').click();await until(()=>q('videoStatus').textContent.includes('call has ended'));q('join').click();await until(()=>q('subtitle').textContent.startsWith('In video'));q('leave').click();
  // Late token responses cannot create a call after the user leaves.
