@@ -10,7 +10,7 @@ function setup(step=0){
  const document={getElementById:id=>element(id),querySelectorAll:()=>[],querySelector:selector=>selector==='.nav'?{getBoundingClientRect:()=>({bottom:64})}:selector.startsWith('[data-social-canvas=')?{closest:()=>element('team-card:'+selector)}:element(selector)};
  const c=vm.createContext({console,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>frames.push(fn),clearTimeout(){},clearInterval(){},setTimeout(){},setInterval(){},URL,
   socialHere:()=>true,socialGuideState:s=>s.guide,socialAsset:(s,kind)=>s.data.assets.find(a=>a.kind===kind),seEsc:String,socialGuideStyles:()=>'',socialGuideIcon:()=>'',socialGuideLook(){},socialGuidePrepare(){},socialGuideFinish(){},socialCanLeave:()=>!s.pending&&!s.busy,
-  socialLock(){},socialMessage:(_,message)=>calls.push({message}),supabase:{storage:{from:()=>({download:async()=>({data:new Blob(['saved cutout'])})})}},Blob,
+  socialTeamWorkflow:{state:s=>s.teamWorkflow||(s.teamWorkflow={})},socialLock(){},socialMessage:(_,message)=>calls.push({message}),supabase:{storage:{from:()=>({download:async()=>({data:new Blob(['saved cutout'])})})}},Blob,
   socialDraw:s=>{calls.push({render:s.view,step:s.guide.step});},socialSave:async()=>true,
   socialGuideOriginalApprove:async s=>{calls.push({save:'upload'});s.guide.local=null;},socialPrepApprove:async s=>{calls.push({save:'prepared'});s.guide.preview=null;}});
  vm.runInContext(boundaries.map(([a,b])=>part(app,a,b)).join('\n'),c);
@@ -35,7 +35,7 @@ test('the team photo editor has no setup progress and saving returns to the orig
  for(const prepared of [false,true]){
   const h=setup(2);if(prepared){h.s.guide.preview='job';h.s.guide.context.jobs=[{id:'job',state:'ready',kind:'photo'}];}else h.s.guide.local={kind:'photo'};
   h.c.socialGuide(h.s);const html=h.element('socialContent').innerHTML;
-  assert.match(html,/Team Graphics · Player photo/);assert.doesNotMatch(html,/Guided setup steps|Step \d of/);
+  assert.match(html,/Player photo preparation/);assert.doesNotMatch(html,/Guided setup steps|Step \d of/);
   assert.equal(h.element('prepNext').textContent,'Save photo & back to team →');
   await h.element('prepNext').onclick();assert.equal(h.s.view,'graphics');assert.equal(h.s.guide.returnCard,'');
   assert.equal(h.s.notice,'Player photo saved ✓');h.frames.forEach(fn=>fn());
@@ -57,6 +57,13 @@ test('Back to Team Graphics keeps an unsaved upload for the same player',()=>{
  assert.equal(h.c.socialGuideReturnToTeam(h.s),true);assert.equal(h.s.view,'graphics');
  h.c.socialGuideEnter(h.s,0);h.c.socialGuideEnter(h.s,2,'player','second:1');
  assert.equal(h.s.guide.local,image);assert.equal(h.s.guide.returnCard,'second:1');
+});
+
+test('background preparation returns to the single artwork page after saving',async()=>{
+ const h=setup(1);h.s.guide.workflowReturn='artwork';h.s.guide.local={kind:'master'};
+ h.c.socialGuide(h.s);assert.doesNotMatch(h.element('socialContent').innerHTML,/Guided setup steps|Step \d of/);
+ await h.c.socialGuideSaveAndContinue(h.s);assert.equal(h.s.view,'graphics');assert.equal(h.s.teamWorkflow.step,'artwork');
+ assert.equal(h.s.notice,'Background saved ✓');
 });
 
 test('photo previews use the selected grade and match day without changing other day choices',()=>{

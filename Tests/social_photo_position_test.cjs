@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
 const app=fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8'),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
 function part(text,start,end){const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a);return text.slice(a,b);}
-const boundaries=[['function socialFixtureCompleted(','async function socialRPC('],['function socialCards(','function socialDate('],['function socialNames(','function socialPhotoId('],
+const boundaries=[['function socialFixtureCompleted(','async function socialRPC('],['function socialCards(','function socialDate('],['function socialSurname(','function socialPhotoId('],
  ['function socialPlayerPhotos(','function socialOversNotice('],['function socialFeatureRequest(','function socialInk('],
  ['async function socialRender(','async function socialPaintAll('],['async function socialRefresh(','async function socialOpen('],
  ['async function socialSave(','function socialLock(']];
@@ -19,7 +19,7 @@ function setup({twoDay=false,split=false,frame='cutout',left=false}={}){
  const document={querySelectorAll:selector=>selector.includes('position-panel')?panels:selector.includes('position-value')?outputs:selector.includes('position-reset')?resets:selector.includes('data-social-position')?inputs:[],querySelector:selector=>selector.includes('position-panel')?summary:selector.includes('data-social-canvas')?preview:selector.includes('position-reset')?resets[0]:inputs.find(i=>selector.includes(`data-axis="${i.dataset.axis}"`))||null};
  const c=vm.createContext({console,URL,crypto:webcrypto,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;},
   socialHere:()=>true,socialMessage:(s,message)=>s.notice=message,socialLock(){},socialDraw(){},socialGuideSaved(){},socialGuideUploadNote(){},socialGuideState:()=>({}),socialGuideRemember(){},
-  socialDefaults:d=>({...d.design}),socialAsset:()=>null,socialAssetURL:async(s,a)=>a?'photo-url':null,socialImage:async(s,url)=>url?photo:null,
+  socialAwards:{settings:async()=>({})},socialDefaults:d=>({...d.design}),socialAsset:()=>null,socialAssetURL:async(s,a)=>a?'photo-url':null,socialImage:async(s,url)=>url?photo:null,
   socialFontReady:async()=>true,socialPhotoBounds:()=>({x:0,y:0,w:500,h:1000,transparent:frame==='cutout'}),socialInk:()=> '#fff',socialFixtureDates:()=>[],
   socialText(){},socialWrap:text=>({lines:[text],size:30}),socialNameProtection:()=>({alpha:0}),socialDrawNameProtection(){},socialMarker(){},seFormatLabel:()=> 'T20',seEsc:String,
   socialFitImage:(ctx,img,x,y,w,h)=>ctx.drawImage(img,x,y,w,h),
@@ -130,7 +130,7 @@ test('busy or unconfirmed saves cannot be overwritten by a new position',async()
 });
 
 test('production and demo use the same saved-position controls and renderer',()=>{
- for(const [a,b] of boundaries)assert.equal(part(app,a,b),part(demo,a,b));
+ for(const [a,b] of boundaries){const production=part(app,a,b).replace("const [data,awards]=await Promise.all([socialRPC(s,'context'),socialAwards.settings(s)]);data.awards=awards;","const data=await socialRPC(s,'context');");assert.equal(production,part(demo,a,b));}
 });
 
 test('a delayed preview uses the saved position after save replaces the fixture context',async()=>{
