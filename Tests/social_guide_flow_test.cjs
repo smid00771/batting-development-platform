@@ -3,12 +3,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
 const app=fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8'),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
 function part(text,start,end){const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a);return text.slice(a,b);}
-const boundaries=[['function socialFixtureCompleted(','async function socialRPC('],['function socialGuideSteps(','function socialGuideLook('],['function socialGuideReturnToTeam(','function socialGuidePreview('],['async function socialGuideSaveAndContinue(','async function socialFindUploadedImage('],['function socialGuideSwitch(',"window.addEventListener('beforeunload'"],['function socialCards(','function socialDate('],['function socialPrepCard(','async function socialPrepPaint(']];
+const boundaries=[['function socialGuidePreparation(', 'function socialGuidePreparationFeedback('],['function socialFixtureCompleted(','async function socialRPC('],['function socialGuideSteps(','function socialGuideLook('],['function socialGuideReturnToTeam(','function socialGuidePreview('],['async function socialGuideSaveAndContinue(','async function socialFindUploadedImage('],['function socialGuideSwitch(',"window.addEventListener('beforeunload'"],['function socialCards(','function socialDate('],['function socialPrepCard(','async function socialPrepPaint(']];
 function setup(step=0){
  const nodes=new Map(),frames=[],scrolls=[],s={view:'guide',design:{},data:{assets:[{kind:'background'}],fixtures:[],players:[]},guide:{step,kind:step===2?'photo':'master',person:step===2?'player':'',context:{jobs:[]},available:true,returnCard:step===2?'second:1':''}},calls=[];
  const element=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',dataset:{previewState:'ready'},style:{},addEventListener(event,fn){this['on'+event]=fn;},scrollIntoView(){scrolls.push(id);}});return nodes.get(id);};
  const document={getElementById:id=>element(id),querySelectorAll:()=>[],querySelector:selector=>selector==='.nav'?{getBoundingClientRect:()=>({bottom:64})}:selector.startsWith('[data-social-canvas=')?{closest:()=>element('team-card:'+selector)}:element(selector)};
- const c=vm.createContext({console,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>frames.push(fn),clearTimeout(){},clearInterval(){},setTimeout(){},setInterval(){},URL,
+ const c=vm.createContext({console,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>frames.push(fn),crypto:require('node:crypto').webcrypto,appNavigationBack:fn=>fn(),clearTimeout(){},clearInterval(){},setTimeout(){},setInterval(){},URL,
   socialHere:()=>true,socialGuideState:s=>s.guide,socialAsset:(s,kind)=>s.data.assets.find(a=>a.kind===kind),seEsc:String,socialGuideStyles:()=>'',socialGuideIcon:()=>'',socialGuideLook(){},socialGuidePrepare(){},socialGuideFinish(){},socialCanLeave:()=>!s.pending&&!s.busy,
   socialTeamWorkflow:{state:s=>s.teamWorkflow||(s.teamWorkflow={})},socialLock(){},socialMessage:(_,message)=>calls.push({message}),supabase:{storage:{from:()=>({download:async()=>({data:new Blob(['saved cutout'])})})}},Blob,
   socialDraw:s=>{calls.push({render:s.view,step:s.guide.step});},socialSave:async()=>true,
@@ -105,7 +105,7 @@ test('reusing an example opens that source and does not substitute an older prep
   h.s.guide.context={jobs};h.c.socialGuidePrepare(h.s);
   assert.equal(h.s.guide.source,'asset:example');assert.equal(h.s.guide.preview,null);
   assert.equal(h.s.guide.workflowReturn,'artwork');assert.match(h.element('prepStep').innerHTML,/<form id="prepForm" >/);
-  jobs.push({id:'new-ready',kind:'master',state:'ready'});h.c.socialGuidePrepare(h.s);
+  jobs.push({id:'new-ready',kind:'master',state:'ready'});h.s.guide.preparation={id:'new-ready'};h.c.socialGuidePrepare(h.s);
   assert.equal(h.s.guide.preview,'new-ready','A subsequent preparation still opens for review');
  }
 });

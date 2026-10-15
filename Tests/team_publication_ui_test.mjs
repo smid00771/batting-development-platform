@@ -17,7 +17,7 @@ function harness({warn=true,short=false,failReload=false,badResponse=false,prepa
  const s={key:'head:club',view:'board',data:{fixtures,roster,head_selector:true,socials:true,access:{timezone:'UTC'}},notice:'',busy:false,pending:null,undo:[]};
  let server=structuredClone(fixtures),publicationCount=0,socialLoads=0,shouldFail=failReload;
  const receipts=new Map(),requests=[],social={view:'awards',data:{fixtures:[]}};
- const ctx=vm.createContext({document,Date,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,
+ const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,
   session:{user:{id:'head'}},club:{id:'club',name:'Test Club'},selectionState:s,currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
   seEsc:esc,seDate:x=>x,seBoard:()=>{},seReviewLabel:()=> 'Captain checked',sePublicationChangeSummary:()=>'<p>Review lineup</p>',
   seFixtureLocked:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,

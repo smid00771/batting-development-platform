@@ -104,6 +104,7 @@ export function createTeamOfWeek(h){
  }
  async function run(s,operation){const w=state(s);if(w.busy||w.pending)return;w.busy=true;render(s);try{await operation(w);}catch(error){message(s,error.message);}finally{w.busy=false;if(current(s,w))render(s);}}
  function render(s){
+  h.navigation?.();
   const w=state(s),host=document.getElementById('socialContent');if(!host)return;const scroll=typeof window!=='undefined'?window.scrollY:0;w.open||={};host.querySelectorAll('details[data-tw-open]').forEach(e=>w.open[e.dataset.twOpen]=e.open);
   if(!w.context){host.innerHTML=w.loadAttempted&&!w.busy?`<p role="status">${esc(w.message)}</p><button class="btn" id="twRetryLoad">Retry loading scores</button>`:'<p role="status">Loading Team of the Week…</p>';document.getElementById('twRetryLoad')?.addEventListener('click',()=>void load(s));if(!w.busy&&!w.loadAttempted)void load(s);return;}
   const locked=w.busy||!!w.pending,pool=candidates(w),count=w.rows.length,ready=sourcesReady(w),cards=w.context.cards,ref=example(w),ranked=teamWeekRank(pool,w.rankMode||'overall'),ranking=new Map(teamWeekRank(pool).map(p=>[p.key,p]));
@@ -231,5 +232,5 @@ export function createTeamOfWeek(h){
   }catch(error){saveNotice(s,w.savedImage?.key===imageKey(s,w)?'Image saved. '+error.message:'Image save not confirmed. '+error.message);}
   finally{w.busy=false;w.saving=false;if(current(s,w))render(s);}
  }
- return {render};
+ return {render,state};
 }
