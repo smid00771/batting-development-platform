@@ -2,6 +2,11 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function matchIdFromUrl(value){let u;try{u=new URL(String(value).trim());}catch{throw Error('Paste the full Australian PlayCricket match link.');}const id=u.pathname.split('/')[2];if(u.protocol!=='https:'||u.hostname!=='play.cricket.com.au'||u.port||u.username||u.password||u.pathname.split('/')[1]!=='match'||!uuid.test(id||''))throw Error('Use an https://play.cricket.com.au/match/… link.');return id.toLowerCase();}
 const text=(v,n=200)=>String(v??'').trim().slice(0,n);
 const integer=v=>Number.isInteger(v)&&v>=0&&v<=9999;
+export function clubLogoUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='res.cloudinary.com'&&!u.port&&!u.username&&!u.password&&u.pathname.startsWith('/playhq/image/upload/')?u.href:null;}catch{return null;}}
+export function scorecardLogos(raw,expectedId){
+ if(raw?.id!==expectedId||!Array.isArray(raw.teams)||raw.teams.length!==2)throw Error('PlayCricket could not supply club logos.');
+ return raw.teams.filter(t=>uuid.test(t.id||'')).map(t=>({id:t.id,organisation_id:uuid.test(t.owningOrganisation?.id||'')?t.owningOrganisation.id:null,logo_url:clubLogoUrl(t.owningOrganisation?.logoUrl)}));
+}
 export function oversToBalls(value){
  if(value===null||value===undefined||value==='')return null;
  const m=String(value).match(/^(\d{1,3})(?:\.([0-5]))?$/);return m?Number(m[1])*6+Number(m[2]||0):null;
@@ -11,7 +16,7 @@ export function normalizeScorecard(raw,expectedId){
  if(!Array.isArray(raw.teams)||raw.teams.length!==2||!Array.isArray(raw.innings)||!raw.innings.length||raw.innings.length>10)throw Error('The scorecard is incomplete. Enter the results manually or try again later.');
  const dates=[...new Set((raw.matchSchedule||[]).map(x=>text(x.startDateTime).slice(0,10)).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();if(!dates.length)throw Error('The scorecard has no usable match date.');
  const type=text(raw.matchType).toLowerCase(),format=type==='two day'||type==='multi day'||type==='test'?'long_form':/^(t20|twenty20|twenty 20)$/.test(type)?'t20':/^(one day|limited overs|limited over)$/.test(type)?'limited_overs':null;
- const people=new Map(),teams=raw.teams.map(t=>{if(!uuid.test(t.id||''))throw Error('The scorecard team identity is missing.');for(const p of t.players||[])if(uuid.test(p.participantId||''))people.set(p.participantId,{name:text(p.name||p.shortName),team:t.id});return {id:t.id,name:text(t.displayName||t.name),organisation:text(t.owningOrganisation?.name),organisation_id:uuid.test(t.owningOrganisation?.id||'')?t.owningOrganisation.id:null};});
+ const people=new Map(),teams=raw.teams.map(t=>{if(!uuid.test(t.id||''))throw Error('The scorecard team identity is missing.');for(const p of t.players||[])if(uuid.test(p.participantId||''))people.set(p.participantId,{name:text(p.name||p.shortName),team:t.id});return {id:t.id,name:text(t.displayName||t.name),organisation:text(t.owningOrganisation?.name),organisation_id:uuid.test(t.owningOrganisation?.id||'')?t.owningOrganisation.id:null,logo_url:clubLogoUrl(t.owningOrganisation?.logoUrl)};});
  const warnings=[],seenInnings=new Set();
  const innings=raw.innings.map(i=>{
   if(!uuid.test(i.id||'')||seenInnings.has(i.id)||!teams.some(t=>t.id===i.battingTeamId)||!Number.isInteger(i.inningsNumber)||i.inningsNumber<1||i.inningsNumber>10||!Array.isArray(i.batting)||i.batting.length>30)throw Error('The innings identity is incomplete.');seenInnings.add(i.id);
