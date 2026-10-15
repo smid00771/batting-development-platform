@@ -1,7 +1,6 @@
 const origins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// The existing Daily account belongs only to the Newcastle City pilot.
-// Keep all other clubs blocked until Club Batting managed billing is ready.
+// Keep the pilot; other clubs require a server-enabled, prepaid annual wallet.
 const pilotClub='c6022ec7-00d9-4c91-a208-710272a0b866';
 
 export function createSelectionVideoHandler({env,fetcher=fetch}){
@@ -28,7 +27,8 @@ export function createSelectionVideoHandler({env,fetcher=fetch}){
     const d=await r.json();if(!r.ok){const e=Error(d.message||'Selection Room could not connect.');e.status=d.code==='42501'?403:400;throw e;}return d;
    };
    const access=await rpc('access');
-   const key=input.club_id===pilotClub?env('DAILY_API_KEY'):null;
+   const managed=access.video_credit?.kind==='annual'&&access.video_credit?.enabled===true;
+   const key=input.club_id===pilotClub||managed?env('DAILY_API_KEY'):null;
    if(input.action==='status')return reply({available:!!key&&access.video_enabled===true,reason:!access.video_enabled?'not_enabled':!key?'billing_required':'ready'});
    if(!access.video_enabled)return reply({error:'Video is not enabled for this club yet.'},403);
    if(!key)return reply({error:'Club Batting video is not enabled for this club yet. Chat and the backup call are available.'},503);

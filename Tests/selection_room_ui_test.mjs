@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import {createRequire} from 'node:module';
 const {JSDOM}=createRequire(import.meta.url)('jsdom');
-const {createSelectionRoom,selectionCallLink,selectionRoomGeometry}=await import('../Website_Files/selection-room.js');
+const {createSelectionRoom,selectionCallLink,selectionRoomGeometry}=await import('../selection-room.js');
 const dom=new JSDOM('<main id="app"><section id="sePage"><input id="boardInput"></section></main>',{url:'https://clubbatting.com/app.html',pretendToBeVisual:true});
 Object.assign(globalThis,{window:dom.window,document:dom.window.document,sessionStorage:dom.window.sessionStorage,MutationObserver:dom.window.MutationObserver});
 const tick=()=>new Promise(r=>setTimeout(r,5));
@@ -82,9 +82,9 @@ try{
  room.close(true);await room.open();assert.equal(q('message').value,'Call stays connected','Draft survives reopening');
  q('join').click();await until(()=>q('subtitle').textContent.startsWith('In video'));scope=null;document.getElementById('app').innerHTML='Signed out';await until(()=>!room.isOpen());assert.equal(document.querySelector('.sr-room'),null);assert.equal(document.querySelector('iframe'),null);assert.equal(document.body.classList.contains('sr-docked'),false);
  // Parse both entry points, including the embedded demo module and adapter.
- const app=fs.readFileSync(new URL('../Website_Files/app.js',import.meta.url),'utf8');
+ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
  assert.ok(app.includes("document.activeElement?.closest('#sePage')"),'Typing in chat must not pause the board refresh');
- const demo=fs.readFileSync(new URL('../Website_Files/demo.html',import.meta.url),'utf8');
+ const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
  for(const script of demo.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
  console.log('Selection Room UI: call presence, board/video layout switching, access cleanup, retry, XSS, draft retention, board redraw, video cancellation and demo syntax passed.');
 }finally{room.close(true);globalThis.setInterval=originalInterval;dom.window.close();}
