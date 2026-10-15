@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),{JSDOM}=require('jsdom'),{createCanvas,GlobalFonts,loadImage}=require('@napi-rs/canvas');
-const {createTeamOfWeek}=await import('../Website_Files/team-of-week.js');
-const {createTeamWeekDemo}=await import('../Website_Files/team-of-week-demo.js');
+const {createTeamOfWeek}=await import('../team-of-week.js');
+const {createTeamWeekDemo}=await import('../team-of-week-demo.js');
 const dom=new JSDOM('<main id="socialContent"></main>',{url:'https://clubbatting.com/'});globalThis.window=dom.window;globalThis.document=dom.window.document;window.scrollTo=()=>{};
-const app=fs.readFileSync(new URL('../Website_Files/app.js',import.meta.url),'utf8'),font=app.match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),font=app.match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 dom.window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(i,...args)=>draw(i.backing||i,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 dom.window.HTMLCanvasElement.prototype.toBlob=function(cb){cb(new Blob([this.backing.toBuffer('image/png')],{type:'image/png'}));};
 const api=createTeamWeekDemo(()=> 'Newcastle City'),downloads=[],calls=[];const original=api.rpc.bind(api);let failFinish=true;
@@ -63,6 +63,8 @@ const savedBackground=s.week.background,normalRpc=api.rpc.bind(api);api.rpc=asyn
 await upload('twBackground',new File([png],'Failed replacement.png',{type:'image/png'}));assert.equal(s.week.background,savedBackground);assert.equal(document.getElementById('twBackgroundName').textContent,png.name);assert.ok(document.getElementById('twStatus').textContent.includes('Simulated save failure'));api.rpc=normalRpc;
 // Older images remain identifiable when no original filename was retained.
 delete s.week.layout.background_name;weekly.render(s);await until(()=>s.week.previewReady);assert.equal(document.getElementById('twBackgroundName').textContent,'Saved background');assert.ok(document.getElementById('twBackgroundPreview'));assert.equal(document.getElementById('twBackgroundChoose').textContent,'Replace background');
-s.data.brand.logo=URL.createObjectURL(new Blob([logo.toBuffer('image/png')],{type:'image/png'}));weekly.render(s);document.getElementById('twClubLogo').click();await until(()=>!s.week.busy&&s.week.previewReady);assert.equal(s.week.layout.logo_name,undefined);assert.equal(document.getElementById('twLogoName').textContent,'Club look logo');assert.equal(document.getElementById('twClubLogo'),null,'Already active club logo has no redundant use button');
+s.data.brand.logo=URL.createObjectURL(new Blob([logo.toBuffer('image/png')],{type:'image/png'}));weekly.render(s);document.getElementById('twClubLogo').click();await until(()=>!s.week.busy&&s.week.previewReady);assert.equal(s.week.layout.logo_name,undefined);assert.equal(document.getElementById('twLogoName').textContent,'Saved club logo');assert.equal(document.getElementById('twClubLogo'),null,'Already active club logo has no redundant use button');
 document.getElementById('twClearBackground').click();await until(()=>!s.week.busy&&s.week.previewReady);assert.equal(s.week.context.design.layout.background_name,undefined);assert.equal(document.getElementById('twBackgroundName').textContent,'Club colours in use');assert.equal(document.getElementById('twBackgroundPreview'),null);
+let backgroundHelp;h.openBackground=(_,file,apply)=>backgroundHelp={file,apply};
+const help=document.getElementById('twPrepareBackground');assert.match(help.closest('.tw-panel').querySelector('h4').textContent,/background/i);help.click();await until(()=>!!backgroundHelp);await backgroundHelp.apply({blob:png,name:'Prepared background.png'});weekly.render(s);await until(()=>s.week.previewReady);assert.equal(s.week.layout.background_name,'Prepared background.png');
 console.log('Passed: saved filenames and previews, separate replacement controls, immediate upload feedback, failed replacement recovery, persistent controls, original PNG and aspect, optional movable logo, applied reference layout, week-specific names and visible ranking.');

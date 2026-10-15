@@ -109,3 +109,24 @@ test('reusing an example opens that source and does not substitute an older prep
   assert.equal(h.s.guide.preview,'new-ready','A subsequent preparation still opens for review');
  }
 });
+
+test('award background saves return to the award without changing team-list artwork',async()=>{
+ for(const prepared of [false,true]){
+  const h=setup(1),before=JSON.stringify(h.s.data),blob=new Blob(['award background']);let applied;
+  h.s.guide.local=prepared?null:{blob,kind:'master'};h.s.guide.preview=prepared?'prepared-job':null;
+  const job=prepared?{id:'prepared-job',kind:'master',state:'ready',result_path:'prepared.png'}:null;
+  h.s.guide.context.jobs=job?[job]:[];h.s.guide.workflowReturn='artwork';
+  h.s.guide.awardReturn={kind:'background',view:'results',apply:async asset=>{applied=asset;}};
+  h.c.socialGuideUploadNote=()=>{};
+  vm.runInContext(part(app,'function socialGuideResetImage(','function socialGuideReturnToTeam('),h.c);
+  await h.c.socialGuideSaveAndContinue(h.s);
+  assert.equal(h.s.view,'results');assert.equal(h.s.guide.awardReturn,null);assert.equal(applied.name,'Prepared background.png');
+  assert.equal(JSON.stringify(h.s.data),before);assert.equal(h.calls.some(c=>c.save),false,'No team artwork approval is called');assert.equal(h.s.busy,false);
+ }
+});
+
+test('a failed award background save keeps the preview and target available for retry',async()=>{
+ const h=setup(1);h.s.guide.local={blob:new Blob(['background']),kind:'master'};h.s.guide.awardReturn={kind:'background',view:'century',apply:async()=>{throw Error('Save failed');}};
+ h.c.socialGuideUploadNote=()=>{};await h.c.socialGuideSaveAndContinue(h.s);
+ assert.equal(h.s.view,'guide');assert.ok(h.s.guide.local);assert.equal(h.s.guide.awardReturn.view,'century');assert.equal(h.s.busy,false);
+});

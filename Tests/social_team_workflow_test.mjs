@@ -66,4 +66,10 @@ vm.runInContext(['socialBindTeamPhotos','socialUploadTeamPhoto','socialFeatureRe
 uploadHarness.socialBindTeamPhotos(uploadState,[uploadCard.f]);const fileInput=document.querySelector('[data-social-team-photo]');Object.defineProperty(fileInput,'files',{value:[{name:'Player.png'}]});fileInput.dispatchEvent(new window.Event('change'));await tick();
 assert.equal(photoWrites[0].bucket,'club-socials');assert.match(photoWrites[0].path,/^club\/photo\//);assert.equal(photoWrites[1].action,'add_asset');assert.equal(photoWrites[1].data.roster_id,'selected-player');assert.deepEqual(Array.from(photoWrites[1].data.feature.days),[2]);assert.equal(photoWrites[1].data.feature.revisions.d2,4);assert.equal(uploadState.busy,false);
 for(const script of fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8').matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
+// The saved team-list logo is the default for every social editor; club branding remains the fallback.
+let logoSource={fixtures:[],assets:[{id:'shared-logo',kind:'logo',path:'club/logo.png'}],brand:{logo:'club-branding-logo'},design:{}};
+const logoHarness=vm.createContext({socialCards:cards,socialPhotoPositionContext:()=>'',socialRPC:async()=>structuredClone(logoSource),socialAwards:{settings:async()=>({enabled:[]})},socialHere:()=>true,socialDefaults:()=>({}),socialAsset:(s,kind)=>s.data.assets.find(a=>a.kind===kind),socialAssetURL:async(_,asset)=>'blob:'+asset.path,socialFixtureCompleted:()=>false});
+vm.runInContext(part('socialRefresh'),logoHarness);
+const logoState={data:{fixtures:[]}};await logoHarness.socialRefresh(logoState);assert.equal(logoState.data.brand.logo,'blob:club/logo.png');
+logoSource.assets=[];await logoHarness.socialRefresh(logoState);assert.equal(logoState.data.brand.logo,'club-branding-logo');
 console.log('Passed: three-stage workflow, single-grade editing, two-day teams, date-specific blurbs, combined review, explicit posting only, responsibility/cover separation, scoped creation menu and demo syntax. All backend calls mocked.');
