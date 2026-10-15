@@ -5,6 +5,8 @@ declare c uuid:=gen_random_uuid();other_c uuid:=gen_random_uuid();head_id uuid:=
  result jsonb;again jsonb;video jsonb;cursor_text text;rejected boolean;item text;call_id uuid;before_count integer;
 begin
  begin
+  -- Exercise the original pilot policy independently of commercial enablement.
+  update club_selection_private.video_credit_config set managed_enabled=false;
   foreach u in array array[head_id,selector_id,admin_id,player_id,outsider_id] loop
    insert into auth.users(id,email) values(u,'selection-room-test-'||u||'@example.invalid');
    insert into public.user_profiles(user_id,display_name) values(u,'Synthetic selector');

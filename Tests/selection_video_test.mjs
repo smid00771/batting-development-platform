@@ -3,7 +3,7 @@ import {createSelectionVideoHandler} from '../Functions/selection-video/handler.
 const club='c6022ec7-00d9-4c91-a208-710272a0b866',request='22222222-2222-4222-8222-222222222222';
 const roomName='cb-'+club.replaceAll('-',''),exp=Math.floor(Date.now()/1000)+5400;
 const roomData={name:roomName,privacy:'private',url:'https://club-test.daily.co/'+roomName,config:{exp}};
-let calls=[],key='server-only-key',allowed=true,enabled=true,missing=true,race=false,roomOverride={},failToken=false;
+let calls=[],key='server-only-key',allowed=true,enabled=true,missing=true,race=false,roomOverride={},failToken=false,managed=false;
 const response=(body,status=200)=>new Response(JSON.stringify(body),{status});
 const handler=createSelectionVideoHandler({env:n=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon',DAILY_API_KEY:key,DAILY_PLATFORM_API_KEY:key})[n],fetcher:async(url,options)=>{
  const body=options.body&&JSON.parse(options.body);calls.push({url,...options,body});
@@ -11,7 +11,7 @@ const handler=createSelectionVideoHandler({env:n=>({SUPABASE_URL:'https://test.s
  if(url.includes('/rest/')){
   assert.equal(options.headers.Authorization,'Bearer session-token');
   if(!allowed)return response({code:'42501',message:'Assigned selectors only'},403);
-  if(body.p_action==='access')return response({allowed:true,video_enabled:enabled});
+  if(body.p_action==='access')return response({allowed:true,video_enabled:enabled,video_credit:{kind:'annual',enabled:managed}});
   assert.equal(body.p_action,'reserve_video');assert.equal(body.p_data.request_id,request);
   return response({room_name:roomName,entry_id:request,user_name:'Selector',expires_at:new Date(exp*1000).toISOString()});
  }
@@ -42,6 +42,9 @@ for(const action of ['status','join']){
  assert.equal(calls.some(c=>c.body?.p_action==='reserve_video'),false,'Do not reserve minutes for unconfigured clubs');
  assert.ok(!JSON.stringify(blocked).includes(key));
 }
+// Managed billing must come from the authenticated server response.
+managed=true;calls=[];r=await invoke('join',{club_id:otherClub});assert.equal(r.status,200);
+assert.ok(calls.some(c=>c.url.includes('api.daily.co')));managed=false;
 // The existing City key still works and UUID case cannot change its billing scope.
 calls=[];r=await invoke('status',{club_id:'C6022EC7-00D9-4C91-A208-710272A0B866'});assert.deepEqual(await r.json(),{available:true,reason:'ready'});
 assert.equal(calls.find(c=>c.body?.p_action==='access').body.p_club_id,'c6022ec7-00d9-4c91-a208-710272a0b866');

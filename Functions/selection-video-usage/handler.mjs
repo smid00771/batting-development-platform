@@ -1,11 +1,10 @@
 // Only Daily's server records can settle a reservation. No browser usage reports.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const pilotClub='c6022ec7-00d9-4c91-a208-710272a0b866';
 const fail=code=>{throw new Error(code);};
 
 export async function collectUsage(call,daily,now=Date.now()){
  const created=Date.parse(call.created_at)/1000,expires=Date.parse(call.expires_at)/1000;
- if(!uuid.test(call.id)||call.club_id!==pilotClub||!Number.isFinite(created)||!Number.isFinite(expires)||expires>now/1000-120)fail('call_not_ready');
+ if(!uuid.test(call.id)||!uuid.test(call.club_id)||!Number.isFinite(created)||!Number.isFinite(expires)||expires>now/1000-120)fail('call_not_ready');
  // Daily's shortest analytics retention is one day. Older history may be
  // partially purged, even when the endpoint still returns some meetings.
  if(created<now/1000-23*3600)fail('history_unavailable');
@@ -97,7 +96,7 @@ export function createUsageHandler({env,fetcher=fetch,now=Date.now}){
    if(!r.ok)fail('worker_database_error');return r.json();
   };
   let calls;
-  try{calls=await rpc('claim',{run_id:input.run_id,token:input.token,club_id:pilotClub});}
+  try{calls=await rpc('claim',{run_id:input.run_id,token:input.token});}
   catch{return reply({error:'Worker authorization failed'},401);}
   if(!Array.isArray(calls))return reply({error:'Invalid work list'},500);
   const daily=async path=>{

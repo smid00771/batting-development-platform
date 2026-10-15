@@ -70,7 +70,8 @@ test('active calls, unfinished sessions and truncated histories cannot refund cr
  await assert.rejects(collectUsage(call,provider({participants:[]}),now),/missing_participants/);
 });
 test('wrong clubs, unknown users, duplicated sessions and invalid durations are rejected',async()=>{
- await assert.rejects(collectUsage({...call,club_id:id(80)},provider(),now),/call_not_ready/);
+ assert.equal((await collectUsage({...call,club_id:id(80)},provider(),now)).usage.length,4,'Commercial clubs use the same verified accounting');
+ await assert.rejects(collectUsage({...call,club_id:'invalid'},provider(),now),/call_not_ready/);
  for(const p of [{...people[0],user_id:id(90)},{...people[0],duration:-1},{...people[0],duration:1200.5},{...people[0],duration:999999}])
   await assert.rejects(collectUsage(call,provider({participants:[p]}),now),/invalid/);
  await assert.rejects(collectUsage(call,provider({participants:[people[0],people[0]]}),now),/invalid/);
