@@ -56,3 +56,8 @@ for(const file of ['app.js','demo.html'])test(file+': directly rendered saved re
  const active=screen(true);assert.equal(active.h.c.document.getElementById('backTeamReview').dataset.appBackBound,undefined,'No renderTab binding pass ran');active.locked(true);active.h.c.document.getElementById('backTeamReview').click();assert.equal(active.h.index(),1,'A pending operation blocks navigation');active.locked(false);active.h.c.renderTeamReviewHistoryContent();active.h.c.document.getElementById('backTeamReview').click();await new Promise(r=>setImmediate(r));assert.equal(active.h.c.currentTab,'teams');assert.equal(active.h.social.view,'results');assert.equal(active.fallback(),0);
  const initial=screen(false);initial.h.c.document.getElementById('backTeamReview').click();assert.equal(initial.state.view,'entry');assert.equal(initial.fallback(),1,'Opening history directly still offers Back to entry');
 });
+
+
+test('browser Back restores the selected Teams week',async()=>{
+ const h=harness();h.s.view='published';h.s.publishedWeek='2026-10-05';h.visit();h.s.publishedWeek='';h.visit();await h.history.back();assert.equal(h.s.publishedWeek,'2026-10-05');
+});
