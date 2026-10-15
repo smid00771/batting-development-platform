@@ -13,7 +13,7 @@ api.rpc=async(name,args)=>{calls.push(structuredClone(args));if(args.p_action===
 const s={scope:'user:club-test',view:'team_week',data:{brand:{name:'Newcastle City',logo:null},timezone:'Australia/Sydney'},design:{primary:'#073554',accent:'#128fd2'},urls:new Map()};
 const h={supabase:api,demo:true,here:x=>x===s,escape:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),extractUrl:v=>v[0],normalize:async b=>b,download:(name,blob)=>downloads.push({name,blob}),image:async(_,url)=>loadImage(Buffer.from(await (await fetch(url)).arrayBuffer())),fontReady:async()=>true,fitImage:(ctx,img,x,y,w,height)=>ctx.drawImage(img,x,y,w,height),text:(ctx,text,x,y,width,size)=>{let n=size;do{ctx.font=`700 ${n}px "Club Sporting"`;if(ctx.measureText(String(text)).width<=width)break;n--;}while(n>18);ctx.fillText(String(text),x,y,width);}};
 const weekly=createTeamOfWeek(h),tick=()=>new Promise(r=>setTimeout(r,5)),until=async pred=>{for(let i=0;i<1000;i++){if(pred())return;await tick();}throw Error('Timed out');};
-weekly.render(s);await until(()=>s.week?.context&&!s.week.busy&&s.week.previewReady);
+weekly.state(s).end='2026-10-11';weekly.render(s);await until(()=>s.week?.context&&!s.week.busy&&s.week.previewReady);
 assert.equal(document.querySelectorAll('[data-tw-team]').length,0,'Known club must not require a choice');
 document.getElementById('twSuggest').click();await until(()=>s.week.previewReady);
 assert.ok(s.week.review.shortlist.length>0);assert.ok(s.week.rows.length<11);assert.ok(document.getElementById('twShortlistHeading').textContent.includes(String(s.week.review.contenders.length)));assert.equal(document.getElementById('twSave').disabled,true,'Close calls need a human choice before saving');assert.equal(document.getElementById('twUseSuggested').textContent,'Confirm suggested XI');assert.ok(document.querySelector('.tw-choice'));
@@ -68,3 +68,54 @@ document.getElementById('twClearBackground').click();await until(()=>!s.week.bus
 let backgroundHelp;h.openBackground=(_,file,apply)=>backgroundHelp={file,apply};
 const help=document.getElementById('twPrepareBackground');assert.match(help.closest('.tw-panel').querySelector('h4').textContent,/background/i);help.click();await until(()=>!!backgroundHelp);await backgroundHelp.apply({blob:png,name:'Prepared background.png'});weekly.render(s);await until(()=>s.week.previewReady);assert.equal(s.week.layout.background_name,'Prepared background.png');
 console.log('Passed: saved filenames and previews, separate replacement controls, immediate upload feedback, failed replacement recovery, persistent controls, original PNG and aspect, optional movable logo, applied reference layout, week-specific names and visible ranking.');
+
+// Reloading scorecards refreshes facts without rebuilding the editor's chosen XI.
+document.getElementById('twUseSuggested')?.click();await until(()=>s.week.previewReady);
+assert.equal(s.week.rows.length,11);document.querySelector('[data-tw-up="1"]').click();await until(()=>s.week.previewReady);
+const picks=s.week.rows.map(p=>({player_id:p.player_id,display:p.display})),updatedPlayer=picks[0].player_id,oldRuns=s.week.rows[0].runs,designRevision=s.week.context.design.revision;
+const draftColour=document.getElementById('twColour');draftColour.value='#aa1177';draftColour.dispatchEvent(new window.Event('input'));await until(()=>s.week.previewReady);
+const currentRpc=api.rpc.bind(api);let omitPlayer=false;
+api.rpc=async(name,args)=>{const result=await currentRpc(name,args);if(args.p_action==='context'){
+ const data=result.data;data.design.revision+=10;
+ for(const card of data.cards)card.snapshot_id+='-updated';
+ data.candidates=data.candidates.filter(p=>!omitPlayer||p.player_id!==picks[1].player_id).map(p=>({...p,snapshot_id:p.snapshot_id+'-updated',key:p.key+'-updated',...(p.player_id===updatedPlayer?{runs:p.runs+7,batting:p.batting.map((b,i)=>i?b:{...b,runs:b.runs+7})}:{})}));
+ }return result;};
+document.getElementById('twReload').click();await until(()=>!s.week.busy&&s.week.previewReady);
+assert.deepEqual(s.week.rows.map(p=>({player_id:p.player_id,display:p.display})),picks,'Reload keeps manual selection, order and display choice');
+assert.equal(s.week.rows[0].runs,oldRuns+7,'Selected rows use refreshed figures');assert.ok(s.week.rows.every(p=>p.key.endsWith('-updated')),'Updated snapshots replace stale source keys');
+assert.equal(s.week.layout.text_colour,'#aa1177');assert.equal(s.week.designDirty,true);assert.equal(s.week.context.design.revision,designRevision,'A dirty layout keeps its optimistic-concurrency base');
+omitPlayer=true;document.getElementById('twReload').click();await until(()=>!s.week.busy&&s.week.previewReady);
+assert.deepEqual(s.week.rows.map(p=>p.player_id),picks.filter((_,i)=>i!==1).map(p=>p.player_id),'Unavailable performance is removed without silently selecting a replacement');assert.match(document.getElementById('twStatus').textContent,/No longer in the selected scorecards/);
+api.rpc=currentRpc;
+const oldWeekBlurb=document.getElementById('twBlurb');oldWeekBlurb.value='Last week’s specific performance.';oldWeekBlurb.dispatchEvent(new window.Event('input'));
+const nextWeek=document.getElementById('twEnd');nextWeek.value='2026-10-25';nextWeek.dispatchEvent(new window.Event('change'));await until(()=>!s.week.busy&&s.week.previewReady);
+assert.equal(s.week.blurb,'','Changing weeks clears the old narrative');assert.notEqual(s.week.layout.text_colour,'#aa1177','Explicit week change loads the saved layout');
+
+// Help edits the saved background; restarting from an example is an explicit choice.
+h.openBackground=(_,file,apply,options)=>backgroundHelp={file,apply,options};backgroundHelp=null;
+const savedBackgroundBlob=(await api.storage.from().download(s.week.background)).data;
+assert.equal(document.getElementById('twPrepareBackground').textContent,'Edit background');document.getElementById('twPrepareBackground').click();await until(()=>!!backgroundHelp);
+assert.equal(backgroundHelp.options.mode,'edit');assert.equal(backgroundHelp.file.name,s.week.layout.background_name);assert.deepEqual(Buffer.from(await backgroundHelp.file.arrayBuffer()),Buffer.from(await savedBackgroundBlob.arrayBuffer()));
+s.week.layout.show_logo=true;s.week.layout.includes_title=true;
+await backgroundHelp.apply({blob:png,name:'Edited background.png'});weekly.render(s);await until(()=>s.week.previewReady);
+assert.equal(s.week.layout.show_logo,true,'Editing preserves separate logo visibility');assert.equal(s.week.layout.includes_title,true);
+backgroundHelp=null;assert.equal(document.getElementById('twPrepareExample').textContent,'Start from previous example');document.getElementById('twPrepareExample').click();await until(()=>!!backgroundHelp);
+assert.equal(backgroundHelp.options.mode,'template');assert.equal(backgroundHelp.file.name,s.week.layout.example_name);assert.deepEqual(Buffer.from(await backgroundHelp.file.arrayBuffer()),Buffer.from(await (await api.storage.from().download(s.week.layout.example_path)).data.arrayBuffer()));
+console.log('Passed: score refresh preserves manual XI and dirty layout, reconciles changed snapshots, flags missing performances, clears old-week blurb, and separates background edits from example restarts.');
+
+// A concurrent design change has an explicit recovery path; score reload cannot bypass the conflict.
+const conflictRpc=api.rpc.bind(api),conflictBase=s.week.context.design.revision;
+api.rpc=async(name,args)=>{if(args.p_action==='save_design'){const saved=await conflictRpc(name,{...args,p_action:'context',p_data:{week_end:s.week.end}});if(args.p_data.revision!==saved.data.design.revision)return {error:{message:'The background settings changed. Reload before saving'}};}return conflictRpc(name,args);};
+await api.rpc('team_of_week_api',{p_club_id:'club-test',p_action:'save_design',p_data:{revision:conflictBase,background_path:s.week.background,layout:{...s.week.layout,text_colour:'#11aa77'}}});
+const conflictRows=s.week.rows.map(({rank,points,reason,...p})=>structuredClone(p)),conflictWeek=s.week.end,conflictTitle=s.week.title;s.week.blurb='Keep this week’s caption.';
+document.getElementById('twColour').value='#7711aa';document.getElementById('twColour').dispatchEvent(new window.Event('input'));await until(()=>s.week.previewReady);
+assert.equal(document.getElementById('twReloadLayout'),null);document.getElementById('twSaveDesign').click();await until(()=>!s.week.busy&&s.week.previewReady);
+assert.equal(s.week.layoutConflict,true);assert.equal(s.week.context.design.revision,conflictBase);assert.match(document.getElementById('twStatus').textContent,/Reload saved layout/);assert.ok(document.getElementById('twReloadLayout'));
+document.getElementById('twReload').click();await until(()=>!s.week.busy&&s.week.previewReady);assert.equal(s.week.context.design.revision,conflictBase);assert.equal(s.week.layout.text_colour,'#7711aa');assert.ok(document.getElementById('twReloadLayout'));
+let confirmLayout=false;window.confirm=()=>confirmLayout;document.getElementById('twReloadLayout').click();await tick();assert.equal(s.week.layout.text_colour,'#7711aa','Cancel keeps the unsaved layout');
+confirmLayout=true;document.getElementById('twReloadLayout').click();await until(()=>!s.week.busy&&s.week.previewReady);
+assert.equal(s.week.layout.text_colour,'#11aa77');assert.equal(s.week.context.design.revision,conflictBase+1);assert.equal(s.week.designDirty,false);assert.equal(document.getElementById('twReloadLayout'),null);
+assert.deepEqual(s.week.rows,conflictRows);assert.equal(s.week.end,conflictWeek);assert.equal(s.week.title,conflictTitle);assert.equal(s.week.blurb,'Keep this week’s caption.');
+document.getElementById('twColour').value='#225588';document.getElementById('twColour').dispatchEvent(new window.Event('input'));document.getElementById('twSaveDesign').click();await until(()=>!s.week.busy&&s.week.previewReady);
+assert.equal(s.week.context.design.revision,conflictBase+2);assert.equal(s.week.layoutConflict,false);assert.equal(s.week.designDirty,false);api.rpc=conflictRpc;
+console.log('Passed: Team of the Week layout conflict, cancelled recovery, confirmed recovery preserving XI/caption/week, and successful subsequent save.');
