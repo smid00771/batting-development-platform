@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {playerWeekRecommendations as suggest,playerWeekFigures} from '../Website_Files/player-week-ranking.js';
+import {playerWeekRecommendations as suggest,playerWeekFigures} from '../player-week-ranking.js';
 const player=(id,name,grade,runs,wickets=0,extra={})=>({key:id,player_id:id,name,grade,runs,wickets,conceded:20,batting:runs?[{runs,not_out:false}]:[],bowling:wickets?[{wickets,runs:20}]:[],format:'limited_overs',...extra});
 const rows=[player('veteran','Senior First','1st Grade',50),player('junior','Emerging Fourth','4th Grade',50),player('bowler','Five Wickets','2nd Grade',0,5),player('allround','Both Skills','3rd Grade',40,3),player('small','Modest Score','4th Grade',10),player('spell','Wicketless Bowler','4th Grade',0,0,{bowling:[{wickets:0,runs:22}]})];
 const unchanged=JSON.stringify(rows),profile={junior:{stage:'emerging',note:'First senior fifty'}},end='2026-10-11';
