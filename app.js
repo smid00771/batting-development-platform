@@ -1,19 +1,19 @@
-// Club Batting 0.8.62.180 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.181 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.180';
-import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.180';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.180';
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.180';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.180';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.180';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.180';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.180';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.180';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.181';
+import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.181';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.181';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.181';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.181';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.181';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.181';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.181';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.181';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.180';
+const APP_UI_VERSION='0.8.62.181';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -21534,7 +21534,10 @@ async function socialPaintAll(s,fs){
  const render=s.render;for(const f of fs){let missing=false,invalid=false;try{for(const card of socialCards(f)){const canvas=document.querySelector(`[data-social-canvas="${CSS.escape(card.key)}"]`);if(!canvas||!socialHere(s)||s.render!==render)return;const result=await socialRender(s,card,canvas);missing||=result.missingPhoto;invalid||=result.invalid;}if(!socialHere(s)||s.render!==render)return;const label=document.querySelector(`[data-social-image-status="${CSS.escape(f.id)}"]`);if(label)label.textContent=invalid?'The featured player is no longer selected. Choose another player.':missing?'No player photo chosen.':'';}catch(e){if(socialHere(s)&&s.render===render){const label=document.querySelector(`[data-social-image-status="${CSS.escape(f.id)}"]`);if(label)label.textContent=e.message;}}}
 }
 function socialCaption(s,f){const d=f.published.details;return [s.data.brand.name+' — '+d.grade,d.cancelled?'MATCH CANCELLED':'Teams published',d.competition,'v '+d.opposition,seFormatLabel(d),...d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+socialDate(day.date)+(day.start?' · '+socialTime(day.start):'')),d.ground,...(d.cancelled?[]:socialCards(f).flatMap(card=>[...(card.split?['','Day '+(card.day+1)+' team']:[]),...socialNames(card).map((p,i)=>(i+1)+'. '+p.name+p.marks)])),s.design.footer].filter(Boolean).join('\n');}
-function socialUploadCard(s,kind,title,description,roster=null){const a=socialAsset(s,kind,roster);return `<section class="social-upload"><h3>${title}</h3><p>${description}</p>${a?`<img data-social-asset="${seEsc(a.id)}" alt="${title}"><p class="social-status">Image saved</p>`:''}<label>${a?'Replace image':'Choose image'}<input type="file" accept="image/png,image/jpeg,image/webp" data-social-upload="${kind}" ${roster?'data-roster="'+seEsc(roster)+'"':''}></label>${a?`<button class="btn ghost" data-social-remove="${seEsc(a.id)}" style="margin-top:10px">Remove image</button>`:''}</section>`;}
+function socialUploadCard(s,kind,title,description,roster=null,preview={}){
+ const a=socialAsset(s,kind,roster)||preview.asset,src=/^data:image\/(png|jpeg|webp);base64,/.test(preview.src||'')?preview.src:'',saved=!!(a||src);
+ return `<section class="social-upload"><h3>${title}</h3><p>${description}</p>${saved?`<img ${a?`data-social-asset="${seEsc(a.id)}"`:`src="${seEsc(src)}"`} alt="${title}"><p class="social-status">Image saved</p>`:''}<label>${saved?'Replace image':'Choose image'}<input type="file" accept="image/png,image/jpeg,image/webp" data-social-upload="${kind}" ${roster?'data-roster="'+seEsc(roster)+'"':''}></label>${a?`<button class="btn ghost" data-social-remove="${seEsc(a.id)}" style="margin-top:10px">Remove image</button>`:''}${preview.content||''}</section>`;
+}
 function socialArtwork(s){socialGuideEnter(s,1);}
 function socialPhotos(s){socialGuideEnter(s,2,s.player||'');}
 function socialManagers(s){
