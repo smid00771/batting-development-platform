@@ -6,15 +6,15 @@ export function videoTime(seconds){
 }
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sydney',openWindow=(...args)=>window.open(...args)}={}){
- let balance,loading=false,busy=false,disposed=false,expanded=false,request=null,message='',checkoutUrl='';
+ let balance,loading=false,busy=false,disposed=false,expanded=false,detailsOpen=false,request=null,message='',checkoutUrl='';
  const money=(amount,currency='aud')=>new Intl.NumberFormat('en-AU',{style:'currency',currency:currency.toUpperCase(),currencyDisplay:'code',maximumFractionDigits:0}).format(amount/100).replace('AUD','A$').replace(/\s/g,'');
  function render(){
   if(disposed||!host.isConnected)return;
   if(!balance){host.innerHTML='<p class="help" role="status">'+esc(message||'Loading video balance…')+'</p>'+(message?'<button class="btn ghost" type="button" data-vc="refresh">Retry balance</button>':'');bind();return;}
   const b=balance,pilot=b.kind==='complimentary',date=b.renews_at?new Date(b.renews_at).toLocaleDateString('en-AU',{timeZone:timezone,day:'numeric',month:'short',year:'numeric'}):'';
-  host.innerHTML=`<div style="border:1px solid ${b.low?'#d7a642':'#dce2ee'};border-radius:8px;padding:${compact?'9px':'14px'};margin:8px 0;background:${b.low?'#fff8e9':'#f6f8fb'};font:13px/1.45 system-ui;color:#24344c">
+  host.innerHTML=`${compact?`<details data-vc="details" ${detailsOpen?'open':''} style="margin:6px 0;font:12px/1.45 system-ui;color:#24344c"><summary style="cursor:pointer;padding:7px 9px;border:1px solid ${b.low?'#d7a642':'#dce2ee'};border-radius:7px;background:${b.low?'#fff8e9':'#f6f8fb'}"><strong>${b.low?'Low video':'Video'}: ${esc(videoTime(b.available_seconds))} available</strong><span style="float:right;margin-left:8px">Details</span></summary><div style="padding:8px 2px 2px">`:`<div style="border:1px solid ${b.low?'#d7a642':'#dce2ee'};border-radius:8px;padding:14px;margin:8px 0;background:${b.low?'#fff8e9':'#f6f8fb'};font:13px/1.45 system-ui;color:#24344c">`}
    ${compact?'':'<h2 style="font-size:18px;margin:0 0 8px">Selection Room video</h2>'}
-   <strong>${esc(videoTime(b.available_seconds))} available${pilot?' · complimentary':''}</strong>
+   ${compact?(pilot?'<p style="margin:0 0 4px">Complimentary video</p>':''):`<strong>${esc(videoTime(b.available_seconds))} available${pilot?' · complimentary':''}</strong>`}
    <p style="margin:4px 0;font-size:12px">Time shown is for four people. More people use it faster; fewer use it more slowly.</p>
    ${pilot?'':`<p style="margin:4px 0;font-size:12px">Included: ${esc(videoTime(b.included_remaining_seconds))} · Purchased: ${esc(videoTime(b.purchased_remaining_seconds))}</p>`}
    ${b.held_seconds>0?`<p style="margin:4px 0;font-size:12px">${esc(videoTime(b.held_seconds))} held for active or recent calls. Unused time returns after the room’s 90-minute window and usage check.</p>`:''}
@@ -26,9 +26,11 @@ export function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sy
    ${b.can_manage&&!pilot&&!b.payments_ready?'<p style="font-size:12px;margin:7px 0">Top-up checkout is being connected.</p>':''}
    <p role="status" style="margin:6px 0 0">${esc(message)}${checkoutUrl?` <a href="${esc(checkoutUrl)}" target="_blank" rel="noopener noreferrer">Open secure checkout ↗</a>`:''}</p>
    ${!compact&&b.history?.length?`<details style="margin-top:10px"><summary>Recent purchases</summary><ul>${b.history.map(p=>`<li>${esc(new Date(p.paid_at).toLocaleDateString('en-AU',{timeZone:timezone}))} · ${esc(videoTime(p.seconds))} · ${esc(money(p.amount_cents,p.currency))}${p.refunded_cents?' · '+esc(money(p.refunded_cents,p.currency))+' refunded':''}</li>`).join('')}</ul></details>`:''}
-  </div>`;bind();
+  </div>${compact?'</details>':''}${compact&&!detailsOpen&&message&&!checkoutUrl?`<p role="status" style="margin:4px 0;font-size:12px">${esc(message)}</p>`:''}`;bind();
  }
  function bind(){
+  const details=host.querySelector('[data-vc="details"]');
+  details?.addEventListener('toggle',()=>{if(details.isConnected)detailsOpen=details.open;});
   host.querySelector('[data-vc="refresh"]')?.addEventListener('click',()=>void reload());
   host.querySelector('[data-vc="toggle"]')?.addEventListener('click',()=>{expanded=!expanded;render();});
   host.querySelectorAll('[data-vc-pack]').forEach(b=>b.addEventListener('click',()=>void buy(b.dataset.vcPack)));
@@ -57,5 +59,6 @@ export function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sy
  const focus=()=>{if(host.isConnected)void reload();else destroy();};window.addEventListener('focus',focus);
  const observer=new MutationObserver(()=>{if(!host.isConnected)destroy();});observer.observe(document.body,{childList:true,subtree:true});
  function destroy(){disposed=true;window.removeEventListener('focus',focus);observer.disconnect();}
- void reload();return {reload,destroy};
+ function collapse(){if(compact){detailsOpen=false;expanded=false;render();}}
+ void reload();return {reload,destroy,collapse};
 }

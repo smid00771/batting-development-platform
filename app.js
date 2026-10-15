@@ -1,17 +1,17 @@
-// Club Batting 0.8.62.176 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.177 — shared grades, season captains and flexible match teams
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.176';
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.176';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.176';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.176';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.176';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.176';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.176';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.177';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.177';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.177';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.177';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.177';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.177';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.177';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.176';
+const APP_UI_VERSION='0.8.62.177';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
