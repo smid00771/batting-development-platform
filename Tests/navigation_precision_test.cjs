@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{webcrypto}=require('node:crypto');
 const {JSDOM}=require('jsdom'),source=fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8');
-function fn(name){const m=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(m,name);const rest=source.slice(m.index),end=rest.slice(1).search(/\n(?:async )?function /);return end<0?rest.split('\n')[0]:rest.slice(0,end+1);}
+function fn(name,text=source){const m=new RegExp('(?:async )?function '+name+'\\(').exec(text);assert.ok(m,name);const rest=text.slice(m.index),end=rest.slice(1).search(/\n(?:async )?function /);return end<0?rest.split('\n')[0]:rest.slice(0,end+1);}
 function harness(){
  const dom=new JSDOM('<main id="page"><div id="seContent"></div></main>',{url:'https://example.test'}),entries=[],s={view:'socials',date:'2026-10-17',data:{fixtures:[]}},social={scope:'u:c',view:'results',date:'2026-10-17',awards:{end:'2026-10-18',focus:'player-a',context:{}},teamWorkflow:{step:'photos',fixture:'second',day:1}},session={user:{id:'u'}};let index=-1,allowed=true;
  const history={state:null,pushState(state){entries.splice(++index);entries.push(structuredClone(state));this.state=state;},replaceState(state){if(index<0)index=0;entries[index]=structuredClone(state);this.state=state;},async back(){if(index>0){index--;this.state=entries[index];await c.handleAppNavigationHistory({state:this.state});}},go(delta){index+=delta;this.state=entries[index];}};
@@ -8,8 +8,8 @@ function harness(){
  const c=vm.createContext({console,queueMicrotask,document:dom.window.document,window:{scrollX:0,scrollY:0,scrollTo:p=>{c.window.scrollY=p.top;}},history,session,club:{id:'c'},currentTab:'teams',socialState:social,appNavigationCurrent:null,appNavigationRestoring:false,appNavigationRequest:0,appNavigationBounce:null,localStorage:dom.window.localStorage,crypto:webcrypto,FORMATS:[],publishedHowWeBatFormat:'',howWeBatBuilderFormat:'',previewFormat:'',playerPlanStructureSection:'',guideSelectedCapabilityKey:'',workshopPreview:null,
   ensureSelections:()=>s,socialEnsure:()=>social,socialGuideState:s=>s.guide,socialTeamWorkflow:{state:s=>s.teamWorkflow||(s.teamWorkflow={step:'artwork',fixture:'',day:0})},socialAwards:{state:s=>s.awards||(s.awards={context:{}})},socialWeek:weekly,socialPlayerWeek:playerWeekly,
   saveClubEditsBeforeNavigation:async()=>allowed,canOpenClubTab:()=>true,renderTab:async()=>{c.recordAppNavigation(c.clubNavigationRoute());},alert:x=>{throw Error(x);},socialGuideSwitch:(g,step,person)=>Object.assign(g,{step,person}),seDelegationEditor:x=>x});
- const names=['clubNavigationRoute','selectionNavigationRoute','socialNavigationRoute','restoreSocialNavigation','recordSelectionNavigation','recordSelectionDrawer','restoreSelectionDrawer','appNavigationBack','canUseAppNavigationBack','bindAppBackButtons','platformNavigationRoute','appNavigationKey','validAppNavigationMarker','replaceRestoredNavigation','recordAppNavigation','restoreClubNavigationState','handleAppNavigationHistory'];
- vm.runInContext(names.map(fn).join('\n'),c);return{c,s,social,entries,history,allowed:x=>allowed=x,index:()=>index,visit:()=>c.recordSelectionNavigation()};
+ const names=['clubNavigationRoute','selectionNavigationRoute','socialNavigationRoute','restoreSocialNavigation','recordSelectionNavigation','recordSelectionDrawer','restoreSelectionDrawer','appNavigationBack','canUseAppNavigationBack','bindAppBackButtons','bindSelectionBackButtons','platformNavigationRoute','appNavigationKey','validAppNavigationMarker','replaceRestoredNavigation','recordAppNavigation','restoreClubNavigationState','handleAppNavigationHistory'];
+ vm.runInContext(names.map(name=>fn(name)).join('\n'),c);return{c,s,social,entries,history,allowed:x=>allowed=x,index:()=>index,visit:()=>c.recordSelectionNavigation()};
 }
 test('Back and Forward restore the Results week and selected award after image preparation',async()=>{
  const h=harness();h.visit();h.c.window.scrollY=425;const apply=()=>{};
@@ -35,4 +35,24 @@ test('the in-app Back uses the same history and falls back safely on an initial 
 
 test('main app Back controls follow the recorded view rather than a hard-coded destination',async()=>{
  const h=harness();h.visit();h.social.view='accounts';h.visit();const b=h.c.document.createElement('button');b.id='clubBrandingBack';b.textContent='Back';h.c.document.body.append(b);let fallback=0;b.onclick=()=>fallback++;h.c.bindAppBackButtons();b.click();await new Promise(r=>setImmediate(r));assert.equal(h.social.view,'results');assert.equal(fallback,0);
+});
+
+test('selection Back binds when earlier optional buttons are absent or already bound',async()=>{
+ const h=harness();h.visit();h.social.view='accounts';h.visit();const button=h.c.document.createElement('button');button.id='seImportCancel';h.c.document.body.append(button);let fallback=0;button.onclick=()=>fallback++;
+ h.c.bindSelectionBackButtons();assert.equal(button.dataset.navigationBack,'1','Absent delegation controls do not stop later bindings');button.click();await new Promise(r=>setImmediate(r));assert.equal(h.social.view,'results');assert.equal(fallback,0);
+ const handler=button.onclick,second=h.c.document.createElement('button');second.id='sePlayerCancel';second.onclick=()=>fallback++;h.c.document.body.append(second);h.c.bindSelectionBackButtons();assert.equal(button.onclick,handler,'Existing bindings remain unchanged');assert.equal(second.dataset.navigationBack,'1','An existing binding does not stop a later button');second.click();assert.equal(fallback,1,'First-screen fallback remains available');
+});
+
+test('saved match reviews Back uses the actual button and returns to the previous view',async()=>{
+ const h=harness();h.visit();h.social.view='accounts';h.visit();const button=h.c.document.createElement('button');button.id='backTeamReview';button.textContent='Back to entry';h.c.document.body.append(button);let fallback=0;button.onclick=()=>fallback++;
+ h.c.bindAppBackButtons();assert.equal(button.getAttribute('aria-label'),'Back to previous view');button.click();await new Promise(r=>setImmediate(r));assert.equal(h.social.view,'results');assert.equal(fallback,0);
+});
+
+for(const file of ['app.js','demo.html'])test(file+': directly rendered saved reviews Back retains history and a safe initial fallback',async()=>{
+ const text=fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8');
+ const screen=withHistory=>{const h=harness();if(withHistory)h.visit();let locked=false,fallback=0;const state={view:'history',historyFilters:{group_id:'',match_date:'',format_key:'',player_query:''},groups:[],history:[],message:'',deletePreview:null};
+  Object.assign(h.c,{currentTab:'team_review',ensureTeamReviewState:()=>state,serializeTeamReviewState:()=>({view:state.view}),teamReviewControlsLocked:()=>locked,teamReviewStyles:()=>'',esc:String,loadTeamReviewHistory:()=>{},clearTeamReviewEntry:()=>{},loadSavedTeamReview:()=>{},previewTeamReviewDelete:()=>{},deleteSavedTeamReview:()=>{},bindMatchReviewHistory:()=>{},renderTeamReviewContent:()=>fallback++});
+  vm.runInContext(fn('renderTeamReviewHistoryContent',text),h.c);h.c.recordAppNavigation(h.c.clubNavigationRoute());h.c.renderTeamReviewHistoryContent();return{h,state,locked:value=>locked=value,fallback:()=>fallback};};
+ const active=screen(true);assert.equal(active.h.c.document.getElementById('backTeamReview').dataset.appBackBound,undefined,'No renderTab binding pass ran');active.locked(true);active.h.c.document.getElementById('backTeamReview').click();assert.equal(active.h.index(),1,'A pending operation blocks navigation');active.locked(false);active.h.c.renderTeamReviewHistoryContent();active.h.c.document.getElementById('backTeamReview').click();await new Promise(r=>setImmediate(r));assert.equal(active.h.c.currentTab,'teams');assert.equal(active.h.social.view,'results');assert.equal(active.fallback(),0);
+ const initial=screen(false);initial.h.c.document.getElementById('backTeamReview').click();assert.equal(initial.state.view,'entry');assert.equal(initial.fallback(),1,'Opening history directly still offers Back to entry');
 });

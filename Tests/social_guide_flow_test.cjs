@@ -130,3 +130,28 @@ test('a failed award background save keeps the preview and target available for 
  h.c.socialGuideUploadNote=()=>{};await h.c.socialGuideSaveAndContinue(h.s);
  assert.equal(h.s.view,'guide');assert.ok(h.s.guide.local);assert.equal(h.s.guide.awardReturn.view,'century');assert.equal(h.s.busy,false);
 });
+
+test('background approval enters the award scope before its guarded upload and preserves the editor on failure',async()=>{
+ for(const view of ['player_week','team_week']){
+  const h=setup(1),blob=new Blob(['prepared background']);let saved=false,fail=true;
+  h.s.guide.local={blob,kind:'master'};h.c.socialGuideUploadNote=()=>{};
+  h.s.guide.awardReturn={kind:'background',view,apply:async asset=>{
+   // Award upload callbacks only accept a result while their own view is current.
+   await Promise.resolve();if(h.s.view!==view)return;
+   if(fail)throw Error('Layout changed elsewhere');
+   saved=await asset.blob.text()==='prepared background';
+  }};
+  vm.runInContext(part(app,'function socialGuideResetImage(','function socialGuideReturnToTeam('),h.c);
+  await h.c.socialGuideSaveAndContinue(h.s);
+  assert.equal(saved,false);assert.equal(h.s.view,'guide');assert.equal(h.s.guide.local.blob,blob);assert.ok(h.s.guide.awardReturn);
+  fail=false;await h.c.socialGuideSaveAndContinue(h.s);
+  assert.equal(saved,true);assert.equal(h.s.view,view);assert.equal(h.s.notice,'Background saved ✓');assert.equal(h.s.guide.awardReturn,null);
+ }
+});
+
+test('leaving an award during approval never reports a background saved or replaces the new view',async()=>{
+ const h=setup(1);h.s.guide.local={blob:new Blob(['background']),kind:'master'};
+ h.c.socialGuideUploadNote=()=>{};h.s.guide.awardReturn={kind:'background',view:'player_week',apply:async()=>{h.s.view='responsibility';}};
+ await h.c.socialGuideSaveAndContinue(h.s);
+ assert.equal(h.s.view,'responsibility');assert.ok(h.s.guide.local);assert.ok(h.s.guide.awardReturn);assert.notEqual(h.s.notice,'Background saved ✓');
+});

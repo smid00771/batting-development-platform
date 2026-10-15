@@ -19,3 +19,5 @@ Design for club volunteers who rarely use computers. Integrate AI behind simple 
 Agreed AI selection sequence (15 October 2026): evidence review first, suggested teams second, detailed match-up analysis third. Existing availability, duplicate-selection and gap checks already exist; extend them rather than presenting them as new features. Show grade, role, opportunities, evidence and uncertainty. Academy status carries no automatic selection weight. Human selectors retain selection and publishing authority. Context-aware help within the current page is a priority for further AI integration.
 
 For the proposed selection evidence review, senior performance and opportunities are explicit inputs. Junior pathways membership adds no automatic credit. Limited senior history is labelled as limited evidence, not a judgement of ability. A development selection remains an explicit human choice.
+
+Prioritise removing recurring volunteer jobs. Capture shared facts once and reuse them across availability, selections, coaching and social posts. Measure improvements by work removed and fewer decisions for volunteers, not by the number of new controls.
