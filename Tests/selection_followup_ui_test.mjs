@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import {createRequire} from 'node:module';
 const {JSDOM}=createRequire(import.meta.url)('jsdom');
-const app=fs.readFileSync(new URL('../Website_Files/app.js',import.meta.url),'utf8');
-const demo=fs.readFileSync(new URL('../Website_Files/demo.html',import.meta.url),'utf8');
+const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
 function get(name){const start=app.indexOf('function '+name+'(');assert.ok(start>=0,name);const next=app.slice(start+1).search(/\n(?:async )?function /);return app.slice(start,start+1+next);}
-const names=['seMovement','seConversationControl','seBindConversations','seConversations','seShortTeams','seTeamNumbers','seGradeLevel','seFixtureCompleted','seFixtureLocked','seFixtureLockControls','seSendReview','sePublishReview','seBoardSlot'];
+const names=['seRevealPublication','seMovement','seConversationControl','seBindConversations','seConversations','seShortTeams','seTeamNumbers','seGradeLevel','seFixtureCompleted','seFixtureLocked','seFixtureLockControls','seSendReview','sePublishReview','seBoardSlot'];
 for(const name of names)assert.ok(demo.includes(get(name)),'Demo shares '+name);
 const dom=new JSDOM('<main id="sePage"><div id="seContent"></div></main>'),document=dom.window.document,calls=[];
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
