@@ -38,10 +38,10 @@ begin
   rejected:=false;
   begin perform club_selection_private.social_post_validate(c,refs);exception when raise_exception then rejected:=true;end;
   assert rejected,'Different saved versions of one weekly award cannot be combined';
-  perform club_selection_private.social_post_validate(c,jsonb_build_array(refs->0));
+  rejected:=false;begin perform club_selection_private.social_post_validate(c,jsonb_build_array(refs->0));exception when raise_exception then rejected:=true;end;assert rejected,'Synthetic images without matching current score facts cannot post';
   select jsonb_agg(jsonb_build_object('id',e.id,'source_type','award','kind',e.kind,'artwork_key',e.image_sha)) into refs
    from club_selection_private.social_award_collection(c,'2026-10-11') e;
-  perform club_selection_private.social_post_validate(c,refs);
+  rejected:=false;begin perform club_selection_private.social_post_validate(c,refs);exception when raise_exception then rejected:=true;end;assert rejected,'Synthetic images without matching current score facts cannot post';
   assert not has_function_privilege('authenticated','club_selection_private.social_award_collection(uuid,date)','EXECUTE');
   raise exception using errcode='P0182',message='Rollback successful award collection checks';
  exception when sqlstate 'P0182' then null;

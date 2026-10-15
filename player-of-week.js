@@ -106,5 +106,5 @@ export function createPlayerOfWeek(h){
    if(!current(s,w))return;w.saved={key:p.key,blob:p.blob,name:p.name};w.pending=null;notice(s,'Winner and image saved to Saved weeks.');try{const data=await rpc(s,'context',{week_end:w.end});w.context.history=data.history;}catch{notice(s,'Winner saved. Reload scores to update Saved weeks.');}
   }catch(e){notice(s,'Save not confirmed. '+e.message);}finally{w.busy=false;w.saving=false;if(current(s,w))render(s);}}
  async function copyCaption(s,winner,title,blurb){if(!winner)return;const text=['PLAYER OF THE WEEK',title,winner.name+' · '+winner.grade,playerWeekFigures(winner).text,blurb].filter(Boolean).join('\n\n');try{await navigator.clipboard.writeText(text);notice(s,'Caption copied.');}catch{h.download('Player-of-the-Week-caption.txt',new Blob([text],{type:'text/plain;charset=utf-8'}));notice(s,'Caption downloaded.');}}
- return {render,state};
+ return {render,state,load};
 }

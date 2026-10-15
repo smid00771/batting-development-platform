@@ -254,5 +254,5 @@ export function createTeamOfWeek(h){
   }catch(error){saveNotice(s,w.savedImage?.key===imageKey(s,w)?'Image saved. '+error.message:'Image save not confirmed. '+error.message);}
   finally{w.busy=false;w.saving=false;if(current(s,w))render(s);}
  }
- return {render,state};
+ return {render,state,load};
 }

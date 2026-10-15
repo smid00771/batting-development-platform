@@ -1,19 +1,19 @@
-// Club Batting 0.8.62.187 — shared grades, season captains and flexible match teams
+// Club Batting 0.8.62.189 — volunteer workflow recovery and current-score protection
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.186';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.189';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.186';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.186';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.186';
 import {createSelectionRoom} from './selection-room.js?v=0.8.62.186';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.188';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.188';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.189';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.189';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.186';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.186';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.188';
+const APP_UI_VERSION='0.8.62.189';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -984,8 +984,8 @@ function matchDraftFields(form){return [...form.querySelectorAll('input,textarea
 function matchDraftSnapshot(form){const read=(row,key)=>row.querySelector('[data-prep-field="'+key+'"]')?.value||'';return {fields:matchDraftFields(form),matchups:[...form.querySelectorAll('[data-prep-matchup]')].map(row=>({id:row.dataset.prepMatchup,bowler:read(row,'bowler'),expect:read(row,'expect'),options:read(row,'options'),avoid:read(row,'avoid'),training_focus:row.querySelector('[data-prep-training-focus]')?.checked===true,extra_shots:typeof preparationExtraShots==='function'?preparationExtraShots(row):[],extra_shot_notes:typeof preparationExtraShotNotes==='function'?preparationExtraShotNotes(row):[]})),fielders:[...form.querySelectorAll('[data-prep-fielder]')].map(row=>({id:row.dataset.prepFielder,name:read(row,'name'),note:read(row,'note'),tags:[...row.querySelectorAll('[data-prep-tag]:checked')].map(x=>x.dataset.prepTag)}))};}
 function matchDraftCapture(ctx){if(!ctx?.form?.isConnected||ctx.restoring||ctx.blocked||matchDraftScope()?.user!==ctx.user||matchDraftScope()?.club!==ctx.club)return;const snapshot=matchDraftSnapshot(ctx.form);if(JSON.stringify(snapshot)===ctx.baseline&&!matchDraftRead(ctx.key)?.command){if(ctx.adopted)matchDraftRemove(ctx);return;}if(!ctx.adopted&&matchDraftRead(ctx.key))return;ctx.adopted=true;matchDraftWrite(ctx,{snapshot});}
 function matchDraftContext(form,{kind,id,label,route,revision}){const scope=matchDraftScope();if(!form||!scope)return null;let ctx=matchDraftRecovery.forms.get(form);if(ctx)return ctx;ctx={...scope,form,kind,id:String(id),label,route,revision:JSON.stringify(revision??null),key:matchDraftKey(kind,id),baseline:JSON.stringify(matchDraftSnapshot(form)),adopted:false,blocked:false};matchDraftRecovery.forms.set(form,ctx);matchDraftRecovery.contexts.add(ctx);form.addEventListener('input',()=>matchDraftCapture(ctx));form.addEventListener('change',()=>matchDraftCapture(ctx));form.addEventListener('click',()=>queueMicrotask(()=>matchDraftCapture(ctx)));matchDraftShowForm(ctx);matchDraftStart();return ctx;}
-function matchDraftRestoreFields(ctx,entry){const form=ctx.form;for(const field of entry.snapshot?.fields||[]){if(!['playerFixtureChoice','staffObservationFixture','staffObservationGrade'].includes(field.id))continue;const control=document.getElementById(field.id);if(control&&field.value&&(![...control.options].some(o=>o.value===field.value)||control.disabled&&control.value!==field.value))throw Error('This draft’s match or grade is no longer available. Keep the draft and check the current fixture before restoring it.');}ctx.restoring=true;try{if(form.querySelector('#prepMatchups')){form.querySelector('#prepMatchups').innerHTML=(entry.snapshot.matchups||[]).map(preparationMatchupFields).join('');form.querySelector('#prepFielders').innerHTML=(entry.snapshot.fielders||[]).map(preparationFielderFields).join('');wirePreparationRows();}const controls=[...form.querySelectorAll('input,textarea,select')].filter(x=>!x.closest('[data-match-draft-banner]')&&!['password','file'].includes(x.type));const changed=[];for(const field of entry.snapshot.fields||[]){const control=field.id?controls.find(x=>x.id===field.id):field.name?controls.find(x=>x.name===field.name&&x.type===field.type&&(!['radio','checkbox'].includes(field.type)||x.value===field.value)):controls[field.index];if(!control||control.disabled)continue;if(control.tagName==='SELECT'&&![...control.options].some(o=>o.value===field.value))continue;if(['checkbox','radio'].includes(control.type))control.checked=field.checked;else control.value=field.value;changed.push(control);}for(const control of changed)control.dispatchEvent(new Event('change',{bubbles:true}));if(form.querySelector('#prepMatchups'))refreshPreparationScoringChoices(form);ctx.adopted=true;ctx.form.querySelector('[data-match-draft-banner]')?.remove();}finally{ctx.restoring=false;}matchDraftCapture(ctx);}
-function matchDraftLock(ctx){if(!ctx.form||ctx.unlock)return;const controls=[...ctx.form.querySelectorAll('input,textarea,select,button')].filter(x=>!x.closest('[data-match-draft-banner]')),prior=controls.map(x=>[x,x.disabled]);for(const [x] of prior)x.disabled=true;ctx.unlock=()=>{for(const [x,disabled]of prior)if(x.isConnected)x.disabled=disabled;ctx.unlock=null;};ctx.blocked=true;}
+function matchDraftRestoreFields(ctx,entry){const form=ctx.form;if(form.dataset.playerFixtureLoading==='true'||form.dataset.playerFixtureError==='true')throw Error('Load your match list before restoring this draft. Then choose Restore draft again.');for(const field of entry.snapshot?.fields||[]){if(!['playerFixtureChoice','staffObservationFixture','staffObservationGrade'].includes(field.id))continue;const control=document.getElementById(field.id);if(control&&field.value&&(![...control.options].some(o=>o.value===field.value)||control.disabled&&control.value!==field.value))throw Error('This draft’s match or grade is no longer available. Keep the draft and check the current fixture before restoring it.');}ctx.restoring=true;try{if(form.querySelector('#prepMatchups')){form.querySelector('#prepMatchups').innerHTML=(entry.snapshot.matchups||[]).map(preparationMatchupFields).join('');form.querySelector('#prepFielders').innerHTML=(entry.snapshot.fielders||[]).map(preparationFielderFields).join('');wirePreparationRows();}const controls=[...form.querySelectorAll('input,textarea,select')].filter(x=>!x.closest('[data-match-draft-banner]')&&!['password','file'].includes(x.type));const changed=[];for(const field of entry.snapshot.fields||[]){const control=field.id?controls.find(x=>x.id===field.id):field.name?controls.find(x=>x.name===field.name&&x.type===field.type&&(!['radio','checkbox'].includes(field.type)||x.value===field.value)):controls[field.index];if(!control||control.disabled)continue;if(control.tagName==='SELECT'&&![...control.options].some(o=>o.value===field.value))continue;if(['checkbox','radio'].includes(control.type))control.checked=field.checked;else control.value=field.value;changed.push(control);}for(const control of changed)control.dispatchEvent(new Event('change',{bubbles:true}));if(form.querySelector('#prepMatchups'))refreshPreparationScoringChoices(form);ctx.adopted=true;ctx.form.querySelector('[data-match-draft-banner]')?.remove();}finally{ctx.restoring=false;}matchDraftCapture(ctx);}
+function matchDraftLock(ctx){if(!ctx.form||ctx.unlock)return;const controls=[...ctx.form.querySelectorAll('input,textarea,select,button')].filter(x=>!x.closest('[data-match-draft-banner]')),prior=controls.map(x=>[x,x.disabled]);for(const [x] of prior)x.disabled=true;ctx.unlock=()=>{for(const [x,disabled]of prior)if(x.isConnected)x.disabled=disabled;ctx.unlock=null;if(typeof syncPlayerFixtureSave==='function')syncPlayerFixtureSave(ctx.form);};ctx.blocked=true;}
 function matchDraftShowForm(ctx){const entry=matchDraftRead(ctx.key);if(!entry||ctx.adopted)return;ctx.form.querySelector('[data-match-draft-banner]')?.remove();const box=document.createElement('section');box.className='notice';box.dataset.matchDraftBanner='form';const changed=entry.revision!==ctx.revision;box.innerHTML='<strong>Unfinished '+esc(ctx.label)+'</strong><p data-draft-message></p><div class="btnrow"><button type="button" class="btn" data-draft-restore></button><button type="button" class="btn ghost" data-draft-discard>Discard draft</button></div>';ctx.form.prepend(box);box.querySelector('[data-draft-message]').textContent=entry.command?'A previous save was not confirmed. Check that same save before making more changes.':changed?'The saved record changed while this draft was closed. Read your draft below alongside the current record; it will not overwrite the newer version.':'Your unsaved work is available on this device.';const restore=box.querySelector('[data-draft-restore]');restore.textContent=entry.command?'Check previous save':'Restore draft';restore.disabled=changed&&!entry.command;restore.onclick=async()=>{if(entry.command)return matchDraftRecoverCommand(ctx,entry,box);restore.disabled=true;try{await matchDraftPreflight(ctx,entry);if(ctx.form?.isConnected){ctx.unlock?.();ctx.blocked=false;matchDraftRestoreFields(ctx,entry);}}catch(error){matchDraftLock(ctx);box.querySelector('[data-draft-message]').textContent=error.message||'Could not check current access.';restore.disabled=false;}};box.querySelector('[data-draft-discard]').disabled=!!entry.command;box.querySelector('[data-draft-discard]').onclick=()=>{matchDraftRemove(ctx);ctx.adopted=true;ctx.blocked=false;ctx.unlock?.();box.remove();};if(changed&&!entry.command){const details=document.createElement('details');details.innerHTML='<summary>Read my draft</summary>';const text=document.createElement('pre');text.style.whiteSpace='pre-wrap';text.textContent=(entry.snapshot?.fields||[]).filter(f=>f.value&&!['radio','checkbox','hidden','select-one'].includes(f.type)).map(f=>f.value).join('\n\n');details.append(text);box.append(details);}if(entry.command||!changed)matchDraftLock(ctx);}
 async function matchDraftPreflight(ctx,entry){const scope=matchDraftScope();if(scope?.user!==ctx.user||scope?.club!==ctx.club)throw Error('Sign in to the same account and club to recover this draft.');let response;if(ctx.kind==='observation'){response=await supabase.rpc('get_coach_observation_context',{p_player_id:ctx.route.playerId});if(response.error)throw response.error;response=await supabase.rpc('get_individual_match_fixtures',{p_club_id:ctx.club,p_player_id:ctx.route.playerId,p_match_id:ctx.route.matchId||null});}else if(ctx.kind==='team')response=await supabase.rpc('get_team_review_roster',{p_club_id:ctx.club});else response=await supabase.rpc('get_my_innings',{p_club_id:ctx.club});if(response.error)throw response.error;if(matchDraftScope()?.user!==ctx.user||matchDraftScope()?.club!==ctx.club)throw Error('The account changed. Reopen the draft from the correct account.');return response.data;}
 function matchDraftAfterAttempt(form){const ctx=matchDraftRecovery.forms.get(form);if(!ctx?.form?.isConnected)return;if(matchDraftRead(ctx.key)?.command){ctx.adopted=false;matchDraftShowForm(ctx);}}
@@ -1303,7 +1303,7 @@ function renderLogin(msg=''){
     <p><button class="guide-inline-link" type="button" id="resetPassword">Set or reset your password</button></p>
     <p class="help">Previously used an email link? Set a password once, then sign in here whenever you return.</p>
     <div id="authStatus" class="help" role="status" aria-live="polite"></div>
-    <p class="help">${trialEntry?'<a href="./app.html?trial=1" id="backToTrialEntry">Back to club details / create an account</a>':'New club? <a href="./app.html?trial=1">Try it free with your club</a>.'}</p>
+    <p class="help">${trialEntry?'<a href="./app.html?trial=1" id="backToTrialEntry">Back to club details / create an account</a>':'New club? <a href="./app.html?trial_product=">Try it free with your club</a>.'}</p>
     ${!platform?'<p class="help"><a href="./app.html?platform=1">Platform Admin sign-in</a></p>':''}
     ${authEntryLinks()}
   </div>`;
@@ -2628,14 +2628,27 @@ async function renderPlayerJoinRoute(token){
     app.innerHTML=`<div class="login"><div class="section-label">Player sign-up</div><h1>This player sign-up link is incomplete.</h1><p>Ask your club for the full player sign-up link, then open it again.</p><p>Already registered? <a href="./app.html?signin=1">Sign in to your account</a>.</p></div>`;
     return;
   }
-  const {data:info,error}=await supabase.rpc('get_public_player_join',{p_token:token});
+  let info;
+  try{
+    const result=await supabase.rpc('get_public_player_join',{p_token:token});
+    if(result.error)throw result.error;
+    info=result.data;
+  }catch(error){
+    app.innerHTML=`<div class="login"><div class="section-label">Player sign-up</div><h1>We couldn’t check your club link.</h1><p>Please try again.</p><div class="btnrow"><button class="btn secondary" id="retryPlayerJoin">Try again</button><a class="btn ghost" href="./app.html?player_join=${encodeURIComponent(token)}&signin=1">Sign in</a></div></div>`;
+    document.getElementById('retryPlayerJoin').onclick=async event=>{
+      const button=event.currentTarget;if(button.disabled)return;
+      button.disabled=true;button.textContent='Checking…';
+      await renderPlayerJoinRoute(token);
+    };
+    return;
+  }
 
-  if(error || !info){
+  if(!info){
     forgetClubSignupEntry();
     app.innerHTML=`<div class="login">
       <div class="section-label">Player sign-up</div>
       <h1>This player link is no longer valid.</h1>
-      <p>Ask your club for its current Player Sign-up link or QR code.</p>
+      <p>Ask your club for its current Player Sign-up link or QR code.</p><p>Already registered? <a href="./app.html?signin=1">Sign in to your account</a>.</p>
     </div>`;
     return;
   }
@@ -2686,41 +2699,63 @@ async function renderPlayerJoinRoute(token){
     return;
   }
 
+  const joiningUserId=session.user.id;
   const {data:profileData}=await supabase
     .from('user_profiles')
     .select('*')
     .eq('user_id',session.user.id)
     .maybeSingle();
+  if(session?.user?.id!==joiningUserId)return;
 
   app.innerHTML=`<div class="login" style="max-width:650px">
     <div class="section-label">Player sign-up</div>
     <h1>Join ${esc(info.club_name)}</h1>
     <p>You’re joining as a <strong>Player</strong>. Your club assigns any staff roles.</p>
     ${sharedSignupIntro(info)}
+    <p>Signed in as <strong>${esc(session.user.email||'your account')}</strong>. <button class="guide-inline-link" type="button" id="playerJoinSwitchAccount">Use a different email</button></p>
     <div class="field"><label>Your name</label><input id="playerJoinName" value="${esc(profileData?.display_name||'')}" placeholder="Full name"></div>
     <button class="btn secondary" id="completePlayerJoin">Join ${esc(info.club_name)}</button>
-    <div id="completePlayerJoinStatus" class="help"></div>
+    <div id="completePlayerJoinStatus" class="help" role="status" aria-live="polite"></div>
   </div>`;
 
-  document.getElementById('completePlayerJoin').onclick=async()=>{
-    const st=document.getElementById('completePlayerJoinStatus');
-    st.textContent='Joining…';
-
-    const {data:clubId,error:jErr}=await supabase.rpc('join_club_as_player',{
-      p_token:token,
-      p_display_name:val('playerJoinName')
-    });
-
-    if(jErr){st.textContent=jErr.message;return;}
-
-    localStorage.setItem('bdp-context','club');
-    localStorage.setItem('bdp-club-id',clubId);
-    forgetClubSignupEntry();
-    history.replaceState({},'',location.pathname);
-    joinedAvailabilityClub=info.products?.selections?clubId:null;
-    currentTab=joinedAvailabilityClub?'teams':'myplan';
-    await loadPlatformContext();
-    await loadContext();
+  const joinButton=document.getElementById('completePlayerJoin'),switchButton=document.getElementById('playerJoinSwitchAccount'),nameField=document.getElementById('playerJoinName'),st=document.getElementById('completePlayerJoinStatus');
+  const lock=value=>{joinButton.disabled=value;switchButton.disabled=value;nameField.disabled=value;};
+  switchButton.onclick=async()=>{
+    if(switchButton.disabled||authActionInFlight)return;
+    lock(true);authActionInFlight=true;st.textContent='Changing account…';
+    try{
+      const {error}=await supabase.auth.signOut({scope:'local'});if(error)throw error;
+      session=null;platformRole=null;platformAccessError=false;canBootstrapPlatform=false;
+      club=null;membership=null;allMemberships=[];userProfile=null;
+      const target=new URL(location.pathname,location.origin);target.searchParams.set('player_join',token);
+      history.replaceState({},'',target);
+      rememberClubSignupEntry(info.club_name);
+      await renderPlayerJoinRoute(token);
+      document.getElementById('playerJoinEmail')?.focus();
+    }catch(error){st.textContent=error.message||'Could not change accounts. Please try again.';}
+    finally{authActionInFlight=false;lock(false);}
+  };
+  joinButton.onclick=async()=>{
+    if(joinButton.disabled||authActionInFlight)return;
+    if(session?.user?.id!==joiningUserId){st.textContent='Your account changed. Reopen this club link to check your email.';return;}
+    lock(true);authActionInFlight=true;st.textContent='Joining…';
+    try{
+      const {data:clubId,error:jErr}=await supabase.rpc('join_club_as_player',{
+        p_token:token,
+        p_display_name:val('playerJoinName')
+      });
+      if(jErr)throw jErr;
+      if(session?.user?.id!==joiningUserId)return;
+      localStorage.setItem('bdp-context','club');
+      localStorage.setItem('bdp-club-id',clubId);
+      forgetClubSignupEntry();
+      history.replaceState({},'',location.pathname);
+      joinedAvailabilityClub=info.products?.selections?clubId:null;
+      currentTab=joinedAvailabilityClub?'teams':'myplan';
+      await loadPlatformContext();
+      await loadContext();
+    }catch(error){st.textContent=error.message||'Could not join your club. Please try again.';}
+    finally{authActionInFlight=false;lock(false);}
   };
 }
 
@@ -11187,6 +11222,7 @@ function captureFeedbackEntryBaseline(){
   }
 }
 function confirmLeaveFeedbackEntry(){if(fixtureCorrectionState&&!fixtureCorrectionAbandon())return false;
+  if(document.getElementById('staffDevelopmentForm')?.dataset.observationSaveUnconfirmed==='true'){alert('Confirm the previous observation save before leaving. Choose Retry save.');return false;}
   if(document.getElementById('staffDevelopmentForm')?.dataset.fixtureSavePending==='true'){alert('Confirm the pending observation save before leaving. Use Retry save.');return false;}
   if(!confirmLeaveTeamReview())return false;
   if(!confirmLeaveEngagement())return false;
@@ -12169,8 +12205,18 @@ async function renderMyInnings({refresh=true,message=''}={}){
   page.querySelectorAll('[data-innings-open]').forEach(b=>b.onclick=()=>change(()=>{state.openId=state.openId===b.dataset.inningsOpen?null:b.dataset.inningsOpen;state.editId=null;}));
   for(const [attr,key,prefix] of [['data-innings-edit','inningsEdit',''],['data-preparation-edit','preparationEdit','prepare:'],['data-preparation-record','preparationRecord','record:']])page.querySelectorAll('['+attr+']').forEach(b=>b.onclick=async()=>{if(await change(()=>{state.editId=prefix+b.dataset[key];state.openId=null;}))revealMyInningsForm();});
   page.querySelectorAll('[data-innings-conversation]').forEach(b=>b.onclick=async()=>{await openCoachConversations();if(currentTab!=='conversations')return;const card=document.querySelector(`[data-coaching-action-card="${b.dataset.inningsConversation}"]`);for(let d=card?.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;card?.scrollIntoView({block:'center'});watchVisibleCoachingNotes();});
-  if(state.editId){wireQuickChoices(page);captureFeedbackEntryBaseline();await wirePlayerFixturePicker(edit.record,edit.match,edit.planning,current);if(!current())return;document.getElementById('cancelMyReflection').onclick=()=>change(()=>{state.editId=null;});if(edit.planning){bindPreparationForm(edit.record,state,current);await Promise.all([loadPreparationFocus(current),loadPreparationCall(edit.record,current)]);}else{wirePreparationReviews();bindMyInningsSave(edit.match,state,current,edit.record);await mountWeeklyLoop(document.getElementById('inningsEditFocus'),{playerId:myPlayer.id,context:'innings',matchId:edit.match?.id||null,reviewReady:false,allowManage:false,readOnly:true,compact:true,title:'Your current focus · bring it into your reflection'});}}
-  if(state.editId&&current()){matchDraftAttachInnings(document.getElementById('myReflectionForm'),{record:edit.record,match:edit.match,preparation:edit.record,planning:!!edit.planning});}
+  if(state.editId){
+    const form=document.getElementById('myReflectionForm');
+    wireQuickChoices(page);captureFeedbackEntryBaseline();
+    document.getElementById('cancelMyReflection').onclick=()=>change(()=>{state.editId=null;});
+    if(edit.planning)bindPreparationForm(edit.record,state,current);
+    else{wirePreparationReviews();bindMyInningsSave(edit.match,state,current,edit.record);}
+    const fixtureLoading=wirePlayerFixturePicker(edit.record,edit.match,edit.planning,current);
+    matchDraftAttachInnings(form,{record:edit.record,match:edit.match,preparation:edit.record,planning:!!edit.planning});
+    await fixtureLoading;if(!current())return;
+    if(edit.planning)await Promise.all([loadPreparationFocus(current),loadPreparationCall(edit.record,current)]);
+    else await mountWeeklyLoop(document.getElementById('inningsEditFocus'),{playerId:myPlayer.id,context:'innings',matchId:edit.match?.id||null,reviewReady:false,allowManage:false,readOnly:true,compact:true,title:'Your current focus · bring it into your reflection'});
+  }
   const opened=rows.find(m=>m.id===state.openId);if(opened&&!opened.preparation_only&&opened.participation_status!=='did_not_bat'&&current())await mountWeeklyLoop(document.getElementById('inningsFocus-'+opened.id),{playerId:myPlayer.id,context:'innings',matchId:opened.id,reviewReady:!!opened.player_reflection});
   if(!current())return;bindCompletePlayerPlanButtons(page);recordAppNavigation(clubNavigationRoute());await revealPendingCoachingUpdate();watchVisibleCoachingNotes();
 }
@@ -12542,6 +12588,16 @@ async function mountMatchTrainingFocus(host,{playerId=myPlayer?.id,isOwner=true,
 // END MY INNINGS
 // BEGIN PLAYER FIXTURE JOURNEY
 function playerFixtureId(form){return form?.querySelector('[data-player-fixture]')?.value||form?.dataset.playerFixtureId||null;}
+function syncPlayerFixtureSave(form){
+ const button=form?.querySelector('#saveMyReflection');if(!button)return;
+ if(!button.dataset.fixtureIdleLabel)button.dataset.fixtureIdleLabel=button.textContent;
+ const loading=form.dataset.playerFixtureLoading==='true',failed=form.dataset.playerFixtureError==='true';
+ const draft=typeof matchDraftRecovery==='undefined'?null:matchDraftRecovery.forms.get(form);
+ button.disabled=loading||failed||!!draft?.unlock;
+ button.textContent=loading?'Loading match…':failed?'Load matches to save':button.dataset.fixtureIdleLabel;
+ const choice=form.querySelector('[data-player-fixture]');if(choice)choice.disabled=form.dataset.playerFixtureLinked==='true'||!!draft?.unlock;
+ if(choice?.value)for(const id of ['prepDate','prepFormat','prepOpposition','reflectionDate','reflectionFormat','reflectionOpposition']){const field=form.querySelector('#'+id);if(field)field.disabled=true;}
+}
 function playerFixtureReady(form){if(form?.dataset.playerFixtureLoading==='true'||form?.dataset.playerFixtureError==='true'){const status=form.querySelector('#myReflectionStatus');if(status)status.textContent='Load your match list before saving so the fixture can be confirmed.';return false;}return true;}
 async function wirePlayerFixturePicker(preparation,match,planning,current){
  const form=document.getElementById('myReflectionForm');if(!form)return;
@@ -12549,13 +12605,13 @@ async function wirePlayerFixturePicker(preparation,match,planning,current){
  const initialSnapshot=feedbackEntryValues(form),wasDisabled=fields.map(f=>!!f?.disabled),host=document.createElement('div');host.className='field';host.style.gridColumn='1 / -1';host.dataset.playerFixtureHost='';
  const anchor=fields[0]?.closest('.field');(anchor?.parentNode||form).insertBefore(host,anchor||form.firstChild);
  const load=async()=>{
-  form.dataset.playerFixtureLoading='true';delete form.dataset.playerFixtureError;host.innerHTML='<p class="help" role="status">Loading your match list…</p>';
+  form.dataset.playerFixtureLoading='true';delete form.dataset.playerFixtureError;syncPlayerFixtureSave(form);host.innerHTML='<p class="help" role="status">Loading your match list…</p>';
   try{
    const {data,error}=await supabase.rpc('get_my_match_fixtures',{p_club_id:club.id,p_preparation_id:preparation?.id||null,p_match_id:match?.id||null});if(error)throw error;if(!Array.isArray(data?.fixtures))throw Error('Your match list could not be confirmed.');
    if(!current()||document.getElementById('myReflectionForm')!==form)return;
    const fixtures=data.fixtures,linked=data.linked_fixture_id||null;
    if(linked&&!fixtures.some(f=>f.id===linked))throw Error('The linked match could not be loaded.');
-   form.dataset.playerFixtureId=linked||'';
+   form.dataset.playerFixtureId=linked||'';form.dataset.playerFixtureLinked=String(!!linked);
    const identityFixed=!!(preparation||match);
    const matchesIdentity=f=>f.match_date===fields[0]?.value&&f.format_key===fields[1]?.value&&String(f.opposition||'').trim().toLowerCase()===String(fields[2]?.value||'').trim().toLowerCase();
    const keptClean=feedbackEntryValues(form)===initialSnapshot;
@@ -12571,8 +12627,11 @@ async function wirePlayerFixturePicker(preparation,match,planning,current){
     if(planning){refreshPreparationScoringChoices(form);syncPreparationCall(preparation);}
    };
    choice.addEventListener('change',apply);if(linked)apply();
-   delete form.dataset.playerFixtureLoading;if(keptClean)feedbackEntryBaselines.set(form,feedbackEntryValues(form));
-  }catch(error){if(!current()||document.getElementById('myReflectionForm')!==form)return;delete form.dataset.playerFixtureLoading;form.dataset.playerFixtureError='true';host.innerHTML=`<p class="help">${esc(error.message||'Your match list could not be loaded.')}</p><button class="btn secondary" type="button" data-retry-player-fixtures>Try loading matches again</button>`;host.querySelector('button').onclick=load;}
+   delete form.dataset.playerFixtureLoading;
+   const draft=typeof matchDraftRecovery==='undefined'?null:matchDraftRecovery.forms.get(form);
+   if(keptClean){feedbackEntryBaselines.set(form,feedbackEntryValues(form));if(draft&&!draft.adopted&&!matchDraftRead(draft.key))draft.baseline=JSON.stringify(matchDraftSnapshot(form));}
+   syncPlayerFixtureSave(form);if(draft?.adopted)matchDraftCapture(draft);
+  }catch(error){if(!current()||document.getElementById('myReflectionForm')!==form)return;delete form.dataset.playerFixtureLoading;form.dataset.playerFixtureError='true';syncPlayerFixtureSave(form);host.innerHTML=`<p class="help">${esc(error.message||'Your match list could not be loaded.')}</p><button class="btn secondary" type="button" data-retry-player-fixtures>Try loading matches again</button>`;host.querySelector('button').onclick=load;}
  };
  await load();
 }
@@ -13736,7 +13795,7 @@ function wireObservationSave(player,kind,onSaved,options={}){
   const button=document.getElementById(kind==='match'?'saveStaffMatchFeedback':'saveTrainingObservation');
   if(!form||!button)return;
   if(kind==='match'&&!options.rpcName){void wireIndividualFixtureObservation(player,onSaved);return;}
-  const targetClub=club?.id,targetUser=session?.user?.id;
+  const targetClub=club?.id,targetUser=session?.user?.id,lockUncertain=options.lockUncertain||kind==='training';
   const stillCurrent=()=>club?.id===targetClub&&session?.user?.id===targetUser&&document.getElementById('staffDevelopmentForm')===form;
   const focus=document.getElementById(kind==='match'?'staffMatchNextFocus':'staffTrainingNextFocus');
   const review=document.getElementById('staffObservationReviewOn');
@@ -13783,15 +13842,15 @@ function wireObservationSave(player,kind,onSaved,options={}){
     try{
       const {data:result,error}=await matchDraftRpc(form,options.rpcName||'save_coach_observation',{...args,p_request_id:requestId});
       if(error)throw error;
-      if(options.lockUncertain&&(!result?.observation_id||(kind==='match'&&!result.match_id)||(['save_fixture_match_observation','save_individual_fixture_observation'].includes(options.rpcName)&&(!result.fixture_id||result.fixture?.id!==result.fixture_id))))throw Error('The saved observation could not be confirmed.');
+      if(lockUncertain&&(!result?.observation_id||(kind==='match'&&!result.match_id)||(['save_fixture_match_observation','save_individual_fixture_observation'].includes(options.rpcName)&&(!result.fixture_id||result.fixture?.id!==result.fixture_id))))throw Error('The saved observation could not be confirmed.');
       matchDraftConfirmed(form,result);
-      uncertainArgs=null;uncertainRestore=null;options.onSaveState?.('saved');feedbackEntryBaselines.set(form,feedbackEntryValues(form));button.textContent='Saved ✓';report('Observation saved.');coachingActionSavePending=false;
+      uncertainArgs=null;uncertainRestore=null;delete form.dataset.observationSaveUnconfirmed;options.onSaveState?.('saved');feedbackEntryBaselines.set(form,feedbackEntryValues(form));button.textContent='Saved ✓';report('Observation saved.');coachingActionSavePending=false;
       if(!stillCurrent())return;
       try{await onSaved(result);}catch(error){report('Saved successfully. Reload this page to see the latest observation and action.');}
     }catch(error){
       const rejected=/^(?:P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(String(error?.code||''));
-      if(options.lockUncertain&&!rejected){uncertainArgs=args;uncertainRestore=restore;options.onSaveState?.('uncertain');button.disabled=false;button.textContent='Retry save';report('The save could not be confirmed. Check previous save safely; your observation is kept here.',true);}
-      else{uncertainArgs=null;uncertainRestore=null;restore();button.textContent=idleLabel;options.onSaveState?.('idle');report(error?.message||'Could not confirm the save. Your observation is still here; try Save again.',true);}
+      if(lockUncertain&&!rejected){uncertainArgs=args;uncertainRestore=restore;form.dataset.observationSaveUnconfirmed='true';options.onSaveState?.('uncertain');button.disabled=false;button.textContent='Retry save';report('The save could not be confirmed. Check previous save safely; your observation is kept here.',true);}
+      else{uncertainArgs=null;uncertainRestore=null;delete form.dataset.observationSaveUnconfirmed;restore();button.textContent=idleLabel;options.onSaveState?.('idle');report(error?.message||'Could not confirm the save. Your observation is still here; try Save again.',true);}
     }
     finally{coachingActionSavePending=false;matchDraftAfterAttempt(form);}
   };
@@ -13808,8 +13867,8 @@ function renderStaffTrainingObservationForm(player,data={},observationId=null){
     <div class="development-form-head"><div><div class="section-label">Training observation</div><h2>${observation?'Edit your training observation.':'Record what you noticed.'}</h2><div class="help">Notice how the player recognises the right ball and commits to their chosen shot. Record decision and execution details that will help them practise. Leave the format unticked for general/Core practice.</div></div></div>
     <div class="field"><label>Date</label><input id="trainingObservationDate" type="date" value="${esc(observation?.observed_on||todayIso())}"></div>
     ${observationPurposeField(observation)}
-    <div id="staffObservationPlanQuestions"><div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],observation?.training_to_plan||'mostly')}</div>
-    <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),observation?.observation_type||'right_shots_right_balls')}</div></div>
+    <div id="staffObservationPlanQuestions"><div class="development-question"><label>Was ${esc(player.display_name||'the player')} training to their Player Plan?</label>${radioChoiceHtml('staffTrainingToPlan',[["yes","Yes","The work clearly matched the plan"],["mostly","Mostly","Useful work with some drift"],["no","No","The session moved away from the plan"]],observation?.training_to_plan||'')}</div>
+    <div class="development-question"><label>What stood out?</label>${radioChoiceHtml('staffObservationType',Object.entries(TRAINING_OBSERVATION_LABELS).map(([k,l])=>[k,l,'']),observation?.observation_type||'')}</div></div>
     <div class="field"><label>Short note <span>optional</span></label><textarea id="staffTrainingNote" maxlength="500" rows="3" placeholder="Only add detail if it helps the player">${esc(observation?.note||'')}</textarea></div>
     ${observationConversationField(observation?.needs_conversation)}
     <div class="development-question"><label>Format focus <span>choose any that apply</span></label><div class="format-check-grid">${enabled.map(([k,l])=>`<label><input type="checkbox" data-training-format value="${k}" ${observation?.format_keys?.includes(k)?'checked':''}><span>${esc(l)}</span></label>`).join('')}</div></div>
@@ -20243,8 +20302,12 @@ function seFixtureEditor(f=null){
   const details={...d,...Object.fromEntries(['competition','opposition','ground','meeting'].map(k=>[k,data.get(k).trim()])),grade:grade.grade,grade_group_id:grade.grade_group_id,format:data.get('format'),overs:data.get('overs')===''?null:Number(data.get('overs')),overs_source:data.has('overs_override')?'fixture':'default',captain_id:d.captain_id||null,days,brackets:data.has('brackets'),min_quicks:Number(data.get('min_quicks')),min_batters:Number(data.get('min_batters')),staff:data.getAll('staff'),cancelled:data.has('cancelled')};
   if(!s.data.selector){s.date=days[0].date;s.boardDateChosen=true;return seMutate('save_fixture',{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details});}
   let slots=structuredClone(f?.slots||seBlankSlots());if(f&&f.details.days.length===2&&days.length===1&&slots.some(x=>x.d2&&x.d1!==x.d2)&&!confirm('Changing to one day removes Day 2 selections from this draft. Continue?'))return;
+  if(f&&f.details.brackets&&days.length===2&&!details.brackets){
+   const changes=slots.filter(x=>x.d1!==x.d2).map(x=>(x.d2?seName(x.d2):'Vacant')+' → '+(x.d1?seName(x.d1):'Vacant'));
+   if(changes.length&&!confirm('Turning off bracketing changes Day 2 selections:\n'+changes.join('\n')+'\nContinue?'))return;
+  }
   if(days.length===1)slots=slots.map(x=>({...x,d2:null}));else if(!details.brackets)slots=slots.map(x=>({...x,d2:x.d1}));s.date=days[0].date;s.boardDateChosen=true;
-  await seMutate('save_board',{fixtures:[{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details,slots}]});
+  await seMutate('save_board',{fixtures:[{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details,slots}]},f?{undo:[structuredClone(f)]}:{});
  };
 }
 function seSettingsSaveState(form,label,action){
@@ -20638,7 +20701,19 @@ function seBoardSlot(f,slot,index,roles){
  }).join('')}</div>${seOrderHandle(f,index)}${active?'<section class="se-picker" id="sePicker" aria-label="Choose a player"></section>':''}</div>`;
 }
 function seTeamCard(f){const s=ensureSelections(),d=f.details,roles=seMatchRoles(f,s.data),problems=[...(f.issues||[]).filter(i=>!i.match_role),...seMatchRoleIssues(f,roles)],same=f.published&&!seDraftChanged(f);return `<section class="se-card"><div class="se-team-head se-team-compact-head"><div><h2>${seEsc(d.grade)}</h2><small class="se-team-state">${seFixtureLocked(f)?(f.published?(same?'Published · locked':'Changes awaiting republication · locked'):'Completed · locked'):d.cancelled?'Cancelled':same?'Published':f.published?'Changes awaiting republication':'Draft'}</small></div><p>v ${seEsc(d.opposition)} · ${d.days.map(x=>seDate(x.date)).join(' / ')}${d.format?' · '+seEsc(SE_FORMATS.find(([key])=>key===d.format)?.[1]||''):''}</p></div>${seFixtureLockControls(f)}<fieldset class="se-fixture-fields" data-se-locked="${seFixtureLocked(f)}">${seBoardCounts(f,roles)}${seMatchRoleFields(f,roles)}${d.days.length===2&&d.brackets?'<p class="se-order-pair-note">Bracketed pairs move together.</p>':''}<div data-se-order-list="${seEsc(f.id)}" role="list" aria-label="${seEsc(d.grade)} batting order">${f.slots.map((slot,i)=>seBoardSlot(f,slot,i,roles)).join('')}</div>${problems.length?`<details class="se-issues"><summary>${problems.filter(i=>i.level==='error').length} issues · ${problems.filter(i=>i.level==='warning').length} warnings</summary>${problems.map(i=>`<p>${seEsc(i.text)}</p>`).join('')}</details>`:''}<div class="se-actions" style="margin-top:10px"><button class="btn ghost" data-se-edit="${f.id}">Fixture details</button><button class="btn ghost" data-se-copylast="${f.id}">Copy previous team</button></div></fieldset></section>`;}
-async function seCopyLast(id){const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id),last=s.data.fixtures.filter(x=>x.id!==id&&x.details.grade===f.details.grade&&x.details.competition===f.details.competition&&x.details.format===f.details.format&&x.details.days[0].date<f.details.days[0].date).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date))[0];if(!last){seNotice('There is no earlier team for this competition and grade.');return;}if(!confirm('Copy the previous team? Only players marked available for these dates will be included.'))return;const copy=structuredClone(f);copy.slots=(last.published?.slots||last.slots).map(slot=>{const available=(id,day)=>{const p=s.data.roster.find(p=>p.id===id);return p?.active&&seDayStatus(p,day)==='available'?id:null;};let d1=available(slot.d1,f.details.days[0]),d2=f.details.days.length===2?available(f.details.brackets?slot.d2||slot.d1:slot.d1,f.details.days[1]):null;if(f.details.days.length===2&&!f.details.brackets&&(!d1||!d2))d1=d2=null;return {d1,d2};});await seMutate('save_board',{fixtures:[copy]},{undo:[structuredClone(f)]});}
+async function seCopyLast(id){
+ const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id);if(!f||s.busy||s.pending)return;
+ const last=s.data.fixtures.filter(x=>x.id!==id&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>x.details?.grade===f.details.grade&&x.details.competition===f.details.competition&&x.details.format===f.details.format&&x.details.days?.[0]?.date<f.details.days[0].date&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date))[0];
+ if(!last){seNotice('There is no earlier team to copy for this competition and grade.');return;}
+ const source=last.details.grade+' · '+seDate(last.details.days[0].date);
+ if(!confirm('Copy '+source+'? Only players marked available for these dates will be included.'))return;
+ const copy=structuredClone(f);copy.slots=Array.from({length:11},(_,i)=>{
+  const slot=last.slots[i]||{},available=(id,day)=>{const p=s.data.roster.find(p=>p.id===id);return p?.active&&seDayStatus(p,day)==='available'?id:null;};
+  let d1=available(slot.d1,f.details.days[0]),d2=f.details.days.length===2?available(f.details.brackets?slot.d2||slot.d1:slot.d1,f.details.days[1]):null;
+  if(f.details.days.length===2&&!f.details.brackets&&(!d1||!d2))d1=d2=null;return {d1,d2};
+ });
+ if(await seMutate('save_board',{fixtures:[copy]},{undo:[structuredClone(f)]}))seNotice('Copied '+source+' ✓');
+}
 function sePublished(){const s=ensureSelections(),fs=s.data.fixtures.filter(f=>f.published).sort((a,b)=>b.published.details.days[0].date.localeCompare(a.published.details.days[0].date));document.getElementById('seContent').innerHTML=fs.length?`<div class="se-grid">${fs.map(f=>{const d=f.published.details,ps=f.published.players,own=s.data.roster.find(p=>p.user_id===session.user.id),name=id=>ps.find(p=>p.id===id)?.name||'Vacant';return `<section class="se-card"><div class="se-team-head"><h2>${seEsc(d.grade)}</h2><p>${seEsc(d.competition)} · v ${seEsc(d.opposition)}</p><p>${seEsc(seFormatLabel(d))}</p><p>${d.days.map((x,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(x.date)+(x.start?' · '+x.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}</p><p>${seEsc(d.meeting)}</p></div>${d.cancelled?'<p>Match cancelled</p>':`<ol>${f.published.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(f.published,slot.d1,0)}${slot.d1===own?.id?' · you':''}${seSnapshotSplit(f.published,slot)?` <span class="se-date-tag">Day 1</span><br>${seSnapshotName(f.published,slot.d2,1)}${slot.d2===own?.id?' · you':''} <span class="se-date-tag">Day 2</span>`:''}</li>`).join('')}</ol>`}<p class="se-muted">${seEsc(sePublicationStamp(f,s.data))}</p><div class="se-actions"><button class="btn ghost" data-se-export="${f.id}">Copy team list</button>${f.can_chat?`<button class="btn" data-se-chat="${f.id}">Match conversation</button>`:''}</div></section>`;}).join('')}</div>`:'<div class="se-card se-empty">Published teams will appear here. Selectors can start in Selection board.</div>';
  if(s.publicationResult&&s.data.socials){document.getElementById('seContent').insertAdjacentHTML('afterbegin','<div class="se-actions"><button class="btn" id="sePublishedGraphics">Create team graphics</button></div>');document.getElementById('sePublishedGraphics').onclick=()=>{if(!confirmLeaveSelections())return;const social=socialEnsure();social.view='graphics';social.date=s.data.fixtures.find(f=>s.publicationResult.ids.includes(f.id))?.published?.details?.days?.[0]?.date||'';social.selected=new Set(s.publicationResult.ids);s.view='socials';drawSelections();};}
 
@@ -22271,7 +22346,23 @@ function socialGuideDraftKey(g){return g.step+':'+(g.step===2?g.person||'':'');}
 window.addEventListener('beforeunload',e=>{if(socialState?.scope===selectionsScopeKey()&&(socialState.dirty||socialState.busy||socialState.pending||Object.keys(socialState.photoPositions||{}).length||socialAwards.hasChanges(socialState))){e.preventDefault();e.returnValue='';}});
 /* END TEAMS SOCIAL GRAPHICS */
 
-const socialAwards=createSocialAwards({navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,draw:socialDraw,message:socialMessage,canLeave:socialCanLeave,image:socialImage,fontReady:socialFontReady,text:socialText,download:socialBlobDownload,
+function socialReviewUpdatedAward(s,edition){
+ if(!socialHere(s)||!socialCanLeave())return false;
+ const key=edition.kind==='team_week'?'week':edition.kind==='player_week'?'playerWeek':null;
+ if(!key||!/^\d{4}-\d{2}-\d{2}$/.test(edition.week_end||''))return false;
+ const api=key==='week'?socialWeek:socialPlayerWeek;let w=api.state(s);
+ if(w.end!==edition.week_end){
+  const draft=w.designDirty||w.layoutDirty||w.rows?.length||w.winner||w.photo||w.blurb;
+  if(draft&&!confirm('Open the week ending '+edition.week_end.split('-').reverse().join('/')+'? Your current '+(key==='week'?'Team':'Player')+' of the Week draft will be replaced.'))return false;
+  delete s[key];w=api.state(s);w.end=edition.week_end;
+ }
+ s.view=edition.kind;
+ // Refresh existing work using the modules' normal preservation rules. A fresh view loads itself.
+ if(w.context){socialDraw(s);void api.load(s,{preserve:true});}else{w.attempted=false;w.loadAttempted=false;socialDraw(s);}
+ return true;
+}
+
+const socialAwards=createSocialAwards({reviewUpdatedAward:socialReviewUpdatedAward,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,draw:socialDraw,message:socialMessage,canLeave:socialCanLeave,image:socialImage,fontReady:socialFontReady,text:socialText,download:socialBlobDownload,
  openScores:(s,end)=>{s.view='team_week';if(s.week?.end!==end)s.week={end,title:'',context:null,selectedSources:new Set(),rows:[],message:'',busy:false,layout:teamWeekLayout(),blurb:'',background:null,pending:null,render:0};socialDraw(s);},
  savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),
  savedPhoto:async(s,id)=>{const a=s.data.assets.find(a=>a.id===id);if(!a)throw Error('Photo not found');const r=await supabase.storage.from('club-socials').download(a.path);if(r.error)throw Error(r.error.message);return {blob:r.data,name:a.label||'Saved player photo.png'};},
