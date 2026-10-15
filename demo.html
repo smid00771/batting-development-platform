@@ -24917,9 +24917,10 @@ function socialGuide(s){
  const saved={0:!!(s.design.brief||s.data.assets.some(a=>['reference','reference_extra'].includes(a.kind))),1:!!socialAsset(s,'background'),3:false};
  const remaining=context?.total_limit!=null?Math.max(0,context.total_limit-context.total_used):null;
  const progress=flow.photo?'':'<nav class="sg-progress" aria-label="Guided setup steps">'+flow.steps.map((step,i)=>'<div class="sg-step '+(saved[step.id]?'is-done':'')+'" aria-current="'+(g.step===step.id?'step':'false')+'"><span>'+(saved[step.id]&&g.step!==step.id?socialGuideIcon('check'):i+1)+'</span>'+step.label+'</div>').join('')+'</nav>';
- const back=flow.photo?'<button class="btn ghost" id="prepReturn">← Back to Team Graphics</button>':flow.back!==undefined?'<button class="btn ghost" id="prepBack">← Back</button>':'<small>Step 1 of 3</small>';
- const next=flow.photo?'<button class="btn" id="prepNext">Back to Team Graphics →</button>':flow.next!==undefined?'<button class="btn" id="prepNext">'+(s.dirty?'Save &amp; next':'Next: '+flow.steps[flow.index+1].label.toLowerCase())+' →</button>':'';
- host.innerHTML=socialGuideStyles()+'<div class="social-guide"><div class="sg-head"><span class="sg-hint">'+(flow.photo?'Team Graphics · Player photo':'Step '+(flow.index+1)+' of 3')+'</span>'+(context?'<span class="sg-pill">'+(paused?'Saved images ready':remaining!=null?remaining+' AI credits':'Guided setup')+'</span>':'')+'</div>'+progress+(g.error?'<p class="notice" role="alert">'+seEsc(g.error)+'</p><button class="btn ghost" id="prepReload">Try again</button>':'')+(context?.demo?'<p class="sg-credits">Demo preview · no AI charge</p>':'')+'<div id="prepStep"></div><div class="sg-footer">'+back+'<div class="sg-footer-end">'+next+'</div></div></div>';
+ const returnLabel=g.awardReturn?'award graphic':'Team Graphics';
+ const back=flow.photo?'<button class="btn ghost" id="prepReturn">← Back to '+returnLabel+'</button>':flow.back!==undefined?'<button class="btn ghost" id="prepBack">← Back</button>':'<small>Step 1 of 3</small>';
+ const next=flow.photo?'<button class="btn" id="prepNext">Back to '+returnLabel+' →</button>':flow.next!==undefined?'<button class="btn" id="prepNext">'+(s.dirty?'Save &amp; next':'Next: '+flow.steps[flow.index+1].label.toLowerCase())+' →</button>':'';
+ host.innerHTML=socialGuideStyles()+'<div class="social-guide"><div class="sg-head"><span class="sg-hint">'+(flow.photo?(g.awardReturn?'Socials Awards · Player photo':'Team Graphics · Player photo'):'Step '+(flow.index+1)+' of 3')+'</span>'+(context?'<span class="sg-pill">'+(paused?'Saved images ready':remaining!=null?remaining+' AI credits':'Guided setup')+'</span>':'')+'</div>'+progress+(g.error?'<p class="notice" role="alert">'+seEsc(g.error)+'</p><button class="btn ghost" id="prepReload">Try again</button>':'')+(context?.demo?'<p class="sg-credits">Demo preview · no AI charge</p>':'')+'<div id="prepStep"></div><div class="sg-footer">'+back+'<div class="sg-footer-end">'+next+'</div></div></div>';
  document.getElementById('prepBack')?.addEventListener('click',()=>socialGuideGo(s,flow.back));
  document.getElementById('prepReturn')?.addEventListener('click',()=>socialGuideReturnToTeam(s));
  document.getElementById('prepReload')?.addEventListener('click',()=>socialGuideReload(s));
@@ -25053,6 +25054,7 @@ function socialGuideResetImage(g){
 }
 function socialGuideReturnToTeam(s,message=''){
  if(!socialCanLeave())return false;const g=socialGuideState(s),key=g.returnCard;socialGuideRemember(g);
+ if(g.awardReturn)return socialGuideReturnToAward(s,g,message);
  g.returnCard='';s.view='graphics';s.notice=message;socialDraw(s);
  requestAnimationFrame(()=>{
   if(!socialHere(s)||s.view!=='graphics')return;
@@ -25060,6 +25062,7 @@ function socialGuideReturnToTeam(s,message=''){
   if(!target)return;target.style.scrollMarginTop=Math.max(16,(document.querySelector('.nav')?.getBoundingClientRect().bottom||0)+16)+'px';target.scrollIntoView({block:'start'});
  });return true;
 }
+async function socialGuideReturnToAward(s,g,message){const target=g.awardReturn;s.busy=true;socialLock(true);try{if(target.savedAsset){const response=await supabase.storage.from('club-socials').download(target.savedAsset.path);if(response.error)throw Error(response.error.message);await target.apply({blob:response.data,name:target.savedAsset.label||'Player cut-out.png'});}g.awardReturn=null;s.view=target.view;s.notice=message||'Returned to the award graphic.';}catch(e){socialMessage(s,e.message);return false;}finally{s.busy=false;if(socialHere(s))socialDraw(s);}return true;}
 async function socialGuideGo(s,step){
  if(s.busy||s.pending)return;const g=socialGuideState(s);
  if(s.dirty&&!await socialSave(s,'settings',{revision:s.data.revision,design:s.design}))return;
@@ -25071,7 +25074,7 @@ function socialGuideEnter(s,step=0,person='',card=''){
  if(card&&!socialGuardArtwork(s,'feature',{fixture_id:card.slice(0,card.lastIndexOf(':'))}))return;
  if(!socialCanLeave())return;const g=socialGuideState(s);
  if(g.step!==step||step===2&&g.person!==person)socialGuideSwitch(g,step,person);
- g.returnCard=card;s.view='guide';s.notice='';socialDraw(s);
+ g.awardReturn=null;g.returnCard=card;s.view='guide';s.notice='';socialDraw(s);
  document.getElementById('socialPage')?.scrollIntoView({block:'start',behavior:'smooth'});
 }
 function socialGuidePreview(title='Your team graphic'){
@@ -25138,14 +25141,14 @@ async function socialGuideSaveAndContinue(s,another=false){
  const job=g.context?.jobs.find(j=>j.id===g.preview&&j.state==='ready');
  if(job)await socialPrepApprove(s);else await socialGuideOriginalApprove(s);
  if(!socialHere(s)||s.pending||g.local||g.preview)return;
- if(another&&!g.returnCard){socialGuideSwitch(g,2,'');socialDraw(s);}else if(step===2)socialGuideReturnToTeam(s,'Player photo saved ✓');else await socialGuideGo(s,socialGuideSteps(g).next);
+ if(another&&!g.returnCard&&!g.awardReturn){socialGuideSwitch(g,2,'');socialDraw(s);}else if(step===2)await socialGuideReturnToTeam(s,'Player photo saved ✓');else await socialGuideGo(s,socialGuideSteps(g).next);
 }
 function socialGuideNextState(s){
  const g=socialGuideState(s),button=document.getElementById('prepNext');if(!button)return;
  const ready=g.context?.jobs.find(j=>j.id===g.preview&&j.state==='ready'),draft=ready||g.local,active=g.context?.jobs.some(j=>j.kind===g.kind&&['pending','processing'].includes(j.state));
  button.hidden=g.step===2&&!draft&&!active;button.disabled=!!(s.busy||s.pending);button.onclick=()=>g.step===2?socialGuideReturnToTeam(s):socialGuideGo(s,socialGuideSteps(g).next);
  if(draft){
-  button.textContent=g.step===2?'Save photo & back to team →':'Use this background →';
+  button.textContent=g.step===2?(g.awardReturn?'Save photo & back to award →':'Save photo & back to team →'):'Use this background →';
   button.disabled||=!!(g.needsHelp&&!ready)||document.getElementById('prepCanvas')?.dataset.previewState!=='ready';
   button.onclick=()=>socialGuideSaveAndContinue(s);
  }else if(active){button.disabled=true;button.textContent='Preparing image…';}

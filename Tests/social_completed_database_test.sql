@@ -70,6 +70,7 @@ begin
  rejected:=false;begin perform public.club_socials_api(c,'feature',data);exception when sqlstate 'P0159' then rejected:=true;end;assert rejected;
  assert (select revision=4 from club_selection_private.social_features where fixture_id=fid and day=1);
  new_key:=club_selection_private.social_artwork_key(fid);
+ rejected:=false;begin perform club_selection_private.social_post_validate(c,jsonb_build_array(jsonb_build_object('id',fid,'artwork_key',new_key)));exception when raise_exception then rejected:=sqlerrm like 'This fixture is completed%';end;assert rejected,'Completed team announcements stay blocked when awards are enabled';
  foreach k in array array['validate_export','record_export'] loop
   rejected:=false;begin perform public.club_socials_api(c,k,jsonb_build_object('request_id',gen_random_uuid(),'fixtures',jsonb_build_array(jsonb_build_object('id',fid,'artwork_key',new_key))));exception when sqlstate 'P0159' then rejected:=true;end;assert rejected;
  end loop;

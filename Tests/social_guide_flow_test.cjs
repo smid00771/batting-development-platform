@@ -10,6 +10,7 @@ function setup(step=0){
  const document={getElementById:id=>element(id),querySelectorAll:()=>[],querySelector:selector=>selector==='.nav'?{getBoundingClientRect:()=>({bottom:64})}:selector.startsWith('[data-social-canvas=')?{closest:()=>element('team-card:'+selector)}:element(selector)};
  const c=vm.createContext({console,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>frames.push(fn),clearTimeout(){},clearInterval(){},setTimeout(){},setInterval(){},URL,
   socialHere:()=>true,socialGuideState:s=>s.guide,socialAsset:(s,kind)=>s.data.assets.find(a=>a.kind===kind),seEsc:String,socialGuideStyles:()=>'',socialGuideIcon:()=>'',socialGuideLook(){},socialGuidePrepare(){},socialGuideFinish(){},socialCanLeave:()=>!s.pending&&!s.busy,
+  socialLock(){},socialMessage:(_,message)=>calls.push({message}),supabase:{storage:{from:()=>({download:async()=>({data:new Blob(['saved cutout'])})})}},Blob,
   socialDraw:s=>{calls.push({render:s.view,step:s.guide.step});},socialSave:async()=>true,
   socialGuideOriginalApprove:async s=>{calls.push({save:'upload'});s.guide.local=null;},socialPrepApprove:async s=>{calls.push({save:'prepared'});s.guide.preview=null;}});
  vm.runInContext(boundaries.map(([a,b])=>part(app,a,b)).join('\n'),c);
@@ -72,4 +73,14 @@ test('photo previews use the selected grade and match day without changing other
 
 test('production and demo retain identical setup navigation and team photo handling',()=>{
  for(const [a,b] of boundaries)assert.equal(part(app,a,b),part(demo,a,b));
+});
+
+test('award cut-outs return the saved photo to the selected award and keep the team fixture untouched',async()=>{
+ const h=setup(2);let applied;h.s.guide.returnCard='';h.s.guide.awardReturn={view:'century',savedAsset:{path:'saved.png',label:'Cut-out'},apply:async asset=>{applied=asset;}};
+ h.c.socialGuide(h.s);assert.match(h.element('socialContent').innerHTML,/Socials Awards · Player photo/);
+ await h.c.socialGuideReturnToTeam(h.s,'Photo saved');assert.equal(h.s.view,'century');assert.equal(await applied.blob.text(),'saved cutout');assert.equal(h.s.guide.awardReturn,null);assert.equal(h.s.busy,false);assert.equal(h.s.data.fixtures.length,0);
+});
+test('failed return keeps the prepared photo available for retry',async()=>{
+ const h=setup(2);h.s.guide.awardReturn={view:'five_wickets',savedAsset:{path:'saved.png'},apply:async()=>{throw Error('Connection lost');}};
+ assert.equal(await h.c.socialGuideReturnToTeam(h.s),false);assert.equal(h.s.view,'guide');assert.ok(h.s.guide.awardReturn.savedAsset);assert.equal(h.s.busy,false);
 });
