@@ -6,7 +6,7 @@ function harness(source,{head=false}={}){
  const fixture=id=>({id,published:{details:{grade:id==='one'?'1st Grade':'2nd Grade'}},details:{grade:id==='one'?'1st Grade':'2nd Grade'},slots:[]});
  const s={view:'published',data:{admin:true,head_selector:head,access:{head_selector_id:'head'},fixtures:['one','two'].map(fixture),reviews:['one','two'].map(id=>({id,snapshot:{details:{grade:id==='one'?'1st Grade':'2nd Grade',days:[]},players:[],slots:[],draft_revision:1}}))}};
  const c=vm.createContext({document,FormData:dom.window.FormData,session:{user:{id:head?'head':'admin'}},selectionState:s,currentTab:'teams',ensureSelections:()=>s,recordSelectionDrawer:(kind,values)=>{s.navigationDrawer={kind,...values};},queueMicrotask(){},bindSelectionBackButtons(){},seCanSetup:()=>true,seEsc:String,seDate:String,seFormatLabel:()=>'',seFixtureLocked:()=>true,seFixtureCompleted:()=>false,seToggleFixtureLock:async id=>events.push(['unlock',id]),drawSelections:()=>events.push(['back']),appNavigationBack:callback=>callback(),confirmLeaveSelections:()=>true,seNotice:message=>notices.push(message),seRPC:(action,data)=>new Promise((resolve,reject)=>requests.push({action,data,resolve,reject})),seReload:async()=>{},seMutate:async()=>true});
- vm.runInContext(['seFixtureLockControls','seFixtureEditor','seReviewScreen','seChat'].map(name=>extract(source,name)).join('\n'),c);
+ vm.runInContext(['seFixtureLockControls','seFixtureEditor','seReviewScreen','sePublishedDates','seClubDate','seMatchConversationClosed','seChat'].map(name=>extract(source,name)).join('\n'),c);
  return {c,s,document,requests,notices,events};
 }
 for(const file of ['app.js','demo.html']){
