@@ -13,7 +13,7 @@ api.rpc=async(name,args)=>{calls.push(structuredClone(args));if(args.p_action===
 const s={scope:'user:club-test',view:'player_week',data:{brand:{name:'Test Club',logo:null},timezone:'Australia/Sydney'},design:{primary:'#073554',accent:'#128fd2'},urls:new Map()};
 const h={supabase:api,demo:true,here:x=>x===s,escape:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),normalize:async b=>b,download:(name,blob)=>downloads.push({name,blob}),image:async(_,url)=>loadImage(Buffer.from(await (await fetch(url)).arrayBuffer())),fontReady:async()=>{},text:(ctx,text,x,y,width,size)=>{ctx.font=`700 ${size}px "Club Sporting"`;ctx.fillText(String(text),x,y,width);},openScores:(_,end)=>{s.openedWeek=end;},savedPhotos:()=>[]};
 const module=createPlayerOfWeek(h),tick=()=>new Promise(r=>setTimeout(r,5)),until=async pred=>{for(let i=0;i<1000;i++){if(pred())return;await tick();}throw Error('Timed out: '+document.getElementById('pwStatus')?.textContent);},id=x=>document.getElementById(x),settled=()=>until(()=>!s.playerWeek.busy&&s.playerWeek.previewReady);
-module.render(s);await settled();assert.equal(s.playerWeek.winner,null);assert.equal(id('pwSave').disabled,true);assert.equal(id('pwUndoChoice'),null);assert.ok(document.querySelectorAll('.pw-contender').length>4);
+module.state(s).end='2026-10-11';module.render(s);await settled();assert.equal(s.playerWeek.winner,null);assert.equal(id('pwSave').disabled,true);assert.equal(id('pwUndoChoice'),null);assert.ok(document.querySelectorAll('.pw-contender').length>4);
 document.querySelector('[data-pw-context]').click();id('pwStage').value='emerging';id('pwContextNote').value='First senior fifty';id('pwSaveContext').click();await settled();assert.ok(Object.values(s.playerWeek.context.profiles).some(p=>p.note==='First senior fifty'));
 document.querySelector('[data-pw-choose]').click();await settled();assert.ok(s.playerWeek.winner);assert.equal(id('pwSave').disabled,false);
 const firstChoice=s.playerWeek.winner.key,choiceWeek=s.playerWeek.end,choiceTitle=s.playerWeek.title,choiceLayout=structuredClone(s.playerWeek.layout),choiceCalls=calls.length;
@@ -50,3 +50,36 @@ id('pwImport').click();assert.equal(s.openedWeek,'2026-10-18');
 let backgroundHelp;h.openBackground=(_,file,apply)=>backgroundHelp={file,apply};
 const help=id('pwPrepareBackground');assert.equal(help.closest('.pw-asset').querySelector('h4').textContent,'Background');help.click();await until(()=>!!backgroundHelp);await backgroundHelp.apply({blob:png,name:'Prepared background.png'});module.render(s);await settled();assert.equal(s.playerWeek.layout.background_name,'Prepared background.png');
 console.log('Passed: human winner, reversible choice, pending-save guard, preserved history, private context, caption, separate save/download, retry, archived original, exact background, persistent controls, photo/logo positioning and week reset.');
+
+// Reload scores preserves unsaved layout changes while explicit week changes load saved artwork.
+const savedLayoutRevision=s.playerWeek.context.design.revision,savedTextColour=s.playerWeek.layout.text_colour;
+id('pwColour').value='#aa1177';id('pwColour').dispatchEvent(new window.Event('input'));await settled();
+const reloadRpc=api.rpc.bind(api);api.rpc=async(name,args)=>{const result=await reloadRpc(name,args);if(args.p_action==='context')result.data.design.revision+=10;return result;};
+id('pwReload').click();await settled();assert.equal(s.playerWeek.layout.text_colour,'#aa1177');assert.equal(s.playerWeek.layoutDirty,true);assert.equal(s.playerWeek.context.design.revision,savedLayoutRevision,'Keep the original layout revision while preserving its draft');api.rpc=reloadRpc;
+id('pwEnd').value='2026-10-25';id('pwEnd').dispatchEvent(new window.Event('change'));await settled();assert.equal(s.playerWeek.layout.text_colour,savedTextColour);assert.equal(s.playerWeek.layoutDirty,false);
+
+// Background help uses the exact saved image and preserves existing overlay choices.
+await upload('example',new File([png],'Previous post.png',{type:'image/png'}));
+h.openBackground=(_,file,apply,options)=>backgroundHelp={file,apply,options};backgroundHelp=null;
+const savedBackgroundBlob=(await api.storage.from().download(s.playerWeek.layout.background_path)).data;
+assert.equal(id('pwPrepareBackground').textContent,'Edit background');id('pwPrepareBackground').click();await until(()=>!!backgroundHelp);
+assert.equal(backgroundHelp.options.mode,'edit');assert.equal(backgroundHelp.file.name,s.playerWeek.layout.background_name);assert.deepEqual(Buffer.from(await backgroundHelp.file.arrayBuffer()),Buffer.from(await savedBackgroundBlob.arrayBuffer()));
+s.playerWeek.layout.show_logo=true;s.playerWeek.layout.text_panel=true;s.playerWeek.layout.includes_title=true;
+await backgroundHelp.apply({blob:png,name:'Edited background.png'});module.render(s);await settled();
+assert.equal(s.playerWeek.layout.show_logo,true);assert.equal(s.playerWeek.layout.text_panel,true);assert.equal(s.playerWeek.layout.includes_title,true);
+backgroundHelp=null;assert.equal(id('pwPrepareExample').textContent,'Start from previous example');id('pwPrepareExample').click();await until(()=>!!backgroundHelp);
+assert.equal(backgroundHelp.options.mode,'template');assert.equal(backgroundHelp.file.name,'Previous post.png');assert.deepEqual(Buffer.from(await backgroundHelp.file.arrayBuffer()),Buffer.from(await (await api.storage.from().download(s.playerWeek.layout.example_path)).data.arrayBuffer()));
+console.log('Passed: score reload preserves the dirty layout; background help edits saved images with preserved overlays or explicitly restarts from an example.');
+
+// Preserve draft edits on score reload, then explicitly recover from an actual design revision conflict.
+const conflictBase=s.playerWeek.context.design.revision;
+await api.rpc('player_of_week_api',{p_club_id:'club-test',p_action:'save_design',p_data:{revision:conflictBase,layout:{...s.playerWeek.layout,text_colour:'#11aa77'}}});
+document.querySelector('[data-pw-choose]:not(:disabled)').click();await settled();const conflictWinner=structuredClone(s.playerWeek.winner),conflictWeek=s.playerWeek.end,conflictTitle=s.playerWeek.title;
+id('pwBlurb').value='Keep the chosen winner’s caption.';id('pwBlurb').dispatchEvent(new window.Event('input'));id('pwColour').value='#7711aa';id('pwColour').dispatchEvent(new window.Event('input'));await settled();
+assert.equal(id('pwReloadLayout'),null);id('pwSaveLayout').click();await settled();assert.equal(s.playerWeek.layoutConflict,true);assert.equal(s.playerWeek.context.design.revision,conflictBase);assert.match(id('pwStatus').textContent,/Reload saved layout/);assert.ok(id('pwReloadLayout'));
+id('pwReload').click();await settled();assert.equal(s.playerWeek.context.design.revision,conflictBase);assert.equal(s.playerWeek.layout.text_colour,'#7711aa');assert.ok(id('pwReloadLayout'));
+let confirmLayout=false;window.confirm=()=>confirmLayout;id('pwReloadLayout').click();await tick();assert.equal(s.playerWeek.layout.text_colour,'#7711aa','Cancel retains the unsaved draft');
+confirmLayout=true;id('pwReloadLayout').click();await settled();assert.equal(s.playerWeek.layout.text_colour,'#11aa77');assert.equal(s.playerWeek.context.design.revision,conflictBase+1);assert.equal(s.playerWeek.layoutDirty,false);assert.equal(id('pwReloadLayout'),null);
+assert.deepEqual(s.playerWeek.winner,conflictWinner);assert.equal(s.playerWeek.end,conflictWeek);assert.equal(s.playerWeek.title,conflictTitle);assert.equal(s.playerWeek.blurb,'Keep the chosen winner’s caption.');
+id('pwColour').value='#225588';id('pwColour').dispatchEvent(new window.Event('input'));id('pwSaveLayout').click();await settled();assert.equal(s.playerWeek.context.design.revision,conflictBase+2);assert.equal(s.playerWeek.layoutConflict,false);assert.equal(s.playerWeek.layoutDirty,false);
+console.log('Passed: Player of the Week layout conflict, cancelled recovery, confirmed recovery preserving winner/caption/week, and successful subsequent save.');
