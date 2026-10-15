@@ -13,3 +13,9 @@ Keep each item's current state, actions and relevant help together in its own se
 User design preference recorded 15 October 2026.
 
 Treat vertical space as valuable: avoid empty status areas and repeated controls, and collapse secondary collections by default. Reuse saved club branding across post types.
+
+Design for club volunteers who rarely use computers. Integrate AI behind simple actions where judgement helps, with clear progress, review and an easy way to undo changes. The user supports paid AI integration within firm usage limits. Imported PlayCricket facts remain authoritative; examples guide the design, never the current match result.
+
+Agreed AI selection sequence (15 October 2026): evidence review first, suggested teams second, detailed match-up analysis third. Existing availability, duplicate-selection and gap checks already exist; extend them rather than presenting them as new features. Show grade, role, opportunities, evidence and uncertainty. Academy status carries no automatic selection weight. Human selectors retain selection and publishing authority. Context-aware help within the current page is a priority for further AI integration.
+
+For the proposed selection evidence review, senior performance and opportunities are explicit inputs. Junior pathways membership adds no automatic credit. Limited senior history is labelled as limited evidence, not a judgement of ability. A development selection remains an explicit human choice.

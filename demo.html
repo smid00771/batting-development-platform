@@ -3208,7 +3208,7 @@ window.__fixtureDb={
 
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.185';
+const APP_UI_VERSION='0.8.62.186';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -25085,32 +25085,33 @@ function socialGuidePrepare(s){
 
  const ready=relevant.find(j=>j.id===g.preview&&['ready','approved'].includes(j.state)),local=g.local,previous=relevant.find(j=>j.id===g.previousPreview&&['ready','approved'].includes(j.state)),display=ready||previous||local;
  const saved=photo?socialPlayerPhotos(s,g.person):s.data.assets.filter(a=>['background','sponsors'].includes(a.kind)),people=s.data.players.filter(p=>p.active||socialPlayerPhotos(s,p.id).length),selectedPlayer=s.data.players.find(p=>p.id===g.person),teamCard=g.returnCard?s.data.fixtures.flatMap(socialCards).find(card=>card.key===g.returnCard):null;
- const failed=request&&['failed','rejected'].includes(request.state),refining=!!g.previousPreview||g.source.startsWith('job:'),canChange=ready||previous;
+ const failed=request&&['failed','rejected'].includes(request.state),refining=!!g.previousPreview||g.source.startsWith('job:'),canChange=ready||previous||local,revert=ready||previous,resultsBackground=g.awardReturn?.view==='results';
  if(ready)g.uploadNote={state:'ready',text:'New version ready — review your changes, then save or adjust again.'};
  else if(failed)g.uploadNote={state:'error',text:request.error||'No new version was created.'};
- const startLabel=request?.state==='unconfirmed'?'Retry same request':waiting?'Preparing changes…':failed?'Retry changes':refining?'Apply changes':photo?'Create cutout':'Prepare background';
+ const startLabel=request?.state==='unconfirmed'?'Retry same request':waiting?'Preparing changes…':failed?'Retry changes':refining||g.preparationMode==='edit'?'Apply changes':photo?'Create cutout':'Prepare background';
  const inputForm=(!photo||g.person)?`<form id="prepForm" ${ready?'hidden':''}>
   ${!photo&&g.awardReturn?.kind!=='background'?`<label>Artwork type<select id="prepKind">${[['master','Complete background · includes logo & sponsors'],['background','Background only · use club logo'],['banner','Logo & sponsor banner']].map(([v,l])=>`<option value="${v}" ${kind===v?'selected':''}>${l}</option>`).join('')}</select></label>`:''}
   ${!refining&&sources.length?`<details class="sg-details"><summary>Choose a saved image</summary><div class="sg-thumbs" aria-label="Choose a source image">${sources.map(a=>`<button type="button" class="sg-thumb" data-prep-source="asset:${seEsc(a.id)}" aria-pressed="${g.source==='asset:'+a.id}"><img data-social-asset="${seEsc(a.id)}" alt="${seEsc(a.label||labels[kind])}"><span>${seEsc(a.label||({background:'Saved background',sponsors:'Saved banner',photo:selectedPlayer?.name,portrait:selectedPlayer?.name}[a.kind])||'Your example')}</span></button>`).join('')}</div></details>`:''}
   ${refining?'<p class="sg-hint">Your next changes will use the version shown here.</p>':`<label class="sg-drop ${g.file||g.source?'sg-drop-compact':''}">${socialGuideIcon('upload')}<strong>${g.file?'Change image':'Upload '+(photo?'a photo':'an image')}</strong><small>${seEsc(g.file?.name||'JPG, PNG or WebP')}</small><input id="prepFile" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload ${photo?'a player photo':'a background source'}"></label>`}
   <img id="prepSourceImage" class="sg-source-preview" hidden alt="Image used for these changes">
   ${!refining?`<label class="sg-help-choice"><input id="prepNeedsHelp" type="checkbox" ${g.needsHelp?'checked':''} ${paused?'disabled':''}><span>${photo?'Remove the background for me':'Prepare or change this background for me'}</span></label>`:''}
-  <label ${!g.needsHelp?'hidden':''}>${refining?'What needs changing in this version?':'What needs changing?'}<textarea id="prepBrief" rows="3" maxlength="1500" placeholder="${photo?'Tell us what to keep or adjust.':'For example: move Results lower and leave more space above it.'}">${seEsc(g.brief)}</textarea></label>
+  <label ${!g.needsHelp?'hidden':''}>${refining?'What needs changing in this version?':'What needs changing?'}<textarea id="prepBrief" rows="3" maxlength="1500" placeholder="${photo?'Tell us what to keep or adjust.':'For example: move Results down slightly so it clears the top edge. Keep everything else in place.'}">${seEsc(g.brief)}</textarea></label>
   <button class="btn" type="submit" id="prepStart" ${g.local&&!g.needsHelp&&!g.startCommand?'hidden':''} ${(s.busy||active||g.needsHelp&&(paused||g.available!==true))?'disabled':''}>${socialGuideIcon('spark')} ${g.needsHelp||g.startCommand?startLabel:'Preview image'}</button>
   <p class="sg-credits">${g.needsHelp?'AI assistance by OpenAI · 1 credit per completed preview. Failed attempts use no credit.':'Use as supplied · no AI credit'}</p>
   ${paused?'<p class="sg-credits">AI is paused. You can still upload and save finished images.</p>':g.available===false?`<p class="sg-credits">${seEsc(g.providerError||'AI preparation is unavailable.')}</p><button class="sg-quiet" type="button" id="prepCheck">Check again</button>`:''}
  </form>`:'<div class="sg-empty">'+socialGuideIcon('person')+'<span>Select a player to add their photo</span></div>';
  const feedback=socialGuidePreparationFeedback(g,request,ready);
+ const reviewActions=display?`<div class="sg-review-actions">${ready||local&&!g.needsHelp&&!request?`<button class="btn" id="prepSaveVersion">${resultsBackground?'Use background &amp; preview Results':'Save this version'}</button>`:''}${canChange?`<button class="btn ghost" id="prepChange" ${waiting||paused?'disabled':''}>${ready||local&&!g.needsHelp?'Edit this version':'Edit request'}</button>`:''}${revert?.source_path?`<button class="btn ghost" id="prepRevert" ${waiting?'disabled':''}>Revert to previous image</button>`:''}${previous&&!ready?`<button class="btn ghost" id="prepKeepVersion" ${waiting?'disabled':''}>Keep previous version</button>`:''}${photo&&!g.returnCard&&!g.awardReturn&&ready?'<button class="btn ghost" id="prepSaveAnother">Save &amp; add another player</button>':''}</div>`:'';
  host.innerHTML=`<section class="sg-panel"><h3>${photo?'Photo for '+seEsc(selectedPlayer?.name||'selected player'):'Prepare your background'}</h3><p class="sg-hint">${photo?(teamCard?seEsc(teamCard.f.published.details.grade)+'. ':'')+'Review the photo, request any changes, then save the version you want.':'Upload an example, review each version, and adjust it until you are happy to save.'}</p>
   <div class="sg-split"><div>${request?'':socialGuideUploadStatus(s)}${photo&&!g.returnCard?`<label>Player<select id="prepPerson"><option value="">Choose a player</option>${people.map(p=>`<option value="${seEsc(p.id)}" ${g.person===p.id?'selected':''}>${seEsc(p.name)}</option>`).join('')}</select></label>`:''}
    ${inputForm}${ready?'<div class="sg-review-title">Before this change</div><img id="prepReviewSource" class="sg-review-source" alt="Image before the requested changes">':''}</div>
    <aside class="sg-preview" id="prepReview"><div class="sg-review-title">${ready?'New version':request?'Previous image':'Image preview'}</div>${feedback}
+    ${reviewActions}${resultsBackground?'<p class="sg-hint" id="prepResultsNote">Background only. Scores, player figures and WIN/DEF labels are added from PlayCricket when you preview Results.</p>':''}
     <canvas id="prepCanvas" width="1080" height="1350" aria-label="Artwork preview"></canvas><p id="prepPreviewLabel"></p>
-    ${display?`<div class="sg-review-actions">${ready||local&&!g.needsHelp&&!request?'<button class="btn" id="prepSaveVersion">Save this version</button>':''}${canChange?`<button class="btn ghost" id="prepChange" ${waiting?'disabled':''}>${ready?'Request more changes':'Change request'}</button>`:''}${previous&&!ready?`<button class="btn ghost" id="prepKeepVersion" ${waiting?'disabled':''}>Keep previous version</button>`:''}${photo&&!g.returnCard&&!g.awardReturn&&ready?'<button class="btn ghost" id="prepSaveAnother">Save &amp; add another player</button>':''}</div>`:''}
    </aside></div>
   ${saved.length?`<details class="sg-saved sg-details"><summary>${socialGuideIcon('check')} ${photo?'Saved for '+seEsc(selectedPlayer?.name||'this player'):'Saved images'}</summary><div class="social-upload-grid">${saved.map(a=>socialGalleryCard(s,a)).join('')}</div></details>`:''}
   ${photo&&!g.returnCard&&!g.awardReturn&&g.person&&saved.length?'<button class="btn ghost" id="prepAnother" style="margin-top:16px">Add another player</button>':''}
- </section>${relevant.length?`<details class="sg-jobs sg-details"><summary>Previous versions &amp; attempts · ${relevant.length}</summary><div class="social-upload-grid">${relevant.map(j=>`<article class="social-upload"><strong>${labels[j.kind]}</strong>${j.brief?`<p class="sg-request-brief">${seEsc(j.brief)}</p>`:''}${['pending','processing'].includes(j.state)?`<p role="status" data-prep-elapsed="${seEsc(j.id)}">Preparing…</p>`:j.state==='failed'?`<p role="status">${seEsc(j.error||'Could not finish.')} ${j.credit_used?'':'No AI credit used.'}</p>`:`<img data-prep-image="${seEsc(j.id)}" alt="Prepared ${seEsc(labels[j.kind])}"><span class="sg-badge">${j.state==='approved'?'Saved':'Ready to review'}${j.credit_used?' · 1 AI credit used':''}</span>`}<div class="social-actions">${['ready','approved'].includes(j.state)?`<button class="btn" data-prep-review="${seEsc(j.id)}" ${waiting?'disabled':''}>Review this version</button><button class="btn ghost" data-prep-refine="${seEsc(j.id)}" ${paused||waiting?'disabled':''}>Request more changes</button>`:''}${!['approved','discarded'].includes(j.state)?`<button class="sg-quiet" data-prep-discard="${seEsc(j.id)}" ${waiting?'disabled':''}>Discard</button>`:''}</div></article>`).join('')}</div></details>`:''}`;
+ </section>${relevant.length?`<details class="sg-jobs sg-details"><summary>Previous versions &amp; attempts · ${relevant.length}</summary><div class="social-upload-grid">${relevant.map(j=>`<article class="social-upload"><strong>${labels[j.kind]}</strong>${j.brief?`<p class="sg-request-brief">${seEsc(j.brief)}</p>`:''}${['pending','processing'].includes(j.state)?`<p role="status" data-prep-elapsed="${seEsc(j.id)}">Preparing…</p>`:j.state==='failed'?`<p role="status">${seEsc(j.error||'Could not finish.')} ${j.credit_used?'':'No AI credit used.'}</p>`:`<img data-prep-image="${seEsc(j.id)}" alt="Prepared ${seEsc(labels[j.kind])}"><span class="sg-badge">${j.state==='approved'?'Saved':'Ready to review'}${j.credit_used?' · 1 AI credit used':''}</span>`}<div class="social-actions">${['ready','approved'].includes(j.state)?`<button class="btn" data-prep-review="${seEsc(j.id)}" ${waiting?'disabled':''}>Review this version</button><button class="btn ghost" data-prep-refine="${seEsc(j.id)}" ${paused||waiting?'disabled':''}>Edit this version</button>`:''}${!['approved','discarded'].includes(j.state)?`<button class="sg-quiet" data-prep-discard="${seEsc(j.id)}" ${waiting?'disabled':''}>Discard</button>`:''}</div></article>`).join('')}</div></details>`:''}`;
  document.getElementById('prepPerson')?.addEventListener('change',e=>{socialGuideSwitch(g,2,e.target.value);socialDraw(s);});
  document.getElementById('prepAnother')?.addEventListener('click',()=>{socialGuideSwitch(g,2,'');socialDraw(s);document.getElementById('prepPerson')?.focus();});
  document.getElementById('prepKind')?.addEventListener('change',e=>{const value=e.target.value;socialGuideResetImage(g);g.kind=value;socialDraw(s);});
@@ -25127,7 +25128,8 @@ function socialGuidePrepare(s){
  host.querySelectorAll('[data-prep-image]').forEach(img=>{const j=jobs.find(j=>j.id===img.dataset.prepImage);void socialPrepURL(s,'club-social-prep',j.result_path).then(url=>{if(img.isConnected)img.src=url;}).catch(e=>socialMessage(s,e.message));});
  document.getElementById('prepSaveVersion')?.addEventListener('click',()=>socialGuideSaveAndContinue(s));
  document.getElementById('prepSaveAnother')?.addEventListener('click',()=>socialGuideSaveAndContinue(s,true));
- document.getElementById('prepChange')?.addEventListener('click',()=>{if(ready)socialGuideRefineVersion(s,ready.id);else document.getElementById('prepBrief')?.focus();});
+ document.getElementById('prepChange')?.addEventListener('click',()=>{if(waiting||paused)return;if(ready)socialGuideRefineVersion(s,ready.id);else{g.needsHelp=true;socialGuideRemember(g);socialDraw(s);document.getElementById('prepBrief')?.focus();}});
+ document.getElementById('prepRevert')?.addEventListener('click',()=>socialGuideRevertVersion(s,revert.id));
  document.getElementById('prepKeepVersion')?.addEventListener('click',()=>socialGuideReviewVersion(s,previous.id));
  if(waiting)host.querySelectorAll('#prepForm input,#prepForm textarea,#prepForm select,[data-prep-source],#prepPerson').forEach(e=>e.disabled=true);
  socialBindUploads(s);void socialGuideSourcePaint(s);void socialPrepPaint(s,display);
@@ -25141,11 +25143,11 @@ function socialGuidePreparation(g){
 function socialGuidePreparationFeedback(g,request,ready){
  const job=request||ready;if(!job)return '';
  let title,detail,state='working';
- if(['pending','processing'].includes(job.state)){title='Preparing your changes…';detail='The image below has not changed yet. A new version will appear here when it is ready.';}
+ if(['pending','processing'].includes(job.state)){title='Preparing your changes…';detail='Image preparation can take a couple of minutes. Your current image stays here until the new version is ready.';}
  else if(job.state==='unconfirmed'){title='Request not yet confirmed';detail=job.error+' Check status, or retry the same request.';state='error';}
  else if(['failed','rejected'].includes(job.state)){title='Changes could not be prepared';detail=(job.error||'Please try again.')+' '+(job.credit_used?'':'No AI credit used.')+' The image below is unchanged.';state='error';}
  else if(job.state==='discarded'){title='Attempt discarded';detail='Choose an earlier version or prepare another image.';state='error';}
- else{title=job.state==='approved'?'Saved version':'New version ready to review';detail='Check your requested changes, then save this version or request more changes.'+(job.credit_used?' 1 AI credit used.':'');state='ready';}
+ else{title=job.state==='approved'?'Saved version':'New version ready to review';detail='Review the change. Save it, edit it again, or revert to the previous image.'+(job.credit_used?' 1 AI credit used.':'');state='ready';}
  return `<div id="prepRequestFeedback" class="sg-request-feedback ${state}" role="status" aria-live="polite"><strong>${state==='working'?'<span class="sg-spinner" aria-hidden="true"></span> ':''}${title}</strong>${job.brief?`<p class="sg-request-brief"><b>Your request:</b> ${seEsc(job.brief)}</p>`:''}<p>${seEsc(detail)}</p>${['pending','processing','unconfirmed'].includes(job.state)?'<button class="btn ghost" id="prepCheckRequest" type="button">Check status</button>':''}</div>`;
 }
 function socialGuideReviewVersion(s,id){
@@ -25154,14 +25156,35 @@ function socialGuideReviewVersion(s,id){
 }
 function socialGuideRefineVersion(s,id){
  const g=socialGuideState(s),job=g.context?.jobs.find(j=>j.id===id&&['ready','approved'].includes(j.state));if(!job||s.busy||s.pending)return;
- socialGuideResetImage(g);g.kind=job.kind;g.person=job.roster_id||g.person;g.previousPreview=id;g.skipPreview=id;g.skipReady=(g.context?.jobs||[]).filter(j=>j.state==='ready').map(j=>j.id);g.needsHelp=true;g.source='job:'+id;socialGuideRemember(g);socialDraw(s);document.getElementById('prepBrief')?.focus();
+ socialGuideResetImage(g);g.kind=job.kind;g.person=job.roster_id||g.person;g.previousPreview=id;g.skipPreview=id;g.skipReady=(g.context?.jobs||[]).filter(j=>j.state==='ready').map(j=>j.id);g.needsHelp=true;g.preparationMode='edit';g.source='job:'+id;socialGuideRemember(g);socialDraw(s);document.getElementById('prepBrief')?.focus();
+}
+async function socialGuideRevertVersion(s,id){
+ const g=socialGuideState(s),job=g.context?.jobs.find(j=>j.id===id&&['ready','approved'].includes(j.state));
+ if(!job?.source_path||s.busy||s.pending||g.startCommand||g.context?.jobs.some(j=>['pending','processing'].includes(j.state)))return;
+ const parent=g.context.jobs.find(j=>j.result_path===job.source_path&&job.source_bucket==='club-social-prep'&&['ready','approved'].includes(j.state));
+ if(parent){socialGuideReviewVersion(s,parent.id);return;}
+ s.busy=true;socialLock(true);
+ try{
+  const bucket=job.source_bucket||'club-social-prep',r=await supabase.storage.from(bucket).download(job.source_path);
+  if(r.error||!r.data)throw Error(r.error?.message||'The previous image could not load.');
+  if(!socialHere(s)||socialGuideState(s)!==g||s.view!=='guide')return;
+  const asset=bucket==='club-socials'?s.data.assets.find(a=>a.path===job.source_path):null,mode=g.preparationMode||'template';
+  socialGuideResetImage(g);g.kind=job.kind;g.person=job.roster_id||g.person;g.preparationMode=mode;
+  g.file=new File([r.data],'Previous image.png',{type:r.data.type||'image/png'});g.fileURL=URL.createObjectURL(g.file);
+  if(asset)g.source='asset:'+asset.id;else if(bucket==='club-social-prep'&&job.source_path.includes('/source/'))g.uploaded=job.source_path;
+  const key='local-preview:'+crypto.randomUUID();s.urls.set(key,URL.createObjectURL(r.data));
+  g.local={kind:g.kind,roster_id:g.kind==='photo'?g.person:null,result_path:key,local:true,blob:r.data,label:'Previous image'};
+  g.skipReady=g.context.jobs.filter(j=>j.state==='ready').map(j=>j.id);
+  socialGuideUploadNote(s,'Previous image restored. No AI credit used.','ready');socialGuideRemember(g);
+ }catch(e){socialMessage(s,'Could not revert. '+e.message+' Your current version is still available.');}
+ finally{s.busy=false;if(socialHere(s))socialDraw(s);}
 }
 async function socialPrepStart(s){
  const g=socialGuideState(s);if(s.busy||s.pending)return;if(s.dirty){socialMessage(s,'Save your style before preparing an image.');return;}
  if(!g.startCommand&&(g.kind==='photo'&&!g.person||!g.source&&!g.file)){socialMessage(s,g.kind==='photo'&&!g.person?'Choose the player in the photo.':'Upload an image or choose a saved example.');return;}
  s.busy=true;g.preparationError=null;socialLock(true);socialMessage(s,'');socialGuideUploadNote(s,'Sending your change request…');
  try{
-  if(!g.startCommand){const p={request_id:crypto.randomUUID(),kind:g.kind,roster_id:g.kind==='photo'?g.person:null,brief:g.brief};
+  if(!g.startCommand){const p={request_id:crypto.randomUUID(),kind:g.kind,roster_id:g.kind==='photo'?g.person:null,brief:g.brief,mode:g.preparationMode||(g.source.startsWith('job:')||s.data.assets.some(a=>g.source==='asset:'+a.id&&['background','sponsors'].includes(a.kind))?'edit':'template')};if(['results','five_wickets','century','team_week','player_week'].includes(g.awardReturn?.view))p.graphic_kind=g.awardReturn.view;
    if(g.source.startsWith('asset:'))p.source_asset_id=g.source.slice(6);else if(g.source.startsWith('job:'))p.source_job_id=g.source.slice(4);else{if(!g.uploaded){const blob=await socialNormaliseUpload(g.file);if(!socialHere(s))return;const path=s.scope.split(':').slice(1).join(':')+'/source/'+crypto.randomUUID()+'.png',r=await supabase.storage.from('club-social-prep').upload(path,blob,{contentType:'image/png',upsert:false});if(r.error)throw Error(r.error.message);g.uploaded=path;}p.source_path=g.uploaded;}
    g.startCommand=p;g.preparation={...p};g.preview=null;socialGuideRemember(g);fixtureSessionStorage.setItem('social-prep:'+s.scope,JSON.stringify(p));
   }
@@ -25238,7 +25261,7 @@ function socialGuideStyles(){return '<style>'+
  '</style>';}
 function socialGuideResetImage(g){
  if(g.fileURL)URL.revokeObjectURL(g.fileURL);
- if(g.drafts)delete g.drafts[socialGuideDraftKey(g)];g.failedSource=null;g.uploadNote=null;g.fileURL=null;g.file=null;g.uploaded=null;g.source='';g.brief='';g.preview=null;g.local=null;g.needsHelp=false;g.preparation=null;g.preparationError=null;g.previousPreview=null;
+ if(g.drafts)delete g.drafts[socialGuideDraftKey(g)];g.failedSource=null;g.uploadNote=null;g.fileURL=null;g.file=null;g.uploaded=null;g.source='';g.brief='';g.preview=null;g.local=null;g.needsHelp=false;g.preparation=null;g.preparationError=null;g.previousPreview=null;g.preparationMode=null;
 }
 function socialGuideReturnToTeam(s,message=''){
  if(!socialCanLeave())return false;const g=socialGuideState(s),key=g.returnCard;socialGuideRemember(g);
@@ -25349,9 +25372,9 @@ async function socialSaveAwardBackground(s,job){
  }catch(e){socialGuideUploadNote(s,'Save not completed. '+e.message,'error');}
  finally{s.busy=false;if(socialHere(s))socialDraw(s);}
 }
-function socialAwardBackground(s,file,apply){
+function socialAwardBackground(s,file,apply,options={}){
  if(!socialCanLeave())return;const view=s.view;s.deferNavigation=true;socialGuideEnter(s,1);s.deferNavigation=false;const g=socialGuideState(s);socialGuideResetImage(g);
- g.kind='master';g.awardReturn={kind:'background',view,apply};g.file=file||null;g.fileURL=file?URL.createObjectURL(file):null;g.needsHelp=true;
+ g.kind='master';g.awardReturn={kind:'background',view,apply};g.file=file||null;g.fileURL=file?URL.createObjectURL(file):null;g.needsHelp=true;g.preparationMode=options.mode||'template';
  g.skipReady=g.context?g.context.jobs.filter(j=>j.state==='ready').map(j=>j.id):null;socialGuideRemember(g);socialDraw(s);
 }
 function socialGuideNextState(s){
@@ -25408,11 +25431,11 @@ function socialGuideSwitch(g,step,person){
  if(step===2&&person===undefined)person=g.lastPerson||'';
  if(person!==undefined)g.person=person;
  const key=socialGuideDraftKey(g),draft=g.drafts[key];
- Object.assign(g,{kind:step===2?'photo':'master',brief:'',source:'',file:null,fileURL:null,uploaded:null,preview:null,local:null,needsHelp:false,skipPreview:null,skipReady:[],uploadNote:null,failedSource:null,preparation:null,preparationError:null,previousPreview:null},draft||{});
+ Object.assign(g,{kind:step===2?'photo':'master',brief:'',source:'',file:null,fileURL:null,uploaded:null,preview:null,local:null,needsHelp:false,skipPreview:null,skipReady:[],uploadNote:null,failedSource:null,preparation:null,preparationError:null,previousPreview:null,preparationMode:null},draft||{});
 }
 function socialGuideRemember(g){
  g.drafts||={};const draft={};
- for(const key of ['kind','person','brief','source','file','fileURL','uploaded','preview','local','needsHelp','skipPreview','skipReady','uploadNote','failedSource','preparation','preparationError','previousPreview'])draft[key]=g[key];
+ for(const key of ['kind','person','brief','source','file','fileURL','uploaded','preview','local','needsHelp','skipPreview','skipReady','uploadNote','failedSource','preparation','preparationError','previousPreview','preparationMode'])draft[key]=g[key];
  g.drafts[socialGuideDraftKey(g)]=draft;
 }
 function socialGuideDraftKey(g){return g.step+':'+(g.step===2?g.person||'':'');}

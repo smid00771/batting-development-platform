@@ -32,7 +32,7 @@ function preview(name,result){if(process.env.AWARDS_PREVIEW_DIR){fs.mkdirSync(pr
 test('Grades against the same club share both header badges with VS',async()=>{
  const items=[1,2,3,4].map(n=>fixture(n));
  // Grade-specific team IDs can differ; the resolved club IDs must decide the header.
- for(const item of items){delete item.teams[1].organisation_id;item.teams[1].name+=' '+item.grade;}
+ for(const item of items){delete item.teams[1].organisation_id;item.teams[1].name+=' '+item.grade;item.result=item.teams[1].name+' won by 18 runs';}
  const result=await render(items,{images:{opponentKeys:Object.fromEntries(items.map(x=>[x.key,'same-club']))}}),versus=result.labels.filter(t=>t.value==='VS');
  assert.equal(versus.length,1);assert.equal(result.draws.filter(d=>d.image===club).length,1);assert.equal(result.draws.filter(d=>d.image===opposition).length,1);
  checkPair(result,result.draws.find(d=>d.image===club),result.draws.find(d=>d.image===opposition),versus[0]);
@@ -58,4 +58,12 @@ test('Header positioning moves both badges and VS together on a saved background
 test('Missing opposition artwork uses its name without borrowing another club’s badge',async()=>{
  const result=await render([fixture(1)],{images:{opponents:{}}});
  assert.equal(result.draws.filter(d=>d.image===club).length,1);assert.ok(result.labels.some(t=>t.value==='Visitors'));assert.ok(result.labels.some(t=>t.value==='VS'));
+});
+
+test('each grade displays its own imported result, and a later round can reverse all outcomes',async()=>{
+ const items=[1,2,3,4].map(n=>fixture(n));
+ for(const [i,item] of items.entries())item.result=(i%2?'Newcastle City':'Visitors')+' won by 18 runs';
+ const first=await render(items);assert.deepEqual(first.labels.filter(t=>['WIN','DEF'].includes(t.value)).map(t=>t.value),['DEF','WIN','DEF','WIN']);preview('results-playcricket-outcomes',first);
+ for(const [i,item] of items.entries())item.result=(i%2?'Visitors':'Newcastle City')+' won by 18 runs';
+ const next=await render(items);assert.deepEqual(next.labels.filter(t=>['WIN','DEF'].includes(t.value)).map(t=>t.value),['WIN','DEF','WIN','DEF']);
 });

@@ -18,18 +18,36 @@ export function resultsShareOpponent(items,keys={}){
  const clubs=items.map(item=>{const team=(item.teams||[]).find(t=>t.id!==item.our_team);return keys[item.key]||team?.organisation_id||team?.name?.trim().toLowerCase()||team?.id;});
  return clubs.length>0&&clubs.every(key=>key&&key===clubs[0]);
 }
+export function resultsOutcome(item){
+ // Use the imported result, never totals, example artwork or last week's selection.
+ const normalize=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim();
+ const text=normalize(item.result),teams=item.teams||[];
+ if(!text||!teams.some(t=>t.id===item.our_team))return '';
+ const outcomes=new Set();
+ for(const team of teams)for(const alias of new Set([team.name,team.organisation].map(normalize).filter(Boolean))){
+  if(!text.startsWith(alias+' '))continue;
+  const rest=text.slice(alias.length).trim();
+  const lost=/^(?:lost\b|(?:was |were )?defeated by\b|(?:was |were )?beaten by\b|forfeited\b)/.test(rest);
+  const won=!lost&&/^(?:won\b|wins?\b|defeated\b|beat\b|def(?:\.|\s))/.test(rest);
+  if(won||lost)outcomes.add((team.id===item.our_team)===won?'WIN':'LOSS');
+ }
+ if(outcomes.size===1)return [...outcomes][0];
+ if(outcomes.size>1)return '';
+ if(/\bno result\b|\babandon(?:ed|ment)?\b|\bwash[ -]?out\b/.test(text))return 'NO RESULT';
+ if(/\btied?\b/.test(text))return 'TIE';
+ if(/\bdraw(?:n)?\b/.test(text))return 'DRAW';
+ return '';
+}
 export function resultsSummary(item){
  const ours=(item.innings||[]).filter(i=>i.team_id===item.our_team),theirs=(item.innings||[]).filter(i=>i.team_id!==item.our_team);
  const names=item.teams||[],ourName=names.find(t=>t.id===item.our_team)?.name||'Our club',opposition=names.filter(t=>t.id!==item.our_team).map(t=>t.name).join(' / ');
  const score=innings=>innings.map(i=>Number.isFinite(i.runs)&&Number.isFinite(i.wickets)?`${i.wickets}/${i.runs}${/declared/i.test(i.closure||'')?' dec':''}`:'Score unavailable').join(' & ')||'Score unavailable';
  const batting=ours.flatMap(i=>(i.batters||[]).filter(b=>b.importable&&b.status==='played'&&Number.isFinite(b.runs)).map(b=>({...b,innings:i.number}))).sort((a,b)=>b.runs-a.runs||a.name.localeCompare(b.name)).slice(0,3);
  const bowling=theirs.flatMap(i=>(i.bowlers||[]).filter(b=>b.team_id===item.our_team&&b.importable&&Number.isFinite(b.wickets)&&b.wickets>0).map(b=>({...b,innings:i.number}))).sort((a,b)=>b.wickets-a.wickets||a.runs-b.runs||a.name.localeCompare(b.name)).slice(0,3);
- const text=(item.result||'').trim(),lower=text.toLowerCase();let outcome='';
- if(/\btied?\b/.test(lower))outcome='TIE';else if(/\bdraw(n)?\b/.test(lower))outcome='DRAW';else if(/no result|abandon|wash.?out/.test(lower))outcome='NO RESULT';
- else if(lower.includes('won')){if(lower.startsWith(ourName.toLowerCase()+' won'))outcome='WIN';else if(names.some(t=>t.id!==item.our_team&&lower.startsWith(t.name.toLowerCase()+' won')))outcome='LOSS';}
+ const text=(item.result||'').trim(),outcome=resultsOutcome(item);
  return {ourName,opposition,ourScore:score(ours),theirScore:score(theirs),batting,bowling,outcome,result:text||'Result not supplied'};
 }
-export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images={},outcomes={}}){
+export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images={}}){
  const bg=images.background,portrait=images.photo,logo=layout.show_logo?images.logo:null;
  await h.fontReady();canvas.width=bg?(bg.naturalWidth||bg.width):1080;canvas.height=bg?(bg.naturalHeight||bg.height):1350;
  const ctx=canvas.getContext('2d');if(bg)ctx.drawImage(bg,0,0);else{const g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);g.addColorStop(0,s.design?.primary||'#073554');g.addColorStop(1,s.design?.accent||'#128fd2');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);}
@@ -59,8 +77,8 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  }
  const top=height*layout.rows_top/100,bottom=height*layout.rows_bottom/100,gap=28,rowHeight=(bottom-top-gap*(Math.max(items.length,1)-1))/Math.max(items.length,1);
  for(let n=0;n<items.length;n++){
-  const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap),outcome=outcomes[item.key]||r.outcome;
-  ctx.fillStyle='rgba(245,249,255,.84)';ctx.fillRect(34,y,1012,rowHeight);
+  const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap),outcome=r.outcome;
+  ctx.fillStyle='#f5f9ff';ctx.fillRect(34,y,1012,rowHeight);
   ctx.fillStyle=s.design?.primary||'#073554';ctx.fillRect(300,y-12,480,45);
   text(item.grade.toUpperCase(),540,y+10,455,35,'#FFFFFF');
   text(r.ourScore,225,y+56,360,35,'#073554');text(r.theirScore,855,y+56,360,35,'#073554');
@@ -71,7 +89,8 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
    ctx.textAlign='right';if(bat)text(`${bat.runs}${bat.not_out?'*':''}`,458,y+95+j*line,70,font,'#10253f');if(bowl)text(`${bowl.wickets}/${bowl.runs}`,1019,y+95+j*line,100,font,'#10253f');ctx.textAlign='center';
   }
   if(!sharedOpponent){const size=Math.max(12,Math.min(72,rowHeight*.3));logoPair(images.opponents?.[item.key],r,552,y+38+size/2,size,30,'#17395a');}
-  text(outcome||'RESULT',552,y+rowHeight*.62,180,outcome==='NO RESULT'?26:38,outcome==='WIN'?'#087947':outcome==='LOSS'?'#a0313d':'#17395a');
+  const outcomeLabel=outcome==='LOSS'?'DEF':outcome||'CHECK RESULT';
+  text(outcomeLabel,552,y+rowHeight*.62,180,outcomeLabel.length>4?26:38,outcome==='WIN'?'#087947':outcome==='LOSS'?'#a0313d':'#17395a');
   if(!sharedOpponent)text(r.opposition,552,y+rowHeight*.87,195,18,'#17395a');
  }
 }
