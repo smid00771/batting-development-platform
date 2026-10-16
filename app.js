@@ -1,6 +1,6 @@
-// Club Batting 0.8.62.193 — review and refine finished social graphics
+// Club Batting 0.8.62.194 — match each club’s own example
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.193';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.194';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.186';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.192';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.186';
@@ -13,7 +13,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.193';
+const APP_UI_VERSION='0.8.62.194';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
