@@ -7,18 +7,23 @@ const {JSDOM}=createRequire(import.meta.url)('jsdom');
 const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
 function get(name){const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const start=match.index,next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
-const names=['seRevealPublication','sePublishReview','seWithSavedRoles','seShortTeams','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seMutate','seLock','sePublished'];
+const names=['seRevealPublication','sePublishReview','seWithSavedRoles','seShortTeams','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seButtonWorking','seMutate','seLock','sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seIsCaptain','seCanSetup','sePublished'];
 for(const name of names.filter(name=>name!=='sePersist'))assert.ok(demo.includes(get(name)),'Demo shares '+name);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Keep the fixtures in the current club week while using the real week-filter helpers.
+class PublicationDate extends Date{
+ constructor(...args){super(...(args.length?args:['2099-10-17T12:00:00Z']));}
+ static now(){return new Date('2099-10-17T12:00:00Z').getTime();}
+}
 function harness({warn=true,short=false,failReload=false,badResponse=false,prepare=false}={}){
  const dom=new JSDOM('<main id="sePage"></main>',{url:'https://example.invalid'}),document=dom.window.document;
  const roster=Array.from({length:66},(_,i)=>({id:'p'+i,name:'Player '+i,user_id:'u'+i}));
  const fixtures=Array.from({length:6},(_,i)=>({id:'f'+i,revision:1,publication:0,published:null,details:{grade:'Grade '+i,opposition:'Visitors',days:[{date:'2099-10-17'}]},slots:Array.from({length:11},(_,j)=>({d1:short&&j===10?null:'p'+(i*11+j),d2:null})),issues:warn?[{level:'warning',text:'Role details incomplete'}]:[]}));
- const s={key:'head:club',view:'board',data:{fixtures,roster,head_selector:true,socials:true,access:{timezone:'UTC'}},notice:'',busy:false,pending:null,undo:[]};
+ const s={key:'head:club',view:'board',data:{fixtures,roster,admin:false,selector:true,captain:false,head_selector:true,socials:true,access:{timezone:'UTC'}},notice:'',busy:false,pending:null,undo:[]};
  let server=structuredClone(fixtures),publicationCount=0,socialLoads=0,shouldFail=failReload;
  const receipts=new Map(),requests=[],social={view:'awards',data:{fixtures:[]}};
- const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,
-  session:{user:{id:'head'}},club:{id:'club',name:'Test Club'},selectionState:s,currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
+ const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date:PublicationDate,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,
+  session:{user:{id:'head'}},membership:{permission_role:'selector'},hasMatchCaptainAccess:()=>false,club:{id:'club',name:'Test Club'},selectionState:s,currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
   seEsc:esc,seDate:x=>x,seBoard:()=>{},seReviewLabel:()=> 'Captain checked',sePublicationChangeSummary:()=>'<p>Review lineup</p>',
   seFixtureLocked:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,
   seFormatLabel:()=> 'Limited overs',seSnapshotName:(snap,id)=>esc(snap.players.find(p=>p.id===id)?.name||'Vacant'),seSnapshotSplit:()=>false,sePublicationStamp:()=> 'Published version 1',
