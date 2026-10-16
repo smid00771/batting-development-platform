@@ -1,4 +1,4 @@
-// Club Batting 0.8.62.194 — match each club’s own example
+// Club Batting 0.8.62.195 — social awards before create posts
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.194';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.186';
@@ -13,7 +13,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.194';
+const APP_UI_VERSION='0.8.62.195';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -21640,7 +21640,7 @@ function socialDraw(s){
  if(['artwork','photos','sandbox'].includes(s.view)){socialTeamWorkflow.state(s).step=s.view==='photos'?'photos':'artwork';s.view='graphics';}
  const creationViews=['graphics','team_week','player_week','results','five_wickets','century','award_collection'],creating=creationViews.includes(s.view);if(creating)s.creationView=s.view;s.render++;
  const active=creating||s.view==='publish_review'||s.view==='guide'?'graphics':s.view==='publish_handover'?'managers':s.view;
- host.innerHTML=socialStyles()+`<section id="socialPage"><div class="social-top"><h2>Social graphics</h2><button class="btn ghost" id="socialRefresh">Refresh</button></div><nav class="social-tabs" aria-label="Social graphics sections">${[['managers','Who handles socials'],['accounts','Social accounts'],['graphics','Create posts'],['awards','Socials Awards']].map(([key,title])=>`<button class="btn ghost" data-social-view="${key}" aria-pressed="${active===key}">${title}</button>`).join('')}</nav>${socialTeamReady(s)}${creating?`<div class="social-create">${socialAwards.menu(s)}</div>`:''}<p id="socialNotice" class="social-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?'<div class="se-recovery"><strong>Artwork save not confirmed</strong><p>Your change is retained in this tab. Retry it, or keep a copy and reload the saved version.</p><div class="social-actions"><button class="btn" id="socialRetrySave">Retry save</button><button class="btn ghost" id="socialRecover">Download changes &amp; reload</button></div></div>':''}<div id="socialContent"></div></section>`;
+ host.innerHTML=socialStyles()+`<section id="socialPage"><div class="social-top"><h2>Social graphics</h2><button class="btn ghost" id="socialRefresh">Refresh</button></div><nav class="social-tabs" aria-label="Social graphics sections">${[['managers','Who handles socials'],['accounts','Social accounts'],['awards','Socials Awards'],['graphics','Create posts']].map(([key,title])=>`<button class="btn ghost" data-social-view="${key}" aria-pressed="${active===key}">${title}</button>`).join('')}</nav>${socialTeamReady(s)}${creating?`<div class="social-create">${socialAwards.menu(s)}</div>`:''}<p id="socialNotice" class="social-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?'<div class="se-recovery"><strong>Artwork save not confirmed</strong><p>Your change is retained in this tab. Retry it, or keep a copy and reload the saved version.</p><div class="social-actions"><button class="btn" id="socialRetrySave">Retry save</button><button class="btn ghost" id="socialRecover">Download changes &amp; reload</button></div></div>':''}<div id="socialContent"></div></section>`;
  document.querySelectorAll('[data-social-view]').forEach(b=>b.onclick=async()=>{if(!socialCanLeave())return;s.view=b.dataset.socialView==='graphics'?s.creationView||'graphics':b.dataset.socialView;s.notice='';if(s.view==='awards'){socialAwards.state(s).message='';await socialAwards.load(s,false);}else if(s.view==='award_collection')await socialAwards.load(s,false);socialDraw(s);});
  document.getElementById('socialRefresh').onclick=()=>{if(socialCanLeave())socialOpen();};document.getElementById('socialRetrySave')?.addEventListener('click',()=>socialSave(s,s.pending.action,s.pending.data));
  document.getElementById('socialRecover')?.addEventListener('click',()=>{seDownload('Social-artwork-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;s.dirty=false;s.notice='Proposed changes downloaded. Review the current saved artwork.';void socialOpen();});
