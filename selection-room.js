@@ -1,4 +1,4 @@
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.196';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.197';
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 export function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
