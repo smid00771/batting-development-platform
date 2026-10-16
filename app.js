@@ -1,6 +1,6 @@
-// Club Batting 0.8.62.192 — additive captain and socials permissions with managed handover
+// Club Batting 0.8.62.193 — review and refine finished social graphics
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.192';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.193';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.186';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.192';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.186';
@@ -13,7 +13,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.192';
+const APP_UI_VERSION='0.8.62.193';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -22341,7 +22341,7 @@ async function socialSaveAwardBackground(s,job){
 }
 function socialAwardBackground(s,file,apply,options={}){
  if(!socialCanLeave())return;const view=s.view;s.deferNavigation=true;socialGuideEnter(s,1);s.deferNavigation=false;const g=socialGuideState(s);socialGuideResetImage(g);
- g.kind='master';g.awardReturn={kind:'background',view,apply};g.file=file||null;g.fileURL=file?URL.createObjectURL(file):null;g.needsHelp=true;g.preparationMode=options.mode||'template';
+ g.kind='master';g.awardReturn={kind:'background',view,apply};g.file=file||null;g.fileURL=file?URL.createObjectURL(file):null;g.needsHelp=true;g.preparationMode=options.mode||'template';g.brief=String(options.brief||'').slice(0,1500);
  g.skipReady=g.context?g.context.jobs.filter(j=>j.state==='ready').map(j=>j.id):null;socialGuideRemember(g);socialDraw(s);
 }
 function socialGuideNextState(s){

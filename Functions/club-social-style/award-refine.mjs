@@ -1,0 +1,50 @@
+import {visualPatch,badgeCrops,refinedAwardLayout,awardStyleSchema,awardStyleInstructions} from '../../social-awards-design.js';
+
+const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+const reply=(status,body)=>({status,body}),failure=(status,error)=>reply(status,{error});
+function base64(bytes){let value='';for(let i=0;i<bytes.length;i+=8192)value+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(value);}
+function png(bytes,maxBytes,maxSide){
+ if(bytes.length<24||bytes.length>maxBytes||[137,80,78,71,13,10,26,10].some((v,i)=>bytes[i]!==v))return false;
+ const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),width=view.getUint32(16),height=view.getUint32(20);
+ return width>0&&height>0&&width<=maxSide&&height<=maxSide&&width*height<=16000000;
+}
+
+// No service key, storage writes or publishing actions. All club data uses the caller's JWT and RLS.
+export async function refineAward(body,{url,anon,key,model,authorization,fetcher=fetch}){
+ try{
+  if(!uuid(body.club_id)||!['results','century','five_wickets'].includes(body.kind)||typeof body.brief!=='string'||!body.brief.trim()||body.brief.length>1500||!/^\d{4}-\d{2}-\d{2}$/.test(body.week_end||'')||!Number.isInteger(body.design_revision)||body.design_revision<0)return failure(400,'Choose a graphic and describe the change in a short message.');
+  if(typeof body.preview!=='string'||body.preview.length>2800000||!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(body.preview))return failure(400,'The graphic preview could not be read. Refresh the preview and try again.');
+  let current,preview;try{current=visualPatch(body.current);preview=Uint8Array.from(atob(body.preview.slice(22)),c=>c.charCodeAt(0));}catch{return failure(400,'The graphic settings could not be read. Refresh and try again.');}
+  if(!png(preview,2097152,1600))return failure(400,'Use a smaller graphic preview.');
+  const headers={apikey:anon,Authorization:authorization,'Content-Type':'application/json'},call=(path,options={})=>fetcher(url+path,{...options,headers,signal:AbortSignal.timeout(10000)});
+  const auth=await call('/auth/v1/user');if(!auth.ok)return failure(401,'Sign in again to modify your club graphics.');
+  const access=await call('/rest/v1/rpc/club_socials_api',{method:'POST',body:JSON.stringify({p_club_id:body.club_id,p_action:'access'})});
+  if(!access.ok||(await access.json())?.allowed!==true)return failure(403,'Club Admin or socials manager access is required.');
+  if(!key||!model)return failure(503,'Graphic assistance is not connected yet. The layout controls are still available.');
+  const awards=await call('/rest/v1/rpc/club_social_awards_api',{method:'POST',body:JSON.stringify({p_club_id:body.club_id,p_action:'context',p_data:{week_end:body.week_end}})});
+  if(!awards.ok)return failure(409,'Reload your saved graphics before trying this change.');
+  const context=await awards.json(),saved=context.designs?.[body.kind];
+  if((saved?.revision||0)!==body.design_revision)return failure(409,'The club’s saved artwork changed. Reload the saved layout, then try again.');
+  const example=saved?.layout?.example_path||null;
+  if(example&&!new RegExp('^'+body.club_id+'/artwork/[0-9a-f-]{36}\\.png$','i').test(example))return failure(400,'Upload a previous example for this club first.');
+  // Existing per-club allowance and rate limits apply to every attempt, with a fresh server ID.
+  const counted=await call('/rest/v1/rpc/club_socials_api',{method:'POST',body:JSON.stringify({p_club_id:body.club_id,p_action:'style_request',p_data:{request_id:crypto.randomUUID(),brief:body.brief,reference_ids:[]}})});
+  if(!counted.ok){const error=await counted.json().catch(()=>({})),message=String(error.message||'Graphic assistance is unavailable.').slice(0,300);return failure(/allowance|used its style suggestions|paused/i.test(message)?429:400,message);}
+  const data=await counted.json(),content=[{type:'input_text',text:JSON.stringify({club:data.brand,graphic:body.kind,design_brief:body.brief,current_settings:current,title_in_background:typeof body.title_in_background==='boolean'?body.title_in_background:!!saved?.layout?.includes_title})},{type:'input_text',text:'CURRENT PREVIEW. Keep its match facts unchanged.'},{type:'input_image',image_url:body.preview,detail:'high'}];
+  if(example){
+   const image=await call('/storage/v1/object/authenticated/club-social-awards/'+example);
+   if(!image.ok)return failure(409,'The previous example could not load. Check it in Artwork and try again.');
+   if(Number(image.headers.get('Content-Length')||0)>10485760)return failure(400,'Use a previous example under 10 MB.');
+   const bytes=new Uint8Array(await image.arrayBuffer());if(!png(bytes,10485760,8192))return failure(400,'Upload a PNG previous example under 10 MB.');
+   content.push({type:'input_text',text:'THIS CLUB’S PREVIOUS EXAMPLE. Visual reference only. Old scores and results must never be reused.'},{type:'input_image',image_url:'data:image/png;base64,'+base64(bytes),detail:'high'});
+  }
+  const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,instructions:awardStyleInstructions,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'club_award_refinement',strict:true,schema:awardStyleSchema}},max_output_tokens:3600}),signal:AbortSignal.timeout(55000)});
+  if(!response.ok)return failure(response.status===429?429:502,response.status===429?'Graphic assistance is busy. Try again later.':'The change could not be prepared. Your current graphic is still here.');
+  const result=await response.json();if(result.status&&result.status!=='completed')return failure(502,'The suggestion was incomplete. Try a smaller change.');
+  const output=(result.output||[]).flatMap(m=>m.content||[]);if(output.some(x=>x.type==='refusal'))return failure(422,'This change could not be prepared. Try describing it another way.');
+  const value=JSON.parse(result.output_text||output.filter(x=>x.type==='output_text').map(x=>x.text).join(''));
+  const changes=visualPatch(value.changes),badges=badgeCrops(value.badges||[]);
+  refinedAwardLayout({rows_top:29,rows_bottom:96,...current,example_path:example},{changes,badges,example_path:example},body.kind);
+  return reply(200,{changes,badges,example_path:example,explanation:String(value.explanation||'Review the updated preview.').slice(0,800),artwork_brief:typeof value.artwork_brief==='string'?value.artwork_brief.slice(0,1500):null});
+ }catch(error){return failure(502,['TimeoutError','AbortError'].includes(error?.name)?'The change took too long. Your current graphic is still here. Try again later.':'The suggestion could not be applied safely. Your current graphic is still here. Try a smaller change.');}
+}
