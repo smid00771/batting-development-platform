@@ -24,7 +24,7 @@ let module,labels=[];const h={supabase:api,here:x=>x===s,escape:v=>String(v??'')
 module=createSocialAwards(h);const w=module.state(s);w.end='2026-10-11';w.logoErrors.away=true;w.chosen=new Set(items.map(x=>x.key));
 const id=x=>document.getElementById(x),tick=()=>new Promise(r=>setTimeout(r,5)),until=async predicate=>{for(let i=0;i<500;i++){if(predicate())return;await tick();}throw Error('Timed out: '+id('saRefineStatus')?.textContent);},settled=()=>until(()=>!w.busy&&!w.loading&&w.previewReady),png=()=>id('saCanvas').backing.toBuffer('image/png'),answer=(changes={},extra={})=>({data:{changes,badges:[],explanation:'Review this change.',artwork_brief:null,...extra}}),edit=async(brief,response)=>{nextResponse=response;id('saRefineBrief').value=brief;id('saRefineBrief').dispatchEvent(new window.Event('input'));id('saTryRefinement').click();await settled();};
 module.render(s);await settled();const original=png(),facts=JSON.stringify(context.candidates),selected=[...w.chosen];
-assert.equal(id('saReload').textContent,'Refresh this page');assert.equal(id('saImport').textContent,'Add / update PlayCricket scores');
+assert.equal(id('saReload').textContent,'Refresh page');assert.equal(id('saImport').textContent,'Add / update PlayCricket scores');
 id('saModifyGraphic').click();await settled();assert.equal(document.activeElement,id('saRefineBrief'));
 await edit('Use a gold ribbon for wins.',answer({badge_style:'ribbon',win_colour:'#B98922',badge_angle:-5},{explanation:'Gold ribbon <img id="injected">'}));
 assert.equal(requests.length,1);assert.ok(requests[0].preview.startsWith('data:image/png;base64,'));assert.equal(requests[0].design_revision,1);assert.equal(requests[0].current.badge_style,'plain');assert.equal(document.getElementById('injected'),null);

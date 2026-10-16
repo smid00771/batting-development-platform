@@ -1,19 +1,19 @@
-// Club Batting 0.8.62.195 — social awards before create posts
+// Club Batting 0.8.62.196 — simpler pages and clear action feedback
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.194';
-import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.186';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.192';
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.186';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.186';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.192';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.192';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.186';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.186';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.196';
+import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.196';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.196';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.196';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.196';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.196';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.196';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.196';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.196';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.195';
+const APP_UI_VERSION='0.8.62.196';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1482,7 +1482,8 @@ function renderPublicTrialForm(saved={},message=''){
     const {club_name:clubName,contact_name:contactName}=rememberPublicTrialDraft();
     const switchButton=document.getElementById('trialUseDifferentEmail');
     if(switchButton)switchButton.disabled=true;
-    button.disabled=true;status.textContent='Preparing your next step…';authActionInFlight=true;
+    const buttonLabel=button.textContent;
+    button.disabled=true;button.textContent='Preparing…';status.textContent='';authActionInFlight=true;
     try{
       if(!session){
         const target=new URL('./app.html?trial=1&continue_trial=1',location.href);
@@ -1498,7 +1499,7 @@ function renderPublicTrialForm(saved={},message=''){
       }
       await continueWebsiteTrial(clubName,contactName);
     }catch(error){status.textContent=error.message||'We couldn’t prepare the next step. Please try again.';}
-    finally{authActionInFlight=false;button.disabled=false;if(switchButton)switchButton.disabled=false;}
+    finally{authActionInFlight=false;button.disabled=false;button.textContent=buttonLabel;if(switchButton)switchButton.disabled=false;}
   };
 }
 
@@ -5431,7 +5432,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <p class="help guide-topic-explanation">${esc(selected.short_explanation)}</p>
       <div class="guide-steps">${tutorial.map((step,i)=>{const unavailable=step.target_tab?guideTargetUnavailableReason(step.target_tab,step.focus||''):'';return `<article><b>${i+1}</b><div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p>${step.target_tab?(unavailable?`<small class="help">${esc(unavailable)}</small>`:`<button class="guide-inline-link" data-guide-target="${esc(step.target_tab)}" data-guide-focus="${esc(step.focus||'')}">${esc(guideTargetLabel(step.target_tab))} →</button>`):''}</div></article>`;}).join('')}</div>
       ${additionalTutorial.length?`<details class="guide-more-steps"><summary>More detail and other situations</summary><div class="guide-steps">${additionalTutorial.map((step,i)=>{const unavailable=step.target_tab?guideTargetUnavailableReason(step.target_tab,step.focus||''):'';return `<article><b>${tutorial.length+i+1}</b><div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p>${step.target_tab?(unavailable?`<small class="help">${esc(unavailable)}</small>`:`<button class="guide-inline-link" data-guide-target="${esc(step.target_tab)}" data-guide-focus="${esc(step.focus||'')}">${esc(guideTargetLabel(step.target_tab))} →</button>`):''}</div></article>`;}).join('')}</div></details>`:''}
-      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete">Mark this tutorial complete</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}<button type="button" class="btn ghost" data-guide-topic="whole_process">Back to overview</button></div>
+      <div class="btnrow"><button class="btn ghost" id="guideMarkComplete" ${progressMap.get(selected.capability_key)?.state==='completed'?'disabled':''}>${progressMap.get(selected.capability_key)?.state==='completed'?'Read ✓':'Mark as read'}</button>${selected.target_tab&&selected.target_tab!=='guide'&&!guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<button class="btn secondary" id="guideOpenArea">Open ${esc(guideTargetLabel(selected.target_tab))} →</button>`:''}<button type="button" class="btn ghost" data-guide-topic="whole_process">Back to overview</button></div>
       ${selected.target_tab&&selected.target_tab!=='guide'&&guideTargetUnavailableReason(selected.target_tab,selectedFocus)?`<p class="help">${esc(guideTargetUnavailableReason(selected.target_tab,selectedFocus))}</p>`:''}
     </section>`}
 
@@ -5450,7 +5451,18 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   document.querySelectorAll('[data-guide-topic]').forEach(b=>b.onclick=()=>{guideSelectedCapabilityKey=b.dataset.guideTopic;return renderClubBattingGuide({revealTutorial:true});});
   document.querySelectorAll('[data-guide-target]').forEach(b=>b.onclick=()=>guideGoToTarget(b.dataset.guideTarget,b.dataset.guideFocus||''));
   document.getElementById('guideOpenArea')?.addEventListener('click',()=>guideGoToTarget(selected.target_tab,selectedFocus));
-  document.getElementById('guideMarkComplete')?.addEventListener('click',async()=>{await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'completed'});return renderClubBattingGuide();});
+  document.getElementById('guideMarkComplete')?.addEventListener('click',async event=>{
+    const button=event.currentTarget;if(button.disabled)return;
+    button.disabled=true;button.textContent='Saving…';
+    try{
+      const {error}=await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'completed'});
+      if(error)throw error;
+      button.textContent='Read ✓';
+      const topic=page.querySelector(`[data-guide-topic="${selected.capability_key}"] .guide-topic-copy`);
+      if(topic&&!topic.querySelector('.guide-topic-complete'))topic.insertAdjacentHTML('beforeend','<span class="guide-topic-complete">Tutorial read ✓</span>');
+    }catch(error){button.textContent='Mark as read';alert(error?.message||'Could not save. Try again.');}
+    finally{button.disabled=button.textContent==='Read ✓';}
+  });
 
   if(revealTutorial){
     requestAnimationFrame(()=>{
@@ -5473,6 +5485,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
     const st=document.getElementById('guideChatStatus');
     const q=input.value.trim();if(!q)return;
     const btn=document.getElementById('guideAsk');
+    if(btn.disabled)return;
     const messageBox=document.getElementById('guideChatMessages');
     btn.disabled=true;btn.textContent='Thinking…';st.textContent='';st.classList.remove('error','ok');
     messageBox.classList.remove('is-empty');
@@ -5498,10 +5511,15 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   document.getElementById('guideSendHandoff').onclick=async()=>{
     const reason=val('guideHandoffReason');
     if(!reason){document.getElementById('guideHandoffReason').focus();return;}
-    const button=document.getElementById('guideSendHandoff');button.disabled=true;
-    const {error}=await supabase.rpc('request_club_batting_guide_handoff',{p_club_id:club.id,p_reason:reason});
-    if(error){button.disabled=false;document.getElementById('guideChatStatus').textContent=error.message;return;}
-    document.getElementById('guideHandoffBox').innerHTML='<div class="notice success compact"><strong>Request recorded for the Club Batting team.</strong><br>Your question and conversation are available to Platform Admin.</div>';
+    const button=document.getElementById('guideSendHandoff');if(button.disabled)return;
+    const cancel=document.getElementById('guideCancelHandoff'),status=document.getElementById('guideChatStatus'),box=document.getElementById('guideHandoffBox');
+    button.disabled=true;button.textContent='Sending…';cancel.disabled=true;status.textContent='';
+    try{
+      const {error}=await supabase.rpc('request_club_batting_guide_handoff',{p_club_id:club.id,p_reason:reason});
+      if(error)throw error;
+      box.innerHTML='<div class="notice success compact">Request recorded for the Club Batting team.</div>';
+    }catch(error){status.textContent=error?.message||'Could not send your request. Try again.';}
+    finally{button.disabled=false;button.textContent='Request a conversation';cancel.disabled=false;}
   };
 }
 
@@ -5545,10 +5563,9 @@ async function renderClubDashboard(){
     <div class="section-label">Club Home</div>
     <h1 class="club-progress-title">Your club’s progress</h1>
     ${clubBrandingSetupPrompt()}
-    <p class="club-home-intro">Build your club’s approach, bring players on board and keep connecting their plans, training and feedback.</p>
-    ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">You are preparing a new philosophy round. Existing players can keep using the published How We Bat and Player Plans. People can still register and use the published version while you prepare its replacement.</div>':''}
+    ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">A new philosophy round is in progress. The published How We Bat, Player Plans and sign-up remain available.</div>':''}
     <section class="club-preparation" aria-labelledby="clubPreparationTitle">
-      <div class="club-preparation-heading"><div><h2 id="clubPreparationTitle">Before players build their plans</h2><p>These five steps prepare the club’s approach and Player Plan questions. People can sign up at any time, and the Club Admin can assign setup roles. After publication, players build their plans, put them into practice through How We Train, and keep learning through feedback and conversations.</p></div><span class="club-preparation-count">${progress.published?'Ready for Player Plans':`${progress.steps.filter(item=>item.complete).length} of 5 preparation steps complete`}</span></div>
+      <div class="club-preparation-heading"><div><h2 id="clubPreparationTitle">Before players build their plans</h2><p>Complete these steps to open Player Plans. People can sign up while you prepare.</p></div><span class="club-preparation-count">${progress.published?'Ready for Player Plans':`${progress.steps.filter(item=>item.complete).length} of 5 preparation steps complete`}</span></div>
       ${clubSetupProgressHtml(progress)}
       <section class="club-stage-panel" id="clubHomeStagePanel" hidden>
         <div class="club-stage-heading" id="clubHomeStageHeading"></div>
@@ -5615,16 +5632,15 @@ async function renderClubDashboard(){
     </section>
     <section class="card club-home-next" aria-labelledby="clubHomeNextTitle">
       <div class="section-label">${progress.systemLive?'Next · Put the plans into practice':'Available now · People & roles'}</div>
-      <h2 id="clubHomeNextTitle">${progress.systemLive?'Get your players using their plans':'Bring your people on board'}</h2>
-      <p>${progress.systemLive?'Invite anyone who has not registered, organise your Playing Groups and set plan due dates. Registered players can now build their Player Plans, use How We Train and keep learning through feedback.':'People can register now. Everyone who plays joins as a Player; non-playing staff use the staff sign-up link. The Club Admin assigns club roles in People & Sign-up, then chooses the Philosophy Lead and contributors in the Workshop.'}</p>
-      ${progress.systemLive?'':'<div class="notice compact">Players without a setup role will see a clear waiting message until the club publishes. People with assigned workshop or setup access can begin their part now.</div>'}
+      <h2 id="clubHomeNextTitle">${progress.systemLive?'Players and due dates':'Invite your club'}</h2>
+      <p>${progress.systemLive?'Invite players, organise Playing Groups and set plan due dates.':'Invite players and non-playing staff, then assign club roles in People & Sign-up.'}</p>
       <div class="btnrow" style="margin-top:14px">${isAdmin()?'<button class="btn secondary" type="button" data-home-go="permissions">People & Sign-up</button>':''}${canUsePlayersWorkspace()?`<button class="btn ${isAdmin()?'ghost':'secondary'}" type="button" data-home-go="players">Open Players</button>`:progress.systemLive?`<button class="btn secondary" type="button" data-home-go="${liveAction.tab}">${liveAction.label}</button>`:''}</div>
-      ${canUsePlayersWorkspace()?`<div class="club-home-owner">${registeredPlayerCount} registered player${registeredPlayerCount===1?'':'s'}${club.player_signup_open===false?' · Player sign-up is manually closed. Your Club Admin can reopen it in People & Sign-up.':' · Sign-up is open during club preparation too.'}</div>`:''}
+      ${canUsePlayersWorkspace()?`<div class="club-home-owner">${registeredPlayerCount} registered player${registeredPlayerCount===1?'':'s'}${club.player_signup_open===false?' · Player sign-up is manually closed. Your Club Admin can reopen it in People & Sign-up.':' · Sign-up open.'}</div>`:''}
     </section>
     ${showRoundReview?`<details class="card setup-collapsible club-round-review" style="margin-top:22px">
       <summary class="setup-collapsible-summary"><div class="setup-collapsible-title"><strong>Start a new club setup</strong></div><span class="setup-collapsible-toggle"></span></summary>
       <div class="setup-collapsible-body">
-        <p>Revisit your club’s approach whenever you need to—for a new season, a change of leadership or a different direction. View the workshop, or deliberately start a new philosophy round.</p>
+        <p>Start a new round for a new season or a change of approach.</p>
         <p class="help">Starting a new round archives the current workshop responses and clears the working drafts. Any published How We Bat and Player Plans stay available while you build a replacement. Your club details, players and Playing Groups do not need to be set up again.</p>
         <div class="btnrow">
           <button class="btn ghost" type="button" data-home-go="workshop">View Batting Philosophy Workshop</button>
@@ -5642,16 +5658,22 @@ async function renderClubDashboard(){
       </div>
     </details>`:''}
     <section class="club-help-feature" aria-labelledby="clubHelpTitle">
-      <div><div class="section-label">Help at every step</div><h2 id="clubHelpTitle">Your tutorials. Your Guide.</h2><p>See how each stage works, or ask a question about your next step.</p></div>
+      <div><h2 id="clubHelpTitle">Need help?</h2></div>
       <div class="btnrow"><button class="btn secondary" type="button" id="dashboardLearnClubBatting">Explore tutorials</button><button class="btn ghost" type="button" id="dashboardAskGuide">Ask the Guide</button></div>
     </section>`;
 
   document.getElementById('continueClubTrial')?.addEventListener('click',()=>openMyClubProducts());
   document.getElementById('startNewPhilosophyRound')?.addEventListener('click',startNewPhilosophyRound);
-  document.getElementById('endClubTrial')?.addEventListener('click',async()=>{
+  document.getElementById('endClubTrial')?.addEventListener('click',async event=>{
+    const button=event.currentTarget;if(button.disabled)return;
     if(!confirm('End Club Batting when this Club Trial finishes? No payment will be taken.'))return;
-    const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:club.id,p_decision:'end'});
-    if(error){alert(error.message);return;}await renderClubDashboard();
+    button.disabled=true;button.textContent='Saving…';let saved=false;
+    try{
+      const {error}=await supabase.rpc('set_club_trial_decision',{p_club_id:club.id,p_decision:'end'});
+      if(error)throw error;
+      saved=true;button.textContent='Ending after trial ✓';await renderClubDashboard();
+    }catch(error){alert(saved?'Your choice is saved. Refresh to update this page.':error?.message||'Could not save. Try again.');}
+    finally{button.disabled=saved;if(!saved)button.textContent='End after trial';}
   });
   if(canReviewLook)wireClubBrandingControls(page);
   page.querySelectorAll('[data-club-stage]').forEach(button=>button.onclick=()=>expandClubHomeStage(clubHomeExpandedStage===button.dataset.clubStage?null:button.dataset.clubStage,progress));
@@ -6517,7 +6539,7 @@ async function renderWorkshop(){
       <div style="margin-top:16px">
       <div class="section-label">1 · Contributors</div>
       <h2>Who is contributing?</h2>
-      <div class="help">Choose the Philosophy Lead and the people whose independent batting perspective should feed this workshop. You can add or invite contributors here without jumping ahead to the draft.</div>
+      <div class="help">Choose a Philosophy Lead and, for a collaborative workshop, the contributors.</div>
 
       <div class="mode-choice">
         <label class="mode-card ${!collaborative?'on':''}">
@@ -6563,7 +6585,7 @@ async function renderWorkshop(){
           <div class="workshop-step-num">1</div>
           <div>
             <label class="field-label">Choose coaches / captains already in this club</label>
-            <div class="help">Only people who have already been given an elevated cricket role appear here. Ordinary players are not listed.</div>
+            <div class="help">Lists Club Admins, coaches and captains.</div>
           </div>
         </div>
         <div class="contributor-picker">
@@ -6602,7 +6624,6 @@ async function renderWorkshop(){
           <div class="help">New email invitations are queued when you save. You can manage existing invitations below.</div>
         </div>
 
-        <div class="notice compact"><strong>No committee meeting required.</strong><br>Invite people now; they complete their response independently when it suits them.</div>
       </div>
 
       <div class="workshop-save-block">
@@ -6624,7 +6645,7 @@ async function renderWorkshop(){
           <div>
             <div class="section-label">Existing invitations</div>
             <h3>Manage existing invitations</h3>
-            <p class="help">Saving the selections above <strong>does not create another invitation for these people</strong>. Use Resend if someone needs a fresh invitation email.</p>
+            <p class="help">Use Resend if someone needs another invitation.</p>
           </div>
         </div>
         <div class="pending-invites">
@@ -6912,52 +6933,65 @@ async function renderWorkshop(){
   wireNewContributorRows();
 
   document.querySelectorAll('[data-resend-philosophy-invite]').forEach(b=>b.onclick=async()=>{
-    b.textContent='Sending…';
-    const {error}=await supabase.rpc('resend_philosophy_contributor_invite',{p_invite_id:b.dataset.resendPhilosophyInvite});
-    if(error){alert(error.message);b.textContent='Resend';return;}
-    b.textContent='Queued ✓';
-    await kickLiveEmailDelivery();
+    if(b.disabled)return;
+    b.disabled=true;b.textContent='Sending…';let queued=false;
+    try{
+      const {error}=await supabase.rpc('resend_philosophy_contributor_invite',{p_invite_id:b.dataset.resendPhilosophyInvite});
+      if(error)throw error;
+      queued=true;b.textContent='Queued ✓';
+      await kickLiveEmailDelivery();
+    }catch(error){alert(queued?'Invitation queued, but delivery could not be checked.':error?.message||'Could not send. Try again.');}
+    finally{b.disabled=queued;if(!queued)b.textContent='Resend';}
   });
 
   document.querySelectorAll('[data-cancel-philosophy-invite]').forEach(b=>b.onclick=async()=>{
-    if(!confirmLeaveWorkshopSetup())return;
-    const {error}=await supabase.rpc('cancel_philosophy_contributor_invite',{p_invite_id:b.dataset.cancelPhilosophyInvite});
-    if(error){alert(error.message);return;}
-    await renderWorkshop();
+    if(b.disabled||!confirmLeaveWorkshopSetup())return;
+    b.disabled=true;b.textContent='Cancelling…';let cancelled=false;
+    try{
+      const {error}=await supabase.rpc('cancel_philosophy_contributor_invite',{p_invite_id:b.dataset.cancelPhilosophyInvite});
+      if(error)throw error;
+      cancelled=true;b.textContent='Cancelled';
+      await renderWorkshop();
+    }catch(error){alert(cancelled?'Invitation cancelled. Refresh to update the list.':error?.message||'Could not cancel. Try again.');}
+    finally{b.disabled=cancelled;if(!cancelled)b.textContent='Cancel';}
   });
 
   if(document.getElementById('myResponseAction')){
     document.getElementById('myResponseAction').onclick=async()=>{
-      if(!confirmLeaveWorkshopSetup())return;
+      const button=document.getElementById('myResponseAction');
+      if(button.disabled||!confirmLeaveWorkshopSetup())return;
       if(me.status==='submitted'){
         renderMySubmittedPhilosophyResponse(myContribution);
         return;
       }
-      if(me.status==='invited'){
-        const {error}=await supabase.rpc('start_my_philosophy_response',{p_club_id:club.id});
-        if(error){alert(error.message);return;}
-        await loadData();
-      }
-      currentTab='identity';
-      renderShell();
+      const label=button.textContent;let started=false;
+      button.disabled=true;button.textContent='Opening…';
+      try{
+        if(me.status==='invited'){
+          const {error}=await supabase.rpc('start_my_philosophy_response',{p_club_id:club.id});
+          if(error)throw error;
+          started=true;await loadData();
+        }
+        currentTab='identity';renderShell();
+      }catch(error){alert(started?'Response started. Refresh to continue.':error?.message||'Could not open your response. Try again.');}
+      finally{button.disabled=started;button.textContent=started?'Response started ✓':label;}
     };
   }
 
   document.querySelectorAll('[data-reopen-contributor]').forEach(b=>b.onclick=async()=>{
-    if(!confirmLeaveWorkshopSetup())return;
+    if(b.disabled||!confirmLeaveWorkshopSetup())return;
     if(workshop?.final_draft_ready || howWeBatDraft || workshop?.status==='published'){
       alert('This response is already part of the current synthesis and can no longer be reopened.');
       return;
     }
-    const ok=confirm('Allow this contributor to change their submitted response? Their response will be removed from the live synthesis until they submit it again.');
-    if(!ok)return;
-    const {error}=await supabase.rpc('reopen_philosophy_contributor',{
-      p_club_id:club.id,
-      p_user_id:b.dataset.reopenContributor
-    });
-    if(error){alert(error.message);return;}
-    await loadData();
-    renderShell();
+    if(!confirm('Allow this contributor to change their submitted response? Their response will be removed from the live synthesis until they submit it again.'))return;
+    const label=b.textContent;let reopened=false;b.disabled=true;b.textContent='Reopening…';
+    try{
+      const {error}=await supabase.rpc('reopen_philosophy_contributor',{p_club_id:club.id,p_user_id:b.dataset.reopenContributor});
+      if(error)throw error;
+      reopened=true;b.textContent='Reopened ✓';await loadData();renderShell();
+    }catch(error){alert(reopened?'Response reopened. Refresh to update this page.':error?.message||'Could not reopen. Try again.');}
+    finally{b.disabled=reopened;if(!reopened)b.textContent=label;}
   });
 
   document.querySelectorAll('[data-scenario-preset]').forEach(b=>b.onclick=async()=>{
@@ -7017,17 +7051,17 @@ async function renderWorkshop(){
   });
 
   document.querySelectorAll('[data-ignore-late]').forEach(b=>b.onclick=async()=>{
+    if(b.disabled)return;
     const action=(lateActions||[]).find(x=>x.id===b.dataset.ignoreLate);
     const name=pMap.get(action?.user_id)?.display_name||'this contributor';
-    const ok=confirm(`Ignore the late response from ${name}? It will remain in the audit history but will not affect the final draft.`);
-    if(!ok)return;
-
-    b.disabled=true;
-    const {error}=await supabase.rpc('ignore_late_philosophy_response',{p_action_id:b.dataset.ignoreLate});
-    if(error){alert(error.message);b.disabled=false;return;}
-
-    await loadData();
-    renderShell();
+    if(!confirm(`Ignore the late response from ${name}? It will remain in the audit history but will not affect the final draft.`))return;
+    const label=b.textContent;let ignored=false;b.disabled=true;b.textContent='Saving…';
+    try{
+      const {error}=await supabase.rpc('ignore_late_philosophy_response',{p_action_id:b.dataset.ignoreLate});
+      if(error)throw error;
+      ignored=true;b.textContent='Ignored';await loadData();renderShell();
+    }catch(error){alert(ignored?'Response ignored. Refresh to update this page.':error?.message||'Could not save. Try again.');}
+    finally{b.disabled=ignored;if(!ignored)b.textContent=label;}
   });
 
   document.querySelectorAll('[data-incorporate-late]').forEach(b=>b.onclick=async()=>{
@@ -8641,7 +8675,7 @@ function howWeBatBannerCandidates(format){
     });
   }
 
-  
+
 
 // Initial score order, then apply a modest overlap penalty so three banners
   // do not all win because of the same shared dimension.
@@ -8914,7 +8948,7 @@ function renderHowWeBatBuilder(savedMessage=''){
     <section class="card hwb-format-builder" style="margin-top:16px">
       <div class="format-tabs hwb-tabs">${formats.map(([k,l])=>`<button data-hwb-format="${k}" class="${k===howWeBatBuilderFormat?'active':''}">${esc(l)}</button>`).join('')}</div>
       <div class="hwb-format-heading">
-        <div><div class="section-label">${esc(formatLabel)}</div><h2>Choose the banners that carry the message</h2></div>
+        <div><div class="section-label">${esc(formatLabel)}</div><h2>Choose the Key Messages</h2></div>
         <button class="btn ghost" id="regenerateHwbFormat">Regenerate ${esc(formatLabel)} suggestions</button>
       </div>
 
@@ -8931,7 +8965,7 @@ function renderHowWeBatBuilder(savedMessage=''){
           <div class="field"><label>Short player-facing message</label><textarea data-hwb-message="${row.key}" rows="3">${esc(row.message)}</textarea></div>
           <div class="field hwb-reference-editor">
             <label>When a player opens this Key Message</label>
-            <div class="help">One useful coaching point per line. This becomes the richer reference layer inside How We Bat and the Player Plan.</div>
+            <div class="help">One coaching point per line. Players see these when they open the Key Message.</div>
             <textarea data-hwb-reference="${row.key}" rows="6">${esc((row.reference_points||[]).join('\n'))}</textarea>
           </div>
           <div class="hwb-evidence">
@@ -8949,7 +8983,7 @@ function renderHowWeBatBuilder(savedMessage=''){
 
       <div class="btnrow hwb-builder-actions">
         <button class="btn ghost" id="backToHwbView">Save & return to How We Bat</button>
-        <button class="btn secondary" id="saveHwbDraft">Save How We Bat draft</button><button class="btn secondary" id="readyHwbDraft">Confirm How We Bat</button>
+        <button class="btn secondary" id="saveHwbDraft" ${!howWeBatBuilderDirty&&savedMessage?'disabled':''}>${!howWeBatBuilderDirty&&savedMessage?'Saved ✓':'Save How We Bat draft'}</button><button class="btn secondary" id="readyHwbDraft">Confirm How We Bat</button>
         <span class="status" id="hwbStatus" aria-live="polite">${howWeBatBuilderDirty?'Unsaved changes':esc(savedMessage)}</span>
       </div>
     </section>
@@ -9106,6 +9140,8 @@ async function saveHowWeBatBuilder(status){
   }
 
   howWeBatBuilderSaving=true;
+  const saveButton=document.getElementById(status==='ready'?'readyHwbDraft':'saveHwbDraft'),saveLabel=saveButton?.textContent;
+  if(saveButton)saveButton.textContent=status==='ready'?'Confirming…':'Saving…';
   const controls=[...document.querySelectorAll('.hwb-builder-shell input,.hwb-builder-shell textarea,.hwb-builder-shell button')].map(element=>({element,disabled:element.disabled}));
   controls.forEach(({element})=>element.disabled=true);
   let persisted=false;
@@ -9146,6 +9182,7 @@ async function saveHowWeBatBuilder(status){
   }finally{
     howWeBatBuilderSaving=false;
     controls.forEach(({element,disabled})=>element.disabled=disabled);
+    if(saveButton?.isConnected)saveButton.textContent=saveLabel;
   }
 }
 
@@ -9873,7 +9910,7 @@ async function renderPlanStructure(){
     const removedQuestions=sectionArray.filter(q=>q.active===false);
     const sectionTabs=[['core','Core'],...formats].map(([k,l])=>`<button class="${playerPlanStructureSection===k?'active':''}" data-plan-section="${k}">${esc(l)}</button>`).join('');
     manualHtml=`<section class="card" style="margin-top:16px">
-      <div class="plan-structure-builder-head"><div><div class="section-label">Optional manual control</div><h2>Edit the exact questions</h2><div class="help">Club Batting’s generated structure is the normal path. Use this only when the club genuinely needs different wording, options or an additional prompt.</div></div></div>
+      <div class="plan-structure-builder-head"><div><div class="section-label">Optional manual control</div><h2>Edit the exact questions</h2><div class="help">Change wording, choices or questions, then save your edits.</div></div></div>
       <div class="plan-structure-tabs">${sectionTabs}</div>
       <div class="plan-section-head"><div><div class="section-label">${esc(planStructureSectionLabel(playerPlanStructureSection))}</div><h3>${activeQuestions.length} question${activeQuestions.length===1?'':'s'}</h3></div><button class="btn ghost" id="addPlanQuestion">+ Add question</button></div>
       <div class="plan-question-editor-list">${activeQuestions.map((q,i)=>renderPlanStructureQuestion(q,i,true)).join('')||'<div class="notice">No questions are currently included.</div>'}</div>
@@ -9884,7 +9921,7 @@ async function renderPlanStructure(){
 
   const statusHtml=structureReady
     ?`<div class="notice success"><strong>Player Plan questions confirmed for this season.</strong><br>${currentDraftPublished?'These questions are published and available to players.':lookReady?'The questions are ready for the final publication step.':'The questions are ready. Next, the Club Admin checks the club look before publication.'} They stay fixed for the season so Player Plans remain aligned with How We Bat.</div>`
-    :`<div class="notice"><strong>Generated from locked How We Bat.</strong><br>Club Batting has kept this deliberately short: three club-wide questions, then one prompt for each How We Bat Key Message. The normal job here is simply to check that the questions make sense.</div>`;
+    :`<div class="notice"><strong>Generated from locked How We Bat.</strong><br>Review the club-wide questions and the prompt for each How We Bat Key Message.</div>`;
 
   const actionHtml=structureReady&&!lookReady
     ?`<div class="btnrow"><button class="btn secondary" id="continueToClubLook">${isAdmin()?'Continue to club look':'Return to Club Home'}</button></div>${isAdmin()?'':'<p class="help">Your Club Admin can add the club logo and colours or keep the current look. Once saved, you can publish here.</p>'}`
@@ -9900,11 +9937,10 @@ async function renderPlanStructure(){
     .plan-review-shell{max-width:980px;margin:0 auto}.plan-review-hero{padding:20px 22px}.plan-review-hero h1{margin:4px 0 7px}.plan-review-count{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.plan-review-count span{padding:6px 9px;border-radius:999px;background:var(--club-soft);font-size:9px;font-weight:900;color:var(--navy)}
   </style>
   <div class="plan-review-shell">
-    <div class="guide-context-bar"><span><strong>Player Plan Structure</strong> · Turn How We Bat into the questions each player answers about their own game.</span><button type="button" class="btn ghost compact-btn" id="planStructureGuideLink">Show me how</button></div>
+    <div class="guide-context-bar"><span><strong>Player Plan Structure</strong></span><button type="button" class="btn ghost compact-btn" id="planStructureGuideLink">Show me how</button></div>
     <section class="card plan-review-hero">
       <div class="section-label">Player Plan Structure</div>
-      <h1>The questions players will build their plans from.</h1>
-      <p class="help">How We Bat sets the club position. These prompts help each batter turn that position into <strong>their own game</strong>.</p>
+      <h1>Player Plan questions</h1>
       <div class="plan-review-count"><span>${playerPlanStructureWorking.core.filter(q=>q.active!==false).length} club-wide</span>${formats.map(([f,l])=>`<span>${esc(l)} · ${(playerPlanStructureWorking.formats?.[f]||[]).filter(q=>q.active!==false).length}</span>`).join('')}</div>
     </section>
     ${statusHtml}
@@ -10066,20 +10102,18 @@ async function savePlayerPlanStructure(status,triggerButton=null){
 async function submitPhilosophyResponse(){
   const s=document.getElementById('submitPhilosophyStatus');
   const btn=document.getElementById('submitPhilosophy');
+  if(btn?.disabled)return;
   if(s)s.textContent='Submitting…';
   if(btn){btn.disabled=true;btn.textContent='Submitting…';}
-
-  const {error}=await supabase.rpc('submit_my_philosophy_response',{p_club_id:club.id});
-  if(error){
-    if(s)s.textContent=error.message;
-    if(btn){btn.disabled=false;btn.textContent='Submit response';}
-    return;
-  }
-
-  if(s)s.textContent='Submitted ✓';
-  await loadData();
-  currentTab='workshop';
-  renderShell();
+  let submitted=false;
+  try{
+    const {error}=await supabase.rpc('submit_my_philosophy_response',{p_club_id:club.id});
+    if(error)throw error;
+    submitted=true;if(s)s.textContent='Submitted ✓';if(btn)btn.textContent='Submitted ✓';
+    await loadData();currentTab='workshop';renderShell();
+  }catch(error){
+    if(s)s.textContent=submitted?'Response submitted. Refresh to return to the Workshop.':error?.message||'Could not submit. Try again.';
+  }finally{if(btn){btn.disabled=submitted;if(!submitted)btn.textContent='Submit response';}}
 }
 
 
@@ -10251,8 +10285,7 @@ async function renderPermissions(){
   <section class="card">
     <div class="section-label">Players · Club people</div>
     <h2 aria-level="1">People & Sign-up</h2>
-    <div class="help"><strong>One club account. Invite people, then assign their roles.</strong></div>
-    <div class="help">Players use the same account for Teams & availability and Club Batting. Assign staff roles after they join.</div>
+    <p class="help">Invite people, then assign their roles. One account covers both club products.</p>
   </section>
 
 
@@ -10260,8 +10293,8 @@ async function renderPermissions(){
     <section class="card player-signup-card">
       <div class="section-label">Player sign-up</div>
       <h2>Invite players to register</h2>
-      ${selectionsEnabled()||plansReady?'':`<div class="notice"><strong>You can register people during preparation.</strong> ${signupOpen?'Players can join now.':'Reopen sign-up when you want to invite players.'} Assign any club roles below, then choose workshop participants in the Workshop. Players without an assigned setup role will see a waiting message until How We Bat and Player Plans are published.</div>`}
-      <div class="help">Post the WhatsApp message in the players chat, or use the QR code at training / on a noticeboard. Everyone using this route joins as a <strong>Player</strong>. If they also captain or coach, assign that club role afterwards.</div>
+      ${selectionsEnabled()||plansReady?'':`<div class="notice">${signupOpen?'Players can join now.':'Reopen sign-up to invite players.'} Player Plans open after publication.</div>`}
+      <div class="help">Share the message in your players’ chat or display the QR code. Playing coaches and captains also use this link.</div>
 
       <div class="signup-status-row">
         <div>
@@ -10283,15 +10316,10 @@ async function renderPermissions(){
 
         <div class="share-actions">
           <h3>For the Players WhatsApp chat</h3>
-          <p>Use the message button — the link is easier for players who are already reading it on their phone.</p>
           <button class="btn ${playerJoinLink?'secondary':'ghost'}" id="copyPlayerWhatsApp" ${playerJoinLink?'':'disabled'}>Copy WhatsApp message</button>
           <button class="btn ghost" id="copyPlayerLink" ${playerJoinLink?'':'disabled'}>Copy player sign-up link</button>
           <div id="playerShareStatus" class="help"></div>
 
-          <div class="share-preview">
-            <strong>What players experience</strong>
-            <span>Open link → enter email → secure sign-in → confirm name → joined as Player.</span><span>${selectionsEnabled()?'Players mark their available dates after joining.':plansReady?'Player Plans are available after joining.':'Player Plans open when your club is ready.'}</span>
-          </div>
         </div>
       </div>
 
@@ -10307,14 +10335,12 @@ async function renderPermissions(){
     <section class="card">
       <div class="section-label">Non-playing staff</div>
       <h2>Invite non-playing staff</h2>
-      <div class="notice"><strong>Playing coach or captain?</strong><br>They still use the normal <strong>Player sign-up</strong>. Do not give them a second account.</div>
-      <div class="help" style="margin-top:14px">Use this link for non-playing staff. Players who also help the club use the player link.</div>
+      <p class="help">For staff who do not play. Playing coaches and captains use the player link.</p>
       <div class="signup-count" style="margin-top:14px"><strong>${nonPlayingStaffCount}</strong> non-playing staff registered</div>
       <div class="btnrow"><button class="btn secondary" id="copyStaffJoinLink">Copy non-playing staff sign-up link</button></div>
       <div id="staffJoinStatus" class="help"></div>
       <div class="permission-explainer">
-        <strong>Registration still does not grant player access.</strong>
-        <span>After they join, find them under Club roles below, assign their role, then choose the Playing Groups or whole-club access they need.</span>
+        <span>After they join, assign their club role and player access below.</span>
       </div>
     </section>
   </div>
@@ -10345,7 +10371,7 @@ async function renderPermissions(){
       <div>
         <div class="section-label">Admin continuity</div>
         <h2>Lead Admin</h2>
-        <div class="help">A club can have several Club Admins. The <strong>Lead Admin</strong> is simply the current custodian responsible for formally handing the system to the next person when committee or coaching roles change.</div>
+        <div class="help">The <strong>Lead Admin</strong> arranges the handover when club leadership changes. Other Club Admins retain full access.</div>
       </div>
       <div class="lead-admin-badge">
         <span>Current Lead Admin</span>
@@ -10428,6 +10454,7 @@ async function renderPermissions(){
     try{
       await navigator.clipboard.writeText(text);
       if(st)st.textContent=`${label} copied ✓`;
+      return true;
     }catch(e){
       if(!st?.isConnected)return;
       st.textContent='Copy this text manually:';
@@ -10435,43 +10462,53 @@ async function renderPermissions(){
       field.value=text;field.readOnly=true;field.rows=Math.min(6,Math.max(2,text.split('\n').length));
       field.setAttribute('aria-label',label);field.style.cssText='display:block;width:100%;box-sizing:border-box;margin-top:6px;font:inherit;font-size:16px';
       st.append(field);field.focus();field.select();
+      return false;
     }
   };
-
-  const copyPlayerShare=(text,label)=>{
-    if(!stillCurrent()||!playerJoinLink)return;
-    return copyText(text,label,'playerShareStatus');
+  const copyWithFeedback=async(button,text,label,statusId)=>{
+    if(button.disabled)return;
+    const original=button.dataset.copyLabel||button.textContent;button.dataset.copyLabel=original;
+    button.disabled=true;button.textContent='Copying…';let copied=false;
+    try{copied=await copyText(text,label,statusId);}
+    finally{button.disabled=false;button.textContent=copied?'Copied ✓':original;}
   };
-  document.getElementById('copyPlayerWhatsApp').onclick=()=>copyPlayerShare(playerWhatsAppMessage,'WhatsApp message');
-  document.getElementById('copyPlayerLink').onclick=()=>copyPlayerShare(playerJoinLink,'Player sign-up link');
+
+  const copyPlayerShare=(text,label,button)=>{
+    if(!stillCurrent()||!playerJoinLink)return;
+    return copyWithFeedback(button,text,label,'playerShareStatus');
+  };
+  document.getElementById('copyPlayerWhatsApp').onclick=event=>copyPlayerShare(playerWhatsAppMessage,'WhatsApp message',event.currentTarget);
+  document.getElementById('copyPlayerLink').onclick=event=>copyPlayerShare(playerJoinLink,'Player sign-up link',event.currentTarget);
   if(document.getElementById('retryPlayerSignupLink'))document.getElementById('retryPlayerSignupLink').onclick=()=>{if(stillCurrent())return renderPermissions();};
-  document.getElementById('copyStaffJoinLink').onclick=()=>copyText(
-    staffJoinLink,'Non-playing staff sign-up link','staffJoinStatus'
+  document.getElementById('copyStaffJoinLink').onclick=event=>copyWithFeedback(
+    event.currentTarget,staffJoinLink,'Non-playing staff sign-up link','staffJoinStatus'
   );
 
   document.getElementById('togglePlayerSignup').onclick=async()=>{
     if(!stillCurrent()||!signupSettingsLoaded)return;
-    const button=document.getElementById('togglePlayerSignup');
-    button.disabled=true;
-    button.textContent=signupOpen?'Closing…':'Opening…';
-    const {error}=await supabase.rpc('set_player_signup_open',{
-      p_club_id:targetClub,
-      p_open:!signupOpen
-    });
-    if(error){alert(error.message);button.disabled=false;button.textContent=signupOpen?'Close sign-up':'Open sign-up';return;}
-    await loadContext();
+    const button=document.getElementById('togglePlayerSignup');if(button.disabled)return;
+    button.disabled=true;button.textContent=signupOpen?'Closing…':'Opening…';let saved=false;
+    try{
+      const {error}=await supabase.rpc('set_player_signup_open',{p_club_id:targetClub,p_open:!signupOpen});
+      if(error)throw error;
+      saved=true;button.textContent=signupOpen?'Sign-up closed ✓':'Sign-up open ✓';
+      await loadContext();
+    }catch(error){alert(saved?'Sign-up updated. Refresh to update this page.':error?.message||'Could not update sign-up. Try again.');}
+    finally{button.disabled=saved;if(!saved)button.textContent=signupOpen?'Close sign-up':'Open sign-up';}
   };
 
   document.getElementById('regeneratePlayerLink').onclick=async()=>{
     if(!stillCurrent()||!signupSettingsLoaded)return;
-    const ok=confirm('Regenerate the Player Sign-up link and QR? The current link and QR will stop working immediately.');
-    if(!ok)return;
-    const button=document.getElementById('regeneratePlayerLink');
-    button.disabled=true;
-    button.textContent='Regenerating…';
-    const {error}=await supabase.rpc('regenerate_player_join_token',{p_club_id:targetClub});
-    if(error){alert(error.message);button.disabled=false;button.textContent='Regenerate link & QR';return;}
-    await loadContext();
+    const button=document.getElementById('regeneratePlayerLink');if(button.disabled)return;
+    if(!confirm('Regenerate the Player Sign-up link and QR? The current link and QR will stop working immediately.'))return;
+    button.disabled=true;button.textContent='Regenerating…';let saved=false;
+    try{
+      const {error}=await supabase.rpc('regenerate_player_join_token',{p_club_id:targetClub});
+      if(error)throw error;
+      saved=true;button.textContent='Link replaced ✓';
+      await loadContext();
+    }catch(error){alert(saved?'Link replaced. Reload before sharing the new link or QR.':error?.message||'Could not replace the link. Try again.');}
+    finally{button.disabled=saved;if(!saved)button.textContent='Regenerate link & QR';}
   };
 
 
@@ -10509,18 +10546,18 @@ async function renderPermissions(){
     wrap.querySelectorAll('[data-find-assigned]').forEach(button=>button.onclick=()=>{const row=document.getElementById('assignedRole-'+button.dataset.findAssigned);row?.scrollIntoView({block:'center',behavior:'smooth'});(row?.querySelector('[data-role-user]')||row)?.focus({preventScroll:true});});
 
     wrap.querySelectorAll('[data-assign-club-role]').forEach(b=>b.onclick=async()=>{
+      if(b.disabled||!stillCurrent())return;
       const userId=b.dataset.assignClubRole;
       const role=wrap.querySelector(`[data-new-club-role="${userId}"]`)?.value;
       if(!role)return;
-      b.disabled=true;
-      b.textContent='Assigning…';
-      const {error}=await supabase
-        .from('club_memberships')
-        .update({permission_role:role})
-        .eq('club_id',club.id)
-        .eq('user_id',userId);
-      if(error){alert(error.message);b.disabled=false;b.textContent='Assign role';return;}
-      await renderPermissions();
+      b.disabled=true;b.textContent='Assigning…';let assigned=false;
+      try{
+        const {error}=await supabase.from('club_memberships').update({permission_role:role}).eq('club_id',targetClub).eq('user_id',userId);
+        if(error)throw error;
+        assigned=true;b.textContent='Assigned ✓';
+        if(stillCurrent())await renderPermissions();
+      }catch(error){alert(assigned?'Role assigned. Refresh to update the list.':error?.message||'Could not assign the role. Try again.');}
+      finally{b.disabled=assigned;if(!assigned)b.textContent='Assign role';}
     });
   };
 
@@ -10555,6 +10592,7 @@ async function renderPermissions(){
     document.getElementById('sendLeadHandover').onclick=async()=>{
       const st=document.getElementById('leadHandoverFormStatus');
       const btn=document.getElementById('sendLeadHandover');
+      if(btn.disabled)return;
       const type=document.querySelector('input[name="handoverSuccessorType"]:checked')?.value||'existing';
 
       let successorUserId=null;
@@ -10580,12 +10618,19 @@ async function renderPermissions(){
       btn.textContent='Sending…';
       st.textContent='';
 
-      const {data,error}=await supabase.rpc('initiate_lead_admin_handover',{
-        p_club_id:club.id,
-        p_successor_user_id:successorUserId,
-        p_successor_name:successorName,
-        p_successor_email:successorEmail
-      });
+      const cancel=document.getElementById('closeLeadHandover');cancel.disabled=true;
+      let result;
+      try{
+        result=await supabase.rpc('initiate_lead_admin_handover',{
+          p_club_id:targetClub,
+          p_successor_user_id:successorUserId,
+          p_successor_name:successorName,
+          p_successor_email:successorEmail
+        });
+      }catch(error){
+        btn.disabled=false;btn.textContent='Send handover';st.textContent=error?.message||'Could not send the handover. Try again.';return;
+      }finally{cancel.disabled=false;}
+      const {data,error}=result;
 
       if(error){
         btn.disabled=false;
@@ -10602,21 +10647,23 @@ async function renderPermissions(){
       box.style.display='block';
       box.innerHTML=`<strong>Prototype test link</strong><span>Until live email delivery is connected, use this to test the acceptance flow.</span><button class="btn ghost" id="copyLeadHandoverTestLink">Copy test link</button>`;
 
-      document.getElementById('copyLeadHandoverTestLink').onclick=()=>copyText(
-        testLink,'Handover test link','leadHandoverFormStatus'
+      document.getElementById('copyLeadHandoverTestLink').onclick=event=>copyWithFeedback(
+        event.currentTarget,testLink,'Handover test link','leadHandoverFormStatus'
       );
     };
   }
 
   if(document.getElementById('cancelLeadHandover')){
     document.getElementById('cancelLeadHandover').onclick=async()=>{
-      const ok=confirm('Cancel the pending Lead Admin handover? Nothing else will change.');
-      if(!ok)return;
-      const {error}=await supabase.rpc('cancel_lead_admin_handover',{
-        p_handover_id:pendingHandover.id
-      });
-      if(error){alert(error.message);return;}
-      await loadContext();
+      const button=document.getElementById('cancelLeadHandover');if(button.disabled)return;
+      if(!confirm('Cancel the pending Lead Admin handover? Nothing else will change.'))return;
+      button.disabled=true;button.textContent='Cancelling…';let cancelled=false;
+      try{
+        const {error}=await supabase.rpc('cancel_lead_admin_handover',{p_handover_id:pendingHandover.id});
+        if(error)throw error;
+        cancelled=true;button.textContent='Cancelled';await loadContext();
+      }catch(error){alert(cancelled?'Handover cancelled. Refresh to update this page.':error?.message||'Could not cancel. Try again.');}
+      finally{button.disabled=cancelled;if(!cancelled)button.textContent='Cancel handover';}
     };
   }
 
@@ -11243,7 +11290,7 @@ function renderMyReflectionForm(match=null,{innings=false}={}){
   const scoreReadOnly=innings&&match&&typeof match.can_edit_score==='boolean'?(match.can_edit_score?'':'disabled'):readOnly;
   return `<section class="card development-entry-form" id="myReflectionForm">
     <div class="development-form-head">
-      <div><div class="section-label">${innings?'My Innings':'Player reflection'}</div><h2>${match?'Update this innings':innings?'Add an innings':'Reflect on an innings'}</h2>${innings?'<p>Save the match details now. Your own note, video and reflection are optional.</p>':''}<div class="help">Give yourself credit for your preparation and commitment. Review the innings overall, then the dismissal ball: one choice need not describe the whole innings. Did that ball and situation suit your shot? How well did you execute it? Getting out alone does not make either wrong. Choose useful practice, without judgement.</div></div>
+      <div><div class="section-label">${innings?'My Innings':'Player reflection'}</div><h2>${match?'Update this innings':innings?'Add an innings':'Reflect on an innings'}</h2>${innings?'<p class="help">Note, video and reflection are optional.</p>':'<div class="help">Review the whole innings separately from the dismissal. Judge your shot choice and execution separately; getting out alone does not make either wrong.</div>'}</div>
     </div>
     <div class="development-match-fields">
       <div class="field"><label for="reflectionDate">Match start date</label><input id="reflectionDate" ${readOnly} type="date" value="${esc(match?.match_date||todayIso())}"></div>
@@ -11255,7 +11302,7 @@ function renderMyReflectionForm(match=null,{innings=false}={}){
     <div class="field"><label for="reflectionInningsNumber">Innings number</label><input id="reflectionInningsNumber" type="number" min="1" max="10" step="1" ${readOnly} value="${Number(match?.innings_number||1)}"><small>Keep 1 unless you bat again against this opposition on the same date.</small></div>
     <div class="field"><label for="reflectionDismissal">My innings note <span>optional</span></label><input id="reflectionDismissal" maxlength="300" value="${esc((innings?match?.player_note:match?.dismissal_summary)||'')}" placeholder="e.g. Pulled a short ball; caught on the boundary"></div>
 
-    ${innings?coachingVideoFields('innings',match?.player_video,{playerRequest:true})+`<details class="innings-reflection-options" id="inningsReflectionPanel" ${match?.player_reflection||(match?.coach_feedback||[]).some(f=>f.reflection_required)?'open':''}><summary>${match?.player_reflection?'My reflection':'Reflect on this innings (optional)'}</summary><p class="help">Choose both answers to record your independent view. A score or note alone does not unlock plan-related coaching feedback.</p>`:''}
+    ${innings?coachingVideoFields('innings',match?.player_video,{playerRequest:true})+`<details class="innings-reflection-options" id="inningsReflectionPanel" ${match?.player_reflection||(match?.coach_feedback||[]).some(f=>f.reflection_required)?'open':''}><summary>${match?.player_reflection?'My reflection':'Reflect on this innings (optional)'}</summary><p class="help">Review the whole innings separately from the dismissal. Judge your shot choice and execution separately; getting out alone does not make either wrong.</p><p class="help">Answer both questions to see plan-related coaching feedback.</p>`:''}
     <div class="development-question"><label>In the innings overall, did I bat to my Player Plan?</label>${radioChoiceHtml('myBattingToPlan',[["yes","Yes","Overall, my approach matched my plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","No","My approach moved away from my plan"]],r.batting_to_plan||'')}</div>
     <div class="development-question"><label>On the dismissal ball, how did my choice fit my plan?</label>${radioChoiceHtml('myDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; I identified an execution detail to practise"],["outside_plan","Decision outside plan","The option for this ball was outside my plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],r.dismissal_classification||'')}</div>
     <div class="development-question"><label>Main issue <span>optional</span></label>
@@ -11410,12 +11457,11 @@ async function renderCoachConversationRequestForm(){
     if(!current())return;people=Array.isArray(data?.people)?data.people:[];
   }catch(error){if(current()){host.innerHTML=`<div class="notice">The club’s people could not load. <button class="btn ghost" id="retryConversationPeople">Try again</button></div>`;document.getElementById('retryConversationPeople').onclick=renderCoachConversationRequestForm;}return;}
   host.innerHTML=`<section class="card development-entry-form" id="coachRequestForm"><h2>Request a Coach Conversation</h2>
-    <p>Ask about something you want to work on. You can choose a coach, captain, administrator or teammate.</p>
-    <div class="field"><label for="coachRequestMessage">What would you like to discuss?</label><textarea id="coachRequestMessage" rows="3" maxlength="500" placeholder="A short explanation is enough."></textarea></div>
+        <div class="field"><label for="coachRequestMessage">What would you like to discuss?</label><textarea id="coachRequestMessage" rows="3" maxlength="500" placeholder="A short explanation is enough."></textarea></div>
     <div class="field"><label for="coachRequestSearch">Find someone in your club (optional)</label><input type="search" id="coachRequestSearch" placeholder="Search by name"></div>
     <div class="field"><label for="coachRequestPerson">Who would you like to speak with?</label><select id="coachRequestPerson"></select><p class="help" id="coachRequestPeopleStatus"></p></div>
     ${coachingVideoFields('coachRequest',null,{playerRequest:true})}
-    <p class="help">Shared with your preferred person and club staff who already have access to your coaching records. Choosing a teammate gives them access to this conversation only. Any coach lets staff with coaching access to you pick it up.</p>
+    <p class="help">Your chosen person and authorised coaching staff can read this. A teammate sees only this conversation. Choose Any coach if you have no preference.</p>
     <div class="btnrow"><button class="btn" id="saveCoachRequest">Request conversation</button><button class="btn ghost" id="cancelCoachRequest">Cancel</button><span id="coachRequestStatus" role="status"></span></div>
   </section>`;
   const picker=document.getElementById('coachRequestPerson');
@@ -11426,7 +11472,7 @@ async function renderCoachConversationRequestForm(){
     document.getElementById('coachRequestPeopleStatus').textContent=query?`${picker.options.length-1} people shown. Your selected person stays selected while searching.`:'';
   };
   drawPeople();document.getElementById('coachRequestSearch').oninput=drawPeople;
-  const form=document.getElementById('coachRequestForm');captureFeedbackEntryBaseline();form.scrollIntoView({behavior:'smooth',block:'start'});
+  const form=document.getElementById('coachRequestForm'),saveButton=form.querySelector('#saveCoachRequest'),saveLabel=saveButton.textContent;captureFeedbackEntryBaseline();form.scrollIntoView({behavior:'smooth',block:'start'});
   document.getElementById('cancelCoachRequest').onclick=()=>{if(confirmLeaveFeedbackEntry())host.innerHTML='';};
   let requestId=null,requestPayload=null;
   document.getElementById('saveCoachRequest').onclick=async()=>{
@@ -11436,14 +11482,14 @@ async function renderCoachConversationRequestForm(){
     const message=val('coachRequestMessage');if(!message){status.textContent='Say what you would like to discuss.';return;}
     const args={p_club_id:clubId,p_message:message,p_preferred_user_id:picker.value||null,p_video_url:video.video_url,p_video_note:video.video_note};
     const payload=JSON.stringify(args);if(payload!==requestPayload){requestId=globalThis.crypto.randomUUID();requestPayload=payload;}
-    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
+    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Sending request…';saveButton.textContent='Sending…';saveButton.setAttribute('aria-busy','true');
     try{
       const {error}=await supabase.rpc('request_my_coach_conversation',{...args,p_request_id:requestId});if(error)throw error;
-      feedbackEntryBaselines.set(form,feedbackEntryValues(form));status.textContent='Requested.';coachingActionSavePending=false;
+      feedbackEntryBaselines.set(form,feedbackEntryValues(form));status.textContent='Requested.';saveButton.textContent='Requested ✓';coachingActionSavePending=false;
       if(!current())return;
       try{await renderCoachConversations();await refreshMyCoachingUpdates();}catch{status.textContent='Request saved. Reload to see the latest conversation.';}
-    }catch(error){status.textContent=error?.message||'Could not confirm the save. Your request is still here; try again.';restore();}
-    finally{coachingActionSavePending=false;}
+    }catch(error){status.textContent=error?.message||'Could not confirm the save. Your request is still here; try again.';saveButton.textContent=saveLabel;restore();}
+    finally{coachingActionSavePending=false;saveButton.removeAttribute('aria-busy');}
   };
 }
 async function renderCoachConversations(){
@@ -12128,7 +12174,7 @@ function preparationUuid(){return globalThis.crypto.randomUUID();}
 function cloneMatchPreparation(record){
   return {preparation:{focus_note:'',matchups:(record.preparation?.matchups||[]).map(m=>({...m,id:preparationUuid(),training_focus:false})),fielders:(record.preparation?.fielders||[]).map(f=>({...f,id:preparationUuid(),tags:[...(f.tags||[])]}))},personal_contest:{bowler:record.personal_contest?.bowler||'',result:null}};
 }
-function preparationMatchupFields(m={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-matchup="${esc(m.id)}"><div class="field"><label for="prep-${esc(m.id)}-bowler">Bowler <span>name or description</span></label><input id="prep-${esc(m.id)}-bowler" data-prep-field="bowler" maxlength="100" value="${esc(m.bowler||'')}" placeholder="e.g. Sam — opening bowler"></div><div class="field"><label for="prep-${esc(m.id)}-expect">What to expect <span>optional</span></label><input id="prep-${esc(m.id)}-expect" data-prep-field="expect" maxlength="200" value="${esc(m.expect||'')}" placeholder="Right-arm seam; moves it away"></div><div class="field"><label id="prep-${esc(m.id)}-scoring-label">My scoring options <span>optional</span></label><div data-prep-scoring-choices role="group" aria-labelledby="prep-${esc(m.id)}-scoring-label"><p class="help">Loading your saved scoring options…</p></div><input type="hidden" id="prep-${esc(m.id)}-options" data-prep-field="options" value="${esc(m.options||'')}"><p class="help">Filled buttons with a tick are selected. Selecting a shot does not change your Player Plan or show it has been practised.</p>${renderPreparationExtraShotFields(m)}</div><div data-prep-training-fallback><div class="field" data-prep-training-field><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" data-prep-training-focus ${m.training_focus===true?'checked':''} style="width:auto;margin:0">Make this a training focus for this week</label><p class="help">Save preparation to show this match-up, including its selected scoring options, in How We Train through the match date and share it with coaches who can access your player records. Training selection is separate from any automatic Coach Conversation for an outside-plan shot.</p></div></div><div class="field"><label for="prep-${esc(m.id)}-avoid">Watch out for <span>optional</span></label><input id="prep-${esc(m.id)}-avoid" data-prep-field="avoid" maxlength="200" value="${esc(m.avoid||'')}" placeholder="Reaching for the drive outside off"></div><button type="button" class="btn ghost" data-prep-remove>Remove bowler</button></article>`;}
+function preparationMatchupFields(m={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-matchup="${esc(m.id)}"><div class="field"><label for="prep-${esc(m.id)}-bowler">Bowler <span>name or description</span></label><input id="prep-${esc(m.id)}-bowler" data-prep-field="bowler" maxlength="100" value="${esc(m.bowler||'')}" placeholder="e.g. Sam — opening bowler"></div><div class="field"><label for="prep-${esc(m.id)}-expect">What to expect <span>optional</span></label><input id="prep-${esc(m.id)}-expect" data-prep-field="expect" maxlength="200" value="${esc(m.expect||'')}" placeholder="Right-arm seam; moves it away"></div><div class="field"><label id="prep-${esc(m.id)}-scoring-label">My scoring options <span>optional</span></label><div data-prep-scoring-choices role="group" aria-labelledby="prep-${esc(m.id)}-scoring-label"><p class="help">Loading your saved scoring options…</p></div><input type="hidden" id="prep-${esc(m.id)}-options" data-prep-field="options" value="${esc(m.options||'')}"><p class="help">These choices do not change your Player Plan or record practice.</p>${renderPreparationExtraShotFields(m)}</div><div data-prep-training-fallback><div class="field" data-prep-training-field><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" data-prep-training-focus ${m.training_focus===true?'checked':''} style="width:auto;margin:0">Make this a training focus for this week</label><p class="help">Save to share this match-up with your coaches in How We Train until the match date. Outside-plan shots also flag a Coach Conversation.</p></div></div><div class="field"><label for="prep-${esc(m.id)}-avoid">Watch out for <span>optional</span></label><input id="prep-${esc(m.id)}-avoid" data-prep-field="avoid" maxlength="200" value="${esc(m.avoid||'')}" placeholder="Reaching for the drive outside off"></div><button type="button" class="btn ghost" data-prep-remove>Remove bowler</button></article>`;}
 function preparationFielderFields(f={id:preparationUuid()}){return `<article class="innings-prep-card" data-prep-fielder="${esc(f.id)}"><div class="field"><label for="prep-${esc(f.id)}-name">Fielder or position</label><input id="prep-${esc(f.id)}-name" data-prep-field="name" maxlength="100" value="${esc(f.name||'')}" placeholder="e.g. Alex at cover"></div><div class="innings-prep-tags">${Object.entries(MATCH_PREPARATION_FIELDER_TAGS).map(([key,label])=>`<label><input type="checkbox" data-prep-tag="${key}" ${(f.tags||[]).includes(key)?'checked':''}>${esc(label)}</label>`).join('')}</div><div class="field"><label for="prep-${esc(f.id)}-note">Short note <span>optional</span></label><input id="prep-${esc(f.id)}-note" data-prep-field="note" maxlength="200" value="${esc(f.note||'')}" placeholder="Be clear on the single"></div><button type="button" class="btn ghost" data-prep-remove>Remove fielder</button></article>`;}
 function preparationOfficialStatus(record){const status=record?.call_entry?.result?.status;return ['played','did_not_bat','cancelled'].includes(status)?status:null;}
 function preparationOfficialResult(record){return record?.call_entry?.result?.status==='played'?record.call_entry.result:null;}
@@ -12150,9 +12196,9 @@ function preparationPredictionValues(form){const input=document.getElementById('
 }
 function renderPreparationForm(record=null){
   const p=record?.preparation||{},contest=record?.personal_contest||{},previous=(myInningsCache?.preparations||[]).filter(r=>r.id!==record?.id&&((r.preparation?.matchups||[]).length||(r.preparation?.fielders||[]).length||r.personal_contest?.bowler));
-  return `<section class="card development-entry-form" id="myReflectionForm"><div class="section-label">My Innings · before the game</div><h2>${record?'Edit preparation':'Prepare for a match'}</h2>${renderPreparationConversation(record)}<div class="development-match-fields innings-prep-match-fields"><div class="field"><label for="prepDate">Match start date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepInningsNumber">Innings number</label><input id="prepInningsNumber" type="number" min="1" max="10" step="1" value="${Number(record?.innings_number||1)}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div>${renderPreparationCall(record)}</div>
-    <details class="innings-prep-section innings-matchups" id="prepMatchupsSection" open><summary>Match-ups <span class="help">· optional</span></summary><p class="help">One useful match-up is enough. Apply your Player Plan to this bowler, then adapt to the ball and situation.</p><div id="prepScoringStatus" role="status"><p class="help">Loading your saved scoring options…</p></div><div id="prepMatchups">${(p.matchups||[]).map(preparationMatchupFields).join('')}</div><button type="button" class="btn" id="addPrepMatchup">Add a bowler</button></details>
-    ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Playing the same team again? Copy the bowlers into this match preparation.</summary><p class="help">Choose a previous entry to bring across its bowlers, scoring shots, shot explanations, fielders to watch and personal contest. Review them for this match. Date, result, reflections and any earlier match focus note will not be copied. Choose any training focuses again for this match.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Copy into this preparation</button></details>`:''}
+  return `<section class="card development-entry-form" id="myReflectionForm"><h2>${record?'Edit preparation':'Prepare for a match'}</h2>${renderPreparationConversation(record)}<div class="development-match-fields innings-prep-match-fields"><div class="field"><label for="prepDate">Match start date</label><input id="prepDate" type="date" value="${esc(record?.match_date||todayIso())}"></div><div class="field"><label for="prepFormat">Format</label><select id="prepFormat">${FORMATS.map(([key,label])=>`<option value="${key}" ${(record?.format_key||'limited_overs')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label for="prepOpposition">Opposition <span>optional</span></label><input id="prepOpposition" maxlength="160" value="${esc(record?.opposition||'')}"></div><div class="field"><label for="prepInningsNumber">Innings number</label><input id="prepInningsNumber" type="number" min="1" max="10" step="1" value="${Number(record?.innings_number||1)}"></div><div class="field"><label for="prepStatus">Status</label><select id="prepStatus">${['planned','did_not_bat','cancelled'].map(status=>`<option value="${status}" ${(record?.status||'planned')===status?'selected':''}>${matchPreparationStatus(status)}</option>`).join('')}</select></div>${renderPreparationCall(record)}</div>
+    <details class="innings-prep-section innings-matchups" id="prepMatchupsSection" open><summary>Match-ups <span class="help">· optional</span></summary><p class="help">Choose how to play a bowler using your Player Plan.</p><div id="prepScoringStatus" role="status"><p class="help">Loading your saved scoring options…</p></div><div id="prepMatchups">${(p.matchups||[]).map(preparationMatchupFields).join('')}</div><button type="button" class="btn" id="addPrepMatchup">Add a bowler</button></details>
+    ${previous.length?`<details class="innings-prep-section innings-reuse"><summary>Reuse earlier preparation</summary><p class="help">Copies bowlers, shots and reasons, fielders and your personal contest. Check them for this match and select training focuses again. Dates, results, reflections and focus notes stay unchanged.</p><label for="prepReuseSource">Previous entry</label><select id="prepReuseSource"><option value="">Choose an entry</option>${previous.sort((a,b)=>String(b.match_date).localeCompare(String(a.match_date))).map(r=>`<option value="${esc(r.id)}">${esc(formatDateShort(r.match_date))} · ${esc(r.opposition||'Opposition not recorded')} · ${esc(formatLabel(r.format_key))}</option>`).join('')}</select><button type="button" class="btn secondary" id="applyPrepReuse">Copy into this preparation</button></details>`:''}
     <details class="innings-prep-section" id="prepFieldersSection"><summary>Fielders to watch · optional</summary><div id="prepFielders">${(p.fielders||[]).map(preparationFielderFields).join('')}</div><button type="button" class="btn secondary" id="addPrepFielder">Add a fielder</button></details>
     <details class="innings-prep-section"><summary>A personal contest · optional</summary><label for="prepContest">Who would you hate to get out to?</label><input id="prepContest" maxlength="100" value="${esc(contest.bowler||'')}" placeholder="A name or description"><p class="help">Just for you. Make the right decision for the team, whoever is bowling.</p></details><input type="hidden" data-prep-legacy-focus value="${esc(p.focus_note||'')}"><div class="btnrow"><button class="btn" id="saveMyReflection">Save preparation</button><button class="btn ghost" id="cancelMyReflection">Cancel</button><span class="status" id="myReflectionStatus" role="status"></span></div></section>`;
 }
@@ -12160,7 +12206,7 @@ function renderPreparationReview(record){
   if(!record)return '';
   const matchups=record.preparation?.matchups||[],review=record.review?.matchups||[],contest=record.personal_contest||{};
   if(!matchups.length&&!contest.bowler)return '';
-  return `<details class="innings-reflection-options" id="prepReviewPanel"><summary>Review my match-ups · optional</summary><p class="help">Compare your approach with what happened. Adapting to the situation can be the right decision. These answers are separate from your independent innings reflection below.</p>${matchups.map(m=>{const r=review.find(row=>row.id===m.id)||{};return `<article class="innings-prep-card" data-prep-review="${esc(m.id)}"><h3>${esc(m.bowler)}</h3>${m.expect?`<p><strong>Expected:</strong> ${esc(m.expect)}</p>`:''}${m.options?`<p><strong>My scoring options:</strong> ${esc(m.options)}</p>`:''}${m.avoid?`<p><strong>Watch out for:</strong> ${esc(m.avoid)}</p>`:''}<div data-prep-review-questions ${r.decision==='not_faced'?'hidden':''}>${radioChoiceHtml('prepReview-'+m.id,Object.entries(MATCH_PREPARATION_DECISIONS).map(([k,l])=>[k,l,'']),r.decision||'')}<div data-prep-review-note ${r.decision==='not_faced'?'hidden':''}><label for="prep-review-note-${esc(m.id)}">Short note <span>optional</span></label><textarea id="prep-review-note-${esc(m.id)}" data-prep-review-text maxlength="300" rows="2">${esc(r.note||'')}</textarea></div></div><p data-prep-not-faced ${r.decision==='not_faced'?'':'hidden'}>Didn’t face this bowler — no match-up reflection needed.</p><button class="btn ghost" type="button" data-prep-clear-review>Clear answer / undo</button></article>`;}).join('')}${contest.bowler?`<article class="innings-prep-card"><h3>You named ${esc(contest.bowler)}</h3><p>Did they get you out?</p>${radioChoiceHtml('prepContestResult',[['yes','Yes',''],['no','No',''],['not_faced','Didn’t face them','']],contest.result||'')}<button class="btn ghost" type="button" id="clearPrepContest">Clear answer</button></article>`:''}</details>`;
+  return `<details class="innings-reflection-options" id="prepReviewPanel"><summary>Review my match-ups · optional</summary><p class="help">Review each match-up. Your innings reflection is separate.</p>${matchups.map(m=>{const r=review.find(row=>row.id===m.id)||{};return `<article class="innings-prep-card" data-prep-review="${esc(m.id)}"><h3>${esc(m.bowler)}</h3>${m.expect?`<p><strong>Expected:</strong> ${esc(m.expect)}</p>`:''}${m.options?`<p><strong>My scoring options:</strong> ${esc(m.options)}</p>`:''}${m.avoid?`<p><strong>Watch out for:</strong> ${esc(m.avoid)}</p>`:''}<div data-prep-review-questions ${r.decision==='not_faced'?'hidden':''}>${radioChoiceHtml('prepReview-'+m.id,Object.entries(MATCH_PREPARATION_DECISIONS).map(([k,l])=>[k,l,'']),r.decision||'')}<div data-prep-review-note ${r.decision==='not_faced'?'hidden':''}><label for="prep-review-note-${esc(m.id)}">Short note <span>optional</span></label><textarea id="prep-review-note-${esc(m.id)}" data-prep-review-text maxlength="300" rows="2">${esc(r.note||'')}</textarea></div></div><p data-prep-not-faced ${r.decision==='not_faced'?'':'hidden'}>Didn’t face this bowler — no match-up reflection needed.</p><button class="btn ghost" type="button" data-prep-clear-review>Clear answer / undo</button></article>`;}).join('')}${contest.bowler?`<article class="innings-prep-card"><h3>You named ${esc(contest.bowler)}</h3><p>Did they get you out?</p>${radioChoiceHtml('prepContestResult',[['yes','Yes',''],['no','No',''],['not_faced','Didn’t face them','']],contest.result||'')}<button class="btn ghost" type="button" id="clearPrepContest">Clear answer</button></article>`:''}</details>`;
 }
 function renderPreparedInningsForm(record,match=null){
   // Keep the actual innings' identity, notes and permissions. A published
@@ -12193,9 +12239,9 @@ async function renderMyInnings({refresh=true,message=''}={}){
   if(state.season===null)state.season=currentSeason;if(state.season!=='all'&&!years.includes(state.season))state.season=currentSeason;
   let edit=preparationEditContext();if(edit.missing||edit.planning&&edit.record?.locked_at){state.editId=null;edit=preparationEditContext();message='That entry has changed. The current saved list is shown below.';}
   const rows=inningsInView(all,state);
-  page.innerHTML=`${myInningsStyles()}<section class="card innings-overview"><div class="innings-title-row"><div class="innings-title-name"><button class="btn ghost" id="inningsBackHome" aria-label="Back to Player Home" title="Player Home">←</button><h1>My Innings</h1></div><button class="btn ghost compact-btn" id="myInningsHelp">Show me how</button></div><p class="innings-intro">Prepare before the game. Review it afterwards.</p><div class="innings-heading"><div class="btnrow"><button class="btn" id="prepareMyMatch">Prepare for a match</button><button class="btn secondary" id="addMyInnings">Add an innings</button></div></div><details class="innings-sharing"><summary>Who can see my preparation?</summary><p class="help">Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving any selected added shot outside your saved Player Plan in an upcoming match-up flags a Coach Conversation, sharing the bowler, shot, reason, training selection and match details. Other preparation stays private. Existing innings notes, video and reflections keep their usual staff access.</p></details></section>${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
+  page.innerHTML=`${myInningsStyles()}<section class="card innings-overview"><div class="innings-title-row"><div class="innings-title-name"><button class="btn ghost" id="inningsBackHome" aria-label="Back to Player Home" title="Player Home">←</button><h1>My Innings</h1></div><button class="btn ghost compact-btn" id="myInningsHelp">Help</button></div><div class="innings-heading"><div class="btnrow"><button class="btn" id="prepareMyMatch">Prepare for a match</button><button class="btn secondary" id="addMyInnings">Add an innings</button></div></div><details class="innings-sharing"><summary>Who can see my preparation?</summary><p class="help">Preparation is optional. Selected training match-ups are shared with your permitted coaches. Saving any selected added shot outside your saved Player Plan in an upcoming match-up flags a Coach Conversation, sharing the bowler, shot, reason, training selection and match details. Other preparation stays private. Existing innings notes, video and reflections keep their usual staff access.</p></details></section>${message?`<div class="notice compact" role="status">${esc(message)}</div>`:''}
     ${state.editId?edit.planning?renderPreparationForm(edit.record):renderWeeklyLoopShell('inningsEditFocus')+(edit.record?renderPreparedInningsForm(edit.record,edit.match):renderMyReflectionForm(edit.match,{innings:true})):''}
-    <section class="card innings-list"><div class="innings-filters"><div class="field"><label for="inningsSeason">Season</label><select id="inningsSeason"><option value="all" ${state.season==='all'?'selected':''}>All seasons</option>${years.map(y=>`<option value="${y}" ${state.season===y?'selected':''}>${inningsSeasonLabel(y)}</option>`).join('')}</select></div><div class="field"><label for="inningsFormat">Format</label><select id="inningsFormat"><option value="">All formats</option>${FORMATS.map(([k,l])=>`<option value="${k}" ${state.format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div><button class="btn ghost" id="refreshMyInnings">Refresh</button></div><div class="innings-count sr-only" role="status">${rows.length} ${rows.length===1?'entry':'entries'} shown</div>${rows.length?`<table class="innings-table"><caption class="sr-only">Your match preparation and recorded innings</caption><thead><tr><th class="innings-date" scope="col">Date</th><th class="innings-opposition" scope="col">Opposition</th><th class="innings-format" scope="col" aria-label="Format">Fmt</th><th class="innings-score" scope="col" aria-label="Score or status">Score</th><th class="innings-open" scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody>${renderInningsRows(rows)}</tbody></table>`:`<div class="innings-empty"><h2>${all.length?'No innings match these filters.':'Your season starts here.'}</h2><p>${all.length?'Choose another season or format, or select All seasons.':'Prepare for a match, or add an innings afterwards. Match observations already recorded by your coaches will also appear here.'}</p></div>`}<p class="help">Scores are recorded as entered, including not-outs (for example, 34*). LO = Limited Overs; Long = Long-form.</p></section>`;
+    <section class="card innings-list"><div class="innings-filters"><div class="field"><label for="inningsSeason">Season</label><select id="inningsSeason"><option value="all" ${state.season==='all'?'selected':''}>All seasons</option>${years.map(y=>`<option value="${y}" ${state.season===y?'selected':''}>${inningsSeasonLabel(y)}</option>`).join('')}</select></div><div class="field"><label for="inningsFormat">Format</label><select id="inningsFormat"><option value="">All formats</option>${FORMATS.map(([k,l])=>`<option value="${k}" ${state.format===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div><button class="btn ghost" id="refreshMyInnings">Refresh</button></div><div class="innings-count sr-only" role="status">${rows.length} ${rows.length===1?'entry':'entries'} shown</div>${rows.length?`<table class="innings-table"><caption class="sr-only">Your match preparation and recorded innings</caption><thead><tr><th class="innings-date" scope="col">Date</th><th class="innings-opposition" scope="col">Opposition</th><th class="innings-format" scope="col" aria-label="Format">Fmt</th><th class="innings-score" scope="col" aria-label="Score or status">Score</th><th class="innings-open" scope="col"><span class="sr-only">Details</span></th></tr></thead><tbody>${renderInningsRows(rows)}</tbody></table>`:`<div class="innings-empty"><h2>${all.length?'No innings match these filters.':'No innings yet.'}</h2><p>${all.length?'Choose another season or format, or select All seasons.':'Use the buttons above to prepare or add an innings. Coach-recorded innings also appear here.'}</p></div>`}${rows.length?'<p class="help">* = not out · LO = Limited Overs · Long = Long-form</p>':''}</section>`;
   const change=async(fn)=>{if(!confirmLeaveFeedbackEntry())return false;fn();await renderMyInnings({refresh:false});return true;};
   document.getElementById('inningsBackHome').onclick=()=>openPlayerHomeAction({tab:'playerhome'});
   document.getElementById('myInningsHelp').onclick=()=>openClubBattingGuideTopic('my_innings');
@@ -12338,7 +12384,7 @@ function revealNewPreparationBowler(card,form){
   });
 }
 function bindPreparationForm(record,state,current){
-  const form=document.getElementById('myReflectionForm'),status=document.getElementById('myReflectionStatus');let requestId=null,lastPayload=null,uncertainCommand=null;
+  const form=document.getElementById('myReflectionForm'),status=document.getElementById('myReflectionStatus'),saveButton=form.querySelector('#saveMyReflection'),saveLabel=saveButton.textContent;let requestId=null,lastPayload=null,uncertainCommand=null;
   form.preparationPublishedCall=!!record?.call_entry;form.preparationOriginalPrediction=record?.predicted_runs??record?.call_entry?.predicted_runs??null;
   preparationScoringState.set(form,{status:'loading',candidates:[]});
   document.getElementById('prepFormat').onchange=()=>refreshPreparationScoringChoices(form);
@@ -12377,7 +12423,7 @@ function bindPreparationForm(record,state,current){
       payload=JSON.stringify(args);if(payload!==lastPayload){lastPayload=payload;requestId=preparationUuid();}
       command={args,requestId,formSnapshot:feedbackEntryValues(form)};
     }
-    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
+    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';saveButton.textContent='Saving…';saveButton.setAttribute('aria-busy','true');
     try{
       const {data,error}=await matchDraftRpc(form,'save_my_fixture_preparation',{...command.args,p_request_id:command.requestId});if(error)throw error;if(!data?.preparation_id||!Number.isInteger(data.revision))throw new Error('Could not confirm the save. Your preparation is still here; try again.');matchDraftConfirmed(form,data);
       if(uncertainCommand&&JSON.stringify(command.args)!==payload){
@@ -12399,7 +12445,7 @@ function bindPreparationForm(record,state,current){
         }
       }
     }
-    finally{coachingActionSavePending=false;if(document.getElementById('myReflectionForm')===form)restore();flushPreparationLoadedData(form);if(document.getElementById('myReflectionForm')===form)syncPreparationCall(record);matchDraftAfterAttempt(form);}
+    finally{coachingActionSavePending=false;saveButton.removeAttribute('aria-busy');if(document.getElementById('myReflectionForm')===form){saveButton.textContent=saveLabel;restore();}flushPreparationLoadedData(form);if(document.getElementById('myReflectionForm')===form)syncPreparationCall(record);matchDraftAfterAttempt(form);}
   };
 }
 async function loadPreparationFocus(current,{refreshCatalogue=false,revealRequiredReason=false}={}){
@@ -12451,7 +12497,7 @@ function expectedInningsSnapshot(values,original){
   return inningsCommittedSnapshot({...values,player_video:values.video_url?{url:values.video_url,note:values.video_note}:null,player_reflection:values.reflection||original?.player_reflection||null});
 }
 function bindMyInningsSave(match,state,current,preparation=null){
-  const form=document.getElementById('myReflectionForm');let requestId=null,lastPayload=null,uncertainCommand=null,saveConflict=null,pendingLinkCommand=null;
+  const form=document.getElementById('myReflectionForm'),saveButton=form.querySelector('#saveMyReflection'),saveLabel=saveButton.textContent;let requestId=null,lastPayload=null,uncertainCommand=null,saveConflict=null,pendingLinkCommand=null;
   const clearReflection=form.querySelector('#clearInningsReflection'),reflectionPanel=form.querySelector('#inningsReflectionPanel');
   if(clearReflection&&reflectionPanel&&!match?.player_reflection){
     const fields=()=>[...reflectionPanel.querySelectorAll('input,select,textarea')];
@@ -12481,7 +12527,7 @@ function bindMyInningsSave(match,state,current,preparation=null){
       if(pendingLinkCommand&&pendingLinkCommand.p_values.match_id!==existing.id){status.textContent='The previous link could not be confirmed. Retry that same innings before choosing a different one.';return;}
       if(!pendingLinkCommand&&!confirm('Link this preparation to the recorded innings? Its saved notes, video and reflection will be kept. Unsaved post-game text in this form will be replaced.'))return;
       const command=pendingLinkCommand||{p_club_id:club.id,p_fixture_id:playerFixtureId(form),p_preparation_id:preparation.id,p_expected_revision:preparation.revision,p_request_id:preparationUuid(),p_values:{action:'link',match_id:existing.id}};
-      coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Linking preparation…';
+      const linkLabel=b.textContent;coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Linking preparation…';b.textContent='Linking…';b.setAttribute('aria-busy','true');
       try{
         const {data,error}=await matchDraftRpc(form,'save_my_fixture_preparation',command);if(error)throw error;
         if(data?.match_id!==existing.id||data?.preparation_id!==preparation.id||!Number.isInteger(data.revision))throw new Error('Could not confirm the link. Retry the same innings.');
@@ -12489,7 +12535,7 @@ function bindMyInningsSave(match,state,current,preparation=null){
         state.editId=existing.participation_status==='did_not_bat'?null:existing.id;state.openId=existing.id;
         await renderMyInnings({message:'Preparation linked to the recorded innings. Saved notes, video and reflections have been kept.'});
       }catch(error){pendingLinkCommand=definiteInningsSaveFailure(error)?null:command;if(current()){status.textContent=(error?.message||'Could not confirm the link.')+(pendingLinkCommand?' Retry the same innings to confirm the link.':'');if(pendingLinkCommand)feedbackEntryBaselines.set(form,'link-outcome-unconfirmed');restore();}}
-      finally{coachingActionSavePending=false;matchDraftAfterAttempt(form);}
+      finally{coachingActionSavePending=false;b.removeAttribute('aria-busy');if(b.isConnected)b.textContent=linkLabel;matchDraftAfterAttempt(form);}
 
     });
     host.querySelector('#saveSeparateInnings').onclick=()=>{const used=(myInningsCache?.matches||[]).filter(m=>m.match_date===values.match_date&&m.format_key===values.format_key).map(m=>Number(m.innings_number||1));const next=Math.max(...used,0)+1;if(next>10){status.textContent='Ten innings are already recorded for these match details. Open the appropriate existing innings.';return;}document.getElementById('reflectionInningsNumber').value=String(next);return document.getElementById('saveMyReflection').onclick();};
@@ -12511,7 +12557,7 @@ function bindMyInningsSave(match,state,current,preparation=null){
     const args=preparation?{p_club_id:club.id,p_fixture_id:playerFixtureId(form),p_preparation_id:preparation.id,p_expected_revision:preparation.revision,p_values:{action:'played',innings_number:values.innings_number,...preparationReviewValues(preparation),innings:values,match_id:match?.id||null,expected_updated_at:match?.updated_at||null,expected_reflection_at:match?.player_reflection?.updated_at||null}}:{p_club_id:club.id,p_fixture_id:playerFixtureId(form),p_match_id:match?.id||null,p_expected_updated_at:match?.updated_at||null,p_expected_reflection_at:match?.player_reflection?.updated_at||null,p_values:values};
     const payload=JSON.stringify(args);if(payload!==lastPayload){requestId=preparationUuid();lastPayload=payload;}
     const command=uncertainCommand||{args,requestId,expectedSnapshot:expectedInningsSnapshot(values,match)};
-    coachingActionSavePending=true;const restore=freezeCoachingForm(document.getElementById('myReflectionForm'));status.textContent='Saving…';let receiptConfirmed=false;
+    coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';saveButton.textContent='Saving…';saveButton.setAttribute('aria-busy','true');let receiptConfirmed=false;
     try{
       const {data,error}=await matchDraftRpc(form,preparation?'save_my_fixture_preparation':'save_my_fixture_innings',{...command.args,p_request_id:command.requestId});if(error)throw error;if(!data?.match_id||preparation&&(!data.preparation_id||!Number.isInteger(data.revision)))throw new Error('Could not confirm the save. Your entry is still here; try again.');
       receiptConfirmed=true;matchDraftConfirmed(form,data);
@@ -12525,7 +12571,7 @@ function bindMyInningsSave(match,state,current,preparation=null){
       uncertainCommand=null;feedbackEntryBaselines.set(form,feedbackEntryValues(form));coachingActionSavePending=false;if(!current())return;
       state.editId=null;state.openId=data.match_id;state.season=inningsSeason(values.match_date);state.format='';await renderMyInnings({message:values.reflection?'Innings and reflection saved.':'Innings saved. You can add a reflection whenever you are ready.'});await refreshMyCoachingUpdates();
     }catch(error){uncertainCommand=receiptConfirmed||!definiteInningsSaveFailure(error)?command:null;if(current()){if(uncertainCommand)feedbackEntryBaselines.set(form,'save-outcome-unconfirmed');status.textContent=(error?.message||'Could not confirm the save. Your entry is still here; try again.')+(uncertainCommand?' Retry Save innings to confirm the previous save before saving any further edits.':'');restore();}}
-    finally{coachingActionSavePending=false;matchDraftAfterAttempt(form);}
+    finally{coachingActionSavePending=false;saveButton.removeAttribute('aria-busy');if(document.getElementById('myReflectionForm')===form)saveButton.textContent=saveLabel;matchDraftAfterAttempt(form);}
   };
   if(!match&&preparation?.resolution_ambiguous){const candidates=(myInningsCache?.matches||[]).filter(m=>sameInningsSlot(m,preparation));if(candidates.length)showExistingInnings(candidates,preparation);}
 }
@@ -13444,13 +13490,13 @@ function captureCallDrafts(){const drafts=new Map();for(const form of document.q
 async function renderMakeYourCall({message='',drafts=null}={}){if(typeof ensureCallResultsState==='function'&&ensureCallResultsState().view==='history')return renderCallResultsHistory();const page=document.getElementById('page'),state=ensureMakeYourCallState(),scope=state.scope,sequence=++makeYourCallSequence;const current=()=>currentTab==='make_your_call'&&ensureMakeYourCallState().scope===scope&&sequence===makeYourCallSequence&&document.getElementById('page')===page;page.innerHTML='<p class="splash">Loading Make your prediction…</p>';try{const {data,error}=await supabase.rpc('get_make_your_call_periods',{p_club_id:club.id,p_week_start:state.week,p_season:state.season,p_month_start:state.month});if(error)throw error;if(!data?.settings||!Array.isArray(data.calls))throw new Error('The club board could not be confirmed.');if(!current())return;makeYourCallCache=data;data._clockSampledAt=Date.now();state.week=data.selection_date||data.week_start;state.month=data.month_start||null;state.season=data.season;
 if(!data.calls.some(c=>c.can_record_result===true))state.recordResults=false;
 const weeks=[...new Set([data.week_start,...(data.weeks||[])])].sort().reverse(),seasons=[...new Set([Number(data.season),...weeks.map(w=>Number(w.slice(0,4))-(Number(w.slice(5,7))<(data.settings.season_start_month||7)?1:0))])].sort((a,b)=>b-a);
-page.innerHTML=`${callStyles()}<div class="call-page"><section class="card call-page-header"><div class="call-header-title"><div class="call-header-copy"><h1>${state.recordResults?'Record results':'Make your prediction'}</h1>${state.recordResults?'':'<p>Back your batting. Predict your teammates’ scores.</p>'}${!state.recordResults&&isPlayerUser()?'<div class="call-header-actions"><button class="btn secondary" id="callPrepare">Predict Your Score</button></div>':''}</div><div class="call-header-tools">${data.calls.some(c=>c.can_record_result===true)?`<button type="button" class="btn ghost" id="callRecordResults">${state.recordResults?'← Predictions':'Record results'}</button>`:''}${!state.recordResults&&data.can_manage?`<button type="button" class="btn ghost" id="callEditSettings" aria-controls="callSettingsEditor" aria-expanded="${!!state.editSettings}" ${state.editSettings?'hidden':''}>${callAwardsSetupLabel(data.settings)}</button>`:''}<button type="button" class="btn ghost" id="callResultsHistory">Results history</button></div></div><p id="callPageStatus" role="status" ${message?'':'hidden'}>${esc(message)}</p></section>${state.recordResults?'':renderCallSettings(data)}${!data.settings.enabled?'<section class="card notice"><h2>Make your prediction is not enabled yet.</h2><p>Your club’s Admin can enable it in Club setup. Private match predictions remain available in My Innings.</p></section>':state.recordResults?renderCallScoring(data):`${renderCallEntries(data)}${typeof renderCallAwardReleaseControls==='function'?renderCallAwardReleaseControls(data):''}${renderCallHonours(data)}${renderCallMessages(data)}`}${!state.recordResults&&myPlayer&&isPlayerUser()&&typeof renderEngagementShell==='function'?renderEngagementShell('callEngagement'):''}</div>`;
+page.innerHTML=`${callStyles()}<div class="call-page"><section class="card call-page-header"><div class="call-header-title"><div class="call-header-copy"><h1>${state.recordResults?'Record results':'Make your prediction'}</h1>${!state.recordResults&&isPlayerUser()?'<div class="call-header-actions"><button class="btn secondary" id="callPrepare">Predict my score</button></div>':''}</div><div class="call-header-tools">${data.calls.some(c=>c.can_record_result===true)?`<button type="button" class="btn ghost" id="callRecordResults">${state.recordResults?'← Predictions':'Record results'}</button>`:''}${!state.recordResults&&data.can_manage?`<button type="button" class="btn ghost" id="callEditSettings" aria-controls="callSettingsEditor" aria-expanded="${!!state.editSettings}" ${state.editSettings?'hidden':''}>${callAwardsSetupLabel(data.settings)}</button>`:''}<button type="button" class="btn ghost" id="callResultsHistory">Results history</button></div></div><p id="callPageStatus" role="status" ${message?'':'hidden'}>${esc(message)}</p></section>${state.recordResults?'':renderCallSettings(data)}${!data.settings.enabled?'<section class="card notice"><h2>Make your prediction is not enabled yet.</h2><p>Your club’s Admin can enable it in Club setup. Private match predictions remain available in My Innings.</p></section>':state.recordResults?renderCallScoring(data):`${renderCallEntries(data)}${typeof renderCallAwardReleaseControls==='function'?renderCallAwardReleaseControls(data):''}${renderCallHonours(data)}${renderCallMessages(data)}`}${!state.recordResults&&myPlayer&&isPlayerUser()&&typeof renderEngagementShell==='function'?renderEngagementShell('callEngagement'):''}</div>`;
 for(const form of page.querySelectorAll('[data-call-form]')){form.callBaseline=makeYourCallFormState(form);for(const draft of drafts?.get(form.dataset.callForm)||[]){const f=document.getElementById(draft.id);if(f&&form.contains(f)){f.value=draft.value;if('checked'in f)f.checked=draft.checked;}}}
 for(const [key]of drafts||[])if(key.startsWith('result-')){const detail=document.getElementById('callScore-'+key.slice(7));if(detail)detail.open=true;}
 if(drafts?.has('settings')){state.editSettings=true;document.getElementById('callSettingsEditor').hidden=false;document.getElementById('callEditSettings').hidden=true;}
 bindMakeYourCall(data,current);recordAppNavigation(clubNavigationRoute());if(myPlayer&&isPlayerUser()&&typeof mountEngagement==='function')await mountEngagement(document.getElementById('callEngagement'),{clubId:club.id});
 }catch(error){if(current()){page.innerHTML=`<section class="card"><h1>Make your prediction</h1><p>${esc(error?.message||'Could not load the board.')}</p><button class="btn" id="callRetry">Try again</button></section>`;document.getElementById('callRetry').onclick=()=>renderMakeYourCall({message,drafts});}}}
-async function saveCallMutation(form,rpc,values,current,success){if(makeYourCallSaving||!current())return;if(typeof callAwardReleaseSavePending==='function'&&callAwardReleaseSavePending()){alert('Confirm the pending award release before saving other changes.');return;}const key=form?.dataset.callForm||rpc;if(makeYourCallCommands.size&&!makeYourCallCommands.has(key)){alert('Confirm the pending save first.');return;}const status=form?.querySelector('[data-call-status]')||document.getElementById('callPageStatus');let command=makeYourCallCommands.get(key);if(!command)command={rpc,args:{p_club_id:club.id,p_request_id:preparationUuid(),p_values:values}};makeYourCallCommands.set(key,command);makeYourCallSaving=true;const controls=[...document.querySelectorAll('.call-page input,.call-page textarea,.call-page select,.call-page button')].map(f=>[f,f.disabled]);controls.forEach(([f])=>f.disabled=true);if(status){status.hidden=false;status.textContent='Saving…';}try{const {data,error}=await supabase.rpc(command.rpc,command.args);if(error)throw error;if(data?.ok!==true)throw new Error('Could not confirm the save.');makeYourCallCommands.delete(key);if(!current())return;if(key.startsWith('vote-')){const s=ensureMakeYourCallState();s.savedOpenId=key.slice(5);s.openId=null;}if(key==='settings')ensureMakeYourCallState().editSettings=false;const focusId=document.activeElement?.id;const drafts=captureCallDrafts();drafts.delete(key);await renderMakeYourCall({message:success?(data.already_saved?'Previous save confirmed. '+success:success):'',drafts});if(currentTab==='make_your_call'){const focus=(key.startsWith('vote-')?document.getElementById('callToggle-'+key.slice(5)):key==='settings'?document.getElementById('callEditSettings'):null)||document.getElementById(focusId||'')||form?.id&&document.getElementById(form.id)?.querySelector('input,textarea,select');focus?.focus({preventScroll:true});}}catch(error){if(definiteInningsSaveFailure(error)){makeYourCallCommands.delete(key);}if(current()&&status){status.textContent=(error?.message||'Could not confirm the save.')+(makeYourCallCommands.has(key)?' Retry the same save to confirm it; these fields stay locked until then.':' Your changes are still here. Load the latest saved data, then try again.');if(!makeYourCallCommands.has(key)){status.insertAdjacentHTML('beforeend',' <button type="button" class="btn ghost" id="callReloadLatest">Load latest saved data</button>');document.getElementById('callReloadLatest').onclick=()=>{if(!makeYourCallSavePending())return renderMakeYourCall({drafts:captureCallDrafts()});};}if(makeYourCallCommands.has(key)&&!form){status.insertAdjacentHTML('beforeend','<button type="button" class="btn secondary" id="retryCallAction">Confirm previous action</button>');document.getElementById('retryCallAction').onclick=()=>saveCallMutation(null,rpc,null,current,success);}}}finally{makeYourCallSaving=false;for(const [f,disabled]of controls)if(document.documentElement.contains(f))f.disabled=disabled;if(makeYourCallCommands.has(key)&&form){for(const f of form.querySelectorAll('input,textarea,select'))f.disabled=true;const retry=document.getElementById('callSave-'+key.slice(5));if(key.startsWith('vote-')&&retry)retry.textContent='Confirm save';}syncCallSettingsForms();}}
+async function saveCallMutation(form,rpc,values,current,success){if(makeYourCallSaving||!current())return;if(typeof callAwardReleaseSavePending==='function'&&callAwardReleaseSavePending()){alert('Confirm the pending award release before saving other changes.');return;}const key=form?.dataset.callForm||rpc,saveButton=form?(key.startsWith('vote-')?document.getElementById('callSave-'+key.slice(5)):form.querySelector('button[type="submit"]')):null,saveLabel=saveButton?.textContent;if(makeYourCallCommands.size&&!makeYourCallCommands.has(key)){alert('Confirm the pending save first.');return;}const status=form?.querySelector('[data-call-status]')||document.getElementById('callPageStatus');let command=makeYourCallCommands.get(key);if(!command)command={rpc,args:{p_club_id:club.id,p_request_id:preparationUuid(),p_values:values}};makeYourCallCommands.set(key,command);makeYourCallSaving=true;const controls=[...document.querySelectorAll('.call-page input,.call-page textarea,.call-page select,.call-page button')].map(f=>[f,f.disabled]);controls.forEach(([f])=>f.disabled=true);if(status){status.hidden=false;status.textContent='Saving…';}if(saveButton){saveButton.textContent='Saving…';saveButton.setAttribute('aria-busy','true');}try{const {data,error}=await supabase.rpc(command.rpc,command.args);if(error)throw error;if(data?.ok!==true)throw new Error('Could not confirm the save.');makeYourCallCommands.delete(key);if(!current())return;if(key.startsWith('vote-')){const s=ensureMakeYourCallState();s.savedOpenId=key.slice(5);s.openId=null;}if(key==='settings')ensureMakeYourCallState().editSettings=false;const focusId=document.activeElement?.id;const drafts=captureCallDrafts();drafts.delete(key);await renderMakeYourCall({message:success?(data.already_saved?'Previous save confirmed. '+success:success):'',drafts});if(currentTab==='make_your_call'){const focus=(key.startsWith('vote-')?document.getElementById('callToggle-'+key.slice(5)):key==='settings'?document.getElementById('callEditSettings'):null)||document.getElementById(focusId||'')||form?.id&&document.getElementById(form.id)?.querySelector('input,textarea,select');focus?.focus({preventScroll:true});}}catch(error){if(definiteInningsSaveFailure(error)){makeYourCallCommands.delete(key);}if(current()&&status){status.textContent=(error?.message||'Could not confirm the save.')+(makeYourCallCommands.has(key)?' Retry the same save to confirm it; these fields stay locked until then.':' Your changes are still here. Load the latest saved data, then try again.');if(!makeYourCallCommands.has(key)){status.insertAdjacentHTML('beforeend',' <button type="button" class="btn ghost" id="callReloadLatest">Load latest saved data</button>');document.getElementById('callReloadLatest').onclick=()=>{if(!makeYourCallSavePending())return renderMakeYourCall({drafts:captureCallDrafts()});};}if(makeYourCallCommands.has(key)&&!form){status.insertAdjacentHTML('beforeend','<button type="button" class="btn secondary" id="retryCallAction">Confirm previous action</button>');document.getElementById('retryCallAction').onclick=()=>saveCallMutation(null,rpc,null,current,success);}}}finally{makeYourCallSaving=false;if(saveButton){saveButton.removeAttribute('aria-busy');if(saveButton.isConnected)saveButton.textContent=makeYourCallCommands.has(key)?'Confirm save':saveLabel;}for(const [f,disabled]of controls)if(document.documentElement.contains(f))f.disabled=disabled;if(makeYourCallCommands.has(key)&&form){for(const f of form.querySelectorAll('input,textarea,select'))f.disabled=true;const retry=document.getElementById('callSave-'+key.slice(5));if(key.startsWith('vote-')&&retry)retry.textContent='Confirm save';}syncCallSettingsForms();}}
 function bindMakeYourCall(data,current){scheduleCallDeadlineRefresh(data,current);const page=document.getElementById('page');bindCallAwardHelp(page);bindCallTallies(page);if(typeof wireCallAwardReleaseControls==='function')wireCallAwardReleaseControls(data,current);const submit=(id,rpc,values,success)=>{const form=document.getElementById(id);if(!form)return;form.onsubmit=async e=>{e.preventDefault();if(makeYourCallSaving)return;let value;try{value=makeYourCallCommands.has(form.dataset.callForm)?null:values();}catch(error){form.querySelector('[data-call-status]').textContent=error.message;return;}return saveCallMutation(form,rpc,value,current,success);};};
 page.querySelectorAll('[data-call-toggle]').forEach(b=>b.onclick=()=>toggleCallEntry(b.dataset.callToggle,data));page.querySelectorAll('[data-call-close]').forEach(b=>b.onclick=()=>toggleCallEntry(b.dataset.callClose,data,{close:true}));
 const needs=document.getElementById('callNeedsPrediction');if(needs)needs.onchange=()=>{const state=ensureMakeYourCallState();if(makeYourCallSavePending()){needs.checked=!!state.needsPrediction;alert('Confirm the pending save before changing the entry filter.');return;}state.savedOpenId=null;state.query='';state.needsPrediction=!!needs.checked;syncCallEntries(data);};
@@ -15623,7 +15669,7 @@ async function renderPlayerHome(){
     .player-home-landing h1{margin:0;color:var(--primary);font-size:28px;line-height:1.2}
     .player-home-landing h1:focus{outline:none}
     .player-home-intro{margin:6px 0 12px;font-size:15px;line-height:1.4;max-width:46rem}
-    .player-home-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .player-home-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
     .player-home-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:88px;border:1px solid #ced6ee;border-radius:12px;padding:12px;text-align:left;color:var(--text,#172033);background:#eff3ff;font:inherit;cursor:pointer}
     .player-home-tile[data-home-area="train"]{background:#eff8f4;border-color:#cce5d8}
     .player-home-tile[data-home-area="prepare"]{background:#fff7eb;border-color:#edddc3}
@@ -15640,7 +15686,6 @@ async function renderPlayerHome(){
     @media(max-width:620px){.player-home-tile strong{font-size:17px}.player-home-tile .player-home-tile-copy{font-size:14px}.player-home-tile .player-home-tile-arrow{right:10px;top:12px}}
   </style><section class="player-home-landing" aria-labelledby="playerHomeTitle">
     <h1 id="playerHomeTitle">Player Home</h1>
-    <p class="player-home-intro">Your Player Plan guides how you train, prepare for a match and review your innings.</p>
     <nav class="player-home-tiles" aria-label="Your batting tools">
       ${tiles.map(([id,title,copy,area])=>`<button type="button" class="player-home-tile" id="${id}" data-home-area="${area}"><strong>${title}</strong><span class="player-home-tile-copy">${copy}</span><span class="player-home-tile-arrow" aria-hidden="true">→</span></button>`).join('')}
     </nav>
@@ -15796,7 +15841,7 @@ function openWeeklyLoopForm(state,{op,focusId=null,decision=null}={}){
   const slot=state.host.querySelector('[data-weekly-form-slot]');
   slot.innerHTML=`<div class="weekly-loop-form" id="${formId}"><h3>${esc(heading)}</h3>
   ${op==='review'&&active.length>1?`<div class="field"><label for="${formId}-focus">Which current focus?</label><select id="${formId}-focus" data-weekly-review-focus>${active.map(f=>`<option value="${esc(f.id)}">${esc(weeklyLoopText(f))}</option>`).join('')}</select></div>`:target&&!['choose','propose'].includes(op)?`<p><strong>${esc(weeklyLoopText(target))}</strong></p>`:''}
-  ${changing?`<div class="field"><label for="${formId}-source">Choose from the saved plan or conversations</label><select id="${formId}-source" data-weekly-source><option value="">Choose a saved priority…</option>${candidates.map((c,i)=>`<option value="${i}">${esc(weeklyLoopSourceLabel(c))} — ${esc(weeklyLoopText(c))}</option>`).join('')}</select>${candidates.length?'':'<p class="help">There are no saved priorities available yet. Add a Player Plan answer, an innings reflection or a training focus in a Coach Conversation, then return here.</p>'}</div><div class="field"><label for="${formId}-text">Focus for the next sessions</label><textarea id="${formId}-text" data-weekly-text rows="3" maxlength="240" placeholder="Choose a saved priority above."></textarea><p class="help">The saved wording is filled in for you. Refine it if a more specific practice goal has been agreed.</p></div><div class="field"><label for="${formId}-theme">Training theme (optional)</label><select id="${formId}-theme" data-weekly-theme>${[['other','No shared theme'],['decision','Decision making'],['execution','Execution'],['strike_rotation','Strike rotation'],['scoring','Scoring options'],['pressure','Handling pressure'],['preparation','Preparation']].map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select><p class="help">Helps coaches spot shared practice themes. Choose only a theme that fits.</p></div>`:''}
+  ${changing?`<div class="field"><label for="${formId}-source">Choose from the saved plan or conversations</label><select id="${formId}-source" data-weekly-source><option value="">Choose a saved priority…</option>${candidates.map((c,i)=>`<option value="${i}">${esc(weeklyLoopSourceLabel(c))} — ${esc(weeklyLoopText(c))}</option>`).join('')}</select>${candidates.length?'':'<p class="help">Save a Player Plan answer, innings reflection or coaching focus first.</p>'}</div><div class="field"><label for="${formId}-text">Focus for the next sessions</label><textarea id="${formId}-text" data-weekly-text rows="3" maxlength="240" placeholder="Choose a saved priority above."></textarea><p class="help">Edit the wording to make your practice goal specific.</p></div><div class="field"><label for="${formId}-theme">Training theme (optional)</label><select id="${formId}-theme" data-weekly-theme>${[['other','No shared theme'],['decision','Decision making'],['execution','Execution'],['strike_rotation','Strike rotation'],['scoring','Scoring options'],['pressure','Handling pressure'],['preparation','Preparation']].map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select><p class="help">Helps coaches group similar training needs.</p></div>`:''}
   ${op==='review'?`<p class="help">${decision==='keep'?'The focus stays current. Record what you learnt or what went well.':decision==='adjust'?own?'This updates your chosen focus and records the decision against this review.':'The current focus stays in place while the player considers your suggestion.':'This uses the existing Coach Conversation when available. Your focus remains current while you discuss it.'}</p>`:op==='retire'?'<p class="help">This removes the focus from current priorities. Its saved history stays available.</p>':op==='decline'?'<p class="help">Your current focus stays the same.</p>':changing?`<p class="help">${own?'Your choice appears across your batting tools.':'The player will be asked to accept the suggestion before it becomes current.'}</p>`:''}
   <div class="field"><label for="${formId}-note">${op==='review'?'What did you learn or agree?':'Note'} <span>(optional)</span></label><textarea id="${formId}-note" data-weekly-note maxlength="500" rows="2" placeholder="A useful decision, committed practice or something to discuss…"></textarea></div>
   <div class="btnrow"><button class="btn secondary" data-weekly-save ${changing&&!candidates.length?'disabled':''}>${op==='review'?'Save next step':op==='accept'?'Accept suggestion':op==='decline'?'Decline suggestion':op==='retire'?'Finish focus':own?'Save focus':'Send suggestion'}</button><button class="btn ghost" data-weekly-cancel>Cancel</button></div><p class="weekly-loop-status" data-weekly-form-status role="status"></p></div>`;
@@ -15825,9 +15870,10 @@ function openWeeklyLoopForm(state,{op,focusId=null,decision=null}={}){
   form.scrollIntoView({block:'nearest'});
 }
 async function saveWeeklyLoop(state,values,form,status){
+  const saveButton=form.querySelector('[data-weekly-save]'),saveLabel=saveButton?.textContent;
   const args={p_player_id:state.options.playerId,p_expected_revision:state.bundle.revision,p_values:values};
   const payload=JSON.stringify(args);if(payload!==state.requestPayload){state.requestId=globalThis.crypto.randomUUID();state.requestPayload=payload;}
-  weeklyLoopSaveBusy=true;coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';
+  weeklyLoopSaveBusy=true;coachingActionSavePending=true;const restore=freezeCoachingForm(form);status.textContent='Saving…';if(saveButton){saveButton.textContent='Saving…';saveButton.setAttribute('aria-busy','true');}
   try{
     const {data,error}=await supabase.rpc('save_player_focus',{...args,p_request_id:state.requestId});if(error)throw error;
     state.savedActionId=data?.action_id||null;
@@ -15837,7 +15883,7 @@ async function saveWeeklyLoop(state,values,form,status){
     if(weeklyLoopIsCurrent(state)&&typeof state.options.onSaved==='function')await state.options.onSaved(values);
     if(typeof refreshMyCoachingUpdates==='function')await refreshMyCoachingUpdates();
   }catch(error){if(weeklyLoopIsCurrent(state)&&state.form===form){status.textContent=error?.message||'Could not confirm the save. Your entry is still here; try again.';restore();}else if(weeklyLoopIsCurrent(state)){const target=state.host.querySelector('[data-weekly-status]');if(target)target.textContent='Saved. Refresh this page to see all the latest updates.';}}
-  finally{weeklyLoopSaveBusy=false;coachingActionSavePending=false;}
+  finally{weeklyLoopSaveBusy=false;coachingActionSavePending=false;if(saveButton){saveButton.removeAttribute('aria-busy');if(saveButton.isConnected)saveButton.textContent=saveLabel;}}
 }
 // END WEEKLY LOOP
 
@@ -16286,9 +16332,7 @@ async function renderMyPlan(){
         const refLabel=FORMATS.find(([k])=>k===builderSection)?.[1]||builderSection;
         return `<details class="card player-plan-key-messages plan-reference-disclosure">
           <summary>${esc(refLabel)} · Club key messages</summary>
-          <div class="section-label">${esc(refLabel)} · How We Bat</div>
-          <h2>Your club’s key messages for this format</h2>
-          <div class="help">These are reference points, not extra questions. Open any Key Message whenever you want to reconnect your Player Plan to the club philosophy.</div>
+
           <div class="hwb-public-banner-grid plan-key-message-grid">
             ${refFormat.banners.map((b,i)=>renderKeyMessageReferenceCard(b,i,'plan',builderSection)).join('')}
           </div>
@@ -16356,10 +16400,10 @@ async function renderMyPlan(){
   const sectionStepCopy=builderSection==='core'
     ?(currentComplete
       ?focusCopy(rawForProgress).copy
-      :'Your answers save automatically. Finish the required Core questions, then choose a format. You can still work ahead whenever you like.')
+      :'Finish the required Core questions, then choose a format.')
     :(currentTrainingReady
       ?`Your ${currentLabel} How We Train is now ready. You can still refine these answers later.${currentDueText}`
-      :`Your answers save automatically. How We Train for ${currentLabel} is created only when Core and this format are complete.${currentDueText}`);
+      :`Complete Core and ${currentLabel} to open its training ideas.${currentDueText}`);
   const nextStep=playerPlanNextStep(rawForProgress,rollout);
   const formatCardsHtml=(raw)=>{
     const core=sectionProgress('core',raw);
@@ -16392,7 +16436,7 @@ async function renderMyPlan(){
         <div>
           <div class="section-label">${esc(currentLabel)} reflection</div>
           <h2>${esc(myPlayer.display_name)}</h2>
-          <div class="help">Choose what genuinely describes your game. Add comments only where the options do not capture it.</div>
+          <div class="help">Choose what fits your game. Add your own answer if needed.</div>
         </div>
         <span class="section-completion ${currentComplete?'done':''}">
           ${currentComplete
@@ -16481,8 +16525,8 @@ async function renderMyPlan(){
       if(stepCopy)stepCopy.textContent=progress.complete
         ?focusCopy(raw).copy
         :gaps.length===1
-          ?'One required Core answer remains. Your answers save automatically.'
-          :`${gaps.length} required Core answers remain. Your answers save automatically.`;
+          ?'One required Core answer remains.'
+          :`${gaps.length} required Core answers remain.`;
     }else{
       const ready=coreNow.complete&&progress.complete;
       if(stepTitle)stepTitle.textContent=progress.complete?`${currentLabel} Player Plan complete ✓`:`${currentLabel} Player Plan in progress`;
@@ -16554,7 +16598,7 @@ function renderQuestion(section,key,spec){
   if(spec.response_type==='text'){
     return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Write the response that best describes your game.')}</div><div class="optional-comment"><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Your response…">${esc(a.comment||'')}</textarea></div></div>`;
   }
-  return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${playerPlanChoiceOptions(section,key,spec,a).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment player-own-answer"><div class="player-own-answer-copy"><strong>Can’t see your answer?</strong><span>Add your own option or useful detail. It is saved with your Player Plan, and de-identified player-added answers help the club see where these choices could be better.</span></div><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Add your own answer…">${esc(a.comment||'')}</textarea></div></div>`;
+  return `<div class="question" data-player-question-key="${esc(key)}" data-player-question-required="${spec.required?'true':'false'}"><div class="question-title-row"><h3>${esc(spec.label)}</h3>${badge}</div><div class="why">${esc(spec.guidance||'Choose all that genuinely apply.')}</div><div class="option-grid">${playerPlanChoiceOptions(section,key,spec,a).map((o,i)=>{const id=`q_${section}_${key}_${i}`;return `<label class="option-chip"><input type="checkbox" id="${esc(id)}" data-answer-section="${section}" data-answer-key="${esc(key)}" value="${esc(o)}" ${(a.choices||[]).includes(o)?'checked':''}><span>${esc(o)}</span></label>`;}).join('')}</div><div class="optional-comment player-own-answer"><div class="player-own-answer-copy"><strong>Can’t see your answer?</strong><span>Add your own answer. Your club can review it without your name to improve the choices.</span></div><textarea data-comment-key="${esc(key)}" data-comment-section="${section}" placeholder="Add your own answer…">${esc(a.comment||'')}</textarea></div></div>`;
 }
 
 let localRaw=null;
@@ -19133,7 +19177,7 @@ function engagementRender(s){
  if(!b.configured){s.host.innerHTML=s.options.training?'<p class="help">Training Check-in is not available for this club yet.</p>':'';s.form=null;s.baseline='';notifyEngagementStatus(s);return;}
  const chosen=candidates.findIndex(c=>c.kind===training?.source_kind&&(c.id||null)===(training?.source_id||null)&&(c.key||null)===(training?.source_key||null));
  const radios=(name,values,selected)=>`<div class="engagement-radios">${values.map(([v,label])=>`<label><input type="radio" name="${name}" value="${v}" ${v===selected?'checked':''} required>${label}</label>`).join('')}</div>`;
- const trainingHtml=s.options.training?`<form class="engagement-checkin"><h3>Training check-in</h3><p class="help">A quick, honest check-in on your focus. Self-reported; no phone needed at training.</p>${candidates.length?`<label>Choose a current focus or saved plan answer<select name="source" required><option value="">Choose…</option>${candidates.map((c,i)=>`<option value="${i}" ${chosen===i?'selected':''}>${esc(c.kind==='focus'?'Current focus: ':'Player Plan: ')}${esc(c.text)}</option>`).join('')}</select></label><fieldset><legend>What happened?</legend>${radios('status',[['worked','Worked on it'],['changed','Changed my approach'],['couldnt','Couldn’t this week']],training?.status)}</fieldset><fieldset><legend>What next?</legend>${radios('next_step',[['keep','Keep working on this'],['adjust','Revisit my focus'],['discuss','Speak with someone']],training?.next_step)}</fieldset><label>Optional note<textarea name="note" maxlength="300" rows="2" placeholder="A useful detail, if needed">${esc(training?.note||'')}</textarea></label><p class="help">This records your next step. Use your current focus or Coach Conversations to make a change or request a conversation.</p><button class="btn ${training?'secondary':'primary'}" type="submit">${training?'Saved ✓':'Save check-in'}</button><span data-engagement-form-state class="help"></span>`:'<p>Choose a current focus or save a Player Plan answer first. Your existing focus controls are on this page.</p>'}</form>`:'';
+ const trainingHtml=s.options.training?`<form class="engagement-checkin"><h3>Training check-in</h3>${candidates.length?`<label>Choose a current focus or saved plan answer<select name="source" required><option value="">Choose…</option>${candidates.map((c,i)=>`<option value="${i}" ${chosen===i?'selected':''}>${esc(c.kind==='focus'?'Current focus: ':'Player Plan: ')}${esc(c.text)}</option>`).join('')}</select></label><fieldset><legend>What happened?</legend>${radios('status',[['worked','Worked on it'],['changed','Changed my approach'],['couldnt','Couldn’t this week']],training?.status)}</fieldset><fieldset><legend>What next?</legend>${radios('next_step',[['keep','Keep working on this'],['adjust','Revisit my focus'],['discuss','Speak with someone']],training?.next_step)}</fieldset><label>Optional note<textarea name="note" maxlength="300" rows="2" placeholder="A useful detail, if needed">${esc(training?.note||'')}</textarea></label><p class="help">To change your focus or ask a coach, use those sections above.</p><button class="btn ${training?'secondary':'primary'}" type="submit">${training?'Saved ✓':'Save check-in'}</button><span data-engagement-form-state class="help"></span>`:'<p>Choose a current focus or save a Player Plan answer first. Your existing focus controls are on this page.</p>'}</form>`:'';
  const compact=!!s.options.compact,awardEnabled=b.award_enabled!==false;
  s.host.innerHTML=engagementStyles()+`<section class="engagement-card${compact?' engagement-training-priority':''}">${compact?`<div class="engagement-training-heading"><h2>Training Check-in</h2>${training?'<span class="engagement-saved">Saved this week ✓</span>':''}</div>${trainingHtml}<details class="engagement-progress-details"><summary>My engagement progress</summary>`:''}<div class="eyebrow">YOUR WEEK</div><h2>${award.cadence==='monthly'?'Engagement progress':'Weekly engagement'} ${award.earned&&award.released!==false?'✓':''}</h2>${b.configured?`${engagementAwardProgress(b)}<div class="engagement-credit-list">${[['prepare','Prepare'],['training','Training check-in'],['review','Review and continue']].map(([k,l])=>`<span class="engagement-credit ${categories.includes(k)?'done':''}">${categories.includes(k)?'✓ ':''}${l}</span>`).join('')}</div><p class="help">Week beginning ${esc(b.week_start)} · ${esc(b.timezone)}. ${Number(b.season_awards)||0} ${typeof award.released==='boolean'?'released awards':'qualifying weeks'} this season.</p>${b.can_view_prizes===true&&String(award.reward_text||'').trim()&&award.reward_text!=='Recognition only'?`<p><strong>Club prize:</strong> ${esc(award.reward_text)}</p>${award.claim_text?`<p class="help"><strong>To claim:</strong> ${esc(award.claim_text)}</p>`:''}`:''}<details><summary>What counts?</summary><p>This award is for your own activities as a player. Admin and coaching duties do not count. Playing admins, coaches and captains can earn it through their own preparation, training check-in and independent reflection.</p><p>Prepare: save a bowler match-up and a scoring option from your plan, or an explained additional shot, before the match day and within the next two weeks.</p><p>Training: check in on a saved focus or plan answer and choose a next step. This is your report, not proof of practice. “Couldn’t this week” can count as thoughtful engagement.</p><p>Review: save your independent innings reflection and choose Keep, Adjust or Discuss within two weeks of the innings.</p><p>Each activity counts once per week. Re-saving the same preparation or innings does not earn it again. Everyone’s qualifying player activity counts automatically. Votes, comments, page opens and time online do not count. A missed week never removes an earlier award.</p>${award.cadence==='monthly'?'<p>For four-week awards, complete two different activities in each of two club weeks within the displayed four-week period. The club sets the first award week; periods run in fixed blocks of four weeks.</p>':''}</details>${s.options.compact?'':trainingHtml}`:'<p class="help">Your club can enable engagement and choose weekly or four-week rewards from Make your prediction settings. Your normal plans, preparation and coaching remain available.</p>'}${compact?'</details>':''}<div class="engagement-status" role="status" data-engagement-status></div></section>`;
  if(!awardEnabled){
@@ -19152,9 +19196,10 @@ async function mountEngagement(host,options={}){
 }
 async function engagementSave(s,op,values){
  if(!engagementCurrent(s)||s.busy)return;
+ const saveButton=s.uncertain?s.host.querySelector('[data-engagement-status] button'):s.form?.querySelector('button[type="submit"]'),saveLabel=saveButton?.textContent;
  if(s.uncertain){op=s.request.op;values=s.request.values;}
  const key=JSON.stringify({op,values,revision:s.bundle.training_checkin?.revision||0});if(s.request?.key!==key)s.request={key,id:engagementRequestId(),op,values};
- s.busy=true;const controls=[...s.host.querySelectorAll('input,select,textarea,button')],states=controls.map(c=>s.controlStates?.has(c)?s.controlStates.get(c):c.disabled);if(!s.controlStates)s.controlStates=new Map();controls.forEach((c,i)=>{s.controlStates.set(c,states[i]);c.disabled=true;});const status=s.host.querySelector('[data-engagement-status]');if(status)status.textContent='Saving…';
+ s.busy=true;const controls=[...s.host.querySelectorAll('input,select,textarea,button')],states=controls.map(c=>s.controlStates?.has(c)?s.controlStates.get(c):c.disabled);if(!s.controlStates)s.controlStates=new Map();controls.forEach((c,i)=>{s.controlStates.set(c,states[i]);c.disabled=true;});const status=s.host.querySelector('[data-engagement-status]');if(status)status.textContent='Saving…';if(saveButton){saveButton.textContent='Saving…';saveButton.setAttribute('aria-busy','true');}
  try{
  const args={p_club_id:s.options.clubId||club?.id,p_expected_revision:s.bundle.training_checkin?.revision||0,p_request_id:s.request.id};
  const {data,error}=await supabase.rpc('save_my_training_checkin',{...args,p_values:values});if(error)throw error;
@@ -19163,7 +19208,7 @@ async function engagementSave(s,op,values){
  const savedStatus=s.host.querySelector('[data-engagement-status]');if(savedStatus)savedStatus.textContent='Training check-in saved. This records your engagement, not verified practice.';
  if(typeof s.options.onSaved==='function')s.options.onSaved(data);
  }catch(e){if(!engagementCurrent(s))return;const definite=typeof e.code==='string'&&(/^[0-9A-Z]{5}$/.test(e.code)||e.code.startsWith('PGRST'));s.uncertain=!definite;if(definite)s.request=null;if(status){status.textContent=s.uncertain?'The save could not be confirmed. Keep this page open and retry the same save.':e.message||'Could not save. Your entries remain here; try again.';if(s.uncertain){const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='Retry save';retry.onclick=()=>engagementSave(s,op,values);status.appendChild(retry);}}}
- finally{s.busy=false;if(engagementCurrent(s)&&!s.uncertain){controls.forEach((c,i)=>c.disabled=states[i]);s.controlStates=null;}}
+ finally{s.busy=false;if(saveButton){saveButton.removeAttribute('aria-busy');if(saveButton.isConnected)saveButton.textContent=s.uncertain?'Save unconfirmed':saveLabel;}if(engagementCurrent(s)&&!s.uncertain){controls.forEach((c,i)=>c.disabled=states[i]);s.controlStates=null;}}
 }
 // END WEEKLY ENGAGEMENT
 
@@ -19275,11 +19320,11 @@ async function openClubMessageTarget(target){
  if(!canOpenClubTab(target))return;currentTab=target;await renderTab();
 }
 async function copyClubMessage(message,button){
- const label=button.textContent;
+ if(button.disabled)return;const label=button.textContent;button.disabled=true;button.textContent='Copying…';
  const tab=message.target==='prepare'?'innings':message.target;
  const link=tab?new URL(`./app.html?club=${encodeURIComponent(club.id)}&tab=${tab}${message.target==='prepare'?'&prepare=1':''}`,location.href).href:'';
  const text=`${message.title}\n\n${message.body}${link?'\n\n'+link:''}`;
- try{await navigator.clipboard.writeText(text);button.textContent='Copied ✓';}catch{button.textContent='Select and copy below';const box=document.createElement('textarea');box.value=text;box.readOnly=true;box.setAttribute('aria-label','Message to copy');button.after(box);box.focus();box.select();}
+ try{await navigator.clipboard.writeText(text);button.textContent='Copied ✓';}catch{button.textContent='Select and copy below';if(button.nextElementSibling?.matches('[data-message-copy-fallback]'))button.nextElementSibling.remove();const box=document.createElement('textarea');box.dataset.messageCopyFallback='';box.value=text;box.readOnly=true;box.setAttribute('aria-label','Message to copy');button.after(box);box.focus();box.select();}finally{button.disabled=false;}
  setTimeout(()=>{if(button.isConnected)button.textContent=label;},2500);
 }
 async function renderClubMessages(){
@@ -19308,7 +19353,7 @@ function drawClubMessages(page,state){
  const data=state.data,staff=!!state.context.can_send,rows=state.mode==='sent'?data.sent:data.inbox;
  if(state.selectedMode!==state.mode){state.selectedIds=[];state.selectedMode=state.mode;}
  state.selectedIds=(state.selectedIds||[]).filter(id=>rows.some(r=>r.id===id));
- page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?(state.draft?.kind==='plan_reminder'?'Player Plan reminder':'New message'):'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">Message players &amp; staff</button>':''}</div>
+ page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?(state.draft?.kind==='plan_reminder'?'Player Plan reminder':'New message'):'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">New message</button>':''}</div>
  ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
  <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
  ${state.mode==='inbox'?seInboxFollowup(state.signupFollowup):''}
@@ -19358,8 +19403,8 @@ function clubMessageComposer(state){
  <div class="field" style="margin-top:12px"><label for="clubMessageTitle">Title</label><input id="clubMessageTitle" required maxlength="80" value="${esc(d.title)}" placeholder="e.g. Thursday training"></div>
  <div class="field"><label for="clubMessageBody">Message <span class="message-body-count" id="messageBodyCount">${d.body.length}/1500</span></label><textarea id="clubMessageBody" required maxlength="1500" rows="4" placeholder="What does everyone need to know or do?">${esc(d.body)}</textarea></div>
  <div class="field" ${reminder?'hidden':''}><label for="clubMessageTarget">Link to</label><select id="clubMessageTarget">${clubMessageTargets.map(([key,label])=>`<option value="${key}" ${d.target===key?'selected':''}>${label}</option>`).join('')}</select></div>
- <label class="message-check"><input id="clubMessageEmail" type="checkbox" ${d.email?'checked':''}>Email also for everyone selected</label>
- <details id="messageEmailPicker"><summary>Email also for selected people</summary><div id="messageEmailPeople">${messageEmailChoices(state)}</div></details>
+ <label class="message-check"><input id="clubMessageEmail" type="checkbox" ${d.email?'checked':''}>Also email everyone</label>
+ <details id="messageEmailPicker"><summary>Also email selected people</summary><div id="messageEmailPeople">${messageEmailChoices(state)}</div></details>
  <p class="help">Everyone receives this in Messages. Phone alerts where enabled; an email link otherwise.</p>
  ${reminder?'<p class="help">Players who have finished or were reminded within 48 hours are skipped.</p>':''}
  ${state.context.email_mode==='prototype'?'<p class="notice">Email delivery is in Prototype mode. In-app messages work; emails will not be delivered yet.</p>':''}
@@ -19385,11 +19430,11 @@ function bindClubMessageComposer(page,state){
  form.onsubmit=async event=>{
   event.preventDefault();if(state.sending)return;sync();if(!clubMessageRecipientCount(state)){status.textContent='Choose at least one person.';form.querySelector('#messageRecipientPicker').open=true;return;}
   if(!d.title.trim()||!d.body.trim()){status.textContent='Add a title and a message.';return;}
-  const clubId=club.id;state.sending=true;form.querySelector('fieldset').disabled=true;status.textContent='Sending…';
+  const clubId=club.id;state.sending=true;form.querySelector('fieldset').disabled=true;form.querySelector('#sendClubMessage').textContent='Sending…';status.textContent='Sending…';
   try{const {data,error}=await supabase.rpc('club_messages_api',{p_club_id:clubId,p_action:'send',p_data:{request_id:d.request_id,player_ids:[...d.player_ids],staff_user_ids:d.include_staff?[...d.staff_user_ids]:[],title:d.title,body:d.body,target:d.target,email:d.email,kind:d.kind,email_user_ids:d.email_user_ids.filter(id=>clubMessageEmailPeople(state).some(p=>p.user_id===id))}});if(error)throw error;
    if(state!==clubMessageState||clubId!==club?.id)return;
    state.draft=null;state.mode='sent';const skipped=Number(data.skipped?.cooldown||0)+Number(data.skipped?.no_longer_overdue||0);state.notice=`In Messages for ${messagePeople(data.recipients)} ✓${data.email_queued?` · ${data.email_queued} email${data.email_queued===1?'':'s'} queued`:''}${skipped?` · ${skipped} no longer due or recently reminded`:''}`;state.openId=data.id;state.sending=false;await renderClubMessages();
-  }catch(error){if(state===clubMessageState&&form.isConnected){status.textContent=`Couldn’t confirm sending. Your draft is here; retrying will not send it twice. ${error.message||''}`;form.querySelector('fieldset').disabled=false;}}
+  }catch(error){if(state===clubMessageState&&form.isConnected){status.textContent=`Send not confirmed. Your draft is kept; retrying will not send it twice. ${error.message||''}`;form.querySelector('fieldset').disabled=false;form.querySelector('#sendClubMessage').textContent='Retry send';}}
   finally{state.sending=false;}
  };
 }
@@ -19517,13 +19562,13 @@ async function renderPhoneApp(){
  ${installed?'<p class="phone-installed">✓ You’re using the Club Batting app.</p>':phoneInstallHelp(ios,android)}
  <div id="phoneNotificationPanel" ${installFirst?'hidden':''}>
  <p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
- <p class="phone-next">Enable phone alerts for club messages and coaching updates. Until phone alerts are enabled, we’ll keep sending email notifications.</p>
+ <p class="phone-next">Choose phone alerts below. Without them, updates arrive by email.</p>
  <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label></div>
  <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
  <p id="phoneAllowHint" class="help" hidden>Tap <strong>Allow</strong> when your phone asks.</p>
- <details><summary>About notifications</summary><p class="help">Your choices apply to ${esc(club?.name||'this club')} on this device. Previews keep message details private. Alerts depend on your device and its settings; iPhone/iPad needs iOS/iPadOS 16.4 or later. Messages stay in Account → Messages. Messages and coaching updates use enabled phone alerts first; otherwise a brief email links you into the app without sharing the details. Coaching updates stay in Coach Conversations.</p></details>
+ <details><summary>About notifications</summary><p class="help">Choices apply to ${esc(club?.name||'this club')} on this device. Alerts show no message details. iPhone/iPad needs iOS/iPadOS 16.4 or later. Find messages in Account → Messages and coaching updates in Coach Conversations.</p></details>
  <p id="phoneActionStatus" role="status" class="help"></p></div>${demo&&installFirst?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
- document.getElementById('installClubBatting')?.addEventListener('click',async()=>{const prompt=phoneInstallPrompt;phoneInstallPrompt=null;await prompt?.prompt();if(here())await renderPhoneApp();});
+ document.getElementById('installClubBatting')?.addEventListener('click',async event=>{const button=event.currentTarget;if(button.disabled)return;const prompt=phoneInstallPrompt;phoneInstallPrompt=null;button.disabled=true;button.textContent='Opening install…';try{if(prompt){await prompt.prompt();await prompt.userChoice;}if(here())await renderPhoneApp();}catch{if(here()&&button.isConnected){const menu=button.nextElementSibling;if(menu?.tagName==='DETAILS')menu.open=true;const message=document.createElement('p');message.setAttribute('role','status');message.textContent='Installation could not open. Use Chrome’s menu below.';button.replaceWith(message);}}});
  if(demo)return;
  if(installFirst)return;
  if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive notifications. Open Club Batting in a supported, up-to-date browser.';return;}
@@ -19534,7 +19579,7 @@ async function renderPhoneApp(){
   const {data,error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'get',p_data:{endpoint:sub?.endpoint||null}});if(error)throw error;if(!here())return;
   const status=document.getElementById('phoneNotificationStatus'),button=document.getElementById('enablePhoneNotifications'),off=document.getElementById('disablePhoneNotifications'),choices=document.getElementById('phoneNotificationChoices');
   if(!data.configured){status.textContent='Notifications are not configured yet. Your inbox is available.';return;}
-  if(Notification.permission==='denied'){status.textContent='Notifications are blocked. Allow them in your phone or browser notification settings, then return here.';if(sub){off.hidden=false;off.onclick=async()=>{const r=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(!r.error){await phoneWorkerMessage('CB_SIGN_OUT');await renderPhoneApp();}};}return;}
+  if(Notification.permission==='denied'){status.textContent='Notifications are blocked. Allow them in your phone or browser notification settings, then return here.';if(sub){off.hidden=false;off.onclick=async()=>{if(phoneSettingsBusy)return;phoneSettingsBusy=true;off.disabled=true;const label=off.textContent;off.textContent='Turning off…';try{const r=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(r.error)throw r.error;if(!here())return;await phoneWorkerMessage('CB_SIGN_OUT');if(here()){await renderPhoneApp();if(here())document.getElementById('phoneActionStatus').textContent='Notifications turned off.';}}catch(error){if(here())document.getElementById('phoneActionStatus').textContent=error.message||'Could not turn off notifications. Try again.';}finally{phoneSettingsBusy=false;if(off.isConnected){off.disabled=false;off.textContent=label;}}};}return;}
   const enabled=!!(sub&&data.subscription_id&&data.club_enabled);
   const anyUpdates=data.preferences.messages||data.preferences.coaching;
   const choicePrompt='Which updates would you like?';
@@ -19546,14 +19591,14 @@ async function renderPhoneApp(){
   if(enabled)await phoneWorkerMessage('CB_BIND',data.binding);
   choices.onchange=()=>{button.textContent=enabled?'Save notification choices':'Enable notifications';button.disabled=false;};
   const disable=async()=>{
-   if(phoneSettingsBusy)return;phoneSettingsBusy=true;off.disabled=true;button.disabled=true;
-   try{if(sub){const {error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(error)throw error;await sub.unsubscribe();}await phoneWorkerMessage('CB_SIGN_OUT');if(here())await renderPhoneApp();}
+   if(phoneSettingsBusy)return;phoneSettingsBusy=true;const label=off.textContent,buttonWasDisabled=button.disabled;off.disabled=true;off.textContent='Turning off…';button.disabled=true;choices.querySelectorAll('input').forEach(input=>input.disabled=true);document.getElementById('phoneActionStatus').textContent='';
+   try{if(sub){const {error}=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'disable',p_data:{endpoint:sub.endpoint}});if(error)throw error;await sub.unsubscribe();}await phoneWorkerMessage('CB_SIGN_OUT');if(here()){await renderPhoneApp();if(here())document.getElementById('phoneActionStatus').textContent='Notifications turned off.';}}
    catch(e){if(here())document.getElementById('phoneActionStatus').textContent=e.message||'Could not turn off notifications. Try again.';}
-   finally{phoneSettingsBusy=false;if(off.isConnected)off.disabled=false;}
+   finally{phoneSettingsBusy=false;if(off.isConnected){off.disabled=false;off.textContent=label;button.disabled=buttonWasDisabled;choices.querySelectorAll('input').forEach(input=>input.disabled=false);}}
   };
   off.onclick=disable;
   button.onclick=async()=>{
-   if(phoneSettingsBusy)return;phoneSettingsBusy=true;button.disabled=true;const result=document.getElementById('phoneActionStatus');
+   if(phoneSettingsBusy)return;phoneSettingsBusy=true;const label=button.textContent,offWasDisabled=off.disabled;button.disabled=true;button.textContent=enabled?'Saving…':'Enabling…';off.disabled=true;choices.querySelectorAll('input').forEach(input=>input.disabled=true);const result=document.getElementById('phoneActionStatus');result.textContent='';
    try{
     // Keep the browser permission request directly within this user click (required on iOS).
     const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
@@ -19563,8 +19608,8 @@ async function renderPhoneApp(){
     if(!here())return;
     const json=sub.toJSON(),saved=await supabase.rpc('phone_app_api',{p_club_id:clubId,p_action:'register',p_data:{endpoint:sub.endpoint,p256dh:json.keys.p256dh,auth:json.keys.auth,messages:document.getElementById('phoneMessages').checked,coaching:document.getElementById('phoneCoaching').checked}});
     if(saved.error)throw saved.error;if(!here())return;await phoneWorkerMessage('CB_BIND',saved.data.binding);await renderPhoneApp();invalidatePhoneSetupPrompt();
-   }catch(e){if(here()){result.textContent=`Notifications could not be enabled. ${e.message||'Please try again.'}`;button.disabled=false;}}
-   finally{phoneSettingsBusy=false;}
+   }catch(e){if(here()){result.textContent=`Notifications could not be saved. ${e.message||'Please try again.'}`;button.disabled=false;}}
+   finally{phoneSettingsBusy=false;if(button.isConnected){button.textContent=label;button.disabled=false;off.disabled=offWasDisabled;choices.querySelectorAll('input').forEach(input=>input.disabled=false);}}
   };
  }catch(error){if(here()){
   document.getElementById('phoneNotificationStatus').textContent=error.message||'Could not check notifications. Please try again.';
@@ -20024,9 +20069,9 @@ function seRosterSaveState(){
 function seRoster(){
  const s=ensureSelections();if(!seCanSetup())return seReadonlyPlayingList();
  if(s.rosterPanel==='inactive')return seInactivePlayers();const players=s.data.roster.filter(p=>p.active);
- document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><button class="btn" id="seImportRoster">Import / refresh registration CSV</button><button class="btn ghost" id="seAddPlayer">Add player</button><button class="btn ghost" id="seRosterTemplate">CSV template</button><button class="se-inactive-link" id="seFindInactive" type="button">Inactive players</button></div>${seInviteButton()}${s.data.signup_followup?.error?'<p class="se-muted">Player follow-up could not load. Use Refresh to check.</p>':''}<form id="seRosterForm" class="se-card" style="margin-top:12px">${seRosterFilters()}<div class="se-roster-head" aria-hidden="true"><span>Player</span><div class="se-roster-controls"><span>Usual grade</span><span>Batting role</span><span>Bowling role</span><span>Workload</span><span>WK</span></div><span></span></div><div id="seRosterRows">${players.map(seRosterRow).join('')}</div><p class="se-roster-empty" id="seRosterEmpty" hidden></p>${players.length?'<div class="se-roster-save"><button type="submit" class="btn" id="seSaveRosterRoles">Save changes</button></div>':''}</form>`;
+ document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><button class="btn" id="seImportRoster">Import registration CSV</button><button class="btn ghost" id="seAddPlayer">Add player</button><button class="btn ghost" id="seRosterTemplate">Download CSV template</button><button class="se-inactive-link" id="seFindInactive" type="button">Inactive players</button></div>${seInviteButton()}${s.data.signup_followup?.error?'<p class="se-muted">Player follow-up could not load. Use Refresh to check.</p>':''}<form id="seRosterForm" class="se-card" style="margin-top:12px">${seRosterFilters()}<div class="se-roster-head" aria-hidden="true"><span>Player</span><div class="se-roster-controls"><span>Usual grade</span><span>Batting role</span><span>Bowling role</span><span>Workload</span><span>WK</span></div><span></span></div><div id="seRosterRows">${players.map(seRosterRow).join('')}</div><p class="se-roster-empty" id="seRosterEmpty" hidden></p>${players.length?'<div class="se-roster-save"><button type="submit" class="btn" id="seSaveRosterRoles">Save changes</button></div>':''}</form>`;
  document.getElementById('seFindInactive').onclick=()=>{if(!confirmLeaveSelections())return;s.rosterPanel='inactive';s.inactiveSearch='';s.rosterOpen=null;seInactivePlayers();};
- seBindInvites();seBindRosterSearch();document.getElementById('seImportRoster').onclick=()=>{if(confirmLeaveSelections())seImport();};document.getElementById('seAddPlayer').onclick=()=>{if(confirmLeaveSelections())sePlayerEditor();};document.getElementById('seRosterTemplate').onclick=()=>seDownload('Playing-list-template.csv','Registration ID,Player name,Usual grade,Player email\r\n','text/csv');
+ seBindInvites();seBindRosterSearch();document.getElementById('seImportRoster').onclick=()=>{if(confirmLeaveSelections())seImport();};document.getElementById('seAddPlayer').onclick=()=>{if(confirmLeaveSelections())sePlayerEditor();};document.getElementById('seRosterTemplate').onclick=event=>{seDownload('Playing-list-template.csv','Registration ID,Player name,Usual grade,Player email\r\n','text/csv');event.currentTarget.textContent='Download started';};
  document.querySelectorAll('[data-se-expand-player]').forEach(button=>button.onclick=()=>{s.rosterOpen=s.rosterOpen===button.dataset.seExpandPlayer?null:button.dataset.seExpandPlayer;document.querySelectorAll('#seRosterForm [data-se-roster-id]').forEach(row=>{const open=row.dataset.seRosterId===s.rosterOpen,toggle=row.querySelector('[data-se-expand-player]'),p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);row.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',(open?'Close':'Edit')+' roles for '+p.name);toggle.innerHTML=(open?'Close':'Edit')+' <span aria-hidden="true">⌄</span>';});});
  document.querySelectorAll('[data-se-edit-player]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){const p=s.data.roster.find(p=>p.id===button.dataset.seEditPlayer);sePlayerEditor(p);if(!p.user_id||seNeedsAccountLink(p))document.getElementById('seAccountLink').open=true;}});document.querySelectorAll('[data-se-player-calendar]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){s.view='availability';drawSelections();seAvailability(button.dataset.sePlayerCalendar);}});
  const form=document.getElementById('seRosterForm');form.addEventListener('change',event=>{const row=event.target.closest('[data-se-roster-id]');if(!row)return;const p={...s.data.roster.find(p=>p.id===row.dataset.seRosterId),grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked};row.querySelector('.se-roster-summary').textContent=seRosterSummary(p);row.querySelector('.se-roster-grade-label').textContent=p.grade||'No usual grade';seRosterSaveState();});
@@ -20330,7 +20375,7 @@ function seSettingsSaveState(form,label,action){
 }
 function seRenderDefaults(){
  const s=ensureSelections(),settings=s.data.access.fixture_defaults||{revision:0,rows:[]},host=document.getElementById('seFixtureDefaults');let sequence=0;
- host.innerHTML='<summary>Grade &amp; format defaults</summary><p class="se-form-note">Fixtures use these overs automatically. Saving updates current and upcoming fixtures that use the default, including their published team graphics. Deliberate fixture overrides and past matches keep their recorded overs.</p><form id="seDefaultsForm"><div id="seDefaultRows"></div><div class="se-actions se-editor-actions"><button class="btn ghost" type="button" id="seAddDefault">Add default</button><button class="btn" type="submit">Save defaults</button></div></form>';
+ host.innerHTML='<summary>Grade &amp; format defaults</summary><p class="se-form-note">Applies to current and upcoming fixtures using these defaults, including published graphics. Past matches and manually set overs stay unchanged.</p><form id="seDefaultsForm"><div id="seDefaultRows"></div><div class="se-actions se-editor-actions"><button class="btn ghost" type="button" id="seAddDefault">Add default</button><button class="btn" type="submit">Save defaults</button></div></form>';
  const form=document.getElementById('seDefaultsForm'),rows=document.getElementById('seDefaultRows'),changed=seSettingsSaveState(form,'Save defaults','fixture_defaults');
  const add=(row={})=>{const key='default_'+sequence++,div=document.createElement('div');div.className='se-default-row';div.dataset.key=key;
   div.innerHTML=`${seGradeFields(key,row.grade,row.grade_group_id)}<label>Format<select name="${key}_format" required>${seOpt([['','Choose format'],...SE_FORMATS],row.format||'')}</select></label><label>Overs per innings<input name="${key}_overs" type="number" min="1" max="999" step="1" value="${row.overs??''}" placeholder="No fixed limit"></label><button type="button" class="btn ghost" aria-label="Remove default">Remove</button>`;
@@ -20402,7 +20447,7 @@ function sePublicationChanges(f,data=ensureSelections().data){
 }
 function sePublicationChangeSummary(f,data=ensureSelections().data){
  const changes=sePublicationChanges(f,data),heading=f.published?'Changes from '+sePublicationStamp(f,data):'First publication';
- return `<div class="se-publication-changes" style="overflow-wrap:anywhere"><p><strong>${seEsc(heading)}</strong></p>${changes.length?`<ul>${changes.map(change=>`<li><strong>${seEsc(change.label)}:</strong> ${seEsc(change.before)} → ${seEsc(change.after)}</li>`).join('')}</ul>`:'<p class="se-muted">No player, appointment, playing date, start time or match instruction changes. Other saved fixture settings will be included.</p>'}</div>`;
+ return `<div class="se-publication-changes" style="overflow-wrap:anywhere"><p><strong>${seEsc(heading)}</strong></p>${changes.length?`<ul>${changes.map(change=>`<li><strong>${seEsc(change.label)}:</strong> ${seEsc(change.before)} → ${seEsc(change.after)}</li>`).join('')}</ul>`:'<p class="se-muted">Only other fixture settings have changed.</p>'}</div>`;
 }
 function seReviewLabel(f){const r=ensureSelections().data.reviews?.find(r=>r.id===f.id);return r?(r.draft_changed?'Changed since shared':'Shared with captain'):'Not yet shared with captain';}
 function seSendReview(fs){recordSelectionDrawer('send_review',{ids:fs.map(f=>f.id)});queueMicrotask(bindSelectionBackButtons);
@@ -20413,15 +20458,15 @@ function seSendReview(fs){recordSelectionDrawer('send_review',{ids:fs.map(f=>f.i
 function seReviews(){
  const s=ensureSelections(),reviews=[...(s.data.reviews||[])].sort((a,b)=>b.sent_at.localeCompare(a.sent_at));
  document.getElementById('seContent').innerHTML=reviews.length?`<div class="se-grid">${reviews.map(r=>`<section class="se-card"><h2>${seEsc(r.snapshot.details.grade)}</h2><p>v ${seEsc(r.snapshot.details.opposition)} · ${r.snapshot.details.days.map(d=>seDate(d.date)).join(' / ')}</p><p class="se-muted">${seEsc(r.captain_name)} · ${r.draft_changed?'Changed since shared':'Shared draft'}</p><button class="btn" data-se-review="${r.id}">View &amp; comment</button></section>`).join('')}</div>`:'<div class="se-card se-empty">Drafts sent to captains appear here.</div>';
- document.querySelectorAll('[data-se-review]').forEach(b=>b.onclick=()=>seReviewScreen(b.dataset.seReview));
+ document.querySelectorAll('[data-se-review]').forEach(b=>b.onclick=()=>seReadButton(b,'Loading…',()=>seReviewScreen(b.dataset.seReview)));
 }
 async function seReviewScreen(id){recordSelectionDrawer('captain',{id});
  const s=ensureSelections(),r=s.data.reviews?.find(x=>x.id===id);if(!r)return;
  const drawer=s.navigationDrawer,view=s.view,isCurrent=()=>s===selectionState&&currentTab==='teams'&&s.view===view&&s.navigationDrawer===drawer&&!!document.getElementById('seContent');
  try{const posts=await seRPC('review_posts',{id});if(!isCurrent())return;const snap=r.snapshot,d=snap.details,name=pid=>snap.players.find(p=>p.id===pid)?.name||'Vacant';
-  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(d.grade)} · captain input</h2><button class="btn ghost" id="seReviewClose">Back</button></div><p class="se-muted">Private to this captain and selectors. Final selection rests with the Head of Selections.</p><p>v ${seEsc(d.opposition)} · ${seEsc(seFormatLabel(d))}</p><p>${d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}${d.meeting?' · '+seEsc(d.meeting):''}</p>${r.draft_changed?'<p class="se-warn">Selectors have since changed this draft.</p>':''}<ol>${snap.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(snap,slot.d1,0)}${seSnapshotSplit(snap,slot)?` (Day 1) / ${seSnapshotName(snap,slot.d2,1)} (Day 2)`:''}</li>`).join('')}</ol><p class="se-muted se-review-prompt">Please check the draft and add any thoughts here.</p><button class="btn ghost" id="seReviewRefresh">Refresh comments</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}${p.review_revision!==snap.draft_revision?' · earlier draft':''}</small><p>${seEsc(p.body)}</p></article>`).join('')}<form id="seReviewPostForm"><label>Comment<textarea name="body" required maxlength="1500" rows="3"></textarea></label><button class="btn se-editor-actions" type="submit">Add comment</button></form></section>`;
+  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(d.grade)} · captain input</h2><button class="btn ghost" id="seReviewClose">Back</button></div><p class="se-muted">Private to the captain and selectors. The Head of Selections makes the final decision.</p><p>v ${seEsc(d.opposition)} · ${seEsc(seFormatLabel(d))}</p><p>${d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)+(day.start?' · '+day.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}${d.meeting?' · '+seEsc(d.meeting):''}</p>${r.draft_changed?'<p class="se-warn">Selectors have since changed this draft.</p>':''}<ol>${snap.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(snap,slot.d1,0)}${seSnapshotSplit(snap,slot)?` (Day 1) / ${seSnapshotName(snap,slot.d2,1)} (Day 2)`:''}</li>`).join('')}</ol><button class="btn ghost" id="seReviewRefresh">Refresh comments</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}${p.review_revision!==snap.draft_revision?' · earlier draft':''}</small><p>${seEsc(p.body)}</p></article>`).join('')}<form id="seReviewPostForm"><label>Comment<textarea name="body" required maxlength="1500" rows="3"></textarea></label><button class="btn se-editor-actions" type="submit">Add comment</button></form></section>`;
   document.getElementById('seReviewClose').onclick=()=>appNavigationBack(()=>{if(confirmLeaveSelections()){s.view='reviews';drawSelections();}});
-  document.getElementById('seReviewRefresh').onclick=async()=>{if(confirmLeaveSelections()){await seReload();if(!isCurrent())return;if(s.data.reviews.some(x=>x.id===id))await seReviewScreen(id);else drawSelections();}};
+  document.getElementById('seReviewRefresh').onclick=event=>{if(!confirmLeaveSelections())return;return seReadButton(event.currentTarget,'Refreshing…',async()=>{await seReload();if(!isCurrent())return;if(s.data.reviews.some(x=>x.id===id))await seReviewScreen(id);else drawSelections();});};
   const form=document.getElementById('seReviewPostForm');form.oninput=()=>s.formDirty=true;form.onsubmit=async e=>{e.preventDefault();if(await seMutate('review_post',{id,body:form.elements.body.value,review_revision:snap.draft_revision})&&s===selectionState&&currentTab==='teams'&&s.view===view)await seReviewScreen(id);};
  }catch(e){if(isCurrent())seNotice(e.message);}
 }
@@ -20430,7 +20475,7 @@ function sePublishReview(fs){recordSelectionDrawer('publish',{ids:fs.map(f=>f.id
  const s=ensureSelections(),changed=fs.filter(seDraftChanged),issues=changed.flatMap(f=>(f.details.cancelled?[]:f.issues||[]).map(i=>({...i,text:f.details.grade+': '+i.text}))),errors=issues.filter(i=>i.level==='error'),warnings=issues.filter(i=>i.level==='warning'&&i.code!=='short_team'),short=seShortTeams(changed);
  const unlinked=[...new Set(changed.filter(f=>!f.details.cancelled).flatMap(f=>f.slots.flatMap(x=>[x.d1,x.d2])).filter(Boolean))].map(id=>s.data.roster.find(p=>p.id===id)).filter(p=>p&&!p.user_id);
  seNotice('');
- document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2 id="sePublishHeading" tabindex="-1">Review team publication</h2><p><strong>Not published yet.</strong> Confirm below to update Teams, make team graphics available and create player messages.</p>${changed.length?`<p>${changed.length} changed team${changed.length===1?'':'s'}:</p>`:'<p>No unpublished changes for these teams.</p>'}${changed.map(f=>`<details class="se-issues"><summary><strong>${seEsc(f.details.grade)}</strong> · ${f.details.cancelled?'Cancelled':seTeamNumbers(f)} · ${seEsc(f.details.days.map(d=>seDate(d.date)).join(' / '))}</summary><p>v ${seEsc(f.details.opposition)} · ${seEsc(seReviewLabel(f))}</p>${sePublicationChangeSummary(f,s.data)}</details>`).join('')}${errors.length?`<div role="alert"><p><strong>Fix these issues before publishing:</strong></p>${errors.map(i=>`<p class="se-warn">${seEsc(i.text)}</p>`).join('')}</div>`:''}${warnings.length?`<details class="se-issues"><summary>${warnings.length} role and team-balance warnings</summary>${warnings.map(i=>`<p class="se-muted">${seEsc(i.text)}</p>`).join('')}</details>`:''}${unlinked.length?`<p class="se-muted">${unlinked.length} players have no linked account. Share the team list with them.</p>`:''}${short.map(({fixture:f,days})=>`<label class="se-check se-warn"><input type="checkbox" data-se-ack-short="${seEsc(f.id)}">Publish ${seEsc(f.details.grade)} with vacant places (${days.map(d=>(f.details.days.length>1?'Day '+d.day+': ':'')+d.count+'/11').join(' · ')})</label>`).join('')}${warnings.length?'<label class="se-check"><input type="checkbox" id="seAcknowledge">I have reviewed the role and team-balance warnings</label>':''}${!s.data.head_selector?'<p class="se-warn">Only the current Head of Selections or Acting Head can publish.</p>':''}<p id="sePublishStatus" class="se-warn" role="status" aria-live="polite" tabindex="-1"></p><div class="se-actions"><button class="btn secondary" id="seConfirmPublish" aria-describedby="sePublishStatus" ${!s.data.head_selector||errors.length||!changed.length?'disabled':''}>${changed.every(f=>f.published)&&changed.length?'Republish':'Publish'} ${changed.length} team${changed.length===1?'':'s'} &amp; notify players</button><button class="btn ghost" id="seBackBoard">Back to Selection board</button></div></section>`;
+ document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2 id="sePublishHeading" tabindex="-1">Review team publication</h2><p><strong>Not published yet.</strong> Publishing updates Teams and graphics and notifies players.</p>${changed.length?`<p>${changed.length} changed team${changed.length===1?'':'s'}:</p>`:'<p>No unpublished changes for these teams.</p>'}${changed.map(f=>`<details class="se-issues"><summary><strong>${seEsc(f.details.grade)}</strong> · ${f.details.cancelled?'Cancelled':seTeamNumbers(f)} · ${seEsc(f.details.days.map(d=>seDate(d.date)).join(' / '))}</summary><p>v ${seEsc(f.details.opposition)} · ${seEsc(seReviewLabel(f))}</p>${sePublicationChangeSummary(f,s.data)}</details>`).join('')}${errors.length?`<div role="alert"><p><strong>Fix these issues before publishing:</strong></p>${errors.map(i=>`<p class="se-warn">${seEsc(i.text)}</p>`).join('')}</div>`:''}${warnings.length?`<details class="se-issues"><summary>${warnings.length} role and team-balance warnings</summary>${warnings.map(i=>`<p class="se-muted">${seEsc(i.text)}</p>`).join('')}</details>`:''}${unlinked.length?`<p class="se-muted">${unlinked.length} players have no linked account. Share the team list with them.</p>`:''}${short.map(({fixture:f,days})=>`<label class="se-check se-warn"><input type="checkbox" data-se-ack-short="${seEsc(f.id)}">Publish ${seEsc(f.details.grade)} with vacant places (${days.map(d=>(f.details.days.length>1?'Day '+d.day+': ':'')+d.count+'/11').join(' · ')})</label>`).join('')}${warnings.length?'<label class="se-check"><input type="checkbox" id="seAcknowledge">I have reviewed the role and team-balance warnings</label>':''}${!s.data.head_selector?'<p class="se-warn">Only the current Head of Selections or Acting Head can publish.</p>':''}<p id="sePublishStatus" class="se-warn" role="status" aria-live="polite" tabindex="-1"></p><div class="se-actions"><button class="btn secondary" id="seConfirmPublish" aria-describedby="sePublishStatus" ${!s.data.head_selector||errors.length||!changed.length?'disabled':''}>${changed.every(f=>f.published)&&changed.length?'Republish':'Publish'} ${changed.length} team${changed.length===1?'':'s'} &amp; notify players</button><button class="btn ghost" id="seBackBoard">Back to Selection board</button></div></section>`;
  document.getElementById('seBackBoard').onclick=seBoard;
  document.getElementById('seConfirmPublish').onclick=async()=>{
   if(s.busy||s.pending)return;
@@ -20543,12 +20588,25 @@ function seEsc(v){return esc(String(v??''));}
 function seOpt(opts,value){return opts.map(([v,label])=>`<option value="${seEsc(v)}" ${v===value?'selected':''}>${seEsc(label)}</option>`).join('');}
 function seName(id){return ensureSelections().data?.roster.find(p=>p.id===id)?.name||'Choose player';}
 function seNotice(text){const s=ensureSelections();s.notice=text;for(const id of ['seNotice','sePublishStatus']){const n=document.getElementById(id);if(n)n.textContent=text;}}
+function seButtonWorking(button,label){
+ if(!button?.isConnected||!button.closest('#sePage'))return ()=>{};
+ const original=button.innerHTML,aria=button.getAttribute('aria-busy');button.textContent=label;button.setAttribute('aria-busy','true');
+ return ()=>{if(!button.isConnected)return;button.innerHTML=original;if(aria===null)button.removeAttribute('aria-busy');else button.setAttribute('aria-busy',aria);};
+}
+function seTrackActionButtons(host,s){
+ const remember=event=>{const button=event.type==='submit'?(event.submitter||event.target.querySelector('button[type="submit"]')):event.target.closest?.('button');if(!button||!host.contains(button)||button.disabled)return;s.actionButton=button;setTimeout(()=>{if(s.actionButton===button)s.actionButton=null;},0);};
+ host.addEventListener('click',remember,true);host.addEventListener('submit',remember,true);
+}
+async function seReadButton(button,label,run){
+ if(button.disabled)return;const restore=seButtonWorking(button,label);button.disabled=true;
+ try{return await run();}catch(error){if(button.isConnected)seNotice(error.message||'Could not load. Try again.');}finally{restore();if(button.isConnected){if(button.dataset.seWasDisabled!==undefined)button.dataset.seWasDisabled='0';else button.disabled=false;}}
+}
 function sePersist(){const s=ensureSelections();try{const key='selections-pending-'+s.key;s.pending?sessionStorage.setItem(key,JSON.stringify(s.pending)):sessionStorage.removeItem(key);}catch{}}
 function confirmLeaveSelections(){if(currentTab==='teams'&&selectionState?.view==='socials'&&!socialCanLeave())return false;if(fixtureCorrectionState&&!fixtureCorrectionAbandon())return false;const s=selectionState;if(currentTab!=='teams'||!s)return true;if(s.busy){alert('The selection change is saving. Please wait.');return false;}if(s.pending){alert('This save is not confirmed. Retry it or download the recovery file before leaving.');return false;}if(s.formDirty&&!confirm('Leave these unsaved form changes?'))return false;s.formDirty=false;return true;}
 async function seRPC(action,data={}){const {data:result,error}=await supabase.rpc('club_selections_api',{p_club_id:club.id,p_action:action,p_data:data});if(error)throw Error(error.message+(error.details&&error.details.startsWith('[')?' '+error.details:''));return result;}
 async function seReload(){const s=ensureSelections(),sequence=(s.loadSequence||0)+1;s.loadSequence=sequence;const result=await seRPC('context'),followup=await seFetchSignupFollowup(club.id);result.signup_followup=followup;try{const access=await supabase.rpc('club_socials_api',{p_club_id:s.key.split(':').slice(1).join(':'),p_action:'access'});result.socials=!access.error&&access.data?.allowed===true;result.social_handover_count=result.socials?access.data?.handover_count||0:0;}catch{result.socials=false;}if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence)return false;s.data=result;if(result.socials&&!s.socialSetupOpened&&new URLSearchParams(location.search).get('social_accounts')==='1'){s.socialSetupOpened=true;s.view='socials';socialEnsure().view='accounts';}if(!result.selector){s.undo=[];s.active=null;}selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
-async function seMutate(action,data,{undo=null,picker=null,order=null}={}){const s=ensureSelections();if(s.busy)return false;if(!s.pending&&!seGuardFixtureEdit(action,data))return false;if(action==='save_board'&&!s.pending)data={...data,fixtures:data.fixtures.map(f=>sePrepareMatch(f))};const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(undo?{undo}:{}),...(picker?{picker}:{}),...(order?{order}:{})};s.pending=pending;s.busy=true;sePersist();seNotice(pending.action==='publish'?'Publishing teams…':'Saving…');seLock(true);
- try{const result=await seRPC(pending.action,pending.data);if(s!==selectionState)return false;if(pending.action==='publish'&&result?.published!==true)throw Error('Publication was not confirmed. Retry the same request.');s.formDirty=false;const loaded=await seReload();if(!loaded||s!==selectionState||s.key!==selectionsScopeKey())return false;s.pending=null;sePersist();if(pending.undo)s.undo.push({before:pending.undo,expected:result.revisions});if(action==='save_roster')s.rosterSaved=true;if(pending.action==='publish'){s.view='published';s.active=null;s.publicationResult={ids:pending.data.ids,recipients:Number(result.recipients)||0};}s.notice=action==='publication_delegate'?(data.operation==='hand_back'?'Publishing handed back to the Head of Selections ✓':'Delegation saved ✓'):action==='conversation'?(data.spoken?'Marked spoken to ✓':'Conversation marked as needed'):action==='fixture_lock'?(data.unlock?'Unlocked · republish changes to notify players · locks after 30 minutes':'Team locked'):action==='send_review'?'Sent to captains ✓':action==='publish'?`${pending.data.ids.length} team${pending.data.ids.length===1?'':'s'} published ✓ · Messages created for ${Number(result.recipients)||0} club members.${Number.isInteger(result.groups?.added_memberships)?' Usual grades updated in Club Batting; existing grades kept.':''}${result.groups?.unlinked_players?.length?' Some players still need a Club Batting player link.':''}${result.groups?.unmapped_grades?.length?' Link these grades in Settings: '+result.groups.unmapped_grades.map(g=>g.grade).join(', ')+'.':''}`:pending.order?.message||'Saved ✓';if(pending.picker||pending.order)sePickerSaved(pending.picker);s.busy=false;drawSelections();if(pending.action==='publish')seRevealPublication('seNotice');if(pending.picker&&currentTab==='teams'&&s.view==='board')seFocusSlot(pending.picker.active);if(pending.order&&currentTab==='teams'&&s.view==='board')seFocusOrder(pending.order.id,pending.order.slot);if(['save_roster','import_roster','selectors','publication_delegate','save_board','save_fixture','publish'].includes(action))void refreshClubMessageBadge();return true;}catch(error){if(pending.action==='availability_batch'&&/^(A player updated their calendar|Playing list changed|A calendar changed)/.test(error.message)){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Availability changed while you were editing. Review the saved choices and try again.';}else if(pending.action==='post'&&error.message.startsWith('This match conversation is closed.')||error.message.startsWith('Completed fixture is locked.')||error.message.startsWith('Published team is locked.')||['conversation','grade_levels'].includes(action)&&/^(This selection|Conversation status|Settings changed|Club Admin)/.test(error.message)||error.message.startsWith('Only the current Head of Selections')||action==='publication_delegate'&&/^(Only |Choose |Assign |Selection responsibilities changed)/.test(error.message)){s.pending=null;sePersist();s.notice=error.message;}else s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;s.busy=false;drawSelections();if(pending.action==='publish')seRevealPublication('seNotice');return false;}finally{s.busy=false;seLock(false);}}
+async function seMutate(action,data,{undo=null,picker=null,order=null}={}){const s=ensureSelections();if(s.busy)return false;if(!s.pending&&!seGuardFixtureEdit(action,data))return false;if(action==='save_board'&&!s.pending)data={...data,fixtures:data.fixtures.map(f=>sePrepareMatch(f))};const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(undo?{undo}:{}),...(picker?{picker}:{}),...(order?{order}:{})};const working=pending.action==='publish'?'Publishing…':pending.action==='import_roster'?'Importing…':['send_review','post','review_post'].includes(pending.action)?'Sending…':pending.action==='fixture_lock'?(pending.data.unlock?'Unlocking…':'Locking…'):'Saving…',restoreButton=seButtonWorking(s.actionButton,working);s.actionButton=null;s.pending=pending;s.busy=true;sePersist();seNotice(pending.action==='publish'?'Publishing teams…':working);seLock(true);
+ try{const result=await seRPC(pending.action,pending.data);if(s!==selectionState)return false;if(pending.action==='publish'&&result?.published!==true)throw Error('Publication was not confirmed. Retry the same request.');s.formDirty=false;const loaded=await seReload();if(!loaded||s!==selectionState||s.key!==selectionsScopeKey())return false;s.pending=null;sePersist();if(pending.undo)s.undo.push({before:pending.undo,expected:result.revisions});if(action==='save_roster')s.rosterSaved=true;if(pending.action==='publish'){s.view='published';s.active=null;s.publicationResult={ids:pending.data.ids,recipients:Number(result.recipients)||0};}s.notice=action==='publication_delegate'?(data.operation==='hand_back'?'Publishing handed back to the Head of Selections ✓':'Delegation saved ✓'):action==='conversation'?(data.spoken?'Marked spoken to ✓':'Conversation marked as needed'):action==='fixture_lock'?(data.unlock?'Unlocked · republish changes to notify players · locks after 30 minutes':'Team locked'):action==='send_review'?'Sent to captains ✓':action==='publish'?`${pending.data.ids.length} team${pending.data.ids.length===1?'':'s'} published ✓ · Messages created for ${Number(result.recipients)||0} club members.${Number.isInteger(result.groups?.added_memberships)?' Usual grades updated in Club Batting; existing grades kept.':''}${result.groups?.unlinked_players?.length?' Some players still need a Club Batting player link.':''}${result.groups?.unmapped_grades?.length?' Link these grades in Settings: '+result.groups.unmapped_grades.map(g=>g.grade).join(', ')+'.':''}`:pending.order?.message||'Saved ✓';if(pending.picker||pending.order)sePickerSaved(pending.picker);s.busy=false;drawSelections();if(pending.action==='publish')seRevealPublication('seNotice');if(pending.picker&&currentTab==='teams'&&s.view==='board')seFocusSlot(pending.picker.active);if(pending.order&&currentTab==='teams'&&s.view==='board')seFocusOrder(pending.order.id,pending.order.slot);if(['save_roster','import_roster','selectors','publication_delegate','save_board','save_fixture','publish'].includes(action))void refreshClubMessageBadge();return true;}catch(error){if(pending.action==='availability_batch'&&/^(A player updated their calendar|Playing list changed|A calendar changed)/.test(error.message)){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Availability changed while you were editing. Review the saved choices and try again.';}else if(pending.action==='post'&&error.message.startsWith('This match conversation is closed.')||error.message.startsWith('Completed fixture is locked.')||error.message.startsWith('Published team is locked.')||['conversation','grade_levels'].includes(action)&&/^(This selection|Conversation status|Settings changed|Club Admin)/.test(error.message)||error.message.startsWith('Only the current Head of Selections')||action==='publication_delegate'&&/^(Only |Choose |Assign |Selection responsibilities changed)/.test(error.message)){s.pending=null;sePersist();s.notice=error.message;}else s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;s.busy=false;drawSelections();if(pending.action==='publish')seRevealPublication('seNotice');return false;}finally{s.busy=false;seLock(false);restoreButton();}}
 function seLock(disabled){document.querySelectorAll('#sePage button,#sePage input,#sePage select,#sePage textarea').forEach(x=>{if(disabled){x.dataset.seWasDisabled=x.disabled?'1':'0';x.disabled=true;}else if(x.dataset.seWasDisabled!==undefined){x.disabled=x.dataset.seWasDisabled==='1';delete x.dataset.seWasDisabled;}});}
 function seDownload(name,text,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 function seStyles(){return `<style>
@@ -20592,7 +20650,8 @@ function seSelectionTabs(d){
  return [...(d.admin?[['settings','Settings']]:[]),...(seCanSetup(d)||!captain&&d.signup_followup?.can_view?[['roster','Playing List']]:[]),...(seHasAvailability(d)&&(!captain||seCanSetup(d))?[['availability','Availability']]:[]),...(d.selector?[['board','Selection Board']]:d.admin?[['fixtures','Fixtures']]:[]),...(d.selector||captain||d.reviews?.length?[['reviews','Captain Checks']]:[]),...(d.selector||captain||d.conversations?.length?[['conversations','Player conversations']]:[]),['published','Teams'],...(d.socials?[['socials','Social Graphics']]:[])];
 }
 function drawSelections(){selectionState?.cancelOrder?.();if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const drawer=s.restoreDrawer;s.restoreDrawer=null;s.navigationDrawer=null;const tabs=seSelectionTabs(d);if(!tabs.some(([key])=>key===s.view)&&!(s.view==='availability'&&seIsCaptain(d)&&seHasAvailability(d)))s.view='published';
- document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1><small>${d.access.mode==='standalone'?'Selections subscription':'Selections · connected to Club Batting'}</small></div><div class="se-actions">${d.selector?'<button class="btn" id="seOpenRoom">Selection Room</button>':''}<button class="btn ghost" id="seRefresh">Refresh</button></div></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your proposed change is kept in this browser tab. Retry uses the same request and cannot apply it twice. If another selector changed the team, download your proposal before reloading.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${s.view==='socials'?'':sePublicationWorkflow(d)}<div id="seContent"></div></section>`;
+ document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1></div><div class="se-actions">${d.selector?'<button class="btn" id="seOpenRoom">Selection Room</button>':''}<button class="btn ghost" id="seRefresh">Refresh</button></div></div><div class="se-tabs">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your change is kept here. Retry safely, or download it before reloading the latest teams.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${s.view==='socials'?'':sePublicationWorkflow(d)}<div id="seContent"></div></section>`;
+ seTrackActionButtons(document.getElementById('sePage'),s);
  document.querySelectorAll('[data-se-view]').forEach(b=>b.onclick=()=>seChangeView(b.dataset.seView));
  document.getElementById('seSocialHandover')?.addEventListener('click',()=>{if(!confirmLeaveSelections())return;s.view='socials';socialEnsure().view='managers';drawSelections();});
  selectionRoomController?.sync();document.getElementById('seOpenRoom')?.addEventListener('click',()=>void seSelectionRoom().open());
@@ -20616,7 +20675,7 @@ function seBoardFixtures(){
 }
 function seBoard(){const s=ensureSelections();s.cancelOrder?.();if(!s.data.selector){s.view=s.data.admin?'fixtures':'published';return drawSelections();}if(s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(s.data.fixtures.map(f=>f.details.days[0].date))].sort();
  if(!dates.length){document.getElementById('seContent').innerHTML='<section class="se-card se-drawer"><p>Add a fixture and its playing dates to start selecting.</p><button class="btn" id="seNewFixture">Add first fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';document.getElementById('seNewFixture').onclick=()=>seFixtureEditor();document.getElementById('seUnselected').onclick=seAvailableUnselected;return;}
- document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label>Show fixtures starting <select id="seBoardDate">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label><button class="btn" id="seNewFixture">Add fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button><button class="btn ghost" id="seUndo" ${s.undo.length?'':'disabled'}>Undo last change</button>${fs.some(f=>!seFixtureLocked(f))?'<button class="btn secondary" id="seSendReview">Send to captains</button>':''}${fs.some(f=>!seFixtureLocked(f))&&s.data.head_selector?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}<p id="seOrderHelp" class="se-muted se-order-help">Drag the handle beside a player to change the batting order, or tap it to choose a position. Changes save to the draft. Keyboard: use the arrow keys on a handle.</p><div class="se-board-layout"><div class="se-grid">${fs.map(f=>seTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
+ document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label>Show fixtures starting <select id="seBoardDate">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label><button class="btn" id="seNewFixture">Add fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button><button class="btn ghost" id="seUndo" ${s.undo.length?'':'disabled'}>Undo last change</button>${fs.some(f=>!seFixtureLocked(f))?'<button class="btn secondary" id="seSendReview">Send to captains</button>':''}${fs.some(f=>!seFixtureLocked(f))&&s.data.head_selector?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}<p id="seOrderHelp" class="se-muted se-order-help">Drag or tap a handle to change the batting order. Drafts save automatically. Keyboard: arrow keys.</p><div class="se-board-layout"><div class="se-grid">${fs.map(f=>seTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
  document.getElementById('seUnselected').onclick=seAvailableUnselected;
  document.getElementById('seAssignHead')?.addEventListener('click',()=>{s.view='settings';drawSelections();});
  document.getElementById('seBoardDate').onchange=e=>{s.date=e.target.value;s.boardDateChosen=true;s.active=null;seBoard();recordSelectionNavigation();};document.getElementById('seNewFixture').onclick=()=>seFixtureEditor();document.getElementById('seSendReview')?.addEventListener('click',()=>seWithSavedRoles(fs,seSendReview));document.getElementById('sePublish')?.addEventListener('click',()=>seWithSavedRoles(fs,sePublishReview));
@@ -20766,13 +20825,13 @@ function seUpdateConversationState(){
  for(const button of document.querySelectorAll('[data-se-chat]')){const f=s.data.fixtures.find(f=>f.id===button.dataset.seChat);if(f)button.textContent=seMatchConversationClosed(f,s.data)?'View conversation':'Match conversation';}
  const week=document.getElementById('sePublishedWeek');if(week&&!s.publishedWeek&&week.value!==sePublishedWeeks(s).current&&!s.busy&&!s.pending){sePublished();recordSelectionNavigation();}
 }
-function sePublished(){const s=ensureSelections(),period=sePublishedWeeks(s),fs=period.fixtures.sort((a,b)=>sePublishedDates(a)[0].localeCompare(sePublishedDates(b)[0])||a.published.details.grade.localeCompare(b.published.details.grade,undefined,{numeric:true}));document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label for="sePublishedWeek">Week<select id="sePublishedWeek">${period.weeks.map(week=>`<option value="${week}" ${week===period.selected?'selected':''}>${seEsc(sePublishedWeekLabel(week,period.current))}</option>`).join('')}</select></label>${seIsCaptain(s.data)&&!seCanSetup(s.data)&&s.data.roster.some(p=>p.active&&p.user_id===session.user.id)?'<button class="btn ghost" id="seMyAvailability">My availability</button>':''}</div>`+(fs.length?`<div class="se-grid">${fs.map(f=>{const d=f.published.details,ps=f.published.players,own=s.data.roster.find(p=>p.user_id===session.user.id),name=id=>ps.find(p=>p.id===id)?.name||'Vacant';return `<section class="se-card"><div class="se-team-head"><h2>${seEsc(d.grade)}</h2><p>${seEsc(d.competition)} · v ${seEsc(d.opposition)}</p><p>${seEsc(seFormatLabel(d))}</p><p>${d.days.map((x,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(x.date)+(x.start?' · '+x.start:'')).join(' / ')}</p><p>${seEsc(d.ground)}</p><p>${seEsc(d.meeting)}</p></div>${d.cancelled?'<p>Match cancelled</p>':`<ol>${f.published.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(f.published,slot.d1,0)}${slot.d1===own?.id?' · you':''}${seSnapshotSplit(f.published,slot)?` <span class="se-date-tag">Day 1</span><br>${seSnapshotName(f.published,slot.d2,1)}${slot.d2===own?.id?' · you':''} <span class="se-date-tag">Day 2</span>`:''}</li>`).join('')}</ol>`}<p class="se-muted">${seEsc(sePublicationStamp(f,s.data))}</p><div class="se-actions"><button class="btn ghost" data-se-export="${f.id}">Copy team list</button>${f.can_chat?`<button class="btn" data-se-chat="${f.id}">${seMatchConversationClosed(f,s.data)?'View conversation':'Match conversation'}</button>`:''}</div></section>`;}).join('')}</div>`:'<div class="se-card se-empty">No teams published for this week.</div>');
+function sePublished(){const s=ensureSelections(),period=sePublishedWeeks(s),fs=period.fixtures.sort((a,b)=>sePublishedDates(a)[0].localeCompare(sePublishedDates(b)[0])||a.published.details.grade.localeCompare(b.published.details.grade,undefined,{numeric:true}));document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label for="sePublishedWeek">Week<select id="sePublishedWeek">${period.weeks.map(week=>`<option value="${week}" ${week===period.selected?'selected':''}>${seEsc(sePublishedWeekLabel(week,period.current))}</option>`).join('')}</select></label>${seIsCaptain(s.data)&&!seCanSetup(s.data)&&s.data.roster.some(p=>p.active&&p.user_id===session.user.id)?'<button class="btn ghost" id="seMyAvailability">My availability</button>':''}</div>`+(fs.length?`<div class="se-grid">${fs.map(f=>{const d=f.published.details,ps=f.published.players,own=s.data.roster.find(p=>p.user_id===session.user.id),name=id=>ps.find(p=>p.id===id)?.name||'Vacant';return `<section class="se-card"><div class="se-team-head"><h2>${seEsc(d.grade)}</h2><p>${d.competition?seEsc(d.competition)+' · ':''}v ${seEsc(d.opposition)}</p>${seFormatLabel(d)?`<p>${seEsc(seFormatLabel(d))}</p>`:''}<p>${d.days.map((x,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(x.date)+(x.start?' · '+x.start:'')).join(' / ')}</p>${d.ground?`<p>${seEsc(d.ground)}</p>`:''}${d.meeting?`<p>${seEsc(d.meeting)}</p>`:''}</div>${d.cancelled?'<p>Match cancelled</p>':`<ol>${f.published.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(f.published,slot.d1,0)}${slot.d1===own?.id?' · you':''}${seSnapshotSplit(f.published,slot)?` <span class="se-date-tag">Day 1</span><br>${seSnapshotName(f.published,slot.d2,1)}${slot.d2===own?.id?' · you':''} <span class="se-date-tag">Day 2</span>`:''}</li>`).join('')}</ol>`}<p class="se-muted">${seEsc(sePublicationStamp(f,s.data))}</p><div class="se-actions"><button class="btn ghost" data-se-export="${f.id}">Copy team list</button>${f.can_chat?`<button class="btn" data-se-chat="${f.id}">${seMatchConversationClosed(f,s.data)?'View conversation':'Match conversation'}</button>`:''}</div></section>`;}).join('')}</div>`:'<div class="se-card se-empty">No teams published for this week.</div>');
  document.getElementById('seMyAvailability')?.addEventListener('click',()=>seChangeView('availability'));
  document.getElementById('sePublishedWeek').onchange=event=>{s.publishedWeek=event.target.value===period.current?'':event.target.value;sePublished();recordSelectionNavigation();};
  if(s.publicationResult&&s.data.socials){document.getElementById('seContent').insertAdjacentHTML('afterbegin','<div class="se-actions"><button class="btn" id="sePublishedGraphics">Create team graphics</button></div>');document.getElementById('sePublishedGraphics').onclick=()=>{if(!confirmLeaveSelections())return;const social=socialEnsure();social.view='graphics';social.date=s.data.fixtures.find(f=>s.publicationResult.ids.includes(f.id))?.published?.details?.days?.[0]?.date||'';social.selected=new Set(s.publicationResult.ids);s.view='socials';drawSelections();};}
 
- document.querySelectorAll('[data-se-export]').forEach(b=>b.onclick=async()=>{const text=seTeamText(fs.find(f=>f.id===b.dataset.seExport),club.name);try{await navigator.clipboard.writeText(text);seNotice('Team list copied. You can paste it into WhatsApp or your publication.');}catch{seDownload('Team-list.txt',text);seNotice('Team list downloaded.');}});document.querySelectorAll('[data-se-chat]').forEach(b=>b.onclick=()=>seChat(b.dataset.seChat));}
-async function seChat(id){recordSelectionDrawer('chat',{id});const s=ensureSelections(),drawer=s.navigationDrawer,view=s.view,isCurrent=()=>s===selectionState&&currentTab==='teams'&&s.view===view&&s.navigationDrawer===drawer&&!!document.getElementById('seContent');try{const posts=await seRPC('posts',{id});if(!isCurrent())return;const f=s.data.fixtures.find(f=>f.id===id);if(!f?.published)return;const closed=seMatchConversationClosed(f,s.data),lastDate=sePublishedDates(f).at(-1);document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(f.published.details.grade)} · match conversation</h2><button class="btn ghost" id="seChatBack">Teams</button></div><p>v ${seEsc(f.published.details.opposition)} · ${sePublishedDates(f).map(seDate).join(" / ")}</p><p class="se-muted" id="seMatchConversationStatus" role="status">${closed?'Conversation closed. Previous messages are read-only.':'Selected players and match staff.'+(lastDate?' Closes after '+seDate(lastDate)+'.':'')}</p><button class="btn ghost" id="seChatRefresh">Refresh conversation</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}</small><p>${seEsc(p.body)}</p></article>`).join('')||'<p>No messages yet.</p>'}${closed?'':`<form id="sePostForm" data-fixture-id="${seEsc(id)}"><label>Message<textarea name="body" required maxlength="1500" rows="3"></textarea></label><div class="se-actions se-editor-actions"><button class="btn" type="submit">Send to match group</button></div></form>`}</section>`;document.getElementById('seChatBack').onclick=()=>appNavigationBack(drawSelections);document.getElementById('seChatRefresh').onclick=()=>{if(confirmLeaveSelections())seChat(id);};const form=document.getElementById('sePostForm');if(!form)return;form.oninput=()=>s.formDirty=true;form.onsubmit=async e=>{e.preventDefault();if(seMatchConversationClosed(f,s.data)){seUpdateConversationState();return;}const body=new FormData(form).get('body');if(await seMutate('post',{id,body})&&s===selectionState&&currentTab==='teams'&&s.view===view)await seChat(id);};}catch(e){if(isCurrent())seNotice(e.message);}}
+ document.querySelectorAll('[data-se-export]').forEach(b=>b.onclick=async()=>{if(b.disabled)return;const text=seTeamText(fs.find(f=>f.id===b.dataset.seExport),club.name);b.disabled=true;b.textContent='Copying…';b.setAttribute('aria-busy','true');try{await navigator.clipboard.writeText(text);if(b.isConnected){b.textContent='Copied';seNotice('Team list copied.');}}catch{seDownload('Team-list.txt',text);if(b.isConnected){b.textContent='Download started';seNotice('Clipboard unavailable. Team list download started.');}}finally{if(b.isConnected){if(b.dataset.seWasDisabled!==undefined)b.dataset.seWasDisabled='0';else b.disabled=false;b.removeAttribute('aria-busy');}}});document.querySelectorAll('[data-se-chat]').forEach(b=>b.onclick=()=>seReadButton(b,'Loading…',()=>seChat(b.dataset.seChat)));}
+async function seChat(id){recordSelectionDrawer('chat',{id});const s=ensureSelections(),drawer=s.navigationDrawer,view=s.view,isCurrent=()=>s===selectionState&&currentTab==='teams'&&s.view===view&&s.navigationDrawer===drawer&&!!document.getElementById('seContent');try{const posts=await seRPC('posts',{id});if(!isCurrent())return;const f=s.data.fixtures.find(f=>f.id===id);if(!f?.published)return;const closed=seMatchConversationClosed(f,s.data),lastDate=sePublishedDates(f).at(-1);document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${seEsc(f.published.details.grade)} · match conversation</h2><button class="btn ghost" id="seChatBack">Teams</button></div><p>v ${seEsc(f.published.details.opposition)} · ${sePublishedDates(f).map(seDate).join(" / ")}</p><p class="se-muted" id="seMatchConversationStatus" role="status">${closed?'Conversation closed. Previous messages are read-only.':'Selected players and match staff.'+(lastDate?' Closes after '+seDate(lastDate)+'.':'')}</p><button class="btn ghost" id="seChatRefresh">Refresh conversation</button>${posts.map(p=>`<article class="se-post"><strong>${seEsc(p.author_name)}</strong><small> · ${seEsc(new Date(p.created_at).toLocaleString('en-AU'))}</small><p>${seEsc(p.body)}</p></article>`).join('')||'<p>No messages yet.</p>'}${closed?'':`<form id="sePostForm" data-fixture-id="${seEsc(id)}"><label>Message<textarea name="body" required maxlength="1500" rows="3"></textarea></label><div class="se-actions se-editor-actions"><button class="btn" type="submit">Send to match group</button></div></form>`}</section>`;document.getElementById('seChatBack').onclick=()=>appNavigationBack(drawSelections);document.getElementById('seChatRefresh').onclick=event=>{if(confirmLeaveSelections())return seReadButton(event.currentTarget,'Refreshing…',()=>seChat(id));};const form=document.getElementById('sePostForm');if(!form)return;form.oninput=()=>s.formDirty=true;form.onsubmit=async e=>{e.preventDefault();if(seMatchConversationClosed(f,s.data)){seUpdateConversationState();return;}const body=new FormData(form).get('body');if(await seMutate('post',{id,body})&&s===selectionState&&currentTab==='teams'&&s.view===view)await seChat(id);};}catch(e){if(isCurrent())seNotice(e.message);}}
 
 function seAvailability(playerId=null){
  const s=ensureSelections(),d=s.data,viewAll=seCanSetup(d)||d.can_view_club_availability&&!d.captain&&membership?.permission_role!=='captain',players=d.roster.filter(p=>p.active).sort((a,b)=>a.name.localeCompare(b.name)),host=document.getElementById('seContent');
@@ -20805,14 +20864,14 @@ function seAvailability(playerId=null){
  form.onsubmit=async e=>{e.preventDefault();if(!editable||!s.formDirty)return;if(await seMutate('availability',{id:p.id,revision:a.revision||0,calendar_mode:'opt_in',available_dates:[...dates].sort()}))seAvailability(p.id);};paint();
 }
 function sePlayerEditor(player=null){recordSelectionDrawer('player',{id:player?.id||null});queueMicrotask(bindSelectionBackButtons);const s=ensureSelections(),p=player||{name:'',grade:'',external_id:'',batting:'unknown',bowling:'unknown',bowling_load:'unknown',keeper:false,active:true,user_id:null};document.getElementById('seContent').innerHTML=`<form class="se-card se-drawer" id="sePlayerForm"><h2>${player?'Player details':'Add player'}</h2><div class="se-form-grid"><label>Name<input name="name" value="${seEsc(p.name)}" maxlength="120" required></label><label>Registration ID (optional)<input name="external_id" value="${seEsc(p.external_id)}" maxlength="120"></label>${seGradeFields('grade',p.grade,null,{label:'Usual grade (optional)',required:false,maxlength:80})}</div><div id="seNameMatch" class="se-name-match" role="alert" hidden></div><p class="se-form-note">No player sign-up needed. A registration ID helps match future CSV imports.</p><details id="seAccountLink" ${p.user_id?'open':''}><summary>App account (optional)</summary><label>Player email (optional)<input name="account_email" type="email" maxlength="254" value="${seEsc(p.account_email||'')}"></label><p class="se-form-note">Verified email and name matches link automatically. Otherwise choose the account below.</p><label>Player’s club account<select name="user_id"><option value="">Not linked yet</option>${s.data.members.filter(m=>!s.data.roster.some(x=>x.user_id===m.user_id&&x.id!==p.id)).map(m=>`<option value="${m.user_id}" ${m.user_id===p.user_id?'selected':''}>${seEsc(m.name)}${m.email?' · '+seEsc(m.email):''}</option>`).join('')}</select></label><p class="se-form-note">For their availability and team messages. No Club Batting subscription needed.</p></details><label class="se-check"><input name="active" type="checkbox" ${p.active?'checked':''}>Active player</label><div class="se-actions se-editor-actions"><button class="btn" type="submit">Save player</button><button class="btn ghost" type="button" id="sePlayerCancel">Cancel</button></div></form>`;const form=document.getElementById('sePlayerForm');form.oninput=()=>s.formDirty=true;const confirmName=seBindPlayerNameCheck(form,p);seBindGrade(form,'grade',()=>s.formDirty=true);document.getElementById('sePlayerCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};form.onsubmit=e=>{e.preventDefault();if(!confirmName())return;const d=new FormData(form),user_id=d.get('user_id')||null;if(user_id!==p.user_id&&user_id&&!confirm('Confirm this account belongs to '+d.get('name')+'? It will receive this player’s selections and can edit their availability.'))return;return seMutate('save_roster',{revision:s.data.roster_revision,rows:[{...p,name:d.get('name').trim(),grade:seReadGrade(form,'grade').grade,external_id:d.get('external_id').trim(),account_email:d.get('account_email').trim(),user_id,active:d.has('active')}]});};}
-function seImport(){recordSelectionDrawer('import');queueMicrotask(bindSelectionBackButtons);const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Refresh the registered playing list</h2><p>Upload your registration CSV. Existing players are matched; roles and availability stay.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|profile.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)],['email','Player email (optional)',guess(/^(?:(?:player|participant|account.?holder).?)?e.?mail$/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
+function seImport(){recordSelectionDrawer('import');queueMicrotask(bindSelectionBackButtons);const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Import registered players</h2><p>Upload your registration CSV. Existing players are matched; roles and availability stay.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|profile.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)],['email','Player email (optional)',guess(/^(?:(?:player|participant|account.?holder).?)?e.?mail$/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
  const preview=()=>{const map=Object.fromEntries([...document.querySelectorAll('[data-se-map]')].map(el=>[el.dataset.seMap,Number(el.value)]));if(map.id<0||map.name<0)throw Error('Choose both a stable ID and name column.');const data=rows.map(r=>({external_id:(r[map.id]||'').trim(),name:[r[map.name],map.last>=0&&map.last!==map.name?r[map.last]:''].filter(Boolean).join(' ').trim(),...(map.grade>=0?{grade:(r[map.grade]||'').trim()}:{}),...seCSVAccountEmail(r,headers,map.email)}));if(data.some(r=>!r.external_id||!r.name))throw Error('Every row must have a registration ID and name.');if(new Set(data.map(r=>r.external_id)).size!==data.length)throw Error('Duplicate registration IDs. Remove duplicate rows before importing.');seValidateRosterNames(data,s.data.roster,true);return data;};
- const draw=()=>{try{const data=preview(),matches=data.filter(r=>seImportMatch(r,s.data.roster)).length;document.getElementById('seCSVError').textContent='';document.getElementById('seCSVCommit').disabled=false;document.getElementById('seCSVPreview').innerHTML=`<p>${data.length} rows · ${matches} existing players · ${data.length-matches} new players</p><div class="se-preview-scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Grade</th></tr></thead><tbody>${data.slice(0,8).map(r=>`<tr><td>${seEsc(r.external_id)}</td><td>${seEsc(r.name)}</td><td>${seEsc(r.grade)}</td></tr>`).join('')}</tbody></table></div><p class="se-muted">Preview of the first ${Math.min(8,data.length)} rows. Matched players keep their account, roles and availability.</p>`;}catch(err){document.getElementById('seCSVError').textContent=err.message;document.getElementById('seCSVCommit').disabled=true;}};document.querySelectorAll('[data-se-map]').forEach(el=>el.onchange=draw);document.getElementById('seCSVCommit').onclick=()=>seMutate('import_roster',{revision:s.data.roster_revision,rows:preview()});draw();}catch(err){document.getElementById('seCSVError').textContent=err.message;}};}
+ const draw=()=>{try{const data=preview(),matches=data.filter(r=>seImportMatch(r,s.data.roster)).length;document.getElementById('seCSVError').textContent='';document.getElementById('seCSVCommit').disabled=false;document.getElementById('seCSVPreview').innerHTML=`<p>${data.length} rows · ${matches} existing players · ${data.length-matches} new players</p><div class="se-preview-scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Grade</th></tr></thead><tbody>${data.slice(0,8).map(r=>`<tr><td>${seEsc(r.external_id)}</td><td>${seEsc(r.name)}</td><td>${seEsc(r.grade)}</td></tr>`).join('')}</tbody></table></div><p class="se-muted">First ${Math.min(8,data.length)} rows. Existing accounts, roles and availability are kept.</p>`;}catch(err){document.getElementById('seCSVError').textContent=err.message;document.getElementById('seCSVCommit').disabled=true;}};document.querySelectorAll('[data-se-map]').forEach(el=>el.onchange=draw);document.getElementById('seCSVCommit').onclick=()=>seMutate('import_roster',{revision:s.data.roster_revision,rows:preview()});draw();}catch(err){document.getElementById('seCSVError').textContent=err.message;}};}
 function seSettings(){const s=ensureSelections(),d=s.data;document.getElementById('seContent').innerHTML=`<div class="btnrow" style="margin-bottom:14px"><button class="btn ghost" type="button" data-club-branding>Club logo &amp; colours</button><button class="btn secondary" type="button" data-shared-teams>Grades &amp; season captains</button></div><section class="se-card se-drawer"><h2>Selection permissions</h2><form id="seSelectors"><label>Head of Selections<select name="head_selector_id">${seOpt([['','Choose Head of Selections'],...d.members.map(m=>[m.user_id,m.name])],d.access.head_selector_id||'')}</select></label><p class="se-muted">The Head of Selections publishes teams to players.</p><details id="seOtherSelectors"><summary>Other selectors<span class="se-form-note" style="display:block;margin:6px 0" id="seSelectorNames"></span></summary>${d.members.map(m=>`<label class="se-check"><input name="users" type="checkbox" value="${m.user_id}" ${m.explicit_selector?'checked':''}>${seEsc(m.name)}${m.is_admin?' · Club Admin':''}</label>`).join('')}</details><button class="btn se-editor-actions" type="submit">Save permissions</button></form></section><div id="seVideoCredits"></div><details class="se-card se-drawer" id="seFixtureDefaults" style="margin-top:14px"></details><details class="se-card se-drawer" id="seGradeLevels" style="margin-top:14px"></details>${d.access.mode==='bundle'?`<details class="se-card se-drawer" id="seBattingConnection" style="margin-top:14px"><summary>Club Batting connection (optional)</summary><p>Publishing teams can add linked players to Club Batting Playing Groups. Players without a link stay in the team.</p><p class="se-form-note">Group membership can affect Player Plan due dates and coaching access. Existing memberships stay.</p><form id="seGroupLinks"><div id="seGroupLinkRows"></div><div class="se-actions"><button class="btn ghost" type="button" id="seAddGroupLink">Add grade mapping</button><button class="btn" type="submit">Save group connections</button></div></form></details>`:''}`;
  const creditClub=club.id;mountVideoCredits(document.getElementById('seVideoCredits'),{timezone:d.access.timezone,rpc:async(action,data)=>{const result=await supabase.rpc('selection_video_credit_api',{p_club_id:creditClub,p_action:action,p_data:data});if(result.error)throw result.error;return result.data;}});
- const selectorForm=document.getElementById('seSelectors');seShowSelectorNames(selectorForm);selectorForm.addEventListener('change',()=>seShowSelectorNames(selectorForm));seSettingsSaveState(selectorForm,'Save permissions','selectors');selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users'),head_selector_id:selectorForm.elements.head_selector_id.value||null});};seRenderDefaults();seGradeLevels();bindClubBrandingLinks();if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks');
- const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No group connections set.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);s.formDirty=true;renderLinks();});};
- const sync=()=>document.querySelectorAll('[data-se-link]').forEach(el=>{links[Number(el.dataset.seLink)]={competition:el.querySelector('[name=competition]').value.trim(),grade:el.querySelector('[name=grade]').value.trim(),group_id:el.querySelector('[name=group_id]').value};});form.oninput=()=>s.formDirty=true;document.getElementById('seAddGroupLink').onclick=()=>{sync();links.push({competition:'',grade:'',group_id:''});s.formDirty=true;renderLinks();};form.onsubmit=e=>{e.preventDefault();sync();return seMutate('group_links',{revision:d.access.revision,links});};renderLinks();}
+ const selectorForm=document.getElementById('seSelectors');seShowSelectorNames(selectorForm);selectorForm.addEventListener('change',()=>seShowSelectorNames(selectorForm));seSettingsSaveState(selectorForm,'Save permissions','selectors');selectorForm.onsubmit=e=>{e.preventDefault();return seMutate('selectors',{revision:d.access.revision,users:new FormData(selectorForm).getAll('users'),head_selector_id:selectorForm.elements.head_selector_id.value||null});};seRenderDefaults();seGradeLevels();bindClubBrandingLinks();if(d.access.mode!=='bundle')return;const links=structuredClone(d.group_links),form=document.getElementById('seGroupLinks'),linksChanged=seSettingsSaveState(form,'Save group connections','group_links');
+ const renderLinks=()=>{document.getElementById('seGroupLinkRows').innerHTML=links.map((l,i)=>`<div class="se-link-row" data-se-link="${i}"><label>Competition<input name="competition" maxlength="120" value="${seEsc(l.competition)}"></label><label>Grade<input name="grade" required maxlength="120" value="${seEsc(l.grade)}"></label><label>Playing Group<select name="group_id" required><option value="">Choose</option>${d.groups.map(g=>`<option value="${g.id}" ${g.id===l.group_id?'selected':''}>${seEsc(g.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost" data-se-remove-link="${i}">Remove</button></div>`).join('')||'<p class="se-muted">No group connections set.</p>';document.querySelectorAll('[data-se-remove-link]').forEach(b=>b.onclick=()=>{sync();links.splice(Number(b.dataset.seRemoveLink),1);linksChanged();renderLinks();});};
+ const sync=()=>document.querySelectorAll('[data-se-link]').forEach(el=>{links[Number(el.dataset.seLink)]={competition:el.querySelector('[name=competition]').value.trim(),grade:el.querySelector('[name=grade]').value.trim(),group_id:el.querySelector('[name=group_id]').value};});document.getElementById('seAddGroupLink').onclick=()=>{sync();links.push({competition:'',grade:'',group_id:''});linksChanged();renderLinks();};form.onsubmit=e=>{e.preventDefault();sync();return seMutate('group_links',{revision:d.access.revision,links});};renderLinks();}
 async function openSelectionsAccess(clubId,clubName){return openClubSubscriptions(clubId,clubName);}
 function seStartLiveRefresh(){if(selectionRefreshTimer)return;selectionRefreshTimer=setInterval(async()=>{seUpdateConversationState();const s=selectionState;if(!s||currentTab!=='teams'||!['board','conversations'].includes(s.view)||s.busy||s.pending||s.formDirty||s.active||s.ordering||(document.activeElement?.closest('#sePage')&&document.activeElement.matches('input,select,textarea'))||(s.view==='board'&&!document.querySelector('.se-board-layout')&&s.boardPanel!=='unselected'))return;try{const before=JSON.stringify(s.data);await seReload();if(s===selectionState&&currentTab==='teams'&&['board','conversations'].includes(s.view)&&!s.busy&&!s.pending&&!s.formDirty&&!s.active&&!s.ordering&&before!==JSON.stringify(s.data)){s.notice='Updated from the shared selection board.';drawSelections();}}catch{seNotice('Live refresh could not connect. Your saved selections are retained; use Refresh to reconnect.');}},20000);}
 /* END TEAMS SELECTION */
@@ -21396,7 +21455,7 @@ function paintPhoneSetupPrompt(host,state,key){
   ?['Phone notifications are blocked','Open notification settings to see how to allow Club Batting alerts.','Review notification settings']
   :state==='unknown'
    ?['Check your phone notifications','We couldn’t confirm this phone’s notification setup. Open settings to check.','Check notification setup']
-   :['Finish setting up notifications','Your app is installed. Turn on notifications to receive team and club updates on your phone. Until phone alerts are enabled, we’ll keep sending email notifications.','Set up notifications'];
+   :['Finish setting up notifications','Turn on phone alerts for team and club updates. Until then, updates arrive by email.','Set up notifications'];
  host.innerHTML=`<style>.phone-setup-prompt{margin:12px 16px 0;padding:14px 16px;border:1px solid #c9d2ee;border-radius:10px;background:#f0f4ff;color:#172033}.phone-setup-prompt strong{display:block;font-size:16px}.phone-setup-prompt p{margin:7px 0 10px;font-size:14px;line-height:1.5}.phone-setup-prompt .btnrow{display:flex;gap:8px;flex-wrap:wrap}.phone-setup-prompt button{min-height:44px;max-width:100%;white-space:normal}.phone-setup-prompt[hidden]{display:none}</style><strong>${copy[0]}</strong><p>${copy[1]}</p><div class="btnrow"><button type="button" class="btn secondary" data-phone-setup-open>${copy[2]}</button><button type="button" class="btn ghost" data-phone-setup-later>Remind me later</button></div>`;
  host.hidden=false;
  host.querySelector('[data-phone-setup-open]').onclick=openPhoneApp;
@@ -21613,7 +21672,7 @@ async function socialRefresh(s){
 async function socialOpen(){const s=socialEnsure(),host=document.getElementById('seContent');host.innerHTML='<div class="se-card">Loading social graphics…</div>';try{if(await socialRefresh(s)){if(s.guide){s.guide.context=null;s.guide.available=null;s.guide.error='';}s.styleStatus=null;socialDraw(s);}}catch(e){if(!socialHere(s))return;host.innerHTML=`<section class="se-card"><h2>Social graphics</h2><p>${seEsc(e.message)}</p><button class="btn" id="socialRetry">Try again</button></section>`;document.getElementById('socialRetry').onclick=socialOpen;}}
 function socialMessage(s,message){s.notice=message;if(socialHere(s)){const e=document.getElementById('socialNotice');if(e)e.textContent=message;}}
 async function socialSave(s,action,data,photoPositionKey=null){
- if(s.busy)return false;const command=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(photoPositionKey?{photoPositionKey}:{})};s.pending=command;s.busy=true;socialMessage(s,'Saving…');socialLock(true);
+ if(s.busy)return false;const command=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(photoPositionKey?{photoPositionKey}:{})};s.pending=command;s.busy=true;const button=s.actionButton;s.actionButton=null;if(button){button.textContent='Saving…';button.setAttribute('aria-busy','true');}socialMessage(s,'Saving…');socialLock(true);
  try{const result=await socialRPC(s,command.action,command.data);if(!socialHere(s))return false;if(result.access_removed){s.pending=null;await seReload();ensureSelections().view='published';ensureSelections().notice=result.message||'Socials access ended. Your other club roles are unchanged.';drawSelections();return true;}if(!await socialRefresh(s))return false;s.pending=null;
  const positionKey=command.action==='feature'?command.photoPositionKey:null;
  if(positionKey){const card=s.data.fixtures.flatMap(socialCards).find(card=>card.key===positionKey);if(card){delete s.photoPositions[positionKey];(s.photoPositionConfirmed||={})[positionKey]=socialPhotoPositionContext(s,card);(s.photoPositionOpen||={})[positionKey]=false;}}
@@ -21625,7 +21684,7 @@ async function socialSave(s,action,data,photoPositionKey=null){
 }
 function socialLock(locked){document.querySelectorAll('#socialPage button,#socialPage input,#socialPage select,#socialPage textarea').forEach(e=>{if(locked){e.dataset.socialDisabled=e.disabled?'1':'0';e.disabled=true;}else if(e.dataset.socialDisabled!==undefined){e.disabled=e.dataset.socialDisabled==='1';delete e.dataset.socialDisabled;}});}
 function socialStyles(){return `<style>.social-create{margin:18px 0}.social-ready{padding:10px 14px;background:#edf7f0;border:1px solid #cce3d3;border-radius:8px;margin:14px 0;font-size:14px}.social-ready span{display:block;color:#52627a;font-size:13px;margin-top:4px}.social-notice:empty{display:none}.social-managers-list summary{cursor:pointer;font-weight:600}.social-managers-list{margin:18px 0}.social-manager-list{max-height:420px;overflow:auto;padding-right:8px}.sa-menu{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sa-menu select{font:inherit;padding:9px;max-width:100%}
- .social-guide label{display:block;margin:12px 0}.social-guide input,.social-guide select,.social-guide textarea{box-sizing:border-box;max-width:100%;width:100%}.social-guide input[type=color]{height:42px}.social-guide textarea{font:inherit}.social-tabs [aria-current=step]{background:var(--navy,#17245f);color:white}.social-comparison{display:grid;grid-template-columns:1fr 1fr;gap:15px}.social-comparison img{width:100%;height:auto;object-fit:contain}.social-comparison canvas{width:100%;height:auto}.social-comparison figcaption{font-size:13px;margin:8px 0}.social-comparison figure{margin:0;min-width:0} .social-feature{padding:10px;background:#f4f7fb;border-radius:7px;margin:10px 0}.social-card .social-feature label{display:block;font-size:13px;margin:8px 0}.social-feature select,.social-feature input{display:block;width:100%;box-sizing:border-box;min-width:0;max-width:100%}.social-feature input{font-size:12px}.social-fields textarea{width:100%;box-sizing:border-box;font:inherit}.social-presets{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 18px}.social-small{font-weight:400!important} .social-top{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}.social-top p{margin:6px 0 14px}.sa-menu{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sa-menu select{font:inherit;padding:9px;max-width:100%}.social-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 18px}.social-tabs [aria-pressed=true]{background:var(--navy,#17245f);color:white}.social-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:18px}.social-card{padding:12px;min-width:0;background:white;border:1px solid #dce2ee;border-radius:10px}.social-card canvas{display:block;width:100%;height:auto;background:#073554;border-radius:6px;margin:10px 0}.social-card label{font-weight:700;display:flex;gap:9px;align-items:center}.social-card input[type=checkbox]{width:20px;height:20px;flex-shrink:0}.social-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:16px 0}.social-controls{display:flex;gap:14px;align-items:end;flex-wrap:wrap}.social-controls select{max-width:100%}.social-status{font-size:13px;line-height:1.5;margin:8px 0;color:#52627a}.social-changed{color:#814912;background:#fff3dc;padding:6px 8px;border-radius:5px}.social-editor{max-width:950px}.social-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.social-fields input[type=text],.social-fields select{width:100%}.social-colour{display:flex;align-items:center;gap:8px}.social-colour input[type=color]{height:44px;width:62px;min-width:62px;padding:3px}.social-upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:18px}.social-upload{padding:14px;border:1px solid #dce2ee;border-radius:9px;background:#f8fafc}.social-upload h3{margin:0 0 5px;font-size:16px}.social-upload p{font-size:13px;color:#52627a}.social-upload img{display:block;max-width:100%;max-height:230px;object-fit:contain;margin:10px auto;background:repeating-conic-gradient(#e3e7ed 0% 25%,white 0% 50%) 50%/18px 18px}.social-upload input{width:100%;font-size:13px}.social-manager{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e4e8ef}.social-manager input{width:20px;height:20px}.social-preview{max-width:430px;margin:20px auto}.social-preview canvas{width:100%;height:auto;display:block}.social-notice{white-space:pre-wrap;overflow-wrap:anywhere}.social-reference-note{max-width:680px;font-size:14px;color:#52627a}.social-empty{padding:24px 0}.social-captions{width:100%;box-sizing:border-box;min-height:170px;font-family:inherit}.social-download-state{min-height:20px}.social-card .btn{width:100%}
+ .social-guide label{display:block;margin:12px 0}.social-guide input,.social-guide select,.social-guide textarea{box-sizing:border-box;max-width:100%;width:100%}.social-guide input[type=color]{height:42px}.social-guide textarea{font:inherit}.social-tabs [aria-current=step]{background:var(--navy,#17245f);color:white}.social-comparison{display:grid;grid-template-columns:1fr 1fr;gap:15px}.social-comparison img{width:100%;height:auto;object-fit:contain}.social-comparison canvas{width:100%;height:auto}.social-comparison figcaption{font-size:13px;margin:8px 0}.social-comparison figure{margin:0;min-width:0} .social-feature{padding:10px;background:#f4f7fb;border-radius:7px;margin:10px 0}.social-card .social-feature label{display:block;font-size:13px;margin:8px 0}.social-feature select,.social-feature input{display:block;width:100%;box-sizing:border-box;min-width:0;max-width:100%}.social-feature input{font-size:12px}.social-fields textarea{width:100%;box-sizing:border-box;font:inherit}.social-presets{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 18px}.social-small{font-weight:400!important} .social-top{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}.social-top p{margin:6px 0 14px}.sa-menu{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sa-menu select{font:inherit;padding:9px;max-width:100%}.social-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 18px}.social-tabs [aria-pressed=true]{background:var(--navy,#17245f);color:white}.social-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:18px}.social-card{padding:12px;min-width:0;background:white;border:1px solid #dce2ee;border-radius:10px}.social-card canvas{display:block;width:100%;height:auto;background:#073554;border-radius:6px;margin:10px 0}.social-card label{font-weight:700;display:flex;gap:9px;align-items:center}.social-card input[type=checkbox]{width:20px;height:20px;flex-shrink:0}.social-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:16px 0}.social-controls{display:flex;gap:14px;align-items:end;flex-wrap:wrap}.social-controls select{max-width:100%}.social-status{font-size:13px;line-height:1.5;margin:8px 0;color:#52627a}.social-changed{color:#814912;background:#fff3dc;padding:6px 8px;border-radius:5px}.social-editor{max-width:950px}.social-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.social-fields input[type=text],.social-fields select{width:100%}.social-colour{display:flex;align-items:center;gap:8px}.social-colour input[type=color]{height:44px;width:62px;min-width:62px;padding:3px}.social-upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:18px}.social-upload{padding:14px;border:1px solid #dce2ee;border-radius:9px;background:#f8fafc}.social-upload h3{margin:0 0 5px;font-size:16px}.social-upload p{font-size:13px;color:#52627a}.social-upload img{display:block;max-width:100%;max-height:230px;object-fit:contain;margin:10px auto;background:repeating-conic-gradient(#e3e7ed 0% 25%,white 0% 50%) 50%/18px 18px}.social-upload input{width:100%;font-size:13px}.social-manager{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e4e8ef}.social-manager input{width:20px;height:20px}.social-preview{max-width:430px;margin:20px auto}.social-preview canvas{width:100%;height:auto;display:block}.social-notice{white-space:pre-wrap;overflow-wrap:anywhere}.social-reference-note{max-width:680px;font-size:14px;color:#52627a}.social-empty{padding:24px 0}.social-captions{width:100%;box-sizing:border-box;min-height:170px;font-family:inherit}.social-download-state:empty,#socialManagerCopyStatus:empty,#prepStyleStatus:empty{display:none}.social-card .btn{width:100%}
  .social-photo-position{margin-top:12px;border-top:1px solid #dce2ee;padding-top:10px}.social-photo-position summary{cursor:pointer;font-weight:700;min-height:34px}.social-card .social-photo-position label{display:block;font-weight:600}.social-photo-position output{display:block;font-size:12px;font-weight:400;color:#52627a}.social-photo-position input[type=range]{width:100%;min-height:36px;cursor:ew-resize;accent-color:var(--navy,#17245f)}
  @media(min-width:1200px){.social-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:600px){.social-fields{grid-template-columns:1fr}.social-actions .btn{flex-grow:1}.social-controls{display:block}.social-controls label{margin:10px 0}.social-top h2{font-size:23px}}
  </style>`;}
@@ -21633,7 +21692,7 @@ function socialTeamReady(s){
  if(!['graphics','managers'].includes(s.view))return '';
  const calendar=socialFixtureCalendar(s).filter(f=>!socialCalendarCompleted(s,f)),dates=[...new Set(calendar.map(f=>f.date))].sort(),date=dates.includes(s.date)?s.date:dates[0],ready=calendar.filter(f=>f.date===date&&f.published),waiting=calendar.filter(f=>f.date===date&&!f.published);
  if(!ready.length)return '';
- return `<aside class="social-ready" role="status"><strong>${ready.length} team${ready.length===1?' is':'s are'} published and ready for social post creation.</strong><span>${seEsc(socialDate(date))}${waiting.length?' · '+waiting.length+' awaiting publication':''}</span></aside>`;
+ return `<aside class="social-ready" role="status"><strong>${ready.length} published team${ready.length===1?'':'s'} ready for posts</strong><span>${seEsc(socialDate(date))}${waiting.length?' · '+waiting.length+' awaiting publication':''}</span></aside>`;
 }
 function socialDraw(s){
  if(!socialHere(s)||!s.data)return;const host=document.getElementById('seContent');
@@ -21641,7 +21700,8 @@ function socialDraw(s){
  const creationViews=['graphics','team_week','player_week','results','five_wickets','century','award_collection'],creating=creationViews.includes(s.view);if(creating)s.creationView=s.view;s.render++;
  const active=creating||s.view==='publish_review'||s.view==='guide'?'graphics':s.view==='publish_handover'?'managers':s.view;
  host.innerHTML=socialStyles()+`<section id="socialPage"><div class="social-top"><h2>Social graphics</h2><button class="btn ghost" id="socialRefresh">Refresh</button></div><nav class="social-tabs" aria-label="Social graphics sections">${[['managers','Who handles socials'],['accounts','Social accounts'],['awards','Socials Awards'],['graphics','Create posts']].map(([key,title])=>`<button class="btn ghost" data-social-view="${key}" aria-pressed="${active===key}">${title}</button>`).join('')}</nav>${socialTeamReady(s)}${creating?`<div class="social-create">${socialAwards.menu(s)}</div>`:''}<p id="socialNotice" class="social-notice" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?'<div class="se-recovery"><strong>Artwork save not confirmed</strong><p>Your change is retained in this tab. Retry it, or keep a copy and reload the saved version.</p><div class="social-actions"><button class="btn" id="socialRetrySave">Retry save</button><button class="btn ghost" id="socialRecover">Download changes &amp; reload</button></div></div>':''}<div id="socialContent"></div></section>`;
- document.querySelectorAll('[data-social-view]').forEach(b=>b.onclick=async()=>{if(!socialCanLeave())return;s.view=b.dataset.socialView==='graphics'?s.creationView||'graphics':b.dataset.socialView;s.notice='';if(s.view==='awards'){socialAwards.state(s).message='';await socialAwards.load(s,false);}else if(s.view==='award_collection')await socialAwards.load(s,false);socialDraw(s);});
+ const page=document.getElementById('socialPage'),rememberAction=e=>{const button=e.submitter||e.target.closest?.('button');if(!button||!page.contains(button)||button.disabled)return;s.actionButton=button;setTimeout(()=>{if(s.actionButton===button)s.actionButton=null;},0);};page.addEventListener('click',rememberAction,true);page.addEventListener('submit',rememberAction,true);
+ document.querySelectorAll('[data-social-view]').forEach(b=>b.onclick=async()=>{if(!socialCanLeave())return;b.disabled=true;b.textContent='Loading…';b.setAttribute('aria-busy','true');s.view=b.dataset.socialView==='graphics'?s.creationView||'graphics':b.dataset.socialView;s.notice='';if(s.view==='awards'){socialAwards.state(s).message='';await socialAwards.load(s,false);}else if(s.view==='award_collection')await socialAwards.load(s,false);socialDraw(s);});
  document.getElementById('socialRefresh').onclick=()=>{if(socialCanLeave())socialOpen();};document.getElementById('socialRetrySave')?.addEventListener('click',()=>socialSave(s,s.pending.action,s.pending.data));
  document.getElementById('socialRecover')?.addEventListener('click',()=>{seDownload('Social-artwork-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;s.dirty=false;s.notice='Proposed changes downloaded. Review the current saved artwork.';void socialOpen();});
  socialAwards.bindMenu(s);
@@ -21784,14 +21844,14 @@ function socialManagers(s){
   const posts=s.data.manager_posts?.[h.user_id]||[],blocking=posts.some(p=>p.blocks_hand_back),last=managers.length===1&&managers[0].user_id===h.user_id;
   return `<section class="notice"><h4>Handover requested · ${seEsc(h.name)}</h4><p class="se-muted">${seEsc(stamp(h.requested_at))} · club time</p><p>${seEsc(h.name)} remains a Socials Manager until this handover is completed.</p>${posts.length?`<p>Review these posts before completing the handover. Take responsibility for each scheduled post, or cancel its schedule.</p>${posts.map(p=>`<p><button class="btn ghost" data-social-handover-post="${seEsc(p.id)}">Review ${seEsc(p.images?.map(i=>i.label).join(', ')||'scheduled post')}</button></p>`).join('')}`:''}${last?`<p>Add another manager below${s.data.admin?', or take responsibility as Club Admin':''}.</p>`:''}<div class="social-actions">${h.user_id===me?'<button class="btn ghost" id="socialCancelHandover">Cancel my request</button>':''}${canManage&&(!last||s.data.admin)?`<button class="btn secondary" data-social-complete-handover="${seEsc(h.user_id)}" data-take-responsibility="${last?'1':'0'}" ${blocking?'disabled':''}>${last?'Take responsibility as Club Admin':'Complete handover'}</button>`:''}</div></section>`;
  }).join('');
- document.getElementById('socialContent').innerHTML=`<section class="se-card social-editor"><h3>Who handles socials?</h3>${canManage?`<p><strong>${managers.length?'Appointed Socials Managers: '+managers.map(m=>seEsc(m.name)).join(', '):'Club Admin handles socials'}</strong></p><p class="se-muted">Socials Managers manage graphics, accounts and posts, and can appoint other managers. Other club roles stay unchanged. Club Admin retains access.</p>${pending}${mine&&!requested?`<button class="btn ghost" id="socialRequestHandover">Request handover${managers.length===1?' · last manager':''}</button>${managers.length===1?'<p class="se-muted">You stay appointed until a replacement is added or Club Admin takes responsibility.</p>':''}`:''}<details class="social-managers-list" ${s.managerListOpen?'open':''}><summary>Choose Socials Managers</summary><div class="social-manager-list">${members.map(m=>`<label class="social-manager"><input type="checkbox" data-social-manager="${seEsc(m.user_id)}" ${m.manager||m.admin?'checked':''} ${m.admin||m.manager&&managers.length===1?'disabled':''}><span>${seEsc(m.name)}${m.admin?' · Club Admin':m.manager&&managers.length===1?' · last manager — handover required':''}</span></label>`).join('')}</div><p class="se-muted">Changes save when ticked. New managers receive a Teams notification.${s.data.admin?' Add missing members through People &amp; sign-up.':' Ask Club Admin to add any missing members.'}</p><button class="btn ghost" id="socialManagerCopy">Copy setup message</button><p id="socialManagerCopyStatus" role="status"></p><textarea id="socialManagerMessage" hidden readonly rows="5"></textarea></details>`:'<p>You are covering socials temporarily. A permanent Socials Manager or Club Admin can appoint permanent managers.</p>'}</section><div id="socialResponsibilityCover" class="social-editor"></div>`;
+ document.getElementById('socialContent').innerHTML=`<section class="se-card social-editor"><h3>Who handles socials?</h3>${canManage?`<p><strong>${managers.length?'Appointed Socials Managers: '+managers.map(m=>seEsc(m.name)).join(', '):'Club Admin handles socials'}</strong></p><p class="se-muted">Managers handle graphics, accounts and posts, and can add other managers. Club Admin also has access.</p>${pending}${mine&&!requested?`<button class="btn ghost" id="socialRequestHandover">Request handover${managers.length===1?' · last manager':''}</button>${managers.length===1?'<p class="se-muted">You stay appointed until a replacement is added or Club Admin takes responsibility.</p>':''}`:''}<details class="social-managers-list" ${s.managerListOpen?'open':''}><summary>Choose Socials Managers</summary><div class="social-manager-list">${members.map(m=>`<label class="social-manager"><input type="checkbox" data-social-manager="${seEsc(m.user_id)}" ${m.manager||m.admin?'checked':''} ${m.admin||m.manager&&managers.length===1?'disabled':''}><span>${seEsc(m.name)}${m.admin?' · Club Admin':m.manager&&managers.length===1?' · last manager — handover required':''}</span></label>`).join('')}</div><p class="se-muted">Saves automatically and notifies new managers.${s.data.admin?' Add missing members through People &amp; sign-up.':' Ask Club Admin to add any missing members.'}</p><button class="btn ghost" id="socialManagerCopy">Copy setup message</button><p id="socialManagerCopyStatus" role="status"></p><textarea id="socialManagerMessage" hidden readonly rows="5"></textarea></details>`:'<p>You are covering socials temporarily. A permanent Socials Manager or Club Admin can appoint permanent managers.</p>'}</section><div id="socialResponsibilityCover" class="social-editor"></div>`;
  document.querySelector('.social-managers-list')?.addEventListener('toggle',e=>s.managerListOpen=e.target.open);
  document.querySelectorAll('[data-social-manager]:not(:disabled)').forEach(e=>e.onchange=()=>socialSave(s,'manager',{user_id:e.dataset.socialManager,enabled:e.checked}));
  document.getElementById('socialRequestHandover')?.addEventListener('click',()=>socialSave(s,'manager_handover',{operation:'request',user_id:me}));
  document.getElementById('socialCancelHandover')?.addEventListener('click',()=>socialSave(s,'manager_handover',{operation:'cancel',user_id:me}));
  document.querySelectorAll('[data-social-complete-handover]').forEach(b=>b.onclick=()=>socialSave(s,'manager',{user_id:b.dataset.socialCompleteHandover,enabled:false,take_responsibility:b.dataset.takeResponsibility==='1'}));
  document.querySelectorAll('[data-social-handover-post]').forEach(b=>b.onclick=()=>socialPublishing.managerPost(s,b.dataset.socialHandoverPost));
- document.getElementById('socialManagerCopy')?.addEventListener('click',async()=>{const url=new URL('./app.html',location.href);url.searchParams.set('club',s.scope.split(':').slice(1).join(':'));url.searchParams.set('tab','teams');url.searchParams.set('social_accounts','1');const message=`Please set up ${s.data.brand.name}’s social accounts in Teams. Connect the club Facebook Page and Instagram account in Social accounts. Create team-list posts through Create posts. Add managers or arrange a handover in Who handles socials.\n\n${url.href}`;try{await navigator.clipboard.writeText(message);document.getElementById('socialManagerCopyStatus').textContent='Setup message copied.';}catch{const area=document.getElementById('socialManagerMessage');area.hidden=false;area.value=message;document.getElementById('socialManagerCopyStatus').textContent='Select and copy the message below.';}});
+ document.getElementById('socialManagerCopy')?.addEventListener('click',async event=>{const button=event.currentTarget;if(button.disabled)return;button.disabled=true;button.textContent='Copying…';const status=document.getElementById('socialManagerCopyStatus'),area=document.getElementById('socialManagerMessage');const url=new URL('./app.html',location.href);url.searchParams.set('club',s.scope.split(':').slice(1).join(':'));url.searchParams.set('tab','teams');url.searchParams.set('social_accounts','1');const message=`Please set up ${s.data.brand.name}’s social accounts in Teams. Connect the club Facebook Page and Instagram account in Social accounts. Create team-list posts through Create posts. Add managers or arrange a handover in Who handles socials.\n\n${url.href}`;try{await navigator.clipboard.writeText(message);if(button.isConnected){button.textContent='Copied';status.textContent='Setup message copied.';}}catch{if(button.isConnected){button.textContent='Copy setup message';area.hidden=false;area.value=message;status.textContent='Select and copy the message below.';area.focus();area.select();}}});
  socialPublishing.responsibility(s,document.getElementById('socialResponsibilityCover'));
 }
 async function socialNormaliseUpload(file){if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>15*1024*1024)throw Error('Choose a PNG, JPG or WebP image under 15 MB.');const url=URL.createObjectURL(file);try{const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error('This image could not be read.'));i.src=url;});if(img.width*img.height>65000000)throw Error('Choose a smaller image.');let limit=1400;while(limit>=450){const c=document.createElement('canvas'),scale=Math.min(1,limit/Math.max(img.width,img.height));c.width=Math.max(1,Math.round(img.width*scale));c.height=Math.max(1,Math.round(img.height*scale));c.getContext('2d').drawImage(img,0,0,c.width,c.height);const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));if(blob&&blob.size<=2097152)return blob;limit=Math.floor(limit*.78);}throw Error('This image is too detailed. Try a smaller copy.');}finally{URL.revokeObjectURL(url);}}
@@ -21988,7 +22048,7 @@ function socialGuideState(s){
 async function socialPrepRPC(s,action,data={}){const r=await supabase.rpc('club_socials_prepare_api',{p_club_id:s.scope.split(':').slice(1).join(':'),p_action:action,p_data:data});if(r.error)throw Error(r.error.message||'Could not load image preparation.');return r.data;}
 async function socialPrepInvoke(s,body){const response=typeof window.__socialPrepareDemo==='function'?await window.__socialPrepareDemo(body):await supabase.functions.invoke('club-social-prepare',{body});if(response.error||response.data?.error){let message=response.data?.error;try{message||=(await response.error.context?.clone().json())?.error;}catch{}throw Object.assign(Error(message||response.error?.message||'Image preparation could not connect.'),{retryable:![400,401,403,404,409,422,429,503].includes(response.error?.context?.status||response.status)});}return response.data;}
 async function socialGuideReload(s){
- const g=socialGuideState(s);if(g.loading)return;g.loading=true;
+ const g=socialGuideState(s);if(g.loading)return;g.loading=true;for(const id of ['prepReload','prepCheckRequest']){const button=document.getElementById(id);if(button){button.disabled=true;button.textContent='Checking…';button.setAttribute('aria-busy','true');}}
  try{const data=await socialPrepRPC(s,'context');if(!socialHere(s))return;g.context=data;g.error='';
   const request=g.startCommand||g.preparation,found=data.jobs.find(j=>request&&(j.id===request.id||j.request_id===request.request_id));
   if(found){g.preparation={id:found.id,request_id:found.request_id};g.preparationError=null;g.startCommand=null;sessionStorage.removeItem('social-prep:'+s.scope);s.notice='';
@@ -22029,7 +22089,7 @@ function socialGuideLook(s){
  const host=document.getElementById('prepStep'),refs=s.data.assets.filter(a=>['reference','reference_extra'].includes(a.kind)),d=s.design,g=socialGuideState(s);const selectedExample=refs.find(a=>a.id===g.exampleId)||refs[refs.length-1];
  const lookPreview=g.showStylePreview||!refs.length&&s.data.assets.some(a=>['background','sponsors'].includes(a.kind))?socialGuidePreview():refs.length?'<aside class="sg-preview"><figure><figcaption>Your example</figcaption><img class="sg-example-image" data-social-asset="'+seEsc(selectedExample.id)+'" alt="Your club design example"></figure></aside>':'<aside class="sg-preview"><div class="sg-empty">'+socialGuideIcon('image')+'<span>Your example will appear here</span></div></aside>';
  const select=(key,label,values)=>'<label>'+label+'<select data-guide-setting="'+key+'">'+seOpt(values,d[key])+'</select></label>';
- host.innerHTML='<section class="sg-panel"><h3>Set up your social design</h3><p class="sg-hint">Add previous posts for reference. Your logo and colours come from Club look.</p><div class="sg-split"><div>'+socialGuideUploadStatus(s)+(refs.length?'<details class="sg-details"><summary>Your examples ('+refs.length+')</summary><div class="social-upload-grid">'+refs.map(a=>socialGalleryCard(s,a)).join('')+'</div></details>':'')+(refs.length<4?'<label class="sg-drop">'+socialGuideIcon('upload')+'<strong>'+(refs.length?'Add another example':'Upload an example')+'</strong><small>JPG, PNG or WebP</small><input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload a design example" data-social-gallery="reference_extra"></label>':'')+'<label>What would you change? <span class="se-muted">(optional)</span><textarea id="prepStyleBrief" rows="2" maxlength="1500" placeholder="Larger player, blue background, sponsors at the top…">'+seEsc(d.brief)+'</textarea></label><div class="social-actions"><button class="btn ghost" id="prepSuggest" aria-describedby="prepStyleStatus" aria-busy="'+(s.styleLoading?'true':'false')+'">'+socialGuideIcon('spark')+' '+(s.styleLoading?'Suggesting…':'Suggest a style')+'</button><button class="btn ghost" id="prepSaveStyle" '+(!s.dirty?'disabled':'')+'>'+(s.dirty?'Save style':'Saved')+'</button></div><p id="prepStyleStatus" class="sg-hint" role="'+(s.styleStatus?.error?'alert':'status')+'" aria-live="polite">'+seEsc(s.styleStatus?.message||(s.data.style_suggestions_available===false?'AI assistance is paused or its allowance is used. Suggest a style checks again when you try.':'Try a suggestion, review the preview, then save the style you like.'))+'</p><details class="sg-details" id="prepFineTune"><summary>Adjust the layout &amp; colours</summary><div class="sg-layouts">'+[['portrait_left','Photo left'],['list','Names only'],['portrait','Photo right']].map(([value,label])=>'<button class="sg-layout" data-guide-layout="'+value+'" aria-pressed="'+(d.layout===value)+'"><span class="sg-mini">'+(value==='portrait_left'?socialGuideIcon('person'):'')+'<span class="sg-mini-lines"></span>'+(value==='portrait'?socialGuideIcon('person'):'')+'</span>'+label+'</button>').join('')+'</div><div class="sg-fields"><label>Main colour<input type="color" data-guide-setting="primary" value="'+seEsc(d.primary)+'"></label><label>Highlight colour<input type="color" data-guide-setting="accent" value="'+seEsc(d.accent)+'"></label>'+select('photo_policy','Default player',[['match','Match captain'],['season','Season captain'],['choose','Choose each time']])+select('theme','Background',[['solid','Use artwork as supplied'],['gradient','Stadium glow'],['split','Angled colours']])+select('font','Lettering',[['bold','Sporting'],['clean','Modern'],['classic','Classic']])+select('frame','Photo treatment',[['cutout','Full cutout / photo'],['rectangle','Rectangle'],['circle','Circle']])+select('marker','Player marker',[['arrows','Arrows'],['badge','Number'],['name','Photo label']])+'<label>Player size<input type="range" data-guide-setting="photo_scale" min="80" max="125" value="'+d.photo_scale+'"></label><label>Player position<input type="range" data-guide-setting="photo_shift" min="-100" max="100" value="'+d.photo_shift+'"></label><label>Header height<input type="number" data-guide-setting="header_height" min="200" max="440" value="'+d.header_height+'"></label>'+select('header_layout','Logo &amp; sponsors',[['integrated','Included in background'],['banner','Separate full banner'],['separate','Club logo + sponsors']])+'</div><label>Footer <span class="se-muted">(optional)</span><input type="text" data-guide-setting="footer" maxlength="100" value="'+seEsc(d.footer)+'"></label></details>'+(s.styleNote?'<details class="sg-details"><summary>About this suggestion</summary><p class="sg-hint">'+seEsc(s.styleNote)+'</p></details>':'')+'</div><div id="prepLookPreview">'+lookPreview+'</div></div></section>';
+ host.innerHTML='<section class="sg-panel"><h3>Set up your social design</h3><p class="sg-hint">Add previous posts for reference. Your logo and colours come from Club look.</p><div class="sg-split"><div>'+socialGuideUploadStatus(s)+(refs.length?'<details class="sg-details"><summary>Your examples ('+refs.length+')</summary><div class="social-upload-grid">'+refs.map(a=>socialGalleryCard(s,a)).join('')+'</div></details>':'')+(refs.length<4?'<label class="sg-drop">'+socialGuideIcon('upload')+'<strong>'+(refs.length?'Add another example':'Upload an example')+'</strong><small>JPG, PNG or WebP</small><input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload a design example" data-social-gallery="reference_extra"></label>':'')+'<label>What would you change? <span class="se-muted">(optional)</span><textarea id="prepStyleBrief" rows="2" maxlength="1500" placeholder="Larger player, blue background, sponsors at the top…">'+seEsc(d.brief)+'</textarea></label><div class="social-actions"><button class="btn ghost" id="prepSuggest" aria-describedby="prepStyleStatus" aria-busy="'+(s.styleLoading?'true':'false')+'">'+socialGuideIcon('spark')+' '+(s.styleLoading?'Suggesting…':'Suggest a style')+'</button><button class="btn ghost" id="prepSaveStyle" '+(!s.dirty?'disabled':'')+'>'+(s.dirty?'Save style':'Saved')+'</button></div><p id="prepStyleStatus" class="sg-hint" role="'+(s.styleStatus?.error?'alert':'status')+'" aria-live="polite">'+seEsc(s.styleStatus?.message||(s.data.style_suggestions_available===false?'AI allowance unavailable. Try Suggest a style to check again.':''))+'</p><details class="sg-details" id="prepFineTune"><summary>Adjust the layout &amp; colours</summary><div class="sg-layouts">'+[['portrait_left','Photo left'],['list','Names only'],['portrait','Photo right']].map(([value,label])=>'<button class="sg-layout" data-guide-layout="'+value+'" aria-pressed="'+(d.layout===value)+'"><span class="sg-mini">'+(value==='portrait_left'?socialGuideIcon('person'):'')+'<span class="sg-mini-lines"></span>'+(value==='portrait'?socialGuideIcon('person'):'')+'</span>'+label+'</button>').join('')+'</div><div class="sg-fields"><label>Main colour<input type="color" data-guide-setting="primary" value="'+seEsc(d.primary)+'"></label><label>Highlight colour<input type="color" data-guide-setting="accent" value="'+seEsc(d.accent)+'"></label>'+select('photo_policy','Default player',[['match','Match captain'],['season','Season captain'],['choose','Choose each time']])+select('theme','Background',[['solid','Use artwork as supplied'],['gradient','Stadium glow'],['split','Angled colours']])+select('font','Lettering',[['bold','Sporting'],['clean','Modern'],['classic','Classic']])+select('frame','Photo treatment',[['cutout','Full cutout / photo'],['rectangle','Rectangle'],['circle','Circle']])+select('marker','Player marker',[['arrows','Arrows'],['badge','Number'],['name','Photo label']])+'<label>Player size<input type="range" data-guide-setting="photo_scale" min="80" max="125" value="'+d.photo_scale+'"></label><label>Player position<input type="range" data-guide-setting="photo_shift" min="-100" max="100" value="'+d.photo_shift+'"></label><label>Header height<input type="number" data-guide-setting="header_height" min="200" max="440" value="'+d.header_height+'"></label>'+select('header_layout','Logo &amp; sponsors',[['integrated','Included in background'],['banner','Separate full banner'],['separate','Club logo + sponsors']])+'</div><label>Footer <span class="se-muted">(optional)</span><input type="text" data-guide-setting="footer" maxlength="100" value="'+seEsc(d.footer)+'"></label></details>'+(s.styleNote?'<details class="sg-details"><summary>About this suggestion</summary><p class="sg-hint">'+seEsc(s.styleNote)+'</p></details>':'')+'</div><div id="prepLookPreview">'+lookPreview+'</div></div></section>';
  const changed=(showDesign=false)=>{if(showDesign)g.showStylePreview=true;if(showDesign&&!document.getElementById('prepCanvas'))document.getElementById('prepLookPreview').innerHTML=socialGuidePreview();s.dirty=Object.keys(socialDefaults(s.data)).some(k=>s.design[k]!==socialDefaults(s.data)[k]);const b=document.getElementById('prepSaveStyle');b.disabled=!s.dirty;b.textContent=s.dirty?'Save style':'Saved';document.getElementById('prepNext').textContent=s.dirty?'Save & next →':'Next: background →';void socialPrepPaint(s);};
  document.getElementById('prepStyleBrief').oninput=e=>{s.design.brief=e.target.value;changed();};
  host.querySelectorAll('[data-guide-setting]').forEach(e=>e.oninput=()=>{const k=e.dataset.guideSetting;s.design[k]=['header_height','photo_scale','photo_shift'].includes(k)?Number(e.value):['primary','accent'].includes(k)?e.value.toUpperCase():e.value;changed(true);});
@@ -22051,7 +22111,7 @@ function socialGuidePrepare(s){
  const ready=relevant.find(j=>j.id===g.preview&&['ready','approved'].includes(j.state)),local=g.local,previous=relevant.find(j=>j.id===g.previousPreview&&['ready','approved'].includes(j.state)),display=ready||previous||local;
  const saved=photo?socialPlayerPhotos(s,g.person):s.data.assets.filter(a=>['background','sponsors'].includes(a.kind)),people=s.data.players.filter(p=>p.active||socialPlayerPhotos(s,p.id).length),selectedPlayer=s.data.players.find(p=>p.id===g.person),teamCard=g.returnCard?s.data.fixtures.flatMap(socialCards).find(card=>card.key===g.returnCard):null;
  const failed=request&&['failed','rejected'].includes(request.state),refining=!!g.previousPreview||g.source.startsWith('job:'),canChange=ready||previous||local,revert=ready||previous,resultsBackground=g.awardReturn?.view==='results';
- if(ready)g.uploadNote={state:'ready',text:'New version ready — review your changes, then save or adjust again.'};
+ if(ready)g.uploadNote={state:'ready',text:'New version ready to review.'};
  else if(failed)g.uploadNote={state:'error',text:request.error||'No new version was created.'};
  const startLabel=request?.state==='unconfirmed'?'Retry same request':waiting?'Preparing changes…':failed?'Retry changes':refining||g.preparationMode==='edit'?'Apply changes':photo?'Create cutout':'Prepare background';
  const inputForm=(!photo||g.person)?`<form id="prepForm" ${ready?'hidden':''}>
@@ -22089,7 +22149,7 @@ function socialGuidePrepare(s){
  document.getElementById('prepCheckRequest')?.addEventListener('click',()=>socialGuideReload(s));
  host.querySelectorAll('[data-prep-review]').forEach(b=>b.onclick=()=>socialGuideReviewVersion(s,b.dataset.prepReview));
  host.querySelectorAll('[data-prep-refine]').forEach(b=>b.onclick=()=>socialGuideRefineVersion(s,b.dataset.prepRefine));
- host.querySelectorAll('[data-prep-discard]').forEach(b=>b.onclick=async()=>{if(s.busy||s.pending||waiting)return;try{await socialPrepRPC(s,'discard',{id:b.dataset.prepDiscard,request_id:crypto.randomUUID()});if(g.preview===b.dataset.prepDiscard)g.preview=null;if(g.preparation?.id===b.dataset.prepDiscard)g.preparation=null;await socialGuideReload(s);}catch(e){socialMessage(s,e.message);}});
+ host.querySelectorAll('[data-prep-discard]').forEach(b=>b.onclick=async()=>{if(s.busy||s.pending||waiting)return;s.busy=true;b.textContent='Removing…';b.setAttribute('aria-busy','true');socialLock(true);try{await socialPrepRPC(s,'discard',{id:b.dataset.prepDiscard,request_id:crypto.randomUUID()});if(g.preview===b.dataset.prepDiscard)g.preview=null;if(g.preparation?.id===b.dataset.prepDiscard)g.preparation=null;await socialGuideReload(s);}catch(e){socialMessage(s,e.message);}finally{s.busy=false;if(socialHere(s))socialDraw(s);}});
  host.querySelectorAll('[data-prep-image]').forEach(img=>{const j=jobs.find(j=>j.id===img.dataset.prepImage);void socialPrepURL(s,'club-social-prep',j.result_path).then(url=>{if(img.isConnected)img.src=url;}).catch(e=>socialMessage(s,e.message));});
  document.getElementById('prepSaveVersion')?.addEventListener('click',()=>socialGuideSaveAndContinue(s));
  document.getElementById('prepSaveAnother')?.addEventListener('click',()=>socialGuideSaveAndContinue(s,true));
@@ -22108,11 +22168,11 @@ function socialGuidePreparation(g){
 function socialGuidePreparationFeedback(g,request,ready){
  const job=request||ready;if(!job)return '';
  let title,detail,state='working';
- if(['pending','processing'].includes(job.state)){title='Preparing your changes…';detail='Image preparation can take a couple of minutes. Your current image stays here until the new version is ready.';}
+ if(['pending','processing'].includes(job.state)){title='Preparing your changes…';detail='This can take a couple of minutes.';}
  else if(job.state==='unconfirmed'){title='Request not yet confirmed';detail=job.error+' Check status, or retry the same request.';state='error';}
  else if(['failed','rejected'].includes(job.state)){title='Changes could not be prepared';detail=(job.error||'Please try again.')+' '+(job.credit_used?'':'No AI credit used.')+' The image below is unchanged.';state='error';}
  else if(job.state==='discarded'){title='Attempt discarded';detail='Choose an earlier version or prepare another image.';state='error';}
- else{title=job.state==='approved'?'Saved version':'New version ready to review';detail='Review the change. Save it, edit it again, or revert to the previous image.'+(job.credit_used?' 1 AI credit used.':'');state='ready';}
+ else{title=job.state==='approved'?'Saved version':'New version ready to review';detail='Save, edit again or undo.'+(job.credit_used?' 1 AI credit used.':'');state='ready';}
  return `<div id="prepRequestFeedback" class="sg-request-feedback ${state}" role="status" aria-live="polite"><strong>${state==='working'?'<span class="sg-spinner" aria-hidden="true"></span> ':''}${title}</strong>${job.brief?`<p class="sg-request-brief"><b>Your request:</b> ${seEsc(job.brief)}</p>`:''}<p>${seEsc(detail)}</p>${['pending','processing','unconfirmed'].includes(job.state)?'<button class="btn ghost" id="prepCheckRequest" type="button">Check status</button>':''}</div>`;
 }
 function socialGuideReviewVersion(s,id){
@@ -22313,8 +22373,8 @@ async function socialGuideOriginalApprove(s){
  finally{s.busy=false;if(socialHere(s))socialDraw(s);}
 }
 async function socialDownloadImage(s,id){
- const asset=s.data.assets.find(a=>a.id===id);if(!asset||s.pending)return;
- try{const response=await supabase.storage.from('club-socials').download(asset.path);if(response.error||!response.data)throw Error(response.error?.message||'The image could not download.');if(!socialHere(s))return;const person=s.data.players.find(p=>p.id===asset.roster_id),cutout=/cut.?out/i.test(asset.label||'');socialBlobDownload(socialSlug(person?.name||asset.label||'Club-image')+(person?(cutout?'-cutout':'-photo'):'')+'.png',response.data);socialMessage(s,'PNG downloaded');}catch(e){socialMessage(s,e.message);}
+ const asset=s.data.assets.find(a=>a.id===id);if(!asset||s.pending)return;const button=document.querySelector('[data-social-download-image="'+CSS.escape(id)+'"]');if(button?.disabled)return;if(button){button.disabled=true;button.textContent='Downloading…';button.setAttribute('aria-busy','true');}
+ try{const response=await supabase.storage.from('club-socials').download(asset.path);if(response.error||!response.data)throw Error(response.error?.message||'The image could not download.');if(!socialHere(s))return;const person=s.data.players.find(p=>p.id===asset.roster_id),cutout=/cut.?out/i.test(asset.label||'');socialBlobDownload(socialSlug(person?.name||asset.label||'Club-image')+(person?(cutout?'-cutout':'-photo'):'')+'.png',response.data);socialMessage(s,'Download started');if(button?.isConnected)button.textContent='Download started';}catch(e){if(socialHere(s))socialMessage(s,e.message);if(button?.isConnected)button.textContent='Download PNG';}finally{if(button?.isConnected){if(button.dataset.socialDisabled!==undefined)button.dataset.socialDisabled='0';else button.disabled=false;button.removeAttribute('aria-busy');}}
 }
 async function socialGuideSaveAndContinue(s,another=false){
  const g=socialGuideState(s),step=g.step;if(s.busy||s.pending||document.getElementById('prepCanvas')?.dataset.previewState!=='ready')return;

@@ -48,19 +48,19 @@ export function createSocialSandbox(h){
  }
  async function paint(s){
   const b=ensure(s),token=++b.paint,target=document.getElementById('sandboxCanvas'),status=document.getElementById('sandboxStatus');if(!target)return;
-  const download=document.getElementById('sandboxDownload');if(download)download.disabled=true;target.dataset.ready='false';
+  const download=document.getElementById('sandboxDownload');if(download){download.disabled=true;download.textContent='Download trial image';}target.dataset.ready='false';
   if(status)status.textContent='Preparing preview…';
   try{
    const p=preview(s),canvas=document.createElement('canvas');await h.renderImage(p.state,p.card,canvas);
    if(!current(s)||token!==b.paint||!target.isConnected)return;
    const ctx=canvas.getContext('2d');ctx.save();ctx.fillStyle='rgba(10,24,47,.9)';ctx.fillRect(0,0,canvas.width,68);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='700 30px Arial';ctx.fillText('TRIAL · DESIGN SANDBOX',canvas.width/2,44);ctx.restore();
    target.width=canvas.width;target.height=canvas.height;target.getContext('2d').drawImage(canvas,0,0);
-   target.dataset.ready='true';if(download)download.disabled=false;if(status)status.textContent='Trial preview';
+   target.dataset.ready='true';if(download)download.disabled=b.busy;if(status&&!b.busy)status.textContent='Trial preview';
   }catch(e){if(current(s)&&token===b.paint){target.dataset.ready='false';if(status)status.textContent='Preview could not load. '+e.message;}}
  }
  function release(s){if(!s.sandbox)return;for(const url of s.sandbox.owned)URL.revokeObjectURL(url);s.sandbox=null;}
  async function upload(s,kind,file){
-  if(!file)return;const {b,key}=selection(s);if(b.busy)return;b.busy=true;
+  if(!file)return;const {b,key}=selection(s);if(b.busy)return;b.busy=true;render(s);const status=document.getElementById('sandboxStatus');if(status)status.textContent='Loading trial '+(kind==='background'?'background':'photo')+'…';
   try{
    const blob=await h.normalize(file);if(s.sandbox!==b)return;
    const url=URL.createObjectURL(blob),asset={id:'sandbox-'+kind+'-'+crypto.randomUUID(),kind,path:url,label:file.name};b.owned.add(url);b.urls.set(url,url);
@@ -83,7 +83,7 @@ export function createSocialSandbox(h){
    select('font','Lettering',[['bold','Sporting'],['clean','Modern'],['classic','Classic']])+select('marker','Player marker',[['arrows','Arrows'],['badge','Number'],['name','Photo label']])+
    select('theme','Background treatment',[['solid','Use as supplied'],['gradient','Stadium glow'],['split','Angled colours']])+select('header_layout','Logo and sponsors',[['integrated','Included in background'],['banner','Separate banner'],['separate','Club logo + sponsors']])+range('header_height','Header height',200,440)+'<label>Footer<input type="text" maxlength="100" data-sandbox-setting="footer" value="'+esc(b.design.footer)+'"></label></div>'+
    '<label>Upload a trial background<input type="file" id="sandboxBackgroundUpload" accept="image/png,image/jpeg,image/webp"></label><button class="btn ghost" id="sandboxReset">Reset sandbox</button><div class="sandbox-apply"><button class="btn" id="sandboxApply">Save layout as club default</button><p>Trial photos, positions and backgrounds stay here.</p></div></section><figure class="sandbox-preview"><canvas id="sandboxCanvas" width="1080" height="1350" aria-label="Team copy for design trials"></canvas><figcaption id="sandboxStatus" role="status" aria-live="polite"></figcaption><button class="btn ghost" id="sandboxDownload" disabled>Download trial image</button></figure></div>';
-  const saveButton=document.getElementById('sandboxApply'),saved=()=>JSON.stringify(b.design)===JSON.stringify(h.defaults(s.data)),saveState=()=>{saveButton.disabled=b.busy||s.busy||!!s.pending||saved();saveButton.textContent=saved()?'Layout saved':'Save layout as club default';};
+  const saveButton=document.getElementById('sandboxApply'),saved=()=>JSON.stringify(b.design)===JSON.stringify(h.defaults(s.data)),saveState=()=>{saveButton.disabled=b.busy||s.busy||!!s.pending||saved();saveButton.textContent=b.saving?'Saving…':saved()?'Layout saved':'Save layout as club default';};
   host.querySelectorAll('[data-sandbox-setting]').forEach(input=>input.oninput=()=>{b.design[input.dataset.sandboxSetting]=input.type==='range'?Number(input.value):input.value;saveState();if(input.dataset.sandboxSetting==='layout')render(s);else void paint(s);});
   document.getElementById('sandboxTeam').onchange=e=>{b.team=e.target.value;b.day=0;render(s);};
   document.getElementById('sandboxDay')?.addEventListener('change',e=>{b.day=Number(e.target.value);render(s);});
@@ -91,8 +91,8 @@ export function createSocialSandbox(h){
   host.querySelectorAll('[data-sandbox-position]').forEach(input=>input.oninput=()=>{b.positions[key][input.dataset.sandboxPosition]=Number(input.value);void paint(s);});
   document.getElementById('sandboxPhotoUpload').onchange=e=>upload(s,'photo',e.target.files[0]);document.getElementById('sandboxBackgroundUpload').onchange=e=>upload(s,'background',e.target.files[0]);
   document.getElementById('sandboxReset').onclick=()=>{if(b.busy||!window.confirm('Reset to the saved club design and discard trial images?'))return;release(s);render(s);h.message(s,'Sandbox reset.');};
-  document.getElementById('sandboxApply').onclick=async()=>{if(b.busy||s.busy||s.pending||saved())return;if(!window.confirm('Save this layout for upcoming teams? Trial photos, positions and backgrounds stay here.'))return;await h.applyDesign(s,{...b.design});if(current(s))saveState();};
-  document.getElementById('sandboxDownload').onclick=()=>{const canvas=document.getElementById('sandboxCanvas');if(canvas?.dataset.ready!=='true')return;canvas.toBlob(blob=>{if(blob){h.download('Club-design-TRIAL.png',blob);h.message(s,'Trial image downloaded.');}},'image/png');};
+  document.getElementById('sandboxApply').onclick=async()=>{if(b.busy||s.busy||s.pending||saved())return;if(!window.confirm('Save this layout for upcoming teams? Trial photos, positions and backgrounds stay here.'))return;b.busy=true;b.saving=true;saveState();host.querySelectorAll('input,select,button').forEach(e=>e.disabled=true);try{await h.applyDesign(s,{...b.design});}catch(e){h.message(s,e.message);}finally{b.busy=false;b.saving=false;if(current(s)&&s.sandbox===b)render(s);}};
+  document.getElementById('sandboxDownload').onclick=()=>{const canvas=document.getElementById('sandboxCanvas'),button=document.getElementById('sandboxDownload');if(button.disabled||canvas?.dataset.ready!=='true')return;button.disabled=true;button.textContent='Preparing…';canvas.toBlob(blob=>{if(blob){h.download('Club-design-TRIAL.png',blob);button.textContent='Download started';h.message(s,'Trial image download started.');}else{button.textContent='Retry download';h.message(s,'Could not prepare the trial image. Try again.');}button.disabled=false;},'image/png');};
   saveState();if(b.busy)host.querySelectorAll('input,select,button').forEach(e=>e.disabled=true);void paint(s);
  }
  return {render,preview,release};
