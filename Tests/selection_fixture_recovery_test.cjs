@@ -38,6 +38,10 @@ for(const file of ['app.js','demo.html']){
  test(file+': copy cannot retain a one-day-only player in an unbracketed two-day team',async()=>{
   const h=harness(source);h.target.details.brackets=false;h.s.data.fixtures.push(fixture('played','2099-10-10'));h.unavailable.add('a:2099-11-07');await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:null,d2:null});
  });
+ test(file+': an old copy button cannot overwrite a published or locked team',async()=>{
+  const h=harness(source);h.s.data.fixtures.push(fixture('played','2099-10-10'));h.target.published={details:structuredClone(h.target.details),slots:structuredClone(h.target.slots)};await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.equal(h.prompts.length,0);assert.match(h.notices.at(-1),/unpublished/);
+  h.target.published=null;h.c.seFixtureLocked=()=>true;await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.equal(h.prompts.length,0);
+ });
  test(file+': no usable source, rejected confirmation and failed save never claim success',async()=>{
   const h=harness(source);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/no earlier team/);h.s.data.fixtures.push(fixture('played','2099-10-10'));h.confirm(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);h.confirm(true);h.saved(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.ok(h.notices.every(x=>!x.startsWith('Copied')));
  });

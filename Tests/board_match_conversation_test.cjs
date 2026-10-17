@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{JSDOM}=require('jsdom');
-const names=['seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','seBoardComments','seReadOnlyTeamCard','seBoard','sePublishedDates','seClubDate','seMatchConversationClosed','seUpdateConversationState','seMutate'];
+const names=['seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','seBoardComments','seCaptainAvailability','seCopyPublishedAction','seBoardPublishedTeam','seBindPublishedActions','seReadOnlyTeamCard','seBoard','sePublishedDates','seClubDate','seMatchConversationClosed','seUpdateConversationState','seMutate'];
 function extract(source,name){const a=source.search(new RegExp('(?:async )?function '+name+'\\('));assert.ok(a>=0,name);const rest=source.slice(a),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);}
 function harness(file){
  const dom=new JSDOM('<main id="sePage"><div id="seContent"></div></main>'),document=dom.window.document,calls=[],posts=[],receipts=new Set();
@@ -8,7 +8,7 @@ function harness(file){
  let clock='2026-10-17T01:00:00Z';class Clock extends Date{constructor(...args){super(...(args.length?args:[clock]));}}
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const c=vm.createContext({document,Date:Clock,Intl,crypto:require('node:crypto').webcrypto,currentTab:'teams',selectionState:s,ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
-  seEsc:esc,seName:()=> 'Selected player',seDate:String,seOpt:()=>'',seBoardRoleMarks:()=>'',seDraftChanged:()=>false,seScorecardNote:()=>'',seTeamNumbers:()=> '1/11',
+  seIsCaptain:d=>d.captain,seCanSetup:d=>d.admin||d.selector,session:{user:{id:'captain'}},club:{name:'Test Club'},seEsc:esc,seName:()=> 'Selected player',seDate:String,seOpt:()=>'',seBoardRoleMarks:()=>'',seDraftChanged:()=>false,seScorecardNote:()=>'',seTeamNumbers:()=> '1/11',
   seBoardAccess:d=>d.can_view_board,seBoardFixtures:()=>s.data.fixtures,seFixtureLocked:()=>true,seFollowupPanel:()=>'',seBindConversations(){},seBindBoardComments(){},seFixtureEditor(){},recordSelectionNavigation(){},
   seButtonWorking:()=>()=>{},seGuardFixtureEdit:()=>true,sePersist(){},seNotice:text=>s.notice=text,seLock(){},seReload:async()=>true,
   seReadButton:async(button,label,run)=>{button.textContent=label;button.disabled=true;return run();},confirmLeaveSelections:()=>true,drawSelections:()=>c.seBoard(),
@@ -29,6 +29,12 @@ for(const file of ['app.js','demo.html']){
  test(file+': existing match messages are escaped and the audience is clear',async()=>{
   const h=harness(file);h.posts.push({author_name:'<img src=x>',body:'Meet at <b>12</b>',created_at:'2026-10-17T00:00:00Z'});const panel=await h.open();
   assert.match(panel.textContent,/Visible to selected players, captains and match staff/);assert.match(panel.textContent,/Meet at <b>12<\/b>/);assert.equal(panel.querySelector('img,b'),null);
+ });
+ test(file+': the visible conversation button expands and collapses beneath the published team',async()=>{
+  const h=harness(file);h.c.seBoard();const panel=h.document.querySelector('[data-se-board-chat]'),button=panel.querySelector('summary');
+  assert.ok(button.classList.contains('btn'));assert.equal(button.textContent,'Match conversation');assert.equal(button.getAttribute('aria-expanded'),'false');
+  button.click();await new Promise(r=>setTimeout(r,10));assert.equal(panel.open,true);assert.equal(button.textContent,'Hide conversation');assert.equal(button.getAttribute('aria-expanded'),'true');assert.ok(panel.querySelector('form'));assert.ok(h.document.querySelector('[data-se-team]'));
+  button.click();await new Promise(r=>setTimeout(r,10));assert.equal(panel.open,false);assert.equal(button.textContent,'Match conversation');assert.equal(button.getAttribute('aria-expanded'),'false');assert.equal(h.s.view,'board');assert.equal(h.calls.filter(c=>c.action==='posts').length,1);
  });
  test(file+': sending stays on the board, shows progress and preserves a private draft',async()=>{
   const h=harness(file);h.s.boardCommentDrafts={first:'Private note'};await h.open();const rpc=h.c.seRPC;let release;h.c.seRPC=(action,data)=>action==='post'?new Promise(r=>release=async()=>r(await rpc(action,data))):rpc(action,data);

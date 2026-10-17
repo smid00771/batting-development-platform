@@ -1,12 +1,12 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {JSDOM}=require('jsdom');
 function fn(source,name){const m=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(m,name);const rest=source.slice(m.index),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);}
-const names=['sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seMatchConversationClosed','seUpdateConversationState','seDate','sePublished','seChat','seChangeView'];
+const names=['sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seMatchConversationClosed','seUpdateConversationState','seDate','seBindPublishedActions','sePublished','seChat','seChangeView'];
 function fixture(id,days){return {id,can_chat:true,publication:1,published:{details:{grade:id,competition:'Test',opposition:'Opponents',format:'limited_overs',days:days.map(date=>({date,start:'12:00'})),ground:'Ground'},slots:[],players:[]}};}
 function setup(file,fixtures=[]){
  const source=fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8'),dom=new JSDOM('<main id="seContent"></main>'),s={view:'published',data:{fixtures,roster:[],access:{timezone:'Australia/Sydney'}}};
  let clock='2026-10-16T01:00:00Z',navigation=0,posts=0;class Clock extends Date{constructor(...args){super(...(args.length?args:[clock]));}static now(){return +new Date(clock);}}
- const c=vm.createContext({document:dom.window.document,Date:Clock,Intl,console,FormData:dom.window.FormData,selectionState:s,session:{user:{id:'user'}},club:{name:'Test club'},currentTab:'teams',ensureSelections:()=>s,
+ const c=vm.createContext({seBoardAccess:()=>false,document:dom.window.document,Date:Clock,Intl,console,FormData:dom.window.FormData,selectionState:s,session:{user:{id:'user'}},club:{name:'Test club'},currentTab:'teams',ensureSelections:()=>s,
   seIsCaptain:()=>false,seCanRecordFixtureResults:()=>false,seScorecardNote:()=>'',seCanSetup:()=>false,seEsc:x=>String(x??''),seFormatLabel:()=> 'Limited overs',sePublicationStamp:()=> 'Published',seSnapshotName:()=>'',seSnapshotSplit:()=>false,
   confirmLeaveSelections:()=>true,socialLanding(){},drawSelections(){s.navigationDrawer=null;c.sePublished();},recordSelectionNavigation(){navigation++;},recordSelectionDrawer(kind,values){s.navigationDrawer={kind,...values};},
   appNavigationBack:f=>f(),seNotice(){},seRPC:async()=>[{author_name:'Player',body:'Saved message',created_at:'2026-10-10T01:00Z'}],seMutate:async()=>{posts++;return false;}});
