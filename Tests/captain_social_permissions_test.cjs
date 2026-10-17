@@ -4,12 +4,12 @@ function fn(src,name){const m=new RegExp('(?:async )?function '+name+'\\(').exec
 for(const file of ['app.js','demo.html']){
  test(file+': captain, player, selector and socials navigation combine without losing prior roles',()=>{
   const membership={permission_role:'captain',involvement:'both'},c=vm.createContext({membership,session:{user:{id:'me'}},hasMatchCaptainAccess:()=>false,seCanSetup:d=>d.admin||d.selector});
-  vm.runInContext(['seHasAvailability','seIsCaptain','seSelectionTabs'].map(n=>fn(source(file),n)).join('\n'),c);
+  vm.runInContext(['seBoardAccess','seHasAvailability','seIsCaptain','seSelectionTabs'].map(n=>fn(source(file),n)).join('\n'),c);
   const d={captain:true,roster:[],reviews:[],conversations:[],can_view_club_availability:true};
   const labels=()=>Array.from(c.seSelectionTabs(d),x=>x[1]);
-  assert.deepEqual(labels(),['Captain Checks','Player conversations','Teams']);
-  d.socials=true;assert.deepEqual(labels(),['Captain Checks','Player conversations','Teams','Social Graphics']);
-  d.selector=true;assert.deepEqual(labels(),['Playing List','Availability','Selection Board','Captain Checks','Player conversations','Teams','Social Graphics']);
+  assert.deepEqual(labels(),['Selection Board','Teams']);
+  d.socials=true;assert.deepEqual(labels(),['Selection Board','Teams','Social Graphics']);
+  d.selector=true;assert.deepEqual(labels(),['Playing List','Availability','Selection Board','Teams','Social Graphics']);
   d.selector=false;d.captain=false;membership.permission_role='none';assert.deepEqual(labels(),['Availability','Teams','Social Graphics']);
   d.socials=false;assert.deepEqual(labels(),['Availability','Teams']);
  });
@@ -41,7 +41,7 @@ for(const file of ['app.js','demo.html']){
   const h=managers({admin:false,can_manage_managers:false});assert.equal(h.doc.querySelector('[data-social-manager]'),null);assert.match(h.doc.body.textContent,/covering socials temporarily/);
  });
  test(file+': Social accounts is the second section',()=>{
-  const match=source(file).match(/\[\['managers','Who handles socials'\],\['accounts','Social accounts'\],\['graphics','Create posts'\]/);assert.ok(match);
+  const match=source(file).match(/\[\['managers','Who handles socials'\],\['accounts','Social accounts'\],(?:\['awards','Socials Awards'\],)?\['graphics','Create posts'\]/);assert.ok(match);
  });
 }
 test('Social accounts handles pending activation, a usable connection, manager disconnect and failed checks',async()=>{

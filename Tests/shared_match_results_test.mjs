@@ -39,21 +39,16 @@ test('the bundled demo renders Player of the Week with its ranking dependencies'
  const ui=ctx.createPlayerOfWeek({sharedResults:true,supabase:createPlayerWeekDemo(()=> 'Example'),here:()=>true,escape:v=>String(v??''),fontReady:async()=>{},text:(c,t,x,y)=>c.fillText(String(t),x,y),savedPhotos:()=>[]});ui.state(s).end='2026-10-18';await ui.load(s);
  assert.ok(dom.window.document.querySelectorAll('[data-pw-choose]').length>0,'Imported contenders appear');assert.equal(dom.window.document.getElementById('pwEnd'),null,'The common checklist owns the week control');assert.doesNotMatch(dom.window.document.body.textContent,/not defined/);
 });
-test('Teams importer saves once, shares updates, retains failed inputs and checks all awards',async()=>{
+test('awards show only compact missing-score alerts and open the existing fixture',async()=>{
  const dom=new JSDOM('<main id="socialResults"></main>');globalThis.document=dom.window.document;globalThis.window=dom.window;dom.window.HTMLElement.prototype.scrollIntoView=()=>{};
  const context={week_end:'2026-10-18',fixtures:[fixture('f1','1st Grade'),fixture('f2','2nd Grade')],cards:[card('m1','1st Grade')]};
- const s={scope:'user:club',view:'awards'},calls=[];let changed=0,fail=false,approval=false,release;
- const api={rpc:async(name,args)=>{calls.push([name,args.p_action]);if(args.p_action==='context')return {data:structuredClone(context)};
-  if(args.p_action==='link'){const c=context.cards.find(c=>c.snapshot_id===args.p_data.snapshot_id);c.fixture_id=args.p_data.fixture_id;context.fixtures.find(f=>f.id===c.fixture_id).match_id=c.scorecard.match_id;return {data:{saved:true}};}
-  if(args.p_action==='no_play'){context.fixtures.find(f=>f.id===args.p_data.fixture_id).no_play=args.p_data.reason||null;return {data:{saved:true}};}throw Error('Unexpected action');},
-  functions:{invoke:async(name,{body})=>{assert.equal(body.purpose,'team_of_week');calls.push(['import',body.url]);if(release)await new Promise(r=>release=r);if(fail)return {error:{message:'Scorecard unavailable'}};const c=card('m2','2nd Grade');context.cards.push(c);return {data:{snapshot_id:c.snapshot_id,scorecard:c.scorecard}};}}};
- const ui=createSharedMatchResults({supabase:api,escape:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),here:()=>true,extractUrl:v=>v[0],canLeave:()=>true,changed:async()=>changed++,confirm:()=>approval});
- const until=async pred=>{for(let n=0;n<100;n++){if(pred())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out');};
- ui.mount(s,'2026-10-18');await until(()=>s.results.context&&!s.results.busy);assert.match(document.body.textContent,/1 of 2/);
- assert.equal(await ui.check(s,'2026-10-18'),false,'Missing team is reviewed before any award can finish');
- approval=true;assert.equal(await ui.check(s,'2026-10-18'),true,'Volunteer may knowingly continue with partial results');
- const input=document.querySelector('[data-result-link="f2"]');input.value='https://play.cricket.com.au/match/m2';input.dispatchEvent(new window.Event('input'));fail=true;document.querySelector('[data-result-load="f2"]').click();await until(()=>!s.results.busy);assert.match(document.body.textContent,/Scorecard unavailable/);assert.equal(document.querySelector('[data-result-link="f2"]').value,input.value);
- fail=false;document.querySelector('[data-result-load="f2"]').click();assert.equal(document.getElementById('sharedResultsRefresh').disabled,true);await until(()=>!s.results.busy);assert.equal(changed,1);assert.match(document.body.textContent,/2 of 2/);assert.equal(context.cards.length,2);assert.equal(document.querySelector('[data-result-load="f2"]'),null);assert.equal(await ui.check(s,'2026-10-18'),true);
+ const s={scope:'user:club',view:'awards'},opened=[];let approval=false;
+ const ui=createSharedMatchResults({supabase:{rpc:async()=>({data:structuredClone(context)})},escape:String,here:()=>true,canLeave:()=>true,openFixture:(_,id)=>opened.push(id),confirm:()=>approval});
+ ui.mount(s,'2026-10-18');for(let n=0;n<10&&s.results.busy;n++)await new Promise(r=>setTimeout(r,0));
+ assert.match(document.body.textContent,/1 match needs scores checked/);assert.doesNotMatch(document.body.textContent,/1st Grade/);assert.equal(document.querySelector('input[type=url]'),null);assert.equal(document.querySelector('details').open,false);
+ document.querySelector('[data-result-open="f2"]').click();assert.deepEqual(opened,['f2']);
+ assert.equal(await ui.check(s,'2026-10-18'),false);approval=true;assert.equal(await ui.check(s,'2026-10-18'),true);
+ context.cards.push(card('m2','2nd Grade'));await ui.load(s);assert.equal(document.querySelector('.shared-results'),null);assert.equal(document.querySelectorAll('[data-result-open]').length,0);assert.equal(await ui.check(s,'2026-10-18'),true);
 });
 test('Match Review loads an existing shared snapshot without another external import or subjective edits',async()=>{
  const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');

@@ -25,7 +25,7 @@ function harness({warn=true,short=false,failReload=false,badResponse=false,prepa
  const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date:PublicationDate,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,
   session:{user:{id:'head'}},membership:{permission_role:'selector'},hasMatchCaptainAccess:()=>false,club:{id:'club',name:'Test Club'},selectionState:s,currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
   seEsc:esc,seDate:x=>x,seBoard:()=>{},seReviewLabel:()=> 'Captain checked',sePublicationChangeSummary:()=>'<p>Review lineup</p>',
-  seFixtureLocked:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,
+  seFixtureLocked:()=>false,seCanRecordFixtureResults:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,
   seFormatLabel:()=> 'Limited overs',seSnapshotName:(snap,id)=>esc(snap.players.find(p=>p.id===id)?.name||'Vacant'),seSnapshotSplit:()=>false,sePublicationStamp:()=> 'Published version 1',
   confirmLeaveSelections:()=>true,socialEnsure:()=>social,refreshClubMessageBadge:()=>{},sePickerSaved:()=>{},
   supabase:{rpc:async(_,args)=>{const {p_action:action,p_data:data}=args;requests.push({action,data:structuredClone(data)});
