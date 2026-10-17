@@ -1,8 +1,9 @@
 /* Demo-only memory store. It never requests or changes a real scorecard. */
-export function createTeamWeekDemo(clubName){
+export function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
  const names=['Alex Carter','Sam Riley','Jordan Lee','Morgan Reed','Taylor James','Casey Brown','Jamie Bell','Robin White','Cameron Hill','Chris Green','Drew Clarke','Pat Wilson','Lee Woods','Rory King','Charlie Young','Jesse Ward'];
  function sample(end){
+  if(sharedScores)return {...sharedScores(end),design:structuredClone(design),history:[...editions.values()].filter(e=>e.sealed).map(({request,...e})=>e).reverse()};
   const snapshot='sample-'+end,team='sample-club',candidates=names.map((name,n)=>{const runs=[86,72,64,58,47,35,28,24,12,8,0,7,42,21,16,9][n],wickets=[0,0,0,0,0,3,2,2,5,4,3,1,0,0,0,0][n],id='sample-player-'+n;
    return {key:snapshot+':'+team+':'+id,snapshot_id:snapshot,team_id:team,match_id:'sample-match',player_id:id,name,grade:(n%4+1)+['st','nd','rd','th'][n%4]+' Grade',runs,wickets,conceded:20+n,batting:runs?[{runs,not_out:n%3===0}]:[],bowling:wickets?[{wickets,runs:20+n,team_id:team,importable:true}]:[]};});
   return {cards:[{snapshot_id:snapshot,our_team:team,scorecard:{schema_version:2,status:'completed',match_id:'sample-match',url:'#',dates:[end],grade:'Sample grades',teams:[{id:team,name:clubName()},{id:'sample-visitors',name:'Sample visitors'}],innings:[{team_id:team,complete:true,bowling_available:true},{team_id:'sample-visitors',complete:true,bowling_available:true}]}}],candidates,design:structuredClone(design),history:[...editions.values()].filter(e=>e.sealed).map(({request,...e})=>e).reverse()};

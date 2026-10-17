@@ -1,7 +1,7 @@
-import {createTeamWeekDemo} from './team-of-week-demo.js?v=0.8.62.172';
+import {createTeamWeekDemo} from './team-of-week-demo.js?v=0.8.62.199';
 /* Demo records remain in memory; no live club writes or imported-score changes. */
-export function createPlayerWeekDemo(clubName){
- const scores=createTeamWeekDemo(clubName),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
+export function createPlayerWeekDemo(clubName,sharedScores=null){
+ const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
  return {async rpc(name,args){
   if(name!=='player_of_week_api')return {error:{message:'Unavailable in this demo'}};
   const data=args.p_data,action=args.p_action;
