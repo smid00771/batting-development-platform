@@ -66,6 +66,21 @@ test('a later team correction invalidates a previously confirmed team check',asy
  h.ui.mount(h.host,{...h.options,snapshotId:'another-scorecard'});await settle();h.host.querySelector('[data-pc-apply]').click();await settle();
  h.ui.mount(h.host,h.options);await settle();assert.match(h.host.textContent,/differs from the selected team/);assert.ok(h.host.querySelector('[data-pc-apply]'));assert.equal(h.calls.filter(c=>c.args.p_action==='context').length,3);
 });
+test('reopening a scorecard rechecks a previously matching or corrected team after selection edits',async()=>{
+ for(const corrected of [false,true]){
+  let edited=false;const h=harness(async args=>({data:args.p_action==='context'?context():args.p_action==='apply'?{saved:true}:{...preview(),changed:corrected||edited}}));await settle();
+  if(corrected){h.host.querySelector('[data-pc-apply]').click();await settle();}
+  assert.match(h.host.textContent,/Team matches PlayCricket/);edited=true;
+  const host=h.dom.window.document.createElement('main');h.host.replaceWith(host);h.ui.mount(host,h.options);await settle();
+  assert.equal(h.calls.filter(c=>c.args.p_action==='context').length,2);assert.match(host.textContent,/differs from the selected team/);assert.ok(host.querySelector('[data-pc-apply]'));
+  assert.equal(h.calls.filter(c=>c.args.p_action==='apply').length,corrected?1:0,'Reopening never changes selections');
+ }
+});
+test('reopening preserves an uncertain update and retries the same request',async()=>{
+ let attempts=0;const h=harness(async args=>args.p_action==='context'?{data:context()}:args.p_action==='preview'?{data:preview()}:++attempts===1?{error:{message:'Connection interrupted'}}:{data:{saved:true}});await settle();h.host.querySelector('[data-pc-apply]').click();await settle();
+ const host=h.dom.window.document.createElement('main');h.host.replaceWith(host);h.ui.mount(host,h.options);await settle();assert.match(host.textContent,/Retry team update/);assert.equal(h.calls.filter(c=>c.args.p_action==='context').length,1);
+ host.querySelector('[data-pc-apply]').click();await settle();const saves=h.calls.filter(c=>c.args.p_action==='apply');assert.deepEqual(saves[0].args,saves[1].args);assert.match(host.textContent,/Team matches PlayCricket/);
+});
 test('unfinished and unavailable full lineups never offer a destructive team update',async()=>{
  for(const value of ['unfinished','missing']){const ctx=context();if(value==='unfinished')ctx.card.status='in_progress';else ctx.card.teams[0].lineup_available=false;const h=harness(async()=>({data:ctx}));await settle();assert.equal(h.calls.length,1);assert.equal(h.host.querySelector('[data-pc-apply]'),null);assert.equal(h.host.querySelector('[data-pc-check]'),null);}
 });
