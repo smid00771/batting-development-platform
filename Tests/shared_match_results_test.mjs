@@ -30,6 +30,15 @@ test('fictional demo imports are shared by both weekly awards and Match Review',
  const review=await shared.rpc('review',{fixture_id:'f1',match_date:'2026-10-17',format_key:'limited_overs'});assert.equal(review.preview.snapshot_id,imported.snapshot_id);
  for(const [name,api] of [['team_of_week_api',createTeamWeekDemo(()=> 'Example',end=>shared.awards(end))],['player_of_week_api',createPlayerWeekDemo(()=> 'Example',end=>shared.awards(end))]]){const response=await api.rpc(name,{p_action:'context',p_data:{week_end:'2026-10-18'}});assert.equal(response.data.cards[0].snapshot_id,imported.snapshot_id);assert.equal(response.data.candidates.length,11);assert.equal(response.data.candidates[0].runs,112);}
 });
+test('the bundled demo renders Player of the Week with its ranking dependencies',async()=>{
+ const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8'),start=demo.indexOf('/* Suggestions cover different kinds of achievement;'),end=demo.indexOf('function createPlayerWeekDemo(',start);assert.ok(start>0&&end>start);
+ const dom=new JSDOM('<main id="socialContent"></main>');dom.window.scrollTo=()=>{};const {createCanvas}=require('@napi-rs/canvas');
+ dom.window.HTMLCanvasElement.prototype.getContext=function(){this.backing||=createCanvas(this.width,this.height);this.backing.width=this.width;this.backing.height=this.height;const c=this.backing.getContext('2d'),draw=c.drawImage.bind(c);c.drawImage=(image,...args)=>draw(image.backing||image,...args);return c;};
+ const ctx={document:dom.window.document,window:dom.window,Date,Map,Set,JSON,Array,Number,String,Math,URL,Blob,structuredClone};vm.createContext(ctx);vm.runInContext(demo.slice(start,end),ctx);
+ const s={scope:'user:club',view:'player_week',data:{brand:{name:'Example'},timezone:'Australia/Sydney'},design:{primary:'#073554',accent:'#128fd2'},urls:new Map()};
+ const ui=ctx.createPlayerOfWeek({sharedResults:true,supabase:createPlayerWeekDemo(()=> 'Example'),here:()=>true,escape:v=>String(v??''),fontReady:async()=>{},text:(c,t,x,y)=>c.fillText(String(t),x,y),savedPhotos:()=>[]});ui.state(s).end='2026-10-18';await ui.load(s);
+ assert.ok(dom.window.document.querySelectorAll('[data-pw-choose]').length>0,'Imported contenders appear');assert.equal(dom.window.document.getElementById('pwEnd'),null,'The common checklist owns the week control');assert.doesNotMatch(dom.window.document.body.textContent,/not defined/);
+});
 test('Teams importer saves once, shares updates, retains failed inputs and checks all awards',async()=>{
  const dom=new JSDOM('<main id="socialResults"></main>');globalThis.document=dom.window.document;globalThis.window=dom.window;dom.window.HTMLElement.prototype.scrollIntoView=()=>{};
  const context={week_end:'2026-10-18',fixtures:[fixture('f1','1st Grade'),fixture('f2','2nd Grade')],cards:[card('m1','1st Grade')]};
