@@ -1,0 +1,267 @@
+/* Shared app presentation. Club colours remain owned by applyClubTheme(). */
+:root {
+  --ink: #202c3b;
+  --text: var(--ink);
+  --muted: #606d7d;
+  --line: #dfe5eb;
+  --bg: #f4f6f8;
+  --soft: #f7f9fb;
+  --primary: var(--navy);
+  --cb-shadow: 0 2px 6px rgb(25 42 64 / 3%);
+  --cb-focus: #426db2;
+}
+
+#app {font-size:15px;line-height:1.5;color:var(--ink)}
+#app .shell {max-width:1440px;background:var(--bg);box-shadow:none}
+#app .page {padding:28px 32px 48px}
+#app :is(h1,h2,h3,h4) {color:inherit}
+#app h1 {margin:0 0 18px;letter-spacing:-.025em!important}
+#app h2 {margin:0 0 12px}
+#app :is(p,li) {line-height:1.55}
+#app :is(.help,.se-muted,.social-small,.team-review-meta,.team-review-row-status) {font-size:13px;line-height:1.5;color:var(--muted)}
+#app :is(.help,.status,.se-notice,.social-notice):empty {display:none}
+#app .section-label {font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--muted)}
+#app :is(.card,.admin-card,.se-card,.st-panel,.season-stats) {border:1px solid var(--line);border-radius:14px;background:#fff;padding:20px;box-shadow:var(--cb-shadow)}
+#app .card + .card {margin-top:18px}
+#app .grid {gap:20px}
+#app :is(.notice,.identity-summary,.committee-summary,.handoff-box) {border-radius:10px;font-size:13px;line-height:1.5}
+
+/* Accessible labels should not repeat themselves above every player control. */
+.sr-only {position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
+
+/* A compact club identity, followed by quiet, consistent navigation. */
+#app .compact-club-header.hero {background:#fff;color:var(--ink);border-top:4px solid var(--navy);padding:16px 32px}
+#app .compact-club-header .topline {gap:20px}
+#app .compact-club-header .club-header-name {font-size:20px;font-weight:700;letter-spacing:-.02em}
+#app .compact-club-header .shell-club-logo {width:44px;height:44px;min-width:44px;padding:2px;background:#fff;border:0;border-radius:0}
+#app .compact-club-header .header-actions {align-items:center;gap:12px}
+#app .compact-club-header .context-switcher {width:210px;flex-basis:210px}
+#app .compact-club-header .context-switcher-label {font-size:12px;font-weight:500;color:var(--muted)}
+#app .compact-club-header .context-switch {border-color:var(--line);font-size:14px;font-weight:500;color:var(--ink)}
+#app .account-controls {flex-direction:row;align-items:center;gap:10px}
+#app .platform-admin-link {min-height:44px;font-weight:500;font-size:12px;color:inherit}
+#app .account-menu-popover {border-color:var(--line);box-shadow:0 12px 36px rgb(25 42 64 / 14%);padding:8px}
+#app .account-menu-action {font-size:14px;font-weight:500;min-height:44px}
+#app .account-menu-identity span {font-size:12px}
+#app .shell .nav {gap:4px;padding:0 24px;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line);box-shadow:0 2px 4px rgb(25 42 64 / 2%)}
+#app .shell .nav button {min-height:48px;padding:12px 10px;margin:0;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:var(--muted);font-size:13px;font-weight:600;white-space:nowrap}
+#app .shell .nav button.active {border-bottom-color:var(--navy);background:var(--club-soft);color:var(--ink)}
+#app .shell .nav button[data-tab="guide"] {border:0;border-bottom:3px solid transparent;margin-left:auto;font-size:13px}
+#app .shell .nav button[data-tab="guide"].active {border-bottom-color:var(--navy)}
+#app .shell .nav .nav-group-start::before {display:none}
+
+/* Primary action, supporting action and selected state each have one treatment. */
+#app .btn {display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:10px 14px;border:1px solid transparent;border-radius:8px;background:var(--navy);color:var(--navy-contrast);font-size:13px;font-weight:650;line-height:1.35;text-decoration:none;transition:background-color .12s,border-color .12s,box-shadow .12s}
+#app .btn:is(.secondary,.ghost) {background:#fff;color:var(--ink);border-color:var(--line)}
+#app .btn.danger {background:#a92c34;color:#fff;border-color:#a92c34}
+#app .btnrow {gap:8px}
+#app :is(button,a,summary,input,select,textarea):focus-visible {outline:3px solid var(--cb-focus);outline-offset:3px}
+#app .btn:active:not(:disabled) {box-shadow:inset 0 0 0 2px rgb(255 255 255 / 35%);filter:brightness(.9)}
+#app .btn:disabled {opacity:.5;cursor:default}
+#app .btn[aria-busy="true"] {opacity:.8;cursor:progress}
+#app .btn:is([aria-pressed="true"],[aria-expanded="true"],[aria-current="step"]) {background:var(--club-soft);color:var(--ink);border-color:var(--navy);box-shadow:inset 0 0 0 1px var(--navy)}
+#app :is(.field label,.se-page label,.social-fields label) {font-size:13px;font-weight:600;color:var(--ink);line-height:1.4}
+#app :is(input,textarea,select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]) {min-height:44px;border:1px solid #cbd4df;border-radius:8px;background:#fff;color:var(--ink);padding:10px 12px;font-size:15px;line-height:1.4;max-width:100%}
+#app textarea {line-height:1.55;resize:vertical}
+#app input:is([type="checkbox"],[type="radio"]) {accent-color:var(--navy);width:18px;height:18px;flex-shrink:0}
+#app :is(input,select,textarea):disabled {background:var(--soft);color:var(--muted);opacity:1}
+#app input::placeholder,#app textarea::placeholder {color:#738092;opacity:1}
+#app .field {margin:12px 0}
+#app .field label {margin-bottom:6px}
+
+/* Section tabs share a visual grammar without turning every button into a tab. */
+#app :is(.se-tabs,.social-tabs,.st-steps) {display:flex;gap:4px;margin:18px 0;padding:0 0 8px;border-bottom:1px solid var(--line)}
+#app :is(.se-tabs,.social-tabs,.st-steps) .btn {background:transparent;border-color:transparent;color:var(--muted);box-shadow:none;min-height:44px}
+#app :is(.se-tabs,.social-tabs,.st-steps) .btn:is([aria-pressed="true"],[aria-current="step"],.active) {background:var(--club-soft);border-color:transparent;color:var(--ink);box-shadow:inset 0 -2px 0 var(--navy)}
+
+/* Selection Board: a clear team sheet, with colour reserved for useful status. */
+#app .se-page {max-width:none}
+#app .se-top {gap:16px;margin-bottom:6px}
+#app .se-top h1 {margin:0}
+#app .se-toolbar {align-items:end;gap:10px;margin:20px 0 12px}
+#app .se-toolbar>label {min-width:200px}
+#app .se-toolbar #sePublish {margin-left:auto}
+#app .se-order-help {margin:8px 0;font-size:12px}
+#app .se-board-layout>.se-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:18px 0}
+#app .se-card[data-se-team] {padding:18px;border-top:3px solid var(--navy);overflow-wrap:anywhere}
+#app .se-team-compact-head>div {align-items:flex-start;gap:10px;flex-wrap:wrap}
+#app .se-team-compact-head h2 {font-size:19px!important;letter-spacing:-.02em!important;margin:0}
+#app .se-team-head {padding-bottom:12px;border-bottom:1px solid var(--line)}
+#app .se-team-head p {font-size:13px;line-height:1.5;color:var(--muted);margin-top:7px}
+#app .se-team-state {display:inline-block;border-radius:5px;padding:3px 7px;font-size:12px;font-weight:500;line-height:1.4;color:#526071;background:var(--soft);text-align:left;max-width:100%}
+#app [data-team-state="published"] .se-team-state {background:#edf5f0;color:#32624a}
+#app [data-team-state="changed"] .se-team-state {background:#fff3dc;color:#7d5513}
+#app [data-team-state="cancelled"] .se-team-state {background:#f9eeee;color:#91363b}
+#app .se-counts {gap:5px;margin:12px 0}
+#app .se-chip {background:var(--soft);color:var(--muted);font-size:12px;border-radius:5px;padding:4px 6px}
+#app .se-chip.se-warn {background:#fff3dc;color:#7d5513}
+#app .se-overflow-count {background:#fce8e5;color:#8e241d}
+#app .se-fixture-lock {background:var(--soft);padding:8px 10px;margin:12px 0;align-items:center;flex-wrap:wrap}
+#app .se-fixture-lock p {font-size:12px;color:var(--muted)}
+#app .se-fixture-lock .btn {font-size:12px;padding:8px 10px}
+#app .se-match-roles {gap:10px;margin:12px 0}
+#app .se-match-roles select {font-size:13px;min-height:44px!important;padding:8px!important}
+#app .se-match-roles label {font-size:12px;font-weight:500;color:var(--muted)}
+#app .se-slot {grid-template-columns:22px minmax(0,1fr) 44px;gap:6px;min-height:48px;padding:3px 0;border-bottom:1px solid #edf0f4}
+#app .se-slot-number {font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted)}
+#app .se-pick {min-height:44px;font-size:14px;line-height:1.4;color:var(--ink);padding:6px 4px}
+#app .se-pick[aria-expanded="true"] {background:var(--club-soft);border-color:var(--navy);box-shadow:inset 0 0 0 1px var(--navy)}
+#app .se-order-handle {color:#8190a0}
+#app .se-role,#app .se-status,#app .se-day-caption {font-size:12px}
+#app .se-card[data-se-team]>.se-actions {gap:6px;margin-top:14px!important}
+#app .se-card[data-se-team]>.se-actions .btn {padding:8px 10px;font-size:12px}
+#app .se-board-comments {border-color:var(--line);margin-top:12px}
+#app .se-board-comments>summary {font-size:13px;font-weight:600}
+#app .se-board-chat>summary.btn {display:inline-flex;background:var(--club-soft);color:var(--ink);border-color:transparent;margin-top:0}
+#app .se-board-chat[open]>summary.btn {border-color:var(--navy);box-shadow:inset 0 0 0 1px var(--navy);margin-bottom:10px}
+#app .se-readonly-sheet>ol {list-style:none;counter-reset:team-position;padding:0;margin:12px 0}
+#app .se-readonly-sheet>ol>li {counter-increment:team-position;position:relative;min-height:48px;padding:12px 0 12px 28px;border-bottom:1px solid #edf0f4;font-size:14px;line-height:1.5}
+#app .se-readonly-sheet>ol>li::before {content:counter(team-position);position:absolute;left:0;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+#app .se-card[data-se-team].se-team-overfull {border:2px solid #bc453b;background:#fffaf8}
+#app .se-team-gap {border:2px solid #b86a00!important}
+#app .se-conversation-toggle {font-size:13px;min-height:44px}
+#app .se-picker {border-color:#c7d2e0;background:var(--soft);border-radius:10px;padding:10px}
+#app .se-candidate {padding:12px 4px;font-size:14px}
+
+/* Match Review: player, decision and score remain easy to scan together. */
+#app .team-review-heading {gap:18px;align-items:flex-start}
+#app .team-review-heading h1 {margin:0}
+#app .team-review-heading .btnrow {margin:0}
+#app .team-review-fields {gap:12px}
+#app .team-review-table {width:100%;border-collapse:collapse;margin-top:16px}
+#app .team-review-table th {padding:12px 10px;background:var(--soft);color:var(--muted);font-size:12px;font-weight:600;text-align:left;border-bottom:1px solid var(--line)}
+#app .team-review-table td {padding:18px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+#app .team-review-player-link {font-size:15px;font-weight:650;line-height:1.45;color:var(--ink);text-decoration-color:#b4becb;text-underline-offset:4px;min-height:44px}
+#app .team-review-meta {font-size:12px;margin-top:5px}
+#app .team-review-options {gap:4px}
+#app .team-review-option {min-height:44px;border:1px solid #cbd4df;border-radius:7px;background:#fff;color:var(--ink);font-size:13px;font-weight:600;line-height:1.3;padding:8px 10px}
+#app .team-review-option[aria-pressed="true"] {background:var(--navy);color:var(--navy-contrast);border-color:var(--navy)}
+#app .team-review-row-status {font-size:12px;margin:7px 0 0}
+#app .team-review-saved {color:#397052}
+#app .team-review-actions {gap:6px;margin-top:10px}
+#app .team-review-actions .btn {font-size:12px;padding:8px 10px}
+#app .match-review-score>strong {font-size:24px;line-height:1.25;font-weight:650;font-variant-numeric:tabular-nums;color:var(--ink)}
+#app .match-review-score small {font-size:12px;line-height:1.5;margin-top:5px;color:var(--muted)}
+#app .match-review-confirm {font-size:13px;min-height:44px;align-items:center;gap:8px}
+#app .match-review-map-row {padding:14px 0;gap:16px;border-bottom:1px solid var(--line)}
+#app .match-review-map-row p {margin:0;font-size:14px}
+#app .match-review-map-row .btnrow {margin:0}
+#app .team-review-footer {border-top:0;margin-top:16px;padding:0;gap:12px;align-items:center}
+
+/* Player tools and administration use the same calm surfaces. */
+#app .player-home-tile {background:#fff;border:1px solid var(--line);border-top:3px solid var(--navy);border-radius:12px;padding:22px;box-shadow:var(--cb-shadow);color:var(--ink);min-height:156px}
+#app .player-home-tile>strong {color:var(--ink);font-weight:650}
+#app .player-home-tile span {font-size:14px;line-height:1.5;color:var(--muted)}
+#app .player-home-links {gap:10px}
+#app :is(.plan-section-tile,.training-tool-tile,.training-disclosure,.innings-prep-section,.innings-reflection-options) {border-color:var(--line);border-radius:12px;box-shadow:none}
+#app :is(.plan-section-tile,.training-disclosure,.innings-prep-section,.innings-reflection-options)>summary {min-height:52px;padding:14px 16px;background:var(--soft);color:var(--ink)}
+#app .club-help-feature {padding:18px 20px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--navy);box-shadow:none;gap:16px}
+#app .club-help-feature p {font-size:14px;color:var(--muted)}
+#app .platform-header {background:#fff;color:var(--ink);border-top:4px solid var(--navy);border-bottom:1px solid var(--line)}
+#app .platform-header :is(p,.section-label) {color:var(--muted)}
+#app .platform-nav {gap:4px}
+#app .platform-nav button {font-size:13px;font-weight:600;min-height:44px}
+#app .platform-nav button.active {background:var(--club-soft);color:var(--ink)}
+#app .admin-table :is(th,td) {font-size:13px;padding:12px;line-height:1.5}
+#app .admin-table td strong {font-size:14px;font-weight:600}
+#app .admin-table td small {font-size:12px}
+#app .status-pill {font-size:12px;font-weight:600;padding:4px 8px}
+#app :is(.active-club-row,.message-row) {padding:16px;border-color:var(--line)}
+#app :is(.active-club-row,.message-row) strong {font-size:14px}
+#app :is(.active-club-row,.message-row) small {font-size:12px}
+#app .active-club-controls label {font-size:12px;text-transform:none;font-weight:500}
+
+/* Social artwork itself is unchanged; the controls around it are simplified. */
+#app :is(.social-card,.social-upload,.social-feature) {border-color:var(--line);border-radius:12px;background:#fff;box-shadow:none}
+#app .social-upload {padding:16px}
+#app .social-fields {gap:12px}
+#app .st-panel {margin:18px 0}
+#app .st-review-heading {gap:14px}
+#app .st-preview figcaption {font-size:13px;color:var(--muted)}
+#app .ss-modes {gap:4px}
+#app .ss-modes [aria-pressed="true"] {background:var(--club-soft);color:var(--ink);border-color:var(--navy)}
+#app .ss-row {border-color:var(--line)}
+#app .ss-row summary {padding:14px 2px}
+#app .ss-compare-row {gap:14px;padding:13px 0}
+#app .ss-values strong {font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}
+#app .ss-compare-cell span {font-variant-numeric:tabular-nums}
+
+@media (hover:hover) {
+  #app .btn:hover:not(:disabled) {filter:brightness(.96)}
+  #app .btn:is(.secondary,.ghost):hover:not(:disabled) {background:var(--soft);border-color:#abb9ca}
+  #app .shell .nav button:hover {background:var(--soft);color:var(--ink)}
+  #app .player-home-tile:hover {border-color:#a8b7ca;box-shadow:0 5px 16px rgb(25 42 64 / 7%)}
+}
+@media (min-width:1320px) {
+  #app .se-board-layout>.se-grid {grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+}
+@media (max-width:1000px) {
+  #app .page {padding:22px 20px 40px}
+  #app .compact-club-header.hero {padding:14px 20px}
+  #app .shell .nav {padding:0 12px}
+  #app .team-review-table td {padding:14px 8px}
+}
+@media (max-width:760px) {
+  #app .team-review-table {display:block;margin-top:12px}
+  #app .team-review-table tbody {display:block}
+  #app .team-review-table tr[data-team-review-row] {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:18px 0;border-top:1px solid var(--line)}
+  #app .team-review-table td {padding:0;border:0;min-width:0}
+  #app .team-review-table td.match-review-score {background:var(--soft);padding:12px;border-radius:8px}
+  #app .team-review-table td.match-review-score small {max-width:none}
+  #app .team-review-table .team-review-section {padding:0;border:0}
+  #app .team-review-table .team-review-section th {display:block;border:0;border-radius:6px}
+  #app .team-review-table thead {display:none}
+  #app .team-review-player-link {font-size:17px;text-align:left;padding:0;min-height:28px}
+  #app .team-review-options {display:flex;flex-wrap:wrap}
+  #app .team-review-option {flex:1 1 auto;min-width:48px;padding:9px 8px}
+  #app .team-review-footer {align-items:stretch;flex-direction:column;gap:6px}
+  #app .team-review-footer>.btn {width:100%}
+  #app .team-review-footer>.help {margin:0}
+}
+@media (max-width:700px) {
+  #app .page {padding:20px 14px 32px}
+  #app {--cb-heading-page:25px}
+  #app :is(.card,.admin-card,.st-panel,.season-stats) {padding:16px;border-radius:12px}
+  #app .compact-club-header.hero {padding:12px 16px}
+  #app .compact-club-header .topline {gap:12px}
+  #app .compact-club-header .club-header-name {font-size:18px}
+  #app .compact-club-header .header-actions {gap:8px;align-items:flex-end}
+  #app .compact-club-header .context-switcher {flex:1 1 160px;width:auto;max-width:100%}
+  #app .compact-club-header .context-switch {font-size:16px}
+  #app .account-controls {margin-left:auto;gap:8px;flex-wrap:wrap}
+  #app .shell .nav {flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:0 8px;scroll-padding:8px;scrollbar-width:thin;scrollbar-color:#b9c3cf transparent;overscroll-behavior-x:contain}
+  #app .shell .nav button {flex:0 0 auto;max-width:none;white-space:nowrap;padding:12px 10px}
+  #app .shell .nav button[data-tab="guide"] {margin-left:0}
+  #app :is(input,textarea,select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]) {font-size:16px}
+  #app :is(.se-tabs,.social-tabs) {flex-wrap:nowrap;overflow-x:auto;gap:2px;scrollbar-width:thin}
+  #app :is(.se-tabs,.social-tabs) .btn {flex:0 0 auto;white-space:nowrap}
+  #app .se-top {align-items:flex-start;gap:12px}
+  #app .se-top>.se-actions {gap:6px}
+  #app .se-top>.se-actions .btn {font-size:12px;padding:8px 10px}
+  #app .se-toolbar {gap:8px;margin-top:16px}
+  #app .se-toolbar>label {flex-basis:100%}
+  #app .se-toolbar #sePublish {margin-left:0}
+  #app .se-board-layout>.se-grid {grid-template-columns:minmax(0,1fr);gap:16px}
+  #app .se-card[data-se-team] {padding:16px}
+  #app .se-match-roles select {font-size:16px}
+  #app .se-slot {min-height:50px}
+  #app .se-pick {font-size:15px}
+  #app .match-review-map-row {grid-template-columns:minmax(0,1fr);gap:12px}
+  #app .match-review-map-row .btnrow {gap:8px}
+  #app .player-home-tile {padding:18px;min-height:140px}
+  #app .platform-page {padding:16px 14px 32px}
+  #app .platform-header {padding:16px}
+  #app .ss-compare-row {gap:8px}
+}
+@media (prefers-reduced-motion:reduce) {
+  #app .btn,#app .player-home-tile {transition:none}
+}
+@media print {
+  #app .shell,#app .page {background:#fff;max-width:none;box-shadow:none}
+  #app .page {padding:0}
+  #app :is(.se-card,.card) {box-shadow:none;break-inside:avoid}
+  #app :is(.se-order-help,.se-toolbar,.se-tabs,.se-top>.se-actions) {display:none}
+}
+
+/* Explicit hidden state takes precedence over every presentation component. */
+#app [hidden] {display:none!important}

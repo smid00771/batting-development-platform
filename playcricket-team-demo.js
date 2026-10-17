@@ -14,10 +14,10 @@ export function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
    const previous=state.scorecard_links.find(l=>l.source_id===source.player_id),stub=state.roster.find(r=>r.id===previous?.roster_id||r.external_id===source.player_id);
    if(!r&&!player)throw Error('Choose an existing club player.');player||=people.find(p=>p.id===r?.review_player_id||p.user_id&&p.user_id===r?.user_id);
    if(data.expected_name!==(data.player_id?player?.display_name:r?.name))throw Error('The player name changed. Reload before confirming.');
-   if(stub&&stub.id!==r?.id&&(!stub.imported_stub||stub.user_id||stub.review_player_id||stub.account_email))throw Error('This identity has another player record. Ask Club Admin to review the links.');
+   if(stub&&stub.id!==r?.id&&(stub.user_id||stub.review_player_id||stub.account_email?.trim()))throw Error('This identity has another player record. Ask Club Admin to review the links.');
    state.scorecard_player_links||=[];
    if(state.scorecard_player_links.some(l=>l.source_id===source.player_id&&l.player_id!==player?.id||l.player_id===player?.id&&l.source_id!==source.player_id))throw Error('This identity has another player history. Ask Club Admin to review the links.');
-   if(!r&&player&&stub?.imported_stub)r=stub;
+   if(!r&&player&&stub)r=stub;
    const f=fixtures.find(f=>f.id===data.fixture_id),old=stub?.id!==r?.id?stub?.id:null,used=x=>[...x.slots,...(x.published?.slots||[])].some(s=>[s.d1,s.d2].includes(r?.id));
    if(data.fixture_id&&r&&!f)throw Error('The fixture changed. Reload before confirming.');
    const conflict=!!old&&state.fixtures.some(x=>!x.details.cancelled&&dates(x).some(d=>card.dates.includes(d))&&used(x));
