@@ -43,7 +43,9 @@ The three Newcastle City 2025/26 exports are useful pilot material, but insuffic
 
 These are provisional research joins, not confirmed player identities. The files lack stable player IDs, match-level opposition, batting positions and format context. No figures from them have been imported into the live app. Their sample sizes do not justify a rule such as “50 in seconds equals 30 in firsts”.
 
-A complete multi-season NDCA dataset has **not** been obtained. The association's published averages tables omit lower-total records, which are essential to understanding unsuccessful moves between grades.
+On 18 October the user reported holding three years of full NDCA 1st–4th grade batting and bowling statistics. Those files have not yet been supplied or checked. They may provide the complete competition history missing from the earlier pilot exports. Verify coverage, identities, denominators, seasons and formats before fitting comparisons; do not silently substitute the association's truncated published averages tables.
+
+The user clarified that these historical files should inform the analysis method separately from the live app. Use them as a private research and validation dataset, retaining the originals and reproducible transformations. The app need only receive validated, versioned comparison parameters and their competition/format scope and uncertainty, alongside the current-season records it already uses. Uploading or displaying the entire three-year archive in the app is not a prerequisite. If the files contain season aggregates rather than innings, they cannot establish actual batting positions or match-level opportunity; those limits must carry into the model.
 
 ## How to establish a defensible local baseline
 
