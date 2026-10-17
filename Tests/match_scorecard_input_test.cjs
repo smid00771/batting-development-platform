@@ -11,7 +11,7 @@ const section=(text,start,end)=>{
   assert.ok(a>=0&&b>a,'Expected application function boundaries');
   return text.slice(a,b);
 };
-const importer=text=>section(text,'function matchReviewImportState(){','function matchReviewImportCommand(){');
+const importer=text=>section(text,'let scorecardTeamController;','function matchReviewImportCommand(){');
 const locks=section(app,'function teamReviewSavePending(){','function confirmLeaveTeamReview(){');
 const url='https://play.cricket.com.au/match/00000000-0000-4000-8000-000000000001';
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
