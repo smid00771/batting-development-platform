@@ -8,7 +8,7 @@ function harness(){
  const c=vm.createContext({console,queueMicrotask,document:dom.window.document,window:{scrollX:0,scrollY:0,scrollTo:p=>{c.window.scrollY=p.top;}},history,session,club:{id:'c'},currentTab:'teams',socialState:social,appNavigationCurrent:null,appNavigationRestoring:false,appNavigationRequest:0,appNavigationBounce:null,localStorage:dom.window.localStorage,crypto:webcrypto,FORMATS:[],publishedHowWeBatFormat:'',howWeBatBuilderFormat:'',previewFormat:'',playerPlanStructureSection:'',guideSelectedCapabilityKey:'',workshopPreview:null,
   ensureSelections:()=>s,socialEnsure:()=>social,socialGuideState:s=>s.guide,socialTeamWorkflow:{state:s=>s.teamWorkflow||(s.teamWorkflow={step:'artwork',fixture:'',day:0})},socialAwards:{state:s=>s.awards||(s.awards={context:{}})},socialWeek:weekly,socialPlayerWeek:playerWeekly,
   saveClubEditsBeforeNavigation:async()=>allowed,canOpenClubTab:()=>true,renderTab:async()=>{c.recordAppNavigation(c.clubNavigationRoute());},alert:x=>{throw Error(x);},socialGuideSwitch:(g,step,person)=>Object.assign(g,{step,person}),seDelegationEditor:x=>x});
- const names=['clubNavigationRoute','selectionNavigationRoute','socialNavigationRoute','restoreSocialNavigation','recordSelectionNavigation','recordSelectionDrawer','restoreSelectionDrawer','appNavigationBack','canUseAppNavigationBack','bindAppBackButtons','bindSelectionBackButtons','platformNavigationRoute','appNavigationKey','validAppNavigationMarker','replaceRestoredNavigation','recordAppNavigation','restoreClubNavigationState','handleAppNavigationHistory'];
+ const names=['clubNavigationRoute','selectionNavigationRoute','socialNavigationRoute','restoreSocialNavigation','recordSelectionNavigation','recordSelectionDrawer','restoreSelectionDrawer','appNavigationBack','canUseAppNavigationBack','bindAppBackButtons','bindSelectionBackButtons','platformNavigationRoute','teamReviewNavigationIdentity','appNavigationKey','validAppNavigationMarker','replaceRestoredNavigation','recordAppNavigation','restoreClubNavigationState','handleAppNavigationHistory'];
  vm.runInContext(names.map(name=>fn(name)).join('\n'),c);return{c,s,social,entries,history,allowed:x=>allowed=x,index:()=>index,visit:()=>c.recordSelectionNavigation()};
 }
 test('Back and Forward restore the Results week and selected award after image preparation',async()=>{
@@ -60,4 +60,169 @@ for(const file of ['app.js','demo.html'])test(file+': directly rendered saved re
 
 test('browser Back restores the selected Teams week',async()=>{
  const h=harness();h.s.view='published';h.s.publishedWeek='2026-10-05';h.visit();h.s.publishedWeek='';h.visit();await h.history.back();assert.equal(h.s.publishedWeek,'2026-10-05');
+});
+
+function reviewHarness(){
+ const h=harness(),c=h.c,requests=[];let permitted=true,serverRevision=4,saveError=null;
+ Object.assign(c,{teamReviewState:null,teamReviewCache:null,teamReviewSequence:0,FORMATS:[['limited_overs','Limited overs']],
+  canUseTeamReview:()=>true,esc:v=>String(v??''),formatDateShort:String,formatLabel:String,
+  TEAM_REVIEW_CHOICES:[['yes','Yes'],['mostly','Mostly'],['no','Not really'],['no_plan','Has no plan'],['did_not_bat','DNB']],
+  TEAM_REVIEW_DISMISSALS:[['plan_execution','Within plan'],['outside_plan','Outside plan']],
+  teamReviewStyles:()=>'',teamReviewRosterHelp:()=>'',teamReviewHistoryNotice:()=>'',teamReviewRosterEditor:()=>'',
+  teamReviewSignupIcon:()=>'',teamReviewPlayerMeta:()=>'',matchReviewOtherObservations:()=>'',matchReviewScoreCell:()=>'<td>34</td>',
+  teamReviewFixturePicker:()=>'',fixtureCorrectionAction:()=>'',renderMatchReviewImporter:()=>'',
+  bindTeamReviewRosterEditor:()=>{},wireFixtureCorrectionActions:()=>{},bindMatchReviewImporter:()=>{},matchDraftAttachTeam:()=>{},
+  matchReviewImportCount:()=>c.ensureTeamReviewState().importer?.dirty?1:0,
+  matchReviewImportState:()=>c.ensureTeamReviewState().importer||(c.ensureTeamReviewState().importer={dirty:false}),
+  matchReviewImportCommand:()=>c.ensureTeamReviewState().importer?.dirty?{rows:[{player_id:'p1'}]}:null,
+  matchReviewRestoreScorecard:()=>{},teamReviewSelection:()=>null,teamReviewCanChoosePlayers:()=>true,
+  teamReviewMatchChanged:()=>{},teamReviewChooseFixture:()=>{},switchMatchReviewInnings:()=>{},teamReviewAdoptRevision:()=>{},clearTeamReviewEntry:()=>{},
+  openClubBattingGuideTopic:()=>{},matchReviewTableRows:()=>'',teamReviewTableRows:rows=>rows.map(p=>c.teamReviewRowHtml(p)).join(''),
+  teamReviewRequestId:()=>webcrypto.randomUUID(),matchDraftConfirmed:()=>{},wireQuickChoices:()=>{},wireObservationSave:()=>{},
+  coachingActionSavePending:false,feedbackEntryBaselines:new WeakMap(),fixtureCorrectionState:null,
+  confirmLeaveEngagement:()=>true,confirmLeaveWeeklyLoop:()=>true,confirm:()=>permitted,alert:()=>{},matchDraftDiscardForm:()=>{},
+  renderStaffMatchFeedbackForm:()=>'<form id="staffDevelopmentForm"><input id="staffMatchDate"><select id="staffMatchFormat"><option value="limited_overs">Limited overs</option></select><input id="staffMatchOpposition"><input id="staffMatchInningsNumber"><textarea id="staffMatchNote"></textarea><button type="button" id="cancelStaffDevelopment">Cancel</button></form>'});
+ const names=['ensureTeamReviewState','serializeTeamReviewState','restoreTeamReviewState','teamReviewIdentity',
+  'teamReviewHasUnsavedChanges','teamReviewSavePending','teamReviewControlsLocked','confirmLeaveTeamReview',
+  'feedbackEntryValues','captureFeedbackEntryBaseline','confirmLeaveFeedbackEntry',
+  'teamReviewBase','teamReviewComparable','teamReviewRevision','teamReviewPlayer','teamReviewUpdate','teamReviewReconcile',
+  'teamReviewSelectCandidate','teamReviewRowHtml','teamReviewSavedGroupName','teamReviewGradeOptions',
+  'renderTeamReviewContent','renderTeamReview','renderTeamReviewEntry','saveTeamReview','loadSavedTeamReview',
+  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','openClubSectionHome'];
+ vm.runInContext(names.map(n=>fn(n)).join('\n'),c);
+ const s=c.ensureTeamReviewState(),player={player_id:'p1',display_name:'Player One',can_edit:true,included_in_review:true,
+  match_id:'innings-1',match_updated_at:'match-version',batting_to_plan:'yes',dismissal_classification:'plan_execution',
+  feedback:{id:'own-feedback',updated_at:'feedback-version',batting_to_plan:'yes',dismissal_classification:'plan_execution'},candidates:[]};
+ Object.assign(s,{fixtureId:'fixture-1',fixtureMode:'saved',match_date:'2026-10-10',format_key:'limited_overs',opposition:'Visitors',innings_number:1,
+  group:'first',sessionId:'own-review',sharedReviewId:'anchor',sessionRevision:4,sessionGroupId:'first',sessionGroupScope:'group',
+  reviewCanEdit:true,editReview:false,groups:[{id:'first',name:'First XI'}],saved:['p1']});s.loaded=c.teamReviewIdentity(s);
+ c.teamReviewRows=()=>[player];c.teamReviewCache={players:[player],groups:s.groups};
+ const response=()=>({shared_review_id:'anchor',own_review_id:s.sessionId,review:{id:s.sessionId,fixture_id:s.fixtureId,
+  match_date:s.match_date,format_key:s.format_key,opposition:s.opposition,innings_number:s.innings_number,group_scope:'group',group_id:'first',
+  can_edit:true,can_delete:false,revision:serverRevision},groups:s.groups,players:[player]});
+ c.supabase={rpc:async(name,args)=>{requests.push({name,args});assert.equal(name,'get_shared_team_review');return{data:response()};}};
+ c.loadDevelopmentFeedback=async()=>({matches:[{id:player.match_id,...s.loaded,coach_feedback:[{id:'own-feedback',author_user_id:'u'}]}]});
+ c.matchDraftRpc=async(_,name,args)=>{requests.push({name,args:structuredClone(args)});if(saveError)return{error:saveError};serverRevision++;
+  for(const row of args.p_values.rows){Object.assign(player.feedback,{batting_to_plan:row.batting_to_plan,dismissal_classification:row.dismissal_classification,updated_at:'feedback-'+serverRevision});}
+  const review={...response().review,id:s.sessionId||'created-review'};
+  return{data:{review_id:review.id,revision:serverRevision,review,saved:args.p_values.rows.map(row=>({player_id:row.player_id})),removed:[],imported_scores:(args.p_values.scorecard_import?.rows||[]).map(row=>({player_id:row.player_id}))}};
+ };
+ c.saveClubEditsBeforeNavigation=async()=>permitted&&c.confirmLeaveFeedbackEntry();
+ c.renderTab=async()=>{if(c.currentTab==='team_review')await c.renderTeamReview();else c.recordAppNavigation(c.clubNavigationRoute());};
+ return{...h,state:s,player,requests,permit:v=>permitted=v,saveFailure:e=>saveError=e,
+  open:async()=>{h.s.view='board';h.visit();c.currentTab='team_review';await c.renderTab();},
+  settle:async()=>{await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));}};
+}
+
+test('Match Review observation is a real Back/Forward step, without intermediate loading screens',async()=>{
+ const h=reviewHarness();await h.open();assert.equal(h.entries.length,2);
+ h.c.document.querySelector('[data-team-detail]').click();await h.settle();
+ assert.equal(h.entries.length,3);assert.equal(h.state.observation.player.id,'p1');assert.ok(h.c.document.getElementById('staffDevelopmentForm'));
+ const observation=h.entries[2];assert.equal(observation.clubBattingNavigation.route.teamReview.observation_player_id,'p1');
+ await h.history.back();assert.equal(h.c.currentTab,'team_review');assert.equal(h.state.observation,null);
+ assert.equal(h.state.fixtureId,'fixture-1');assert.equal(h.state.innings_number,1);assert.ok(h.c.document.querySelector('[data-team-detail]'));
+ await h.c.handleAppNavigationHistory({state:observation});assert.equal(h.state.observation.player.id,'p1');assert.equal(h.entries.length,3);
+ assert.equal(JSON.stringify(h.entries).includes('feedback-version'),false,'Observation contents are never stored in browser history');
+});
+
+test('the observation Back button uses history and pending saves or unsaved answers can block it',async()=>{
+ const h=reviewHarness();await h.open();await h.c.openTeamReviewPlayer('p1');
+ h.state.observation.pending=true;h.c.closeTeamReviewObservation();await h.settle();assert.equal(h.index(),2);
+ h.state.observation.pending=false;h.c.document.getElementById('staffMatchNote').value='Unfinished note';h.permit(false);
+ h.c.document.getElementById('backToFixture').click();await h.settle();assert.equal(h.index(),2);assert.ok(h.state.observation);
+ h.permit(true);h.c.document.getElementById('backToFixture').click();await h.settle();assert.equal(h.index(),1);assert.equal(h.state.observation,null);assert.equal(h.c.currentTab,'team_review');
+});
+
+test('clicking Match Review opens its home table and Back still returns to the previous observation',async()=>{
+ const h=reviewHarness();await h.open();await h.c.openTeamReviewPlayer('p1');
+ h.permit(false);await h.c.openClubSectionHome('team_review');assert.ok(h.state.observation);assert.equal(h.entries.length,3);
+ h.permit(true);await h.c.openClubSectionHome('team_review');assert.equal(h.state.observation,null);assert.equal(h.state.view,'entry');assert.equal(h.state.fixtureId,'fixture-1');
+ assert.ok(h.c.document.querySelector('[data-team-detail]'));await h.history.back();assert.equal(h.state.observation.player.id,'p1');
+ await h.c.openClubSectionHome('teams');assert.equal(h.s.view,'published');
+ await h.c.openClubSectionHome('team_review');assert.equal(h.state.observation,null);assert.equal(h.state.fixtureId,'fixture-1');
+});
+
+test('a saved or score-imported review stays editable through repeated saves, with the same review ID',async()=>{
+ const h=reviewHarness();await h.open();
+ const choice=value=>h.c.document.querySelector('[data-team-choice="'+value+'"]');
+ for(const value of ['mostly','no','yes']){
+  assert.equal(choice(value).disabled,false);choice(value).click();assert.equal(choice(value).getAttribute('aria-pressed'),'true');
+  assert.equal(h.c.document.getElementById('saveTeamReview').disabled,false);await h.c.saveTeamReview();
+  assert.equal(h.state.sessionId,'own-review');assert.equal(h.state.editReview,true);assert.equal(h.c.document.querySelector('[data-team-dismissal]').disabled,false);
+  assert.equal(choice('mostly').disabled,false);assert.equal(h.c.document.getElementById('saveTeamReview').textContent,'Saved');
+ }
+ h.state.importer={dirty:true,selected:{p1:true}};h.c.renderTeamReviewContent();await h.c.saveTeamReview();
+ assert.equal(choice('mostly').disabled,false);assert.equal(h.state.importer.dirty,false);assert.equal(h.entries.length,2,'Saving stays on the same navigation step');
+ const writes=h.requests.filter(r=>r.name==='save_team_match_review');assert.equal(writes.length,4);
+ assert.deepEqual(writes.map(r=>r.args.p_values.review_id),['own-review','own-review','own-review','own-review']);
+ assert.deepEqual(writes.map(r=>r.args.p_values.expected_revision),[4,5,6,7]);assert.equal(writes[3].args.p_values.rows.length,0,'Score-only saves do not manufacture coaching answers');
+});
+
+test('permission loss, saving and uncertain requests still disable review controls',async()=>{
+ for(const state of [{reviewCanEdit:false},{saving:true},{pending:{request_id:'unconfirmed'}},{loading:true}]){
+  const h=reviewHarness();await h.open();Object.assign(h.state,state);h.c.renderTeamReviewContent();
+  assert.equal(h.c.document.querySelector('[data-team-choice]').disabled,true);assert.equal(h.c.document.querySelector('[data-team-dismissal]').disabled,true);
+  const before=h.requests.length;h.c.teamReviewUpdate('p1',{batting_to_plan:'mostly'});assert.equal(Object.keys(h.state.drafts).length,0);assert.equal(h.requests.length,before);
+ }
+ const h=reviewHarness();await h.open();h.player.can_edit=false;h.c.renderTeamReviewContent();assert.equal(h.c.document.querySelector('[data-team-choice]').disabled,true);
+});
+
+test('the first score-only save keeps coaching responses open and later saves reuse that review',async()=>{
+ const h=reviewHarness();await h.open();Object.assign(h.state,{sessionId:null,sharedReviewId:null,sessionRevision:null,importer:{dirty:true,selected:{p1:true}}});
+ h.c.renderTeamReviewContent();await h.c.saveTeamReview();assert.equal(h.state.sessionId,'created-review');
+ assert.equal(h.c.document.querySelector('[data-team-choice="mostly"]').disabled,false);h.c.teamReviewUpdate('p1',{batting_to_plan:'mostly'});await h.c.saveTeamReview();
+ const writes=h.requests.filter(r=>r.name==='save_team_match_review');assert.equal(writes[0].args.p_values.review_id,null);assert.equal(writes[0].args.p_values.rows.length,0);assert.equal(writes[1].args.p_values.review_id,'created-review');assert.equal(h.entries.length,2);
+});
+
+test('clicking a section cancels an in-flight observation without reopening it later',async()=>{
+ const h=reviewHarness();await h.open();let resolve;
+ h.c.loadDevelopmentFeedback=()=>new Promise(r=>resolve=r);const opening=h.c.openTeamReviewPlayer('p1');assert.equal(h.state.loading,true);
+ h.c.appNavigationRestoring=true;await h.c.openClubSectionHome('team_review');
+ resolve({matches:[]});await opening;assert.equal(h.state.observation,null);assert.equal(h.state.loading,false);assert.equal(h.c.appNavigationRestoring,false);
+ assert.ok(h.c.document.querySelector('[data-team-detail]'));assert.equal(h.entries.length,2);
+});
+
+test('a lost save response retains the receipt and choices, then retry confirms the same save',async()=>{
+ const h=reviewHarness();await h.open();h.c.teamReviewUpdate('p1',{batting_to_plan:'mostly'});h.saveFailure({message:'Network error'});await h.c.saveTeamReview();
+ const request=h.state.pending.request_id;assert.equal(h.c.document.querySelector('[data-team-choice]').disabled,true);assert.equal(h.c.document.getElementById('saveTeamReview').textContent,'Retry save');
+ h.saveFailure(null);await h.c.saveTeamReview();const writes=h.requests.filter(r=>r.name==='save_team_match_review');
+ assert.equal(writes[1].args.p_request_id,request);assert.equal(h.state.pending,null);assert.equal(h.player.feedback.batting_to_plan,'mostly');assert.equal(h.c.document.querySelector('[data-team-choice]').disabled,false);
+});
+
+test('history changes retain unsaved choices with their own fixture, never another match',async()=>{
+ const h=reviewHarness();await h.open();const first=h.c.serializeTeamReviewState();h.c.teamReviewUpdate('p1',{batting_to_plan:'mostly'});
+ const second={...first,fixture_id:'fixture-2',session_id:'second-review',shared_review_id:'second-anchor',opposition:'Other visitors'};
+ h.c.restoreTeamReviewState(second);assert.equal(h.state.fixtureId,'fixture-2');assert.equal(Object.keys(h.state.drafts).length,0);
+ h.c.restoreTeamReviewState(first);assert.equal(h.state.fixtureId,'fixture-1');assert.equal(h.state.drafts.p1.batting_to_plan,'mostly');
+ h.state.observation={player:{id:'p1'}};h.c.restoreTeamReviewState(first);assert.equal(h.state.observation,null,'Unsaved quick choices do not trap navigation inside a player');assert.equal(h.state.drafts.p1.batting_to_plan,'mostly');
+});
+
+test('section buttons clear nested views only after navigation is allowed',async()=>{
+ const h=reviewHarness();await h.open();const messages={mode:'sent',openId:'message',draft:{body:'Retained unsent draft'}},innings={openId:'innings',editId:'innings'};
+ Object.assign(h.c,{ensureClubMessages:()=>messages,ensureMyInningsState:()=>innings,resetPlayersWorkspaceForClub:()=>{},clearPlayersWorkspaceSearch:()=>h.c.playersWorkspaceSearch='',
+  playersWorkspaceSelectedId:'player',playersWorkspaceSection:'development',playersWorkspaceMatchFormat:'',playersWorkspaceMatchOpenId:'innings',playersWorkspaceSearch:'Name',playersWorkspaceGroupFilter:'first',playersWorkspaceShowAll:false,
+  playersWorkspaceDevelopmentMode:'match',playersWorkspaceDevelopmentMatchId:'innings',staffObservationEditId:'feedback',saveWorkspacePlayerPlanSilently:async()=>true});
+ await h.c.openClubSectionHome('messages');assert.equal(messages.mode,'inbox');assert.equal(messages.openId,null);assert.equal(messages.draft.body,'Retained unsent draft');
+ await h.c.openClubSectionHome('innings');assert.equal(innings.openId,null);assert.equal(innings.editId,null);
+ await h.c.openClubSectionHome('players');assert.equal(h.c.playersWorkspaceSelectedId,null);assert.equal(h.c.playersWorkspaceSection,'summary');assert.equal(h.c.playersWorkspaceDevelopmentMode,null);assert.equal(h.c.staffObservationEditId,null);
+ h.s.view='board';h.s.navigationDrawer={kind:'fixture',id:'fixture-1'};h.s.restoreDrawer=h.s.navigationDrawer;h.permit(false);
+ await h.c.openClubSectionHome('teams');assert.equal(h.s.view,'board');assert.ok(h.s.navigationDrawer);
+ h.permit(true);await h.c.openClubSectionHome('teams');assert.equal(h.s.view,'published');assert.equal(h.s.navigationDrawer,null);assert.equal(h.s.restoreDrawer,null);
+});
+
+test('nested Players, Innings and Messages screens have distinct navigation identities',()=>{
+ const h=harness(),key=h.c.appNavigationKey;
+ for(const [before,after] of [
+  [{tab:'players',playerId:'p',playerSection:'development'},{tab:'players',playerId:'p',playerSection:'development',developmentMode:'match',developmentMatchId:'m',observationEditId:'f'}],
+  [{tab:'innings',innings:{}},{tab:'innings',innings:{openId:'m'}}],
+  [{tab:'messages',messages:{mode:'inbox'}},{tab:'messages',messages:{mode:'inbox',openId:'m'}}],
+  [{tab:'messages',messages:{mode:'inbox'}},{tab:'messages',messages:{mode:'compose'}}]
+ ])assert.notEqual(key(before),key(after));
+});
+
+test('production and demo share review editing and navigation behaviour',()=>{
+ const demo=fs.readFileSync(new URL('../demo.html','file://'+__filename),'utf8').replaceAll('fixtureLocalStorage.','localStorage.');
+ for(const name of ['openClubSectionHome','clubNavigationRoute','teamReviewNavigationIdentity','appNavigationKey','restoreClubNavigationState',
+  'serializeTeamReviewState','restoreTeamReviewState','teamReviewUpdate','teamReviewRowHtml','renderTeamReviewContent','renderTeamReview','renderTeamReviewEntry',
+  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name),fn(name,demo),name);
 });

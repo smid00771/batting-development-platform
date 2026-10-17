@@ -21,3 +21,11 @@ Agreed AI selection sequence (15 October 2026): evidence review first, suggested
 For the proposed selection evidence review, senior performance and opportunities are explicit inputs. Junior pathways membership adds no automatic credit. Limited senior history is labelled as limited evidence, not a judgement of ability. A development selection remains an explicit human choice.
 
 Prioritise removing recurring volunteer jobs. Capture shared facts once and reuse them across availability, selections, coaching and social posts. Measure improvements by work removed and fewer decisions for volunteers, not by the number of new controls.
+
+Design for a phone first. Every visible item must serve a direct, obvious purpose. Show exceptions that need a decision; do not repeat successful matches, completed checks, or information already on the page. Remove routine explanations, status panels and extra controls unless they help the user complete the current action. Put necessary help beside the problem when it occurs. This is the default across the app, not just scorecard imports.
+
+Keep every capability that serves a purpose. Simplify its presentation or location before removing it; the cleanup targets unnecessary additions, duplication and clutter.
+
+User design preference recorded 17 October 2026. Match Conversation is for match-day arrangements and closes after the final playing day; Match Review coaching responses remain editable by authorised coaches and captains. Saving or importing scores must not lock them.
+
+Captains and selectors use the Selection Board as their team workspace. Private Selection comments are useful from fixture creation, before players are selected. After publication, a visible Match conversation button expands the thread beneath that team. Avoid a duplicate Teams page for these roles; ordinary players must still see only published selections. Copy previous team is a draft-building action and is hidden after publication.

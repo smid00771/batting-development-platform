@@ -7,9 +7,9 @@ for(const file of ['app.js','demo.html']){
   vm.runInContext(['seBoardAccess','seHasAvailability','seIsCaptain','seSelectionTabs'].map(n=>fn(source(file),n)).join('\n'),c);
   const d={captain:true,roster:[],reviews:[],conversations:[],can_view_club_availability:true};
   const labels=()=>Array.from(c.seSelectionTabs(d),x=>x[1]);
-  assert.deepEqual(labels(),['Selection Board','Teams']);
-  d.socials=true;assert.deepEqual(labels(),['Selection Board','Teams','Social Graphics']);
-  d.selector=true;assert.deepEqual(labels(),['Playing List','Availability','Selection Board','Teams','Social Graphics']);
+  assert.deepEqual(labels(),['Selection Board']);
+  d.socials=true;assert.deepEqual(labels(),['Selection Board','Social Graphics']);
+  d.selector=true;assert.deepEqual(labels(),['Playing List','Availability','Selection Board','Social Graphics']);
   d.selector=false;d.captain=false;membership.permission_role='none';assert.deepEqual(labels(),['Availability','Teams','Social Graphics']);
   d.socials=false;assert.deepEqual(labels(),['Availability','Teams']);
  });
