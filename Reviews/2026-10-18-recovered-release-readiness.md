@@ -8,13 +8,22 @@ The unpublished .206 source has been recovered from the previous working tree, i
 - Selection Room is offered only to selectors on the Selection Board. Its scope is invalid outside that board or without the loaded access record. Normal section navigation uses the existing leave-call confirmation; board redraws keep the same call and draft. Scope loss removes the room and closes its video connection.
 - Bumped entry-point and dependency cache versions to .206.1.
 
+## Demo fidelity correction
+
+The delivered demo still used an older social menu without Socials Awards, and its default administrator persona had no selection role. Component checks had missed both problems in the complete demo.
+
+- The default demo now opens the Selection Board as a selector and nominated Socials Manager. Direct Social Graphics and Socials Awards views are available. The admin-only example is labelled explicitly; ordinary players retain their published-team view.
+- Socials Awards uses the current shared UI and navigation, backed by fictional in-memory settings, requests, designs, photos and editions. Clubs can save award choices and try requesting a new type. Requests clearly state that they have not been sent to Club Batting. Reset demo clears the fictional changes.
+- `Scripts/sync-demo-socials.mjs` embeds the shared awards sources and navigation. Its `--check` mode detects drift.
+- The existing landing-page product links open batting home and the selector board respectively. Complete-file integration checks exercise those links, the default entry, role switching, award choices, request submission and reset.
+
 ## Validation
 
-Targeted Node tests cover season calculations and UI, current-season boundaries, corrections/deduplication, identity linking, section and browser navigation, weekly social-page cold reload, room visibility, and call/draft lifecycle. JavaScript syntax and `git diff --check` pass.
+118 targeted Node checks pass, including the complete-demo integration checks above, social permissions and workflows, season calculations and UI, current-season boundaries, corrections/deduplication, identity linking, section and browser navigation, weekly social-page cold reload, room visibility, and call/draft lifecycle. JavaScript syntax and `git diff --check` pass.
 
 The previous .206 reports document synthetic database checks. The two pending SQL migrations have not been applied to production in this continuation. This draft is not a live release.
 
-The cloud browser cannot reach the local preview server (connection refused); therefore the recovered visual refresh still needs rendered desktop/mobile review. The standalone `demo.html` contains fictional data for that review. DOM tests do not substitute for visual inspection.
+The cloud browser could not reach the local preview server, and its URL policy rejected local-file navigation. The recovered visual refresh and corrected demo still need rendered desktop/mobile review. The standalone `demo.html` contains fictional data for that review. The complete-demo harness uses JSDOM with browser graphics stubs; these checks do not substitute for visual inspection.
 
 ## Release prerequisites
 

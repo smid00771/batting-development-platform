@@ -130,7 +130,7 @@ test('busy or unconfirmed saves cannot be overwritten by a new position',async()
 });
 
 test('production and demo use the same saved-position controls and renderer',()=>{
- for(const [a,b] of boundaries){const production=part(app,a,b).replace("const [data,awards]=await Promise.all([socialRPC(s,'context'),socialAwards.settings(s)]);data.awards=awards;","const data=await socialRPC(s,'context');");assert.equal(production,part(demo,a,b));}
+ for(const [a,b] of boundaries){assert.equal(part(app,a,b),part(demo,a,b));}
 });
 
 test('a delayed preview uses the saved position after save replaces the fixture context',async()=>{

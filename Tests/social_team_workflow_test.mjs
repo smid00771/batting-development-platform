@@ -50,7 +50,7 @@ document.querySelector('[name="user_id"]').value='cover';document.querySelector(
 // Exercise the production section shell: setup and responsibility have no creation selector.
 const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 function part(name){const start=source.search(new RegExp('(?:async )?function '+name+'\\(')),next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
-const selections={view:'socials'},landing=vm.createContext({recordSelectionNavigation(){},confirmLeaveSelections:()=>leave,ensureSelections:()=>selections,socialEnsure:()=>s,socialTeamWorkflow:workflow,drawSelections:()=>{}});
+const selections={view:'socials'},landing=vm.createContext({selectionRoomController:null,recordSelectionNavigation(){},confirmLeaveSelections:()=>leave,ensureSelections:()=>selections,socialEnsure:()=>s,socialTeamWorkflow:workflow,drawSelections:()=>{}});
 vm.runInContext(['seChangeView','socialLanding'].map(part).join('\n'),landing);
 for(const previous of ['managers','accounts','century','guide','publish_review']){s.view=previous;s.creationView='century';workflow.state(s).step='review';landing.seChangeView('socials');assert.equal(s.view,'graphics');assert.equal(s.creationView,'graphics');assert.equal(workflow.state(s).step,'artwork');assert.equal(s.data.assets.length,0);}
 leave=false;s.view='managers';landing.seChangeView('socials');assert.equal(s.view,'managers','Entry respects the existing unsaved-change guard');leave=true;
