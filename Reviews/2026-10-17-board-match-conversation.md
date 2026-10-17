@@ -1,0 +1,13 @@
+# Match conversation on the Selection Board — 0.8.62.203
+
+Captains and selectors can open the existing match conversation beneath a published team without leaving the Selection Board. The section stays collapsed until opened and appears only when the server grants access to that published fixture. Captains retain read-only team selection access.
+
+The section uses the existing `posts` and `post` actions and the same fixture ID as the player-facing Teams conversation. No new thread, database table, audience, or notification path is created. The draft discussion is labelled **Selection comments · private** to distinguish it from messages visible to published players and match staff.
+
+Sending shows progress, retains drafts after uncertain responses and retries the same request ID. Refreshing messages preserves unsent text. Private selection comments and match messages preserve each other's drafts. The final published match day still controls conversation closure in the club's timezone; past messages remain readable and an open form becomes read-only at midnight. Detached loads cannot overwrite another view or club.
+
+The PlayCricket team check now compares automatically after the scorecard loads or the last unresolved identity is chosen. Known fixtures and already-matched players do not produce dropdowns. A mismatch shows incoming/outgoing players, any displaced team and **Update team / Not now**. Matching teams show one status line with no further confirmation. Only unmatched or ambiguous identities and uncertain bracketed playing days need input. The redundant **Check team changes** step is removed. Errors offer an active retry; invalid preview responses cannot masquerade as a successful check. A later correction invalidates earlier cached confirmations so any new gaps are checked again.
+
+Validation: 139 targeted checks passed across the production and demo implementations, covering authorised visibility, same-screen sending, escaped messages, pending requests and duplicate prevention, draft retention, stale responses, club-midnight closure, captain permissions, team publication, player moves, locked-fixture scorecards, automatic comparisons, matched-team status, genuine identity exceptions, both bracketed days, deferred corrections, failed checks and the existing cross-team gap/history behaviour. Shared functions match and all demo scripts parse.
+
+Release status: user authorised publishing .203, including both changes. No database migration is required. The .202 baseline was published through PR #51 and verified live. The .203 release is prepared for GitHub Pages deployment and a deployed demo check.

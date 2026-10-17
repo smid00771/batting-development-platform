@@ -36,7 +36,7 @@ test('no-play status can be recorded and undone without editing the team',async(
 test('Fixture details remains enabled on a locked selection card while player changes stay locked',()=>{
  for(const file of ['app.js','demo.html']){
   const source=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),a=source.indexOf('function seTeamCard('),b=source.indexOf('\nfunction ',a+1),f={id:'fixture',details:{grade:'First XI',opposition:'Visitors',days:[{date:'2026-10-10'}]},published:{},slots:[],issues:[]};
-  const ctx={ensureSelections:()=>({data:{}}),seMatchRoles:()=>({}),seMatchRoleIssues:()=>[],seDraftChanged:()=>false,seOverflowText:()=>'',seEsc:escape,seFixtureLocked:()=>true,seDate:String,seBoardComments:()=>'',seScorecardNote:()=>'',seFixtureLockControls:()=>'',seBoardCounts:()=>'',seMatchRoleFields:()=>'<button data-player-change>Player</button>'};vm.createContext(ctx);vm.runInContext(source.slice(a,b),ctx);
+  const ctx={ensureSelections:()=>({data:{}}),seMatchRoles:()=>({}),seMatchRoleIssues:()=>[],seDraftChanged:()=>false,seOverflowText:()=>'',seEsc:escape,seFixtureLocked:()=>true,seDate:String,seBoardComments:()=>'',seBoardMatchConversation:()=>'',seScorecardNote:()=>'',seFixtureLockControls:()=>'',seBoardCounts:()=>'',seMatchRoleFields:()=>'<button data-player-change>Player</button>'};vm.createContext(ctx);vm.runInContext(source.slice(a,b),ctx);
   const dom=new JSDOM(ctx.seTeamCard(f)),doc=dom.window.document;doc.querySelectorAll('[data-se-locked="true"] button').forEach(x=>x.disabled=true);
   assert.equal(doc.querySelector('[data-se-edit]').disabled,false,file);assert.equal(doc.querySelector('[data-player-change]').disabled,true);assert.equal(doc.querySelector('[data-se-copylast]').disabled,true);
  }
