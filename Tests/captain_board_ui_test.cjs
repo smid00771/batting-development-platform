@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{JSDOM}=require('jsdom');
 const extract=(s,n)=>{const start=s.search(new RegExp('(?:async )?function '+n+'\\('));assert.ok(start>=0,n);const rest=s.slice(start),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);};
-const names=['seBoardAccess','seFollowupRows','seFollowupPanel','seBoardComments','seBindBoardComments','seLoadBoardComments','seReadOnlyTeamCard','seBoard','seConversationControl','seBindConversations','seHasAvailability','seIsCaptain','seSelectionTabs'];
+const names=['seBoardAccess','seFollowupRows','seFollowupPanel','seBoardComments','seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','seBindBoardComments','seLoadBoardComments','seReadOnlyTeamCard','seBoard','seConversationControl','seBindConversations','seHasAvailability','seIsCaptain','seSelectionTabs'];
 function harness(file){
  const source=fs.readFileSync(file,'utf8'),dom=new JSDOM('<main id="seContent"></main>'),document=dom.window.document,calls=[];
  const f={id:'first',revision:2,can_comment:true,comment_count:0,details:{grade:'1st Grade',opposition:'Visitors',days:[{date:'2099-10-17'}]},slots:[{d1:'p'},{d1:null}]};

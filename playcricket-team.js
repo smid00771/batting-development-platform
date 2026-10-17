@@ -1,4 +1,4 @@
-/* The scorecard is trusted by the server; the importer reviews identities and the change. */
+/* Compare the trusted scorecard automatically; ask only for missing identities and the change. */
 const normal=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 export function scorecardPlayerMatches(players,roster,links=[]){
  const matches={},used=new Set();
@@ -23,65 +23,68 @@ export function createScorecardTeams(h){
  function live(s){return s.host?.isConnected&&s.here()&&s.scope===h.scope();}
  function setMatches(s){
   const team=s.context.card.teams.find(t=>t.id===s.teamId),fixture=s.context.fixtures.find(f=>f.id===s.fixtureId);
-  s.matches=scorecardPlayerMatches(team?.players||[],s.context.roster,s.context.links);s.days={};s.plan=null;s.open=false;
+  s.matches=scorecardPlayerMatches(team?.players||[],s.context.roster,s.context.links);s.days={};s.plan=null;s.deferred=false;s.error=false;s.saved=false;
   for(const p of team?.players||[]){const id=s.matches[p.player_id];s.days[p.player_id]=fixture?.brackets?fixture.days.filter((_,i)=>fixture.slots.some(slot=>slot['d'+(i+1)]===id)).map(d=>d.date):(fixture?.days||[]).map(d=>d.date);}
  }
  function payload(s){return {fixture_id:s.fixtureId,team_id:s.teamId,mapping:(s.context.card.teams.find(t=>t.id===s.teamId)?.players||[]).map(p=>({source_id:p.player_id,roster_id:s.matches[p.player_id],days:s.days[p.player_id]||[]}))};}
- function ready(s){const p=payload(s);return p.fixture_id&&p.team_id&&p.mapping.length&&p.mapping.every(m=>m.roster_id&&m.days.length);}
- async function preview(s){
-  if(s.busy||s.pending||!ready(s))return;s.busy=true;s.message='Checking team changes…';draw(s);
-  try{s.plan=await rpc(s,'preview',payload(s));s.message='';}catch(error){s.plan=null;s.message=error.message||'Could not check team changes.';}finally{s.busy=false;draw(s);}
+ function needsChoice(s,p){const id=s.matches?.[p.player_id];return !id||!s.days?.[p.player_id]?.length||id!=='new'&&Object.values(s.matches).filter(value=>value===id).length>1;}
+ function ready(s){const team=s.context?.card.teams.find(t=>t.id===s.teamId);return s.fixtureId&&team?.players?.length&&team.players.every(p=>!needsChoice(s,p));}
+ function reveal(s){if(!live(s))return;const result=s.host.querySelector('[data-pc-result]');result?.focus({preventScroll:true});result?.scrollIntoView?.({block:'nearest'});}
+ async function preview(s,show=false){
+  if(s.busy||s.pending||!ready(s)||s.context.card.status!=='completed'||!s.context.card.teams.find(t=>t.id===s.teamId)?.lineup_available)return;
+  s.busy=true;s.error=false;s.deferred=false;s.message='Checking the selected team…';draw(s);
+  try{const plan=await rpc(s,'preview',payload(s));if(typeof plan.changed!=='boolean'||!Array.isArray(plan.fixtures)||!plan.fixtures.length||!plan.expected)throw Error('The team check was not confirmed. Please retry.');s.plan=plan;s.message='';}catch(error){s.plan=null;s.error=true;s.message=error.message||'Could not check the selected team.';}finally{s.busy=false;draw(s);if(show)reveal(s);}
  }
  async function load(s){
-  if(s.busy)return;s.busy=true;s.message='Checking the selected team…';draw(s);
-  try{s.context=await rpc(s,'context');if(!s.context.enabled){s.message='';return;}
+  if(s.busy||s.pending)return;s.busy=true;s.error=false;s.message='Checking the selected team…';draw(s);
+  try{const ctx=await rpc(s,'context');if(ctx.enabled!==false&&(!Array.isArray(ctx.card?.teams)||!Array.isArray(ctx.fixtures)||!Array.isArray(ctx.roster)))throw Error('The team check could not be loaded. Please retry.');s.context=ctx;s.stale=false;if(!s.context.enabled){s.message='';return;}
    s.teamId=s.context.card.teams.some(t=>t.id===s.teamId)?s.teamId:s.context.our_team||'';
    s.fixtureId=scorecardFixture(s.context,s.teamId,s.fixtureId);setMatches(s);s.message='';
-  }catch(error){s.message=error.message||'Could not check the selected team.';}finally{s.busy=false;draw(s);}
-  if(s.context?.enabled&&ready(s)&&s.context.card.status==='completed'&&s.context.card.teams.find(t=>t.id===s.teamId)?.lineup_available)await preview(s);
+  }catch(error){s.error=true;s.message=error.message||'Could not check the selected team.';}finally{s.busy=false;draw(s);}
+  if(!s.error&&s.context?.enabled)await preview(s);
  }
  async function apply(s){
   if(s.busy||!s.plan&&!s.pending)return;
-  s.pending||={...payload(s),expected:s.plan.expected,request_id:crypto.randomUUID()};s.busy=true;s.message='Updating teams…';draw(s);
+  s.pending||={...payload(s),expected:s.plan.expected,request_id:crypto.randomUUID()};s.busy=true;s.error=false;s.message='Updating teams…';draw(s);
   try{const result=await rpc(s,'apply',s.pending);if(!result.saved)throw Error('Team update was not confirmed. Retry the same update.');s.pending=null;s.saved=true;s.message='Team updated to match PlayCricket.';
    // Other imported scorecards must be checked again after a transfer.
    for(const entry of entries.values())if(entry!==s&&entry.clubId===s.clubId&&!entry.busy&&!entry.pending){entry.context=null;entry.plan=null;entry.stale=true;}
    if(live(s))try{await s.changed?.(result);}catch{s.message='Team updated. Refresh this page to load the corrected review list.';}
-  }catch(error){s.message=error.message||'Update not confirmed. Retry to check the same update.';if(error.code&&error.code!=='PGRST000'&&!String(error.code).startsWith('08')){s.pending=null;s.plan=null;s.stale=true;}}
-  finally{s.busy=false;draw(s);}
+  }catch(error){s.error=true;s.message=error.message||'Update not confirmed. Retry to check the same update.';if(error.code&&error.code!=='PGRST000'&&!String(error.code).startsWith('08')){s.pending=null;s.plan=null;s.stale=true;}}
+  finally{s.busy=false;draw(s);reveal(s);}
  }
  function draw(s){
   if(!live(s))return;const ctx=s.context,locked=s.busy||!!s.pending;
   if(ctx?.enabled===false){s.host.innerHTML='';return;}
   const team=ctx?.card.teams.find(t=>t.id===s.teamId),fixture=ctx?.fixtures.find(f=>f.id===s.fixtureId),target=s.plan?.fixtures[0],others=s.plan?.fixtures.slice(1)||[],players=team?.players||[];
-  const missing=players.some(p=>!s.matches?.[p.player_id]||!s.days?.[p.player_id]?.length),canCheck=ctx&&ctx.card.status==='completed'&&team?.lineup_available;
+  const unresolved=players.filter(p=>needsChoice(s,p)),canCheck=ctx&&ctx.card.status==='completed'&&team?.lineup_available;
   const changes=target?[target.added.length?'In: '+target.added.join(', '):'',target.removed.length?'Out: '+target.removed.join(', '):''].filter(Boolean):[];
   const warning=!!s.plan?.changed&&!s.saved;
+  if((s.saved||s.plan&&!s.plan.changed)&&!s.busy&&!s.error&&!s.pending){s.host.innerHTML='<p class="se-muted" data-pc-result tabindex="-1" role="status">Team matches PlayCricket ✓</p>';return;}
+  if(s.deferred&&warning&&!s.busy&&!s.pending){s.host.innerHTML='<p data-pc-result tabindex="-1" role="status">Team left unchanged. It differs from PlayCricket.</p><button type="button" class="btn ghost" data-pc-review>Review change</button>';s.host.querySelector('[data-pc-review]').onclick=()=>void preview(s,true);return;}
   s.host.innerHTML=`<section class="pc-team ${warning?'pc-team-warning':''}" aria-label="PlayCricket team check">
-   <style>.pc-team{margin:12px 0;border:1px solid #ccd7df;border-radius:8px;padding:12px}.pc-team-warning{border:2px solid #b86a00;background:#fff8e9}.pc-team p{margin:6px 0}.pc-team label{display:block;margin:8px 0}.pc-team select{max-width:100%;width:100%;min-height:40px}.pc-team button{min-height:40px;margin:8px 8px 0 0}.pc-team summary{cursor:pointer;padding:7px 0}.pc-team-player{border-top:1px solid #dce2e8;padding:7px 0}.pc-team-days{display:flex;flex-wrap:wrap;gap:12px}.pc-team-days label{display:flex;align-items:center;gap:5px}.pc-team-days input{width:20px;height:20px}</style>
-   <strong>${s.saved?'Team matches PlayCricket ✓':warning?'The team that played differs from the selected team.':s.plan?'Team matches PlayCricket':'Check team against PlayCricket'}</strong>
+   <style>.pc-team{margin:12px 0;border:1px solid #ccd7df;border-radius:8px;padding:12px}.pc-team-warning{border:2px solid #b86a00;background:#fff8e9}.pc-team p{margin:6px 0}.pc-team label{display:block;margin:8px 0}.pc-team select{max-width:100%;width:100%;min-height:44px}.pc-team button{min-height:44px;margin:8px 8px 0 0}.pc-team [role=status]:empty{display:none}.pc-team-player{border-top:1px solid #dce2e8;padding:7px 0}</style>
+   <div data-pc-result tabindex="-1" ${warning?'role="alert"':''}><strong>${warning?'The team that played differs from the selected team.':s.error?'Team check needs attention':unresolved.length&&canCheck&&fixture?'Match '+unresolved.length+' player'+(unresolved.length===1?'':'s'):'PlayCricket team check'}</strong>${warning?'<p>Update the team to match PlayCricket?</p>':''}</div>
    ${ctx&&!ctx.fixtures.length?'<p>No fixture has these match dates. Add or correct the fixture in Teams, then check again.</p>':ctx?`
    ${!s.teamId?`<label>Our PlayCricket team<select data-pc-team ${locked?'disabled':''}>${option('','Choose our team',true)}${ctx.card.teams.map(t=>option(t.id,t.name,false)).join('')}</select></label>`:''}
-   ${ctx.fixtures.length?`<label>Club fixture<select data-pc-fixture ${locked?'disabled':''}>${option('','Choose the matching fixture',!s.fixtureId)}${ctx.fixtures.map(f=>option(f.id,f.grade+' v '+f.opposition+' · '+f.days.map(d=>d.date).join(' / '),f.id===s.fixtureId)).join('')}</select></label>`:''}
+   ${ctx.fixtures.length&&!fixture?`<label>Club fixture<select data-pc-fixture ${locked?'disabled':''}>${option('','Choose the matching fixture',true)}${ctx.fixtures.map(f=>option(f.id,f.grade+' v '+f.opposition+' · '+f.days.map(d=>d.date).join(' / '),false)).join('')}</select></label>`:''}
    ${ctx.card.status!=='completed'?'<p>The team can be updated when the scorecard is complete.</p>':team&&!team.lineup_available?'<p>Refresh the scorecard to load its full listed team.</p>':''}
-   ${canCheck&&fixture&&!s.saved?`<details data-pc-matches ${missing||s.open?'open':''}><summary>Check player matches · ${players.length} listed</summary>${players.map(p=>`<div class="pc-team-player"><label>${esc(p.name)}<select data-pc-player="${esc(p.player_id)}" ${locked?'disabled':''}>${option('','Choose club player',!s.matches[p.player_id])}${ctx.roster.map(r=>option(r.id,r.name+(!r.active?' (inactive)':''),s.matches[p.player_id]===r.id)).join('')}${option('new','Add '+p.name+' to playing list',s.matches[p.player_id]==='new')}</select></label>${fixture.brackets?`<div class="pc-team-days">${fixture.days.map(d=>`<label><input type="checkbox" data-pc-day="${esc(p.player_id)}" value="${esc(d.date)}" ${(s.days[p.player_id]||[]).includes(d.date)?'checked':''} ${locked?'disabled':''}>Played ${esc(d.date)}</label>`).join('')}</div>`:''}</div>`).join('')}</details>`:''}
+   ${canCheck&&fixture&&unresolved.length&&!s.saved?`<p>Choose the club player${fixture.brackets?' and playing days':''} for ${unresolved.length===1?'this name':'these names'}.</p>${unresolved.map(p=>`<div class="pc-team-player"><label>${esc(p.name)}<select data-pc-player="${esc(p.player_id)}" ${locked?'disabled':''}>${option('','Choose club player',!s.matches[p.player_id])}${ctx.roster.map(r=>option(r.id,r.name+(!r.active?' (inactive)':''),s.matches[p.player_id]===r.id)).join('')}${option('new','Add '+p.name+' to playing list',s.matches[p.player_id]==='new')}</select></label>${fixture.brackets?`<label>Played on<select data-pc-days="${esc(p.player_id)}" ${locked?'disabled':''}>${option('','Choose playing days',!s.days[p.player_id]?.length)}${fixture.days.map(d=>option(d.date,d.date.split('-').reverse().join('/'),s.days[p.player_id]?.length===1&&s.days[p.player_id][0]===d.date)).join('')}${fixture.days.length>1?option(fixture.days.map(d=>d.date).join(','),'Both days',s.days[p.player_id]?.length===fixture.days.length):''}</select></label>`:''}</div>`).join('')}`:''}
    ${changes.map(t=>`<p>${esc(t)}</p>`).join('')}
-   ${others.map(f=>`<p><strong>${esc(f.grade)}:</strong> ${esc([...new Set(f.departures.map(p=>p.name))].join(', '))} will be removed. The gap stays highlighted until this team's scorecard is checked.</p>`).join('')}
-   ${warning?'<p>Update the team to match PlayCricket?</p>':''}
-   ${s.plan&&!s.saved&&!s.pending?`<button type="button" class="btn" data-pc-apply ${locked?'disabled':''}>${s.busy?'Updating…':warning?'Update team to match PlayCricket':'Confirm team matches'}</button>`:''}
-   ${canCheck&&fixture&&!s.plan&&!s.pending&&!s.saved?`<button type="button" class="btn secondary" data-pc-check ${locked||!ready(s)?'disabled':''}>${s.busy?'Checking…':'Check team changes'}</button>`:''}`:''}
-   <p role="status" aria-live="polite">${esc(s.message||'')}</p>
+   ${others.map(f=>`<p><strong>${esc(f.grade)}:</strong> ${esc([...new Set(f.departures.map(p=>p.name))].join(', '))} will be removed, leaving a highlighted gap.</p>`).join('')}
+   ${warning&&!changes.length&&!others.length?'<p>The saved lineup or playing days will be corrected.</p>':''}
+   ${warning&&!s.pending?`<button type="button" class="btn" data-pc-apply ${locked?'disabled':''}>${s.busy?'Updating…':'Update team'}</button><button type="button" class="btn ghost" data-pc-later ${locked?'disabled':''}>Not now</button>`:''}`:''}
+   <p role="${s.error?'alert':'status'}" aria-live="polite">${esc(s.message||'')}</p>
    ${s.pending?`<button type="button" class="btn" data-pc-apply ${s.busy?'disabled':''}>${s.busy?'Updating…':'Retry team update'}</button>`:''}
-   ${(!ctx||s.stale||ctx&&!ctx.fixtures.length)&&!s.busy&&!s.pending?'<button type="button" class="btn secondary" data-pc-reload>Check again</button>':''}
+   ${(s.error||s.stale||ctx&&!ctx.fixtures.length)&&!s.busy&&!s.pending?'<button type="button" class="btn secondary" data-pc-reload>Retry team check</button>':''}
    </section>`;
   s.host.querySelector('[data-pc-apply]')?.addEventListener('click',()=>void apply(s));
-  s.host.querySelector('[data-pc-check]')?.addEventListener('click',()=>void preview(s));
-  s.host.querySelector('[data-pc-reload]')?.addEventListener('click',()=>{s.stale=false;void load(s);});
-  s.host.querySelector('[data-pc-matches]')?.addEventListener('toggle',e=>s.open=e.target.open);
-  s.host.querySelector('[data-pc-team]')?.addEventListener('change',e=>{s.teamId=e.target.value;s.fixtureId=scorecardFixture(ctx,s.teamId,s.fixtureId);setMatches(s);draw(s);void preview(s);});
-  s.host.querySelector('[data-pc-fixture]')?.addEventListener('change',e=>{s.fixtureId=e.target.value;s.saved=false;setMatches(s);draw(s);void preview(s);});
-  s.host.querySelectorAll('[data-pc-player]').forEach(el=>el.onchange=()=>{const id=el.dataset.pcPlayer;s.matches[id]=el.value;s.plan=null;s.open=true;s.message='';draw(s);});
-  s.host.querySelectorAll('[data-pc-day]').forEach(el=>el.onchange=()=>{const id=el.dataset.pcDay,days=new Set(s.days[id]);el.checked?days.add(el.value):days.delete(el.value);s.days[id]=[...days].sort();s.plan=null;s.open=true;s.message='';draw(s);});
+  s.host.querySelector('[data-pc-later]')?.addEventListener('click',()=>{if(s.busy||s.pending)return;s.deferred=true;draw(s);reveal(s);});
+  s.host.querySelector('[data-pc-reload]')?.addEventListener('click',()=>{if(ctx&&!s.stale&&ready(s))void preview(s,true);else{s.stale=false;void load(s);}});
+  s.host.querySelector('[data-pc-team]')?.addEventListener('change',e=>{s.teamId=e.target.value;s.fixtureId=scorecardFixture(ctx,s.teamId,s.fixtureId);setMatches(s);draw(s);void preview(s,true);});
+  s.host.querySelector('[data-pc-fixture]')?.addEventListener('change',e=>{s.fixtureId=e.target.value;s.saved=false;setMatches(s);draw(s);void preview(s,true);});
+  s.host.querySelectorAll('[data-pc-player]').forEach(el=>el.onchange=()=>{const id=el.dataset.pcPlayer;s.matches[id]=el.value;if(fixture.brackets&&!s.days[id]?.length&&el.value!=='new')s.days[id]=fixture.days.filter((_,i)=>fixture.slots.some(slot=>slot['d'+(i+1)]===el.value)).map(d=>d.date);s.plan=null;s.message='';s.error=false;draw(s);void preview(s,true);});
+  s.host.querySelectorAll('[data-pc-days]').forEach(el=>el.onchange=()=>{s.days[el.dataset.pcDays]=el.value?el.value.split(','):[];s.plan=null;s.message='';s.error=false;draw(s);void preview(s,true);});
  }
  return {mount(host,options){
   if(!host||!options.snapshotId)return;const scope=h.scope(),key=scope+':'+options.clubId+':'+options.snapshotId;let s=entries.get(key);
