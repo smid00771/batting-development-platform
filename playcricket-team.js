@@ -89,6 +89,9 @@ export function createScorecardTeams(h){
  return {mount(host,options){
   if(!host||!options.snapshotId)return;const scope=h.scope(),key=scope+':'+options.clubId+':'+options.snapshotId;let s=entries.get(key);
   if(!s){s={...options,scope,matches:{},days:{},busy:false,context:null};entries.set(key,s);}
+  // A reopened scorecard must compare against selections saved since the last visit.
+  // Keep unfinished choices and uncertain updates intact.
+  if(s.host&&s.host!==host&&(s.plan||s.saved)&&!s.busy&&!s.pending){s.context=null;s.plan=null;s.saved=false;s.deferred=false;}
   s.host=host;s.here=options.here;s.changed=options.changed;
   if(options.teamId&&options.teamId!==s.teamId&&!s.pending&&!s.busy){s.teamId=options.teamId;s.context=null;s.plan=null;s.saved=false;}
   draw(s);if(!s.context&&!s.busy&&!s.pending)void load(s);

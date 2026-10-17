@@ -1,4 +1,4 @@
-import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.203';
+import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.203&build=2';
 // Club Batting 0.8.62.203 — Match conversations on the Selection Board
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.203';
