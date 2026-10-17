@@ -1,5 +1,7 @@
 # Recovered .206 package and navigation fixes (.206.1)
 
+**Demo review status, 18 October:** the user reports that the delivered download still shows Teams without Selection Board and the older Social Graphics menu. The demo is not accepted as a faithful preview. Full demo reconstruction and role-flow redesign are parked until closer to product completion. The screenshot also shows excessive vertical gaps, stacked navigation and repeated Refresh controls. Future review must cover distinct role journeys and realistic combined roles, as recorded in `AGENTS.md`, and visually verify the actual delivered artifact. The automated results below do not resolve the user's observed mismatch.
+
 The unpublished .206 source has been recovered from the previous working tree, including the .205 statistics foundation, identity repair, visual refresh and selection-evidence proposal. The original working tree has been preserved. This package is based on the published .204 commit, 789d8a782b809cb16b6f52a1a22b0a1d6b4d41bb.
 
 ## Additional fixes
