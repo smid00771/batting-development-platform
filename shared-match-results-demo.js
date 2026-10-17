@@ -11,6 +11,11 @@ export function createSharedResultsDemo(getState,getCards,getLinks){
  function awards(end){const data=context(end),pool=[];for(const c of data.cards){if(c.scorecard.status!=='completed')continue;const players=new Map(),player=(id,name)=>{if(!players.has(id))players.set(id,{key:c.snapshot_id+':'+c.our_team+':'+id,snapshot_id:c.snapshot_id,team_id:c.our_team,match_id:c.scorecard.match_id,player_id:id,name,grade:c.scorecard.grade,runs:0,wickets:0,conceded:0,batting:[],bowling:[]});return players.get(id);};for(const inn of c.scorecard.innings){if(inn.team_id===c.our_team)for(const b of inn.batters||[]){const p=player(b.player_id,b.name);if(b.status!=='did_not_bat'){p.runs+=b.runs||0;p.batting.push({runs:b.runs||0,not_out:!!b.not_out});}}else for(const b of inn.bowlers||[]){const p=player(b.player_id,b.name);p.wickets+=b.wickets||0;p.conceded+=b.runs||0;p.bowling.push({...b});}}pool.push(...players.values());}return {cards:data.cards,candidates:pool};}
  async function rpc(action,data){const state=getState(),sources=state.result_sources||={};
   if(action==='context')return context(data.week_end);
+  if(action==='fixture'||action==='fixture_access'){
+   const f=state.fixtures.find(f=>f.id===data.fixture_id);if(!f)throw Error('Choose a club fixture.');if(action==='fixture_access')return {allowed:true};
+   const end=f.details.days.map(d=>d.date).sort().at(-1),all=context(end);
+   return {...all,fixtures:all.fixtures.filter(x=>x.id===f.id),cards:all.cards.filter(c=>(!c.fixture_id||c.fixture_id===f.id)&&c.scorecard.dates[0]===f.details.days[0].date&&c.scorecard.format_key===f.details.format)};
+  }
   if(action==='review'){
    const all=Object.entries(getCards()).filter(([,c])=>c.dates[0]===data.match_date&&c.format_key===data.format_key),latest=new Map();for(const [id,c] of all)latest.set(c.match_id,[id,c]);const matches=[...latest.values()];
    const fid=data.fixture_id,fixture=state.fixtures.find(f=>f.id===fid),bound=sources[fid]?.match_id||fixture?.scorecard_sync?.match_id||data.existing_match_id;
