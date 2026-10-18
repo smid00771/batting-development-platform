@@ -116,6 +116,21 @@
 #app .se-fixture-lock {background:var(--soft);padding:8px 10px;margin:12px 0;align-items:center;flex-wrap:wrap}
 #app .se-fixture-lock p {font-size:12px;color:var(--muted)}
 #app .se-fixture-lock .btn {font-size:12px;padding:8px 10px}
+#app .se-fixture-summary .se-top {align-items:flex-start;gap:8px;margin:0;flex-wrap:nowrap}
+#app .se-fixture-title {min-width:0}
+#app .se-fixture-title h2 {margin:0 0 2px}
+#app .se-fixture-summary .se-top>.btn {flex-shrink:0}
+#app .se-fixture-heading {line-height:1.4;overflow-wrap:anywhere}
+#app .se-fixture-heading h3 {display:inline;margin:0}
+#app .se-fixture-heading>span {font-size:12px;color:var(--muted);margin-left:8px}
+#app .se-fixture-summary :is(.se-fixture-meta,.se-fixture-meeting) {margin:4px 0 0;overflow-wrap:anywhere}
+#app .se-fixture-summary .se-fixture-lock {justify-content:flex-start;gap:4px 12px;background:none;border:0;border-radius:0;padding:0;margin:4px 0 0}
+#app .se-fixture-summary .se-fixture-lock p {margin:0}
+#app .se-fixture-summary .se-fixture-lock small {font-size:12px;color:var(--muted)}
+#app .se-calendar button[data-se-availability="unavailable"] {background:#fff0ee;border-color:#cb6c6c;color:#8e242b}
+#app .se-availability-key {display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin:4px 0 10px}
+#app .se-availability-key span:first-child {color:#154e32}
+#app .se-availability-key span:nth-child(2) {color:#8e242b}
 #app .se-match-roles {gap:10px;margin:12px 0}
 #app .se-match-roles select {font-size:13px;min-height:44px!important;padding:8px!important}
 #app .se-match-roles label {font-size:12px;font-weight:500;color:var(--muted)}
@@ -284,13 +299,17 @@
 #app .fr-team-scores[open]>summary strong::before {content:'▾ '}
 #app .fr-team-scores>summary span {font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
 #app .fr-table-wrap {max-width:100%;overflow-x:auto}
-#app .fr-score-table {width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+#app .fr-score-table {width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
 #app .fr-score-table caption {text-align:left;font-weight:650;padding:6px 0}
-#app .fr-score-table :is(th,td) {padding:6px 4px;text-align:right;border-bottom:1px solid var(--line)}
-#app .fr-score-table th:first-child {text-align:left;width:100%;min-width:105px;font-weight:500}
+#app .fr-score-table :is(th,td) {padding:6px clamp(4px,1vw,12px);text-align:right;border-bottom:1px solid var(--line)}
+#app .fr-score-table th:first-child {text-align:left;width:44%;font-weight:500;overflow-wrap:anywhere}
+#app .fr-score-table :is(th,td):not(:first-child) {white-space:nowrap;overflow-wrap:normal}
 #app .fr-score-table thead th {font-size:12px;color:var(--muted);font-weight:600}
 #app .fr-score-table small {display:block;font-size:11px;color:var(--muted);font-weight:400;line-height:1.35}
 #app .fr-total {font-size:12px;text-align:right;color:var(--muted);margin:4px 0 8px}
+@media (max-width:480px) {
+  #app .fr-score-table th:first-child {width:38%}
+}
 #app .completed-club-setup>summary {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;cursor:pointer;font-weight:600;list-style:none}
 #app .completed-club-setup>summary::after {content:'▾';color:var(--muted)}
 #app .completed-club-setup[open]>summary::after {content:'▴'}

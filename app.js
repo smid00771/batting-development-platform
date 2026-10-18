@@ -1,7 +1,7 @@
 import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.210';
 import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.210';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.210 — Rough performance colours and role-matched grade comparisons
+// Club Batting 0.8.62.211 — Clear availability states, compact fixtures and readable scorecards
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.208';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.208';
@@ -18,7 +18,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.210';
+const APP_UI_VERSION='0.8.62.211';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2899,7 +2899,7 @@ async function openClubSectionHome(nextTab){
   }
   if(nextTab==='teams'){
     const s=ensureSelections();s.view='published';s.statsOpen=false;s.publishedWeek='';s.boardDateChosen=false;s.boardDateInitialised=false;s.boardPanel=null;s.rosterPanel=null;
-    s.navigationDrawer=null;s.restoreDrawer=null;s.active=null;
+    s.navigationDrawer=null;s.restoreDrawer=null;s.active=null;s.availabilityPlayerId=null;
     s.followupOpen=false;s.boardChatOpen=null;s.boardCommentOpen=null;s.teamChange=null;s.availabilityReturn=null;
   }
   if(nextTab==='messages'){const s=ensureClubMessages();s.mode='inbox';s.openId=null;}
@@ -2908,9 +2908,11 @@ async function openClubSectionHome(nextTab){
   if(nextTab==='dashboard'){clubHomeStageClubId=club.id;clubHomeExpandedStage=null;clubHomeRestoredStage=true;}
   if(nextTab==='howwetrain')howWeTrainReflectionEditId=null;
   if(nextTab==='myplan'){builderSection='core';playerPlanEditScope='';}
+  if(nextTab==='plan')playerPlanStructureSection='core';
   if(nextTab==='guide')guideSelectedCapabilityKey='whole_process';
   currentTab=nextTab;localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   await renderTab();
+  window.scrollTo?.({top:0,left:0,behavior:'instant'});
   if(nextTab==='guide')focusClubGuideArea('page');
 }
 function clubNavigationRoute(){
@@ -2945,6 +2947,7 @@ function clubNavigationRoute(){
 // Store navigation choices only. Image files and callbacks stay in this tab's memory.
 function selectionNavigationRoute(s){
  const route={view:s.view,date:s.date,publishedWeek:s.publishedWeek||'',boardPanel:s.boardPanel||null,rosterPanel:s.rosterPanel||null,drawer:s.navigationDrawer||null,followupOpen:!!s.followupOpen,boardChatOpen:s.boardChatOpen||null,boardCommentOpen:s.boardCommentOpen||null,statsOpen:!!s.statsOpen,statsFilters:{grade:s.statsFilters?.grade||'',format:s.statsFilters?.format||'',mode:s.statsFilters?.mode||'batting',compare:!!s.statsFilters?.compare,compareDate:s.statsFilters?.compareDate||'',firstTeam:s.statsFilters?.firstTeam||'',secondTeam:s.statsFilters?.secondTeam||''}};
+ if(s.view==='availability'){route.availabilityPlayerId=s.availabilityPlayerId||null;route.availabilityMonth=s.availabilityMonth||null;}
  if(s.view==='socials')route.social=socialNavigationRoute(socialEnsure());
  return route;
 }
@@ -3092,7 +3095,7 @@ function restoreClubNavigationState(route){
   if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
   const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
   currentTab=canOpenClubTab(tab)?tab:selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
-  if(currentTab==='teams'){const s=ensureSelections(),saved=route.selections||{};s.view=saved.view||'published';s.date=saved.date||'';s.publishedWeek=saved.publishedWeek||'';s.boardDateChosen=!!s.date;s.boardPanel=saved.boardPanel||null;s.followupOpen=saved.followupOpen===true;s.boardChatOpen=typeof saved.boardChatOpen==='string'?saved.boardChatOpen:null;s.boardCommentOpen=typeof saved.boardCommentOpen==='string'?saved.boardCommentOpen:null;s.statsOpen=saved.statsOpen===true;s.statsFilters={grade:saved.statsFilters?.grade||'',format:saved.statsFilters?.format||'',mode:saved.statsFilters?.mode==='bowling'?'bowling':'batting',compare:!!saved.statsFilters?.compare,compareDate:saved.statsFilters?.compareDate||'',firstTeam:saved.statsFilters?.firstTeam||'',secondTeam:saved.statsFilters?.secondTeam||''};s.rosterPanel=saved.rosterPanel||null;s.active=null;s.navigationDrawer=saved.drawer||null;s.restoreDrawer=saved.drawer||null;restoreSocialNavigation(saved.social);}
+  if(currentTab==='teams'){const s=ensureSelections(),saved=route.selections||{};s.view=saved.view||'published';s.date=saved.date||'';s.publishedWeek=saved.publishedWeek||'';s.boardDateChosen=!!s.date;s.boardPanel=saved.boardPanel||null;s.followupOpen=saved.followupOpen===true;s.boardChatOpen=typeof saved.boardChatOpen==='string'?saved.boardChatOpen:null;s.boardCommentOpen=typeof saved.boardCommentOpen==='string'?saved.boardCommentOpen:null;s.statsOpen=saved.statsOpen===true;s.statsFilters={grade:saved.statsFilters?.grade||'',format:saved.statsFilters?.format||'',mode:saved.statsFilters?.mode==='bowling'?'bowling':'batting',compare:!!saved.statsFilters?.compare,compareDate:saved.statsFilters?.compareDate||'',firstTeam:saved.statsFilters?.firstTeam||'',secondTeam:saved.statsFilters?.secondTeam||''};s.rosterPanel=saved.rosterPanel||null;s.active=null;s.navigationDrawer=saved.drawer||null;s.restoreDrawer=saved.drawer||null;s.availabilityPlayerId=typeof saved.availabilityPlayerId==='string'?saved.availabilityPlayerId:null;s.availabilityMonth=/^\d{4}-\d{2}$/.test(saved.availabilityMonth||'')?saved.availabilityMonth:null;restoreSocialNavigation(saved.social);}
   if(currentTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=route.makeYourCall?.week||null;s.season=route.makeYourCall?.season||null;s.month=route.makeYourCall?.month||null;restoreCallResultsState(route.makeYourCall?.results||{});}
   if(currentTab==='players'){
     resetPlayersWorkspaceForClub();
@@ -5213,7 +5216,7 @@ const CLUB_BATTING_HELP = {
     ],
     "tutorial": [
       {
-        "body": "Teams & availability → Availability. Tap the dates you can play, then Save. You can only be selected for dates marked available. Marked dates show a green tick. Tap again to remove a date. Dates apply across competitions in the club time zone; mark Day 1 and Day 2 separately.",
+        "body": "Teams & availability → Availability. Tap a date to cycle through green tick (available), red cross (unavailable), and blank (not set), then Save. Only available dates can be selected. Click Availability again to return to its home screen. Dates apply across competitions in the club time zone; mark Day 1 and Day 2 separately.",
         "title": "Mark available dates",
         "target_tab": "teams"
       },
@@ -20619,7 +20622,7 @@ function seFixtureEditor(f=null){
  const s=ensureSelections();if(!f&&!seCanSetup())return;
  if(f&&(seFixtureLocked(f)||!seCanSetup()||f.result_only)){
   const d=f.published?.details||f.details;
-  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>Fixture details</h2><button type="button" class="btn ghost" id="seLockedBack">Back</button></div><h3>${seEsc(d.grade)} · v ${seEsc(d.opposition)}</h3><p>${(d.days||[]).map(x=>seDate(x.date)+(x.start?' · '+seEsc(x.start):'')).join(' / ')}${seFormatLabel(d)?' · '+seEsc(seFormatLabel(d)):''}</p>${d.competition?`<p>${seEsc(d.competition)}</p>`:''}${d.ground?`<p>${seEsc(d.ground)}</p>`:''}${d.meeting?`<p>${seEsc(d.meeting)}</p>`:''}${seCanSetup()&&!f.result_only?seFixtureLockControls(f):''}</section><div id="fixtureResults"></div>`;
+  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-fixture-summary"><div class="se-top"><div class="se-fixture-title"><h2>Fixture details</h2><div class="se-fixture-heading"><h3>${seEsc(d.grade)} · v ${seEsc(d.opposition)}</h3>${d.competition?`<span>${seEsc(d.competition)}</span>`:''}</div></div><button type="button" class="btn ghost" id="seLockedBack">Back</button></div><p class="se-fixture-meta">${[(d.days||[]).map(x=>seDate(x.date)+(x.start?' · '+x.start:'')).join(' / '),seFormatLabel(d),d.ground].filter(Boolean).map(seEsc).join(' · ')}</p>${d.meeting?`<p class="se-fixture-meeting">${seEsc(d.meeting)}</p>`:''}${seCanSetup()&&!f.result_only?seFixtureLockControls(f):''}</section><div id="fixtureResults"></div>`;
   document.querySelector('[data-se-fixture-lock]')?.addEventListener('click',async()=>{if(!confirmLeaveSelections())return;await seToggleFixtureLock(f.id);const current=s.data.fixtures.find(x=>x.id===f.id);if(current)seFixtureEditor(current);});
   document.getElementById('seLockedBack').onclick=()=>{if(confirmLeaveSelections())drawSelections();};seMountFixtureScores(f);return;
  }
@@ -20925,7 +20928,7 @@ async function renderSelections(){
 function seHasAvailability(d){return seCanSetup(d)||d.can_view_club_availability||d.roster.some(p=>p.active&&p.user_id===session?.user?.id)||['player','both'].includes(membership?.involvement);}
 function seChangeView(view){
  if(!confirmLeaveSelections()||view!=='board'&&selectionRoomController?.close()===false)return;recordSelectionNavigation();const s=ensureSelections();s.view=view;s.statsOpen=false;s.boardPanel=null;s.rosterPanel=null;s.navigationDrawer=null;s.restoreDrawer=null;s.active=null;s.formDirty=false;s.notice='';
- s.followupOpen=false;s.boardChatOpen=null;s.boardCommentOpen=null;s.teamChange=null;s.availabilityReturn=null;
+ s.followupOpen=false;s.boardChatOpen=null;s.boardCommentOpen=null;s.teamChange=null;s.availabilityReturn=null;s.availabilityPlayerId=null;
  if(view==='published')s.publishedWeek='';if(view==='socials')socialLanding();drawSelections();
 }
 function socialLanding(){const s=socialEnsure();s.view='graphics';s.creationView='graphics';socialTeamWorkflow.state(s).step='artwork';s.notice='';}
@@ -21227,27 +21230,27 @@ function seAvailability(playerId=null){
   s.availabilityPlayerId=null;
   host.innerHTML=viewAll?`<section class="se-card se-drawer"><h2>Player availability</h2>${players.length?dateSetup+chooser(''):seCanSetup(d)?'<button class="btn" id="seAvailabilityAddPlayers">Add players</button>':'<p>No players added yet.</p>'}</section>`:'<section class="se-card se-drawer"><h2>Your availability</h2><p>Ask a selector to link your name in the playing list to your account.</p></section>';
   document.getElementById('seSetAvailabilityDate')?.addEventListener('click',seAvailabilityDateSetup);
-  document.getElementById('seAvailabilityPlayer')?.addEventListener('change',e=>seAvailability(e.target.value));
+  document.getElementById('seAvailabilityPlayer')?.addEventListener('change',e=>{seAvailability(e.target.value);recordSelectionNavigation();});
   document.getElementById('seAvailabilityAddPlayers')?.addEventListener('click',()=>{s.view='roster';drawSelections();});return;
  }
  s.availabilityPlayerId=p.id;
- const editable=seCanSetup(d)||p.user_id===session.user.id,own=p.user_id===session.user.id,a=p.availability||{revision:0,available_dates:[]},saved=[...new Set(a.available_dates||[])].sort(),dates=new Set(saved),today=new Date().toLocaleDateString('en-CA',{timeZone:d.access.timezone});let month=s.availabilityMonth||today.slice(0,7);
- const instruction=!editable?'Only players with dates marked available can be selected.':own?'Tap the dates you can play, then Save. You can only be selected for dates marked available.':'Tap the dates the player has confirmed, then Save. Only marked dates can be selected.';
- host.innerHTML=`<form id="seAvailabilityForm" class="se-card se-drawer"><div class="se-top"><h2>${own?'Your availability':seEsc(p.name)+' · availability'}</h2></div>${dateSetup}${viewAll?chooser(p.id):''}<p class="se-form-note">${instruction}</p><div class="se-month-tools"><button type="button" class="btn ghost" id="seMonthPrev" aria-label="Previous month">‹</button><label>Month<input type="month" id="seMonth" value="${month}"></label><button type="button" class="btn ghost" id="seMonthNext" aria-label="Next month">›</button></div><div id="seCalendar" class="se-calendar"></div>${editable?`<button type="submit" class="btn" id="seSaveAvailability" disabled>${a.revision?'Saved':'Save'}</button>`:''}${s.availabilityReturn?'<button type="button" class="btn ghost" id="seAvailabilityBack">Back to Selection Board</button>':''}</form>`;
+ const editable=seCanSetup(d)||p.user_id===session.user.id,own=p.user_id===session.user.id,a=p.availability||{revision:0,available_dates:[]},saved=[...new Set(a.available_dates||[])].sort(),dates=new Set(saved),savedUnavailable=[...new Set((a.unavailable_dates||[]).filter(date=>!dates.has(date)))].sort(),unavailable=new Set(savedUnavailable),today=new Date().toLocaleDateString('en-CA',{timeZone:d.access.timezone});let month=s.availabilityMonth||today.slice(0,7);
+ const instruction=!editable?'Only available dates can be selected.':'Tap a date to cycle: available → unavailable → not set. Then Save.';
+ host.innerHTML=`<form id="seAvailabilityForm" class="se-card se-drawer"><div class="se-top"><h2>${own?'Your availability':seEsc(p.name)+' · availability'}</h2></div>${dateSetup}${viewAll?chooser(p.id):''}<p class="se-form-note">${instruction}</p><div class="se-month-tools"><button type="button" class="btn ghost" id="seMonthPrev" aria-label="Previous month">‹</button><label>Month<input type="month" id="seMonth" value="${month}"></label><button type="button" class="btn ghost" id="seMonthNext" aria-label="Next month">›</button></div><div id="seCalendar" class="se-calendar"></div><p class="se-availability-key"><span>✓ Available</span><span>× Unavailable</span><span>Blank: not set</span></p>${editable?`<button type="submit" class="btn" id="seSaveAvailability" disabled>${a.revision?'Saved':'Save'}</button>`:''}${s.availabilityReturn?'<button type="button" class="btn ghost" id="seAvailabilityBack">Back to Selection Board</button>':''}</form>`;
  const form=document.getElementById('seAvailabilityForm');
  document.getElementById('seAvailabilityBack')?.addEventListener('click',()=>{if(confirmLeaveSelections())seReturnFromAvailability();});
  document.getElementById('seSetAvailabilityDate')?.addEventListener('click',()=>{if(confirmLeaveSelections())seAvailabilityDateSetup();});
  const paint=()=>{
   s.availabilityMonth=month;document.getElementById('seMonth').value=month;
   const first=new Date(month+'-01T12:00:00Z'),offset=(first.getUTCDay()+6)%7,count=new Date(first.getUTCFullYear(),first.getUTCMonth()+1,0).getDate();
-  document.getElementById('seCalendar').innerHTML=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<small>${x}</small>`).join('')+'<span></span>'.repeat(offset)+Array.from({length:count},(_,i)=>{const date=month+'-'+String(i+1).padStart(2,'0'),available=dates.has(date);return `<button type="button" data-se-date="${date}" aria-pressed="${available}" aria-label="${date}, ${available?'available':'not available for selection'}" ${editable?'':'disabled'}>${i+1}${available?'<span class="se-calendar-tick" aria-hidden="true">✓</span>':''}</button>`;}).join('');
-  if(editable){document.querySelectorAll('[data-se-date]').forEach(b=>b.onclick=()=>{const date=b.dataset.seDate;dates.has(date)?dates.delete(date):dates.add(date);s.formDirty=JSON.stringify([...dates].sort())!==JSON.stringify(saved);paint();});const save=document.getElementById('seSaveAvailability');save.disabled=!s.formDirty;save.textContent=s.formDirty?'Save':a.revision?'Saved':'Save';}
+  document.getElementById('seCalendar').innerHTML=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<small>${x}</small>`).join('')+'<span></span>'.repeat(offset)+Array.from({length:count},(_,i)=>{const date=month+'-'+String(i+1).padStart(2,'0'),available=dates.has(date),status=available?'available':unavailable.has(date)?'unavailable':'unknown';return `<button type="button" data-se-date="${date}" data-se-availability="${status}" aria-pressed="${available}" aria-label="${date}, ${status==='unknown'?'availability not set':status}" ${editable?'':'disabled'}>${i+1}${status!=='unknown'?`<span class="se-calendar-tick" aria-hidden="true">${available?'✓':'×'}</span>`:''}</button>`;}).join('');
+  if(editable){document.querySelectorAll('[data-se-date]').forEach(b=>b.onclick=()=>{const date=b.dataset.seDate;if(dates.has(date)){dates.delete(date);unavailable.add(date);}else if(unavailable.has(date))unavailable.delete(date);else dates.add(date);s.formDirty=JSON.stringify([...dates].sort())!==JSON.stringify(saved)||JSON.stringify([...unavailable].sort())!==JSON.stringify(savedUnavailable);paint();document.querySelector(`[data-se-date="${date}"]`)?.focus({preventScroll:true});});const save=document.getElementById('seSaveAvailability');save.disabled=!s.formDirty;save.textContent=s.formDirty?'Save':a.revision?'Saved':'Save';}
  };
  const changeMonth=n=>{const next=new Date(month+'-01T12:00:00Z');next.setUTCMonth(next.getUTCMonth()+n);month=next.toISOString().slice(0,7);paint();};
  document.getElementById('seMonthPrev').onclick=()=>changeMonth(-1);document.getElementById('seMonthNext').onclick=()=>changeMonth(1);
  document.getElementById('seMonth').onchange=e=>{if(/^\d{4}-\d{2}$/.test(e.target.value)&&e.target.value.slice(0,4)!=='0000'){month=e.target.value;paint();}else e.target.value=month;};
- document.getElementById('seAvailabilityPlayer')?.addEventListener('change',e=>{if(confirmLeaveSelections())seAvailability(e.target.value);else e.target.value=p.id;});
- form.onsubmit=async e=>{e.preventDefault();if(!editable||!s.formDirty)return;if(await seMutate('availability',{id:p.id,revision:a.revision||0,calendar_mode:'opt_in',available_dates:[...dates].sort()})&&s.view==='availability')seAvailability(p.id);};paint();
+ document.getElementById('seAvailabilityPlayer')?.addEventListener('change',e=>{if(confirmLeaveSelections()){seAvailability(e.target.value);recordSelectionNavigation();}else e.target.value=p.id;});
+ form.onsubmit=async e=>{e.preventDefault();if(!editable||!s.formDirty)return;if(await seMutate('availability',{id:p.id,revision:a.revision||0,calendar_mode:'opt_in',available_dates:[...dates].sort(),unavailable_dates:[...unavailable].sort()})&&s.view==='availability')seAvailability(p.id);};paint();
 }
 function sePlayerEditor(player=null){recordSelectionDrawer('player',{id:player?.id||null});queueMicrotask(bindSelectionBackButtons);const s=ensureSelections(),p=player||{name:'',grade:'',external_id:'',batting:'unknown',bowling:'unknown',bowling_load:'unknown',keeper:false,active:true,user_id:null};document.getElementById('seContent').innerHTML=`<form class="se-card se-drawer" id="sePlayerForm"><h2>${player?'Player details':'Add player'}</h2><div class="se-form-grid"><label>Name<input name="name" value="${seEsc(p.name)}" maxlength="120" required></label><label>Registration ID (optional)<input name="external_id" value="${seEsc(p.external_id)}" maxlength="120"></label>${seGradeFields('grade',p.grade,null,{label:'Usual grade (optional)',required:false,maxlength:80})}</div><div id="seNameMatch" class="se-name-match" role="alert" hidden></div><p class="se-form-note">No player sign-up needed. A registration ID helps match future CSV imports.</p><details id="seAccountLink" ${p.user_id?'open':''}><summary>App account (optional)</summary><label>Player email (optional)<input name="account_email" type="email" maxlength="254" value="${seEsc(p.account_email||'')}"></label><p class="se-form-note">Verified email and name matches link automatically. Otherwise choose the account below.</p><label>Player’s club account<select name="user_id"><option value="">Not linked yet</option>${s.data.members.filter(m=>!s.data.roster.some(x=>x.user_id===m.user_id&&x.id!==p.id)).map(m=>`<option value="${m.user_id}" ${m.user_id===p.user_id?'selected':''}>${seEsc(m.name)}${m.email?' · '+seEsc(m.email):''}</option>`).join('')}</select></label><p class="se-form-note">For their availability and team messages. No Club Batting subscription needed.</p></details><label class="se-check"><input name="active" type="checkbox" ${p.active?'checked':''}>Active player</label><div class="se-actions se-editor-actions"><button class="btn" type="submit">Save player</button><button class="btn ghost" type="button" id="sePlayerCancel">Cancel</button></div></form>`;const form=document.getElementById('sePlayerForm');form.oninput=()=>s.formDirty=true;const confirmName=seBindPlayerNameCheck(form,p);seBindGrade(form,'grade',()=>s.formDirty=true);document.getElementById('sePlayerCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};form.onsubmit=e=>{e.preventDefault();if(!confirmName())return;const d=new FormData(form),user_id=d.get('user_id')||null;if(user_id!==p.user_id&&user_id&&!confirm('Confirm this account belongs to '+d.get('name')+'? It will receive this player’s selections and can edit their availability.'))return;return seMutate('save_roster',{revision:s.data.roster_revision,rows:[{...p,name:d.get('name').trim(),grade:seReadGrade(form,'grade').grade,external_id:d.get('external_id').trim(),account_email:d.get('account_email').trim(),user_id,active:d.has('active')}]});};}
 function seImport(){recordSelectionDrawer('import');queueMicrotask(bindSelectionBackButtons);const s=ensureSelections();document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer"><h2>Import registered players</h2><p>Upload your registration CSV. Existing players are matched; roles and availability stay.</p><label>Registration CSV<input type="file" id="seCSVFile" accept=".csv,text/csv"></label><div id="seCSVMap"></div><p id="seCSVError" role="alert"></p><button class="btn ghost" id="seImportCancel">Back to playing list</button></section>`;document.getElementById('seImportCancel').onclick=()=>{if(confirmLeaveSelections())seRoster();};document.getElementById('seCSVFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2e6)throw Error('Choose a CSV smaller than 2 MB.');const rows=seCSV(await file.text()),headers=rows.shift();if(rows.length>1000)throw Error('Import up to 1000 players at a time.');const guess=(re,fallback=-1)=>headers.findIndex(h=>re.test(h))>=0?headers.findIndex(h=>re.test(h)):fallback,choices=[['-1','Not used'],...headers.map((h,i)=>[String(i),h||'Column '+(i+1)])];document.getElementById('seCSVMap').innerHTML=`<div class="se-form-grid" style="margin:16px 0">${[['id','Stable registration ID',guess(/participant.?id|registration.?id|profile.?id|player.?id|^id$/i)],['name','Full name / first name',guess(/player.?name|full.?name|first.?name|^name$/i)],['last','Surname (if separate)',/first.?name/i.test(headers[guess(/player.?name|full.?name|first.?name|^name$/i)]||'')?guess(/last.?name|surname/i):-1],['grade','Usual grade (optional)',guess(/grade|team/i)],['email','Player email (optional)',guess(/^(?:(?:player|participant|account.?holder).?)?e.?mail$/i)]].map(([k,l,v])=>`<label>${l}<select data-se-map="${k}">${seOpt(choices,String(v))}</select></label>`).join('')}</div><div id="seCSVPreview"></div><button class="btn" id="seCSVCommit">Import playing list</button>`;
