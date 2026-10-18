@@ -90,7 +90,7 @@ function assess(team,person,row) {
       }
       return {...evidence,state:'building',baseline:base};
     }
-    if (!base || !knownRole) return {...evidence,state:'building',baseline:base,
+    if (!base || (discipline==='bat' && !knownRole)) return {...evidence,state:'building',baseline:base,
       reason:!base ? 'No historical benchmark for this competition, grade or format' : 'Set the playing-list role before showing a form flag'};
     let state='steady',reason='Within the broad grade range';
     if (discipline === 'bat') {
@@ -107,6 +107,13 @@ function assess(team,person,row) {
         state='low';reason=wicketsLow?'Fewer wickets per ball without enough economy advantage':'Higher economy without enough wicket-taking advantage';
       } else if (wicketsStrong && evidence.economy > 1.1*base.economy) reason='Strong wicket-taking offsets higher economy';
       else if (economyStrong && evidence.wickets < .9*base.wickets) reason='Economical bowling offsets fewer wickets';
+      // A missing playing-list role must not hide strong recorded bowling.
+      // Keep other assessments and like-for-like swaps dependent on the role.
+      if (!knownRole) {
+        if (state!=='strong') return {...evidence,state:'building',baseline:base,
+          reason:'Set the playing-list bowling role for the full guide'};
+        reason+=' · Bowling role needed for swap comparisons';
+      }
     }
     return {...evidence,state,baseline:base,early:(discipline==='bat'?row.innings:row.bowling_innings)<5,reason};
   };

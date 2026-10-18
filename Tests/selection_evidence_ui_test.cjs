@@ -37,6 +37,20 @@ test('one form guide control includes neutral bowling and explains the historica
  assert.match(h.host.textContent,/All roles and match formats/);assert.match(h.host.textContent,/Early sample · 2 innings · 18.5 overs/);
  assert.doesNotMatch(h.host.textContent,/comparable club records|current club records/);
 });
+test('strong bowling with an unset role remains visible and explains the missing swap information',async()=>{
+ const h=await setup(),p={...h.fixture.roster[0],batting:'unknown',bowling:'unknown',bowling_load:'unknown'};
+ const stats={roster_id:p.id,competition:'NDCA',grade:'3rd Grade',format:'limited_overs',runs:4,innings:2,not_outs:1,average:4,
+  batting_complete:true,bowling_complete:true,bowling_balls:78,bowling_innings:2,wickets:7,conceded:41,economy:41*6/78};
+ const item=h.engine.buildSelectionEvidence({rows:[stats]},[],[p]).forRow(stats);item.key='unset-bowler';
+ h.host.innerHTML=h.ui.renderEvidenceBadges(item);
+ assert.match(h.host.querySelector('.se-evidence-chip.strong').textContent,/Bowling: ↑ Strong/);
+ assert.match(h.host.querySelector('button').getAttribute('aria-label'),/Bowling: Strong \(early sample\)/);
+ h.ui.bindEvidenceDetails(h.host,{players:new Map([[item.key,item]])});h.host.querySelector('button').click();
+ const text=h.host.querySelector('dialog').textContent;
+ assert.match(text,/Bowling role not set/);assert.match(text,/Bowling role needed for swap comparisons/);
+ assert.match(text,/7 wickets · 13.0 overs · 2 inns · 5.86 average · 3.15 economy/);
+ assert.match(text,/Early sample · 2 innings · 13.0 overs/);assert.doesNotMatch(text,/Set the playing-list role before showing a form flag/);
+});
 test('the early batting flag shows two innings and the limited evidence in the shared form dialog',async()=>{
  const h=await setup(),p=h.fixture.roster[0];
  const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:93,innings:2,not_outs:0,average:46.5,
