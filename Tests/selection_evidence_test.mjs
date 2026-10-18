@@ -136,6 +136,31 @@ test('a very low two-innings average earns only a mild early flag, without unloc
  assert.equal(s.build().player('high','incumbent').bat.state,'low');s.summary.rows[0].not_outs=2;
  assert.equal(s.build().player('high','incumbent').bat.state,'building');
 });
+test('lower-order batting never receives slow-start or below-guide warnings from the whole-grade reference',()=>{
+ for(const innings of [2,3,6])for(const batting of ['top','middle','lower']){
+  const s=scenario();s.roster[0].batting=batting;
+  Object.assign(s.summary.rows[0],{runs:2,innings,not_outs:0});
+  const m=s.build(),bat=m.player('high','incumbent').bat;
+  assert.equal(bat.state,batting==='lower'?'building':innings===2?'slow':'low');
+  if(batting==='lower')assert.match(bat.reason,/No lower-order batting benchmark/);
+  assert.deepEqual(m.forRow(s.summary.rows[0]).bat,bat);
+ }
+});
+test('lower-order batters retain positive highlights and the existing opportunity gates',()=>{
+ for(const innings of [2,5]){
+  const s=scenario();s.roster[0].batting='lower';Object.assign(s.summary.rows[0],{runs:innings*50,innings,not_outs:0});
+  const bat=s.build().player('high','incumbent').bat;assert.equal(bat.state,'strong');assert.equal(bat.early,innings<5);
+ }
+ const s=scenario();s.roster[0].batting='lower';Object.assign(s.summary.rows[0],{runs:80,innings:2,not_outs:2});
+ assert.equal(s.build().player('high','incumbent').bat.state,'strong');
+ s.summary.rows[0].batting_complete=false;assert.equal(s.build().player('high','incumbent').bat.state,'building');
+});
+test('the lower-order exception uses the saved batting role, not a proposed selection slot',()=>{
+ const s=scenario();s.high.slots=Array.from({length:10},(_,i)=>i===9?{d1:'incumbent'}:{});
+ Object.assign(s.summary.rows[0],{runs:2,innings:2,not_outs:0});
+ assert.equal(s.build().player('high','incumbent').bat.state,'slow');
+ s.roster[0].batting='lower';assert.equal(s.build().player('high','incumbent').bat.state,'building');
+});
 test('slow-start flags require an average below half the historical reference in each grade',()=>{
  for(const grade of ['1st Grade','2nd Grade','3rd Grade','4th Grade']){
   const s=scenario();s.high.grade=s.summary.rows[0].grade=grade;

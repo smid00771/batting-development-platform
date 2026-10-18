@@ -85,6 +85,8 @@ function assess(team,person,row) {
       }
       if (discipline==='bat' && base && knownRole && row?.innings===2 && evidence.dismissals===2
         && Number.isFinite(evidence.average) && evidence.average < .5*base.average) {
+        if (knownRole==='lower') return {...evidence,state:'building',baseline:base,
+          reason:'No lower-order batting benchmark · negative flags withheld'};
         return {...evidence,state:'slow',baseline:base,early:true,
           reason:'Average below half the grade reference after 2 innings and 2 dismissals; an early signal only'};
       }
@@ -95,7 +97,10 @@ function assess(team,person,row) {
     let state='steady',reason='Within the broad grade range';
     if (discipline === 'bat') {
       if (evidence.average > base.average && evidence.average >= 1.25*base.average) {state='strong';reason='Average at least 25% above the grade reference';}
-      else if (evidence.average < base.average && evidence.average <= .75*base.average) {state='low';reason='Average at least 25% below the grade reference';}
+      else if (evidence.average < base.average && evidence.average <= .75*base.average) {
+        state=knownRole==='lower'?'building':'low';
+        reason=knownRole==='lower'?'No lower-order batting benchmark · negative flags withheld':'Average at least 25% below the grade reference';
+      }
     } else {
       const wicketsStrong=evidence.wickets > base.wickets && evidence.wickets >= 1.25*base.wickets;
       const economyStrong=evidence.economy < base.economy && evidence.economy <= .8*base.economy;

@@ -77,6 +77,20 @@ test('the mild slow-start flag has explicit accessible text and explains the two
  assert.match(dialog.textContent,/Early sample · 2 innings · 2 dismissals/);assert.match(dialog.textContent,/4 batting average/);
  assert.match(dialog.textContent,/Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals/);
 });
+test('lower-order batting withholds warning colours and explains the missing role benchmark',async()=>{
+ const h=await setup(),p={...h.fixture.roster[0],batting:'lower'};
+ for(const innings of [2,4]){
+  const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:0,innings,not_outs:0,average:0,
+   batting_complete:true,bowling_complete:true,bowling_balls:0,bowling_innings:0,wickets:0,conceded:0};
+  const item=h.engine.buildSelectionEvidence({rows:[stats]},[],[p]).forRow(stats);item.key='lower-batter';
+  h.host.innerHTML=h.ui.renderEvidenceBadges(item);
+  assert.equal(h.host.querySelector('.se-evidence-chip.slow,.se-evidence-chip.low'),null);assert.match(h.host.textContent,/Batting: · Not yet rated/);
+  h.ui.bindEvidenceDetails(h.host,{players:new Map([[item.key,item]])});h.host.querySelector('button').click();
+  const text=h.host.querySelector('dialog').textContent;
+  assert.match(text,/Lower order/);assert.match(text,/No lower-order batting benchmark · negative flags withheld/);
+  assert.match(text,/0 batting average/);
+ }
+});
 test('repeated board redraws reuse saved figures; refresh corrections clear old markers and modal details',async()=>{
  const h=await setup();h.controller.mount(h.host,h.options);await tick();h.controller.mount(h.host,h.options);await tick();assert.equal(h.calls(),1);
  h.host.querySelector('[data-evidence-open]').click();h.reply(async()=>({data:{...h.fixture.context,cards:[]}}));h.controller.invalidate();await tick();
