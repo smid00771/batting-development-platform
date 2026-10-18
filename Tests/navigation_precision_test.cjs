@@ -220,11 +220,11 @@ test('nested Players, Innings and Messages screens have distinct navigation iden
  ])assert.notEqual(key(before),key(after));
 });
 
-test('production and demo share review editing and navigation behaviour',()=>{
+test('production and parked demo retain unchanged review editing behaviour',()=>{
  const demo=fs.readFileSync(new URL('../demo.html','file://'+__filename),'utf8').replaceAll('fixtureLocalStorage.','localStorage.');
- for(const name of ['openClubSectionHome','clubNavigationRoute','teamReviewNavigationIdentity','appNavigationKey','restoreClubNavigationState',
+ for(const name of ['teamReviewNavigationIdentity','appNavigationKey',
   'serializeTeamReviewState','restoreTeamReviewState','teamReviewUpdate','teamReviewRowHtml','renderTeamReviewContent','renderTeamReview','renderTeamReviewEntry',
-  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name).replace('s.teamChange=null;s.availabilityReturn=null;','').replace("compareDate:saved.statsFilters?.compareDate||'',",''),fn(name,demo),name); // The parked demo has no .207 move notice or .209 comparison date.
+  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name),fn(name,demo),name); // Live navigation has advanced; the demo rebuild is explicitly parked.
 });
 
 
@@ -264,4 +264,20 @@ test('plain Player Home tiles open the section home; specific match actions reta
  vm.runInContext(fn('openPlayerHomeAction'),h.c);await h.c.openPlayerHomeAction({tab:'howwetrain'});await h.c.openPlayerHomeAction({tab:'myplan'});
  assert.deepEqual(opened,['howwetrain','myplan']);
  await h.c.openPlayerHomeAction({tab:'myplan',section:'long_form',edit:true});assert.equal(h.c.builderSection,'long_form');assert.equal(h.c.playerPlanEditScope,'c:p');assert.equal(h.c.currentTab,'myplan');
+});
+
+test('Availability home and individual calendars are distinct Back/Forward destinations',async()=>{
+ const h=harness();h.s.view='availability';h.s.availabilityPlayerId=null;h.visit();
+ h.s.availabilityPlayerId='player';h.s.availabilityMonth='2026-11';h.visit();
+ h.s.availabilityPlayerId=null;h.visit();await h.history.back();
+ assert.equal(h.s.availabilityPlayerId,'player');assert.equal(h.s.availabilityMonth,'2026-11');
+ await h.history.back();assert.equal(h.s.availabilityPlayerId,null);
+ assert.doesNotMatch(JSON.stringify(h.entries),/available_dates|unavailable_dates/,'Calendar answers stay out of browser history');
+});
+
+test('section home resets availability, Plan Structure and scroll while Back keeps the prior destination',async()=>{
+ const h=reviewHarness();await h.open();h.s.view='availability';h.s.availabilityPlayerId='player';h.c.currentTab='teams';h.visit();h.c.window.scrollY=600;
+ await h.c.openClubSectionHome('teams');assert.equal(h.s.availabilityPlayerId,null);assert.equal(h.c.window.scrollY,0);
+ await h.history.back();assert.equal(h.s.view,'availability');assert.equal(h.s.availabilityPlayerId,'player');
+ h.c.playerPlanStructureSection='long_form';await h.c.openClubSectionHome('plan');assert.equal(h.c.playerPlanStructureSection,'core');
 });
