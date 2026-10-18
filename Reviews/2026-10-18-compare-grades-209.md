@@ -1,0 +1,15 @@
+# Compare grades — 0.8.62.209
+
+Compare grades received only fixtures for the Selection Board's current date. When the board advanced to an unselected upcoming round, the comparison rendered eleven vacant rows even though season batting and bowling totals existed. The competition suffix on the first dropdown was display text and did not alter the stored grade or statistical match.
+
+The comparison now receives the already-authorised fixture list, including published snapshots. As requested, Last published is the default: each grade uses its latest published team within its competition and match format, including the published batting order. Pending changes and populated future drafts do not replace that snapshot. Each column shows its fixture date, so grades published for different rounds remain explicit. Current selections can be chosen by date in the same compact Line-ups control without changing the Selection Board. If no teams have been published, an available current line-up is used. Explicit choices survive redraws and Back/Forward navigation. Cancelled and out-of-season fixtures are excluded.
+
+Both grade dropdowns use the same labels. Competition and format names appear when needed to distinguish otherwise identical grade labels. Teams are still paired only within the same competition and format, and totals still use confirmed player identities. An entirely unselected pair shows a short empty-state message; partially selected teams retain their actual vacancies. The existing batting-order and bracketing calculation is unchanged.
+
+## Verification
+
+80 targeted Node/DOM cases pass across season calculations, the stats panel, Selection Board integration and navigation. New cases cover an empty upcoming round with populated previous line-ups, manual date changes, persistence of an explicitly selected empty date, current selected and Day 2 line-ups, cancellation and season boundaries, competition labels and separation, and linked batting figures in both compared grades. Published-team cases verify that a populated future draft cannot replace the default, unpublished order changes do not leak into the snapshot, each grade can use a different published date, and formats remain distinguishable and separate. The real app adapter is checked for passing prior fixtures and published snapshots along with the board date. Dedicated role checks confirm that selectors and captains can open Season stats without Club Admin access; a read-only production function check confirms both roles are accepted by the deployed API. Existing comparison-format and identity tests remain in place.
+
+JavaScript syntax and whitespace checks pass. A read-only aggregate production query confirmed the reported empty-upcoming-team scenario. No database or selected-team mutation is required. The parked demo remains unchanged; its navigation parity assertion excludes only the new live comparison-date field, which has its own Back/Forward check.
+
+Verification used DOM integration tests rather than a signed-in browser session. The release updates app and panel cache versions to .209.

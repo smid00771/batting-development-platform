@@ -49,6 +49,22 @@ for(const file of ['app.js','demo.html'])test(file+': stats opens inline, closes
  h.document.getElementById('seSeasonStats').click();assert.equal(h.s.statsOpen,false);assert.equal(h.document.getElementById('seStatsHost').textContent,'');h.document.getElementById('seSeasonStats').click();h.c.seChangeView('availability');assert.equal(h.s.statsOpen,false);
 });
 
+test('live comparison receives previous selected teams as well as the upcoming board date',async()=>{
+ const h=setup('app.js');await h.c.renderSelections();h.s.date='2099-10-24';h.s.statsOpen=true;
+ h.f.details.days=[{date:'2099-10-17'}];h.f.slots=[{d1:'selected-player'}];
+ h.s.data.fixtures.push({...h.f,id:'upcoming',details:{...h.f.details,days:[{date:'2099-10-24'}]},slots:[{d1:null,d2:null}]});
+ h.c.seMountStats();const options=h.calls.find(call=>call.stats).stats;
+ assert.equal(options.boardDate,'2099-10-24');assert.deepEqual(Array.from(options.teams,t=>t.id),['match','upcoming']);
+ assert.equal(options.teams[0].slots[0].d1,'selected-player');
+ assert.deepEqual(JSON.parse(JSON.stringify(options.teams[0].published.slots)),h.f.published.slots);
+});
+
+for(const role of ['selector','captain'])test('live Season stats is visible to '+role+' without Club Admin access',async()=>{
+ const h=setup('app.js',role);h.s.data.admin=false;await h.c.renderSelections();
+ const button=h.document.getElementById('seSeasonStats');assert.ok(button);button.click();
+ assert.equal(h.s.statsOpen,true);assert.ok(h.calls.some(call=>call.stats));assert.equal(h.s.data.admin,false);
+});
+
 for(const file of ['app.js','demo.html'])test(file+': returning to Selection Board closes follow-up, comments and chat without changing saved work',async()=>{
  const h=setup(file);h.s.date='2099-10-17';await h.c.renderSelections();
  h.document.querySelector('#seFollowup summary').click();await new Promise(r=>setTimeout(r,10));

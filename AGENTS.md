@@ -1,5 +1,7 @@
 # Project writing rule
 
+Season stats must be visible to selectors and captains. Compare grades defaults to the last published team in each grade, using the published line-up and batting order rather than unpublished edits. Show each line-up's date; current draft selections remain an explicit alternative. Keep competitions and match formats separate. User requirements recorded 18 October 2026.
+
 Next batch, not the current release: compact Fixture details into one line for date, format and ground (wrapping naturally on small screens), with competition such as NDCA in a secondary position. Avoid separate padded paragraphs for each match detail. User request recorded 18 October 2026.
 
 One uploaded scorecard must supply Fixture details, Match Review, Season stats and social awards. Teams & availability-only clubs must see player batting and bowling figures in Fixture details without coaching access. Reduce scrolling throughout the app: compact phone headers, tight spacing and rows, completed setup collapsed, and usable 44px tap targets. Tutorial videos belong in Help, not at the top of task pages; App and notifications keeps its videos. Existing videos are outdated: recreating them is parked until the product is close to finished, and must not be included in the current layout fixes. User requirements recorded 18 October 2026.

@@ -1,6 +1,6 @@
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.208';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.209';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.208 — Shared scorecards, linked season stats and compact phone layout
+// Club Batting 0.8.62.209 — Compare selected grades by line-up date
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.208';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.208';
@@ -17,7 +17,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.208';
+const APP_UI_VERSION='0.8.62.209';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2943,7 +2943,7 @@ function clubNavigationRoute(){
 }
 // Store navigation choices only. Image files and callbacks stay in this tab's memory.
 function selectionNavigationRoute(s){
- const route={view:s.view,date:s.date,publishedWeek:s.publishedWeek||'',boardPanel:s.boardPanel||null,rosterPanel:s.rosterPanel||null,drawer:s.navigationDrawer||null,followupOpen:!!s.followupOpen,boardChatOpen:s.boardChatOpen||null,boardCommentOpen:s.boardCommentOpen||null,statsOpen:!!s.statsOpen,statsFilters:{grade:s.statsFilters?.grade||'',format:s.statsFilters?.format||'',mode:s.statsFilters?.mode||'batting',compare:!!s.statsFilters?.compare,firstTeam:s.statsFilters?.firstTeam||'',secondTeam:s.statsFilters?.secondTeam||''}};
+ const route={view:s.view,date:s.date,publishedWeek:s.publishedWeek||'',boardPanel:s.boardPanel||null,rosterPanel:s.rosterPanel||null,drawer:s.navigationDrawer||null,followupOpen:!!s.followupOpen,boardChatOpen:s.boardChatOpen||null,boardCommentOpen:s.boardCommentOpen||null,statsOpen:!!s.statsOpen,statsFilters:{grade:s.statsFilters?.grade||'',format:s.statsFilters?.format||'',mode:s.statsFilters?.mode||'batting',compare:!!s.statsFilters?.compare,compareDate:s.statsFilters?.compareDate||'',firstTeam:s.statsFilters?.firstTeam||'',secondTeam:s.statsFilters?.secondTeam||''}};
  if(s.view==='socials')route.social=socialNavigationRoute(socialEnsure());
  return route;
 }
@@ -3091,7 +3091,7 @@ function restoreClubNavigationState(route){
   if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
   const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
   currentTab=canOpenClubTab(tab)?tab:selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
-  if(currentTab==='teams'){const s=ensureSelections(),saved=route.selections||{};s.view=saved.view||'published';s.date=saved.date||'';s.publishedWeek=saved.publishedWeek||'';s.boardDateChosen=!!s.date;s.boardPanel=saved.boardPanel||null;s.followupOpen=saved.followupOpen===true;s.boardChatOpen=typeof saved.boardChatOpen==='string'?saved.boardChatOpen:null;s.boardCommentOpen=typeof saved.boardCommentOpen==='string'?saved.boardCommentOpen:null;s.statsOpen=saved.statsOpen===true;s.statsFilters={grade:saved.statsFilters?.grade||'',format:saved.statsFilters?.format||'',mode:saved.statsFilters?.mode==='bowling'?'bowling':'batting',compare:!!saved.statsFilters?.compare,firstTeam:saved.statsFilters?.firstTeam||'',secondTeam:saved.statsFilters?.secondTeam||''};s.rosterPanel=saved.rosterPanel||null;s.active=null;s.navigationDrawer=saved.drawer||null;s.restoreDrawer=saved.drawer||null;restoreSocialNavigation(saved.social);}
+  if(currentTab==='teams'){const s=ensureSelections(),saved=route.selections||{};s.view=saved.view||'published';s.date=saved.date||'';s.publishedWeek=saved.publishedWeek||'';s.boardDateChosen=!!s.date;s.boardPanel=saved.boardPanel||null;s.followupOpen=saved.followupOpen===true;s.boardChatOpen=typeof saved.boardChatOpen==='string'?saved.boardChatOpen:null;s.boardCommentOpen=typeof saved.boardCommentOpen==='string'?saved.boardCommentOpen:null;s.statsOpen=saved.statsOpen===true;s.statsFilters={grade:saved.statsFilters?.grade||'',format:saved.statsFilters?.format||'',mode:saved.statsFilters?.mode==='bowling'?'bowling':'batting',compare:!!saved.statsFilters?.compare,compareDate:saved.statsFilters?.compareDate||'',firstTeam:saved.statsFilters?.firstTeam||'',secondTeam:saved.statsFilters?.secondTeam||''};s.rosterPanel=saved.rosterPanel||null;s.active=null;s.navigationDrawer=saved.drawer||null;s.restoreDrawer=saved.drawer||null;restoreSocialNavigation(saved.social);}
   if(currentTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=route.makeYourCall?.week||null;s.season=route.makeYourCall?.season||null;s.month=route.makeYourCall?.month||null;restoreCallResultsState(route.makeYourCall?.results||{});}
   if(currentTab==='players'){
     resetPlayersWorkspaceForClub();
@@ -20349,7 +20349,7 @@ function seToggleStats(){
 }
 function seMountStats(){
  const s=ensureSelections(),host=document.getElementById('seStatsHost');if(!host||!s.statsOpen||!seStatsAllowed(s.data))return;
- seasonStatsPanel.mount(host,{clubId:club.id,scope:s.key,state:s.statsFilters||(s.statsFilters={mode:'batting',grade:'',format:''}),preferredFormat:s.data.fixtures.find(f=>f.details.days[0].date===s.date)?.details.format,roster:s.data.roster,teams:s.data.fixtures.filter(f=>f.details.days[0].date===s.date).map(f=>({id:f.id,...f.details,slots:f.slots,level:seGradeLevel(f.details.competition,f.details.grade)}))});
+ seasonStatsPanel.mount(host,{clubId:club.id,scope:s.key,state:s.statsFilters||(s.statsFilters={mode:'batting',grade:'',format:''}),boardDate:s.date,preferredFormat:s.data.fixtures.find(f=>f.details.days[0].date===s.date)?.details.format,roster:s.data.roster,teams:s.data.fixtures.map(f=>({id:f.id,...f.details,slots:f.slots,published:f.published?{...f.published,level:seGradeLevel(f.published.details.competition,f.published.details.grade)}:null,level:seGradeLevel(f.details.competition,f.details.grade)}))});
 }
 function seBoardAccess(d=ensureSelections().data){return d?.can_view_board===true||d?.selector===true||d?.captain===true;}
 function seFollowupRows(){const s=ensureSelections();return (s.data.conversations||[]).filter(m=>m.date===s.date);}
