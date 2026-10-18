@@ -25,8 +25,8 @@ begin
   insert into club_selection_private.fixtures(id,club_id,details,slots) values(f,c,jsonb_build_object('grade','1st Grade','competition','Test District','format','long_form','opposition','Visitors','meeting','private arrangements','days',jsonb_build_array(jsonb_build_object('date',played))),'[]');
   insert into club_selection_private.roster(id,club_id,name,account_email) values(r1,c,'Confirmed Name','do-not-return@example.invalid'),(r2,c,'Linked Batter',null),(r3,c,'Conflicting Link',null);
   insert into public.players(id,club_id,display_name) values(p2,c,'Batting-linked Name');
-  insert into club_selection_private.scorecard_roster_links(club_id,source_player_id,roster_id) values(c,source1,r1);
-  insert into public.match_review_player_links(club_id,source_player_id,player_id) values(c,source2,p2);
+  insert into club_selection_private.scorecard_roster_links(club_id,source_player_id,roster_id,confirmed_by) values(c,source1,r1,adm);
+  insert into public.match_review_player_links(club_id,source_player_id,player_id,confirmed_by) values(c,source2,p2,adm);
   insert into club_batting_private.roster_players(club_id,roster_id,player_id) values(c,r2,p2);
   card:=jsonb_build_object('provider','playcricket_au','schema_version',2,'status','completed','match_id',mid,'dates',jsonb_build_array(played),'grade','1st Grade','format_key','long_form',
    'teams',jsonb_build_array(jsonb_build_object('id',our,'name','Synthetic club','players',jsonb_build_array(jsonb_build_object('player_id',source1,'name','Source Name'),jsonb_build_object('player_id',source2,'name','Source Two'),jsonb_build_object('player_id',source3,'name','Unlinked Batter'))),jsonb_build_object('id',them,'name','Visitors','players','[]'::jsonb)),
@@ -44,7 +44,7 @@ begin
   insert into public.match_review_scorecards(id,club_id,source_match_id,fetched_by,scorecard,created_at) values(new_sid,c,mid,adm,card,now());
   res:=public.club_season_stats_api(c);
   assert jsonb_array_length(res->'cards')=1 and res#>>'{cards,0,scorecard,innings,0,batters,0,runs}'='73','Newest correction replaces original snapshot';
-  insert into club_selection_private.scorecard_roster_links(club_id,source_player_id,roster_id) values(c,source2,r3);
+  insert into club_selection_private.scorecard_roster_links(club_id,source_player_id,roster_id,confirmed_by) values(c,source2,r3,adm);
   res:=public.club_season_stats_api(c);
   assert exists(select 1 from jsonb_array_elements(res->'identities') x where x->>'source_id'=source2::text and x->>'conflict'='true'),'Conflicting linked identities are explicit';
 
