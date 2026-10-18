@@ -77,11 +77,12 @@ function assess(team,person,row) {
     if (discipline === 'ball' && !evidence.applicable) return null;
     const base=gradeBenchmark(team,discipline), knownRole=discipline === 'bat' ? role(person) : bowlingRole(person);
     if (!evidence.ready) {
-      if (discipline==='bat' && base && knownRole && Number.isFinite(evidence.positiveAverage)
+      if (discipline==='bat' && base && Number.isFinite(evidence.positiveAverage)
         && evidence.positiveAverage > base.average && evidence.positiveAverage >= 1.25*base.average) {
-        return {...evidence,state:'strong',baseline:base,early:true,reason:evidence.positiveUsesInnings
+        return {...evidence,state:'strong',baseline:base,early:true,reason:(evidence.positiveUsesInnings
           ? 'Early positive flag: runs per innings at least 25% above the grade reference; fewer than 2 dismissals'
-          : 'Early positive flag: average at least 25% above the grade reference'};
+          : 'Early positive flag: average at least 25% above the grade reference')
+          +(knownRole?'':' · Batting role needed for swap comparisons')};
       }
       if (discipline==='bat' && base && knownRole && row?.innings===2 && evidence.dismissals===2
         && Number.isFinite(evidence.average) && evidence.average < .5*base.average) {
@@ -92,8 +93,8 @@ function assess(team,person,row) {
       }
       return {...evidence,state:'building',baseline:base};
     }
-    if (!base || (discipline==='bat' && !knownRole)) return {...evidence,state:'building',baseline:base,
-      reason:!base ? 'No historical benchmark for this competition, grade or format' : 'Set the playing-list role before showing a form flag'};
+    if (!base) return {...evidence,state:'building',baseline:base,
+      reason:'No historical benchmark for this competition, grade or format'};
     let state='steady',reason='Within the broad grade range';
     if (discipline === 'bat') {
       if (evidence.average > base.average && evidence.average >= 1.25*base.average) {state='strong';reason='Average at least 25% above the grade reference';}
@@ -112,13 +113,14 @@ function assess(team,person,row) {
         state='low';reason=wicketsLow?'Fewer wickets per ball without enough economy advantage':'Higher economy without enough wicket-taking advantage';
       } else if (wicketsStrong && evidence.economy > 1.1*base.economy) reason='Strong wicket-taking offsets higher economy';
       else if (economyStrong && evidence.wickets < .9*base.wickets) reason='Economical bowling offsets fewer wickets';
-      // A missing playing-list role must not hide strong recorded bowling.
-      // Keep other assessments and like-for-like swaps dependent on the role.
-      if (!knownRole) {
-        if (state!=='strong') return {...evidence,state:'building',baseline:base,
-          reason:'Set the playing-list bowling role for the full guide'};
-        reason+=' · Bowling role needed for swap comparisons';
-      }
+    }
+    // Missing playing-list roles must not hide strong recorded performances.
+    // Keep other assessments and like-for-like swaps dependent on the role.
+    if (!knownRole) {
+      const name=discipline==='bat'?'Batting':'Bowling';
+      if (state!=='strong') return {...evidence,state:'building',baseline:base,
+        reason:`Set the playing-list ${name.toLowerCase()} role for the full guide`};
+      reason+=` · ${name} role needed for swap comparisons`;
     }
     return {...evidence,state,baseline:base,early:(discipline==='bat'?row.innings:row.bowling_innings)<5,reason};
   };
