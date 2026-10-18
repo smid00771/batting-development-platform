@@ -111,6 +111,19 @@ test('an imported name-only placeholder prompts for the original club player',as
  const ctx=context();ctx.roster[1].name='Ollie Smith';ctx.card.teams[0].players[1].name='Oliver Smith';ctx.roster.push({id:'stub',name:'Oliver Smith',imported_stub:true,active:true});ctx.links=[{source_id:'source-b',roster_id:'stub'}];
  const h=harness(async()=>({data:ctx}));await settle();assert.equal(h.host.querySelector('[data-pc-same]').dataset.roster,'b');assert.equal(h.calls.length,1);
 });
+test('an inactive ordinary registration asks to resolve the old name before a team update',async()=>{
+ const ctx=context();ctx.roster[1].name='Sam Example';ctx.card.teams[0].players[1].name='Samuel James Example';
+ ctx.roster.push({id:'registered',name:'Samuel James Example',external_id:'registration-id',active:false,identity_unlinked:true});ctx.links=[{source_id:'source-b',roster_id:'registered'}];
+ const h=harness(async(args,name)=>{
+  if(name==='confirm_scorecard_player'){ctx.roster[1].active=false;ctx.roster[3].active=true;ctx.roster[3].identity_unlinked=false;return {data:{confirmed:true,roster_id:'registered',retired_roster_id:'b'}};}
+  return {data:args.p_action==='context'?ctx:{...preview(),changed:false}};
+ });await settle();assert.match(h.host.textContent,/Is Samuel James Example the same player as Sam Example/);assert.equal(h.calls.filter(x=>x.args.p_action==='preview').length,0);
+ h.host.querySelector('[data-pc-same]').click();await settle();const command=h.calls.find(x=>x.name==='confirm_scorecard_player');assert.equal(command.args.p_values.roster_id,'b');assert.equal(command.args.p_values.prefer_registration,true);assert.equal(h.host.textContent,'');assert.equal(h.changed,1);
+});
+test('an inactive matched registration without a duplicate still requires explicit confirmation',async()=>{
+ const ctx=context();ctx.roster[1].active=false;ctx.links=[{source_id:'source-b',roster_id:'b'}];
+ const h=harness(async()=>({data:ctx}));await settle();assert.equal(h.host.querySelector('[data-pc-same]').dataset.roster,'b');assert.equal(h.calls.length,1);
+});
 test('identity retry keeps one request, blocks other actions and remembers the confirmed link',async()=>{
  const ctx=context();ctx.roster[1].name='Ollie Smith';ctx.card.teams[0].players[1].name='Oliver Smith';let attempts=0;
  const h=harness(async(args,name)=>{

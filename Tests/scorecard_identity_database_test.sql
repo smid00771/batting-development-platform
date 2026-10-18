@@ -24,7 +24,7 @@ begin
   slots:=jsonb_build_array(jsonb_build_object('d1',stub,'d2',null));
   insert into club_selection_private.fixtures(id,club_id,details,slots,publication,published,scorecard_sync) values(fid,c,details||'{"meeting":"Unpublished edit"}',slots,1,jsonb_build_object('details',details,'slots',slots,'players',jsonb_build_array(jsonb_build_object('id',stub,'name','Sulaiman Moin Muhammad'))),jsonb_build_object('match_id',mid,'team_id',tid,'players',jsonb_build_array(jsonb_build_object('source_id',source,'roster_id',stub,'name','Sulaiman Moin Muhammad'))));
   insert into club_selection_private.publications(fixture_id,version,snapshot,created_by) select id,1,published,staff from club_selection_private.fixtures where id=fid;
-  insert into club_batting_private.fixture_review_rosters(club_id,fixture_id,player_ids) values(c,fid,'{}');
+  insert into club_batting_private.fixture_review_rosters(club_id,fixture_id,player_ids,revision,updated_by) values(c,fid,'{}',1,staff);
   perform set_config('request.jwt.claim.sub',staff::text,true);
   result:=public.playcricket_team_api(c,'context',jsonb_build_object('snapshot_id',sid));
   assert exists(select 1 from jsonb_array_elements(result->'roster') r where r->>'id'=stub::text and r->>'imported_stub'='true'),'Context identifies only the empty imported record';

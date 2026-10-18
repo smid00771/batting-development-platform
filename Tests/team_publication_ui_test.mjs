@@ -6,9 +6,10 @@ import {randomUUID} from 'node:crypto';
 const {JSDOM}=createRequire(import.meta.url)('jsdom');
 const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
-function get(name){const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const start=match.index,next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
+let exercisedSource=source;
+function get(name){const source=exercisedSource;const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const start=match.index,next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
 const names=['seScorecardNote','seRevealPublication','sePublishReview','seWithSavedRoles','seShortTeams','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seButtonWorking','seMutate','seLock','sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seIsCaptain','seCanSetup','seBindPublishedActions','sePublished'];
-for(const name of names.filter(name=>name!=='sePersist'))assert.ok(demo.includes(get(name)),'Demo shares '+name);
+for(const name of names.filter(name=>!['sePersist','seMutate'].includes(name)))assert.ok(demo.includes(get(name)),'Demo shares '+name);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Keep the fixtures in the current club week while using the real week-filter helpers.
 class PublicationDate extends Date{
@@ -22,7 +23,7 @@ function harness({warn=true,short=false,failReload=false,badResponse=false,prepa
  const s={key:'head:club',view:'board',data:{fixtures,roster,admin:false,selector:true,captain:false,head_selector:true,socials:true,access:{timezone:'UTC'}},notice:'',busy:false,pending:null,undo:[]};
  let server=structuredClone(fixtures),publicationCount=0,socialLoads=0,shouldFail=failReload;
  const receipts=new Map(),requests=[],social={view:'awards',data:{fixtures:[]}};
- const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date:PublicationDate,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,
+ const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date:PublicationDate,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,fixtureSessionStorage:dom.window.sessionStorage,
   session:{user:{id:'head'}},membership:{permission_role:'selector'},hasMatchCaptainAccess:()=>false,club:{id:'club',name:'Test Club'},selectionState:s,currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
   seEsc:esc,seDate:x=>x,seBoard:()=>{},seReviewLabel:()=> 'Captain checked',sePublicationChangeSummary:()=>'<p>Review lineup</p>',
   seFixtureLocked:()=>false,seCanRecordFixtureResults:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,
@@ -41,6 +42,9 @@ function harness({warn=true,short=false,failReload=false,badResponse=false,prepa
  return {ctx,s,document,requests,social,publicationCount:()=>publicationCount,socialLoads:()=>socialLoads};
 }
 
+// The demo remains parked. Execute publication behavior in both versions instead of requiring an identical move-feedback implementation.
+for(const candidate of [source,demo]){
+exercisedSource=candidate;
 // First action opens a focused review. Unacknowledged warnings explain the blocker beside the button.
 const h=harness();await h.ctx.seWithSavedRoles(h.s.data.fixtures,h.ctx.sePublishReview);
 assert.match(h.document.body.textContent,/Not published yet/);assert.equal(h.document.activeElement.id,'sePublishHeading');
@@ -69,5 +73,6 @@ short.document.querySelectorAll('[data-se-ack-short]').forEach(el=>el.checked=tr
 const denied=harness();denied.s.data.head_selector=false;denied.ctx.sePublishReview(denied.s.data.fixtures);assert.equal(denied.document.getElementById('seConfirmPublish').disabled,true);assert.match(denied.document.body.textContent,/Only the current Head/);
 denied.s.data.head_selector=true;denied.s.data.fixtures[0].issues.push({level:'error',text:'Player unavailable'});denied.ctx.sePublishReview(denied.s.data.fixtures);assert.equal(denied.document.getElementById('seConfirmPublish').disabled,true);assert.match(denied.document.body.textContent,/Fix these issues/);
 const bad=harness({warn:false,badResponse:true});bad.ctx.sePublishReview(bad.s.data.fixtures);await bad.document.getElementById('seConfirmPublish').onclick();assert.ok(bad.s.pending);assert.equal(bad.s.view,'board');assert.match(bad.document.getElementById('seNotice').textContent,/Publication was not confirmed/);
+}
 for(const script of demo.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
 console.log('Team publication review, feedback, Teams, graphics handoff and idempotent retry checks passed.');

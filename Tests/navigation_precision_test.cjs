@@ -224,7 +224,7 @@ test('production and demo share review editing and navigation behaviour',()=>{
  const demo=fs.readFileSync(new URL('../demo.html','file://'+__filename),'utf8').replaceAll('fixtureLocalStorage.','localStorage.');
  for(const name of ['openClubSectionHome','clubNavigationRoute','teamReviewNavigationIdentity','appNavigationKey','restoreClubNavigationState',
   'serializeTeamReviewState','restoreTeamReviewState','teamReviewUpdate','teamReviewRowHtml','renderTeamReviewContent','renderTeamReview','renderTeamReviewEntry',
-  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name),fn(name,demo),name);
+  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name).replace('s.teamChange=null;s.availabilityReturn=null;',''),fn(name,demo),name); // The parked demo has no .207 move-result notice to clear.
 });
 
 

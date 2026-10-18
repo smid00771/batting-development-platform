@@ -26,6 +26,16 @@
 #app .grid {gap:20px}
 #app :is(.notice,.identity-summary,.committee-summary,.handoff-box) {border-radius:10px;font-size:13px;line-height:1.5}
 
+/* Draft recovery belongs to the match section, without a global alert. */
+#app .match-draft-list {margin:12px 0;font-size:13px;color:var(--muted)}
+#app .match-draft-list>summary {cursor:pointer;min-height:44px;align-content:center}
+#app .match-draft-list .btnrow {margin:4px 0}
+#app .match-draft-list [role="status"]:empty {display:none}
+#app .match-draft-recovery {border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:10px 0;background:#fff;font-size:13px}
+#app .match-draft-recovery p {margin:4px 0}
+#app .match-draft-recovery .btnrow {margin:6px 0 0}
+#app .se-team-change {margin:6px 0 10px;font-size:13px;line-height:1.5;color:var(--ink)}
+
 /* Accessible labels should not repeat themselves above every player control. */
 .sr-only {position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
 

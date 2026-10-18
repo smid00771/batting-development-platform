@@ -21,12 +21,11 @@ export function scorecardPlayerCandidates(players,roster,links=[],matches={}){
  const result={};
  for(const p of players){
   const current=roster.find(r=>r.id===matches[p.player_id]);
-  if(current&&!current.imported_stub)continue;
-  const saved=links.filter(l=>l.source_id===p.player_id);
-  if(saved.length&&current&&!current.imported_stub)continue;
+  if(current&&!current.imported_stub&&!current.identity_unlinked&&current.active!==false)continue;
   result[p.player_id]=roster.filter(r=>r.active!==false&&!r.imported_stub&&r.id!==current?.id&&
    !players.some(other=>other.player_id!==p.player_id&&matches[other.player_id]===r.id)&&
    matchReviewShortNameMatches(matchReviewNameParts(p.name),matchReviewNameParts(r.name)));
+  if(!result[p.player_id].length&&current?.active===false)result[p.player_id]=[current];
  }
  return result;
 }
@@ -46,7 +45,7 @@ export function createScorecardTeams(h){
  async function confirmIdentity(s,sourceId,rosterId){
   if(s.busy||s.pending)return;
   const r=s.context.roster.find(r=>r.id===rosterId);if(!r&&!s.identityPending)return;
-  s.identityPending||={p_club_id:s.clubId,p_request_id:crypto.randomUUID(),p_values:{snapshot_id:s.snapshotId,team_id:s.teamId,source_player_id:sourceId,roster_id:rosterId,fixture_id:s.fixtureId||null,expected_name:r.name}};
+  s.identityPending||={p_club_id:s.clubId,p_request_id:crypto.randomUUID(),p_values:{snapshot_id:s.snapshotId,team_id:s.teamId,source_player_id:sourceId,roster_id:rosterId,fixture_id:s.fixtureId||null,expected_name:r.name,prefer_registration:true}};
   s.busy=true;s.error=false;s.message='Linking player…';draw(s);
   try{
    const {data,error}=await h.supabase.rpc('confirm_scorecard_player',s.identityPending);if(error)throw error;if(!data?.confirmed)throw Error('The player link was not confirmed.');
