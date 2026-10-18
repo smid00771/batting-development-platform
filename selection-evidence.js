@@ -36,7 +36,14 @@ export function battingEvidence(row) {
   if (!row || row.batting_complete === false) return {ready:false,reason:row ? 'Batting figures incomplete' : 'No linked season figures'};
   if (![row.runs,row.innings,row.not_outs].every(integer) || row.not_outs > row.innings) return {ready:false,reason:'Check batting figures'};
   const dismissals=row.innings-row.not_outs, average=dismissals ? row.runs/dismissals : null;
-  return {average, ready:row.innings >= 3 && dismissals >= 2, reason:!row.innings ? 'Yet to bat' : !dismissals ? 'Not dismissed yet' : row.innings < 3 || dismissals < 2 ? 'Building a record · 3 innings and 2 dismissals needed' : ''};
+  // A positive early flag may use two innings. With fewer than two
+  // dismissals, runs per innings is a conservative floor, not a replacement
+  // for the player's actual average. Full comparisons retain the old gate.
+  const positiveUsesInnings=dismissals < 2;
+  const positiveAverage=row.innings >= 2 ? positiveUsesInnings ? row.runs/row.innings : average : null;
+  return {average,positiveAverage,positiveUsesInnings,ready:row.innings >= 3 && dismissals >= 2,
+    reason:!row.innings ? 'Yet to bat' : row.innings < 2 ? 'Building a record · 2 innings needed for an early positive flag'
+      : row.innings < 3 || dismissals < 2 ? 'No early strong signal · 3 innings and 2 dismissals needed for the full guide' : ''};
 }
 export function bowlingEvidence(row, person, format) {
   if (person?.bowling === 'none' && !row?.bowling_balls) return {applicable:false,ready:false};
@@ -69,7 +76,15 @@ function assess(team,person,row) {
   const evaluate = (discipline,evidence) => {
     if (discipline === 'ball' && !evidence.applicable) return null;
     const base=gradeBenchmark(team,discipline), knownRole=discipline === 'bat' ? role(person) : bowlingRole(person);
-    if (!evidence.ready) return {...evidence,state:'building',baseline:base};
+    if (!evidence.ready) {
+      if (discipline==='bat' && base && knownRole && Number.isFinite(evidence.positiveAverage)
+        && evidence.positiveAverage > base.average && evidence.positiveAverage >= 1.25*base.average) {
+        return {...evidence,state:'strong',baseline:base,early:true,reason:evidence.positiveUsesInnings
+          ? 'Early positive flag: runs per innings at least 25% above the grade reference; fewer than 2 dismissals'
+          : 'Early positive flag: average at least 25% above the grade reference'};
+      }
+      return {...evidence,state:'building',baseline:base};
+    }
     if (!base || !knownRole) return {...evidence,state:'building',baseline:base,
       reason:!base ? 'No historical benchmark for this competition, grade or format' : 'Set the playing-list role before showing a form flag'};
     let state='steady',reason='Within the broad grade range';
