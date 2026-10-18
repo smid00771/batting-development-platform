@@ -118,14 +118,33 @@ test('an early not-out batting signal uses runs per innings while preserving the
   assert.equal(bat.state,'building');assert.equal(bat.positiveAverage,15);
  }
 });
-test('one innings, incomplete figures, unknown roles and missing benchmarks cannot produce an early batting flag',()=>{
+test('one innings, incomplete figures and missing benchmarks cannot produce an early batting flag',()=>{
  for(const change of [{innings:1},{batting_complete:false},{runs:null},{not_outs:3}]){
   const s=scenario();Object.assign(s.summary.rows[0],{runs:200,innings:2,not_outs:0},change);
   assert.equal(s.build().player('high','incumbent').bat.state,'building');
  }
  const s=scenario();Object.assign(s.summary.rows[0],{runs:200,innings:2,not_outs:0});s.roster[0].batting='unknown';
- assert.equal(s.build().player('high','incumbent').bat.state,'building');s.roster[0].batting='top';s.high.competition=s.summary.rows[0].competition='Other';
+ assert.equal(s.build().player('high','incumbent').bat.state,'strong');s.high.competition=s.summary.rows[0].competition='Other';
  assert.equal(s.build().player('high','incumbent').bat.state,'building');
+});
+test('positive batting ignores an unset role and uses a conservative floor for unbeaten innings',()=>{
+ for(const sample of [{innings:2,not_outs:2,runs:64,average:null},{innings:2,not_outs:1,runs:64,average:64},{innings:2,not_outs:0,runs:64,average:32},{innings:5,not_outs:1,runs:160,average:40}]){
+  const s=scenario();s.roster[0].batting='unknown';s.high.grade=s.summary.rows[0].grade='4th Grade';
+  Object.assign(s.summary.rows[0],sample);
+  const before=JSON.stringify(s.summary),m=s.build(),bat=m.player('high','incumbent').bat;
+  assert.equal(bat.state,'strong');assert.equal(bat.average,sample.average);assert.equal(bat.early,sample.innings<5);
+  assert.equal(bat.positiveAverage,sample.innings===2?32:40);assert.match(bat.reason,/Batting role needed for swap comparisons/);
+  assert.deepEqual(m.forRow(s.summary.rows[0]).bat,bat);assert.equal(JSON.stringify(s.summary),before);assert.equal(s.roster[0].batting,'unknown');
+ }
+});
+test('unset batting roles still block adverse ratings and like-for-like replacement suggestions',()=>{
+ for(const average of [0,10,20]){
+  const s=scenario();s.roster[0].batting='unknown';s.summary.rows[0].runs=average*4;
+  assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ }
+ const s=scenario();assert.ok(s.build().pairs.length);s.roster[2].batting='unknown';
+ const m=s.build();assert.equal(m.player('low','candidate').bat.state,'strong');
+ assert.ok(!m.pairs.some(p=>p.lower.person.id==='candidate'));
 });
 test('a very low two-innings average earns only a mild early flag, without unlocking replacements',()=>{
  const s=scenario();Object.assign(s.summary.rows[0],{runs:2,innings:2,not_outs:0});

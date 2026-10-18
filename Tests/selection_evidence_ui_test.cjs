@@ -62,6 +62,20 @@ test('the early batting flag shows two innings and the limited evidence in the s
  assert.match(h.host.querySelector('dialog').textContent,/46.5 batting average/);assert.match(h.host.querySelector('dialog').textContent,/93 runs · 2 inns · 0 not out/);
  assert.match(h.host.querySelector('dialog').textContent,/Positive batting flags can start after 2 innings/);
 });
+test('two unbeaten batting innings show a positive early flag with an unset role and no invented average',async()=>{
+ const h=await setup(),p={...h.fixture.roster[0],batting:'unknown'};
+ const stats={roster_id:p.id,competition:'NDCA',grade:'4th Grade',format:'limited_overs',runs:64,innings:2,not_outs:2,average:null,
+  batting_complete:true,bowling_complete:true,bowling_balls:0,bowling_innings:0,wickets:0,conceded:0};
+ const item=h.engine.buildSelectionEvidence({rows:[stats]},[],[p]).forRow(stats);item.key='unbeaten-batter';
+ h.host.innerHTML=h.ui.renderEvidenceBadges(item);
+ assert.match(h.host.querySelector('.se-evidence-chip.strong').textContent,/Batting: ↑ Strong/);
+ assert.match(h.host.querySelector('button').getAttribute('aria-label'),/Batting: Strong \(early sample\)/);
+ h.ui.bindEvidenceDetails(h.host,{players:new Map([[item.key,item]])});h.host.querySelector('button').click();
+ const text=h.host.querySelector('dialog').textContent;
+ assert.match(text,/Batting role not set/);assert.match(text,/Early positive flag: runs per innings/);
+ assert.match(text,/— batting average/);assert.match(text,/64 runs · 2 inns · 2 not out/);
+ assert.match(text,/Early sample · 2 innings · 0 dismissals/);
+});
 test('the mild slow-start flag has explicit accessible text and explains the two-innings threshold',async()=>{
  const h=await setup(),p=h.fixture.roster[0];
  const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:8,innings:2,not_outs:0,average:4,
