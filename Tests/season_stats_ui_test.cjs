@@ -13,7 +13,25 @@ test('modes and grade comparison visibly change state, with no invented promotio
  const h=await harness();assert.equal(h.host.querySelector('[data-stats-mode=batting]').getAttribute('aria-pressed'),'true');
  h.click('[data-stats-mode=bowling]');assert.equal(h.host.querySelector('[data-stats-mode=bowling]').getAttribute('aria-pressed'),'true');assert.match(h.host.textContent,/No bowling figures/);
  h.click('[data-stats-compare]');assert.equal(h.host.querySelector('[data-stats-compare]').getAttribute('aria-pressed'),'true');assert.equal(h.host.querySelectorAll('[role=row]').length,2);assert.match(h.host.textContent,/Alex/);assert.match(h.host.textContent,/Jordan/);assert.match(h.host.textContent,/No linked season figures/);assert.doesNotMatch(h.host.textContent,/Promote|Worth reviewing/);
+ assert.equal(h.host.querySelector('[data-stats-compare-mode=bowling]').getAttribute('aria-pressed'),'true');
  h.click('[data-stats-mode=batting]');assert.equal(h.s.state.compare,false);assert.equal(h.host.querySelector('[role=table]'),null);assert.equal(h.navigations(),3);
+});
+test('comparison toggles batting and bowling without losing teams, date, focus or navigation state',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster});h.click('[data-stats-compare]');
+ assert.equal(h.host.querySelector('[data-stats-date]').value,'published');assert.equal(h.host.querySelector('[data-stats-compare-mode=batting]').getAttribute('aria-pressed'),'true');
+ change(h,'[data-stats-date]','2026-10-24');change(h,'[data-stats-team=firstTeam]','team-2');
+ const selection=()=>[h.s.state.firstTeam,h.s.state.secondTeam,h.s.state.compareDate,h.s.state.format];
+ const chosen=selection(),cell=()=>h.host.querySelectorAll('[role=cell]')[8].textContent;
+ assert.match(cell(),/Pat Hart35 average140 runs · 4 inns/);
+ h.click('[data-stats-compare-mode=bowling]');assert.equal(h.s.state.compare,true);assert.equal(h.s.state.mode,'bowling');assert.deepEqual(selection(),chosen);
+ assert.match(cell(),/Pat Hart8 average12 wickets · 32\.0 overs · 4 inns3 Econ · 16 S\/R/);assert.doesNotMatch(cell(),/140 runs/);
+ assert.match(h.host.querySelector('.ss-compare').getAttribute('aria-label'),/bowling figures/);assert.equal(h.dom.window.document.activeElement.dataset.statsCompareMode,'bowling');
+ assert.equal(h.host.querySelector('[data-stats-compare]').getAttribute('aria-pressed'),'true');assert.equal(h.calls.length,1);assert.equal(h.navigations(),4);
+ assert.ok(h.host.querySelector('.ss-compare [data-evidence-open]'),'Existing evidence details remain available');
+ h.click('[data-stats-refresh]');await tick();assert.equal(h.s.state.mode,'bowling');assert.deepEqual(selection(),chosen);assert.match(cell(),/12 wickets/);
+ h.click('[data-stats-compare-mode=batting]');assert.deepEqual(selection(),chosen);assert.match(cell(),/140 runs · 4 inns/);assert.equal(h.dom.window.document.activeElement.dataset.statsCompareMode,'batting');
+ h.panel.mount(h.host,{...h.options,state:{...h.s.state,mode:'bowling'}});assert.match(cell(),/12 wickets/);assert.equal(h.host.querySelector('[data-stats-compare-mode=bowling]').getAttribute('aria-pressed'),'true');
 });
 test('refresh acknowledges progress, ignores repeat clicks and recovers from failure',async()=>{
  const h=await harness();let finish;h.reply(()=>new Promise(r=>finish=r));h.click('[data-stats-refresh]');assert.equal(h.host.querySelector('[data-stats-refresh]').disabled,true);assert.match(h.host.textContent,/Updating/);h.click('[data-stats-refresh]');assert.equal(h.calls.length,2);

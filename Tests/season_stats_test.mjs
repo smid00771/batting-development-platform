@@ -84,6 +84,25 @@ test('comparison uses current selected positions and confirmed links; brackets s
  assert.equal(compareSelectedGrades(summary,one,{...two,format:'t20'}).length,0);assert.equal(compareSelectedGrades(summary,one,{...two,competition:'Elsewhere'}).length,0);
  assert.match(renderGradeComparison(summary,one,two,[]),/Averages are not adjusted for grade strength/);
 });
+test('bowling comparison uses grade-specific bowling rates and keeps bracketed players explicit',()=>{
+ const first=card(),second=card('m2',{grade:'2nd Grade'});second.scorecard.innings[1].bowlers=[bowler('p2',{wickets:2,runs:18,balls:31})];
+ const summary=buildSeasonStats(context([first,second]));
+ const one={id:'f1',competition:'District',grade:'1st Grade',format:'long_form',slots:[{d1:'r1',d2:'r2'},{d1:'unlinked'}]},two={...one,id:'f2',grade:'2nd Grade',slots:[{d1:'r2'}]};
+ const html=renderGradeComparison(summary,one,two,[],undefined,'bowling');
+ assert.match(html,/season bowling figures/);assert.match(html,/Day 1<\/small><small>No bowling recorded/);assert.match(html,/Day 2<\/small><span>10 average/);
+ assert.match(html,/3 wickets · 6\.5 overs · 1 inns/);assert.match(html,/4\.39 Econ · 13\.67 S\/R/);
+ assert.match(html,/9 average/);assert.match(html,/2 wickets · 5\.1 overs · 1 inns/);assert.match(html,/3\.48 Econ · 15\.5 S\/R/);
+ assert.match(html,/No linked season figures/);assert.match(html,/Vacant/);assert.doesNotMatch(html,/50 average|50 runs/);
+ assert.match(renderGradeComparison(summary,one,{...two,competition:'Other'},[],undefined,'bowling'),/same competition and format/);
+ assert.match(renderGradeComparison(summary,one,{...two,format:'t20'},[],undefined,'bowling'),/same competition and format/);
+});
+test('bowling comparison distinguishes zero wickets, unknown balls and incomplete figures',()=>{
+ const one={id:'f1',competition:'District',grade:'1st Grade',format:'long_form',slots:[{d1:'r2'}]},two={...one,id:'f2',grade:'2nd Grade'};
+ const a=card(),b=card('m2',{grade:'2nd Grade'});a.scorecard.innings[1].bowlers[0].wickets=0;b.scorecard.innings[1].bowlers[0].balls=null;
+ const render=()=>renderGradeComparison(buildSeasonStats(context([a,b])),one,two,[],undefined,'bowling');
+ let html=render();assert.match(html,/— average/);assert.match(html,/0 wickets · 6\.5 overs/);assert.match(html,/4\.39 Econ · — S\/R/);assert.match(html,/3 wickets · — overs/);assert.match(html,/— Econ · — S\/R/);assert.doesNotMatch(html,/No bowling recorded|NaN|Infinity/);
+ a.scorecard.innings[1].bowling_available=false;a.scorecard.innings[1].bowlers=[];html=render();assert.match(html,/Figures incomplete/);assert.doesNotMatch(html,/No bowling recorded|>0 wickets|>0 average/);
+});
 test('player and competition text is escaped and scorecard links cannot run scripts',()=>{
  const c=card();c.scorecard.url='javascript:alert(1)';const r=buildSeasonStats(context([c],{identities:[{source_id:'p1',roster_id:'r1',name:'<img src=x onerror=alert(1)>'}]}));
  const html=renderStatsRows(r.rows);assert.doesNotMatch(html,/<img|javascript:/);assert.match(html,/&lt;img/);
