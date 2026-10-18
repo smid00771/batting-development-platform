@@ -2,12 +2,12 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {JSDOM}=require('jsdom');
 function extract(source,name){const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const rest=source.slice(match.index),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);}
 const plain=value=>JSON.parse(JSON.stringify(value));
-function fixture(id,date,{slots=[{d1:'a',d2:'b'}],brackets=true,cancelled=false}={}){return {id,revision:7,details:{competition:'Comp',grade:'5th Grade',format:'long',opposition:'Visitors',ground:'Park',meeting:'Meet at 11',overs:null,overs_source:'fixture',days:[{date,start:'12:00'},{date:'2099-11-07',start:'12:00'}],brackets,cancelled,staff:[]},slots};}
+function fixture(id,date,{slots=[{d1:'a',d2:'b'}],brackets=true,cancelled=false}={}){return {id,revision:7,details:{competition:'Comp',grade:'5th Grade',format:'long_form',opposition:'Visitors',ground:'Park',meeting:'Meet at 11',overs:null,overs_source:'fixture',days:[{date,start:'12:00'},{date:'2099-11-07',start:'12:00'}],brackets,cancelled,staff:[]},slots};}
 function harness(source){
  const dom=new JSDOM('<main id="seContent"></main>'),document=dom.window.document,requests=[],prompts=[],notices=[];
  const target=fixture('target','2099-10-31'),s={data:{selector:true,access:{timezone:'Australia/Sydney',fixture_defaults:{rows:[]}},members:[],fixtures:[target],roster:[{id:'a',name:'Alex',active:true},{id:'b',name:'Blair',active:true},{id:'c',name:'Casey',active:false}]}};
  let confirmed=true,saved=true;const unavailable=new Set();
- const c=vm.createContext({document,FormData:dom.window.FormData,structuredClone,ensureSelections:()=>s,recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},seCanSetup:()=>true,seFixtureLocked:()=>false,seEsc:String,seGradeFields:()=>'<select name="grade"><option value="5th Grade">5th Grade</option></select>',SE_FORMATS:[['long','Long']],seOpt:(opts,value)=>opts.map(([v,label])=>`<option value="${v}" ${v===value?'selected':''}>${label}</option>`).join(''),fixtureResults:{canLeave:()=>true},fixtureCorrectionDecorateEditor(){},seMountFixtureScores(){},seReadGrade:()=>({grade:'5th Grade',grade_group_id:null}),seBindGrade(){},confirmLeaveSelections:()=>true,drawSelections(){},seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Unknown',seDate:String,seNotice:message=>notices.push(message),confirm:message=>{prompts.push(message);return confirmed;},seDayStatus:(p,day)=>unavailable.has(p.id+':'+day.date)?'unknown':'available',seMutate:async(action,data,options)=>{requests.push({action,data,options});return saved;}});
+ const c=vm.createContext({document,FormData:dom.window.FormData,structuredClone,ensureSelections:()=>s,recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},seCanSetup:()=>true,seFixtureLocked:()=>false,seEsc:String,seGradeFields:()=>'<select name="grade"><option value="5th Grade">5th Grade</option></select>',SE_FORMATS:[['t20','T20'],['limited_overs','Limited Overs'],['long_form','Long-form']],seOpt:(opts,value)=>opts.map(([v,label])=>`<option value="${v}" ${v===value?'selected':''}>${label}</option>`).join(''),fixtureResults:{canLeave:()=>true},fixtureCorrectionDecorateEditor(){},seMountFixtureScores(){},seReadGrade:()=>({grade:'5th Grade',grade_group_id:null}),seBindGrade(){},confirmLeaveSelections:()=>true,drawSelections(){},seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Unknown',seDate:String,seNotice:message=>notices.push(message),confirm:message=>{prompts.push(message);return confirmed;},seDayStatus:(p,day)=>unavailable.has(p.id+':'+day.date)?'unknown':'available',seMutate:async(action,data,options)=>{requests.push({action,data,options});return saved;}});
  vm.runInContext(['seFixtureEditor','seCopyLast'].map(name=>extract(source,name)).join('\n'),c);
  return {c,s,target,document,requests,prompts,notices,unavailable,confirm:value=>confirmed=value,saved:value=>saved=value,submit:()=>document.getElementById('seFixtureForm').onsubmit({preventDefault(){}})};
 }
@@ -46,3 +46,16 @@ for(const file of ['app.js','demo.html']){
   const h=harness(source);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/no earlier team/);h.s.data.fixtures.push(fixture('played','2099-10-10'));h.confirm(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);h.confirm(true);h.saved(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.ok(h.notices.every(x=>!x.startsWith('Copied')));
  });
 }
+
+for(const format of ['t20','limited_overs'])test('app: '+format+' hides and excludes bracketing while preserving the existing Day 2 confirmation',async()=>{
+ const h=harness(fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8'));h.target.details.format=format;h.c.seFixtureEditor(h.target);
+ const control=h.document.querySelector('[name=brackets]');assert.equal(h.document.getElementById('seBrackets').hidden,true);assert.equal(control.disabled,true);
+ await h.submit();assert.equal(h.requests[0].data.fixtures[0].details.brackets,false);assert.match(h.prompts[0],/Turning off bracketing/);assert.deepEqual(plain(h.requests[0].options.undo),[h.target]);
+});
+test('app: bracketing remains a club choice for long-form and follows format changes',()=>{
+ const h=harness(fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8'));h.c.seFixtureEditor(h.target);const form=h.document.getElementById('seFixtureForm'),label=h.document.getElementById('seBrackets'),control=form.elements.brackets;
+ assert.equal(label.hidden,false);assert.equal(control.disabled,false);assert.equal(control.checked,true);
+ form.elements.format.value='t20';form.elements.format.onchange();assert.equal(label.hidden,true);assert.equal(control.disabled,true);
+ form.elements.format.value='long_form';form.elements.format.onchange();assert.equal(label.hidden,false);assert.equal(control.disabled,false);assert.equal(control.checked,true);
+ form.elements.format.value='';form.elements.format.onchange();assert.equal(label.hidden,true);
+});

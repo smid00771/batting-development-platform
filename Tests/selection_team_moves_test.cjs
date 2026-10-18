@@ -10,7 +10,7 @@ function harness(fixtures=[team('A'),team('B'),team('C')]){
  const roster=[...new Set(fixtures.flatMap(f=>f.slots.flatMap(slot=>[slot.d1,slot.d2])).filter(Boolean))].map(id=>({id,name:id,active:true,availability:{available_dates:[...dates]}}));
  const s={key:'selector:club',view:'board',busy:false,pending:null,undo:[],data:{selector:true,fixtures,roster,access:{timezone:'UTC'}}},calls=[],notices=[],orders=[];let saveResult=true;
  const c=vm.createContext({Date,Intl,structuredClone,ensureSelections:()=>s,selectionState:s,currentTab:'teams',selectionsScopeKey:()=>s.key,seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Vacant',seNotice:text=>notices.push(text),seDate:String,sePickerSaved(){s.active=null;},seBoard(){},seFocusOrder(){},seMoveOrder:async(...args)=>{orders.push(args);return true;},seMutate:async(action,data,options)=>{calls.push({action,data,options});return saveResult;}});
- vm.runInContext(['seDayStatus','seOverlap','seUsed','seFixtureCompleted','seFixtureLocked','seOrderName','seTrimSlots','seOverflow','seOverflowText','seTransferProblem','seMovePlan','seMovePlayer','seClearOrder'].map(extract).join('\n'),c);
+ vm.runInContext(['seDayStatus','seOverlap','seUsed','seFixtureCompleted','seFixtureLocked','seOrderName','seTeamNumbers','seBlankSlots','seClearTeam','seTrimSlots','seOverflow','seOverflowText','seTransferProblem','seMovePlan','seMovePlayer','seClearOrder'].map(extract).join('\n'),c);
  return {c,s,calls,notices,orders,saved:value=>saveResult=value};
 }
 const occupied=(f,day='d1')=>f.slots.map(slot=>slot[day]).filter(Boolean);
@@ -189,4 +189,67 @@ test('tap honours position ten when a vacancy before it is consumed',async()=>{
 
 test('focus returns to the empty player picker after clearing the final occupied row',()=>{
  const h=interactionHarness(),handle=h.handle('A',10);const row=handle.closest('.se-slot');handle.remove();const empty=h.document.createElement('button');empty.type='button';empty.dataset.seFixture='A';empty.dataset.seSlot='10';empty.textContent='Choose player';empty.getBoundingClientRect=()=>({top:100,bottom:140});row.append(empty);vm.runInContext(extract('seFocusOrder'),h.c);h.c.seFocusOrder('A',10);assert.equal(h.document.activeElement,empty);
+});
+
+test('clear team clears both days and excess rows in one undoable draft save',async()=>{
+ const a=team('A',12,{twoDays:true,brackets:true});a.slots[0].d2='partner';a.details.match_roles={d1:{captain_id:'A-0',captain_manual:true}};
+ a.published={details:structuredClone(a.details),slots:structuredClone(a.slots)};a.selection_unlocked_until='2100-01-01T00:00:00Z';
+ const h=harness([a,team('B')]),before=plain(h.s.data.fixtures),prompts=[];h.c.confirm=message=>{prompts.push(message);return true;};
+ assert.equal(await h.c.seClearTeam('A',a.revision),true);assert.equal(prompts.length,1);assert.match(prompts[0],/Both days, including bracketed pairs/);assert.equal(h.calls.length,1);
+ const {data,options}=h.calls[0],cleared=data.fixtures[0];assert.equal(data.fixtures.length,1);assert.equal(cleared.slots.length,11);assert.ok(cleared.slots.every(slot=>slot.d1===null&&slot.d2===null));
+ assert.deepEqual(plain(cleared.details.match_roles),{});assert.equal(cleared.details.captain_id,null);assert.deepEqual(plain(cleared.published),before[0].published);assert.deepEqual(plain(options.undo),[before[0]]);
+ assert.deepEqual(plain(h.s.data.fixtures),before,'The save request does not mutate loaded teams');
+ for(const key of ['grade','competition','days','brackets'])assert.deepEqual(plain(cleared.details[key]),plain(before[0].details[key]));
+});
+test('clear team cancellation, stale revision, empty team and access guards never save',async()=>{
+ for(const variant of ['cancel','stale','empty','locked','cancelled','busy','pending','nonselector','away']){
+  const h=harness(),a=h.s.data.fixtures[0];let prompted=0,revision=a.revision;h.c.confirm=()=>{prompted++;return variant!=='cancel';};
+  if(variant==='stale')revision--;if(variant==='empty')a.slots=h.c.seBlankSlots();if(variant==='locked')a.published={};if(variant==='cancelled')a.details.cancelled=true;
+  if(variant==='busy')h.s.busy=true;if(variant==='pending')h.s.pending={};if(variant==='nonselector')h.s.data.selector=false;if(variant==='away')h.s.view='availability';
+  assert.equal(await h.c.seClearTeam('A',revision),false,variant);assert.equal(h.calls.length,0,variant);assert.equal(prompted,variant==='cancel'?1:0,variant);
+ }
+});
+test('move feedback distinguishes filling a vacancy from adding a twelfth player',async()=>{
+ for(const vacant of [false,true]){
+  const h=harness(),[a,b]=h.s.data.fixtures;if(vacant)b.slots[4]={d1:null,d2:null};await h.c.seMovePlayer(a.id,0,b.id,2,a.revision,b.revision);
+  const note=h.calls[0].options.order.feedback;assert.match(note,/A: 10\/11/);assert.match(note,vacant?/B: 11\/11/:/B: 12\/11/);assert.equal(note.includes('vacant place filled'),vacant);
+ }
+});
+
+function savedBoardHarness(fixtures=[team('A'),team('B')]){
+ const h=harness(fixtures),{JSDOM}=require('jsdom'),dom=new JSDOM('<div id="sePage"><p id="seNotice"></p><main id="seContent"></main></div>'),document=dom.window.document;
+ let stored=structuredClone(h.s.data);const requests=[];
+ Object.assign(h.c,{document,crypto:require('node:crypto').webcrypto,URLSearchParams,location:{search:''},club:{id:'club'},selectionAccess:{},seFetchSignupFollowup:async()=>({}),seButtonWorking:()=>()=>{},sePersist(){},seLock(){},refreshClubMessageBadge(){},sePrepareMatch:f=>structuredClone(f),seGuardFixtureEdit:()=>true,seEsc:value=>String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])),seMatchRoles:()=>({d1:{}}),seMatchRoleIssues:()=>[],seDraftChanged:()=>true,seScorecardNote:()=>'',seFixtureLockControls:()=>'',seMatchRoleFields:()=>'',seBoardSlot:(f,slot,i)=>'<p data-row="'+i+'">'+(slot.d1||'Vacant')+'</p>',seCopyPublishedAction:()=>'',seBoardPublishedTeam:()=>'',seBoardComments:()=>'',seBoardMatchConversation:()=>'',SE_FORMATS:[],supabase:{rpc:async(name,args)=>{
+  if(name==='club_socials_api')return {data:{allowed:false},error:null};
+  if(args.p_action==='context')return {data:structuredClone(stored),error:null};
+  assert.equal(args.p_action,'save_board');const data=args.p_data;requests.push(plain(data));const revisions={};
+  for(const next of data.fixtures){const old=stored.fixtures.find(f=>f.id===next.id);assert.equal(next.revision,old.revision);revisions[next.id]=old.revision+1;}
+  stored.fixtures=stored.fixtures.map(f=>{const next=data.fixtures.find(n=>n.id===f.id);return next?{...structuredClone(next),revision:revisions[f.id]}:f;});
+  return {data:{saved:true,revisions},error:null};
+ }}});
+ h.c.drawSelections=()=>{document.getElementById('seContent').innerHTML=h.s.data.fixtures.map(f=>h.c.seTeamCard(f)).join('');};
+ vm.runInContext(['seRPC','seReload','seMutate','seCounts','seBoardCounts','seTeamChangeNotice','seTeamCard'].map(extract).join('\n'),h.c);
+ return {...h,document,requests,stored:()=>stored};
+}
+test('full XI move survives save and reload, renders 12/11 with warning, and Undo restores both teams',async()=>{
+ const h=savedBoardHarness(),before=plain(h.s.data.fixtures),[a,b]=h.s.data.fixtures;
+ assert.equal(await h.c.seMovePlayer(a.id,3,b.id,4,a.revision,b.revision),true);assert.equal(h.requests.length,1);
+ assert.deepEqual(h.s.data.fixtures.map(f=>occupied(f).length),[10,12]);assert.equal(h.document.querySelectorAll('[data-se-team="B"] [data-row]').length,12);
+ assert.ok(h.document.querySelector('[data-se-team="B"].se-team-overfull'));assert.match(h.document.querySelector('[data-se-team="B"] .se-overflow-count').textContent,/12\/11/);
+ assert.match(h.document.querySelector('[data-se-team="B"] .se-team-change').textContent,/A: 10\/11.*B: 12\/11/);assert.equal(h.s.undo.length,1);
+ assert.deepEqual(h.s.data.fixtures.flatMap(f=>occupied(f)).sort(),before.flatMap(f=>occupied(f)).sort());
+ const undo=h.s.undo.at(-1);await h.c.seMutate('save_board',{fixtures:undo.before.map(f=>({...f,revision:undo.expected[f.id]}))});
+ assert.deepEqual(plain(h.s.data.fixtures.map(f=>f.slots)),before.map(f=>f.slots));assert.equal(h.document.querySelector('.se-team-overfull,.se-team-change'),null);
+});
+test('vacant XI move saves eleven with explicit vacancy feedback and loses no player',async()=>{
+ const a=team('A'),b=team('B',10),h=savedBoardHarness([a,b]),before=plain(h.s.data.fixtures);
+ await h.c.seMovePlayer('A',2,'B',2,a.revision,b.revision);assert.deepEqual(h.s.data.fixtures.map(f=>occupied(f).length),[10,11]);assert.equal(h.document.querySelector('.se-team-overfull'),null);
+ assert.match(h.document.querySelector('.se-team-change').textContent,/vacant place filled.*A: 10\/11.*B: 11\/11/);assert.deepEqual(h.s.data.fixtures.flatMap(f=>occupied(f)).sort(),before.flatMap(f=>occupied(f)).sort());
+ const current=h.s.data.fixtures.find(f=>f.id==='B');current.revision++;h.c.drawSelections();assert.equal(h.document.querySelector('.se-team-change'),null,'Old move feedback must not describe a newer team revision');
+});
+test('clear team saves an empty XI, hides its clear action and restores both days through Undo',async()=>{
+ const a=team('A',12,{twoDays:true,brackets:true});a.slots[2].d2='partner';const h=savedBoardHarness([a,team('B')]),before=plain(h.s.data.fixtures);h.c.seMatchRoles=()=>({d1:{},d2:{}});h.c.confirm=()=>true;
+ await h.c.seClearTeam('A',a.revision);assert.equal(h.requests.length,1);assert.equal(h.document.querySelector('[data-se-team="A"] [data-se-clear-team]'),null);assert.ok(h.document.querySelector('[data-se-team="B"] [data-se-clear-team]'));
+ assert.equal(h.s.data.fixtures[0].slots.length,11);assert.equal(occupied(h.s.data.fixtures[0]).length,0);assert.equal(occupied(h.s.data.fixtures[0],'d2').length,0);assert.deepEqual(plain(h.s.data.fixtures[1]),before[1]);
+ const undo=h.s.undo.at(-1);await h.c.seMutate('save_board',{fixtures:undo.before.map(f=>({...f,revision:undo.expected[f.id]}))});assert.deepEqual(plain(h.s.data.fixtures[0].slots),before[0].slots);
 });

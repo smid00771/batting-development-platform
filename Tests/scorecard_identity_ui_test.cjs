@@ -46,11 +46,11 @@ test('an uncertain identity confirmation blocks navigation and retries the exact
 test('a confirmed link stays confirmed if refreshing the review fails',async()=>{
  const h=harness({refreshError:true});h.host.querySelector('[data-import-same]').click();await settle();assert.equal(h.s.importer.identityPending,null);assert.equal(h.host.querySelector('#retryPlayerIdentity'),null);assert.match(h.host.textContent,/Player linked\. Refresh scores/);assert.equal(h.calls.length,1);
 });
-test('name-matching helpers and the actual importer stay identical in production and demo',()=>{
- assert.equal(importer(app),importer(demo));const helpers=section(app,'function matchReviewNameParts','function matchReviewSuggestPlayers').trim();
+test('unchanged name-matching helpers and the parked demo remain consistent',()=>{
+ assert.equal(importer(app).replace(',prefer_registration:true',''),importer(demo));const helpers=section(app,'function matchReviewNameParts','function matchReviewSuggestPlayers').trim();
  assert.equal(helpers,section(demo,'function matchReviewNameParts','function matchReviewSuggestPlayers').trim());
  const module=fs.readFileSync(path.join(root,'player-name-matching.js'),'utf8').replaceAll('export ','');assert.equal(helpers,module.slice(module.indexOf('function matchReviewNameParts')).trim());
- const teams=fs.readFileSync(path.join(root,'playcricket-team.js'),'utf8').replaceAll('export ','');assert.equal(teams.slice(teams.indexOf('const normal=value=>')).trim(),section(demo.slice(demo.indexOf('/* Compare the trusted scorecard')), 'const normal=value=>','return createScorecardTeams;').trim());
+ // The live team UI now resolves inactive registration duplicates; its behaviour is tested separately.
  const adapter=fs.readFileSync(path.join(root,'playcricket-team-demo.js'),'utf8').replaceAll('export ','');assert.equal(adapter.slice(adapter.indexOf('function createScorecardTeamDemo')).trim(),section(demo,'function createScorecardTeamDemo','const demoScorecardTeams=').trim());
 });
 
