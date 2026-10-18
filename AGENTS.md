@@ -1,5 +1,9 @@
 # Project writing rule
 
+Next batch, not the current release: compact Fixture details into one line for date, format and ground (wrapping naturally on small screens), with competition such as NDCA in a secondary position. Avoid separate padded paragraphs for each match detail. User request recorded 18 October 2026.
+
+One uploaded scorecard must supply Fixture details, Match Review, Season stats and social awards. Teams & availability-only clubs must see player batting and bowling figures in Fixture details without coaching access. Reduce scrolling throughout the app: compact phone headers, tight spacing and rows, completed setup collapsed, and usable 44px tap targets. Tutorial videos belong in Help, not at the top of task pages; App and notifications keeps its videos. Existing videos are outdated: recreating them is parked until the product is close to finished, and must not be included in the current layout fixes. User requirements recorded 18 October 2026.
+
 Keep app copy, instructions and progress updates as short and clear as possible.
 Use direct action labels. Avoid repeated explanations, filler and unnecessary warnings.
 Include extra detail only when needed for a decision, an error or a requested explanation.

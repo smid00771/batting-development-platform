@@ -100,7 +100,7 @@ export function createSeasonStatsPanel(h) {
   }
   async function load(s, settings = null) {
     if (s.busy || !here(s)) return;
-    s.busy = true; s.savingSeason = !!settings; s.error = false; s.message = settings ? 'Saving season dates…' : 'Loading latest saved scores…'; draw(s);
+    s.busy = true; s.stale = false; s.savingSeason = !!settings; s.error = false; s.message = settings ? 'Saving season dates…' : 'Loading latest saved scores…'; draw(s);
     try {
       const data = await request(s, settings ? 'set_season' : 'context', settings || {});
       if (!here(s)) return;
@@ -111,10 +111,10 @@ export function createSeasonStatsPanel(h) {
       if (!all.formats.includes(s.state.format)) s.state.format = all.formats.includes(s.preferredFormat) ? s.preferredFormat : all.formats.includes('limited_overs') ? 'limited_overs' : all.formats[0] || 'limited_overs';
       s.message = settings ? 'Season dates saved.' : '';
     } catch (error) {if (here(s)) {s.error = true; s.message = error.message || 'Season stats could not be loaded.';}}
-    finally {s.busy = false; s.savingSeason = false; draw(s);}
+    finally {s.busy = false; s.savingSeason = false; draw(s); if (s.stale && here(s) && !s.state.seasonDraft) void load(s);}
   }
-  return {canLeave, mount(host, options) {
-    if (active?.host === host && active.scope === options.scope) {Object.assign(active,options); draw(active); return active;}
+  return {canLeave, invalidate() {if (active) {active.stale = true; if (here(active) && !active.busy && !active.state.seasonDraft) void load(active);}}, mount(host, options) {
+    if (active?.host === host && active.scope === options.scope) {Object.assign(active,options); draw(active); if (active.stale && !active.busy && !active.state.seasonDraft) void load(active); return active;}
     const s = {...options, host, state:options.state || {}, context:null, busy:false, message:'', error:false}; active = s; void load(s); return s;
   }};
 }
