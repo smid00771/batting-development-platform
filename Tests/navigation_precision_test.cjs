@@ -224,14 +224,14 @@ test('production and demo share review editing and navigation behaviour',()=>{
  const demo=fs.readFileSync(new URL('../demo.html','file://'+__filename),'utf8').replaceAll('fixtureLocalStorage.','localStorage.');
  for(const name of ['openClubSectionHome','clubNavigationRoute','teamReviewNavigationIdentity','appNavigationKey','restoreClubNavigationState',
   'serializeTeamReviewState','restoreTeamReviewState','teamReviewUpdate','teamReviewRowHtml','renderTeamReviewContent','renderTeamReview','renderTeamReviewEntry',
-  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name).replace('s.teamChange=null;s.availabilityReturn=null;',''),fn(name,demo),name); // The parked demo has no .207 move-result notice to clear.
+  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name).replace('s.teamChange=null;s.availabilityReturn=null;','').replace("compareDate:saved.statsFilters?.compareDate||'',",''),fn(name,demo),name); // The parked demo has no .207 move notice or .209 comparison date.
 });
 
 
 test('browser Back restores stats filters and comparison without retaining private score data',async()=>{
- const h=harness();h.s.view='board';h.s.statsOpen=true;h.s.statsFilters={mode:'batting',format:'long_form',grade:'',compare:true,firstTeam:'first',secondTeam:'second',secret:'Never stored'};h.visit();
+ const h=harness();h.s.view='board';h.s.statsOpen=true;h.s.statsFilters={mode:'batting',format:'long_form',grade:'',compare:true,compareDate:'2026-10-17',firstTeam:'first',secondTeam:'second',secret:'Never stored'};h.visit();
  h.s.statsOpen=false;h.s.statsFilters={mode:'bowling'};h.visit();await h.history.back();
- assert.equal(h.s.statsOpen,true);assert.equal(h.s.statsFilters.compare,true);assert.equal(h.s.statsFilters.firstTeam,'first');assert.equal(h.s.statsFilters.secondTeam,'second');assert.equal(h.s.statsFilters.secret,undefined);
+ assert.equal(h.s.statsOpen,true);assert.equal(h.s.statsFilters.compare,true);assert.equal(h.s.statsFilters.compareDate,'2026-10-17');assert.equal(h.s.statsFilters.firstTeam,'first');assert.equal(h.s.statsFilters.secondTeam,'second');assert.equal(h.s.statsFilters.secret,undefined);
  assert.doesNotMatch(JSON.stringify(h.entries),/Never stored/);
 });
 

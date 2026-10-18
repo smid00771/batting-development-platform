@@ -2,11 +2,11 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),{JSDOM}=r
 const tick=()=>new Promise(r=>setImmediate(r));
 const data=()=>({season:{start:'2026-07-01',end:'2027-06-30',label:'2026/27',revision:0},today:'2026-10-17',can_set_season:true,fixtures:[],cards:[],identities:[]});
 const teams=[{id:'first',level:1,grade:'First',competition:'District',format:'long_form',slots:[{d1:'r1'}]},{id:'second',level:2,grade:'Second',competition:'District',format:'long_form',slots:[{d1:'r2'}]}];
-async function harness(response=data()) {
+async function harness(response=data(), overrides={}) {
  const {createSeasonStatsPanel}=await import('../season-stats-panel.js'),dom=new JSDOM('<main><div id="stats"></div></main>'),host=dom.window.document.getElementById('stats'),calls=[],messages=[];
  let close=0,navigations=0,allowed=true,inside=true,reply=async()=>({data:response,error:null});
  const panel=createSeasonStatsPanel({supabase:{rpc:async(name,args)=>{calls.push({name,args});return reply(name,args);}},here:()=>inside,close:()=>close++,navigate:()=>navigations++,alert:m=>messages.push(m),confirm:()=>allowed,openFixture:(s,id)=>messages.push(id)});
- const options={clubId:'club',scope:'club:user',state:{mode:'batting',format:'long_form'},teams:structuredClone(teams),roster:[{id:'r1',name:'Alex'},{id:'r2',name:'Jordan'}]},s=panel.mount(host,options);await tick();
+ const options={clubId:'club',scope:'club:user',state:{mode:'batting',format:'long_form'},teams:structuredClone(teams),roster:[{id:'r1',name:'Alex'},{id:'r2',name:'Jordan'}],...overrides},s=panel.mount(host,options);await tick();
  return {panel,s,options,dom,host,calls,messages,close:()=>close,navigations:()=>navigations,reply:fn=>reply=fn,inside:v=>inside=v,allow:v=>allowed=v,click:sel=>host.querySelector(sel).click(),input(sel,value){const el=host.querySelector(sel);el.value=value;el.dispatchEvent(new dom.window.Event('input',{bubbles:true}));},submit(){host.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));}};
 }
 test('modes and grade comparison visibly change state, with no invented promotion rating',async()=>{
@@ -64,4 +64,76 @@ test('new shared scores refresh an open stats panel and preserve unsaved season 
 test('an import during a stats request reloads once after the old response arrives',async()=>{
  const h=await harness();let finish;h.reply(()=>new Promise(r=>finish=r));h.click('[data-stats-refresh]');h.panel.invalidate();h.panel.invalidate();assert.equal(h.calls.length,2);
  h.reply(async()=>({data:{...data(),season:{...data().season,label:'Newest scores'}}}));finish({data:data()});await tick();assert.equal(h.calls.length,3);assert.match(h.host.textContent,/Newest scores/);
+});
+
+const datedTeams=(day,selected=true)=>teams.map(t=>({...structuredClone(t),id:t.id+'-'+day,days:[{date:day}],competition:'NDCA',slots:selected?structuredClone(t.slots):Array.from({length:11},()=>({d1:null,d2:null}))}));
+const publishedTeams=day=>datedTeams(day).map(t=>({...t,published:{details:{grade:t.grade,competition:t.competition,format:t.format,days:structuredClone(t.days)},slots:structuredClone(t.slots)}}));
+const change=(h,selector,value)=>{const el=h.host.querySelector(selector);el.value=value;el.dispatchEvent(new h.dom.window.Event('change',{bubbles:true}));};
+test('empty upcoming teams open the latest populated lineups, with a visible independent date choice',async()=>{
+ const previous=datedTeams('2026-10-17'),upcoming=datedTeams('2026-10-24',false);
+ const h=await harness(data(),{boardDate:'2026-10-24',teams:[...datedTeams('2026-10-10'),...previous,...upcoming]});
+ h.click('[data-stats-compare]');
+ assert.equal(h.host.querySelector('[data-stats-date]').value,'2026-10-17');
+ assert.match(h.host.querySelector('[role=table]').textContent,/Alex/);assert.match(h.host.querySelector('[role=table]').textContent,/Jordan/);
+ assert.equal(h.options.boardDate,'2026-10-24','Comparison does not change the Selection Board date');
+ assert.deepEqual([...h.host.querySelectorAll('[data-stats-team]')].map(el=>el.selectedOptions[0].textContent),['First','Second']);
+ change(h,'[data-stats-date]','2026-10-24');
+ assert.equal(h.host.querySelector('[role=table]'),null);assert.match(h.host.textContent,/No players selected for these teams yet/);assert.doesNotMatch(h.host.textContent,/Vacant/);
+ h.panel.mount(h.host,h.options);assert.equal(h.host.querySelector('[data-stats-date]').value,'2026-10-24','Explicit empty date remains selected after redraw');
+ change(h,'[data-stats-date]','2026-10-10');assert.match(h.host.querySelector('[role=table]').textContent,/Alex/);
+ assert.equal(h.calls.length,1,'Changing lineups reuses the same saved season figures');
+});
+test('current board lineups win when selected; partial teams retain real vacancies and day-two players',async()=>{
+ const selected=datedTeams('2026-10-24');selected[0].slots=[{d1:null,d2:'r1'},{d1:null,d2:null}];
+ const h=await harness(data(),{boardDate:'2026-10-24',teams:[...datedTeams('2026-10-17'),...selected]});h.click('[data-stats-compare]');
+ assert.equal(h.host.querySelector('[data-stats-date]').value,'2026-10-24');assert.match(h.host.textContent,/Alex/);assert.match(h.host.textContent,/Vacant/);
+});
+test('cancelled and out-of-season lineups are unavailable; competition labels and boundaries stay consistent',async()=>{
+ const valid=datedTeams('2026-10-17'),other=valid.map(t=>({...t,id:'other-'+t.id,competition:'Other competition'}));
+ const excluded=[...datedTeams('2025-10-17'),...datedTeams('2026-10-24').map(t=>({...t,cancelled:true}))];
+ const h=await harness(data(),{boardDate:'2026-10-24',teams:[...valid,...other,...excluded]});h.click('[data-stats-compare]');
+ assert.deepEqual([...h.host.querySelector('[data-stats-date]').options].map(o=>o.value),['2026-10-17']);
+ assert.deepEqual([...h.host.querySelectorAll('[data-stats-team]')].map(el=>el.selectedOptions[0].textContent),['First · NDCA','Second · NDCA']);
+ const second=h.host.querySelector('[data-stats-team=secondTeam]');assert.ok([...second.options].every(o=>o.textContent.endsWith(' · NDCA')));
+ change(h,'[data-stats-team=firstTeam]',other[0].id);
+ assert.ok([...h.host.querySelector('[data-stats-team=secondTeam]').options].every(o=>o.textContent.endsWith(' · Other competition')));
+});
+test('the NDCA display label does not affect confirmed player statistics in either grade',async()=>{
+ const selected=datedTeams('2026-10-17'),players=[{source_id:'source-one',roster_id:'r1',name:'Alex'},{source_id:'source-two',roster_id:'r2',name:'Jordan'}];
+ const cards=selected.map((team,i)=>({snapshot_id:team.id,our_team:'us',fixture_id:team.id,scorecard:{match_id:team.id,status:'completed',dates:['2026-10-17'],grade:team.grade,competition:team.competition,format_key:team.format,teams:[{id:'us',players:[{player_id:players[i].source_id,name:players[i].name}]},{id:'them',name:'Visitors'}],innings:[{id:'batting',number:1,team_id:'us',complete:true,batters:[{player_id:players[i].source_id,name:players[i].name,status:'played',runs:40+i,not_out:false,balls:50,importable:true}]}]}}));
+ const h=await harness({...data(),cards,identities:players,fixtures:selected.map(t=>({...t,match_id:t.id}))},{boardDate:'2026-10-24',teams:[...selected,...datedTeams('2026-10-24',false)]});
+ h.click('[data-stats-compare]');const table=h.host.querySelector('[role=table]').textContent;
+ assert.match(table,/Alex40 average40 runs/);assert.match(table,/Jordan41 average41 runs/);assert.doesNotMatch(table,/No linked season figures/);
+});
+test('last published teams are the default even when upcoming draft teams already have players',async()=>{
+ const published=publishedTeams('2026-10-17'),draft=datedTeams('2026-10-24');draft[0].slots=[{d1:'r2'}];
+ const h=await harness(data(),{boardDate:'2026-10-24',teams:[...publishedTeams('2026-10-10'),...published,...draft]});h.click('[data-stats-compare]');
+ assert.equal(h.host.querySelector('[data-stats-date]').value,'published');assert.equal(h.s.state.firstTeam,'first-2026-10-17');
+ assert.match(h.host.querySelector('[role=table]').textContent,/First17 Oct/);assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Alex/);
+ change(h,'[data-stats-date]','2026-10-24');assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Jordan/);
+ change(h,'[data-stats-date]','published');assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Alex/);
+});
+test('each grade uses its latest published snapshot and order, excluding unpublished edits',async()=>{
+ const previous=publishedTeams('2026-10-17'),first=publishedTeams('2026-10-24')[0];
+ first.published.slots=[{d1:'r2',d2:'r1'},{d1:'r1'}];first.slots=[{d1:'r1'}];
+ const h=await harness(data(),{boardDate:'2026-10-24',teams:[...previous,first]});h.click('[data-stats-compare]');
+ assert.equal(h.s.state.firstTeam,first.id);assert.equal(h.s.state.secondTeam,previous[1].id);
+ const table=h.host.querySelector('[role=table]');assert.match(table.textContent,/First24 Oct/);assert.match(table.textContent,/Second17 Oct/);
+ const cells=table.querySelectorAll('[role=cell]');assert.match(cells[0].textContent,/JordanDay 1.*AlexDay 2/);assert.match(cells[2].textContent,/Alex/);
+ first.published.slots=[{d1:'r1'}];h.panel.mount(h.host,h.options);assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Alex/);assert.doesNotMatch(h.host.querySelectorAll('[role=cell]')[0].textContent,/Jordan/);
+});
+test('cancelled and prior-season publications never replace current eligible published teams',async()=>{
+ const older=publishedTeams('2025-10-17'),valid=publishedTeams('2026-10-17'),cancelled=publishedTeams('2026-10-24');
+ cancelled.forEach(t=>t.published.details.cancelled=true);
+ const h=await harness(data(),{boardDate:'2026-10-24',teams:[...older,...valid,...cancelled]});h.click('[data-stats-compare]');
+ assert.equal(h.s.state.firstTeam,valid[0].id);assert.equal(h.s.state.secondTeam,valid[1].id);
+});
+test('published teams in multiple formats have distinct labels and retain the chosen statistics format',async()=>{
+ const long=publishedTeams('2026-10-17'),short=publishedTeams('2026-10-24');short.forEach(t=>{t.format='t20';t.published.details.format='t20';});
+ const h=await harness(data(),{boardDate:'2026-10-24',teams:[...long,...short]});h.click('[data-stats-compare]');
+ const first=h.host.querySelector('[data-stats-team=firstTeam]');assert.equal(new Set([...first.options].map(o=>o.textContent)).size,4);
+ change(h,'[data-stats-team=firstTeam]',short[0].id);assert.equal(h.s.state.format,'t20');assert.equal(h.s.state.secondTeam,short[1].id);
+ assert.ok([...h.host.querySelector('[data-stats-team=secondTeam]').options].every(o=>short.some(t=>t.id===o.value)));
+ h.click('[data-stats-mode=batting]');h.s.state.format='long_form';h.panel.mount(h.host,h.options);h.click('[data-stats-compare]');
+ assert.equal(h.s.state.firstTeam,long[0].id);assert.equal(h.s.state.secondTeam,long[1].id);
 });
