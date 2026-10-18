@@ -63,6 +63,36 @@ test('early bowling uses the whole-grade reference equally for quicks and spinne
  s.summary.rows=s.summary.rows.slice(2);assert.deepEqual(s.build().player('low','candidate').ball,lower);
  Object.assign(s.summary.rows[0],{bowling_innings:1});assert.equal(s.build().player('low','candidate').ball.state,'building');
 });
+test('strong recorded bowling is highlighted when the type or workload is unset',()=>{
+ for(const change of [{bowling:'unknown',bowling_load:'unknown'},{bowling:'pace',bowling_load:'unknown'},{bowling:'unknown',bowling_load:'frontline'},{bowling:'spin',bowling_load:'unknown'}]){
+  const s=allrounders();Object.assign(s.roster[0],change);
+  Object.assign(s.high,{grade:'3rd Grade',format:'limited_overs'});
+  Object.assign(s.summary.rows[0],{grade:'3rd Grade',format:'limited_overs',bowling_balls:78,bowling_innings:2,wickets:7,conceded:41,economy:41*6/78});
+  const before=JSON.stringify(s.roster),m=s.build(),ball=m.player('high','incumbent').ball;
+  assert.equal(ball.state,'strong');assert.equal(ball.early,true);assert.equal(ball.ready,true);
+  assert.equal(ball.wickets,700/78);assert.equal(ball.economy,41*6/78);assert.match(ball.reason,/Strong wicket-taking with economy in range/);
+  assert.deepEqual(m.forRow(s.summary.rows[0]).ball,ball);assert.equal(JSON.stringify(s.roster),before);
+ }
+});
+test('unset-role bowling still needs complete figures, sufficient opportunities and a supported benchmark',()=>{
+ for(const change of [{bowling_balls:59},{bowling_innings:1},{bowling_complete:false},{wickets:null},{conceded:null},{competition:'Other'},{grade:'5th Grade'},{format:'unknown'},{format:'long_form'}]){
+  const s=allrounders();Object.assign(s.roster[0],{bowling:'unknown',bowling_load:'unknown'});
+  const r=s.summary.rows[0];Object.assign(r,{format:'limited_overs',bowling_balls:78,bowling_innings:2,wickets:7,conceded:41},change);
+  Object.assign(s.high,{format:r.format,grade:r.grade,competition:r.competition});
+  assert.equal(s.build().player('high','incumbent').ball.state,'building');
+ }
+});
+test('unset bowling details do not create negative flags or unlock replacement comparisons',()=>{
+ for(const wickets of [0,8]){
+  const s=allrounders();Object.assign(s.roster[0],{bowling:'unknown',bowling_load:'unknown'});s.summary.rows[0].wickets=wickets;
+  assert.equal(s.build().player('high','incumbent').ball.state,'building');
+ }
+ for(const index of [0,2])for(const change of [{bowling:'unknown'},{bowling_load:'unknown'}]){
+  const s=allrounders();assert.ok(s.build().pairs.length);Object.assign(s.roster[index],change);
+  const m=s.build();assert.equal(m.player(index===0?'high':'low',s.roster[index].id).ball.state,'strong');
+  assert.ok(!m.pairs.some(p=>p.higher.person.id===s.roster[index].id || p.lower.person.id===s.roster[index].id));
+ }
+});
 test('few innings, a single dismissal, all-not-outs and incomplete figures never create a struggling or promotion label',()=>{
  for(const change of [{innings:2,not_outs:0},{innings:5,not_outs:4},{innings:5,not_outs:5},{batting_complete:false}]){
   const s=scenario();Object.assign(s.summary.rows[0],change);const m=s.build();assert.equal(m.player('high','incumbent').bat.state,'building');assert.ok(!m.pairs.some(p=>p.higher.person.id==='incumbent'));
