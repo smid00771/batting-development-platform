@@ -1,3 +1,5 @@
+Season stats > Compare grades offers a Batting / Bowling toggle for the same selected teams and line-ups. Keep the chosen grades, dates and format when switching figures. Bowling shows average, wickets, overs, innings, Econ and S/R; missing and incomplete figures remain explicit. User request recorded 18 October 2026.
+
 Fixture scorecards show batting S/R and bowling Econ to two decimal places, calculated from recorded runs and balls. Missing figures and zero-ball denominators display a dash. Partial overs use balls, not decimal overs. User request recorded 18 October 2026.
 
 Fixture details & results belongs in a prominent button beside each team heading, above the players, including past games. Remove Copy team list / Copy published team from team cards; retain Copy previous team for drafting. User request recorded 18 October 2026.
