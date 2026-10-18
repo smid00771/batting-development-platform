@@ -13,17 +13,24 @@
 
 #app {font-size:15px;line-height:1.5;color:var(--ink)}
 #app .shell {max-width:1440px;background:var(--bg);box-shadow:none}
-#app .page {padding:28px 32px 48px}
+#app .page {padding:16px 20px 28px}
 #app :is(h1,h2,h3,h4) {color:inherit}
-#app h1 {margin:0 0 18px;letter-spacing:-.025em!important}
-#app h2 {margin:0 0 12px}
+#app h1 {margin:0 0 10px;letter-spacing:-.025em!important}
+#app h2 {margin:0 0 8px}
 #app :is(p,li) {line-height:1.55}
 #app :is(.help,.se-muted,.social-small,.team-review-meta,.team-review-row-status) {font-size:13px;line-height:1.5;color:var(--muted)}
 #app :is(.help,.status,.se-notice,.social-notice):empty {display:none}
 #app .section-label {font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--muted)}
-#app :is(.card,.admin-card,.se-card,.st-panel,.season-stats) {border:1px solid var(--line);border-radius:14px;background:#fff;padding:20px;box-shadow:var(--cb-shadow)}
-#app .card + .card {margin-top:18px}
-#app .grid {gap:20px}
+#app :is(.card,.admin-card,.se-card,.st-panel,.season-stats) {border:1px solid var(--line);border-radius:10px;background:#fff;padding:12px;box-shadow:var(--cb-shadow)}
+#app .card + .card {margin-top:10px}
+#app .grid {gap:12px}
+#app .page p {margin-top:6px;margin-bottom:8px}
+#app .club-preparation {padding:10px 12px;border-radius:10px}
+#app .club-preparation-heading {gap:8px;margin-bottom:10px}
+#app .club-setup-progress {gap:6px;margin:8px 0}
+#app .club-setup-progress button {min-height:44px;padding:8px 10px}
+#app .club-home-next {margin-top:10px}
+#app :is(.club-round-review,.setup-commercial) {margin-top:10px!important}
 #app :is(.notice,.identity-summary,.committee-summary,.handoff-box) {border-radius:10px;font-size:13px;line-height:1.5}
 
 /* Draft recovery belongs to the match section, without a global alert. */
@@ -40,10 +47,10 @@
 .sr-only {position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
 
 /* A compact club identity, followed by quiet, consistent navigation. */
-#app .compact-club-header.hero {background:#fff;color:var(--ink);border-top:4px solid var(--navy);padding:16px 32px}
-#app .compact-club-header .topline {gap:20px}
+#app .compact-club-header.hero {background:#fff;color:var(--ink);border-top:4px solid var(--navy);padding:8px 20px}
+#app .compact-club-header .topline {gap:8px}
 #app .compact-club-header .club-header-name {font-size:20px;font-weight:700;letter-spacing:-.02em}
-#app .compact-club-header .shell-club-logo {width:44px;height:44px;min-width:44px;padding:2px;background:#fff;border:0;border-radius:0}
+#app .compact-club-header .shell-club-logo {width:36px;height:36px;min-width:36px;flex:0 0 36px;padding:0;background:#fff;border:0;border-radius:0;box-shadow:none}
 #app .compact-club-header .header-actions {align-items:center;gap:12px}
 #app .compact-club-header .context-switcher {width:210px;flex-basis:210px}
 #app .compact-club-header .context-switcher-label {font-size:12px;font-weight:500;color:var(--muted)}
@@ -76,11 +83,11 @@
 #app input:is([type="checkbox"],[type="radio"]) {accent-color:var(--navy);width:18px;height:18px;flex-shrink:0}
 #app :is(input,select,textarea):disabled {background:var(--soft);color:var(--muted);opacity:1}
 #app input::placeholder,#app textarea::placeholder {color:#738092;opacity:1}
-#app .field {margin:12px 0}
-#app .field label {margin-bottom:6px}
+#app .field {margin:8px 0}
+#app .field label {margin-bottom:4px}
 
 /* Section tabs share a visual grammar without turning every button into a tab. */
-#app :is(.se-tabs,.social-tabs,.st-steps) {display:flex;gap:4px;margin:18px 0;padding:0 0 8px;border-bottom:1px solid var(--line)}
+#app :is(.se-tabs,.social-tabs,.st-steps) {display:flex;gap:4px;margin:8px 0;padding:0;border-bottom:1px solid var(--line)}
 #app :is(.se-tabs,.social-tabs,.st-steps) .btn {background:transparent;border-color:transparent;color:var(--muted);box-shadow:none;min-height:44px}
 #app :is(.se-tabs,.social-tabs,.st-steps) .btn:is([aria-pressed="true"],[aria-current="step"],.active) {background:var(--club-soft);border-color:transparent;color:var(--ink);box-shadow:inset 0 -2px 0 var(--navy)}
 
@@ -88,12 +95,12 @@
 #app .se-page {max-width:none}
 #app .se-top {gap:16px;margin-bottom:6px}
 #app .se-top h1 {margin:0}
-#app .se-toolbar {align-items:end;gap:10px;margin:20px 0 12px}
+#app .se-toolbar {align-items:end;gap:8px;margin:10px 0 8px}
 #app .se-toolbar>label {min-width:200px}
 #app .se-toolbar #sePublish {margin-left:auto}
 #app .se-order-help {margin:8px 0;font-size:12px}
-#app .se-board-layout>.se-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:18px 0}
-#app .se-card[data-se-team] {padding:18px;border-top:3px solid var(--navy);overflow-wrap:anywhere}
+#app .se-board-layout>.se-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+#app .se-card[data-se-team] {padding:12px;border-top:3px solid var(--navy);overflow-wrap:anywhere}
 #app .se-team-compact-head>div {align-items:flex-start;gap:10px;flex-wrap:wrap}
 #app .se-team-compact-head h2 {font-size:19px!important;letter-spacing:-.02em!important;margin:0}
 #app .se-team-head {padding-bottom:12px;border-bottom:1px solid var(--line)}
@@ -138,9 +145,9 @@
 #app .team-review-heading h1 {margin:0}
 #app .team-review-heading .btnrow {margin:0}
 #app .team-review-fields {gap:12px}
-#app .team-review-table {width:100%;border-collapse:collapse;margin-top:16px}
+#app .team-review-table {width:100%;border-collapse:collapse;margin-top:8px}
 #app .team-review-table th {padding:12px 10px;background:var(--soft);color:var(--muted);font-size:12px;font-weight:600;text-align:left;border-bottom:1px solid var(--line)}
-#app .team-review-table td {padding:18px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+#app .team-review-table td {padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 #app .team-review-player-link {font-size:15px;font-weight:650;line-height:1.45;color:var(--ink);text-decoration-color:#b4becb;text-underline-offset:4px;min-height:44px}
 #app .team-review-meta {font-size:12px;margin-top:5px}
 #app .team-review-options {gap:4px}
@@ -159,24 +166,24 @@
 #app .team-review-footer {border-top:0;margin-top:16px;padding:0;gap:12px;align-items:center}
 
 /* Player tools and administration use the same calm surfaces. */
-#app .player-home-tile {background:#fff;border:1px solid var(--line);border-top:3px solid var(--navy);border-radius:12px;padding:22px;box-shadow:var(--cb-shadow);color:var(--ink);min-height:156px}
+#app .player-home-tile {background:#fff;border:1px solid var(--line);border-top:3px solid var(--navy);border-radius:10px;padding:12px;box-shadow:var(--cb-shadow);color:var(--ink);min-height:0}
 #app .player-home-tile>strong {color:var(--ink);font-weight:650}
 #app .player-home-tile span {font-size:14px;line-height:1.5;color:var(--muted)}
 #app .player-home-links {gap:10px}
 #app :is(.plan-section-tile,.training-tool-tile,.training-disclosure,.innings-prep-section,.innings-reflection-options) {border-color:var(--line);border-radius:12px;box-shadow:none}
-#app :is(.plan-section-tile,.training-disclosure,.innings-prep-section,.innings-reflection-options)>summary {min-height:52px;padding:14px 16px;background:var(--soft);color:var(--ink)}
-#app .club-help-feature {padding:18px 20px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--navy);box-shadow:none;gap:16px}
+#app :is(.plan-section-tile,.training-disclosure,.innings-prep-section,.innings-reflection-options)>summary {min-height:44px;padding:10px 12px;background:var(--soft);color:var(--ink)}
+#app .club-help-feature {padding:12px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--navy);box-shadow:none;gap:10px;margin:10px 0}
 #app .club-help-feature p {font-size:14px;color:var(--muted)}
 #app .platform-header {background:#fff;color:var(--ink);border-top:4px solid var(--navy);border-bottom:1px solid var(--line)}
 #app .platform-header :is(p,.section-label) {color:var(--muted)}
 #app .platform-nav {gap:4px}
 #app .platform-nav button {font-size:13px;font-weight:600;min-height:44px}
 #app .platform-nav button.active {background:var(--club-soft);color:var(--ink)}
-#app .admin-table :is(th,td) {font-size:13px;padding:12px;line-height:1.5}
+#app .admin-table :is(th,td) {font-size:13px;padding:8px;line-height:1.45}
 #app .admin-table td strong {font-size:14px;font-weight:600}
 #app .admin-table td small {font-size:12px}
 #app .status-pill {font-size:12px;font-weight:600;padding:4px 8px}
-#app :is(.active-club-row,.message-row) {padding:16px;border-color:var(--line)}
+#app :is(.active-club-row,.message-row) {padding:10px;border-color:var(--line)}
 #app :is(.active-club-row,.message-row) strong {font-size:14px}
 #app :is(.active-club-row,.message-row) small {font-size:12px}
 #app .active-club-controls label {font-size:12px;text-transform:none;font-weight:500}
@@ -185,14 +192,14 @@
 #app :is(.social-card,.social-upload,.social-feature) {border-color:var(--line);border-radius:12px;background:#fff;box-shadow:none}
 #app .social-upload {padding:16px}
 #app .social-fields {gap:12px}
-#app .st-panel {margin:18px 0}
+#app .st-panel {margin:10px 0}
 #app .st-review-heading {gap:14px}
 #app .st-preview figcaption {font-size:13px;color:var(--muted)}
 #app .ss-modes {gap:4px}
 #app .ss-modes [aria-pressed="true"] {background:var(--club-soft);color:var(--ink);border-color:var(--navy)}
 #app .ss-row {border-color:var(--line)}
-#app .ss-row summary {padding:14px 2px}
-#app .ss-compare-row {gap:14px;padding:13px 0}
+#app .ss-row summary {padding:8px 2px;min-height:48px}
+#app .ss-compare-row {gap:10px;padding:8px 0}
 #app .ss-values strong {font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}
 #app .ss-compare-cell span {font-variant-numeric:tabular-nums}
 
@@ -206,17 +213,17 @@
   #app .se-board-layout>.se-grid {grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 }
 @media (max-width:1000px) {
-  #app .page {padding:22px 20px 40px}
-  #app .compact-club-header.hero {padding:14px 20px}
+  #app .page {padding:14px 16px 24px}
+  #app .compact-club-header.hero {padding:8px 16px}
   #app .shell .nav {padding:0 12px}
-  #app .team-review-table td {padding:14px 8px}
+  #app .team-review-table td {padding:8px}
 }
 @media (max-width:760px) {
   #app .team-review-table {display:block;margin-top:12px}
   #app .team-review-table tbody {display:block}
-  #app .team-review-table tr[data-team-review-row] {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:18px 0;border-top:1px solid var(--line)}
+  #app .team-review-table tr[data-team-review-row] {display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:10px 0;border-top:1px solid var(--line)}
   #app .team-review-table td {padding:0;border:0;min-width:0}
-  #app .team-review-table td.match-review-score {background:var(--soft);padding:12px;border-radius:8px}
+  #app .team-review-table td.match-review-score {background:var(--soft);padding:8px;border-radius:8px}
   #app .team-review-table td.match-review-score small {max-width:none}
   #app .team-review-table .team-review-section {padding:0;border:0}
   #app .team-review-table .team-review-section th {display:block;border:0;border-radius:6px}
@@ -229,15 +236,18 @@
   #app .team-review-footer>.help {margin:0}
 }
 @media (max-width:700px) {
-  #app .page {padding:20px 14px 32px}
+  #app .page {padding:12px 10px 20px}
   #app {--cb-heading-page:25px}
-  #app :is(.card,.admin-card,.st-panel,.season-stats) {padding:16px;border-radius:12px}
-  #app .compact-club-header.hero {padding:12px 16px}
-  #app .compact-club-header .topline {gap:12px}
-  #app .compact-club-header .club-header-name {font-size:18px}
+  #app :is(.card,.admin-card,.st-panel,.season-stats) {padding:10px;border-radius:10px}
+  #app .compact-club-header.hero {padding:8px 12px}
+  #app .compact-club-header .topline {display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+  #app .compact-club-header .shell-brand-lockup {flex:none;min-height:0;gap:8px}
+  #app .compact-club-header .club-header-name {font-size:16px}
   #app .compact-club-header .header-actions {gap:8px;align-items:flex-end}
   #app .compact-club-header .context-switcher {flex:1 1 160px;width:auto;max-width:100%}
   #app .compact-club-header .context-switch {font-size:16px}
+  #app .compact-club-header .context-switcher-label {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  #app .compact-club-header .context-switcher {gap:0;flex-basis:145px}
   #app .account-controls {margin-left:auto;gap:8px;flex-wrap:wrap}
   #app .shell .nav {flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:0 8px;scroll-padding:8px;scrollbar-width:thin;scrollbar-color:#b9c3cf transparent;overscroll-behavior-x:contain}
   #app .shell .nav button {flex:0 0 auto;max-width:none;white-space:nowrap;padding:12px 10px}
@@ -248,21 +258,42 @@
   #app .se-top {align-items:flex-start;gap:12px}
   #app .se-top>.se-actions {gap:6px}
   #app .se-top>.se-actions .btn {font-size:12px;padding:8px 10px}
-  #app .se-toolbar {gap:8px;margin-top:16px}
+  #app .se-toolbar {gap:6px;margin-top:8px}
   #app .se-toolbar>label {flex-basis:100%}
   #app .se-toolbar #sePublish {margin-left:0}
-  #app .se-board-layout>.se-grid {grid-template-columns:minmax(0,1fr);gap:16px}
-  #app .se-card[data-se-team] {padding:16px}
+  #app .se-board-layout>.se-grid {grid-template-columns:minmax(0,1fr);gap:10px}
+  #app .se-card[data-se-team] {padding:10px}
   #app .se-match-roles select {font-size:16px}
   #app .se-slot {min-height:50px}
   #app .se-pick {font-size:15px}
   #app .match-review-map-row {grid-template-columns:minmax(0,1fr);gap:12px}
   #app .match-review-map-row .btnrow {gap:8px}
-  #app .player-home-tile {padding:18px;min-height:140px}
+  #app .player-home-tile {padding:12px;min-height:0}
   #app .platform-page {padding:16px 14px 32px}
   #app .platform-header {padding:16px}
   #app .ss-compare-row {gap:8px}
 }
+
+/* Read the shared scorecard here; no Match Review subscription is required. */
+#app .fr-scores {margin:8px 0}
+#app .fr-result {font-weight:600}
+#app .fr-team-scores {border-top:1px solid var(--line)}
+#app .fr-team-scores>summary {display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px;padding:6px 0;cursor:pointer;list-style:none}
+#app .fr-team-scores>summary::-webkit-details-marker {display:none}
+#app .fr-team-scores>summary strong::before {content:'▸ ';color:var(--muted)}
+#app .fr-team-scores[open]>summary strong::before {content:'▾ '}
+#app .fr-team-scores>summary span {font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+#app .fr-table-wrap {max-width:100%;overflow-x:auto}
+#app .fr-score-table {width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+#app .fr-score-table caption {text-align:left;font-weight:650;padding:6px 0}
+#app .fr-score-table :is(th,td) {padding:6px 4px;text-align:right;border-bottom:1px solid var(--line)}
+#app .fr-score-table th:first-child {text-align:left;width:100%;min-width:105px;font-weight:500}
+#app .fr-score-table thead th {font-size:12px;color:var(--muted);font-weight:600}
+#app .fr-score-table small {display:block;font-size:11px;color:var(--muted);font-weight:400;line-height:1.35}
+#app .fr-total {font-size:12px;text-align:right;color:var(--muted);margin:4px 0 8px}
+#app .completed-club-setup>summary {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;cursor:pointer;font-weight:600;list-style:none}
+#app .completed-club-setup>summary::after {content:'▾';color:var(--muted)}
+#app .completed-club-setup[open]>summary::after {content:'▴'}
 @media (prefers-reduced-motion:reduce) {
   #app .btn,#app .player-home-tile {transition:none}
 }

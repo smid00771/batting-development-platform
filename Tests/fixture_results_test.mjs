@@ -3,11 +3,21 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {createFixtureResults} from '../fixture-results.js';
+import {createFixtureResults,renderFixtureScorecard} from '../fixture-results.js';
 import {createSharedResultsDemo} from '../shared-match-results-demo.js';
 const require=createRequire(import.meta.url),{JSDOM}=require('jsdom');
 const escape=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 const settle=async()=>{for(let n=0;n<12;n++)await new Promise(r=>setTimeout(r,0));};
+test('fixture scorecard shows our batting and bowling, preserves unknowns and escapes source text',()=>{
+ const card={our_team:'ours',scorecard:{result:'Club <won>',teams:[{id:'them',name:'Visitors'},{id:'ours',name:'Our club'}],innings:[
+  {team_id:'ours',number:1,complete:true,runs:19,wickets:1,extras:0,batters:[{name:'Alex <Smith>',runs:19,balls:26,not_out:false,fours:0,sixes:null,dismissal_text:'c <keeper>'},{name:'Jordan Lee',status:'did_not_bat'}],bowlers:[{team_id:'them',name:'Other Bowler',balls:6,runs:19,wickets:1,maidens:0}]},
+  {team_id:'them',number:1,complete:false,batters:[],bowlers:[{team_id:'ours',name:'Our Bowler',balls:23,maidens:0,runs:7,wickets:2}]}]}};
+ const doc=new JSDOM(renderFixtureScorecard(card)).window.document,ours=doc.querySelector('[data-score-team=ours]'),them=doc.querySelector('[data-score-team=them]');
+ assert.equal(ours.open,true);assert.equal(them.open,false);assert.equal(doc.querySelector('details'),ours);
+ assert.match(ours.textContent,/Alex <Smith>/);assert.equal(ours.querySelector('smith'),null);assert.match(ours.textContent,/19/);assert.match(ours.textContent,/DNB/);assert.match(ours.textContent,/Our Bowler3.5072/);assert.doesNotMatch(ours.textContent,/Other Bowler/);assert.match(ours.textContent,/Bowling · in progress/);assert.match(ours.textContent,/—/);
+ const reopened=new JSDOM(renderFixtureScorecard(card,new Set(['them']))).window.document;assert.equal(reopened.querySelector('[data-score-team=ours]').open,false);assert.equal(reopened.querySelector('[data-score-team=them]').open,true);
+ card.scorecard.innings.push({...card.scorecard.innings[0],number:2});assert.match(renderFixtureScorecard(card),/Batting · innings 2/);
+});
 function harness(){
  const dom=new JSDOM('<div id="fixtureResults"></div>'),host=dom.window.document.getElementById('fixtureResults');
  const fixture={id:'fixture',published:{details:{}},details:{grade:'First XI',opposition:'Visitors',format:'limited_overs',days:[{date:'2026-10-10'}]},slots:[{d1:'player'}]},state={fixtures:[fixture],roster:[{id:'player',name:'Example Player'}]},cards={};
@@ -25,7 +35,7 @@ test('a locked fixture imports once and supplies the same scorecard to Match Rev
 });
 test('opening an imported fixture reuses stored scores and offers refresh without importing again',async()=>{
  const h=harness();await settle();const result=await h.demo.fetchCard({},'https://play.cricket.com.au/match/existing','fixture');await h.demo.rpc('link',{fixture_id:'fixture',snapshot_id:result.snapshot_id});h.ui.mount(h.host,h.options);await settle();
- assert.match(h.host.textContent,/Refresh scores/);assert.equal(h.host.querySelector('[data-fixture-score-url]').value,result.scorecard.url);assert.equal(Object.keys(h.cards).length,1);
+ assert.match(h.host.textContent,/Refresh scores/);assert.ok(h.host.querySelector('[aria-label="Player scorecard"]'));assert.equal(h.host.querySelector('[data-fixture-score-url]').value,result.scorecard.url);assert.equal(Object.keys(h.cards).length,1);
 });
 test('a failed import retains its link, restores controls, and warns before discarding',async()=>{
  const h=harness();await settle();h.fill('https://play.cricket.com.au/match/example');h.fail(true);h.host.querySelector('[data-fixture-score-load]').click();await settle();assert.match(h.host.textContent,/Try this scorecard again/);assert.equal(h.host.querySelector('[data-fixture-score-url]').value,'https://play.cricket.com.au/match/example');assert.equal(h.host.querySelector('[data-fixture-score-load]').disabled,false);assert.equal(h.ui.canLeave(),false);h.confirm(true);assert.equal(h.ui.canLeave(),true);assert.equal(Object.keys(h.cards).length,0);

@@ -51,8 +51,17 @@ test('fixture attention opens the existing fixture details and normal matches do
  assert.match(h.host.textContent,/1 match needs attention/);h.click('[data-stats-fixture]');assert.equal(h.messages.at(-1),'missing');
  const empty=await harness();assert.equal(empty.host.querySelector('.ss-issues'),null);
 });
-test('demo bundles exactly the shipped engine, panel and adapter',()=>{
- const demo=fs.readFileSync('demo.html','utf8');for(const file of ['season-stats.js','season-stats-panel.js','season-stats-demo.js']){
+test('parked demo retains the statistics engine and adapter; live presentation may change independently',()=>{
+ const demo=fs.readFileSync('demo.html','utf8');for(const file of ['season-stats.js','season-stats-demo.js']){
   const source=fs.readFileSync(file,'utf8').replace(/^import .*\n/,'').replaceAll('export ','').trim();assert.ok(demo.includes(source),file+' must be rebundled');
  }
+});
+test('new shared scores refresh an open stats panel and preserve unsaved season edits',async()=>{
+ const h=await harness();h.reply(async()=>({data:{...data(),season:{...data().season,label:'Updated scores'}}}));h.panel.invalidate();await tick();assert.match(h.host.textContent,/Updated scores/);assert.equal(h.calls.length,2);
+ h.input('[name=start]','2026-08-01');h.panel.invalidate();assert.equal(h.calls.length,2);assert.equal(h.host.querySelector('[name=start]').value,'2026-08-01');assert.equal(h.s.stale,true);
+ h.panel.canLeave();h.panel.mount(h.host,h.options);await tick();assert.equal(h.calls.length,3);assert.equal(h.s.stale,false);
+});
+test('an import during a stats request reloads once after the old response arrives',async()=>{
+ const h=await harness();let finish;h.reply(()=>new Promise(r=>finish=r));h.click('[data-stats-refresh]');h.panel.invalidate();h.panel.invalidate();assert.equal(h.calls.length,2);
+ h.reply(async()=>({data:{...data(),season:{...data().season,label:'Newest scores'}}}));finish({data:data()});await tick();assert.equal(h.calls.length,3);assert.match(h.host.textContent,/Newest scores/);
 });

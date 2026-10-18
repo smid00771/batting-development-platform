@@ -1,6 +1,24 @@
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
 import {weeklyResultCoverage,cardStatus} from './shared-match-results.js?v=0.8.62.201';
 
+const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
+const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
+export function renderFixtureScorecard(wrapped, openTeams = null) {
+ const card=wrapped?.scorecard;
+ if(!card?.teams?.length)return '';
+ const teams=[...card.teams].sort((a,b)=>Number(b.id===wrapped.our_team)-Number(a.id===wrapped.our_team));
+ const innings=card.innings||[];
+ const batting=i=>`<div class="fr-table-wrap"><table class="fr-score-table"><caption>Batting${innings.filter(x=>x.team_id===i.team_id).length>1?' · innings '+escapeScore(i.number):''}${i.complete?'':' · in progress'}</caption><thead><tr><th scope="col">Batter</th><th scope="col">R</th><th scope="col">B</th><th scope="col">4s</th><th scope="col">6s</th></tr></thead><tbody>${(i.batters||[]).map(p=>`<tr><th scope="row">${escapeScore(p.name)}<small>${escapeScore(p.status==='did_not_bat'?'Did not bat':p.dismissal_text||p.dismissal||(!i.complete?'In progress':''))}</small></th><td><strong>${p.status==='did_not_bat'?'DNB':scoreNumber(p.runs)+(p.not_out?'*':'')}</strong></td><td>${p.status==='did_not_bat'?'—':scoreNumber(p.balls)}</td><td>${p.status==='did_not_bat'?'—':scoreNumber(p.fours)}</td><td>${p.status==='did_not_bat'?'—':scoreNumber(p.sixes)}</td></tr>`).join('')||'<tr><td colspan="5">Batting figures unavailable.</td></tr>'}</tbody></table></div><p class="fr-total">Extras ${scoreNumber(i.extras)} · Total ${scoreNumber(i.wickets)}/${scoreNumber(i.runs)}${/declared/i.test(i.closure||'')?' declared':''}</p>`;
+ const bowling=(i,team)=>`<div class="fr-table-wrap"><table class="fr-score-table"><caption>Bowling${innings.filter(x=>x.team_id!==team.id).length>1?' · innings '+escapeScore(i.number):''}${i.complete?'':' · in progress'}</caption><thead><tr><th scope="col">Bowler</th><th scope="col">O</th><th scope="col">M</th><th scope="col">R</th><th scope="col">W</th></tr></thead><tbody>${(i.bowlers||[]).filter(p=>p.team_id===team.id).map(p=>`<tr><th scope="row">${escapeScore(p.name)}</th><td>${scoreOvers(p.balls)}</td><td>${scoreNumber(p.maidens)}</td><td>${scoreNumber(p.runs)}</td><td><strong>${scoreNumber(p.wickets)}</strong></td></tr>`).join('')||`<tr><td colspan="5">${i.bowling_available?'No bowling figures recorded.':'Bowling figures unavailable.'}</td></tr>`}</tbody></table></div>`;
+ return `<div class="fr-scores" aria-label="Player scorecard">${card.result?`<p class="fr-result">${escapeScore(card.result)}</p>`:''}${teams.map((team,index)=>{
+  const ours=innings.filter(i=>i.team_id===team.id),theirs=innings.filter(i=>i.team_id!==team.id);
+  const totals=ours.map(i=>`${scoreNumber(i.wickets)}/${scoreNumber(i.runs)}`).join(' & ');
+  const open=openTeams?openTeams.has(team.id):index===0;
+  return `<details class="fr-team-scores" data-score-team="${escapeScore(team.id)}" ${open?'open':''}><summary><strong>${escapeScore(team.name)}</strong><span>${totals}</span></summary>${ours.map(batting).join('')||'<p>Batting figures unavailable.</p>'}${theirs.map(i=>bowling(i,team)).join('')}</details>`;
+ }).join('')}</div>`;
+}
+
 export function createFixtureResults(h){
  const esc=h.escape,labels={ready:'Scores loaded',playing:'Still playing',team:'Choose our team',incomplete:'Scores incomplete',bowling:'Bowling missing'};
  let current=null;
@@ -10,10 +28,11 @@ export function createFixtureResults(h){
  async function read(s){const result=await rpc(s,'fixture');if(!Array.isArray(result?.fixtures)||!Array.isArray(result?.cards))throw Error('Scorecard could not be checked.');if(live(s)){s.context=result;const c=selected(s);if(!s.dirty)s.url=c?.scorecard.url||'';}return result;}
  function draw(s){
   if(!live(s))return;const c=selected(s),f=s.context?.fixtures[0],locked=s.busy?'disabled':'',candidates=(s.context?.cards||[]).filter(x=>!x.fixture_id||x.fixture_id===s.fixtureId);
+  const previous=s.host.querySelectorAll('[data-score-team]'),openTeams=previous.length?new Set([...previous].filter(el=>el.open).map(el=>el.dataset.scoreTeam)):null;
   s.host.innerHTML=`<section class="se-card fixture-results" aria-label="Fixture scorecard"><style>.fixture-results{margin:12px 0}.fixture-results h3{margin:0 0 8px}.fixture-results p{margin:8px 0}.fixture-results .fr-input{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.fixture-results .fr-input input{flex:1;min-width:min(240px,100%)}.fixture-results [role=status]:empty{display:none}.fixture-results summary{cursor:pointer;padding:8px 0}.fixture-results label{margin:8px 0}</style><h3>PlayCricket scorecard</h3>${s.context?`
    ${c?`<p><strong>${esc(labels[cardStatus(c)])}</strong> · <a href="${esc(c.scorecard.url)}" target="_blank" rel="noopener">View on PlayCricket</a></p>`:f.no_play?`<p>Marked ${esc(f.no_play.replaceAll('_',' '))}.</p>`:''}
    <div class="fr-input"><input type="url" data-fixture-score-url aria-label="PlayCricket match link" placeholder="Paste PlayCricket match link" value="${esc(s.url)}" ${locked}><button type="button" class="btn secondary" data-fixture-score-load ${locked}>${s.busy?'Saving…':c?'Refresh scores':'Load scores'}</button></div>
-   <p class="se-muted">Shared with Match Review and social awards.</p>
+   ${c?renderFixtureScorecard(c,openTeams):''}
    ${!c&&candidates.length?`<label>Already imported<select data-fixture-score-existing ${locked}><option value="">Choose this match’s scorecard</option>${candidates.map(x=>`<option value="${esc(x.snapshot_id)}">${esc(x.scorecard.grade)} · ${esc(x.scorecard.teams.map(t=>t.name).join(' v '))}</option>`).join('')}</select></label>`:''}
    ${c&&!c.our_team?`<label>Our team<select data-fixture-score-team ${locked}><option value="">Choose our team</option>${c.scorecard.teams.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>`:''}
    ${!c?`<details><summary>${f.no_play?'Change no-play status':'Match did not take place?'}</summary><label>No play reason<select data-fixture-score-no-play ${locked}><option value="">Scores expected</option>${[['washed_out','Washed out'],['bye','Bye'],['cancelled','Cancelled']].map(([v,l])=>`<option value="${v}" ${f.no_play===v?'selected':''}>${l}</option>`).join('')}</select></label></details>`:''}

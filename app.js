@@ -1,23 +1,23 @@
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.207';
-import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.207';
-// Club Batting 0.8.62.207 — Selection batch: clear team, move feedback and quieter draft recovery
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.208';
+import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
+// Club Batting 0.8.62.208 — Shared scorecards, linked season stats and compact phone layout
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.207';
-import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.207';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.207';
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.207';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.207';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.207';
-import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.207';
-import {createFixtureResults} from './fixture-results.js?v=0.8.62.207';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.207';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.207';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.207';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.208';
+import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.208';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.208';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.208';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.208';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.208';
+import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.208';
+import {createFixtureResults} from './fixture-results.js?v=0.8.62.208';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.208';
+import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
+import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.208';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.207';
+const APP_UI_VERSION='0.8.62.208';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -5601,8 +5601,8 @@ async function renderClubDashboard(){
     <h1 class="club-progress-title">Your club’s progress</h1>
     ${clubBrandingSetupPrompt()}
     ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">A new philosophy round is in progress. The published How We Bat, Player Plans and sign-up remain available.</div>':''}
-    <section class="club-preparation" aria-labelledby="clubPreparationTitle">
-      <div class="club-preparation-heading"><div><h2 id="clubPreparationTitle">Before players build their plans</h2><p>Complete these steps to open Player Plans. People can sign up while you prepare.</p></div><span class="club-preparation-count">${progress.published?'Ready for Player Plans':`${progress.steps.filter(item=>item.complete).length} of 5 preparation steps complete`}</span></div>
+    ${progress.published?`<details class="club-preparation completed-club-setup" ${clubHomeExpandedStage?'open':''}><summary id="clubPreparationTitle">Club setup complete</summary>`:'<section class="club-preparation" aria-labelledby="clubPreparationTitle">'}
+      ${progress.published?'':`<div class="club-preparation-heading"><div><h2 id="clubPreparationTitle">Before players build their plans</h2><p>Complete these steps to open Player Plans.</p></div><span class="club-preparation-count">${progress.steps.filter(item=>item.complete).length} of 5 preparation steps complete</span></div>`}
       ${clubSetupProgressHtml(progress)}
       <section class="club-stage-panel" id="clubHomeStagePanel" hidden>
         <div class="club-stage-heading" id="clubHomeStageHeading"></div>
@@ -5666,7 +5666,7 @@ async function renderClubDashboard(){
     </section>`:''}
 
       </section>
-    </section>
+    ${progress.published?'</details>':'</section>'}
     <section class="card club-home-next" aria-labelledby="clubHomeNextTitle">
       <div class="section-label">${progress.systemLive?'Next · Put the plans into practice':'Available now · People & roles'}</div>
       <h2 id="clubHomeNextTitle">${progress.systemLive?'Players and due dates':'Invite your club'}</h2>
@@ -5722,7 +5722,7 @@ async function renderClubDashboard(){
     const liveProgress=clubSetupProgress();
     if(!isAdmin()||!(liveProgress.structureReady||liveProgress.systemLive))return;
     const card=page.querySelector('.club-branding-card');
-    if(card){card.hidden=false;requestAnimationFrame(()=>card.scrollIntoView({behavior:'smooth',block:'start'}));}
+    if(card){card.hidden=false;const setup=card.closest('.completed-club-setup');if(setup)setup.open=true;requestAnimationFrame(()=>card.scrollIntoView({behavior:'smooth',block:'start'}));}
   }));
 }
 
@@ -19075,6 +19075,7 @@ function mountScorecardTeam(host,options){
  scorecardTeamController.mount(host,options);
 }
 async function matchReviewTeamChanged(){
+ if(typeof seasonStatsPanel!=='undefined')seasonStatsPanel.invalidate?.();
  const s=ensureTeamReviewState(),scope=s.scope,i=matchReviewImportState(),saved={...i,mapping:{...i.mapping},selected:{...i.selected}},mapping={...i.mapping},selected={...i.selected};
  await renderTeamReview();if(ensureTeamReviewState().scope!==scope||currentTab!=='team_review')return;
  s.importer=saved;matchReviewMapScores();const allowed=new Set(matchReviewMappingPlayers().map(p=>p.player_id));
@@ -19100,6 +19101,7 @@ async function matchReviewShareSource(){
  const s=ensureTeamReviewState(),i=matchReviewImportState();if(!i.preview?.snapshot_id||!i.teamId)return;
  const result=await supabase.rpc('club_match_results_api',{p_club_id:club.id,p_action:s.fixtureId?'link':'identify',p_data:{snapshot_id:i.preview.snapshot_id,team_id:i.teamId,fixture_id:s.fixtureId||null}});
  if(result.error)throw Error(result.error.message);s.sharedResultsChecked=matchReviewSharedKey(s);
+ if(typeof seasonStatsPanel!=='undefined')seasonStatsPanel.invalidate?.();
  if(socialState?.scope===selectionsScopeKey()){if(socialState.results){socialState.results.context=null;socialState.results.attempted=false;}for(const key of ['week','playerWeek','awards'])if(socialState[key])socialState[key].sharedStale=true;}
 }
 function matchReviewExtractUrl(values){
@@ -20593,6 +20595,7 @@ function seCanRecordFixtureResults(f){
  return seReviewCaptains({...f,details:d},s.data).some(p=>p.user_id===session?.user?.id);
 }
 function seFixtureScoresChanged(){
+ if(typeof seasonStatsPanel!=='undefined')seasonStatsPanel.invalidate?.();
  if(teamReviewState){teamReviewState.sharedResultsChecked=null;teamReviewState.needsReload=true;}
  if(socialState){if(socialState.results){socialState.results.context=null;socialState.results.attempted=false;socialState.results.ack=null;}for(const key of ['week','playerWeek','awards'])if(socialState[key])socialState[key].sharedStale=true;}
 }
@@ -21907,9 +21910,7 @@ function helpVideosForContext(){
  const available=HELP_VIDEOS.filter(v=>helpVideoRelevant(v));
  if(currentTab==='guide')return guideSelectedCapabilityKey==='whole_process'?available:available.filter(v=>v.topics.includes(guideSelectedCapabilityKey));
  if(currentTab==='phone_app')return HELP_VIDEOS.filter(v=>v.id.startsWith('phone-')&&(!phoneIsIOS()&&!phoneIsAndroid()||v.id===`phone-${phoneIsIOS()?'iphone':'android'}`));
- if(currentTab==='teams')return available.filter(v=>v.id===(selectionState?.view==='availability'?'availability':selectionState?.data?.selector?'select-publish':'availability'));
- if(currentTab==='messages'&&isPlayerUser())return [];
- return available.filter(v=>v.tabs.includes(currentTab));
+ return [];
 }
 function helpVideoStyles(){return `<style id="helpVideoStyles">
  .phone-video-preview{display:flex;align-items:center;gap:14px;box-sizing:border-box;width:100%;margin:8px 0 16px;padding:12px;border:1px solid #ccd5e8;border-radius:12px;background:#f5f7fc;color:#17245f;text-align:left;font:inherit;cursor:pointer}.phone-video-preview:hover{background:#eef2fb;border-color:#8598c7}.phone-video-preview:focus-visible{outline:3px solid #6679dd;outline-offset:3px}.phone-video-thumb{position:relative;display:block;flex:0 0 88px}.phone-video-thumb img{display:block;width:88px;height:156px;object-fit:cover;border-radius:7px;background:#101d3b}.phone-video-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#fffffff2;color:#17245f;font-size:20px;box-shadow:0 2px 8px #101d3b55}.phone-video-copy{display:flex;flex-direction:column;gap:7px;min-width:0}.phone-video-copy strong{font-size:16px}.phone-video-copy>span{font-size:14px;line-height:1.4}.phone-video-copy small{font-size:12px;color:#5e6678}
