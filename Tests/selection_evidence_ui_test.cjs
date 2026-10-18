@@ -48,6 +48,21 @@ test('the early batting flag shows two innings and the limited evidence in the s
  assert.match(h.host.querySelector('dialog').textContent,/46.5 batting average/);assert.match(h.host.querySelector('dialog').textContent,/93 runs · 2 inns · 0 not out/);
  assert.match(h.host.querySelector('dialog').textContent,/Positive batting flags can start after 2 innings/);
 });
+test('the mild slow-start flag has explicit accessible text and explains the two-innings threshold',async()=>{
+ const h=await setup(),p=h.fixture.roster[0];
+ const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:8,innings:2,not_outs:0,average:4,
+  batting_complete:true,bowling_complete:true,bowling_balls:0,bowling_innings:0,wickets:0,conceded:0};
+ const item=h.engine.buildSelectionEvidence({rows:[stats]},[],[p]).forRow(stats);item.key='slow-batter';
+ h.host.innerHTML=h.ui.renderEvidenceBadges(item);
+ assert.match(h.host.textContent,/Form guide · early/);assert.match(h.host.querySelector('.se-evidence-chip.slow').textContent,/Batting: · Slow start/);
+ assert.match(h.host.querySelector('button').getAttribute('aria-label'),/Slow start \(early sample\)/);
+ assert.equal(h.host.querySelector('.se-evidence-chip.low'),null);assert.equal(h.host.querySelector('.se-evidence-link'),null);
+ h.ui.bindEvidenceDetails(h.host,{players:new Map([[item.key,item]])});h.host.querySelector('button').click();
+ const dialog=h.host.querySelector('dialog');
+ assert.match(dialog.textContent,/Average below half the grade reference after 2 innings and 2 dismissals; an early signal only/);
+ assert.match(dialog.textContent,/Early sample · 2 innings · 2 dismissals/);assert.match(dialog.textContent,/4 batting average/);
+ assert.match(dialog.textContent,/Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals/);
+});
 test('repeated board redraws reuse saved figures; refresh corrections clear old markers and modal details',async()=>{
  const h=await setup();h.controller.mount(h.host,h.options);await tick();h.controller.mount(h.host,h.options);await tick();assert.equal(h.calls(),1);
  h.host.querySelector('[data-evidence-open]').click();h.reply(async()=>({data:{...h.fixture.context,cards:[]}}));h.controller.invalidate();await tick();
