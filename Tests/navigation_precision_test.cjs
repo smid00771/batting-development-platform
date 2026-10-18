@@ -205,9 +205,9 @@ test('section buttons clear nested views only after navigation is allowed',async
  await h.c.openClubSectionHome('messages');assert.equal(messages.mode,'inbox');assert.equal(messages.openId,null);assert.equal(messages.draft.body,'Retained unsent draft');
  await h.c.openClubSectionHome('innings');assert.equal(innings.openId,null);assert.equal(innings.editId,null);
  await h.c.openClubSectionHome('players');assert.equal(h.c.playersWorkspaceSelectedId,null);assert.equal(h.c.playersWorkspaceSection,'summary');assert.equal(h.c.playersWorkspaceDevelopmentMode,null);assert.equal(h.c.staffObservationEditId,null);
- h.s.view='board';h.s.navigationDrawer={kind:'fixture',id:'fixture-1'};h.s.restoreDrawer=h.s.navigationDrawer;h.permit(false);
+ h.s.view='board';h.s.statsOpen=true;h.s.followupOpen=true;h.s.boardChatOpen='fixture-1';h.s.boardCommentOpen='fixture-1';h.s.navigationDrawer={kind:'fixture',id:'fixture-1'};h.s.restoreDrawer=h.s.navigationDrawer;h.permit(false);
  await h.c.openClubSectionHome('teams');assert.equal(h.s.view,'board');assert.ok(h.s.navigationDrawer);
- h.permit(true);await h.c.openClubSectionHome('teams');assert.equal(h.s.view,'published');assert.equal(h.s.navigationDrawer,null);assert.equal(h.s.restoreDrawer,null);
+ h.permit(true);await h.c.openClubSectionHome('teams');assert.equal(h.s.view,'published');assert.equal(h.s.navigationDrawer,null);assert.equal(h.s.restoreDrawer,null);assert.equal(h.s.statsOpen,false);assert.equal(h.s.followupOpen,false);assert.equal(h.s.boardChatOpen,null);assert.equal(h.s.boardCommentOpen,null);
 });
 
 test('nested Players, Innings and Messages screens have distinct navigation identities',()=>{
@@ -225,4 +225,43 @@ test('production and demo share review editing and navigation behaviour',()=>{
  for(const name of ['openClubSectionHome','clubNavigationRoute','teamReviewNavigationIdentity','appNavigationKey','restoreClubNavigationState',
   'serializeTeamReviewState','restoreTeamReviewState','teamReviewUpdate','teamReviewRowHtml','renderTeamReviewContent','renderTeamReview','renderTeamReviewEntry',
   'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name),fn(name,demo),name);
+});
+
+
+test('browser Back restores stats filters and comparison without retaining private score data',async()=>{
+ const h=harness();h.s.view='board';h.s.statsOpen=true;h.s.statsFilters={mode:'batting',format:'long_form',grade:'',compare:true,firstTeam:'first',secondTeam:'second',secret:'Never stored'};h.visit();
+ h.s.statsOpen=false;h.s.statsFilters={mode:'bowling'};h.visit();await h.history.back();
+ assert.equal(h.s.statsOpen,true);assert.equal(h.s.statsFilters.compare,true);assert.equal(h.s.statsFilters.firstTeam,'first');assert.equal(h.s.statsFilters.secondTeam,'second');assert.equal(h.s.statsFilters.secret,undefined);
+ assert.doesNotMatch(JSON.stringify(h.entries),/Never stored/);
+});
+
+test('Back restores the expanded board panel while section entry starts at home',async()=>{
+ const h=harness();h.s.view='board';h.visit();h.s.followupOpen=true;h.visit();h.s.boardChatOpen='fixture';h.visit();h.s.boardCommentOpen='fixture';h.visit();
+ h.s.view='availability';h.s.followupOpen=false;h.s.boardChatOpen=null;h.s.boardCommentOpen=null;h.visit();
+ await h.history.back();assert.equal(h.s.view,'board');assert.equal(h.s.followupOpen,true);assert.equal(h.s.boardChatOpen,'fixture');assert.equal(h.s.boardCommentOpen,'fixture');
+ await h.history.back();assert.equal(h.s.boardCommentOpen,null);assert.equal(h.s.boardChatOpen,'fixture');
+ await h.history.back();assert.equal(h.s.boardChatOpen,null);assert.equal(h.s.followupOpen,true);
+ await h.history.back();assert.equal(h.s.followupOpen,false);
+});
+test('Club Home, Training and Player Plan section buttons clear the nested screen',async()=>{
+ const h=reviewHarness();await h.open();Object.assign(h.c,{clubHomeStageClubId:'c',clubHomeExpandedStage:'workshop',clubHomeRestoredStage:false,howWeTrainReflectionEditId:'match',playerPlanEditScope:'edit',builderSection:'limited_overs'});
+ await h.c.openClubSectionHome('dashboard');assert.equal(h.c.clubHomeExpandedStage,null);assert.equal(h.c.clubHomeRestoredStage,true);
+ await h.c.openClubSectionHome('howwetrain');assert.equal(h.c.howWeTrainReflectionEditId,null);
+ await h.c.openClubSectionHome('myplan');assert.equal(h.c.builderSection,'core');assert.equal(h.c.playerPlanEditScope,'');
+});
+
+test('captain section buttons added after sign-in use the same home navigation',async()=>{
+ const dom=new JSDOM('<div class="shell"><nav class="nav"></nav></div>'),opened=[];
+ const c=vm.createContext({document:dom.window.document,club:{id:'club'},session:{user:{id:'captain'}},selectionsStandalone:()=>false,canUsePlayersWorkspace:()=>true,canUseTeamReview:()=>true,openClubSectionHome:tab=>opened.push(tab)});
+ const start=source.indexOf('function syncMatchCaptainNavigation()'),end=source.indexOf('\ndocument.addEventListener',start);
+ vm.runInContext(source.slice(start,end),c);c.syncMatchCaptainNavigation();
+ for(const tab of ['players','team_review']){const b=dom.window.document.querySelector('[data-tab="'+tab+'"]');b.click();b.click();}
+ assert.deepEqual(opened,['players','players','team_review','team_review']);
+});
+
+test('plain Player Home tiles open the section home; specific match actions retain their destination',async()=>{
+ const opened=[],h=harness();Object.assign(h.c,{openClubSectionHome:tab=>opened.push(tab),myPlayer:{id:'p'},playerPlanEditScope:'',builderSection:'core'});
+ vm.runInContext(fn('openPlayerHomeAction'),h.c);await h.c.openPlayerHomeAction({tab:'howwetrain'});await h.c.openPlayerHomeAction({tab:'myplan'});
+ assert.deepEqual(opened,['howwetrain','myplan']);
+ await h.c.openPlayerHomeAction({tab:'myplan',section:'long_form',edit:true});assert.equal(h.c.builderSection,'long_form');assert.equal(h.c.playerPlanEditScope,'c:p');assert.equal(h.c.currentTab,'myplan');
 });

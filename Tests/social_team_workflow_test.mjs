@@ -50,14 +50,26 @@ document.querySelector('[name="user_id"]').value='cover';document.querySelector(
 // Exercise the production section shell: setup and responsibility have no creation selector.
 const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 function part(name){const start=source.search(new RegExp('(?:async )?function '+name+'\\(')),next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
-const selections={view:'socials'},landing=vm.createContext({confirmLeaveSelections:()=>leave,ensureSelections:()=>selections,socialEnsure:()=>s,socialTeamWorkflow:workflow,drawSelections:()=>{}});
+const selections={view:'socials'},landing=vm.createContext({selectionRoomController:null,recordSelectionNavigation(){},confirmLeaveSelections:()=>leave,ensureSelections:()=>selections,socialEnsure:()=>s,socialTeamWorkflow:workflow,drawSelections:()=>{}});
 vm.runInContext(['seChangeView','socialLanding'].map(part).join('\n'),landing);
 for(const previous of ['managers','accounts','century','guide','publish_review']){s.view=previous;s.creationView='century';workflow.state(s).step='review';landing.seChangeView('socials');assert.equal(s.view,'graphics');assert.equal(s.creationView,'graphics');assert.equal(workflow.state(s).step,'artwork');assert.equal(s.data.assets.length,0);}
 leave=false;s.view='managers';landing.seChangeView('socials');assert.equal(s.view,'managers','Entry respects the existing unsaved-change guard');leave=true;
-const noop=()=>{},shell=vm.createContext({recordSelectionNavigation(){},document,Set,Date,console,socialHere:()=>true,seEsc:esc,socialStyles:()=>'',socialFixtureCalendar:calendar,socialCalendarCompleted:(_,f)=>f.completed,socialDate:String,socialCanLeave:()=>true,socialOpen:noop,socialSave:noop,seDownload:noop,socialGuide:noop,socialGraphics:noop,socialManagers:noop,socialPlayerWeek:{render:noop},socialWeek:{render:noop},socialPublishing:{accounts:noop,review:noop,attention:noop,handover:noop},socialTeamWorkflow:workflow,socialAwards:createSocialAwards({escape:esc,canLeave:()=>leave,draw:noop})});
+const noop=()=>{},shell=vm.createContext({recordSelectionNavigation(){},document,Set,Date,console,setTimeout,socialHere:()=>true,seEsc:esc,socialStyles:()=>'',socialFixtureCalendar:calendar,socialCalendarCompleted:(_,f)=>f.completed,socialDate:String,socialCanLeave:()=>leave,socialOpen:noop,socialSave:noop,seDownload:noop,socialGuide:noop,socialGraphics:noop,socialManagers:noop,socialPlayerWeek:{render:noop},socialWeek:{render:noop},socialPublishing:{accounts:noop,review:noop,attention:noop,handover:noop},socialTeamWorkflow:workflow,socialAwards:createSocialAwards({escape:esc,canLeave:()=>leave,draw:noop})});
 vm.runInContext(['socialTeamReady','socialDraw'].map(part).join('\n'),shell);
 for(const view of ['managers','accounts','guide']){s.view=view;shell.socialDraw(s);assert.equal(document.getElementById('socialCreateMenu'),null);assert.doesNotMatch(document.querySelector('.social-tabs').textContent,/Guided setup|Design sandbox/);if(view==='managers')assert.match(document.body.textContent,/published teams ready for posts/);else assert.doesNotMatch(document.body.textContent,/published teams ready for posts/);}
 s.view='graphics';shell.socialDraw(s);assert.equal(document.getElementById('socialCreateMenu').value,'graphics');assert.equal(document.querySelectorAll('#socialCreateMenu').length,1);
+// Re-selecting Create posts opens its first step and retains saved artwork/post drafts.
+const savedSocialData=JSON.stringify({data:s.data,design:s.design,posts:[...posts]});
+for(const previous of ['guide','publish_review','graphics']){
+ s.view=previous;s.creationView='century';workflow.state(s).step='review';shell.socialDraw(s);
+ document.querySelector('[data-social-view="graphics"]').click();await tick();
+ assert.equal(s.view,'graphics');assert.equal(s.creationView,'graphics');assert.equal(workflow.state(s).step,'artwork');
+ assert.equal(document.querySelector('[data-social-view="graphics"]').getAttribute('aria-pressed'),'true');
+ assert.equal(JSON.stringify({data:s.data,design:s.design,posts:[...posts]}),savedSocialData);
+}
+leave=false;s.view='guide';workflow.state(s).step='photos';shell.socialDraw(s);
+document.querySelector('[data-social-view="graphics"]').click();await tick();
+assert.equal(s.view,'guide');assert.equal(workflow.state(s).step,'photos','Create posts retains the unsaved-change guard');leave=true;
 // The grade's direct upload attaches the saved photo to precisely that published card.
 document.getElementById('socialContent').innerHTML='<input type="file" data-social-team-photo="two:1">';
 const photoWrites=[],uploadState={...s,busy:false,pending:null},uploadCard={f:{...fixture('two',future,true),features:[{day:2,revision:4}]},key:'two:1',day:1,split:true};

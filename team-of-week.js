@@ -66,7 +66,7 @@ export function createTeamOfWeek(h){
  const clubId=s=>s.scope.split(':').slice(1).join(':');
  const dateAdd=(value,days)=>{const d=new Date(value+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);};
  function state(s){
-  if(!s.week){const today=new Date().toLocaleDateString('en-CA',{timeZone:s.data.timezone||'Australia/Sydney'}),day=new Date(today+'T12:00:00Z').getUTCDay();
+  if(!s.week){const today=new Date().toLocaleDateString('en-CA',{timeZone:s.data?.timezone||'Australia/Sydney'}),day=new Date(today+'T12:00:00Z').getUTCDay();
    s.week={end:dateAdd(today,day>=5?7-day:-day),title:'',context:null,selectedSources:new Set(),rows:[],message:'',busy:false,layout:teamWeekLayout(),blurb:'',background:null,pending:null,render:0};
   }return s.week;
  }

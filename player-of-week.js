@@ -9,7 +9,7 @@ export function createPlayerOfWeek(h){
  const club=s=>s.scope.split(':').slice(1).join(':');
  const shortDate=date=>date.split('-').reverse().join('/');
  const stageLabel={unspecified:'Context not set',emerging:'Emerging / junior',established:'Established player',experienced:'Experienced player'};
- function state(s){if(!s.playerWeek){const today=new Date().toLocaleDateString('en-CA',{timeZone:s.data.timezone||'Australia/Sydney'}),day=new Date(today+'T12:00:00Z').getUTCDay();s.playerWeek={end:dateAdd(today,day>=5?7-day:-day),context:null,layout:playerWeekLayout(),title:'',blurb:'',winner:null,photo:null,busy:false,pending:null,message:'',render:0,open:{},preferNew:false};}return s.playerWeek;}
+ function state(s){if(!s.playerWeek){const today=new Date().toLocaleDateString('en-CA',{timeZone:s.data?.timezone||'Australia/Sydney'}),day=new Date(today+'T12:00:00Z').getUTCDay();s.playerWeek={end:dateAdd(today,day>=5?7-day:-day),context:null,layout:playerWeekLayout(),title:'',blurb:'',winner:null,photo:null,busy:false,pending:null,message:'',render:0,open:{},preferNew:false};}return s.playerWeek;}
  const current=(s,w)=>h.here(s)&&s.view==='player_week'&&s.playerWeek===w;
  async function rpc(s,action,data={}){const r=await h.supabase.rpc('player_of_week_api',{p_club_id:club(s),p_action:action,p_data:data});if(r.error)throw Error(r.error.message);return r.data;}
  function notice(s,text){const w=state(s);w.message=text;if(current(s,w))for(const id of ['pwStatus','pwSaveStatus'])if(el(id))el(id).textContent=text;}

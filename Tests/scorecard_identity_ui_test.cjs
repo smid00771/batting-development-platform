@@ -13,7 +13,7 @@ function harness({reply,refreshError=false,source=app}={}){
  const s={scope:'club:user',fixtureId:'fixture',sessionId:'same-review',reviewCanEdit:true,innings_number:1,match_date:'2026-10-10',drafts:{other:{batting_to_plan:'mostly'}},removed:[],importer:{teamId:'ours',url:'https://play.cricket.com.au/match/example',mapping:{},selected:{},reason:'',preview:{snapshot_id:'snapshot',player_links:[],scorecard:{teams:[{id:'ours',name:'Our club'},{id:'theirs',name:'Visitors'}],dates:['2026-10-10'],innings:[{team_id:'ours',number:1,complete:true,batters}]}}}};
  let confirmed=false,c;
  const render=()=>{host.innerHTML=c.renderMatchReviewImporter();c.bindMatchReviewImporter();};
- c=vm.createContext({URL,crypto:webcrypto,document:dom.window.document,club:{id:'club'},currentTab:'team_review',teamReviewState:s,teamReviewCache:{players},ensureTeamReviewState:()=>s,teamReviewRows:()=>players,esc,formatDateShort:x=>x,todayIso:()=> '2026-10-17',renderTeamReviewContent:render,
+ c=vm.createContext({URL,crypto:webcrypto,document:dom.window.document,club:{id:'club'},currentTab:'team_review',teamReviewState:s,teamReviewCache:{players},ensureTeamReviewState:()=>s,teamReviewRows:()=>players,teamReviewControlsLocked:()=>false,esc,formatDateShort:x=>x,todayIso:()=> '2026-10-17',renderTeamReviewContent:render,
   renderTeamReview:async()=>{if(refreshError)throw Error('Refresh disconnected');if(confirmed)players[0].display_name=batters[0].name;},
   supabase:{rpc:async(name,args)=>{calls.push({name,args:structuredClone(args)});const r=reply?await reply(name,args):{data:{confirmed:true,source_player_id:'source',player_id:'original',roster_id:'roster',name:batters[0].name}};confirmed=!!r.data?.confirmed;return r;}}});
  vm.runInContext(section(app,'function teamReviewSavePending(){','function confirmLeaveTeamReview(){')+importer(source),c);
@@ -25,6 +25,7 @@ for(const [label,source] of [['app',app],['demo',demo]])test(label+': one unmatc
  assert.equal(h.calls.length,0);assert.equal(h.s.importer.mapping.source,'');h.host.querySelector('[data-import-same]').click();assert.ok(h.host.querySelector('[data-import-same]').disabled);await settle();
  assert.equal(h.calls.length,1);assert.equal(h.calls[0].name,'confirm_scorecard_player');assert.equal(h.calls[0].args.p_values.player_id,'original');assert.equal(h.calls[0].args.p_values.expected_name,'Sulaiman Muhammad');
  assert.equal(h.players[0].display_name,'Sulaiman Moin Muhammad');assert.equal(h.s.importer.mapping.source,'original');assert.equal(h.s.importer.selected.source,true);assert.equal(h.s.sessionId,'same-review');assert.equal(h.s.drafts,draft);assert.equal(h.host.querySelector('.match-review-mapping'),null);
+ assert.match(h.c.matchReviewScoreCell(h.players[0]),/<strong>42<\/strong>/,'Confirmed name immediately displays the score against the original player');
 });
 test('No and Skip do not rename anyone or write a match',async()=>{
  const h=harness();h.host.querySelector('[data-import-different]').click();assert.ok(h.host.querySelector('[data-import-player]'));h.host.querySelector('[data-import-skip]').click();await settle();assert.equal(h.calls.length,0);assert.equal(h.host.querySelector('.match-review-mapping'),null);assert.equal(h.players[0].display_name,'Sulaiman Muhammad');

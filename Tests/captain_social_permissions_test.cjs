@@ -41,7 +41,7 @@ for(const file of ['app.js','demo.html']){
   const h=managers({admin:false,can_manage_managers:false});assert.equal(h.doc.querySelector('[data-social-manager]'),null);assert.match(h.doc.body.textContent,/covering socials temporarily/);
  });
  test(file+': Social accounts is the second section',()=>{
-  const match=source(file).match(/\[\['managers','Who handles socials'\],\['accounts','Social accounts'\],(?:\['awards','Socials Awards'\],)?\['graphics','Create posts'\]/);assert.ok(match);
+  const match=source(file).match(/\[\['managers','Who handles socials'\],\['accounts','Social accounts'\],\['awards','Socials Awards'\],\['graphics','Create posts'\]/);assert.ok(match);
  });
 }
 test('Social accounts handles pending activation, a usable connection, manager disconnect and failed checks',async()=>{

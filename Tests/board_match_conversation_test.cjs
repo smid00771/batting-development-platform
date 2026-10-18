@@ -7,7 +7,7 @@ function harness(file){
  const s={key:'user:club',view:'board',date:'2026-10-17',undo:[],data:{captain:true,selector:false,can_view_board:true,roster:[{id:'player',name:'Selected player'}],fixtures:[fixture],access:{timezone:'Australia/Sydney',head_selector_id:'head'}}};
  let clock='2026-10-17T01:00:00Z';class Clock extends Date{constructor(...args){super(...(args.length?args:[clock]));}}
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const c=vm.createContext({document,Date:Clock,Intl,crypto:require('node:crypto').webcrypto,currentTab:'teams',selectionState:s,ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
+ const c=vm.createContext({document,Date:Clock,Intl,queueMicrotask,seMountStats:()=>{},crypto:require('node:crypto').webcrypto,currentTab:'teams',selectionState:s,ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
   seIsCaptain:d=>d.captain,seCanSetup:d=>d.admin||d.selector,session:{user:{id:'captain'}},club:{name:'Test Club'},seEsc:esc,seName:()=> 'Selected player',seDate:String,seOpt:()=>'',seBoardRoleMarks:()=>'',seDraftChanged:()=>false,seScorecardNote:()=>'',seTeamNumbers:()=> '1/11',
   seBoardAccess:d=>d.can_view_board,seBoardFixtures:()=>s.data.fixtures,seFixtureLocked:()=>true,seFollowupPanel:()=>'',seBindConversations(){},seBindBoardComments(){},seFixtureEditor(){},recordSelectionNavigation(){},
   seButtonWorking:()=>()=>{},seGuardFixtureEdit:()=>true,sePersist(){},seNotice:text=>s.notice=text,seLock(){},seReload:async()=>true,
