@@ -1,3 +1,5 @@
+import {NDCA_BENCHMARKS} from './ndca-grade-benchmarks.js?v=0.8.62.215';
+export {NDCA_BENCHMARKS};
 /* Rough selection guides, not forecasts or automatic team changes.
  * Historical parameters: NDCA 2021/22–2025/26, same player/club/season
  * in adjacent grades. Only aggregate parameters belong in this repository.
@@ -30,7 +32,6 @@ const bowlingRole = person => bowler(person) && ['frontline','part_time'].includ
 export const battingRoleLabel = person => ({top:'Top order',middle:'Middle order',lower:'Lower order'})[person?.batting] || 'Batting role not set';
 export const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : 'Spinner') + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
 const integer = value => Number.isInteger(value) && value >= 0;
-const median = values => {const sorted=[...values].sort((a,b)=>a-b), n=sorted.length; return n ? (sorted[Math.floor((n-1)/2)]+sorted[Math.floor(n/2)])/2 : null;};
 export function battingEvidence(row) {
   if (!row || row.batting_complete === false) return {ready:false,reason:row ? 'Batting figures incomplete' : 'No linked season figures'};
   if (![row.runs,row.innings,row.not_outs].every(integer) || row.not_outs > row.innings) return {ready:false,reason:'Check batting figures'};
@@ -52,51 +53,42 @@ export function bowlingEvidence(row, person, format) {
 }
 const matchingRow = (summary,team,id) => summary.rows.find(row => row.roster_id === id && row.competition === team.competition && row.grade === team.grade && row.format === team.format);
 const eligibleTeam = (team,season={}) => !team.cancelled && (!season.start || !team.days?.[0]?.date || team.days[0].date >= season.start && team.days[0].date <= season.end);
-function convert(row, team) {
-  if (row.competition !== team.competition || row.format !== team.format) return null;
-  if (row.grade === team.grade) return {distance:0,batting:1,wickets:1,economy:1};
-  const guide=gradeGuide(team,row); if (!guide) return null;
-  const higher = evidenceGrade(team.grade) < evidenceGrade(row.grade);
-  return {distance:1,batting:higher ? guide.batting : 1/guide.batting,wickets:higher ? guide.wickets : 1/guide.wickets,economy:higher ? guide.economy : 1/guide.economy};
+// Grade-wide historical totals set a stable reference, independent of this
+// club's results. The exports cannot separate roles or match formats.
+export function gradeBenchmark(team, discipline) {
+  if (!ndca(team?.competition) || !['t20','limited_overs','long_form'].includes(team?.format)) return null;
+  const grade=NDCA_BENCHMARKS.grades[evidenceGrade(team.grade)];
+  if (!grade) return null;
+  if (discipline==='bat') return {...grade.batting,average:grade.batting.runs/grade.batting.dismissals};
+  if (discipline==='ball') return {...grade.bowling,average:grade.bowling.conceded/grade.bowling.wickets,
+    wickets:grade.bowling.wickets*100/grade.bowling.balls,economy:grade.bowling.conceded*6/grade.bowling.balls};
+  return null;
 }
-// One record per person, preferring their record in the target grade. Roles
-// come from the playing list, never from reputation or a new selection slot.
-function peers(summary, roster, team, person, discipline) {
-  const wanted = discipline === 'bat' ? role(person) : bowlingRole(person);
-  if (!wanted) return [];
-  const selected = new Map();
-  for (const row of summary.rows) {
-    const other=roster.get(row.roster_id), factor=convert(row,team);
-    if (!other || other.active === false || !factor || (discipline === 'bat' ? role(other) : bowlingRole(other)) !== wanted) continue;
-    const evidence=discipline === 'bat' ? battingEvidence(row) : bowlingEvidence(row,other,team.format);
-    if (!evidence.ready) continue;
-    const old=selected.get(other.id);
-    if (!old || factor.distance < old.distance) selected.set(other.id, {distance:factor.distance,
-      average:evidence.average*factor.batting,wickets:evidence.wickets*factor.wickets,economy:evidence.economy*factor.economy});
-  }
-  return [...selected.values()];
-}
-function assess(summary,roster,team,person,row) {
+function assess(team,person,row) {
   const bat=battingEvidence(row), ball=bowlingEvidence(row,person,team.format);
   const evaluate = (discipline,evidence) => {
     if (discipline === 'ball' && !evidence.applicable) return null;
-    if (!evidence.ready) return {...evidence,state:'building'};
-    const pool=peers(summary,roster,team,person,discipline), knownRole=discipline === 'bat' ? role(person) : bowlingRole(person);
-    if (!knownRole || pool.length < 3) return {...evidence,state:'building',reason:!knownRole ? 'Set the playing-list role to compare similar jobs' : 'More comparable club records needed'};
-    const base=discipline === 'bat' ? {average:median(pool.map(p=>p.average))} : {wickets:median(pool.map(p=>p.wickets)),economy:median(pool.map(p=>p.economy))};
-    let state='steady';
+    const base=gradeBenchmark(team,discipline), knownRole=discipline === 'bat' ? role(person) : bowlingRole(person);
+    if (!evidence.ready) return {...evidence,state:'building',baseline:base};
+    if (!base || !knownRole) return {...evidence,state:'building',baseline:base,
+      reason:!base ? 'No historical benchmark for this competition, grade or format' : 'Set the playing-list role before showing a form flag'};
+    let state='steady',reason='Within the broad grade range';
     if (discipline === 'bat') {
-      if (evidence.average > base.average && evidence.average >= 1.25*base.average) state='strong';
-      else if (evidence.average < base.average && evidence.average <= .75*base.average) state='low';
+      if (evidence.average > base.average && evidence.average >= 1.25*base.average) {state='strong';reason='Average at least 25% above the grade reference';}
+      else if (evidence.average < base.average && evidence.average <= .75*base.average) {state='low';reason='Average at least 25% below the grade reference';}
     } else {
       const wicketsStrong=evidence.wickets > base.wickets && evidence.wickets >= 1.25*base.wickets;
       const economyStrong=evidence.economy < base.economy && evidence.economy <= .8*base.economy;
       const wicketsLow=evidence.wickets < base.wickets && evidence.wickets <= .75*base.wickets;
       const economyLow=evidence.economy > base.economy && evidence.economy >= 1.25*base.economy;
-      if (wicketsStrong && evidence.economy <= 1.1*base.economy || economyStrong && evidence.wickets >= .9*base.wickets) state='strong';
-      else if (wicketsLow && evidence.economy >= .9*base.economy || economyLow && evidence.wickets <= 1.1*base.wickets) state='low';
+      if (wicketsStrong && evidence.economy <= 1.1*base.economy || economyStrong && evidence.wickets >= .9*base.wickets) {
+        state='strong';reason=wicketsStrong && economyStrong?'Strong wicket-taking and economy':wicketsStrong?'Strong wicket-taking with economy in range':'Strong economy with wicket-taking in range';
+      } else if (wicketsLow && evidence.economy >= .9*base.economy || economyLow && evidence.wickets <= 1.1*base.wickets) {
+        state='low';reason=wicketsLow?'Fewer wickets per ball without enough economy advantage':'Higher economy without enough wicket-taking advantage';
+      } else if (wicketsStrong && evidence.economy > 1.1*base.economy) reason='Strong wicket-taking offsets higher economy';
+      else if (economyStrong && evidence.wickets < .9*base.wickets) reason='Economical bowling offsets fewer wickets';
     }
-    return {...evidence,state,baseline:base,peers:pool.length,reason:'Same role and format · current club records'};
+    return {...evidence,state,baseline:base,early:(discipline==='bat'?row.innings:row.bowling_innings)<5,reason};
   };
   return {bat:evaluate('bat',bat),ball:evaluate('ball',ball)};
 }
@@ -156,7 +148,7 @@ export function buildSelectionEvidence(summary,teams=[],people=[]) {
       const person=roster.get(id); if (!person || person.active === false || players.has(playerKey(team.id,id))) continue;
       const stats=matchingRow(summary,team,id);
       const selectedDays=(team.days||[]).filter((_,day)=>slot['d'+(day+1)]===id).map(day=>day.date);
-      players.set(playerKey(team.id,id),{key:playerKey(team.id,id),team,person,position:index+1,selectedDays,stats,links:[],...assess(summary,roster,team,person,stats)});
+      players.set(playerKey(team.id,id),{key:playerKey(team.id,id),team,person,position:index+1,selectedDays,stats,links:[],...assess(team,person,stats)});
     }
   }
   for (let i=0;i<validTeams.length;i++) for (let j=i+1;j<validTeams.length;j++) {
@@ -176,5 +168,5 @@ export function buildSelectionEvidence(summary,teams=[],people=[]) {
   }
   pairs.forEach(pair=>{pair.id=JSON.stringify([pair.higher.key,pair.lower.key]);pair.higher.links.push(pair);pair.lower.links.push(pair);});
   return {players,pairs,player:(teamId,playerId)=>players.get(playerKey(teamId,playerId)),
-    forRow(row) {const person=roster.get(row.roster_id);return person && person.active !== false ? {person,stats:row,team:row,links:[],...assess(summary,roster,row,person,row)} : null;}};
+    forRow(row) {const person=roster.get(row.roster_id);return person && person.active !== false ? {person,stats:row,team:row,links:[],...assess(row,person,row)} : null;}};
 }
