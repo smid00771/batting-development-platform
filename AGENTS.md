@@ -1,3 +1,5 @@
+Fixture scorecards show batting S/R and bowling Econ to two decimal places, calculated from recorded runs and balls. Missing figures and zero-ball denominators display a dash. Partial overs use balls, not decimal overs. User request recorded 18 October 2026.
+
 Fixture details & results belongs in a prominent button beside each team heading, above the players, including past games. Remove Copy team list / Copy published team from team cards; retain Copy previous team for drafting. User request recorded 18 October 2026.
 
 # Project writing rule
