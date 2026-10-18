@@ -1,7 +1,7 @@
 import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.210';
 import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.210';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.212 — Prominent fixture details and results
+// Club Batting 0.8.62.213 — Batting strike rates and bowling economy
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.208';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.208';
@@ -10,7 +10,7 @@ import {mountVideoCredits} from './video-credits.js?v=0.8.62.208';
 import {createSelectionRoom} from './selection-room.js?v=0.8.62.208';
 import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.208';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.208';
-import {createFixtureResults} from './fixture-results.js?v=0.8.62.208';
+import {createFixtureResults} from './fixture-results.js?v=0.8.62.213';
 import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.208';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.208';
@@ -18,7 +18,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.212';
+const APP_UI_VERSION='0.8.62.213';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

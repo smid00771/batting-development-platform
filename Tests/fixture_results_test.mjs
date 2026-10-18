@@ -18,6 +18,17 @@ test('fixture scorecard shows our batting and bowling, preserves unknowns and es
  const reopened=new JSDOM(renderFixtureScorecard(card,new Set(['them']))).window.document;assert.equal(reopened.querySelector('[data-score-team=ours]').open,false);assert.equal(reopened.querySelector('[data-score-team=them]').open,true);
  card.scorecard.innings.push({...card.scorecard.innings[0],number:2});assert.match(renderFixtureScorecard(card),/Batting · innings 2/);
 });
+test('scorecard rates use recorded balls, handle partial overs and leave missing or zero-ball figures unknown',()=>{
+ const batters=[{runs:31,balls:72},{runs:66,balls:80,not_out:true},{runs:0,balls:8},{runs:0,balls:0},{runs:6,balls:null},{runs:null,balls:4},{runs:99,balls:10,status:'did_not_bat'}].map((p,i)=>({name:'Batter '+i,...p}));
+ const bowlers=[{runs:30,balls:53},{runs:7,balls:23},{runs:0,balls:6},{runs:10,balls:0},{runs:10,balls:null},{runs:null,balls:6}].map((p,i)=>({name:'Bowler '+i,team_id:'ours',...p}));
+ const card={our_team:'ours',scorecard:{teams:[{id:'ours',name:'Our club'},{id:'them',name:'Visitors'}],innings:[{team_id:'ours',complete:true,batters,bowlers:[]},{team_id:'them',complete:true,batters:[],bowlers}]}};
+ const before=JSON.stringify(card),doc=new JSDOM(renderFixtureScorecard(card)).window.document,[batting,bowling]=doc.querySelectorAll('[data-score-team=ours] table');
+ assert.equal(batting.tHead.rows[0].cells[5].textContent,'S/R');assert.equal(bowling.tHead.rows[0].cells[5].textContent,'Econ');
+ assert.deepEqual([...batting.tBodies[0].rows].map(row=>row.cells[5].textContent),['43.06','82.50','0.00','—','—','—','—']);
+ assert.deepEqual([...bowling.tBodies[0].rows].map(row=>row.cells[5].textContent),['3.40','1.83','0.00','—','—','—']);
+ assert.equal(bowling.tBodies[0].rows[0].cells[1].textContent,'8.5');assert.equal(batting.tBodies[0].rows[1].cells[1].textContent,'66*');assert.equal(JSON.stringify(card),before);
+ const empty=doc.querySelectorAll('[data-score-team=them] tbody td[colspan]');assert.equal(empty.length,2);assert.ok([...empty].every(cell=>cell.colSpan===6));
+});
 function harness(){
  const dom=new JSDOM('<div id="fixtureResults"></div>'),host=dom.window.document.getElementById('fixtureResults');
  const fixture={id:'fixture',published:{details:{}},details:{grade:'First XI',opposition:'Visitors',format:'limited_overs',days:[{date:'2026-10-10'}]},slots:[{d1:'player'}]},state={fixtures:[fixture],roster:[{id:'player',name:'Example Player'}]},cards={};

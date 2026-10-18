@@ -310,12 +310,17 @@
 #app .fr-score-table caption {text-align:left;font-weight:650;padding:6px 0}
 #app .fr-score-table :is(th,td) {padding:6px clamp(4px,1vw,12px);text-align:right;border-bottom:1px solid var(--line)}
 #app .fr-score-table th:first-child {text-align:left;width:44%;font-weight:500;overflow-wrap:anywhere}
+#app .fr-score-table thead th:last-child {width:14%}
 #app .fr-score-table :is(th,td):not(:first-child) {white-space:nowrap;overflow-wrap:normal}
 #app .fr-score-table thead th {font-size:12px;color:var(--muted);font-weight:600}
 #app .fr-score-table small {display:block;font-size:11px;color:var(--muted);font-weight:400;line-height:1.35}
 #app .fr-total {font-size:12px;text-align:right;color:var(--muted);margin:4px 0 8px}
 @media (max-width:480px) {
-  #app .fr-score-table th:first-child {width:38%}
+  #app .fr-score-table {font-size:12px}
+  #app .fr-score-table :is(th,td) {padding:6px 2px}
+  #app .fr-score-table th:first-child {width:32%}
+  #app .fr-score-table thead th:nth-child(2) {width:14%}
+  #app .fr-score-table thead th:last-child {width:20%}
 }
 #app .completed-club-setup>summary {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;cursor:pointer;font-weight:600;list-style:none}
 #app .completed-club-setup>summary::after {content:'▾';color:var(--muted)}
