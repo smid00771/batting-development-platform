@@ -41,9 +41,9 @@ export function battingEvidence(row) {
   // for the player's actual average. Full comparisons retain the old gate.
   const positiveUsesInnings=dismissals < 2;
   const positiveAverage=row.innings >= 2 ? positiveUsesInnings ? row.runs/row.innings : average : null;
-  return {average,positiveAverage,positiveUsesInnings,ready:row.innings >= 3 && dismissals >= 2,
-    reason:!row.innings ? 'Yet to bat' : row.innings < 2 ? 'Building a record · 2 innings needed for an early positive flag'
-      : row.innings < 3 || dismissals < 2 ? 'No early strong signal · 3 innings and 2 dismissals needed for the full guide' : ''};
+  return {average,dismissals,positiveAverage,positiveUsesInnings,ready:row.innings >= 3 && dismissals >= 2,
+    reason:!row.innings ? 'Yet to bat' : row.innings < 2 ? 'Building a record · 2 innings needed for an early flag'
+      : row.innings < 3 || dismissals < 2 ? 'Building a record · 3 innings and 2 dismissals needed for the full guide' : ''};
 }
 export function bowlingEvidence(row, person, format) {
   if (person?.bowling === 'none' && !row?.bowling_balls) return {applicable:false,ready:false};
@@ -82,6 +82,11 @@ function assess(team,person,row) {
         return {...evidence,state:'strong',baseline:base,early:true,reason:evidence.positiveUsesInnings
           ? 'Early positive flag: runs per innings at least 25% above the grade reference; fewer than 2 dismissals'
           : 'Early positive flag: average at least 25% above the grade reference'};
+      }
+      if (discipline==='bat' && base && knownRole && row?.innings===2 && evidence.dismissals===2
+        && Number.isFinite(evidence.average) && evidence.average < .5*base.average) {
+        return {...evidence,state:'slow',baseline:base,early:true,
+          reason:'Average below half the grade reference after 2 innings and 2 dismissals; an early signal only'};
       }
       return {...evidence,state:'building',baseline:base};
     }

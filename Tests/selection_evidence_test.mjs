@@ -97,11 +97,37 @@ test('one innings, incomplete figures, unknown roles and missing benchmarks cann
  assert.equal(s.build().player('high','incumbent').bat.state,'building');s.roster[0].batting='top';s.high.competition=s.summary.rows[0].competition='Other';
  assert.equal(s.build().player('high','incumbent').bat.state,'building');
 });
-test('poor batting starts stay unrated until three innings and two dismissals',()=>{
+test('a very low two-innings average earns only a mild early flag, without unlocking replacements',()=>{
  const s=scenario();Object.assign(s.summary.rows[0],{runs:2,innings:2,not_outs:0});
- assert.equal(s.build().player('high','incumbent').bat.state,'building');s.summary.rows[0].innings=3;
+ const m=s.build(),bat=m.player('high','incumbent').bat;
+ assert.equal(bat.state,'slow');assert.equal(bat.early,true);assert.equal(bat.ready,false);assert.equal(bat.average,1);
+ assert.deepEqual(m.forRow(s.summary.rows[0]).bat,bat);assert.ok(!m.pairs.some(p=>p.higher.person.id==='incumbent'));
+ s.summary.rows[0].innings=3;
  assert.equal(s.build().player('high','incumbent').bat.state,'low');s.summary.rows[0].not_outs=2;
  assert.equal(s.build().player('high','incumbent').bat.state,'building');
+});
+test('slow-start flags require an average below half the historical reference in each grade',()=>{
+ for(const grade of ['1st Grade','2nd Grade','3rd Grade','4th Grade']){
+  const s=scenario();s.high.grade=s.summary.rows[0].grade=grade;
+  const baseline=gradeBenchmark(s.high,'bat').average;
+  Object.assign(s.summary.rows[0],{runs:Math.floor(baseline),innings:2,not_outs:0});
+  assert.equal(s.build().player('high','incumbent').bat.state,'slow');
+  s.summary.rows[0].runs=Math.ceil(baseline);
+  assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ }
+});
+test('one innings, not-outs, incomplete records, unknown roles and unsupported scopes cannot trigger a slow start',()=>{
+ for(const change of [{innings:1},{not_outs:1},{not_outs:2},{batting_complete:false},{runs:null},{not_outs:3}]){
+  const s=scenario();Object.assign(s.summary.rows[0],{runs:0,innings:2,not_outs:0},change);
+  assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ }
+ for(const change of [{competition:'Other'},{grade:'5th Grade'},{format:'unknown'}]){
+  const s=scenario();Object.assign(s.high,change);Object.assign(s.summary.rows[0],{runs:0,innings:2,not_outs:0},change);
+  assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ }
+ const s=scenario();Object.assign(s.summary.rows[0],{runs:0,innings:2,not_outs:0});s.roster[0].batting='unknown';
+ assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ s.roster[0].batting='top';assert.equal(s.build().player('high','incumbent').bat.state,'slow');
 });
 test('unknown roles, inactive people and unlinked records cannot become replacement candidates',()=>{
  for(const change of [{active:false},{batting:'unknown'},{bowling:'unknown'}]){
