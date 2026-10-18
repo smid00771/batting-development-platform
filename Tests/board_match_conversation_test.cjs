@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{JSDOM}=require('jsdom');
-const names=['seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','seBoardComments','seCaptainAvailability','seCopyPublishedAction','seBoardPublishedTeam','seBindPublishedActions','seReadOnlyTeamCard','seBoard','sePublishedDates','seClubDate','seMatchConversationClosed','seUpdateConversationState','seMutate'];
+const names=['seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','seBoardComments','seCaptainAvailability','seBoardPublishedTeam','seBindPublishedActions','seReadOnlyTeamCard','seBoard','sePublishedDates','seClubDate','seMatchConversationClosed','seUpdateConversationState','seMutate'];
 function extract(source,name){const a=source.search(new RegExp('(?:async )?function '+name+'\\('));assert.ok(a>=0,name);const rest=source.slice(a),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);}
 function harness(file){
  const dom=new JSDOM('<main id="sePage"><div id="seContent"></div></main>'),document=dom.window.document,calls=[],posts=[],receipts=new Set();
@@ -13,7 +13,7 @@ function harness(file){
   seButtonWorking:()=>()=>{},seGuardFixtureEdit:()=>true,sePersist(){},seNotice:text=>s.notice=text,seLock(){},seReload:async()=>true,
   seReadButton:async(button,label,run)=>{button.textContent=label;button.disabled=true;return run();},confirmLeaveSelections:()=>true,drawSelections:()=>c.seBoard(),
   seRPC:async(action,data)=>{calls.push({action,data});if(action==='posts')return posts;if(action==='post'){if(!receipts.has(data.request_id)){receipts.add(data.request_id);posts.push({author_name:'Captain',body:data.body,created_at:'2026-10-17T01:00:00Z'});}return {saved:true};}throw Error('Unexpected '+action);}
- });vm.runInContext(names.map(n=>extract(fs.readFileSync(file,'utf8'),n)).join('\n'),c);
+ });vm.runInContext([...names,file==='app.js'?'seFixtureDetailsAction':'seCopyPublishedAction'].map(n=>extract(fs.readFileSync(file,'utf8'),n)).join('\n'),c);
  const open=async()=>{s.boardChatOpen='first';c.seBoard();await settle();return document.querySelector('[data-se-board-chat]');};
  return {c,s,fixture,document,dom,calls,posts,open,setClock:x=>clock=x};
 }
