@@ -105,6 +105,12 @@
 #app .se-team-compact-head h2 {font-size:19px!important;letter-spacing:-.02em!important;margin:0}
 #app .se-team-head {padding-bottom:12px;border-bottom:1px solid var(--line)}
 #app .se-team-head p {font-size:13px;line-height:1.5;color:var(--muted);margin-top:7px}
+#app .se-team-fixture-head {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:start}
+#app .se-team-fixture-head>.se-team-title {display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+#app .se-team-fixture-head>.se-team-title h2 {margin:0}
+#app .se-team-fixture-head>p {grid-column:1/-1;margin:0}
+#app .se-fixture-details {padding:8px 10px;text-align:left;align-self:start;white-space:nowrap}
+#app .se-fixture-details>span>span {display:block}
 #app .se-team-state {display:inline-block;border-radius:5px;padding:3px 7px;font-size:12px;font-weight:500;line-height:1.4;color:#526071;background:var(--soft);text-align:left;max-width:100%}
 #app [data-team-state="published"] .se-team-state {background:#edf5f0;color:#32624a}
 #app [data-team-state="changed"] .se-team-state {background:#fff3dc;color:#7d5513}
@@ -142,6 +148,7 @@
 #app .se-role,#app .se-status,#app .se-day-caption {font-size:12px}
 #app .se-card[data-se-team]>.se-actions {gap:6px;margin-top:14px!important}
 #app .se-card[data-se-team]>.se-actions .btn {padding:8px 10px;font-size:12px}
+#app .se-card>.se-actions:empty {display:none}
 #app .se-board-comments {border-color:var(--line);margin-top:12px}
 #app .se-board-comments>summary {font-size:13px;font-weight:600}
 #app .se-board-chat>summary.btn {display:inline-flex;background:var(--club-soft);color:var(--ink);border-color:transparent;margin-top:0}

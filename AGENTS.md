@@ -1,3 +1,5 @@
+Fixture details & results belongs in a prominent button beside each team heading, above the players, including past games. Remove Copy team list / Copy published team from team cards; retain Copy previous team for drafting. User request recorded 18 October 2026.
+
 # Project writing rule
 
 Availability calendars must distinguish saved unavailable dates from dates not yet set: green tick for available, red cross for unavailable, neutral for unset. This includes exceptions from Set availability for a date and individual changes. Individual calendar dates cycle through available, unavailable and not set, and save all three states explicitly. Clicking Availability again or returning from another section opens its home screen with no player selected; retain unsaved-change guards and browser Back/Forward destinations. Preserve the existing saved exceptions and opt-in selection rules. User request recorded 18 October 2026.

@@ -9,7 +9,8 @@ const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
 let exercisedSource=source;
 function get(name){const source=exercisedSource;const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const start=match.index,next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
 const names=['seScorecardNote','seRevealPublication','sePublishReview','seWithSavedRoles','seShortTeams','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seButtonWorking','seMutate','seLock','sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seIsCaptain','seCanSetup','seBindPublishedActions','sePublished'];
-for(const name of names.filter(name=>!['sePersist','seMutate'].includes(name)))assert.ok(demo.includes(get(name)),'Demo shares '+name);
+// The parked demo keeps its older team-card actions; publication behaviour is exercised in both below.
+for(const name of names.filter(name=>!['sePersist','seMutate','seBindPublishedActions','sePublished'].includes(name)))assert.ok(demo.includes(get(name)),'Demo shares '+name);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Keep the fixtures in the current club week while using the real week-filter helpers.
 class PublicationDate extends Date{
