@@ -70,6 +70,39 @@ test('few innings, a single dismissal, all-not-outs and incomplete figures never
  assert.equal(battingEvidence(row('no','1st Grade',0,{innings:5,not_outs:5})).average,null);
  assert.equal(battingEvidence(row('duck','1st Grade',0)).average,0);
 });
+test('two strong batting innings earn a positive early flag without unlocking replacement comparisons',()=>{
+ const s=scenario();Object.assign(s.summary.rows[0],{runs:93,innings:2,not_outs:0,average:46.5});
+ const m=s.build(),bat=m.player('high','incumbent').bat;
+ assert.equal(bat.state,'strong');assert.equal(bat.early,true);assert.equal(bat.ready,false);assert.equal(bat.average,46.5);
+ assert.deepEqual(m.forRow(s.summary.rows[0]).bat,bat);assert.ok(!m.pairs.some(p=>p.higher.person.id==='incumbent'));
+ Object.assign(s.summary.rows[2],{runs:180,innings:2,not_outs:0,average:90});
+ assert.equal(s.build().player('low','candidate').bat.state,'strong');assert.equal(s.build().pairs.length,0);
+});
+test('an early not-out batting signal uses runs per innings while preserving the true average',()=>{
+ for(const not_outs of [1,2]){
+  const s=scenario();Object.assign(s.summary.rows[0],{runs:80,innings:2,not_outs,average:not_outs===2?null:80});
+  let bat=s.build().player('high','incumbent').bat;
+  assert.equal(bat.state,'strong');assert.equal(bat.early,true);assert.equal(bat.positiveAverage,40);assert.equal(bat.average,not_outs===2?null:80);
+  assert.match(bat.reason,/runs per innings/);assert.equal(bat.ready,false);
+  Object.assign(s.summary.rows[0],{runs:30});bat=s.build().player('high','incumbent').bat;
+  assert.equal(bat.state,'building');assert.equal(bat.positiveAverage,15);
+ }
+});
+test('one innings, incomplete figures, unknown roles and missing benchmarks cannot produce an early batting flag',()=>{
+ for(const change of [{innings:1},{batting_complete:false},{runs:null},{not_outs:3}]){
+  const s=scenario();Object.assign(s.summary.rows[0],{runs:200,innings:2,not_outs:0},change);
+  assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ }
+ const s=scenario();Object.assign(s.summary.rows[0],{runs:200,innings:2,not_outs:0});s.roster[0].batting='unknown';
+ assert.equal(s.build().player('high','incumbent').bat.state,'building');s.roster[0].batting='top';s.high.competition=s.summary.rows[0].competition='Other';
+ assert.equal(s.build().player('high','incumbent').bat.state,'building');
+});
+test('poor batting starts stay unrated until three innings and two dismissals',()=>{
+ const s=scenario();Object.assign(s.summary.rows[0],{runs:2,innings:2,not_outs:0});
+ assert.equal(s.build().player('high','incumbent').bat.state,'building');s.summary.rows[0].innings=3;
+ assert.equal(s.build().player('high','incumbent').bat.state,'low');s.summary.rows[0].not_outs=2;
+ assert.equal(s.build().player('high','incumbent').bat.state,'building');
+});
 test('unknown roles, inactive people and unlinked records cannot become replacement candidates',()=>{
  for(const change of [{active:false},{batting:'unknown'},{bowling:'unknown'}]){
   const s=scenario();Object.assign(s.roster[0],change);assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));

@@ -37,6 +37,17 @@ test('one form guide control includes neutral bowling and explains the historica
  assert.match(h.host.textContent,/All roles and match formats/);assert.match(h.host.textContent,/Early sample · 2 innings · 18.5 overs/);
  assert.doesNotMatch(h.host.textContent,/comparable club records|current club records/);
 });
+test('the early batting flag shows two innings and the limited evidence in the shared form dialog',async()=>{
+ const h=await setup(),p=h.fixture.roster[0];
+ const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:93,innings:2,not_outs:0,average:46.5,
+  batting_complete:true,bowling_complete:true,bowling_balls:0,bowling_innings:0,wickets:0,conceded:0};
+ const item=h.engine.buildSelectionEvidence({rows:[stats]},[],[p]).forRow(stats);item.key='early-batter';
+ h.host.innerHTML=h.ui.renderEvidenceBadges(item);assert.match(h.host.textContent,/Form guide · early/);assert.match(h.host.textContent,/Batting: ↑ Strong/);
+ h.ui.bindEvidenceDetails(h.host,{players:new Map([[item.key,item]])});h.host.querySelector('button').click();
+ assert.match(h.host.querySelector('dialog').textContent,/Early sample · 2 innings · 2 dismissals/);
+ assert.match(h.host.querySelector('dialog').textContent,/46.5 batting average/);assert.match(h.host.querySelector('dialog').textContent,/93 runs · 2 inns · 0 not out/);
+ assert.match(h.host.querySelector('dialog').textContent,/Positive batting flags can start after 2 innings/);
+});
 test('repeated board redraws reuse saved figures; refresh corrections clear old markers and modal details',async()=>{
  const h=await setup();h.controller.mount(h.host,h.options);await tick();h.controller.mount(h.host,h.options);await tick();assert.equal(h.calls(),1);
  h.host.querySelector('[data-evidence-open]').click();h.reply(async()=>({data:{...h.fixture.context,cards:[]}}));h.controller.invalidate();await tick();
