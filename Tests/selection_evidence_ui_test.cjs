@@ -14,7 +14,7 @@ async function setup(){
 test('board colours and paired markers open actual figures without choosing or moving a player',async()=>{
  const h=await setup(),before=JSON.stringify(h.fixture);let picks=0;h.host.querySelector('.pick').onclick=()=>picks++;
  h.controller.mount(h.host,h.options);await tick();
- const button=h.host.querySelector('[data-evidence-player="g1p0"] button');assert.match(button.textContent,/Bat ↓/);assert.match(button.textContent,/↔/);
+ const button=h.host.querySelector('[data-evidence-player="g1p0"] button');assert.match(button.textContent,/Form guide/);assert.match(button.textContent,/Batting: ↓ Below guide/);assert.match(button.textContent,/↔/);
  button.click();const dialog=h.host.querySelector('dialog');assert.ok(dialog.open);assert.match(dialog.textContent,/Alex Rowan/);assert.match(dialog.textContent,/10 batting average/);
  const link=dialog.querySelector('.se-evidence-pair');link.open=true;assert.match(link.textContent,/Rough batting target in 2nd Grade: 20 average/);
  assert.equal(picks,0);assert.equal(JSON.stringify(h.fixture),before);
@@ -22,9 +22,20 @@ test('board colours and paired markers open actual figures without choosing or m
 });
 test('small samples show building markers, and status has accessible text as well as colour',async()=>{
  const h=await setup();h.controller.mount(h.host,h.options);await tick();
- const button=h.host.querySelector('[data-evidence-player="g1p2"] button');assert.match(button.textContent,/Bat ·/);assert.match(button.getAttribute('aria-label'),/Building a record/);assert.doesNotMatch(button.textContent,/↔/);
- button.click();assert.match(h.host.querySelector('dialog').textContent,/Building a record/);
+ const button=h.host.querySelector('[data-evidence-player="g1p2"] button');assert.match(button.textContent,/Batting: · Not yet rated/);assert.match(button.getAttribute('aria-label'),/Not yet rated/);assert.doesNotMatch(button.textContent,/↔/);
+ button.click();assert.match(h.host.querySelector('dialog').textContent,/Not yet rated/);
  h.host.querySelector('dialog').dispatchEvent(new h.dom.window.Event('cancel',{cancelable:true}));assert.equal(h.host.querySelector('dialog'),null);
+});
+test('one form guide control includes neutral bowling and explains the historical reference and early sample',async()=>{
+ const h=await setup(),p=h.fixture.roster.find(p=>p.id==='g1p4');
+ const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:0,innings:0,not_outs:0,batting_complete:true,
+  wickets:5,conceded:82,bowling_balls:113,bowling_innings:2,bowling_complete:true,economy:82*6/113};
+ const item=h.engine.buildSelectionEvidence({rows:[stats]},[],[p]).forRow(stats);item.key='example';
+ h.host.innerHTML=h.ui.renderEvidenceBadges(item);
+ assert.equal(h.host.querySelectorAll('button').length,1);assert.match(h.host.textContent,/Bowling:  Within guide/);assert.match(h.host.textContent,/Form guide · early/);
+ h.host.innerHTML=h.ui.renderEvidenceDetails(item);assert.match(h.host.textContent,/NDCA 2021\/22–2025\/26/);assert.match(h.host.textContent,/768 historical records/);
+ assert.match(h.host.textContent,/All roles and match formats/);assert.match(h.host.textContent,/Early sample · 2 innings · 18.5 overs/);
+ assert.doesNotMatch(h.host.textContent,/comparable club records|current club records/);
 });
 test('repeated board redraws reuse saved figures; refresh corrections clear old markers and modal details',async()=>{
  const h=await setup();h.controller.mount(h.host,h.options);await tick();h.controller.mount(h.host,h.options);await tick();assert.equal(h.calls(),1);

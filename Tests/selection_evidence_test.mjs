@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildSelectionEvidence,battingEvidence,bowlingEvidence,gradeGuide,bowlingJobFits,battingPositionFits} from '../selection-evidence.js';
+import {buildSelectionEvidence,battingEvidence,bowlingEvidence,gradeGuide,gradeBenchmark,bowlingJobFits,battingPositionFits,NDCA_BENCHMARKS} from '../selection-evidence.js';
 
 const person=(id,extra={})=>({id,name:id,active:true,batting:'top',bowling:'none',bowling_load:'unknown',keeper:false,...extra});
 const team=(id,grade,ids,extra={})=>({id,grade,competition:'NDCA',format:'long_form',days:[{date:'2026-10-17'}],slots:ids.map(id=>({d1:id})),...extra});
@@ -28,11 +28,40 @@ test('rough guides recognise NDCA labels, handle reversed columns and never leak
  assert.equal(gradeGuide({...s.high,competition:'Other'},{...s.low,competition:'Other'}),null);
  for(const format of ['t20','unknown'])assert.equal(gradeGuide(s.high,{...s.low,format}),null);
 });
-test('colours compare similar current roles, with adjacent-grade adjustments and one record per player',()=>{
+test('batting colours use a fixed historical grade benchmark, independent of current club peers',()=>{
  const s=scenario(),model=s.build();assert.equal(model.player('high','incumbent').bat.state,'low');assert.equal(model.player('low','candidate').bat.state,'strong');
+ const before=model.player('high','incumbent').bat;assert.equal(before.baseline.average,133474/6530);assert.equal(before.baseline.records,1099);
  s.summary.rows.push(row('incumbent','2nd Grade',500),row('tail','1st Grade',1));s.roster.push(person('tail',{batting:'lower'}));
- const evidence=s.build().player('high','incumbent').bat;assert.equal(evidence.peers,3);assert.equal(evidence.baseline.average,20);
- s.roster[2].batting='lower';assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ assert.deepEqual(s.build().player('high','incumbent').bat,before);
+ s.roster[2].batting='lower';s.summary.rows=s.summary.rows.slice(0,1);assert.deepEqual(s.build().player('high','incumbent').bat,before);
+ assert.deepEqual(s.build().forRow(s.summary.rows[0]).bat,before);
+ s.roster[0].batting='unknown';assert.equal(s.build().player('high','incumbent').bat.state,'building');
+});
+test('historical benchmark scope is NDCA grades 1–4, and the pooled role/format scope is explicit',()=>{
+ const s=scenario();assert.equal(NDCA_BENCHMARKS.season_count,5);assert.equal(NDCA_BENCHMARKS.scope,'All recorded roles and match formats');
+ for(const g of [1,2,3,4])for(const format of ['long_form','limited_overs','t20']){
+  const t={...s.high,grade:'NDCA '+g,format},b=gradeBenchmark(t,'ball');assert.ok(b.average>0&&b.wickets>0&&b.economy>0);assert.ok(b.wicketless_records>0);
+  assert.equal(b.wickets,NDCA_BENCHMARKS.grades[g].bowling.wickets*100/NDCA_BENCHMARKS.grades[g].bowling.balls);
+  assert.equal(gradeBenchmark(t,'bat').average,NDCA_BENCHMARKS.grades[g].batting.runs/NDCA_BENCHMARKS.grades[g].batting.dismissals);
+ }
+});
+test('unsupported competitions and grades never fall back to small club peer groups',()=>{
+ for(const change of [{competition:'Other League'},{grade:'5th Grade'},{format:'unknown'}]){
+  const s=scenario();Object.assign(s.high,change);Object.assign(s.summary.rows[0],change);
+  assert.equal(gradeBenchmark(s.high,'bat'),null);assert.equal(s.build().player('high','incumbent').bat.state,'building');
+ }
+});
+test('early bowling uses the whole-grade reference equally for quicks and spinners',()=>{
+ const s=allrounders();s.high.format=s.low.format='limited_overs';s.roster.forEach(p=>p.batting='lower');s.summary.rows.forEach(r=>r.format='limited_overs');
+ Object.assign(s.roster[0],{bowling:'spin'});Object.assign(s.roster[2],{bowling:'spin'});
+ Object.assign(s.summary.rows[0],{wickets:5,conceded:82,bowling_balls:113,bowling_innings:2});
+ Object.assign(s.summary.rows[1],{wickets:3,conceded:51,bowling_balls:72,bowling_innings:2});
+ Object.assign(s.summary.rows[2],{wickets:5,conceded:35,bowling_balls:96,bowling_innings:2});
+ const m=s.build(),spinner=m.player('high','incumbent').ball,quick=m.player('high','peer').ball,lower=m.player('low','candidate').ball;
+ assert.equal(spinner.state,'steady');assert.equal(quick.state,'steady');assert.deepEqual(spinner.baseline,quick.baseline);
+ assert.equal(lower.state,'strong');assert.equal(lower.early,true);assert.equal(lower.baseline.economy,115400*6/214773);
+ s.summary.rows=s.summary.rows.slice(2);assert.deepEqual(s.build().player('low','candidate').ball,lower);
+ Object.assign(s.summary.rows[0],{bowling_innings:1});assert.equal(s.build().player('low','candidate').ball.state,'building');
 });
 test('few innings, a single dismissal, all-not-outs and incomplete figures never create a struggling or promotion label',()=>{
  for(const change of [{innings:2,not_outs:0},{innings:5,not_outs:4},{innings:5,not_outs:5},{batting_complete:false}]){
