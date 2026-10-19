@@ -1,5 +1,5 @@
 import {buildSeasonStats, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.205';
-import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.220';
+import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.226';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
@@ -8,6 +8,7 @@ const states={strong:['↑','Strong'],low:['↓','Below guide'],slow:['·','Slow
 export const evidenceStyles=`<style>
 .se-evidence-button{border:0;border-radius:6px;background:transparent;display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:3px;min-height:44px;min-width:44px;max-width:110px;padding:4px;cursor:pointer;color:#24344c;font:600 11px/1.3 system-ui}.se-evidence-button:hover{background:#eef2f7}.se-evidence-button:focus-visible{outline:2px solid #17245f;outline-offset:2px}.se-evidence-button .se-evidence-chip{display:inline-flex;gap:3px;align-items:center;border:1px solid transparent;border-radius:4px;padding:2px 4px;white-space:nowrap;font-size:11px;line-height:1.3;margin:0}.se-evidence-chip.strong{background:#d9f2e7;color:#175c41;border-color:#a7d6c0}.se-evidence-chip.low{background:#fff0cf;color:#784500;border-color:#e6c37b}.se-evidence-chip.slow{background:#fff9ed;color:#78664b;border-color:#eee3ce}.se-evidence-chip.building{background:#edf0f4;color:#526074;border-color:#d3dae3}.se-evidence-link{color:#243f92;background:#e9edfc}.se-evidence-link.tradeoff{color:#596477;background:#edf0f4}.se-evidence:empty{display:none}.se-has-evidence{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px}.se-has-evidence>.se-conversation-status{grid-column:1/-1}.se-has-evidence>.se-evidence .se-evidence-button{max-width:72px}.se-evidence-dialog{box-sizing:border-box;width:min(560px,calc(100% - 24px));max-height:85dvh;overflow:auto;border:1px solid #cdd6e3;border-radius:12px;padding:16px;color:#24344c;background:white;box-shadow:0 12px 60px #17245f30;font:14px/1.4 system-ui}.se-evidence-dialog::backdrop{background:#15233a66}.se-evidence-dialog h2{font-size:18px;margin:0}.se-evidence-dialog h3{font-size:15px;margin:12px 0 4px}.se-evidence-heading{display:flex;align-items:start;justify-content:space-between;gap:10px}.se-evidence-close{min-width:44px;min-height:44px;border:1px solid #cdd6e3;border-radius:6px;background:white;color:#24344c;cursor:pointer}.se-evidence-dialog p{margin:7px 0}.se-evidence-dialog p>small{display:block}.se-evidence-small{color:#52627a;font-size:12px}.se-evidence-metrics{display:flex;gap:12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #e1e7ee}.se-evidence-metrics>div{flex:1;min-width:150px}.se-evidence-metrics strong{display:block}.se-evidence-pair{border-bottom:1px solid #e1e7ee;padding:4px 0}.se-evidence-pair>summary,.se-evidence-help>summary{cursor:pointer;min-height:44px;align-content:center}.se-evidence-pair>summary small{display:block;margin-left:15px;color:#52627a}.se-evidence-pair-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.se-evidence-pair-grid>div{min-width:0;overflow-wrap:anywhere}.se-evidence-pair-grid strong,.se-evidence-pair-grid small{display:block}.se-evidence-target{background:#eef2fb;padding:8px;border-radius:6px}.se-evidence-help{font-size:12px;color:#52627a}.se-evidence-help ul{padding-left:18px;margin:4px 0 10px}.se-evidence-help li{margin:5px 0}.se-evidence-dialog .se-evidence-chip{display:inline-block;padding:2px 5px;border-radius:4px}.ss-name .se-evidence-button{vertical-align:middle;margin-left:4px}.ss-compare-cell .se-evidence-button{justify-content:flex-start;padding-left:0}.se-evidence-inline{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .se-evidence-button{flex-direction:column;align-items:stretch;gap:2px;max-width:100%;padding:3px;text-align:left}.se-evidence-button .se-evidence-chip{white-space:normal;font-size:11px;gap:2px;padding:1px 3px}.se-evidence-button .se-evidence-title{font-size:10px;line-height:1.3;margin:0;color:#526074;font-weight:600}.se-evidence-title .se-evidence-link{display:inline-block;margin-left:3px;font-size:10px}.se-evidence-chip.steady{color:#526074;background:transparent}.se-has-evidence>.se-evidence .se-evidence-button{max-width:160px}.ss-name .se-evidence-button{margin-left:0}.se-evidence-sample{font-size:11px;color:#526074}.se-evidence-close{flex-shrink:0;white-space:nowrap;padding:6px 10px}.se-evidence-source{margin:8px 0;color:#52627a;font-size:12px}@media(max-width:480px){.se-has-evidence{grid-template-columns:minmax(0,1fr);gap:0}.se-has-evidence>.se-evidence .se-evidence-button{padding-left:0}}
+.se-other-grades{font-size:13px;overflow-wrap:anywhere}.se-other-grades small{color:#52627a;font-size:12px}
 </style>`;
 
 export function renderEvidenceBadges(item,key=item?.key) {
@@ -27,10 +28,31 @@ export function renderEvidenceBadges(item,key=item?.key) {
 }
 function record(item) {
   const s=item.stats;
-  if (!s) return '<p class="se-evidence-small">No linked season figures.</p>';
+  if (!s) return '';
   const batting=s.batting_complete===false?'Figures incomplete':`${s.runs} runs · ${s.innings} inns · ${s.not_outs} not out`;
   const bowling=s.bowling_complete===false?'Figures incomplete':`${s.wickets} wickets · ${statsOvers(s.bowling_balls)??'—'} overs · ${s.bowling_innings} inns · ${s.wickets?decimal(s.conceded/s.wickets):'—'} average · ${decimal(s.economy)} economy`;
   return `<p><strong>${number(s.average)} batting average</strong><small>${escape(batting)}</small></p>${item.ball?.applicable?`<p><strong>${escape(bowling)}</strong></p>`:''}`;
+}
+function otherGradeRecords(item) {
+  const stats=item.otherGrades?.[0];
+  if (!stats) return '';
+  const date = value => {
+    const parsed=/^\d{4}-\d{2}-\d{2}$/.test(value || '') ? new Date(value+'T12:00:00Z') : null;
+    return parsed && Number.isFinite(parsed.getTime()) ? new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',timeZone:'UTC'}).format(parsed) : '';
+  };
+  const scores = (match,kind) => {
+    const figures=(match[kind] || []).map(p => kind==='batting' ? p.dnb ? 'DNB' : `${p.runs}${p.not_out?'*':''}`
+      : `${p.wickets}/${p.runs}`);
+    if(match[kind+'_incomplete']) figures.push('Figures incomplete');
+    return figures.join(' & ') || (match[kind+'_available'] ? kind==='batting'?'DNB':'Did not bowl' : 'Not recorded');
+  };
+  const innings=`${number(stats.innings)} ${stats.innings===1?'inn':'inns'}`;
+  const batting=stats.batting_complete===false?'Bat: incomplete':!stats.innings?'Yet to bat'
+    : stats.not_outs===stats.innings?`Bat: ${number(stats.runs)} runs (${innings}, unbeaten)`:`Bat avg ${number(stats.average)} (${innings})`;
+  const bowling=stats.bowling_complete===false?'Bowl: incomplete':!stats.bowling_innings?'Yet to bowl'
+    : `Bowl avg ${stats.wickets?decimal(stats.conceded/stats.wickets):'—'} (${number(stats.wickets)} ${stats.wickets===1?'wkt':'wkts'})`;
+  const recent=[...(stats.history || [])].sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')))[0];
+  return `<p class="se-other-grades" aria-label="Recent form in another grade"><strong>${escape(stats.grade)}</strong> · ${escape(batting)} · ${escape(bowling)}${recent?`<small>Latest${date(recent.date)?' · '+escape(date(recent.date)):''}: Bat ${escape(scores(recent,'batting'))} · Bowl ${escape(scores(recent,'bowling'))}</small>`:''}</p>`;
 }
 function pairDetails(pair) {
   const {higher,lower}=pair, symbol=pair.kind==='tradeoff'?'≈':'↔';
@@ -41,14 +63,15 @@ function help() {
 }
 function assessmentDetails(item,key,label,job) {
   const evidence=item[key],base=evidence.baseline;
+  const reason=item.stats ? evidence.reason : `No ${item.team.grade} figures in this format this season`;
   const reference=base ? key==='bat' ? `${number(base.average)} batting average · ${number(base.records)} historical records`
     : `${number(base.average)} bowling average · ${decimal(base.economy)} economy · ${decimal(base.wickets)} wickets/100 balls · ${number(base.records)} historical records` : '';
   const actual=key==='bat' ? `${number(item.stats?.innings)} innings · ${number((item.stats?.innings??0)-(item.stats?.not_outs??0))} dismissals`
     : `${number(item.stats?.bowling_innings)} innings · ${statsOvers(item.stats?.bowling_balls)??'—'} overs`;
-  return `<div><strong>${label} <span class="se-evidence-chip ${evidence.state}">${states[evidence.state][0]} ${states[evidence.state][1]}</span></strong><span class="se-evidence-small">${escape(job)}</span><p class="se-evidence-small">${escape(evidence.reason)}</p>${base?`<small class="se-evidence-small">Grade reference: ${escape(reference)}</small>`:''}${evidence.ready||evidence.early?`<p class="se-evidence-sample">${evidence.early?'Early sample · ':''}${escape(actual)}</p>`:''}</div>`;
+  return `<div><strong>${label} <span class="se-evidence-chip ${evidence.state}">${states[evidence.state][0]} ${states[evidence.state][1]}</span></strong><span class="se-evidence-small">${escape(job)}</span><p class="se-evidence-small">${escape(reason)}</p>${base?`<small class="se-evidence-small">Grade reference: ${escape(reference)}</small>`:''}${evidence.ready||evidence.early?`<p class="se-evidence-sample">${evidence.early?'Early sample · ':''}${escape(actual)}</p>`:''}</div>`;
 }
 export function renderEvidenceDetails(item) {
-  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}${item.links.length?`<h3>Possible comparisons</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No linked comparison meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
+  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}${otherGradeRecords(item)}${item.links.length?`<h3>Possible comparisons</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No linked comparison meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
 }
 export function bindEvidenceDetails(host,model,here=()=>true) {
   host.querySelectorAll('[data-evidence-open]').forEach(button=>button.onclick=event=>{

@@ -1,9 +1,9 @@
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.222';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.220';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.220';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.226';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.226';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.225 — AI editing beside every social graphic preview
+// Club Batting 0.8.62.226 — Keep other-grade form visible after selection moves
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.225';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.225';
@@ -20,7 +20,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.225';
+const APP_UI_VERSION='0.8.62.226';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
