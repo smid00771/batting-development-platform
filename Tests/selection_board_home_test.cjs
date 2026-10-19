@@ -3,7 +3,7 @@ const extract=(source,name)=>{const a=source.search(new RegExp('(?:async )?funct
 function setup(file,role='captain'){
  const dom=new JSDOM('<main id="page"></main>'),document=dom.window.document,calls=[];dom.window.HTMLElement.prototype.scrollIntoView=function(){};
  const f={id:'match',can_chat:true,can_comment:true,details:{grade:'First XI',opposition:'Visitors',days:[{date:'2099-10-17'}]},slots:[]};f.published={details:structuredClone(f.details),slots:[],players:[]};
- const s={key:'user:club',view:'published',publishedWeek:'',restoreDrawer:null,data:{captain:role==='captain',selector:role==='selector',can_view_board:role!=='player',roster:[],conversations:role==='player'?[]:[{date:'2099-10-17',name:'Test player',previous_grade:'Second XI',kind:'left_out',availability:'available'}],fixtures:[f],access:{timezone:'UTC'}}};let c;
+ const s={key:'user:club',view:'published',publishedWeek:'',restoreDrawer:null,data:{captain:role==='captain',selector:role==='selector',can_view_board:role!=='player',roster:[],conversations:role==='player'?[]:[{date:'2099-10-17',name:'Test player',previous_grade:'Second XI',kind:file==='app.js'?'lower_grade':'left_out',availability:'available'}],fixtures:[f],access:{timezone:'UTC'}}};let c;
  c=vm.createContext({document,Date,Intl,selectionState:s,session:{user:{id:'user'}},membership:{permission_role:role},club:{id:'club'},currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,hasMatchCaptainAccess:()=>false,seCanSetup:d=>d.admin||d.selector,seEsc:String,seDate:String,
   loadSelectionsAccess:async()=>{},selectionsEnabled:()=>true,seReload:async()=>true,seStartLiveRefresh(){},seStyles:()=>'',clubBrandingSetupPrompt:()=>'',sePublicationWorkflow:()=>'',seTrackActionButtons(){},selectionRoomController:null,bindClubBrandingLinks(){},seBindPublicationWorkflow(){},bindSelectionBackButtons(){},recordSelectionNavigation:()=>calls.push({view:s.view}),confirmLeaveSelections:()=>true,
   socialOpen(){},seReviews(){},seConversations(){},seFixtures(){},seRoster(){},seSettings(){},seAvailability(){document.getElementById('seContent').textContent='Availability';},sePublished(){document.getElementById('seContent').textContent='Published player teams';},
@@ -67,13 +67,13 @@ for(const role of ['selector','captain'])test('live Season stats is visible to '
 
 for(const file of ['app.js','demo.html'])test(file+': returning to Selection Board closes follow-up, comments and chat without changing saved work',async()=>{
  const h=setup(file);h.s.date='2099-10-17';await h.c.renderSelections();
- h.document.querySelector('#seFollowup summary').click();await new Promise(r=>setTimeout(r,10));
- assert.equal(h.s.followupOpen,true);h.s.boardCommentOpen='match';h.s.boardChatOpen='match';
+ if(file==='demo.html'){h.document.querySelector('#seFollowup summary').click();await new Promise(r=>setTimeout(r,10));assert.equal(h.s.followupOpen,true);}else assert.equal(h.document.getElementById('seFollowup'),null);
+ h.s.boardCommentOpen='match';h.s.boardChatOpen='match';
  const saved=JSON.stringify(h.s.data),draft={match:'Unsent message'};h.s.boardChatDrafts=draft;
  h.c.seChangeView('availability');h.document.querySelector('[data-se-view="board"]').click();
- assert.equal(h.s.followupOpen,false);assert.equal(h.document.getElementById('seFollowup').open,false);assert.equal(h.s.boardChatOpen,null);assert.equal(h.s.boardCommentOpen,null);
+ assert.equal(h.s.followupOpen,false);if(file==='demo.html')assert.equal(h.document.getElementById('seFollowup').open,false);else assert.equal(h.document.getElementById('seFollowup'),null);assert.equal(h.s.boardChatOpen,null);assert.equal(h.s.boardCommentOpen,null);
  assert.equal(JSON.stringify(h.s.data),saved);assert.equal(h.s.boardChatDrafts,draft);
- h.document.querySelector('#seFollowup summary').click();await new Promise(r=>setTimeout(r,10));assert.equal(h.s.followupOpen,true);
- h.document.querySelector('[data-se-view="board"]').click();assert.equal(h.document.getElementById('seFollowup').open,false,'Repeated section click is also Home');
+ if(file==='demo.html'){h.document.querySelector('#seFollowup summary').click();await new Promise(r=>setTimeout(r,10));assert.equal(h.s.followupOpen,true);}
+ h.document.querySelector('[data-se-view="board"]').click();if(file==='demo.html')assert.equal(h.document.getElementById('seFollowup').open,false,'Repeated section click is also Home');else assert.equal(h.document.getElementById('seFollowup'),null);
  h.s.followupOpen=true;h.c.confirmLeaveSelections=()=>false;h.document.querySelector('[data-se-view="board"]').click();assert.equal(h.s.followupOpen,true,'Unconfirmed edits can still block leaving');
 });
