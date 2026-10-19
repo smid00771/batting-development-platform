@@ -25,7 +25,7 @@ module=createSocialAwards(h);const w=module.state(s);w.end='2026-10-11';w.logoEr
 const id=x=>document.getElementById(x),tick=()=>new Promise(r=>setTimeout(r,5)),until=async predicate=>{for(let i=0;i<500;i++){if(predicate())return;await tick();}throw Error('Timed out: '+id('saRefineStatus')?.textContent);},settled=()=>until(()=>!w.busy&&!w.loading&&w.previewReady),png=()=>id('saCanvas').backing.toBuffer('image/png'),answer=(changes={},extra={})=>({data:{changes,badges:[],explanation:'Review this change.',artwork_brief:null,...extra}}),edit=async(brief,response)=>{nextResponse=response;id('saRefineBrief').value=brief;id('saRefineBrief').dispatchEvent(new window.Event('input'));id('saTryRefinement').click();await settled();};
 module.render(s);await settled();const original=png(),facts=JSON.stringify(context.candidates),selected=[...w.chosen];
 assert.equal(id('saReload').textContent,'Refresh page');assert.equal(id('saImport').textContent,'Add / update PlayCricket scores');
-id('saModifyGraphic').click();await settled();assert.equal(document.activeElement,id('saRefineBrief'));
+assert.ok(id('saRefineBrief'),'The AI editor is visible directly beneath the preview.');
 await edit('Use a gold ribbon for wins.',answer({badge_style:'ribbon',win_colour:'#B98922',badge_angle:-5},{explanation:'Gold ribbon <img id="injected">'}));
 assert.equal(requests.length,1);assert.ok(requests[0].preview.startsWith('data:image/png;base64,'));assert.equal(requests[0].design_revision,1);assert.equal(requests[0].current.badge_style,'plain');assert.equal(document.getElementById('injected'),null);
 assert.equal(w.refinements.results.candidate,true);assert.equal(id('saConfirmGraphic').disabled,true);assert.equal(id('saSaveLayout').disabled,true);assert.equal(module.canLeave(s),false);assert.equal(saves.length,0);assert.notDeepEqual(png(),original);assert.equal(context.editions.length,0);
@@ -54,3 +54,13 @@ const crops=[{label:'WIN',x:.39,y:.30,width:.18,height:.06},{label:'DEF',x:.39,y
 await edit('Move the painted title lower.',answer({}, {explanation:'Review an artwork change for the painted title.',artwork_brief:'Move only the painted title lower. Keep the club colours.'}));assert.equal(w.refinements.results.candidate,false);id('saRefineArtwork').click();await until(()=>!!backgroundHelp);assert.equal(backgroundHelp.options.brief,'Move only the painted title lower. Keep the club colours.');assert.equal(backgroundHelp.options.mode,'template');assert.equal(backgroundHelp.file.name,'Our previous results.png');
 for(let i=0;i<context.editions.length;i++)assert.deepEqual(Buffer.from(await files.get('club-social-awards'+context.editions[i].image_path).arrayBuffer()),savedImages[i]);assert.equal(JSON.stringify(context.candidates),facts);
 console.log('Passed: current-preview input, isolated club style, repeated revisions, failure recovery, stale response rejection, source-bound badges, explicit approval, free undo, immutable facts/history, exact saved previews and in-app artwork handoff.');
+
+// Grade abbreviations are display-only and survive save/reload for each award type.
+context.settings.enabled=['results','century','five_wickets'];
+for(const kind of ['results','century','five_wickets']){
+ const grade='Rippit Development League',key='grade-'+kind;context.designs[kind]||={revision:0,layout:{}};context.candidates.push(kind==='results'?{...items[0],key,signature:'grade-source',grade}:{key,signature:'grade-source',kind,grade,name:'Alex Example',player_id:'alex',stat:{runs:kind==='century'?125:19,wickets:5,not_out:true},opposition:'Visitors'});
+ s.view=kind;await module.load(s,false);w.focus=key;w.chosen=new Set([key]);module.render(s);await settled();assert.ok(id('saRefineBrief'));const factsBefore=JSON.stringify(context.candidates);labels=[];
+ await edit('Shorten Development League to Dev',answer({}, {grade_labels:[{grade,label:'Dev'}]}));assert.equal(w.layouts[kind].grade_labels[0].label,'Dev');assert.ok(labels.some(v=>v==='DEV'||v.startsWith('Dev ·')));assert.equal(JSON.stringify(context.candidates),factsBefore);
+ id('saUseRefinement').click();await settled();await module.load(s,false);module.render(s);await settled();assert.equal(w.layouts[kind].grade_labels[0].label,'Dev');assert.equal(JSON.stringify(context.candidates),factsBefore);
+}
+console.log('Passed: Results, Century and 5 Wickets display abbreviations persist without editing source grades.');

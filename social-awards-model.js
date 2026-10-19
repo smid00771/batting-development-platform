@@ -1,3 +1,4 @@
+import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
 import {safeAwardStyle} from './social-awards-design.js?v=0.8.62.193';
 
 export const SOCIAL_AWARDS = [
@@ -53,7 +54,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  layout=awardLayout(kind,layout);
  const bg=images.background,portrait=images.photo,logo=layout.show_logo?images.logo:null;
  await h.fontReady();canvas.width=bg?(bg.naturalWidth||bg.width):1080;canvas.height=bg?(bg.naturalHeight||bg.height):1350;
- const ctx=canvas.getContext('2d');if(bg)ctx.drawImage(bg,0,0);else{const g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);g.addColorStop(0,s.design?.primary||'#073554');g.addColorStop(1,s.design?.accent||'#128fd2');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);}
+ const ctx=canvas.getContext('2d');canvas.graphicLabelWarnings=[];if(bg)ctx.drawImage(bg,0,0);else{const g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);g.addColorStop(0,s.design?.primary||'#073554');g.addColorStop(1,s.design?.accent||'#128fd2');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);}
  const scale=canvas.width/1080,height=canvas.height/scale;ctx.scale(scale,scale);ctx.socialFont=({sporting:'"Club Sporting",Arial,sans-serif',modern:'Arial,sans-serif',classic:'Georgia,serif'})[layout.font];ctx.textAlign='center';ctx.textBaseline='middle';
  const text=(value,x,y,width,size,colour=layout.text_colour)=>{ctx.fillStyle=colour;h.text(ctx,String(value),x,y,width,size);};
  const image=(img,x,y,size,maxHeight=.7)=>{if(!img)return;const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(1080*size/100/iw,height*maxHeight/ih),w=iw*fit,ht=ih*fit;ctx.drawImage(img,(1080-w)*x/100,(height-ht)*y/100,w,ht);};
@@ -65,10 +66,10 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   text(week,540,height*layout.week_y/100,980,layout.week_size);
   text((item?.name||'CHOOSE A PERFORMANCE').toUpperCase(),540,height*layout.name_y/100,980,layout.name_size);
   text(item?awardFigures(item)+(kind==='century'?' RUNS':''):'',540,height*layout.figures_y/100,980,layout.figures_size);
-  text([item?.grade,item?.opposition&&'v '+item.opposition].filter(Boolean).join(' · '),540,height*layout.grade_y/100,980,30);return;
+  ctx.font=`900 30px ${ctx.socialFont}`;const grade=graphicGrade(item?.grade,layout);checkGraphicLabel(canvas,ctx,{source:item?.grade,label:grade,width:980-ctx.measureText(item?.opposition?' · v '+item.opposition:'').width,size:30,grade:true});text([grade,item?.opposition&&'v '+item.opposition].filter(Boolean).join(' · '),540,height*layout.grade_y/100,980,30);return;
  }
  if(!layout.includes_title)text('RESULTS',540,height*layout.title_y/100,990,layout.title_size);
- text(week,540,height*layout.week_y/100,970,layout.week_size);
+ checkGraphicLabel(canvas,ctx,{source:week,label:week,width:970,size:layout.week_size});text(week,540,height*layout.week_y/100,970,layout.week_size);
  const sharedOpponent=resultsShareOpponent(items,images.opponentKeys);
  const logoPair=(opponent,summary,x,y,size,gap,colour)=>{
   const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/iw,size/ih);ctx.drawImage(img,cx-iw*fit/2,y-ih*fit/2,iw*fit,ih*fit);};
@@ -86,7 +87,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   ctx.fillStyle=layout.grade_colour||s.design?.primary||'#073554';
   if(layout.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12);ctx.lineTo(790,y-12);ctx.lineTo(774,y+11);ctx.lineTo(790,y+33);ctx.lineTo(290,y+33);ctx.lineTo(306,y+11);ctx.closePath();ctx.fill();}
   else if(layout.grade_style==='bar')ctx.fillRect(300,y-12,480,45);
-  text(item.grade.toUpperCase(),540,y+10,455,layout.grade_size,layout.grade_style==='text'?(layout.grade_colour||layout.score_colour):layout.grade_text_colour);
+  const grade=graphicGrade(item.grade,layout).toUpperCase();checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:455,size:layout.grade_size,grade:true});text(grade,540,y+10,455,layout.grade_size,layout.grade_style==='text'?(layout.grade_colour||layout.score_colour):layout.grade_text_colour);
   text(r.ourScore,225,y+56,360,layout.score_size,layout.score_colour);text(r.theirScore,855,y+56,360,layout.score_size,layout.score_colour);
   const font=Math.min(layout.player_size,Math.max(19,(rowHeight-98)/3*.8)),line=Math.min(42,(rowHeight-92)/3),left=inset+28,right=1080-inset-27;
   for(let j=0;j<3;j++){

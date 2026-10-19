@@ -22,7 +22,7 @@ Deno.serve(async req=>{
  try{
   const raw=await req.text();if(raw.length>2900000)return json({error:'Use a smaller graphic preview.'},400);
   let body;try{body=JSON.parse(raw);}catch{return json({error:'Invalid request.'},400);}
-  if(body?.purpose==='award_refine'){const result=await refineAward(body,{url,anon,key,model,authorization});return json(result.body,result.status);}
+  if(['award_refine','graphic_refine'].includes(body?.purpose)){const result=await refineAward(body,{url,anon,key,model,authorization});return json(result.body,result.status);}
   if(raw.length>7000)return json({error:'Use a short design brief and up to four examples.'},400);
   if(!body||!uuid(body.club_id)||typeof body.brief!=='string'||body.brief.length>1500||!Array.isArray(body.reference_ids)||body.reference_ids.length>4||body.reference_ids.some((id:unknown)=>!uuid(id))||new Set(body.reference_ids).size!==body.reference_ids.length)return json({error:'Choose your club, a short design brief and up to four examples.'},400);
   if(!body.brief.trim()&&!body.reference_ids.length)return json({error:'Add an example or describe the look you want.'},400);
