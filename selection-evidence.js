@@ -59,6 +59,13 @@ export function bowlingEvidence(row, person, format) {
     reason:ready ? '' : minimum ? `Building a record · ${ballsNeeded/6} overs and 2 innings bowled needed` : 'Match format needed'};
 }
 const matchingRow = (summary,team,id) => summary.rows.find(row => row.roster_id === id && row.competition === team.competition && row.grade === team.grade && row.format === team.format);
+// Keep the player's other-grade record visible after a selection move. These
+// rows are context only: the selected grade still supplies all ratings/swaps.
+const otherGradeRows = (summary,team,id) => {
+  const latest = row => (row.history || []).reduce((date,match) => match.date > date ? match.date : date,'');
+  return summary.rows.filter(row => row.roster_id === id && row.competition === team.competition && row.format === team.format && row.grade !== team.grade)
+    .sort((a,b) => latest(b).localeCompare(latest(a)) || a.grade.localeCompare(b.grade,undefined,{numeric:true}));
+};
 const eligibleTeam = (team,season={}) => !team.cancelled && (!season.start || !team.days?.[0]?.date || team.days[0].date >= season.start && team.days[0].date <= season.end);
 // Grade-wide historical totals set a stable reference, independent of this
 // club's results. The exports cannot separate roles or match formats.
@@ -182,7 +189,7 @@ export function buildSelectionEvidence(summary,teams=[],people=[]) {
       const person=roster.get(id); if (!person || person.active === false || players.has(playerKey(team.id,id))) continue;
       const stats=matchingRow(summary,team,id);
       const selectedDays=(team.days||[]).filter((_,day)=>slot['d'+(day+1)]===id).map(day=>day.date);
-      players.set(playerKey(team.id,id),{key:playerKey(team.id,id),team,person,position:index+1,selectedDays,stats,links:[],...assess(team,person,stats)});
+      players.set(playerKey(team.id,id),{key:playerKey(team.id,id),team,person,position:index+1,selectedDays,stats,otherGrades:otherGradeRows(summary,team,id),links:[],...assess(team,person,stats)});
     }
   }
   for (let i=0;i<validTeams.length;i++) for (let j=i+1;j<validTeams.length;j++) {
@@ -202,5 +209,5 @@ export function buildSelectionEvidence(summary,teams=[],people=[]) {
   }
   pairs.forEach(pair=>{pair.id=JSON.stringify([pair.higher.key,pair.lower.key]);pair.higher.links.push(pair);pair.lower.links.push(pair);});
   return {players,pairs,player:(teamId,playerId)=>players.get(playerKey(teamId,playerId)),
-    forRow(row) {const person=roster.get(row.roster_id);return person && person.active !== false ? {person,stats:row,team:row,links:[],...assess(row,person,row)} : null;}};
+    forRow(row) {const person=roster.get(row.roster_id);return person && person.active !== false ? {person,stats:row,team:row,otherGrades:otherGradeRows(summary,row,person.id),links:[],...assess(row,person,row)} : null;}};
 }

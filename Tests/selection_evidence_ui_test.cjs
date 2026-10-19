@@ -26,6 +26,55 @@ test('small samples show building markers, and status has accessible text as wel
  button.click();assert.match(h.host.querySelector('dialog').textContent,/Not yet rated/);
  h.host.querySelector('dialog').dispatchEvent(new h.dom.window.Event('cancel',{cancelable:true}));assert.equal(h.host.querySelector('dialog'),null);
 });
+test('a promoted player keeps their actual lower-grade season totals and recent match visible after a board redraw',async()=>{
+ const h=await setup(),p=h.fixture.roster.find(p=>p.id==='g2p0');
+ Object.assign(p,{batting:'middle',bowling:'pace',bowling_load:'frontline'});
+ const card=h.fixture.context.cards.find(c=>c.scorecard.match_id==='match-2-2');
+ h.fixture.context.cards=[card];card.scorecard.format_key='limited_overs';
+ h.fixture.context.fixtures.find(f=>f.id===card.fixture_id).format='limited_overs';
+ card.scorecard.innings[0].batters.find(b=>b.player_id==='source-'+p.id).runs=57;
+ card.scorecard.innings[1].bowlers.push({player_id:'source-'+p.id,team_id:'us',wickets:2,runs:40,balls:48,maidens:0,importable:true});
+ h.fixture.teams.forEach(t=>t.format='limited_overs');
+ h.fixture.teams[0].slots[0]={d1:p.id};h.fixture.teams[1].slots[0]={d1:null};h.host.innerHTML=h.markup();
+ const before=JSON.stringify(h.fixture.context);h.controller.mount(h.host,h.options);await tick();
+ const button=h.host.querySelector(`[data-evidence-player="${p.id}"] button`);button.click();
+ let dialog=h.host.querySelector('dialog'),other=dialog.querySelector('.se-other-grades');
+ assert.match(dialog.querySelector('.se-evidence-heading').textContent,/1st Grade · Limited overs/);
+ assert.match(dialog.querySelector('.se-evidence-metrics').textContent,/No 1st Grade figures in this format this season/);
+ assert.doesNotMatch(dialog.querySelector('.se-evidence-metrics').textContent,/57 batting average/);
+ assert.equal(other.querySelector('strong').textContent,'2nd Grade');
+ assert.match(other.textContent,/Bat avg 57 \(1 inn\) · Bowl avg 20.00 \(2 wkts\)/);
+ assert.match(other.querySelector('small').textContent,/Latest · 17 Oct: Bat 57 · Bowl 2\/40/);
+ assert.equal(other.querySelectorAll('button,details,ul,h3,h4').length,0,'Keep the context to two compact text rows');
+ assert.doesNotMatch(dialog.textContent,/No linked season figures/);assert.equal(JSON.stringify(h.fixture.context),before);
+ // Returning to the original grade uses the same scores as the main record.
+ h.fixture.teams[0].slots[0]={d1:null};h.fixture.teams[1].slots[0]={d1:p.id};h.host.innerHTML=h.markup();
+ h.controller.mount(h.host,h.options);await tick();assert.equal(h.calls(),1);
+ h.host.querySelector(`[data-evidence-player="${p.id}"] button`).click();dialog=h.host.querySelector('dialog');
+ assert.match(dialog.querySelector('.se-evidence-heading').textContent,/2nd Grade · Limited overs/);
+ assert.match(dialog.textContent,/57 batting average/);assert.equal(dialog.querySelector('.se-other-grades'),null);
+ assert.equal(JSON.stringify(h.fixture.context),before);
+});
+test('compact other-grade context shows only the latest grade and match, preserves not-outs and labels incomplete figures',async()=>{
+ const h=await setup(),p=h.fixture.roster[0],current={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:0,innings:0,not_outs:0,bowling_balls:0,bowling_innings:0,wickets:0,conceded:0};
+ const other={...current,grade:'2nd Grade',runs:57,innings:1,not_outs:1,average:null,batting_complete:false,bowling_complete:false,bowling_innings:1,history:[
+  {date:'2026-10-03',opposition:'Old match',batting:[{runs:1,not_out:false}],bowling:[],bowling_available:false},
+  {date:'2026-10-17',opposition:'<img src=x onerror=alert(1)>',batting:[{runs:57,not_out:true},{dnb:true}],bowling:[{wickets:2,runs:40,balls:47}],batting_incomplete:true},
+  {date:'2026-10-10',opposition:'Earlier match',batting:[],batting_available:true,bowling:[],bowling_available:true},
+  {date:'2026-10-24',opposition:'Latest match',batting:[],bowling:[]}
+ ]};
+ const older={...other,grade:'3rd Grade',history:[{date:'2026-09-26',batting:[{runs:999}],bowling:[]}]};
+ const before=JSON.stringify(other),item=h.engine.buildSelectionEvidence({rows:[current,other,older]},[],[p]).forRow(current);
+ h.host.innerHTML=h.ui.renderEvidenceDetails(item);let section=h.host.querySelector('.se-other-grades');
+ assert.equal(h.host.querySelectorAll('.se-other-grades').length,1);assert.equal(section.querySelectorAll('small').length,1);
+ assert.match(section.textContent,/Bat: incomplete · Bowl: incomplete/);
+ assert.match(section.querySelector('small').textContent,/24 Oct: Bat Not recorded · Bowl Not recorded/);
+ assert.doesNotMatch(section.textContent,/3rd Grade|999|Old match|20.00|57/);assert.equal(JSON.stringify(other),before);
+ other.history=other.history.filter(m=>m.date!=='2026-10-24');h.host.innerHTML=h.ui.renderEvidenceDetails(item);section=h.host.querySelector('.se-other-grades');
+ assert.match(section.querySelector('small').textContent,/Bat 57\* & DNB & Figures incomplete · Bowl 2\/40/);assert.equal(section.querySelector('img'),null);
+ Object.assign(other,{batting_complete:true,bowling_complete:true,wickets:0});h.host.innerHTML=h.ui.renderEvidenceDetails(item);section=h.host.querySelector('.se-other-grades');
+ assert.match(section.textContent,/Bat: 57 runs \(1 inn, unbeaten\)/);assert.match(section.textContent,/Bowl avg — \(0 wkts\)/);assert.doesNotMatch(section.textContent,/Bat avg 0|Bowl avg 0/);
+});
 test('one form guide control includes neutral bowling and explains the historical reference and early sample',async()=>{
  const h=await setup(),p=h.fixture.roster.find(p=>p.id==='g1p4');
  const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:0,innings:0,not_outs:0,batting_complete:true,

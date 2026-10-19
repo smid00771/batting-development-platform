@@ -14,6 +14,26 @@ function scenario(options={}) {
 const bowl={bowling_balls:300,bowling_innings:5,wickets:10,conceded:150,economy:3};
 function allrounders(){const s=scenario();for(const p of s.roster)Object.assign(p,{bowling:'pace',bowling_load:'frontline'});Object.assign(s.summary.rows[0],bowl);Object.assign(s.summary.rows[1],bowl);Object.assign(s.summary.rows[2],bowl,{wickets:15,conceded:120,economy:2.4});return s;}
 
+test('moving up a grade preserves lower-grade form as context without manufacturing a higher-grade rating or swap',()=>{
+ const s=scenario(),lower=s.summary.rows[2];s.high.slots.push({d1:'candidate'});s.low.slots=[];
+ const before=JSON.stringify(s.summary),m=s.build(),promoted=m.player('high','candidate');
+ assert.equal(promoted.stats,undefined);assert.deepEqual(promoted.otherGrades,[lower]);
+ assert.equal(promoted.bat.state,'building');assert.equal(promoted.bat.average,undefined);assert.equal(promoted.bat.baseline.average,133474/6530);
+ assert.equal(promoted.links.length,0);assert.ok(!m.pairs.some(p=>p.higher.person.id==='candidate'||p.lower.person.id==='candidate'));
+ assert.equal(JSON.stringify(s.summary),before);
+ const higher=row('candidate','1st Grade',18);s.summary.rows.push(higher);
+ const established=s.build().player('high','candidate');assert.equal(established.stats,higher);assert.deepEqual(established.otherGrades,[lower]);assert.equal(established.bat.average,18);
+});
+test('other-grade context stays with the same player, competition and format and keeps each grade separate',()=>{
+ const s=scenario(),third=row('incumbent','3rd Grade',45,{history:[{date:'2026-10-17'}]}),second=row('incumbent','2nd Grade',38,{history:[{date:'2026-10-10'}]});
+ s.summary.rows.push(second,third,row('incumbent','2nd Grade',999,{format:'t20'}),row('incumbent','2nd Grade',888,{competition:'Other'}));
+ const m=s.build(),item=m.player('high','incumbent');
+ assert.deepEqual(item.otherGrades,[third,second]);assert.equal(item.stats.average,10);
+ assert.deepEqual(m.forRow(s.summary.rows[0]).otherGrades,[third,second]);
+ assert.deepEqual(m.forRow(second).otherGrades.map(r=>r.grade),['3rd Grade','1st Grade']);
+ assert.deepEqual(m.player('high','peer').otherGrades,[]);
+});
+
 test('real batting averages, not runs per innings, set the rough comparison target',()=>{
  const s=scenario();Object.assign(s.summary.rows[0],{runs:90,innings:8,not_outs:3,average:18});
  Object.assign(s.summary.rows[2],{runs:252,innings:7,not_outs:1,average:42});
