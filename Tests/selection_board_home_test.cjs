@@ -3,7 +3,7 @@ const extract=(source,name)=>{const a=source.search(new RegExp('(?:async )?funct
 function setup(file,role='captain'){
  const dom=new JSDOM('<main id="page"></main>'),document=dom.window.document,calls=[];dom.window.HTMLElement.prototype.scrollIntoView=function(){};
  const f={id:'match',can_chat:true,can_comment:true,details:{grade:'First XI',opposition:'Visitors',days:[{date:'2099-10-17'}]},slots:[]};f.published={details:structuredClone(f.details),slots:[],players:[]};
- const s={key:'user:club',view:'published',publishedWeek:'',restoreDrawer:null,data:{captain:role==='captain',selector:role==='selector',can_view_board:role!=='player',roster:[],conversations:role==='player'?[]:[{date:'2099-10-17',name:'Test player',previous_grade:'Second XI',kind:'left_out',availability:'unavailable'}],fixtures:[f],access:{timezone:'UTC'}}};let c;
+ const s={key:'user:club',view:'published',publishedWeek:'',restoreDrawer:null,data:{captain:role==='captain',selector:role==='selector',can_view_board:role!=='player',roster:[],conversations:role==='player'?[]:[{date:'2099-10-17',name:'Test player',previous_grade:'Second XI',kind:'left_out',availability:'available'}],fixtures:[f],access:{timezone:'UTC'}}};let c;
  c=vm.createContext({document,Date,Intl,selectionState:s,session:{user:{id:'user'}},membership:{permission_role:role},club:{id:'club'},currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,hasMatchCaptainAccess:()=>false,seCanSetup:d=>d.admin||d.selector,seEsc:String,seDate:String,
   loadSelectionsAccess:async()=>{},selectionsEnabled:()=>true,seReload:async()=>true,seStartLiveRefresh(){},seStyles:()=>'',clubBrandingSetupPrompt:()=>'',sePublicationWorkflow:()=>'',seTrackActionButtons(){},selectionRoomController:null,bindClubBrandingLinks(){},seBindPublicationWorkflow(){},bindSelectionBackButtons(){},recordSelectionNavigation:()=>calls.push({view:s.view}),confirmLeaveSelections:()=>true,
   socialOpen(){},seReviews(){},seConversations(){},seFixtures(){},seRoster(){},seSettings(){},seAvailability(){document.getElementById('seContent').textContent='Availability';},sePublished(){document.getElementById('seContent').textContent='Published player teams';},
@@ -11,7 +11,7 @@ function setup(file,role='captain'){
   seasonStatsPanel:{mount:(host,options)=>{calls.push({stats:options});host.textContent='Season stats opened';}},seGradeLevel:()=>1,
   seRPC:async(action,data)=>{calls.push({action,data});return [];},seReadButton:async(b,l,run)=>run()
  });
- const names=['seFollowupPanel','seFollowupRows','seBindBoardComments','seStatsAllowed','seToggleStats','seMountStats','seBoardAccess','seHasAvailability','seIsCaptain','seSelectionTabs','drawSelections','renderSelections','seChangeView','seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','sePublishedDates','sePublishedWeekStart','seClubDate','seMatchConversationClosed','seChat','seOpenBoardChat'];
+ const names=['seFollowupPanel','seFollowupRows','seConversationControl','seBindBoardComments','seStatsAllowed','seToggleStats','seMountStats','seBoardAccess','seHasAvailability','seIsCaptain','seSelectionTabs','drawSelections','renderSelections','seChangeView','seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','sePublishedDates','sePublishedWeekStart','seClubDate','seMatchConversationClosed','seChat','seOpenBoardChat'];
  vm.runInContext(names.map(n=>extract(fs.readFileSync(file,'utf8'),n)).join('\n'),c);return {c,s,f,calls,document,dom};
 }
 for(const file of ['app.js','demo.html']){
