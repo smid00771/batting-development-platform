@@ -1,5 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),{webcrypto}=require('node:crypto');
+const {graphicGrade,checkGraphicLabel}=require('../social-graphic-design.js');
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
 const app=fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8'),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
 function part(text,start,end){const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a);return text.slice(a,b);}
@@ -7,8 +8,8 @@ const boundaries=[['function socialFixtureCompleted(','async function socialRPC(
  ['function socialPlayerPhotos(','function socialOversNotice('],['function socialFeatureRequest(','function socialInk('],
  ['async function socialRender(','async function socialPaintAll('],['async function socialRefresh(','async function socialOpen('],
  ['async function socialSave(','function socialLock(']];
-const code=boundaries.map(([a,b])=>part(app,a,b)).join('\n');
-function setup({twoDay=false,split=false,frame='cutout',left=false}={}){
+const code=source=>boundaries.map(([a,b])=>part(source,a,b)).join('\n');
+function setup({twoDay=false,split=false,frame='cutout',left=false,source=app}={}){
  const people=[{id:'scotty',name:'Scotty Example'},{id:'other',name:'Other Player'}],asset={id:'photo',path:'test-photo',roster_id:'scotty',kind:'photo'};
  const f={id:'fixture',publication:2,features:[],published:{details:{grade:'Third Grade',opposition:'Visitors',format:'t20',days:[{date:'2099-10-10'},...(twoDay?[{date:'2099-10-17'}]:[])],match_roles:{d1:{captain_id:'scotty'},d2:{captain_id:'scotty'}}},players:people,slots:people.map(p=>({d1:p.id,d2:twoDay?p.id:null}))}};
  f.features=[{day:1,mode:'player',roster_id:'scotty',asset_id:'photo',revision:1,photo_x:0,photo_y:0},...(twoDay?[{day:2,mode:'player',roster_id:split?'other':'scotty',asset_id:split?null:'photo',revision:1,photo_x:0,photo_y:0}]:[])];
@@ -17,7 +18,7 @@ function setup({twoDay=false,split=false,frame='cutout',left=false}={}){
  const canvas=()=>{const draws=[],ctx={drawImage:(...args)=>draws.push(args),fillRect(){},save(){},restore(){},beginPath(){},rect(){},clip(){},ellipse(){},fillText(){},measureText:()=>({width:10})};return {width:1080,height:1350,dataset:{},getContext:()=>ctx,draws};};
  const preview=canvas(),summary={textContent:'Move photo',focus(){}};
  const document={querySelectorAll:selector=>selector.includes('position-panel')?panels:selector.includes('position-value')?outputs:selector.includes('position-reset')?resets:selector.includes('data-social-position')?inputs:[],querySelector:selector=>selector.includes('position-panel')?summary:selector.includes('data-social-canvas')?preview:selector.includes('position-reset')?resets[0]:inputs.find(i=>selector.includes(`data-axis="${i.dataset.axis}"`))||null};
- const c=vm.createContext({console,URL,crypto:webcrypto,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;},
+ const c=vm.createContext({graphicGrade,checkGraphicLabel,console,URL,crypto:webcrypto,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;},
   socialHere:()=>true,socialMessage:(s,message)=>s.notice=message,socialLock(){},socialDraw(){},socialGuideSaved(){},socialGuideUploadNote(){},socialGuideState:()=>({}),socialGuideRemember(){},
   socialAwards:{settings:async()=>({})},socialDefaults:d=>({...d.design}),socialAsset:()=>null,socialAssetURL:async(s,a)=>a?'photo-url':null,socialImage:async(s,url)=>url?photo:null,
   socialFontReady:async()=>true,socialPhotoBounds:()=>({x:0,y:0,w:500,h:1000,transparent:frame==='cutout'}),socialInk:()=> '#fff',socialFixtureDates:()=>[],
@@ -28,14 +29,14 @@ function setup({twoDay=false,split=false,frame='cutout',left=false}={}){
    for(const day of data.days){const old=target.features.find(x=>x.day===day);Object.assign(old,{mode:data.mode,roster_id:data.roster_id,asset_id:data.asset_id,photo_x:data.photo_x,photo_y:data.photo_y,revision:old.revision+1});}
    const result={saved:true};receipts.set(data.request_id,result);if(fail){fail=false;throw Error('Response lost');}return result;
   }});
- vm.runInContext(code,c);
+ vm.runInContext(code(source),c);
  const card=()=>c.socialCards(s.data.fixtures[0])[0];
  return {c,s,f,asset,calls,card,canvas,preview,summary,inputs,outputs,resets,panels,frames,fail:()=>{fail=true;}};
 }
 
 test('horizontal and vertical offsets move only the photo in cutout, circle and rectangle layouts',async()=>{
- for(const frame of ['cutout','circle','rectangle'])for(const left of [false,true]){
-  const h=setup({frame,left}),before=h.canvas(),after=h.canvas();await h.c.socialRender(h.s,h.card(),before);
+ for(const source of [app,demo])for(const frame of ['cutout','circle','rectangle'])for(const left of [false,true]){
+  const h=setup({frame,left,source}),before=h.canvas(),after=h.canvas();await h.c.socialRender(h.s,h.card(),before);
   h.s.photoPositions[h.card().key]={x:-8,y:-7};await h.c.socialRender(h.s,h.card(),after);
   assert.ok(Math.abs(Number(after.dataset.photoLeft)-Number(before.dataset.photoLeft)+86.4)<1e-8);
   assert.equal(Number(after.dataset.photoTop)-Number(before.dataset.photoTop),-94.5);
@@ -129,8 +130,9 @@ test('busy or unconfirmed saves cannot be overwritten by a new position',async()
  for(const property of ['busy','pending']){const h=setup();h.s[property]=true;assert.equal(await h.c.socialSavePhotoPosition(h.s,h.card(),{x:1,y:1}),false);assert.equal(h.calls.length,0);}
 });
 
-test('production and demo use the same saved-position controls and renderer',()=>{
- for(const [a,b] of boundaries){assert.equal(part(app,a,b),part(demo,a,b));}
+test('production and parked demo retain the same saved-position controls',()=>{
+ // The live renderer adds label suggestions; photo placement is checked for both renderers above.
+ for(const [a,b] of boundaries.filter(([a])=>a!=='async function socialRender(')){assert.equal(part(app,a,b),part(demo,a,b));}
 });
 
 test('a delayed preview uses the saved position after save replaces the fixture context',async()=>{

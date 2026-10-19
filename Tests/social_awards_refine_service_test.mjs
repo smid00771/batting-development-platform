@@ -16,7 +16,7 @@ function setup(overrides={}){
  const fetcher=async(url,options)=>{const body=options.body?JSON.parse(options.body):null;calls.push({url,options,body});
   if(url.endsWith('/auth/v1/user'))return json({id:'user'},overrides.auth||200);
   if(body?.p_action==='access')return json({allowed:overrides.allowed!==false});
-  if(body?.p_action==='context')return json({designs:{results:{revision:overrides.revision??3,layout:{example_path:overrides.example??example}}}});
+  if(body?.p_action==='context')return json(overrides.context||{designs:{results:{revision:overrides.revision??3,layout:{example_path:overrides.example??example}}}});
   if(body?.p_action==='style_request')return overrides.limit?json({message:'The club has used its style suggestions for now.'},400):json({brand:{name:'Green & Gold Club',primary:'#225533',accent:'#EAC552'},references:[]});
   if(url.includes('/storage/'))return new Response(png,{headers:{'Content-Type':'image/png'}});
   if(url==='https://api.openai.com/v1/responses')return overrides.providerStatus?json({},overrides.providerStatus):json({status:'completed',output_text:JSON.stringify(overrides.output||response)});
@@ -77,4 +77,20 @@ test('the deployed router preserves legacy team suggestions and gates both route
  const old=await handler(req({club_id:club,brief:'Use our colours.',reference_ids:[]}));assert.equal(old.status,200);assert.deepEqual(await old.json(),legacy);
  assert.equal((await handler(req(request()))).status,200);assert.equal(refined,1);
  const before=network.length;assert.equal((await handler(req({club_id:club,brief:'x'.repeat(7100),reference_ids:[]}))).status,400);assert.equal(network.length,before);
+});
+
+test('every graphic profile uses scoped grades, caller permissions and revision checks',async()=>{
+ const grade='Rippit Development League';
+ for(const [kind,api] of [['team_week','team_of_week_api'],['player_week','player_of_week_api'],['team_selections','club_socials_api'],['results','club_social_awards_api'],['century','club_social_awards_api'],['five_wickets','club_social_awards_api']]){
+  const layout=kind==='team_week'?{top:620,bottom:1230,left:65,figures_right:825,grade_right:1015}:{};
+  const context={design:{revision:3,layout},designs:{[kind]:{revision:3,layout}},revision:3,candidates:[{grade},{grade:'1st Grade'}],fixtures:[{published:{details:{grade}}}],assets:[]};if(kind==='team_selections')context.design=layout;
+  const output={changes:{},grade_labels:[{grade,label:'Dev'}],badges:[],explanation:'Short label.',artwork_brief:null},base={...request(),kind,purpose:'graphic_refine',current:layout,preview_grades:[grade],grade_labels:[{grade,label:'Dev League'}]};
+  const good=setup({context,output}),result=await refineAward(base,good.options);assert.equal(result.status,200,kind+': '+JSON.stringify(result.body));assert.deepEqual(result.body.grade_labels,[{grade,label:'Dev'}]);
+  assert.ok(good.calls.some(c=>c.body?.p_action==='context'&&c.url.endsWith('/'+api)));
+  const prompt=JSON.parse(good.calls.find(c=>c.url.includes('openai')).body.input[0].content[0].text);assert.deepEqual(prompt.available_grades,[{grade,label:'Dev League'}]);
+  for(const [override,status] of [[{allowed:false},403],[{auth:401},401],[{limit:true},429]]){const denied=setup({context,output,...override});assert.equal((await refineAward(base,denied.options)).status,status);assert.ok(!denied.calls.some(c=>c.url.includes('openai')));}
+  const stale=setup({context,output});assert.equal((await refineAward({...base,design_revision:2},stale.options)).status,409);assert.ok(!stale.calls.some(c=>c.body?.p_action==='style_request'));
+  for(const badOutput of [{changes:{players:['Replacement']},grade_labels:[]},{changes:{},grade_labels:[{grade:'Other Club Grade',label:'Dev'}]},{changes:{},grade_labels:[{grade,label:'<script>bad</script>'}]}]){const bad=setup({context,output:badOutput});assert.equal((await refineAward(base,bad.options)).status,502);}
+  const unknown=setup({context,output});assert.equal((await refineAward({...base,preview_grades:['Foreign grade']},unknown.options)).status,400);assert.ok(!unknown.calls.some(c=>c.body?.p_action==='style_request'));
+ }
 });

@@ -1,4 +1,4 @@
-/* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143. */
+/* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143; local preview cache .225. */
 export function createSocialPublishing(h){
  const {supabase}=h,esc=h.escape,demo=!!h.demo;
  const css=`<style>.sp-panel{margin:18px 0;padding:18px;border:1px solid #dce2ee;border-radius:12px;background:#f7f9fd}.sp-panel h3{margin:0 0 8px}.sp-panel p{line-height:1.5}.sp-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:20px 0}.sp-preview figure{margin:0;max-width:360px}.sp-preview img{display:block;width:100%;border-radius:8px}.sp-preview figcaption{font-size:13px;margin-top:7px}#socialContent .sp-caption{box-sizing:border-box;width:100%;min-height:160px;font:inherit;padding:12px;line-height:1.5}.sp-target{display:flex;align-items:center;gap:10px;margin:12px 0}.sp-target input{width:20px;height:20px}.sp-count{font-size:13px;color:#52627a}.sp-result{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid #dce2ee;flex-wrap:wrap}.sp-result p{margin:4px 0}.sp-result small{display:block;max-width:600px}.sp-success{color:#11633d}.sp-warning{color:#875000}.sp-history{margin:20px 0}.sp-history summary{font-weight:700;cursor:pointer}.sp-live:empty,#spCopyStatus:empty,#spTeamCopyStatus:empty,#spCoverStatus:empty{display:none}.sp-live{white-space:pre-wrap;line-height:1.5}.sp-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.sp-caption-count-over{color:#a12121}@media(max-width:600px){.sp-preview{grid-template-columns:minmax(0,1fr)}.sp-preview figure{max-width:none}.sp-panel{padding:14px}.sp-panel .social-actions .btn{width:100%}}
@@ -204,10 +204,10 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
    if(!demo&&(!p.checkedAt||Date.now()-p.checkedAt>60000))await load(s,false,true);
    const checks=fixtures.map(f=>({id:f.id,artwork_key:f.artwork_key}));
    if(!demo)await h.artwork(s,'validate_export',{fixtures:checks});
-   if(p.review?.state==='draft'&&p.review.renderer!=='social-awards.178'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){p.review.caption=teamCaption(s);p.returnView=null;s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
+   if(p.review?.state==='draft'&&p.review.renderer!=='social-awards.178'&&p.review.previewVersion==='0.8.62.225'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){p.review.caption=teamCaption(s);p.returnView=null;s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
    const caption=teamCaption(s);
    if(p.review)for(const u of p.review.urls||[])URL.revokeObjectURL(u);
-   r={id:crypto.randomUUID(),renderer:'0.8.62.143',fixtures:checks,images:[],blobs:[],urls:[],caption,selectionDate:s.date,targets:targets(p),state:'draft',destinations:[],uploaded:false};
+   r={id:crypto.randomUUID(),renderer:'0.8.62.143',previewVersion:'0.8.62.225',fixtures:checks,images:[],blobs:[],urls:[],caption,selectionDate:s.date,targets:targets(p),state:'draft',destinations:[],uploaded:false};
    for(let i=0;i<cards.length;i++){
     if(!h.here(s))return;const card=cards[i],canvas=document.createElement('canvas'),result=await h.renderImage(s,card,canvas);if(result?.invalid)throw Error('A featured player changed. Refresh and review again.');
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));if(!blob)throw Error('An image could not be prepared. Try again.');

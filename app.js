@@ -1,25 +1,26 @@
+import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.222';
 import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.220';
 import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.220';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.224 — Connect Pages owned by a Meta business portfolio
+// Club Batting 0.8.62.225 — AI editing beside every social graphic preview
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.208';
-import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.208';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.208';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.225';
+import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.225';
+import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.208';
 import {createSelectionRoom} from './selection-room.js?v=0.8.62.208';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.208';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.225';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.208';
 import {createFixtureResults} from './fixture-results.js?v=0.8.62.213';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.208';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.225';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.224';
+const APP_UI_VERSION='0.8.62.225';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -22036,7 +22037,7 @@ function socialEnsure(){
  const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState){socialSandbox.release(socialState);for(const u of socialState.urls.values())URL.revokeObjectURL(u);}socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
 }
 function socialHere(s){return s===socialState&&s.scope===selectionsScopeKey()&&currentTab==='teams'&&ensureSelections().view==='socials';}
-function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.results?.busy){alert(s.busy||s.week?.busy||s.playerWeek?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(!socialAwards.canLeave(s))return false;if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
+function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.results?.busy){alert(s.busy||s.week?.busy||s.playerWeek?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(!socialAwards.canLeave(s)||!socialWeek.canLeave(s)||!socialPlayerWeek.canLeave(s)||!socialTeamWorkflow.canLeave(s))return false;if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
 function socialFixtureCompleted(s,f,now=new Date()){
  const dates=(f.published?.details?.days||f.details?.days||[]).map(d=>d.date).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')).sort();
  return f.completed===true||!!dates.length&&dates.at(-1)<now.toLocaleDateString('en-CA',{timeZone:s.data?.timezone||'Australia/Sydney'});
@@ -22182,7 +22183,7 @@ async function socialRender(s,card,canvas){
  const load=async(asset,label)=>{try{return await socialImage(s,await socialAssetURL(s,asset));}catch(e){if(!s.previewOf||asset?.id===s.requiredPreviewAsset)throw e;warnings.push(label+' unavailable');return null;}};
  const [bg,sponsors,portrait,logo,fontLoaded]=await Promise.all([load(socialAsset(s,'background'),'Saved background'),integratedLayout?null:load(socialAsset(s,'sponsors'),'Saved banner'),showPortrait?load(featured.asset,'Player photo'):null,integratedLayout?null:(socialAsset(s,'logo')?load(socialAsset(s,'logo'),'Team-list logo'):socialImage(s,logoURL)).catch(()=>{warnings.push('Club logo unavailable');return null;}),design.font==='bold'?socialFontReady():true]);
  if(!fontLoaded)warnings.push('Standard lettering');
- const ctx=canvas.getContext('2d');canvas.width=1080;canvas.height=1350;ctx.socialFont=design.font==='classic'?'Georgia,serif':design.font==='clean'?'Arial,sans-serif':fontLoaded?'"Club Sporting",sans-serif':'Arial,sans-serif';
+ const ctx=canvas.getContext('2d');canvas.width=1080;canvas.height=1350;canvas.graphicLabelWarnings=[];ctx.socialFont=design.font==='classic'?'Georgia,serif':design.font==='clean'?'Arial,sans-serif':fontLoaded?'"Club Sporting",sans-serif':'Arial,sans-serif';
  const ink=socialInk(design.primary),integrated=!!bg&&design.header_layout==='integrated',combined=!!sponsors&&design.header_layout==='banner',headerH=integrated?Math.max(200,Math.min(440,Number(design.header_height)||310)):combined?Math.min(380,1080*sponsors.height/sponsors.width):249;
  ctx.fillStyle=design.primary;ctx.fillRect(0,0,1080,1350);
  if(bg){if(integrated)ctx.drawImage(bg,0,0,1080,1350);else socialFitImage(ctx,bg,0,0,1080,1350,true);}
@@ -22207,8 +22208,8 @@ async function socialRender(s,card,canvas){
   else socialFitImage(ctx,portrait,photoX,photoY,photoW,photoH,design.frame==='rectangle');ctx.restore();
  }
  ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:52,headingWidth=largeCutout?690:975,textLines=[];
- const meta=[d.round?'ROUND '+d.round:'',d.competition].filter(Boolean).join(' · ');textLines.push([meta.toUpperCase(),52,metaY,970,29,'700']);
- textLines.push([d.grade.toUpperCase()+(card.split?' · DAY '+(card.day+1):''),headingX-4,titleY,showPortrait&&left?447:headingWidth,design.font==='bold'?108:78,'700',35]);
+ const meta=[d.round?'ROUND '+d.round:'',d.competition].filter(Boolean).join(' · ');checkGraphicLabel(canvas,ctx,{source:meta,label:meta.toUpperCase(),width:970,size:29});textLines.push([meta.toUpperCase(),52,metaY,970,29,'700']);
+ const gradeLabel=graphicGrade(d.grade,design).toUpperCase()+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?447:headingWidth,gradeSize=design.font==='bold'?108:78;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
  let y=titleY+44;const detailLines=['v '+d.opposition,seFormatLabel(d),...socialFixtureDates(card),d.ground].filter(Boolean);
  for(const [i,text] of detailLines.entries()){const wrapped=socialWrap(ctx,text,detailsWidth,i===0?40:36,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+7;}}
  const names=socialNames(card),baseY=Math.max(headerH+330,y+24),line=Math.min(60,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?51:40,line*.88),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
@@ -22216,7 +22217,7 @@ async function socialRender(s,card,canvas){
  if(d.cancelled){socialText(ctx,'MATCH',52,baseY+100,960,76,'700');socialText(ctx,'CANCELLED',52,baseY+190,960,76,'700');}
  else names.forEach((p,i)=>{const row=baseY+i*line,marked=!!portrait&&p.id===featured.id;socialText(ctx,(p.name+p.marks).toUpperCase(),listX,row,listWidth,font,'700',18);if(marked)socialMarker(ctx,design.marker,left?listX-28:listX+listWidth+26,row-font*.30,design.marker==='arrows'?ink:design.accent,ink,left);});
  if(portrait&&!d.cancelled&&design.marker==='badge')socialMarker(ctx,'badge',left?55:1025,photoY+40,design.accent,ink);
- if(footer){ctx.fillStyle=design.primary;ctx.fillRect(0,1300,1080,50);ctx.fillStyle=ink;socialText(ctx,footer,52,1331,975,21,'500');}
+ if(footer){checkGraphicLabel(canvas,ctx,{source:footer,label:footer,width:975,size:21});ctx.fillStyle=design.primary;ctx.fillRect(0,1300,1080,50);ctx.fillStyle=ink;socialText(ctx,footer,52,1331,975,21,'500');}
  Object.assign(canvas.dataset,{featuredPlayer:portrait?featured.id||'':'',photoMarker:portrait?design.marker:'',headerLayout:integrated?'integrated':combined?'banner':'separate',headerHeight:String(headerH),nameProtection:protection.alpha?'automatic':'none',nameProtectionAlpha:protection.alpha.toFixed(2),largeCutout:String(largeCutout),photoLeft:photoX.toFixed(1),photoTop:photoY.toFixed(1),photoShiftX:String(position.x),photoShiftY:String(position.y),photoHeight:photoH.toFixed(1),photoWidth:photoW.toFixed(1),typeface:design.font==='bold'?(fontLoaded?'Club Sporting':'Arial'):design.font});
  return {warnings,missingPhoto:showPortrait&&!portrait,photoExpected:!!featured.asset,invalid:featured.invalid};
 }
@@ -22462,7 +22463,7 @@ function socialGuide(s){
  const saved={0:!!(s.design.brief||s.data.assets.some(a=>['reference','reference_extra'].includes(a.kind))),1:!!socialAsset(s,'background'),3:false};
  const remaining=context?.total_limit!=null?Math.max(0,context.total_limit-context.total_used):null;
  const progress=flow.photo||g.workflowReturn?'':'<nav class="sg-progress" aria-label="Guided setup steps">'+flow.steps.map((step,i)=>'<div class="sg-step '+(saved[step.id]?'is-done':'')+'" aria-current="'+(g.step===step.id?'step':'false')+'"><span>'+(saved[step.id]&&g.step!==step.id?socialGuideIcon('check'):i+1)+'</span>'+step.label+'</div>').join('')+'</nav>';
- const returnLabel=g.awardReturn?'award graphic':g.workflowReturn==='artwork'?'team-list artwork':'player photos';
+ const returnLabel=g.awardReturn?(g.awardReturn.view==='graphics'?'team-list artwork':'award graphic'):g.workflowReturn==='artwork'?'team-list artwork':'player photos';
  const back=flow.photo||g.workflowReturn?'<button class="btn ghost" id="prepReturn">← Back to '+returnLabel+'</button>':flow.back!==undefined?'<button class="btn ghost" id="prepBack">← Back</button>':'<small>Step 1 of 3</small>';
  const next=flow.photo||g.workflowReturn?'<button class="btn" id="prepNext">Back to '+returnLabel+' →</button>':flow.next!==undefined?'<button class="btn" id="prepNext">'+(s.dirty?'Save &amp; next':'Next: '+flow.steps[flow.index+1].label.toLowerCase())+' →</button>':'';
  host.innerHTML=socialGuideStyles()+'<div class="social-guide"><div class="sg-head"><span class="sg-hint">'+(flow.photo?(g.awardReturn?'Socials Awards · Player photo':'Player photo preparation'):g.workflowReturn?'Background preparation':'Step '+(flow.index+1)+' of 3')+'</span>'+(context?'<span class="sg-pill">'+(paused?'Saved images ready':remaining!=null?remaining+' AI credits':'Image preparation')+'</span>':'')+'</div>'+progress+(g.error?'<p class="notice" role="alert">'+seEsc(g.error)+'</p><button class="btn ghost" id="prepReload">Try again</button>':'')+(context?.demo?'<p class="sg-credits">Demo preview · no AI charge</p>':'')+'<div id="prepStep"></div><div class="sg-footer">'+back+'<div class="sg-footer-end">'+next+'</div></div></div>';
@@ -22882,7 +22883,7 @@ function socialAdoptResultsWeek(s,end){
  s.resultsWeek=end;
  for(const api of [socialAwards,socialWeek,socialPlayerWeek]){
   const w=api.state(s);if(w.end===end)continue;
-  Object.assign(w,{end,context:null,attempted:false,loadAttempted:false,title:'',blurb:'',message:'',rows:[],winner:null,photo:null,saved:null,savedImage:null,contextPlayer:null,focus:null,caption:'',drafts:{},refinements:{},selectedSources:new Set(),selected:new Set(),chosen:new Set()});
+  Object.assign(w,{end,context:null,attempted:false,loadAttempted:false,title:'',blurb:'',message:'',rows:[],winner:null,photo:null,saved:null,savedImage:null,contextPlayer:null,focus:null,caption:'',drafts:{},refinements:{},graphicAssistant:null,selectedSources:new Set(),selected:new Set(),chosen:new Set()});
  }
 }
 async function socialResultsChanged(s){
@@ -22911,7 +22912,16 @@ const socialAwards=createSocialAwards({sharedResults:true,checkResults:(s,end)=>
 const socialPlayerWeek=createPlayerOfWeek({sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,text:socialText,openScores:(s)=>socialResults.open(s),savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),savedPhoto:async(s,id)=>{const asset=s.data.assets.find(a=>a.id===id);if(!asset)throw Error('Photo not found');return await (await fetch(await socialAssetURL(s,asset))).blob();}});
 const socialWeek=createTeamOfWeek({sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),teamCheck:mountScorecardTeam,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,extractUrl:matchReviewExtractUrl,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,fitImage:socialFitImage,text:socialText});
 const socialSandbox=createSocialSandbox({here:socialHere,escape:seEsc,defaults:socialDefaults,groups:()=>ensureSelections().data?.groups||[],cards:socialCards,featured:socialFeatured,renderImage:socialRender,normalize:socialNormaliseUpload,message:socialMessage,download:socialBlobDownload,applyDesign:async(s,design)=>{if(s.busy||s.pending)return;if(await socialSave(s,'settings',{revision:s.data.revision,design}))socialMessage(s,'Club layout saved for upcoming teams.');}});
-const socialTeamWorkflow=createTeamSocialWorkflow({navigation:recordSelectionNavigation,escape:seEsc,date:socialDate,calendar:socialFixtureCalendar,calendarCompleted:socialCalendarCompleted,completed:socialFixtureCompleted,here:socialHere,canLeave:socialCanLeave,draw:socialDraw,save:socialSave,defaults:socialDefaults,asset:socialAsset,uploadCard:socialUploadCard,galleryCard:socialGalleryCard,bindUploads:socialBindUploads,bindGallery:socialBindGallery,cards:socialCards,sample:socialPrepCard,renderImage:socialRender,photoControls:socialPhotoControls,bindPhotos:socialBindTeamPhotos,oversNotice:socialOversNotice,prepare:socialGuideEnter,prepareExample:(s,id)=>socialGuideEnter(s,1,'','',id),selection:socialSelection,caption:socialCaption,download:socialDownload,history:socialShowHistory,rpc:socialRPC,message:socialMessage,posting:s=>socialPublishing.mount(s)});
+async function socialTeamEditBackground(s,brief){
+ if(!socialCanLeave())return;const asset=socialAsset(s,'background')||socialAsset(s,'reference');
+ try{const saved=asset?await supabase.storage.from('club-socials').download(asset.path):null;if(saved?.error)throw Error(saved.error.message);if(!socialHere(s))return;
+ socialAwardBackground(s,saved?.data?new File([saved.data],asset.label||'Team background.png',{type:saved.data.type||'image/png'}):null,async output=>{
+  const path=s.scope.split(':').slice(1).join(':')+'/background/'+crypto.randomUUID()+'.png',upload=await supabase.storage.from('club-socials').upload(path,output.blob,{contentType:'image/png',upsert:false});if(upload.error)throw Error(upload.error.message);
+  const previous=socialAsset(s,'background');s.busy=false;try{if(!await socialSave(s,'save_asset',{kind:'background',path,asset_id:previous?.id||null,revision:previous?.revision||0}))throw Error('The background save was not confirmed. Use Retry save.');}finally{s.busy=true;}
+ },{mode:asset?.kind==='background'?'edit':'template',brief});
+ }catch(e){socialMessage(s,e.message);}
+}
+const socialTeamWorkflow=createTeamSocialWorkflow({supabase,refresh:socialRefresh,editBackground:socialTeamEditBackground,navigation:recordSelectionNavigation,escape:seEsc,date:socialDate,calendar:socialFixtureCalendar,calendarCompleted:socialCalendarCompleted,completed:socialFixtureCompleted,here:socialHere,canLeave:socialCanLeave,draw:socialDraw,save:socialSave,defaults:socialDefaults,asset:socialAsset,uploadCard:socialUploadCard,galleryCard:socialGalleryCard,bindUploads:socialBindUploads,bindGallery:socialBindGallery,cards:socialCards,sample:socialPrepCard,renderImage:socialRender,photoControls:socialPhotoControls,bindPhotos:socialBindTeamPhotos,oversNotice:socialOversNotice,prepare:socialGuideEnter,prepareExample:(s,id)=>socialGuideEnter(s,1,'','',id),selection:socialSelection,caption:socialCaption,download:socialDownload,history:socialShowHistory,rpc:socialRPC,message:socialMessage,posting:s=>socialPublishing.mount(s)});
 const socialPublishing=createSocialPublishing({canSetupPlatform:()=>platformRole==='owner',renderPlatformSetup:host=>renderSocialPlatformSetup({supabase,host,escape:seEsc}),back:appNavigationBack,supabase,escape:seEsc,date:socialDate,here:socialHere,draw:socialDraw,message:socialMessage,lock:socialLock,selection:socialSelection,cards:socialCards,renderImage:socialRender,artwork:socialRPC,refresh:socialRefresh,current:()=>socialState,returnToTeams:()=>{ensureSelections().view='published';drawSelections();void seReload().then(()=>drawSelections()).catch(()=>seNotice('Refresh Teams to check your current access.'));},demo:false});
 
 function seApplyWeekLaunch(s){

@@ -15,7 +15,7 @@ test('outcome follows the stated result even when totals or team order suggest o
  assert.equal(resultsOutcome({...fixture('Newcastle City won by 5 wickets'),our_team:'unmatched'}),'');
 });
 test('next week replaces last week’s outcome and ignores any old manual outcome value',async()=>{
- const labels=[],ctx={fillStyle:'',scale(){},fillRect(){},createLinearGradient:()=>({addColorStop(){}})},canvas={getContext:()=>ctx},h={fontReady:async()=>{},text:(_,value)=>labels.push(value)};
+ const labels=[],ctx={fillStyle:'',save(){},restore(){},measureText:()=>({width:10}),scale(){},fillRect(){},createLinearGradient:()=>({addColorStop(){}})},canvas={getContext:()=>ctx},h={fontReady:async()=>{},text:(_,value)=>labels.push(value)};
  for(const [result,expected,old] of [['Newcastle City won by 5 wickets','WIN','LOSS'],['Toronto Workers won by 18 runs','DEF','WIN'],['Result awaiting confirmation','CHECK RESULT','WIN']]){
   labels.length=0;await drawAwardGraphic(h,{},canvas,{kind:'results',items:[fixture(result)],layout:awardLayout('results'),week:'THIS WEEK',outcomes:{'first-grade':old}});
   assert.ok(labels.includes(expected));assert.ok(!labels.includes(expected==='WIN'?'DEF':'WIN'));
