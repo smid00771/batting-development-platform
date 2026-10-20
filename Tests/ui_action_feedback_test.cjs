@@ -34,5 +34,13 @@ function setup(){
   else{h.c.seLock(false);assert.equal(button.disabled,true,'An outstanding read stays disabled after mutation unlock');resolve();await pending;}
   assert.equal(button.disabled,false);assert.equal(button.dataset.seWasDisabled,undefined);
  }
+ for(const code of ['P0001',undefined]){
+  const h=setup();h.c.sePrepareMatch=x=>x;const promise=h.c.seMutate('save_board',{fixtures:[{id:'dev',revision:2,slots:[]}]});
+  h.requests[0].reject(Object.assign(Error('Alex is already selected on 2026-10-24. Choose one place per player per date.'),{code}));await promise;
+  assert.equal(h.s.busy,false);if(code){assert.equal(h.s.pending,null,'A confirmed refusal cannot trap the board in retry');assert.match(h.s.notice,/Team was not changed/);}else{assert.ok(h.s.pending,'An unverified network failure keeps safe retry');}
+ }
+ {
+  const h=setup();h.c.sePrepareMatch=x=>x;h.c.seReload=async()=>{throw Object.assign(Error('Alex is already selected on 2026-10-24. Choose one place per player per date.'),{code:'P0001'});};const promise=h.c.seMutate('save_board',{fixtures:[{id:'dev',revision:2,slots:[]}]});h.requests[0].resolve({saved:true});await promise;assert.ok(h.s.pending,'A failed read after a confirmed write cannot discard the pending receipt');
+ }
  console.log('Selection mutation/loading buttons: working feedback, double-click protection, success/failure, keyboard submit and detached-screen safeguards passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

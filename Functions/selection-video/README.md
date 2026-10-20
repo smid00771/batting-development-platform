@@ -19,15 +19,19 @@ Preferred rollout: Club Batting manages Daily and bills clubs through Club Batti
 
 ## Using the board during a call
 
-On a laptop, Selection Room opens beside the board. **Expand video** opens the larger call and chat layout; **Board + video** returns to the board. **Hide room** keeps the call connected. Layout changes and board refreshes preserve the existing video frame.
+New calls default to audio-only. **Use video** appears only before the first selector starts a call; that choice fixes the room mode. Later joiners and retries inherit it. Audio-only room and token permissions allow microphone audio only, with no camera, screen or custom video and no participant permission to elevate access. Existing calls retain their prior video-capable mode. Starting video requires a separate room after the current one expires; leaving and rejoining does not change the mode.
 
-A selector can also sign in on both devices: join video on the phone and use the board on the laptop. The participant list only reports people in the Daily call; it does not imply that other selectors have been notified or are online elsewhere. Invitations are not sent automatically.
+Audio calls tuck the entire room away on connection so nothing overlays the board. **Call controls** in the normal navigation reopens the timer, microphone and **Leave call** controls; **Hide room** or the close icon tucks them away without ending the call. Video calls use a taller, scrollable view on phones. **Expand video**, **Board + video** and **Hide room** retain the same connected iframe. Browsing other Club Batting pages keeps the call connected; signing out, changing clubs/accounts or losing selector access closes it.
+
+Switching to other phone apps remains subject to browser/OS restrictions. An iPhone home-screen web app can lose microphone capture in the background. The app never mutes automatically, offers an explicit **Resume microphone** control when interruption is detected, and suggests Safari for this specific case. Actual two-device camera/audio testing is still required.
+
+The participant list reports people in the Daily call only; invitations are not sent automatically.
 
 ## Pilot limits
 
 Video is disabled unless the club has an enabled `club_selection_private.selection_video_policy` row. The Newcastle City pilot allows up to 5,000 participant minutes per UTC month; all enabled clubs together have a 9,000-minute limit. Each join temporarily reserves the remaining call duration, rounded up with a one-minute margin. Retries reuse their request ID.
 
-After the room and its tokens expire, the scheduled [usage worker](../selection-video-usage/README.md) replaces reservations with verified connected seconds from Daily. Failed joins then use zero and short calls return unused allowance. Four people connected for 20 minutes use 80 participant-minutes. Reconnect durations are added once. Active or unverified calls retain their reservation to protect the spending limit.
+After the room and its tokens expire, the scheduled [usage worker](../selection-video-usage/README.md) replaces reservations with verified connected seconds from Daily. Failed joins then use zero and short calls return unused allowance. Four people connected for 20 minutes use 80 participant-minutes. Reconnect durations are added once. Active or unverified calls retain their reservation to protect the spending limit. The balance shows available and temporarily reserved credit separately, plus the latest verified call duration and participant credit once settled. The visible connection timer is not a billing authority. Audio and video use the existing club allowance; Daily provider rates are separate.
 
 Calls expire after 90 minutes, or at the UTC month boundary, with up to 12 participants. A private, expiring Daily token binds each user entry to one room. Duplicate token identities cannot join simultaneously. Recording, transcription, dial-out and paid caption controls are not enabled by this integration.
 

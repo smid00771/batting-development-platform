@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {JSDOM}=require('jsdom');
 function extract(source,name){const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const rest=source.slice(match.index),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);}
 const plain=value=>JSON.parse(JSON.stringify(value));
-function fixture(id,date,{slots=[{d1:'a',d2:'b'}],brackets=true,cancelled=false}={}){return {id,revision:7,details:{competition:'Comp',grade:'5th Grade',format:'long_form',opposition:'Visitors',ground:'Park',meeting:'Meet at 11',overs:null,overs_source:'fixture',days:[{date,start:'12:00'},{date:'2099-11-07',start:'12:00'}],brackets,cancelled,staff:[]},slots};}
+function fixture(id,date,{slots=[{d1:'a',d2:'b'}],brackets=true,cancelled=false}={}){const end=new Date(date+'T12:00:00Z');end.setUTCDate(end.getUTCDate()+7);return {id,revision:7,details:{competition:'Comp',grade:'5th Grade',format:'long_form',opposition:'Visitors',ground:'Park',meeting:'Meet at 11',overs:null,overs_source:'fixture',days:[{date,start:'12:00'},{date:end.toISOString().slice(0,10),start:'12:00'}],brackets,cancelled,staff:[]},slots};}
 function harness(source){
  const dom=new JSDOM('<main id="seContent"></main>'),document=dom.window.document,requests=[],prompts=[],notices=[];
  const target=fixture('target','2099-10-31'),s={data:{selector:true,access:{timezone:'Australia/Sydney',fixture_defaults:{rows:[]}},members:[],fixtures:[target],roster:[{id:'a',name:'Alex',active:true},{id:'b',name:'Blair',active:true},{id:'c',name:'Casey',active:false}]}};
@@ -30,7 +30,7 @@ for(const file of ['app.js','demo.html']){
  test(file+': copy skips cancelled and empty fixtures and retains eleven positions',async()=>{
   const h=harness(source),played=fixture('played','2099-10-10');played.published={details:structuredClone(played.details),slots:structuredClone(played.slots)};
   const cancelled=fixture('cancelled','2099-10-17',{cancelled:true});cancelled.published={details:structuredClone(cancelled.details),slots:[]};const empty=fixture('empty','2099-10-24',{slots:[]});h.s.data.fixtures.push(played,cancelled,empty);
-  await h.c.seCopyLast('target');const copy=h.requests[0].data.fixtures[0];assert.equal(copy.slots.length,11);assert.deepEqual(plain(copy.slots[0]),{d1:'a',d2:'b'});assert.ok(copy.slots.slice(1).every(x=>x.d1===null&&x.d2===null));assert.match(h.prompts[0],/5th Grade · 2099-10-10/);assert.match(h.notices.at(-1),/Copied 5th Grade · 2099-10-10/);assert.deepEqual(plain(h.requests[0].options.undo),[h.target]);
+  await h.c.seCopyLast('target');const copy=h.requests[0].data.fixtures[0];assert.equal(copy.slots.length,11);assert.deepEqual(plain(copy.slots[0]),{d1:'a',d2:'b'});assert.ok(copy.slots.slice(1).every(x=>x.d1===null&&x.d2===null));if(file==='app.js')assert.equal(h.prompts.length,0,'Copy works directly without a confirmation dialog');else assert.match(h.prompts[0],/5th Grade · 2099-10-10/);assert.match(h.notices.at(-1),/Copied 5th Grade · 2099-10-10/);assert.deepEqual(plain(h.requests[0].options.undo),[h.target]);
  });
  test(file+': copy uses a coherent published snapshot and preserves availability checks',async()=>{
   const h=harness(source),played=fixture('played','2099-10-10',{slots:[{d1:'c',d2:'c'}]});played.published={details:structuredClone(played.details),slots:[{d1:'a',d2:'b'}]};played.details.grade='Different draft grade';h.s.data.fixtures.push(played);h.unavailable.add('b:2099-11-07');await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:'a',d2:null});
@@ -43,7 +43,7 @@ for(const file of ['app.js','demo.html']){
   h.target.published=null;h.c.seFixtureLocked=()=>true;await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.equal(h.prompts.length,0);
  });
  test(file+': no usable source, rejected confirmation and failed save never claim success',async()=>{
-  const h=harness(source);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/no earlier team/);h.s.data.fixtures.push(fixture('played','2099-10-10'));h.confirm(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);h.confirm(true);h.saved(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.ok(h.notices.every(x=>!x.startsWith('Copied')));
+  const h=harness(source);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/no earlier team/);h.s.data.fixtures.push(fixture('played','2099-10-10'));if(file==='demo.html'){h.confirm(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);h.confirm(true);}h.saved(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.ok(h.notices.every(x=>!x.startsWith('Copied')));
  });
 }
 
@@ -58,4 +58,17 @@ test('app: bracketing remains a club choice for long-form and follows format cha
  form.elements.format.value='t20';form.elements.format.onchange();assert.equal(label.hidden,true);assert.equal(control.disabled,true);
  form.elements.format.value='long_form';form.elements.format.onchange();assert.equal(label.hidden,false);assert.equal(control.disabled,false);assert.equal(control.checked,true);
  form.elements.format.value='';form.elements.format.onchange();assert.equal(label.hidden,true);
+});
+
+for(const brackets of [true,false])test('app: copying Dev League skips players selected elsewhere and preserves other teams',async()=>{
+ const h=harness(fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8'));h.target.details.brackets=brackets;
+ const previous=fixture('previous','2099-10-10'),firsts=fixture('firsts','2099-11-07',{slots:[{d1:brackets?'b':'a',d2:null}]}),thirds=fixture('thirds','2099-10-31',{slots:[{d1:'a',d2:null}]});
+ firsts.published={details:structuredClone(firsts.details),slots:structuredClone(firsts.slots)};h.s.data.fixtures.push(previous,firsts,thirds);const before=structuredClone(h.s.data.fixtures);
+ await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:null,d2:null});assert.deepEqual(h.s.data.fixtures,before,'Copy does not move anyone out of another grade');assert.equal(h.requests[0].data.fixtures.length,1);
+});
+test('app: copy keeps unaffected dates, skips duplicate identities and ignores cancelled teams',async()=>{
+ const h=harness(fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8'));
+ h.s.data.roster.push({id:'alias',name:'  ALEX  ',active:false});
+ const previous=fixture('previous','2099-10-10',{slots:[{d1:'a',d2:'b'},{d1:'b',d2:'b'}]}),other=fixture('other','2099-10-31',{slots:[{d1:'alias',d2:null}]}),cancelled=fixture('cancelled','2099-10-31',{cancelled:true,slots:[{d1:'b',d2:'b'}]});h.s.data.fixtures.push(previous,other,cancelled);
+ await h.c.seCopyLast('target');const slots=plain(h.requests[0].data.fixtures[0].slots);assert.deepEqual(slots[0],{d1:null,d2:'b'});assert.deepEqual(slots[1],{d1:'b',d2:null},'Same-day duplicates in the source also leave a blank');
 });

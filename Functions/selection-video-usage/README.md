@@ -6,7 +6,7 @@ This server worker settles Newcastle City pilot reservations from Daily's meetin
 
 Admission counts `actual_seconds` for verified entries and `reserved_minutes * 60` otherwise. Original reservations remain available for audit. No per-entry rounding is applied to verified usage.
 
-The worker waits until room and token expiry plus two minutes. It reads every meeting and participant page, including reconnects, and requires two identical snapshots at least three minutes apart. The five-minute schedule normally settles usage 5–10 minutes after the 90-minute room window closes. Leaving early does not immediately release the hold because its token can still rejoin.
+The worker waits until room and token expiry plus two minutes. It reads every meeting and participant page, including reconnects, and requires two identical snapshots at least three minutes apart. The live scheduler runs every minute; the expiry grace period and two matching snapshots normally settle usage about 5–7 minutes after the 90-minute room window closes. Leaving early does not immediately release the hold because its token can still rejoin.
 
 Provider errors, ongoing meetings, unknown token identities and incomplete records keep the reservation. Calls older than 23 hours require review because Daily's shortest analytics retention is one day; a missing or partially purged history must not be interpreted as zero. `usage_error` and `usage_review_required` identify these cases. Review flags do not erase reservations.
 
