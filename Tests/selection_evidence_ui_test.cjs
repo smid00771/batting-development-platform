@@ -3,9 +3,9 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function setup(){
  const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs');
  const engine=await import('../selection-evidence.js'),ui=await import('../selection-evidence-ui.js'),stats=await import('../season-stats.js');
- const fixture=selectionEvidenceFixture(),dom=new JSDOM('<main id="host"></main>'),host=dom.window.document.querySelector('main');
+ const fixture=selectionEvidenceFixture(),dom=new JSDOM('<main id="host"></main>',{url:'https://example.invalid'}),host=dom.window.document.querySelector('main');
  dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
- const markup=()=>fixture.teams.map(t=>t.slots.map(slot=>`<div class="se-player-cell"><button class="pick">${slot.d1}</button><span data-se-evidence data-evidence-fixture="${t.id}" data-evidence-player="${slot.d1}"></span></div>`).join('')).join('');
+ const markup=()=>'<label><input type="checkbox" data-evidence-toggle checked>Show form indicators</label>'+fixture.teams.map(t=>t.slots.map(slot=>`<div class="se-player-cell"><button class="pick">${slot.d1}</button><span data-se-evidence data-evidence-fixture="${t.id}" data-evidence-player="${slot.d1}"></span></div>`).join('')).join('');
  host.innerHTML=markup();let calls=0,allowed=true,reply=async()=>({data:fixture.context});
  const controller=ui.createSelectionEvidence({here:()=>allowed,supabase:{rpc:async(name,args)=>{calls++;assert.equal(name,'club_season_stats_api');assert.equal(args.p_action,'context');return reply(args);}}});
  const options={scope:'user:club',clubId:'club',roster:fixture.roster,teams:fixture.teams};
@@ -14,7 +14,7 @@ async function setup(){
 test('board colours and paired markers open actual figures without choosing or moving a player',async()=>{
  const h=await setup(),before=JSON.stringify(h.fixture);let picks=0;h.host.querySelector('.pick').onclick=()=>picks++;
  h.controller.mount(h.host,h.options);await tick();
- const button=h.host.querySelector('[data-evidence-player="g1p0"] button');assert.match(button.textContent,/Form guide/);assert.match(button.textContent,/Batting: ↓ Below guide/);assert.match(button.textContent,/↔/);
+ const button=h.host.querySelector('[data-evidence-player="g1p0"] button');assert.ok(button.classList.contains('se-evidence-compact'));assert.doesNotMatch(button.textContent,/Form guide|Batting|Bowling|Below guide/);assert.match(button.getAttribute('aria-label'),/Batting: Below guide/);assert.ok(button.querySelector('[data-evidence-kind=bat].low svg'));assert.equal(button.querySelector('[data-evidence-kind=ball]'),null);assert.match(button.textContent,/↔/);
  button.click();const dialog=h.host.querySelector('dialog');assert.ok(dialog.open);assert.match(dialog.textContent,/Alex Rowan/);assert.match(dialog.textContent,/10 batting average/);
  const link=dialog.querySelector('.se-evidence-pair');link.open=true;assert.match(link.textContent,/Rough batting target in 2nd Grade: 20 average/);
  assert.equal(picks,0);assert.equal(JSON.stringify(h.fixture),before);
@@ -22,7 +22,7 @@ test('board colours and paired markers open actual figures without choosing or m
 });
 test('small samples show building markers, and status has accessible text as well as colour',async()=>{
  const h=await setup();h.controller.mount(h.host,h.options);await tick();
- const button=h.host.querySelector('[data-evidence-player="g1p2"] button');assert.match(button.textContent,/Batting: · Not yet rated/);assert.match(button.getAttribute('aria-label'),/Not yet rated/);assert.doesNotMatch(button.textContent,/↔/);
+ const button=h.host.querySelector('[data-evidence-player="g1p2"] button');assert.ok(button.querySelector('[data-evidence-kind=bat].building'));assert.doesNotMatch(button.textContent,/Not yet rated/);assert.match(button.getAttribute('aria-label'),/Not yet rated/);assert.doesNotMatch(button.textContent,/↔/);
  button.click();assert.match(h.host.querySelector('dialog').textContent,/Not yet rated/);
  h.host.querySelector('dialog').dispatchEvent(new h.dom.window.Event('cancel',{cancelable:true}));assert.equal(h.host.querySelector('dialog'),null);
 });
@@ -158,6 +158,26 @@ test('repeated board redraws reuse saved figures; refresh corrections clear old 
  const h=await setup();h.controller.mount(h.host,h.options);await tick();h.controller.mount(h.host,h.options);await tick();assert.equal(h.calls(),1);
  h.host.querySelector('[data-evidence-open]').click();h.reply(async()=>({data:{...h.fixture.context,cards:[]}}));h.controller.invalidate();await tick();
  assert.equal(h.calls(),2);assert.equal(h.host.querySelector('dialog'),null);assert.equal(h.host.querySelector('.se-evidence-chip.low'),null);
+});
+test('hiding form removes its space and dialog, survives redraws and reloads, and is personal to the club scope',async()=>{
+ const h=await setup();h.controller.mount(h.host,h.options);await tick();
+ h.host.querySelector('[data-evidence-open]').click();assert.ok(h.host.querySelector('dialog'));
+ let toggle=h.host.querySelector('[data-evidence-toggle]');toggle.checked=false;toggle.dispatchEvent(new h.dom.window.Event('change'));
+ assert.equal(h.host.querySelector('[data-evidence-open],.se-has-evidence,dialog'),null);
+ h.host.innerHTML=h.markup();h.controller.mount(h.host,h.options);await tick();
+ assert.equal(h.host.querySelector('[data-evidence-toggle]').checked,false);assert.equal(h.calls(),1);
+ let reads=0;const reloaded=h.ui.createSelectionEvidence({here:()=>true,supabase:{rpc:async()=>{reads++;return {data:h.fixture.context};}}});
+ h.host.innerHTML=h.markup();reloaded.mount(h.host,h.options);await tick();assert.equal(reads,0);assert.equal(h.host.querySelector('[data-evidence-toggle]').checked,false);
+ reloaded.mount(h.host,{...h.options,scope:'another-user:club'});await tick();assert.equal(h.host.querySelector('[data-evidence-toggle]').checked,true);assert.equal(reads,1);
+ reloaded.mount(h.host,h.options);await tick();toggle=h.host.querySelector('[data-evidence-toggle]');assert.equal(toggle.checked,false);
+ toggle.checked=true;toggle.dispatchEvent(new h.dom.window.Event('change'));await tick();assert.ok(h.host.querySelector('[data-evidence-open]'));assert.equal(reads,2);
+});
+test('a pending response and Season stats updates cannot reveal indicators after the checkbox is cleared',async()=>{
+ const h=await setup();let finish;h.reply(()=>new Promise(resolve=>finish=resolve));h.controller.mount(h.host,h.options);
+ const toggle=h.host.querySelector('[data-evidence-toggle]');toggle.checked=false;toggle.dispatchEvent(new h.dom.window.Event('change'));
+ finish({data:h.fixture.context});await tick();assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ h.controller.adopt(h.options.scope,h.fixture.context);assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ toggle.checked=true;toggle.dispatchEvent(new h.dom.window.Event('change'));await tick();assert.ok(h.host.querySelector('[data-evidence-open]'));assert.equal(h.calls(),1);
 });
 test('a late response cannot reveal another club’s or a departed board’s private evidence',async()=>{
  const h=await setup();let finish;h.reply(()=>new Promise(r=>finish=r));h.controller.mount(h.host,h.options);
