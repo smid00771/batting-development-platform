@@ -3,7 +3,7 @@ import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.232';
 import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.228';
 import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.232';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.232 — Compact phone Selection Board
+// Club Batting 0.8.62.233 — Compact phone styling across the app
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.225';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.225';
@@ -20,7 +20,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.232';
+const APP_UI_VERSION='0.8.62.233';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
