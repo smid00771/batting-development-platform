@@ -1,6 +1,6 @@
 # Selection Room video
 
-The Selection Room button is in Teams & availability. Chat is stored privately in the club database. Assigned selectors can join; the Head of Selections can set a Teams, Meet or Zoom backup link.
+The Selection Room button is in Teams & availability. Chat is stored privately for the current call, with no previous-chat archive. Assigned selectors can join; the Head of Selections can set a Teams, Meet or Zoom backup link.
 
 ## Daily connection
 
@@ -16,6 +16,10 @@ The function also uses the automatically supplied `SUPABASE_URL` and `SUPABASE_A
 The current `DAILY_API_KEY` is explicitly restricted to Newcastle City (`c6022ec7-00d9-4c91-a208-710272a0b866`) in the Edge Function. Other clubs are rejected before any minutes are reserved or any Daily request is made, even if their database video policy is enabled. Request parameters cannot select a billing account. Keep this restriction until platform billing is ready.
 
 Preferred rollout: Club Batting manages Daily and bills clubs through Club Batting. Clubs should not need a Daily account, API key, or separate setup. This release does not enable that rollout or activate club charges. Before enabling it, arrange the business payment method, club subscription/allowance rules, reliable per-club usage reconciliation, and spending limits. Existing reservation totals are conservative admission limits, not actual billable usage.
+
+## Temporary selection chat
+
+Each new server call starts a fresh chat. Comments from earlier calls are deleted, not archived. When the room expires, its comments are cleared by the next chat request or the minute-by-minute cleanup job. A selector leaving or reconnecting does not clear comments for people still using that room. Messages written between calls remain available until the next call starts; text chat still works when calls are unavailable. Requests from an expired chat cannot retry its old comments into the next call. Call expiry and verified usage settlement are unchanged.
 
 ## Using the board during a call
 

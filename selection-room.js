@@ -1,4 +1,4 @@
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.229';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.230';
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 export function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -82,7 +82,7 @@ export function createSelectionRoom(h){
   el(s,'layout').hidden=!g.wide;
  }
  function scheduleFit(s){if(s.layoutFrame)return;s.layoutFrame=window.requestAnimationFrame(()=>{s.layoutFrame=null;fit(s);});}
- function persist(s){try{sessionStorage.setItem('selection-room-draft-'+s.scope.key,JSON.stringify({draft:s.draft,pending:s.pending}));}catch{}}
+ function persist(s){try{sessionStorage.setItem('selection-room-draft-'+s.scope.key,JSON.stringify({draft:s.draft,pending:s.pending,chat_session:s.chatSession}));}catch{}}
  function syncReturn(s){
   const stowed=s.minimized&&s.inCall&&!s.useVideo;
   s.panel.classList.toggle('sr-stowed',stowed);s.panel.inert=stowed;s.panel.setAttribute('aria-hidden',String(stowed));
@@ -102,7 +102,12 @@ export function createSelectionRoom(h){
   if(!force&&(s.frame||s.joining)&&!window.confirm('Leave the video call and close Selection Room?'))return false;
   room=null;s.credits?.destroy();persist(s);clearInterval(s.timer);clearInterval(s.clock);document.removeEventListener('visibilitychange',s.visibility);window.removeEventListener('focus',s.foreground);s.observer?.disconnect();if(s.layoutFrame)window.cancelAnimationFrame(s.layoutFrame);window.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('scroll',s.resize);leave(s,false);s.panel.remove();s.reopen.remove();document.body.classList.remove('sr-open','sr-minimized','sr-docked','sr-wide');document.body.style.removeProperty('--selection-room-width');window.removeEventListener('beforeunload',s.unload);return true;
  }
- function messageRows(s,messages,{older=false}={}){
+ function chatSession(s,key){
+  if(typeof key!=='string'||s.chatSession===key)return;
+  const previous=s.chatSession;s.chatSession=key;s.messages.clear();el(s,'messages').querySelectorAll('[data-message-id]').forEach(n=>n.remove());
+  if(previous!==undefined||s.pending&&s.pending.chat_session!==key){s.pending=null;s.draft='';el(s,'message').value='';compose(s);text(s,'sendStatus','');}persist(s);
+ }
+ function messageRows(s,messages){
   const box=el(s,'messages'),height=box.scrollHeight,scroll=box.scrollTop,atBottom=height-scroll-box.clientHeight<70;
   let added=false;
   for(const m of messages||[]){
@@ -114,7 +119,7 @@ export function createSelectionRoom(h){
    const next=[...box.querySelectorAll('[data-message-id]')].find(n=>BigInt(n.dataset.messageId)>BigInt(m.id));box.insertBefore(article,next||null);
   }
   el(s,'empty').hidden=s.messages.size>0;text(s,'empty','No messages yet.');
-  if(added){if(older)box.scrollTop=scroll+box.scrollHeight-height;else if(atBottom)box.scrollTop=box.scrollHeight;}
+  if(added&&atBottom)box.scrollTop=box.scrollHeight;
  }
  function backup(s){
   const cfg=s.config||{},link=el(s,'backupLink'),edit=el(s,'editBackup');let url='';try{url=selectionCallLink(cfg.backup_url);}catch{}
@@ -122,31 +127,30 @@ export function createSelectionRoom(h){
   if(!cfg.can_manage)el(s,'backupForm').hidden=true;
   el(s,'backup').hidden=!url&&!cfg.can_manage;
  }
- async function refresh(s,{older=false}={}){
-  if(!same(s)||s.loading)return;s.loading=true;
-  el(s,'older').disabled=true;el(s,'retry').disabled=true;text(s,'older',older?'Loading…':'Earlier messages');text(s,'retry','Reconnecting…');
-  const ids=[...s.messages.keys()].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1),data=older?{before:ids[0]}:ids.length?{after:ids.at(-1)}:{};
+ async function refresh(s){
+  if(!same(s))return;if(s.loading){s.refreshAgain=true;return;}s.loading=true;
+  el(s,'retry').disabled=true;text(s,'retry','Reconnecting…');
+  const ids=[...s.messages.keys()].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1),data=ids.length?{after:ids.at(-1)}:{};
   try{
    const result=await h.rpc(s.scope,'context',data);if(!same(s))return;
-   s.config=result;activeCall(s,result.active_call);messageRows(s,result.messages,{older});backup(s);
-   if(older||!ids.length)el(s,'older').hidden=!result.has_older;
+   s.config=result;activeCall(s,result.active_call);chatSession(s,result.chat_session);messageRows(s,result.messages);backup(s);
    text(s,'connection','');el(s,'retry').hidden=true;
   }catch(error){
    if(!same(s))return;
    if(error.code==='42501'||error.status===403){close(true);h.notice?.('Selection Room is available to assigned selectors only.');return;}
    text(s,'connection','Connection lost. Your draft is kept.');el(s,'retry').hidden=false;if(!s.messages.size)text(s,'empty','Messages unavailable.');
-  }finally{s.loading=false;if(same(s)){el(s,'older').disabled=false;el(s,'retry').disabled=false;text(s,'older','Earlier messages');text(s,'retry','Reconnect chat');}}
+  }finally{s.loading=false;if(same(s)){el(s,'retry').disabled=false;text(s,'retry','Reconnect chat');if(s.refreshAgain){s.refreshAgain=false;void refresh(s);}}}
  }
  function compose(s){
   const area=el(s,'message'),button=el(s,'send');area.disabled=!!s.pending;button.disabled=s.sending||!s.draft.trim();button.textContent=s.sending?'Sending…':s.pending?'Retry send':'Send';
  }
  async function send(s){
   if(!same(s)||s.sending||!s.draft.trim())return;
-  if(!s.pending)s.pending={request_id:crypto.randomUUID(),body:s.draft.trim()};persist(s);s.sending=true;compose(s);text(s,'sendStatus','');
+  if(!s.pending)s.pending={request_id:crypto.randomUUID(),body:s.draft.trim(),...(s.chatSession?{chat_session:s.chatSession}:{})};const pending=s.pending;persist(s);s.sending=true;compose(s);text(s,'sendStatus','');
   try{
-   const result=await h.rpc(s.scope,'post',s.pending);if(!same(s))return;
+   const result=await h.rpc(s.scope,'post',pending);if(!same(s)||s.pending!==pending)return;
    messageRows(s,[result.message]);s.pending=null;s.draft='';el(s,'message').value='';persist(s);text(s,'sendStatus','Sent');
-  }catch(error){if(same(s))text(s,'sendStatus',error.code==='42501'?'Selector access is required.':'Send not confirmed. Retry sends this message once.');}
+  }catch(error){if(same(s)&&s.pending===pending){if(error.code==='P0230'){s.pending=null;s.draft='';el(s,'message').value='';persist(s);void refresh(s);text(s,'sendStatus','That chat has ended.');}else text(s,'sendStatus',error.code==='42501'?'Selector access is required.':'Send not confirmed. Retry sends this message once.');}}
   finally{s.sending=false;if(same(s))compose(s);}
  }
  async function saveBackup(s){
@@ -259,7 +263,7 @@ export function createSelectionRoom(h){
    const frame=provider.createFrame(el(s,'video'),{iframeStyle:{width:'100%',height:'100%',border:'0'},showLeaveButton:true,activeSpeakerMode:false});s.frame=frame;videoControls(s);text(s,'videoStatus','Check your camera and microphone below.');
    frame.on('joined-meeting',()=>{if(same(s)&&s.frame===frame){s.joining=false;s.inCall=true;s.connectedAt=Date.now();s.expiresAt=data.expires_at;
     try{frame.setLocalVideo(s.useVideo);}catch{s.mediaError=true;text(s,'videoStatus','Camera could not start. Audio is still connected.');}
-    videoControls(s);setMinimized(s,!s.useVideo);callClock(s);participants(s,frame);void s.credits?.reload();}});
+    videoControls(s);setMinimized(s,!s.useVideo);callClock(s);participants(s,frame);void refresh(s);void s.credits?.reload();}});
    for(const event of ['participant-joined','participant-updated','participant-left'])frame.on(event,()=>participants(s,frame));
    frame.on('left-meeting',()=>{if(same(s)&&s.frame===frame&&!s.videoError)leave(s);});
    frame.on('error',error=>{if(same(s)&&s.frame===frame)videoFailure(s,error);});
@@ -277,12 +281,12 @@ export function createSelectionRoom(h){
   if(!saved||typeof saved!=='object')saved={};
   if(!saved.pending||typeof saved.pending.body!=='string'||typeof saved.pending.request_id!=='string')saved.pending=null;
   const panel=document.createElement('aside');panel.className='sr-room';panel.setAttribute('aria-label','Selection Room');
-  panel.innerHTML=`<header><div><h2>Selection Room</h2><small data-sr="subtitle"></small></div><button type="button" data-sr="layout" aria-pressed="false">Expand video</button><button type="button" data-sr="toggle" aria-expanded="true" title="Keep the call connected while hiding the room">Hide room</button><button type="button" data-sr="close" aria-label="Close Selection Room" title="Close Selection Room">×</button></header><div class="sr-body"><section class="sr-video-section" aria-label="Selection video"><div class="sr-actions"><button type="button" class="sr-primary" data-sr="join" hidden>Join video</button><button type="button" data-sr="leave" hidden>Leave video</button><button type="button" data-sr="checkVideo">Check video</button></div><p data-sr="videoStatus" class="sr-status" role="status">Checking video…</p><p class="sr-join-help">Selectors join here. No invitations are sent.</p><div data-sr="presence" class="sr-presence" hidden><p data-sr="callPresence" role="status"></p><ul data-sr="people" class="sr-people" aria-label="People in this call" hidden></ul></div><div data-sr="videoEmpty" class="sr-video-empty">Join video to see who is in the call.</div><div data-sr="video" class="sr-video" hidden></div><div data-sr="credits"></div><div data-sr="backup" class="sr-backup" hidden><div class="sr-actions"><a class="sr-link" data-sr="backupLink" target="_blank" rel="noopener noreferrer" hidden>Join backup call ↗</a><button type="button" data-sr="editBackup" hidden>Add backup call</button></div><form data-sr="backupForm" hidden><label for="srBackupUrl">Teams, Google Meet or Zoom link</label><input id="srBackupUrl" data-sr="backupUrl" type="url" maxlength="2048"><div class="sr-actions"><button class="sr-primary" data-sr="saveBackup" type="submit">Save call link</button><button data-sr="cancelBackup" type="button">Cancel</button></div></form><p data-sr="backupStatus" class="sr-status" role="status"></p></div></section><section class="sr-chat-section" aria-label="Selection chat"><div class="sr-chat-heading"><h3>Selection chat</h3><button type="button" data-sr="older" hidden>Earlier messages</button><button type="button" data-sr="retry" hidden>Reconnect chat</button></div><p data-sr="connection" class="sr-status" role="status"></p><div data-sr="messages" class="sr-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Private selector messages"><p data-sr="empty" class="sr-empty">Loading messages…</p></div><form class="sr-compose" data-sr="compose"><label for="srMessage">Message to selectors</label><textarea id="srMessage" data-sr="message" rows="2" maxlength="1500" placeholder="Discuss selections…"></textarea><div class="sr-actions"><p data-sr="sendStatus" class="sr-status" role="status"></p><button type="submit" data-sr="send" class="sr-primary">Send</button></div></form></section></div>`;
+  panel.innerHTML=`<header><div><h2>Selection Room</h2><small data-sr="subtitle"></small></div><button type="button" data-sr="layout" aria-pressed="false">Expand video</button><button type="button" data-sr="toggle" aria-expanded="true" title="Keep the call connected while hiding the room">Hide room</button><button type="button" data-sr="close" aria-label="Close Selection Room" title="Close Selection Room">×</button></header><div class="sr-body"><section class="sr-video-section" aria-label="Selection video"><div class="sr-actions"><button type="button" class="sr-primary" data-sr="join" hidden>Join video</button><button type="button" data-sr="leave" hidden>Leave video</button><button type="button" data-sr="checkVideo">Check video</button></div><p data-sr="videoStatus" class="sr-status" role="status">Checking video…</p><p class="sr-join-help">Selectors join here. No invitations are sent.</p><div data-sr="presence" class="sr-presence" hidden><p data-sr="callPresence" role="status"></p><ul data-sr="people" class="sr-people" aria-label="People in this call" hidden></ul></div><div data-sr="videoEmpty" class="sr-video-empty">Join video to see who is in the call.</div><div data-sr="video" class="sr-video" hidden></div><div data-sr="credits"></div><div data-sr="backup" class="sr-backup" hidden><div class="sr-actions"><a class="sr-link" data-sr="backupLink" target="_blank" rel="noopener noreferrer" hidden>Join backup call ↗</a><button type="button" data-sr="editBackup" hidden>Add backup call</button></div><form data-sr="backupForm" hidden><label for="srBackupUrl">Teams, Google Meet or Zoom link</label><input id="srBackupUrl" data-sr="backupUrl" type="url" maxlength="2048"><div class="sr-actions"><button class="sr-primary" data-sr="saveBackup" type="submit">Save call link</button><button data-sr="cancelBackup" type="button">Cancel</button></div></form><p data-sr="backupStatus" class="sr-status" role="status"></p></div></section><section class="sr-chat-section" aria-label="Selection chat"><div class="sr-chat-heading"><h3>Selection chat</h3><button type="button" data-sr="retry" hidden>Reconnect chat</button></div><p data-sr="connection" class="sr-status" role="status"></p><div data-sr="messages" class="sr-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Private selector messages"><p data-sr="empty" class="sr-empty">Loading messages…</p></div><form class="sr-compose" data-sr="compose"><label for="srMessage">Message to selectors</label><textarea id="srMessage" data-sr="message" rows="2" maxlength="1500" placeholder="Discuss selections…"></textarea><div class="sr-actions"><p data-sr="sendStatus" class="sr-status" role="status"></p><button type="submit" data-sr="send" class="sr-primary">Send</button></div></form></section></div>`;
   const recovery=document.createElement('div');recovery.className='sr-audio-recovery';recovery.dataset.sr='audioRecovery';recovery.hidden=true;recovery.innerHTML='<span data-sr="audioStatus"></span><button type="button" data-sr="resumeAudio">Resume microphone</button>';panel.querySelector('[data-sr=video]').before(recovery);
   const controls=document.createElement('div');controls.className='sr-call-controls';controls.innerHTML='<button type="button" data-sr="mute" hidden>Mute</button><label class="sr-video-choice" data-sr="videoChoice"><input type="checkbox" data-sr="useVideo">Use video</label><span data-sr="callMode" hidden></span>';
   controls.append(panel.querySelector('[data-sr=leave]'));panel.querySelector('header').after(controls);controls.after(recovery);panel.querySelector('[data-sr=leave]').textContent='Leave call';
   const reopen=document.createElement('button');reopen.type='button';reopen.className='sr-call-return';reopen.textContent='Call controls';reopen.hidden=true;reopen.setAttribute('aria-controls','selectionRoomPanel');panel.id='selectionRoomPanel';
-  const s={scope,panel,reopen,onBoard:scope.onBoard!==false,messages:new Map(),draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,useVideo:false,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');reopen.onclick=()=>{setMinimized(s,false);el(s,'mute').focus({preventScroll:true});};
+  const s={scope,panel,reopen,onBoard:scope.onBoard!==false,messages:new Map(),chatSession:typeof saved.chat_session==='string'?saved.chat_session:undefined,draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,useVideo:false,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');reopen.onclick=()=>{setMinimized(s,false);el(s,'mute').focus({preventScroll:true});};
   const nav=window.navigator,ios=/iPad|iPhone|iPod/.test(nav.userAgent)||nav.platform==='MacIntel'&&nav.maxTouchPoints>1;
   if(ios&&(nav.standalone||window.matchMedia?.('(display-mode: standalone)').matches)){const help=document.createElement('p');help.className='sr-status';help.textContent='Switching apps may pause your iPhone microphone. Try joining through Safari for calls.';el(s,'video').before(help);}
   text(s,'subtitle','Selectors only · '+scope.club_name);el(s,'message').value=s.draft;compose(s);
@@ -292,7 +296,7 @@ export function createSelectionRoom(h){
   el(s,'close').onclick=()=>s.frame||s.joining?setMinimized(s,true):close();el(s,'toggle').onclick=()=>setMinimized(s,!s.minimized);
   el(s,'message').oninput=e=>{s.draft=e.target.value;persist(s);compose(s);text(s,'sendStatus','');};
   el(s,'message').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();void send(s);}};
-  el(s,'compose').onsubmit=e=>{e.preventDefault();void send(s);};el(s,'older').onclick=()=>void refresh(s,{older:true});el(s,'retry').onclick=()=>void refresh(s);
+  el(s,'compose').onsubmit=e=>{e.preventDefault();void send(s);};el(s,'retry').onclick=()=>void refresh(s);
   el(s,'editBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=false;el(s,'editBackup').hidden=true;el(s,'backupUrl').value=s.config.backup_url||'';s.editRevision=s.config.revision;text(s,'backupStatus','');el(s,'backupUrl').focus();};
   el(s,'cancelBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=true;text(s,'backupStatus','');backup(s);};el(s,'backupUrl').oninput=()=>text(s,'backupStatus','');el(s,'backupForm').onsubmit=e=>{e.preventDefault();void saveBackup(s);};
   el(s,'join').onclick=()=>void join(s);el(s,'leave').onclick=()=>leave(s);el(s,'checkVideo').onclick=()=>void videoStatus(s);
