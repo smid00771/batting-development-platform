@@ -335,6 +335,37 @@
   #app :is(.se-order-help,.se-toolbar,.se-tabs,.se-top>.se-actions) {display:none}
 }
 
+/* One compact phone scale for every app screen and its dialogs. */
+@media(max-width:700px) {
+  :is(#app,dialog,[role="dialog"]) {--cb-heading-page:22px;--cb-heading-section:17px;--cb-heading-subsection:15px;--cb-heading-detail:14px}
+  #app {font-size:14px;line-height:1.45}
+  #app :is(h1,h2,h3,h4) {margin-top:0;margin-bottom:6px}
+  #app :is(.page,.platform-page) {padding:6px 10px 20px}
+  #app :is(.card,.admin-card,.st-panel,.season-stats) {padding:8px;border-radius:8px}
+  #app .card+.card {margin-top:8px}
+  #app :is(.grid,.form-grid,.workshop-grid,.se-form-grid,.social-fields) {gap:8px}
+  #app :is(.btnrow,.se-actions,.social-actions,.st-actions) {gap:4px}
+  #app .btnrow {margin-top:6px}
+  #app .btn {min-height:44px;padding:6px 8px;border-radius:6px;font-size:12px;font-weight:600}
+  #app .field {margin:6px 0}
+  #app :is(.field label,.se-page label,.social-fields label) {font-size:12px;margin-bottom:3px}
+  #app :is(.help,.se-muted,.social-small,.team-review-meta,.team-review-row-status) {font-size:12px;line-height:1.4}
+  #app .page p {margin-top:4px;margin-bottom:6px}
+  #app :is(.notice,.club-preparation,.match-draft-recovery,.active-club-row,.message-row) {padding:8px}
+  #app :is(.train-hero,.feedback-hero,.hwb-public-hero,.player-home-hero,.guide-hero,.club-help-feature,.prospect-hero,.call-page-header) {padding:12px!important;gap:8px}
+  #app .platform-header {padding:10px}
+  #app .player-home-tile {padding:8px;border-top-width:2px;min-height:44px}
+  #app .player-home-tile span {font-size:13px;line-height:1.4}
+  #app :is(.train-format-accordion>summary,.training-tool-tile,.setup-collapsible>summary,.plan-section-tile>summary,.training-disclosure>summary,.innings-prep-section>summary,.innings-reflection-options>summary) {min-height:44px;padding-top:6px!important;padding-bottom:6px!important}
+  #app .team-review-player-link {font-size:15px;min-height:44px}
+  #app .team-review-table tr[data-team-review-row] {padding:6px 0;gap:4px}
+  #app .match-review-score>strong {font-size:20px}
+  #app .ss-values strong {font-size:18px}
+  #app .account-menu-action {font-size:13px;padding:6px 8px}
+  /* Keep native fields at 16px to avoid focus zoom on iPhone. */
+  #app :is(input,textarea,select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]) {font-size:16px;min-height:44px;padding:6px 8px}
+}
+
 /* Phone selection workspace: show the teams before the occasional tools. */
 #app .club-menu-toggle,#app .se-section-toggle {display:none}
 #clubCallControls:empty {display:none}
