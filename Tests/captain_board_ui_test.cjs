@@ -8,7 +8,7 @@ function harness(file){
  const s={key:'club:captain',view:'board',date:'2099-10-17',undo:[],data:{captain:true,can_view_board:true,selector:false,access:{timezone:'UTC',head_selector_id:'head'},roster:[{id:'p',name:'Selected'}],fixtures:[f],conversations:[move],reviews:[],members:[]}};
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const c=vm.createContext({document,Date,Intl,structuredClone,queueMicrotask,seMountStats:()=>{},currentTab:'teams',selectionState:s,ensureSelections:()=>s,membership:{permission_role:'captain'},session:{user:{id:'cap'}},hasMatchCaptainAccess:()=>true,seCanSetup:d=>d.admin||d.selector,seEsc:esc,seDate:String,seOpt:(o,v)=>o.map(([id,l])=>`<option value="${id}" ${id===v?'selected':''}>${l}</option>`).join(''),seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Choose player',seRoleMarks:()=>'',seBoardRoleMarks:()=>'',seOrderHandle:()=>'',seDraftChanged:()=>false,seScorecardNote:()=>'',seTeamNumbers:f=>f.slots.filter(x=>x.d1).length+'/11',seBoardFixtures:()=>s.data.fixtures,seFixtureLocked:f=>!!f?.locked,seMatchRoles:()=>({d1:{},d2:{}}),seMatchRoleIssues:()=>[],seOverflowText:()=>'',seFixtureLockControls:()=>'',seBoardCounts:()=>'',seTeamChangeNotice:()=>'',seMatchRoleFields:()=>'<select data-test-role><option>Captain</option></select>',SE_FORMATS:[],seBindMatchRoles(){},seBindOrder(){},sePicker(){},seFixtureEditor:f=>calls.push({action:'fixture',id:f.id}),confirmLeaveSelections:()=>true,bindSelectionBackButtons(){},seRole:()=>'',recordSelectionNavigation(){},seRPC:async(action,data)=>{calls.push({action,data});return [];},seMutate:async(action,data)=>{calls.push({action,data});if(action==='conversation'){move.spoken_at=data.spoken?'2026-10-17T00:00:00Z':null;move.spoken_by=data.spoken?'Captain':null;move.revision++;c.seBoard();}return true;},seReadButton:async(b,label,fn)=>fn(),seReload:async()=>{},drawSelections(){},seBoardComments(){return '';}});
- vm.runInContext([...names,file==='app.js'?'seFixtureDetailsAction':'seCopyPublishedAction'].map(n=>extract(source,n)).join('\n'),c);return {s,f,move,c,document,calls,dom};
+ vm.runInContext([...names,...(file==='app.js'?['seBoardAvailability' ]:[]),file==='app.js'?'seFixtureDetailsAction':'seCopyPublishedAction'].map(n=>extract(source,n)).join('\n'),c);return {s,f,move,c,document,calls,dom};
 }
 for(const file of ['app.js','demo.html']){
  test(file+': captain has one board, read-only drafts and active follow-up',async()=>{
@@ -141,4 +141,16 @@ test('live captain board keeps each bracket partner and their own grade-drop con
  assert.match(cells[0].textContent,/Day 1/);assert.equal(cells[0].querySelector('[data-se-conversation]').dataset.seConversationPlayer,'p');assert.ok(cells[0].classList.contains('se-dropped'));
  assert.match(cells[1].textContent,/Day 2/);assert.equal(cells[1].querySelector('[data-se-conversation]').dataset.seConversationPlayer,'partner');assert.ok(cells[1].classList.contains('se-spoken'));
  assert.equal(h.document.querySelector('[data-se-slot],#seFollowup'),null,'Captain keeps read-only selection access without a separate dropdown');
+});
+
+test('live captain and selector boards label explicit unavailable days in red, separately from unanswered dates',()=>{
+ const h=harness('app.js'),p=h.s.data.roster[0];p.availability={available_dates:[],unavailable_dates:['2099-10-17']};
+ h.f.details.days.push({date:'2099-10-24'});h.f.slots[0].d2='p';h.s.data.conversations=[];
+ h.c.seBoard();let cell=h.document.querySelector('.se-player-cell');
+ assert.equal(cell.querySelector('.se-status.unavailable').textContent,'Day 1: Unavailable');
+ assert.equal(cell.querySelector('.se-status.unknown').textContent,'Day 2: Availability not confirmed');
+ h.s.data.selector=true;h.c.seBoard();cell=h.document.querySelector('.se-player-cell');
+ assert.equal(cell.querySelector('.se-status.unavailable').textContent,'Day 1: Unavailable');
+ assert.equal(cell.querySelector('.se-status.unknown').textContent,'Day 2: Availability not confirmed');
+ p.availability.available_dates=['2099-10-17'];assert.equal(h.c.seDayStatus(p,h.f.details.days[0]),'unavailable','Explicit red takes precedence if stale data overlaps');
 });

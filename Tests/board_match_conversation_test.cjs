@@ -8,12 +8,12 @@ function harness(file){
  let clock='2026-10-17T01:00:00Z';class Clock extends Date{constructor(...args){super(...(args.length?args:[clock]));}}
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const c=vm.createContext({document,Date:Clock,Intl,queueMicrotask,seMountStats:()=>{},crypto:require('node:crypto').webcrypto,currentTab:'teams',selectionState:s,ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
-  seIsCaptain:d=>d.captain,seCanSetup:d=>d.admin||d.selector,session:{user:{id:'captain'}},club:{name:'Test Club'},seEsc:esc,seName:()=> 'Selected player',seDate:String,seOpt:()=>'',seBoardRoleMarks:()=>'',seDraftChanged:()=>false,seScorecardNote:()=>'',seTeamNumbers:()=> '1/11',
+  seIsCaptain:d=>d.captain,seCanSetup:d=>d.admin||d.selector,session:{user:{id:'captain'}},club:{name:'Test Club'},seEsc:esc,seName:()=> 'Selected player',seDate:String,seOpt:()=>'',seBoardRoleMarks:()=>'',seMovement:()=>null,seMovementBadge:()=>'',seDraftChanged:()=>false,seScorecardNote:()=>'',seTeamNumbers:()=> '1/11',
   seBoardAccess:d=>d.can_view_board,seBoardFixtures:()=>s.data.fixtures,seFixtureLocked:()=>true,seFollowupPanel:()=>'',seBindConversations(){},seBindBoardComments(){},seFixtureEditor(){},recordSelectionNavigation(){},
   seButtonWorking:()=>()=>{},seGuardFixtureEdit:()=>true,sePersist(){},seNotice:text=>s.notice=text,seLock(){},seReload:async()=>true,
   seReadButton:async(button,label,run)=>{button.textContent=label;button.disabled=true;return run();},confirmLeaveSelections:()=>true,drawSelections:()=>c.seBoard(),
   seRPC:async(action,data)=>{calls.push({action,data});if(action==='posts')return posts;if(action==='post'){if(!receipts.has(data.request_id)){receipts.add(data.request_id);posts.push({author_name:'Captain',body:data.body,created_at:'2026-10-17T01:00:00Z'});}return {saved:true};}throw Error('Unexpected '+action);}
- });vm.runInContext([...names,file==='app.js'?'seFixtureDetailsAction':'seCopyPublishedAction'].map(n=>extract(fs.readFileSync(file,'utf8'),n)).join('\n'),c);
+ });vm.runInContext([...names,...(file==='app.js'?['seBoardAvailability','seDayStatus' ]:[]),file==='app.js'?'seFixtureDetailsAction':'seCopyPublishedAction'].map(n=>extract(fs.readFileSync(file,'utf8'),n)).join('\n'),c);
  const open=async()=>{s.boardChatOpen='first';c.seBoard();await settle();return document.querySelector('[data-se-board-chat]');};
  return {c,s,fixture,document,dom,calls,posts,open,setClock:x=>clock=x};
 }
