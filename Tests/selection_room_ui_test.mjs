@@ -38,6 +38,10 @@ const room=createSelectionRoom({
 });
 try{
  await room.open();assert.equal(room.isOpen(),true);assert.equal(q('join').hidden,false);assert.equal(q('presence').hidden,true,'Do not claim the call is empty before joining');
+ const idlePanel=document.querySelector('.sr-room');
+ assert.equal(idlePanel.classList.contains('sr-stowed'),false,'Opening an idle room must leave it visible');
+ for(let i=0;i<6;i++){refreshCallback();await tick();assert.equal(idlePanel.classList.contains('sr-stowed'),false,'Background polling must not toggle an idle room offscreen');assert.equal(idlePanel.getAttribute('aria-hidden'),'false');}
+ q('checkVideo').click();await tick();assert.equal(idlePanel.classList.contains('sr-stowed'),false,'Checking call status must not hide the room');
  assert.equal(joinCount,0,'Opening Selection Room does not reserve video time');
  const creditDetails=()=>q('credits').querySelector('[data-vc="details"]');
  assert.equal(creditDetails().open,false,'Balance starts as a compact row');

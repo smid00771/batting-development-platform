@@ -1,4 +1,4 @@
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.230';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.231';
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 export function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -84,7 +84,7 @@ export function createSelectionRoom(h){
  function scheduleFit(s){if(s.layoutFrame)return;s.layoutFrame=window.requestAnimationFrame(()=>{s.layoutFrame=null;fit(s);});}
  function persist(s){try{sessionStorage.setItem('selection-room-draft-'+s.scope.key,JSON.stringify({draft:s.draft,pending:s.pending,chat_session:s.chatSession}));}catch{}}
  function syncReturn(s){
-  const stowed=s.minimized&&s.inCall&&!s.useVideo;
+  const stowed=!!(s.minimized&&s.inCall&&!s.useVideo);
   s.panel.classList.toggle('sr-stowed',stowed);s.panel.inert=stowed;s.panel.setAttribute('aria-hidden',String(stowed));
   s.reopen.hidden=!s.inCall;s.reopen.setAttribute('aria-expanded',String(!s.minimized));
   if(s.inCall){const host=document.querySelector('#app .nav')||document.getElementById('app');if(host&&s.reopen.parentNode!==host)host.prepend(s.reopen);}
@@ -286,7 +286,7 @@ export function createSelectionRoom(h){
   const controls=document.createElement('div');controls.className='sr-call-controls';controls.innerHTML='<button type="button" data-sr="mute" hidden>Mute</button><label class="sr-video-choice" data-sr="videoChoice"><input type="checkbox" data-sr="useVideo">Use video</label><span data-sr="callMode" hidden></span>';
   controls.append(panel.querySelector('[data-sr=leave]'));panel.querySelector('header').after(controls);controls.after(recovery);panel.querySelector('[data-sr=leave]').textContent='Leave call';
   const reopen=document.createElement('button');reopen.type='button';reopen.className='sr-call-return';reopen.textContent='Call controls';reopen.hidden=true;reopen.setAttribute('aria-controls','selectionRoomPanel');panel.id='selectionRoomPanel';
-  const s={scope,panel,reopen,onBoard:scope.onBoard!==false,messages:new Map(),chatSession:typeof saved.chat_session==='string'?saved.chat_session:undefined,draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,useVideo:false,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');reopen.onclick=()=>{setMinimized(s,false);el(s,'mute').focus({preventScroll:true});};
+  const s={scope,panel,reopen,minimized:false,inCall:false,onBoard:scope.onBoard!==false,messages:new Map(),chatSession:typeof saved.chat_session==='string'?saved.chat_session:undefined,draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,useVideo:false,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');reopen.onclick=()=>{setMinimized(s,false);el(s,'mute').focus({preventScroll:true});};
   const nav=window.navigator,ios=/iPad|iPhone|iPod/.test(nav.userAgent)||nav.platform==='MacIntel'&&nav.maxTouchPoints>1;
   if(ios&&(nav.standalone||window.matchMedia?.('(display-mode: standalone)').matches)){const help=document.createElement('p');help.className='sr-status';help.textContent='Switching apps may pause your iPhone microphone. Try joining through Safari for calls.';el(s,'video').before(help);}
   text(s,'subtitle','Selectors only · '+scope.club_name);el(s,'message').value=s.draft;compose(s);
