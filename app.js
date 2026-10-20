@@ -1,15 +1,15 @@
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
-import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.222';
+import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.232';
 import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.228';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.228';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.232';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.231 — Stable Selection Room visibility
+// Club Batting 0.8.62.232 — Compact phone Selection Board
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.225';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.225';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.231';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.231';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.232';
+import {createSelectionRoom} from './selection-room.js?v=0.8.62.232';
 import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.225';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.208';
 import {createFixtureResults} from './fixture-results.js?v=0.8.62.213';
@@ -20,7 +20,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.231';
+const APP_UI_VERSION='0.8.62.232';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2471,6 +2471,13 @@ function accountMenuHtml({allowJoin=true,allowCoaching=false,outId='out',joinId=
   </details>${showPlatform&&platformRole?`<button class="platform-admin-link" id="${platformId}" type="button">Platform Admin</button>`:''}</div>`;
 }
 
+function bindClubMobileMenu(){
+  const button=document.getElementById('clubMenuToggle'),shell=button?.closest('.shell');if(!shell)return;
+  const setOpen=open=>{shell.classList.toggle('club-menu-open',!!open);button.setAttribute('aria-expanded',String(!!open));};
+  button.onclick=()=>setOpen(button.getAttribute('aria-expanded')!=='true');
+  shell.addEventListener('keydown',event=>{if(event.key==='Escape'&&!event.defaultPrevented&&!event.target.closest?.('details[open],dialog[open]')&&button.getAttribute('aria-expanded')==='true'){setOpen(false);button.focus();event.preventDefault();}});
+}
+
 function renderShell(){
   document.title=club?.name?`${club.name} · Club Batting`:'Club Batting';
   applyClubTheme();
@@ -2561,19 +2568,22 @@ function renderShell(){
           ${club.logo_data_url?`<div class="shell-club-logo"><img src="${esc(club.logo_data_url)}" alt="${esc(club.name)} logo"></div>`:''}
           <div class="club-header-name">${esc(club.name)}</div>
         </div>
-        <div class="header-actions">
+        <button type="button" class="btn ghost club-menu-toggle" id="clubMenuToggle" aria-expanded="false" aria-controls="clubHeaderActions clubMainNav">Menu <span aria-hidden="true">☰</span></button>
+        <div class="header-actions" id="clubHeaderActions">
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
           ${canBootstrapPlatform&&!platformRole?'<button class="btn ghost" id="claimPlatform">Set up Platform Owner</button>':''}
           <div id="coachingUpdatesHost" hidden></div><div id="clubMessagesHost" hidden></div>
           ${accountMenuHtml({allowJoin:true,allowCoaching:true,outId:'out',joinId:'joinAnother',showPlatform:true,platformId:'accountPlatform'})}
         </div>
       </div>
+      <div id="clubCallControls"></div>
     </header>
-    <nav class="nav" aria-label="Main sections">${(()=>{let previousGroup=null;return nav.map(([k,l,g])=>{const startsNewGroup=previousGroup!==null&&previousGroup!==g;previousGroup=g;return `<button data-tab="${k}" class="${startsNewGroup?'nav-group-start':''}" data-nav-group="${g||''}">${l}</button>`;}).join('');})()}</nav>
+    <nav class="nav" id="clubMainNav" aria-label="Main sections">${(()=>{let previousGroup=null;return nav.map(([k,l,g])=>{const startsNewGroup=previousGroup!==null&&previousGroup!==g;previousGroup=g;return `<button data-tab="${k}" class="${startsNewGroup?'nav-group-start':''}" data-nav-group="${g||''}">${l}</button>`;}).join('');})()}</nav>
     <aside id="phoneSetupPromptHost" class="phone-setup-prompt" aria-label="Phone notification setup" hidden></aside>
     <main class="page" id="page"></main>
   </div>`;
 
+  bindClubMobileMenu();
   if(!selectionsStandalone())void refreshMyCoachingUpdates();
   void refreshClubMessageBadge();void syncPhoneDeviceSession();
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await signOutClubBatting();};
@@ -3181,6 +3191,8 @@ async function handleAppNavigationHistory(event){
 }
 
 function renderTab(){
+  document.querySelector('#app .shell')?.classList.remove('club-menu-open');
+  document.getElementById('clubMenuToggle')?.setAttribute('aria-expanded','false');
   installDisclosureUI();
   if(currentTab!=='myplan')playerPlanEditScope='';
   if(currentTab==='feedback'&&canUsePlayersWorkspace()){
@@ -20364,7 +20376,7 @@ function seMountStats(){
 }
 function seMountSelectionEvidence(){
  const s=ensureSelections(),host=document.getElementById('seContent');if(!host||currentTab!=='teams'||s.view!=='board'||!seBoardAccess(s.data))return;
- selectionEvidence.mount(host,{scope:s.key,clubId:club.id,roster:s.data.roster,teams:s.data.fixtures.filter(f=>f.details.days[0]?.date===s.date).map(f=>({id:f.id,...f.details,slots:f.slots}))});
+ selectionEvidence.mount(host,{scope:s.key,clubId:club.id,visibilityToggle:document.getElementById('seFormIndicators'),roster:s.data.roster,teams:s.data.fixtures.filter(f=>f.details.days[0]?.date===s.date).map(f=>({id:f.id,...f.details,slots:f.slots}))});
 }
 function seBoardAccess(d=ensureSelections().data){return d?.can_view_board===true||d?.selector===true||d?.captain===true;}
 function seFollowupRows(date=ensureSelections().date,data=ensureSelections().data){return (data.conversations||[]).filter(m=>m.kind==='lower_grade'&&m.availability!=='unavailable'&&(date===null||m.date===date));}
@@ -20947,17 +20959,26 @@ function seSelectionTabs(d){
  return [...(d.admin?[['settings','Settings']]:[]),...(seCanSetup(d)||!captain&&d.signup_followup?.can_view?[['roster','Playing List']]:[]),...(seHasAvailability(d)&&(!captain||seCanSetup(d))?[['availability','Availability']]:[]),...(seBoardAccess(d)||seFollowupRows(null,d).length||d.reviews?.length?[['board','Selection Board']]:[]),...(!d.selector&&d.admin?[['fixtures','Fixtures']]:[]),...(!seBoardAccess(d)?[['published','Teams']]:[]),...(d.socials?[['socials','Social Graphics']]:[])];
 }
 function drawSelections(){selectionState?.cancelOrder?.();if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const drawer=s.restoreDrawer;s.restoreDrawer=null;s.navigationDrawer=null;if(['reviews','conversations'].includes(s.view)){s.followupOpen=s.view==='conversations';s.view='board';}if(s.view==='published'&&seBoardAccess(d)){if(s.publishedWeek){const f=d.fixtures.find(f=>f.published&&sePublishedDates(f).some(date=>sePublishedWeekStart(date)===s.publishedWeek));if(f){s.date=f.details.days[0].date;s.boardDateChosen=true;}}s.view='board';}const tabs=seSelectionTabs(d);if(!tabs.some(([key])=>key===s.view)&&!(s.view==='availability'&&seIsCaptain(d)&&seHasAvailability(d)))s.view=seBoardAccess(d)?'board':'published';
- document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><div class="se-top"><div><h1>Club Selections</h1></div><div class="se-actions">${seStatsAllowed(d)&&['board','fixtures'].includes(s.view)?`<button class="btn ghost" id="seSeasonStats" aria-expanded="${!!s.statsOpen}" aria-controls="seStatsHost">Season stats</button>`:''}${d.selector&&s.view==='board'?'<button class="btn ghost" id="seOpenRoom">Selection Room</button>':''}<button class="btn ghost" id="seRefresh">Refresh</button></div></div><div class="se-tabs" role="navigation" aria-label="Teams sections">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</div>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice${s.notice&&s.quietNotice===s.notice?' se-notice-quiet':''}" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your change is kept here. Retry safely, or download it before reloading the latest teams.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${['board','settings'].includes(s.view)?sePublicationWorkflow(d,{board:s.view==='board'}):''}<div id="seStatsHost"></div><div id="seContent"></div></section>`;
+ document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><header class="se-page-header"><div class="se-page-heading"><h1>Club Selections</h1><button type="button" class="btn ghost se-section-toggle" id="seSectionToggle" aria-expanded="false" aria-controls="seSectionLinks">${seEsc(tabs.find(([key])=>key===s.view)?.[1]||'Availability')} <span aria-hidden="true">⌄</span></button></div><div class="se-actions se-page-tools">${seStatsAllowed(d)&&['board','fixtures'].includes(s.view)?`<button class="btn ghost" id="seSeasonStats" aria-expanded="${!!s.statsOpen}" aria-controls="seStatsHost">Season stats</button>`:''}${d.selector&&s.view==='board'?'<button class="btn ghost" id="seOpenRoom">Selection Room</button>':''}<details class="se-more" id="seMore"><summary class="btn ghost">More <span aria-hidden="true">⌄</span></summary><div class="se-more-body"><button class="btn ghost" id="seRefresh">Refresh</button>${s.view==='board'&&seBoardAccess(d)?`<div id="seBoardExtras" class="se-board-extras">${d.selector?'<button class="btn ghost" id="seNewFixture">Add fixture</button>':''}<label class="se-check se-evidence-toggle"><input type="checkbox" id="seFormIndicators" data-evidence-toggle checked>Show form indicators</label><div id="seBoardExtraTools"></div>${d.selector?'<p id="seOrderHelp" class="se-muted se-order-help">Tap a player’s handle to move them, or drag to reorder. Drafts save automatically.</p>':''}</div>`:''}</div></details></div><nav class="se-tabs" id="seSectionLinks" aria-label="Teams sections">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</nav></header>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice${s.notice&&s.quietNotice===s.notice?' se-notice-quiet':''}" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your change is kept here. Retry safely, or download it before reloading the latest teams.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${['board','settings'].includes(s.view)?sePublicationWorkflow(d,{board:s.view==='board'}):''}<div id="seStatsHost"></div><div id="seContent"></div></section>`;
+ const sectionToggle=document.getElementById('seSectionToggle'),sectionLinks=document.getElementById('seSectionLinks'),more=document.getElementById('seMore');
+ sectionToggle.onclick=()=>{const open=sectionToggle.getAttribute('aria-expanded')!=='true';sectionToggle.setAttribute('aria-expanded',String(open));sectionLinks.classList.toggle('se-sections-open',open);};
+ document.getElementById('sePage').addEventListener('keydown',event=>{if(event.key!=='Escape'||event.defaultPrevented)return;if(more.open){more.open=false;more.querySelector('summary').focus();event.preventDefault();}else if(sectionToggle.getAttribute('aria-expanded')==='true'){sectionToggle.click();sectionToggle.focus();event.preventDefault();}});
+ more.addEventListener('click',event=>{if(event.target.closest('button'))more.open=false;});
+ if(s.view==='board'){
+  const controls=document.querySelector('.se-publication-responsibility'),extras=document.getElementById('seBoardExtras');
+  if(controls&&extras){const workflow=controls.parentElement;extras.append(controls);if(!workflow.children.length)workflow.remove();}
+ }
  seTrackActionButtons(document.getElementById('sePage'),s);
  document.querySelectorAll('[data-se-view]').forEach(b=>b.onclick=()=>seChangeView(b.dataset.seView));
  document.getElementById('seSocialHandover')?.addEventListener('click',()=>{if(!confirmLeaveSelections())return;s.view='socials';socialEnsure().view='managers';drawSelections();});
  document.getElementById('seSeasonStats')?.addEventListener('click',seToggleStats);
+ document.getElementById('seNewFixture')?.addEventListener('click',()=>{if(confirmLeaveSelections())seFixtureEditor();});
  selectionRoomController?.sync();document.getElementById('seOpenRoom')?.addEventListener('click',()=>void seSelectionRoom().open());
  document.getElementById('seRefresh').onclick=async()=>{if(!confirmLeaveSelections())return;s.notice='';await renderSelections();};
  document.getElementById('seRetrySave')?.addEventListener('click',()=>seMutate(s.pending.action,s.pending.data));
  document.getElementById('seRecovery')?.addEventListener('click',async()=>{seDownload('Selection-save-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;sePersist();s.notice='Proposal downloaded. Review it against the latest saved teams before making changes.';await seReload();drawSelections();});
  const rendered=({socials:socialOpen,published:sePublished,reviews:seReviews,conversations:seConversations,board:seBoard,fixtures:seFixtures,roster:seRoster,availability:seAvailability,settings:seSettings}[s.view]||sePublished)();seMountStats();bindClubBrandingLinks();seBindPublicationWorkflow();
- if(s.pending)document.querySelectorAll('#seContent button,#seContent input,#seContent select,#seContent textarea').forEach(x=>x.disabled=true);
+ if(s.pending)document.querySelectorAll('#seContent button,#seContent input,#seContent select,#seContent textarea,#seBoardExtras button,#seBoardExtras input').forEach(x=>x.disabled=true);
  if(drawer)return Promise.resolve(rendered).then(()=>restoreSelectionDrawer(drawer));
  if(s.view!=='socials')recordSelectionNavigation();bindSelectionBackButtons();return rendered;
 }
@@ -20990,11 +21011,11 @@ function seBoardFixtures(){
  return fixtures.filter(f=>f.details.days[0].date===s.date);
 }
 function seBoard(){const s=ensureSelections();queueMicrotask(()=>{if(typeof seClearUnavailableDrafts==='function')void seClearUnavailableDrafts();if(typeof clubWeek!=='undefined')clubWeek.mount();seMountStats();if(typeof seMountSelectionEvidence==='function')seMountSelectionEvidence();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(s.data.fixtures.map(f=>f.details.days[0].date))].sort();
- if(!dates.length&&!s.data.selector){document.getElementById('seContent').innerHTML=seCaptainAvailability()+'<p>No fixtures yet.</p>';seBindPublishedActions();return;}if(!dates.length){document.getElementById('seContent').innerHTML='<section class="se-card se-drawer"><p>Add a fixture and its playing dates to start selecting.</p><button class="btn" id="seNewFixture">Add first fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';document.getElementById('seNewFixture').onclick=()=>seFixtureEditor();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);return;}
- document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label>Show fixtures starting <select id="seBoardDate">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label><label class="se-check se-evidence-toggle"><input type="checkbox" data-evidence-toggle checked>Show form indicators</label>${seCaptainAvailability()}${s.data.selector?`<button class="btn ghost" id="seNewFixture">Add fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button><button class="btn ghost" id="seUndo" ${s.undo.length?'':'disabled'}>Undo last change</button>`:''}${fs.some(f=>!seFixtureLocked(f))&&s.data.head_selector?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${s.data.selector&&!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}${s.data.selector?'<p id="seOrderHelp" class="se-muted se-order-help">Drag a handle between teams or to reorder. Tap it for move options. Drafts save automatically.</p>':'<p class="se-muted">Teams are read-only. Drafts may change until published.</p>'}${seFollowupPanel()}<div class="se-board-layout"><div class="se-grid">${fs.map(f=>s.data.selector?seTeamCard(f):seReadOnlyTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
+ if(!dates.length&&!s.data.selector){document.getElementById('seContent').innerHTML=seCaptainAvailability()+'<p>No fixtures yet.</p>';seBindPublishedActions();return;}if(!dates.length){document.getElementById('seContent').innerHTML='<section class="se-card se-drawer"><p>Add a fixture and its playing dates to start selecting.</p><button class="btn" id="seFirstFixture">Add first fixture</button><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';document.getElementById('seFirstFixture').onclick=()=>seFixtureEditor();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);return;}
+ document.getElementById('seContent').innerHTML=`<div class="se-toolbar se-board-toolbar"><label class="se-board-date">Fixtures <select id="seBoardDate" aria-label="Fixtures starting">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label>${seCaptainAvailability()}${s.data.selector?`<button class="btn ghost" id="seUnselected">Available, not selected</button>${s.undo.length?'<button class="btn ghost" id="seUndo">Undo last change</button>':''}`:''}${fs.some(f=>!seFixtureLocked(f))&&s.data.head_selector?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${s.data.selector&&!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}${s.data.selector?'':'<p class="se-muted">Teams are read-only. Drafts may change until published.</p>'}${seFollowupPanel()}<div class="se-board-layout"><div class="se-grid">${fs.map(f=>s.data.selector?seTeamCard(f):seReadOnlyTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
  document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);
  document.getElementById('seAssignHead')?.addEventListener('click',()=>{s.view='settings';drawSelections();});
- document.getElementById('seBoardDate').onchange=e=>{if(!confirmLeaveSelections()){e.target.value=s.date;return;}s.date=e.target.value;s.boardDateChosen=true;s.active=null;seBoard();recordSelectionNavigation();};document.getElementById('seNewFixture')?.addEventListener('click',()=>seFixtureEditor());document.getElementById('sePublish')?.addEventListener('click',()=>seWithSavedRoles(fs,sePublishReview));
+ document.getElementById('seBoardDate').onchange=e=>{if(!confirmLeaveSelections()){e.target.value=s.date;return;}s.date=e.target.value;s.boardDateChosen=true;s.active=null;seBoard();recordSelectionNavigation();};document.getElementById('sePublish')?.addEventListener('click',()=>seWithSavedRoles(fs,sePublishReview));
  document.getElementById('seUndo')?.addEventListener('click',()=>{const previous=s.undo.at(-1);if(!previous)return;if(previous.before.some(f=>s.data.fixtures.find(x=>x.id===f.id)?.revision!==previous.expected?.[f.id])){seNotice('A team has changed since your edit. Review it before undoing anything.');return;}s.undo.pop();const fixtures=previous.before.map(f=>({...f,revision:previous.expected[f.id]}));void seMutate('save_board',{fixtures});});
  document.querySelectorAll('[data-se-slot]').forEach(b=>b.onclick=()=>{if(!s.data.selector||s.busy||s.pending||seFixtureLocked(s.data.fixtures.find(f=>f.id===b.dataset.seFixture)))return;const a={id:b.dataset.seFixture,slot:Number(b.dataset.seSlot),day:Number(b.dataset.seDay)};if(s.active?.id===a.id&&s.active.slot===a.slot&&(b.dataset.seBoth==='1'||s.active.day===a.day))return seClosePicker();s.active=a;s.pairs=false;s.search='';s.role='';const f=s.data.fixtures.find(f=>f.id===a.id),slot=f.slots[a.slot];s.both=f.details.days.length===2&&(!f.details.brackets||slot.d1===slot.d2);seBoard();seFocusPicker();});
  document.querySelectorAll('[data-se-edit]').forEach(b=>b.onclick=()=>seFixtureEditor(s.data.fixtures.find(f=>f.id===b.dataset.seEdit)));

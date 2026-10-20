@@ -335,5 +335,71 @@
   #app :is(.se-order-help,.se-toolbar,.se-tabs,.se-top>.se-actions) {display:none}
 }
 
+/* Phone selection workspace: show the teams before the occasional tools. */
+#app .club-menu-toggle,#app .se-section-toggle {display:none}
+#clubCallControls:empty {display:none}
+#app #clubCallControls .sr-call-return {min-height:44px;margin:4px 0 0;padding:6px 10px;font-size:13px}
+#app .se-page-header {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 10px;margin-bottom:6px}
+#app .se-page-heading {min-width:0}
+#app .se-page-heading h1 {margin:0;font-size:24px}
+#app .se-page-header .se-tabs {grid-column:1/-1;margin:0}
+#app .se-page-tools {gap:6px;position:relative}
+#app .se-more {position:static}
+#app .se-more>summary {list-style:none;cursor:pointer;user-select:none}
+#app .se-more>summary::-webkit-details-marker {display:none}
+#app .se-more>summary::marker {content:''}
+#app .se-more-body {position:absolute;z-index:40;right:0;top:calc(100% + 4px);width:min(300px,calc(100vw - 24px));box-sizing:border-box;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:0 8px 24px rgb(25 42 64 / 14%);display:grid;gap:2px;max-height:65vh;overflow-y:auto}
+#app .se-board-extras {display:grid;gap:2px}
+#app .se-more-body .btn {justify-content:flex-start;text-align:left;width:100%;border-color:transparent;padding:6px 8px;font-size:13px}
+#app .se-more-body .se-check {padding:0 8px;margin:0;font-size:13px;font-weight:500;white-space:normal}
+#app .se-more-body .cw-tools {display:grid;gap:2px;margin:0}
+#app .se-more-body .se-publication-responsibility {margin:0;padding:0;border:0;background:transparent}
+#app .se-more-body .se-publication-responsibility .se-actions {width:100%}
+#app .se-more-body .se-order-help {font-size:12px;line-height:1.4;margin:4px 8px}
+#app .se-board-toolbar {align-items:center;margin:4px 0;gap:6px}
+#app .se-board-toolbar>.se-board-date {display:flex;align-items:center;gap:6px;min-width:0;width:auto;flex:0 1 auto;font-size:12px;font-weight:500}
+#app .se-board-date #seBoardDate {width:auto;max-width:100%;margin:0;padding:6px 8px}
+
+@media(max-width:700px) {
+  #app .compact-club-header.hero {padding:4px 10px;border-top-width:3px}
+  #app .compact-club-header .topline {display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px 8px}
+  #app .compact-club-header .shell-brand-lockup {flex:1 1 0;min-width:0;gap:7px}
+  #app .compact-club-header .shell-club-logo {width:26px;height:26px;min-width:26px;flex-basis:26px}
+  #app .compact-club-header .club-header-name {font-size:15px;line-height:1.25}
+  #app .club-menu-toggle {display:inline-flex;flex:0 0 auto;padding:6px 9px;font-size:13px;border-color:transparent}
+  #app .shell:not(.club-menu-open) #clubHeaderActions,#app .shell:not(.club-menu-open) #clubMainNav {display:none}
+  #app .club-menu-open #clubHeaderActions {display:flex;flex:1 0 100%;width:100%;gap:6px;padding:4px 0;border-top:1px solid var(--line)}
+  #app .club-menu-open #clubMainNav {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;padding:4px 8px;gap:2px}
+  #app .club-menu-open #clubMainNav button {min-height:44px;white-space:normal;text-align:left;padding:6px 8px;font-size:13px}
+  #app .club-menu-open #clubMainNav button[data-tab="guide"] {margin:0}
+  #app .compact-club-header .header-actions .btn {padding:6px 8px;font-size:12px}
+  #app .compact-club-header .account-controls {margin-left:0;gap:6px}
+  #app .page {padding:6px 10px 20px}
+  #app .se-page-header {grid-template-columns:minmax(0,1fr);gap:2px;margin-bottom:4px}
+  #app .se-page-heading h1 {position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%)}
+  #app .se-section-toggle {display:inline-flex;justify-content:space-between;gap:10px;max-width:100%;min-height:44px;border:0;background:transparent;padding:4px 0;font-size:18px;font-weight:650}
+  #app .se-page-header .se-tabs {display:none;grid-row:2}
+  #app .se-page-header .se-tabs.se-sections-open {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;overflow:visible;padding-bottom:4px}
+  #app .se-page-header .se-tabs .btn {min-width:0;white-space:normal;text-align:left;justify-content:flex-start;font-size:13px;padding:6px 8px}
+  #app .se-page-tools {gap:4px;justify-content:flex-start}
+  #app .se-page-tools>.btn {flex:0 1 auto}
+  #app .se-page .btn {font-size:12px;font-weight:600;min-height:44px;padding:6px 8px;border-radius:6px}
+  #app .se-page .se-section-toggle {font-size:18px;padding:4px 0}
+  #app .se-page-tools>.btn,#app .se-page-tools>.se-more>summary {border-color:transparent;background:transparent}
+  #app .se-page-tools>#seSeasonStats[aria-expanded="true"] {border-color:var(--navy);background:var(--club-soft)}
+  #app .se-board-toolbar {gap:4px 6px}
+  #app .se-board-layout>.se-grid {margin:6px 0;gap:8px}
+  #app .se-card[data-se-team] {padding:8px;border-top-width:2px}
+  #app .se-team-title h2,#app .se-team-compact-head h2 {font-size:17px!important}
+  #app .se-team-head {padding-bottom:6px}
+  #app .se-team-head p {font-size:12px;line-height:1.4}
+  #app .se-counts {margin:6px 0;gap:4px}
+  #app .se-chip {padding:2px 5px}
+  #app .se-match-roles {margin:6px 0;gap:6px}
+  #app .se-slot {min-height:44px;padding:0;gap:4px}
+  #app .se-pick {font-size:14px;padding:4px 2px}
+}
+@media print {#app .se-page-header,#app #clubCallControls {display:none}}
+
 /* Explicit hidden state takes precedence over every presentation component. */
 #app [hidden] {display:none!important}
