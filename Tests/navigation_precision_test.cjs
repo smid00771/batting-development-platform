@@ -224,7 +224,7 @@ test('production and parked demo retain unchanged review editing behaviour',()=>
  const demo=fs.readFileSync(new URL('../demo.html','file://'+__filename),'utf8').replaceAll('fixtureLocalStorage.','localStorage.');
  for(const name of ['teamReviewNavigationIdentity','appNavigationKey',
   'serializeTeamReviewState','restoreTeamReviewState','teamReviewUpdate','teamReviewRowHtml','renderTeamReviewContent','renderTeamReview','renderTeamReviewEntry',
-  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview','drawClubMessages'])assert.equal(fn(name),fn(name,demo),name); // Live navigation has advanced; the demo rebuild is explicitly parked.
+  'openTeamReviewPlayer','closeTeamReviewObservation','renderTeamReviewObservation','saveTeamReview','loadSavedTeamReview'])assert.equal(fn(name),fn(name,demo),name); // Live message links have advanced; the demo rebuild is explicitly parked.
 });
 
 

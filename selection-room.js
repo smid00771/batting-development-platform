@@ -1,4 +1,4 @@
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.197';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.229';
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 export function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -15,6 +15,11 @@ export function selectionRoomGeometry(viewport,docked=true){
  const panelWidth=Math.min(width-2*gap,wide?(docked?Math.max(320,Math.min(420,width*.34)):1100):440);
  const inset=Math.min(height-2*gap,Math.max(wide&&height>=650?76:gap,(viewport.insetTop||0)+gap)),available=height-inset-gap,panelHeight=wide?available:Math.min(720,height*.8,available);
  return {left:left+width-gap-panelWidth,top:top+(wide?inset:height-gap-panelHeight),width:panelWidth,height:panelHeight,gap,wide};
+}
+
+export function selectionCallElapsed(start,now=Date.now()){
+ const seconds=Math.floor(Math.max(0,now-start)/1000);
+ return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
 }
 
 export function createSelectionRoom(h){
@@ -47,8 +52,25 @@ export function createSelectionRoom(h){
   .sr-room.sr-minimized{height:auto;max-width:calc(100% - 16px)}.sr-room.sr-minimized .sr-body,.sr-room.sr-minimized [data-sr=layout]{display:none}.sr-room.sr-minimized header{border-bottom:0}.sr-room.sr-wide.sr-minimized header{display:flex}.sr-room.sr-wide.sr-minimized header>div{flex:1}
   .sr-room:not(.sr-wide) header{padding:12px}.sr-room:not(.sr-wide) .sr-body{display:flex;flex-direction:column;overflow:auto}.sr-room:not(.sr-wide) .sr-video-section{display:block;flex:none;overflow:visible;padding:10px 12px;border-right:0;border-bottom:1px solid #e2e8f0}.sr-room:not(.sr-wide) .sr-video{height:230px;min-height:0;max-height:28dvh;margin-top:8px}.sr-room:not(.sr-wide) .sr-video-empty{display:none}.sr-room:not(.sr-wide) .sr-chat-section{flex:1;min-height:235px}.sr-room:not(.sr-wide) .sr-chat-heading{padding-top:8px}.sr-room:not(.sr-wide) .sr-compose textarea{max-height:100px}
   .sr-room.sr-in-call .sr-join-help,.sr-room.sr-in-call .sr-backup{display:none}
-  .sr-room.sr-in-call.sr-docked .sr-video-section{display:flex;flex:0 1 52%;max-height:52%;overflow:auto}.sr-room.sr-in-call.sr-docked .sr-video{flex:1;min-height:80px;height:auto;max-height:none}.sr-room.sr-in-call.sr-docked [data-sr=credits]{flex:none}
-  .sr-room.sr-in-call:not(.sr-wide) .sr-body{overflow:hidden}.sr-room.sr-in-call:not(.sr-wide) .sr-chat-section{min-height:0;overflow:auto}.sr-room.sr-in-call:not(.sr-wide) .sr-messages{min-height:30px}.sr-room.sr-in-call:not(.sr-wide) .sr-compose textarea{min-height:46px;max-height:80px;resize:none}
+  /* Daily's camera tiles need room above its mobile controls. Never shrink the iframe to fit chat. */
+  .sr-room .sr-video{flex:1 0 400px;min-height:400px}
+  .sr-room.sr-wide.sr-docked .sr-body,.sr-room:not(.sr-wide) .sr-body{overflow:auto}
+  .sr-room.sr-wide.sr-docked .sr-video-section,.sr-room:not(.sr-wide) .sr-video-section{display:block;flex:none;max-height:none;overflow:visible}
+  .sr-room.sr-wide.sr-docked .sr-video,.sr-room:not(.sr-wide) .sr-video{height:clamp(400px,62dvh,560px);min-height:400px;max-height:none}
+  .sr-room.sr-wide.sr-docked .sr-chat-section,.sr-room:not(.sr-wide) .sr-chat-section{flex:none;min-height:220px;overflow:visible}
+  .sr-room.sr-wide.sr-docked .sr-messages,.sr-room:not(.sr-wide) .sr-messages{max-height:180px}
+  .sr-room.sr-in-call .sr-presence{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .sr-room .sr-audio-recovery{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#8a3b0e;margin:6px 0}
+  .sr-room .sr-call-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 12px;border-bottom:1px solid #e2e8f0;flex:none}
+  .sr-room .sr-video-choice{display:inline-flex;align-items:center;gap:7px;min-height:44px;font-size:13px;font-weight:600;margin:0;cursor:pointer}
+  .sr-room .sr-video-choice input{width:18px;height:18px;margin:0;padding:0}
+  .sr-room.sr-audio-call .sr-video{position:absolute;left:-10000px;top:0;width:420px;height:560px;min-height:400px;pointer-events:none}
+  .sr-room button{min-height:44px}.sr-room [data-sr=close]{min-width:44px}
+  /* Keep the live iframe mounted and laid out while the small call bar is showing. */
+  .sr-room.sr-minimized .sr-body{display:flex!important;position:absolute;left:-10000px;top:0;width:420px;height:680px;flex-direction:column;pointer-events:none}
+  .sr-room.sr-minimized [data-sr=layout]{display:none!important}
+  .sr-room.sr-stowed{left:-10000px!important;top:0!important;pointer-events:none}
+  .sr-call-return{position:static;min-height:44px;border:1px solid #b8cfbf;border-radius:7px;background:#edf5f1;color:#24344c;padding:8px 10px;font:600 13px system-ui;cursor:pointer}
   `;document.head.append(style);
  }
  function fit(s){
@@ -56,17 +78,29 @@ export function createSelectionRoom(h){
   s.panel.classList.toggle('sr-wide',g.wide);s.panel.classList.toggle('sr-short',viewport.height<650);document.body.classList.toggle('sr-wide',g.wide);document.body.style.setProperty('--selection-room-width',g.width+'px');
   const width=s.minimized?Math.min(g.width,380):g.width;Object.assign(s.panel.style,{left:(g.left+g.width-width)+'px',right:'auto',bottom:'auto',width:width+'px',height:s.minimized?'auto':g.height+'px',maxHeight:(viewport.height-2*g.gap)+'px'});
   s.panel.style.top=(s.minimized?viewport.top+viewport.height-g.gap-Math.min(s.panel.getBoundingClientRect().height,viewport.height-2*g.gap):g.top)+'px';
+  if(s.minimized&&s.inCall&&!s.useVideo){s.panel.style.left='-10000px';s.panel.style.top='0px';}
   el(s,'layout').hidden=!g.wide;
  }
  function scheduleFit(s){if(s.layoutFrame)return;s.layoutFrame=window.requestAnimationFrame(()=>{s.layoutFrame=null;fit(s);});}
  function persist(s){try{sessionStorage.setItem('selection-room-draft-'+s.scope.key,JSON.stringify({draft:s.draft,pending:s.pending}));}catch{}}
- function setMinimized(s,value){s.minimized=value;s.panel.classList.toggle('sr-minimized',value);document.body.classList.toggle('sr-minimized',value);text(s,'toggle',value?'Show room':'Hide room');el(s,'toggle').setAttribute('aria-expanded',String(!value));fit(s);}
- function setDocked(s,value){s.docked=value;s.panel.classList.toggle('sr-docked',value);document.body.classList.toggle('sr-docked',value);text(s,'layout',value?'Expand video':'Board + video');el(s,'layout').setAttribute('aria-pressed',String(!value));fit(s);}
- function sync(){if(room&&!same(room))close(true);}
+ function syncReturn(s){
+  const stowed=s.minimized&&s.inCall&&!s.useVideo;
+  s.panel.classList.toggle('sr-stowed',stowed);s.panel.inert=stowed;s.panel.setAttribute('aria-hidden',String(stowed));
+  s.reopen.hidden=!s.inCall;s.reopen.setAttribute('aria-expanded',String(!s.minimized));
+  if(s.inCall){const host=document.querySelector('#app .nav')||document.getElementById('app');if(host&&s.reopen.parentNode!==host)host.prepend(s.reopen);}
+ }
+ function setMinimized(s,value){s.minimized=value;s.panel.classList.toggle('sr-minimized',value);document.body.classList.toggle('sr-minimized',value);const body=s.panel.querySelector('.sr-body');body.inert=value;body.setAttribute('aria-hidden',String(value));text(s,'toggle',value?'Show room':'Hide room');el(s,'toggle').setAttribute('aria-expanded',String(!value));syncReturn(s);fit(s);if(value&&s.panel.contains(document.activeElement)&&s.inCall)s.reopen.focus({preventScroll:true});}
+ function setDocked(s,value){s.docked=value;s.panel.classList.toggle('sr-docked',value);document.body.classList.toggle('sr-docked',value);text(s,'layout',(value?'Expand ':'Board + ')+(s.useVideo?'video':'room'));el(s,'layout').setAttribute('aria-pressed',String(!value));fit(s);}
+ function sync(){
+  const s=room;if(!s)return;if(!same(s)){close(true);return;}
+  const onBoard=h.scope().onBoard!==false;
+  if(!onBoard&&s.onBoard){if(s.frame||s.joining)setMinimized(s,true);else{close(true);return;}}
+  s.onBoard=onBoard;syncReturn(s);
+ }
  function close(force=false){
   const s=room;if(!s)return true;
   if(!force&&(s.frame||s.joining)&&!window.confirm('Leave the video call and close Selection Room?'))return false;
-  room=null;s.credits?.destroy();persist(s);clearInterval(s.timer);s.observer?.disconnect();if(s.layoutFrame)window.cancelAnimationFrame(s.layoutFrame);window.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('scroll',s.resize);leave(s,false);s.panel.remove();document.body.classList.remove('sr-open','sr-minimized','sr-docked','sr-wide');document.body.style.removeProperty('--selection-room-width');window.removeEventListener('beforeunload',s.unload);return true;
+  room=null;s.credits?.destroy();persist(s);clearInterval(s.timer);clearInterval(s.clock);document.removeEventListener('visibilitychange',s.visibility);window.removeEventListener('focus',s.foreground);s.observer?.disconnect();if(s.layoutFrame)window.cancelAnimationFrame(s.layoutFrame);window.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('resize',s.resize);window.visualViewport?.removeEventListener('scroll',s.resize);leave(s,false);s.panel.remove();s.reopen.remove();document.body.classList.remove('sr-open','sr-minimized','sr-docked','sr-wide');document.body.style.removeProperty('--selection-room-width');window.removeEventListener('beforeunload',s.unload);return true;
  }
  function messageRows(s,messages,{older=false}={}){
   const box=el(s,'messages'),height=box.scrollHeight,scroll=box.scrollTop,atBottom=height-scroll-box.clientHeight<70;
@@ -94,7 +128,7 @@ export function createSelectionRoom(h){
   const ids=[...s.messages.keys()].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1),data=older?{before:ids[0]}:ids.length?{after:ids.at(-1)}:{};
   try{
    const result=await h.rpc(s.scope,'context',data);if(!same(s))return;
-   s.config=result;messageRows(s,result.messages,{older});backup(s);
+   s.config=result;activeCall(s,result.active_call);messageRows(s,result.messages,{older});backup(s);
    if(older||!ids.length)el(s,'older').hidden=!result.has_older;
    text(s,'connection','');el(s,'retry').hidden=true;
   }catch(error){
@@ -125,21 +159,64 @@ export function createSelectionRoom(h){
   }catch(error){if(same(s))text(s,'backupStatus',error.message||'Call link could not save. Try again.');}
   finally{s.savingBackup=false;if(same(s)){el(s,'saveBackup').disabled=false;el(s,'cancelBackup').disabled=false;el(s,'backupUrl').disabled=false;text(s,'saveBackup','Save call link');}}
  }
+ function activeCall(s,value){
+  if(s.frame||s.joining)return;
+  s.activeCall=value&&['audio','video'].includes(value.mode)&&new Date(value.expires_at).getTime()>Date.now()?value:null;
+  if(s.activeCall)s.useVideo=s.activeCall.mode==='video';
+  videoControls(s);
+ }
  function videoControls(s){
   s.panel.classList.toggle('sr-in-call',s.joining||!!s.frame&&!s.videoError);
-  el(s,'join').hidden=!s.videoReady||!!s.frame&&!s.videoError;el(s,'join').disabled=s.joining;text(s,'join',s.joining?'Connecting…':s.videoError?'Retry video':'Join video');
+  s.panel.classList.toggle('sr-audio-call',!s.useVideo&&!s.videoError);el(s,'video').inert=!s.useVideo&&!s.videoError;el(s,'video').setAttribute('aria-hidden',String(!s.useVideo&&!s.videoError));
+  el(s,'join').hidden=!s.videoReady||!!s.frame&&!s.videoError;el(s,'join').disabled=s.joining;text(s,'join',s.joining?'Connecting…':s.videoError?'Retry call':(s.activeCall?'Join ':'Start ')+(s.useVideo?'video call':'audio call'));
   el(s,'leave').hidden=!s.frame&&!s.joining;el(s,'video').hidden=!s.frame;el(s,'checkVideo').hidden=s.videoReady||s.joining||!!s.frame;
-  el(s,'videoEmpty').hidden=!!s.frame;text(s,'videoEmpty',s.joining?'Preparing video…':s.videoReady?'Join video to see who is in the call.':'Selection chat is ready.');
-  el(s,'presence').hidden=!s.inCall||!!s.videoError;
+  el(s,'mute').hidden=!s.inCall;el(s,'useVideo').disabled=s.joining||!!s.frame||!!s.activeCall;el(s,'useVideo').checked=!!s.useVideo;
+  el(s,'videoChoice').hidden=s.joining||!!s.frame||!!s.activeCall;
+  el(s,'callMode').hidden=!s.frame&&!s.joining&&!s.activeCall;text(s,'callMode',s.useVideo?'Video call':'Audio-only call');
+  el(s,'videoEmpty').hidden=!!s.frame;text(s,'videoEmpty',s.joining?'Preparing call…':s.videoReady?s.activeCall?(s.useVideo?'Video call ready to join.':'This call stays audio-only.'):'Audio-only unless Use video is selected before starting.':'Selection chat is ready.');
+  el(s,'presence').hidden=!s.inCall||!!s.videoError;text(s,'layout',(s.docked?'Expand ':'Board + ')+(s.useVideo?'video':'room'));
+  el(s,'close').setAttribute('aria-label',s.inCall?'Hide call controls':'Close Selection Room');el(s,'close').title=s.inCall?'Hide call controls':'Close Selection Room';syncReturn(s);
+ }
+ function setVideo(s,value){
+  if(!same(s)||s.frame||s.joining||s.activeCall){if(same(s))videoControls(s);return;}
+  s.useVideo=!!value;videoControls(s);
+ }
+ function mute(s){
+  if(!same(s)||!s.frame||!s.inCall)return;
+  try{s.frame.setLocalAudio(!s.frame.localAudio());checkAudio(s);}catch{text(s,'audioStatus','Microphone could not change. Try again.');el(s,'audioRecovery').hidden=false;}
+ }
+ function callClock(s){
+  if(!same(s)||!s.inCall||s.videoError||!Number.isFinite(s.connectedAt))return;
+  const elapsed=selectionCallElapsed(s.connectedAt),ending=new Date(s.expiresAt).toLocaleTimeString('en-AU',{timeZone:s.scope.timezone||'Australia/Sydney',hour:'numeric',minute:'2-digit'});
+  if(!s.mediaError)text(s,'videoStatus','Connected '+elapsed+' · room closes '+ending);
+  text(s,'subtitle',elapsed+' in call'+(s.participantCount?' · '+s.participantCount+' joined':''));
+ }
+ function checkAudio(s){
+  if(!same(s)||!s.inCall||!s.frame||document.visibilityState==='hidden')return;
+  try{
+   const audio=s.frame.participants().local?.tracks?.audio,track=audio?.persistentTrack||audio?.track;
+   const enabled=s.frame.localAudio?.()===true;text(s,'mute',enabled?'Mute':'Unmute');el(s,'mute').setAttribute('aria-pressed',String(!enabled));
+   // A muted button is a deliberate choice. Never silently unmute after switching apps.
+   const interrupted=!!audio&&(audio.state==='interrupted'||audio.state==='blocked'||enabled&&(track?.muted===true||track?.readyState==='ended'));
+   el(s,'audioRecovery').hidden=!interrupted;
+   const label=interrupted?'Call controls · mic interrupted':'Call controls';if(s.reopen.textContent!==label)s.reopen.textContent=label;
+   if(interrupted)text(s,'audioStatus','Microphone interrupted.');
+  }catch{/* A temporary roster failure must not change the user's microphone. */}
+ }
+ function resumeAudio(s){
+  if(!same(s)||!s.inCall||!s.frame)return;
+  try{s.frame.setLocalAudio(false,{forceDiscardTrack:true});s.frame.setLocalAudio(true);text(s,'audioStatus','Restarting microphone…');}
+  catch{text(s,'audioStatus','Use the microphone control in the call to reconnect.');}
  }
  function participants(s,frame){
   if(!same(s)||s.frame!==frame||!s.inCall||s.videoError)return;
+  checkAudio(s);
   let list;try{list=Object.values(frame.participants());}catch{s.participantSignature=null;text(s,'callPresence','Participant list unavailable.');el(s,'people').replaceChildren();text(s,'subtitle','In video call · '+s.scope.club_name);return;}
   const names=list.filter(Boolean).sort((a,b)=>Number(b.local)-Number(a.local)||String(a.user_name||'').localeCompare(String(b.user_name||''))).map(p=>p.local?'You':String(p.user_name||'Selector').trim()||'Selector');
   const signature=JSON.stringify(names);if(signature===s.participantSignature)return;s.participantSignature=signature;
-  const count=names.length,alone=count===1&&list.some(p=>p?.local);
+  const count=names.length,alone=count===1&&list.some(p=>p?.local);s.participantCount=count;
   text(s,'callPresence',alone?'Only you are in the call.':count?'In this call · '+count:'Checking who is in the call…');
-  text(s,'subtitle','In video call'+(alone?' · only you':count?' · '+count+' joined':''));
+  callClock(s);
   const people=el(s,'people');people.replaceChildren();people.hidden=count<2;
   for(const name of names){const item=document.createElement('li');item.textContent=name;item.title=name;people.append(item);}
  }
@@ -153,8 +230,8 @@ export function createSelectionRoom(h){
  async function videoStatus(s){
   if(!same(s)||s.statusLoading)return;s.statusLoading=true;el(s,'checkVideo').disabled=true;text(s,'checkVideo','Checking…');if(!s.frame&&!s.joining&&!s.videoError)text(s,'videoStatus','Checking video…');
   try{
-   const result=await h.video(s.scope,'status',{});if(!same(s))return;s.videoReady=result.available===true;void s.credits?.reload();
-   if(!s.frame&&!s.joining&&!s.videoError)text(s,'videoStatus',s.videoReady?'Video ready · calls last up to 90 minutes.':result.reason==='billing_required'?'Video is not enabled for this club yet. Chat is ready.':result.reason==='demo'?'Demo: chat is local. Live video is available in your club.':'Video is not connected yet. Chat is ready.');
+   const result=await h.video(s.scope,'status',{});if(!same(s))return;s.videoReady=result.available===true;activeCall(s,result.active_call);void s.credits?.reload();
+   if(!s.frame&&!s.joining&&!s.videoError)text(s,'videoStatus',s.videoReady?'Call ready · up to 90 minutes.':result.reason==='billing_required'?'Calls are not enabled for this club yet. Chat is ready.':result.reason==='demo'?'Demo: chat is local. Live calls are available in your club.':'Calls are not connected yet. Chat is ready.');
   }catch{if(same(s)&&!s.frame&&!s.videoError)text(s,'videoStatus','Video connection could not be checked. Chat is still available.');}
   finally{s.statusLoading=false;s.statusChecked=Date.now();if(same(s)){el(s,'checkVideo').disabled=false;text(s,'checkVideo','Check video');videoControls(s);}}
  }
@@ -164,32 +241,36 @@ export function createSelectionRoom(h){
   return dailyPromise;
  }
  function leave(s,show=true){
-  ++s.joinSequence;const frame=s.frame;s.frame=null;s.joining=false;s.videoRequest=null;s.videoError='';s.inCall=false;s.participantSignature=null;el(s,'people').replaceChildren();
+  ++s.joinSequence;const frame=s.frame,elapsed=Number.isFinite(s.connectedAt)?selectionCallElapsed(s.connectedAt):null;s.frame=null;s.joining=false;s.videoRequest=null;s.videoError='';s.inCall=false;s.connectedAt=null;s.participantCount=0;s.participantSignature=null;el(s,'people').replaceChildren();el(s,'audioRecovery').hidden=true;
   if(frame)try{s.videoCleanup=Promise.resolve(frame.destroy()).catch(()=>{});}catch{s.videoCleanup=Promise.resolve();}
-  if(show&&same(s)){el(s,'video').replaceChildren();videoControls(s);text(s,'videoStatus','You left the call.');text(s,'subtitle','Selectors only · '+s.scope.club_name);}
+  if(show&&same(s)){el(s,'video').replaceChildren();videoControls(s);text(s,'videoStatus',elapsed?'You left after '+elapsed+'. Credit updates after the usage check.':'You left the call.');text(s,'subtitle','Selectors only · '+s.scope.club_name);void s.credits?.reload();}
  }
  async function join(s){
   if(!same(s)||s.joining||s.frame&&!s.videoError||!s.videoReady)return;
   if(s.frame){const request=s.videoRequest;leave(s,false);s.videoRequest=request;}
-  s.videoError='';s.joining=true;const sequence=++s.joinSequence;s.videoRequest ||= crypto.randomUUID();s.credits?.collapse();videoControls(s);text(s,'videoStatus','Preparing video…');
+  s.videoError='';s.mediaError=false;s.joining=true;const sequence=++s.joinSequence;s.videoRequest ||= crypto.randomUUID();s.credits?.collapse();videoControls(s);text(s,'videoStatus','Preparing call…');
   try{
    await s.videoCleanup;if(!same(s)||sequence!==s.joinSequence)return;
    const provider=await daily();if(!same(s)||sequence!==s.joinSequence)return;
-   const data=await h.video(s.scope,'join',{request_id:s.videoRequest});if(!same(s)||sequence!==s.joinSequence)return;
+   const data=await h.video(s.scope,'join',{request_id:s.videoRequest,use_video:s.useVideo});if(!same(s)||sequence!==s.joinSequence)return;
+   if(!['audio','video'].includes(data.call_mode))throw Error('The call type could not be verified. Try again.');
+   s.useVideo=data.call_mode==='video';s.activeCall={mode:data.call_mode,expires_at:data.expires_at};
    const u=new URL(data.url);if(u.protocol!=='https:'||!u.hostname.endsWith('.daily.co')||u.username||u.password)throw Error('The video room could not be verified.');
-   const frame=provider.createFrame(el(s,'video'),{iframeStyle:{width:'100%',height:'100%',border:'0'},showLeaveButton:true});s.frame=frame;videoControls(s);text(s,'videoStatus','Check your camera and microphone below.');
-   frame.on('joined-meeting',()=>{if(same(s)&&s.frame===frame){s.joining=false;s.inCall=true;videoControls(s);text(s,'subtitle','In video call · '+s.scope.club_name);text(s,'videoStatus','Connected · call ends '+new Date(data.expires_at).toLocaleTimeString('en-AU',{timeZone:s.scope.timezone||'Australia/Sydney',hour:'numeric',minute:'2-digit'}));participants(s,frame);}});
+   const frame=provider.createFrame(el(s,'video'),{iframeStyle:{width:'100%',height:'100%',border:'0'},showLeaveButton:true,activeSpeakerMode:false});s.frame=frame;videoControls(s);text(s,'videoStatus','Check your camera and microphone below.');
+   frame.on('joined-meeting',()=>{if(same(s)&&s.frame===frame){s.joining=false;s.inCall=true;s.connectedAt=Date.now();s.expiresAt=data.expires_at;
+    try{frame.setLocalVideo(s.useVideo);}catch{s.mediaError=true;text(s,'videoStatus','Camera could not start. Audio is still connected.');}
+    videoControls(s);setMinimized(s,!s.useVideo);callClock(s);participants(s,frame);void s.credits?.reload();}});
    for(const event of ['participant-joined','participant-updated','participant-left'])frame.on(event,()=>participants(s,frame));
    frame.on('left-meeting',()=>{if(same(s)&&s.frame===frame&&!s.videoError)leave(s);});
    frame.on('error',error=>{if(same(s)&&s.frame===frame)videoFailure(s,error);});
-   frame.on('camera-error',()=>{if(same(s)&&s.frame===frame&&!s.videoError)text(s,'videoStatus','Camera or microphone unavailable. Check the device controls below.');});
+   frame.on('camera-error',()=>{if(same(s)&&s.frame===frame&&!s.videoError){s.mediaError=true;text(s,'videoStatus','Camera or microphone unavailable. Check the device controls below.');}});
    await frame.join({url:u.href,token:data.token,userName:data.user_name});
   }catch(error){
    if(same(s)&&sequence===s.joinSequence&&!s.videoError)videoFailure(s,error);
   }finally{if(same(s)&&sequence===s.joinSequence){s.joining=false;videoControls(s);}}
  }
  async function open(){
-  const scope=h.scope();if(!scope)return;
+  const scope=h.scope();if(!scope||scope.onBoard===false&&!room)return;
   if(room&&same(room)){setMinimized(room,false);return;}
   close(true);styles();
   let saved={};try{saved=JSON.parse(sessionStorage.getItem('selection-room-draft-'+scope.key)||'{}');}catch{}
@@ -197,20 +278,31 @@ export function createSelectionRoom(h){
   if(!saved.pending||typeof saved.pending.body!=='string'||typeof saved.pending.request_id!=='string')saved.pending=null;
   const panel=document.createElement('aside');panel.className='sr-room';panel.setAttribute('aria-label','Selection Room');
   panel.innerHTML=`<header><div><h2>Selection Room</h2><small data-sr="subtitle"></small></div><button type="button" data-sr="layout" aria-pressed="false">Expand video</button><button type="button" data-sr="toggle" aria-expanded="true" title="Keep the call connected while hiding the room">Hide room</button><button type="button" data-sr="close" aria-label="Close Selection Room" title="Close Selection Room">×</button></header><div class="sr-body"><section class="sr-video-section" aria-label="Selection video"><div class="sr-actions"><button type="button" class="sr-primary" data-sr="join" hidden>Join video</button><button type="button" data-sr="leave" hidden>Leave video</button><button type="button" data-sr="checkVideo">Check video</button></div><p data-sr="videoStatus" class="sr-status" role="status">Checking video…</p><p class="sr-join-help">Selectors join here. No invitations are sent.</p><div data-sr="presence" class="sr-presence" hidden><p data-sr="callPresence" role="status"></p><ul data-sr="people" class="sr-people" aria-label="People in this call" hidden></ul></div><div data-sr="videoEmpty" class="sr-video-empty">Join video to see who is in the call.</div><div data-sr="video" class="sr-video" hidden></div><div data-sr="credits"></div><div data-sr="backup" class="sr-backup" hidden><div class="sr-actions"><a class="sr-link" data-sr="backupLink" target="_blank" rel="noopener noreferrer" hidden>Join backup call ↗</a><button type="button" data-sr="editBackup" hidden>Add backup call</button></div><form data-sr="backupForm" hidden><label for="srBackupUrl">Teams, Google Meet or Zoom link</label><input id="srBackupUrl" data-sr="backupUrl" type="url" maxlength="2048"><div class="sr-actions"><button class="sr-primary" data-sr="saveBackup" type="submit">Save call link</button><button data-sr="cancelBackup" type="button">Cancel</button></div></form><p data-sr="backupStatus" class="sr-status" role="status"></p></div></section><section class="sr-chat-section" aria-label="Selection chat"><div class="sr-chat-heading"><h3>Selection chat</h3><button type="button" data-sr="older" hidden>Earlier messages</button><button type="button" data-sr="retry" hidden>Reconnect chat</button></div><p data-sr="connection" class="sr-status" role="status"></p><div data-sr="messages" class="sr-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Private selector messages"><p data-sr="empty" class="sr-empty">Loading messages…</p></div><form class="sr-compose" data-sr="compose"><label for="srMessage">Message to selectors</label><textarea id="srMessage" data-sr="message" rows="2" maxlength="1500" placeholder="Discuss selections…"></textarea><div class="sr-actions"><p data-sr="sendStatus" class="sr-status" role="status"></p><button type="submit" data-sr="send" class="sr-primary">Send</button></div></form></section></div>`;
-  const s={scope,panel,messages:new Map(),draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');
+  const recovery=document.createElement('div');recovery.className='sr-audio-recovery';recovery.dataset.sr='audioRecovery';recovery.hidden=true;recovery.innerHTML='<span data-sr="audioStatus"></span><button type="button" data-sr="resumeAudio">Resume microphone</button>';panel.querySelector('[data-sr=video]').before(recovery);
+  const controls=document.createElement('div');controls.className='sr-call-controls';controls.innerHTML='<button type="button" data-sr="mute" hidden>Mute</button><label class="sr-video-choice" data-sr="videoChoice"><input type="checkbox" data-sr="useVideo">Use video</label><span data-sr="callMode" hidden></span>';
+  controls.append(panel.querySelector('[data-sr=leave]'));panel.querySelector('header').after(controls);controls.after(recovery);panel.querySelector('[data-sr=leave]').textContent='Leave call';
+  const reopen=document.createElement('button');reopen.type='button';reopen.className='sr-call-return';reopen.textContent='Call controls';reopen.hidden=true;reopen.setAttribute('aria-controls','selectionRoomPanel');panel.id='selectionRoomPanel';
+  const s={scope,panel,reopen,onBoard:scope.onBoard!==false,messages:new Map(),draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,useVideo:false,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');reopen.onclick=()=>{setMinimized(s,false);el(s,'mute').focus({preventScroll:true});};
+  const nav=window.navigator,ios=/iPad|iPhone|iPod/.test(nav.userAgent)||nav.platform==='MacIntel'&&nav.maxTouchPoints>1;
+  if(ios&&(nav.standalone||window.matchMedia?.('(display-mode: standalone)').matches)){const help=document.createElement('p');help.className='sr-status';help.textContent='Switching apps may pause your iPhone microphone. Try joining through Safari for calls.';el(s,'video').before(help);}
   text(s,'subtitle','Selectors only · '+scope.club_name);el(s,'message').value=s.draft;compose(s);
   if(h.credit)s.credits=mountVideoCredits(el(s,'credits'),{compact:true,timezone:scope.timezone,rpc:(action,data)=>h.credit(scope,action,data)});
   setDocked(s,true);el(s,'layout').onclick=()=>{setMinimized(s,false);setDocked(s,!s.docked);};
   s.resize=()=>scheduleFit(s);window.addEventListener('resize',s.resize);window.visualViewport?.addEventListener('resize',s.resize);window.visualViewport?.addEventListener('scroll',s.resize);
-  el(s,'close').onclick=()=>close();el(s,'toggle').onclick=()=>setMinimized(s,!s.minimized);
+  el(s,'close').onclick=()=>s.frame||s.joining?setMinimized(s,true):close();el(s,'toggle').onclick=()=>setMinimized(s,!s.minimized);
   el(s,'message').oninput=e=>{s.draft=e.target.value;persist(s);compose(s);text(s,'sendStatus','');};
   el(s,'message').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();void send(s);}};
   el(s,'compose').onsubmit=e=>{e.preventDefault();void send(s);};el(s,'older').onclick=()=>void refresh(s,{older:true});el(s,'retry').onclick=()=>void refresh(s);
   el(s,'editBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=false;el(s,'editBackup').hidden=true;el(s,'backupUrl').value=s.config.backup_url||'';s.editRevision=s.config.revision;text(s,'backupStatus','');el(s,'backupUrl').focus();};
   el(s,'cancelBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=true;text(s,'backupStatus','');backup(s);};el(s,'backupUrl').oninput=()=>text(s,'backupStatus','');el(s,'backupForm').onsubmit=e=>{e.preventDefault();void saveBackup(s);};
   el(s,'join').onclick=()=>void join(s);el(s,'leave').onclick=()=>leave(s);el(s,'checkVideo').onclick=()=>void videoStatus(s);
+  el(s,'resumeAudio').onclick=()=>resumeAudio(s);
+  el(s,'mute').onclick=()=>mute(s);el(s,'useVideo').onchange=e=>setVideo(s,e.target.checked);
   s.unload=e=>{if(s.frame||s.joining){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',s.unload);
   s.observer=new MutationObserver(sync);s.observer.observe(document.getElementById('app')||document.body,{childList:true,subtree:true});
+  s.foreground=()=>{sync();if(same(s)){callClock(s);checkAudio(s);void s.credits?.reload();}};s.visibility=()=>{if(document.visibilityState!=='hidden')s.foreground();};
+  document.addEventListener('visibilitychange',s.visibility);window.addEventListener('focus',s.foreground);
+  s.clock=setInterval(()=>{if(document.visibilityState!=='hidden'){callClock(s);checkAudio(s);}},1000);
   s.timer=setInterval(()=>{sync();if(!same(s))return;if(document.visibilityState==='hidden'&&!s.frame)return;void refresh(s);if(Date.now()-(s.statusChecked||0)>30000)void videoStatus(s);},3000);
   await Promise.allSettled([refresh(s),videoStatus(s)]);
  }

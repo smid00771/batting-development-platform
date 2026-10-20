@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-import {mountVideoCredits,videoTime} from '../video-credits.js';
+import {mountVideoCredits,videoTime,videoDuration} from '../video-credits.js';
 const {JSDOM}=createRequire(import.meta.url)('jsdom');
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 const base={kind:'annual',enabled:true,available_seconds:86400,included_remaining_seconds:86400,purchased_remaining_seconds:0,held_seconds:0,renews_at:'2027-10-07T00:00:00Z',low:false,can_manage:true,can_top_up:true,payments_ready:true,packs:[{code:'video_5h',label:'5 hours',amount_cents:1500,currency:'aud'}]};
@@ -29,7 +29,7 @@ test('four-person display and blocked popups preserve server-confirmed credit',a
 test('selectors and the complimentary pilot cannot buy; low and held credit are visible',async()=>{
  for(const balance of [{...base,can_manage:false,can_top_up:false,low:true,available_seconds:0,held_seconds:5460},{...base,kind:'complimentary',can_top_up:false,payments_ready:false}]){
   const s=setup(balance);try{await tick();assert.equal(s.host.querySelector('[data-vc="toggle"]'),null);
-   if(balance.low){assert.match(s.host.textContent,/No video time/);assert.match(s.host.textContent,/held for active or recent calls/);assert.match(s.host.textContent,/Selection chat stays available/);}
+   if(balance.low){assert.match(s.host.textContent,/No video time/);assert.match(s.host.textContent,/Reserved time is temporary/);assert.match(s.host.textContent,/Selection chat stays available/);}
    else assert.match(s.host.textContent,/complimentary/);
   }finally{s.close();}
  }
@@ -40,4 +40,18 @@ test('checkout retries reuse the order and untrusted checkout URLs are rejected'
   s.host.querySelector('[data-vc-pack]').click();await tick();assert.deepEqual(s.requests[1].data,s.requests[2].data);
   assert.equal(s.host.querySelector('a'),null);assert.match(s.host.textContent,/Checkout could not be verified/);
  }finally{s.close();}
+});
+
+test('reservation stays visible when compact details are closed; verified usage distinguishes call length from credit',async()=>{
+ const dom=new JSDOM('<main id="credits"></main>',{url:'https://clubbatting.com/app.html'});
+ Object.assign(globalThis,{window:dom.window,document:dom.window.document,MutationObserver:dom.window.MutationObserver});
+ const host=document.getElementById('credits');let balance={...base,held_seconds:269*60,latest_call:{status:'pending',created_at:'2026-10-20T09:15:00Z',expires_at:'2026-10-20T10:45:00Z'}};
+ const mounted=mountVideoCredits(host,{compact:true,rpc:async()=>balance});
+ try{
+  await tick();assert.equal(host.querySelector('details').open,false);assert.match(host.querySelector('summary').textContent,/1 hr 7 min reserved/);
+  assert.match(host.querySelector('[data-vc=latestCall]').textContent,/Usage pending/);assert.doesNotMatch(host.textContent,/credit used/);
+  balance={...base,latest_call:{status:'confirmed',created_at:'2026-10-20T09:15:00Z',call_seconds:2700,people:3,participant_seconds:8100}};await mounted.reload();
+  assert.match(host.querySelector('[data-vc=latestCall]').textContent,/45 min connected · 3 people · 33 min 45 sec credit used/);
+  assert.doesNotMatch(host.querySelector('summary').textContent,/reserved/);assert.equal(videoDuration(0),'0 min');
+ }finally{mounted.destroy();dom.window.close();}
 });

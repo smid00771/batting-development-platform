@@ -32,9 +32,13 @@ for(const file of ['app.js','demo.html']){
   h.s.view='board';h.s.data.selector=false;h.s.data.captain=true;h.c.drawSelections();
   assert.equal(h.document.getElementById('seOpenRoom'),null,'Captain access alone does not grant a selector room');
  });
- test(file+': declining to leave an active room keeps the Selection Board',()=>{
+ test(file+': navigation handles the active room without discarding work',()=>{
   const h=setup(file,'selector');h.s.view='board';h.s.data.admin=true;
   let closes=0;h.c.selectionRoomController={close:()=>{closes++;return false;},sync(){}};
+  if(file==='app.js'){
+   h.c.seChangeView('settings');assert.equal(h.s.view,'settings');assert.equal(closes,0,'Browsing another page must not leave the call');
+   h.c.confirmLeaveSelections=()=>false;h.c.seChangeView('board');assert.equal(h.s.view,'settings','Unsaved-work guards still apply');return;
+  }
   h.c.seChangeView('settings');assert.equal(h.s.view,'board');assert.equal(closes,1);
   h.c.selectionRoomController.close=()=>{closes++;return true;};
   h.c.seChangeView('settings');assert.equal(h.s.view,'settings');assert.equal(closes,2);
