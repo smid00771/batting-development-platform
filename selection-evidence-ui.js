@@ -106,7 +106,7 @@ export function createSelectionEvidence(h) {
       preferences.set(b.scope,visible);
     }
     b.visible=preferences.get(b.scope);
-    const toggle=b.host.querySelector('[data-evidence-toggle]');
+    const toggle=b.visibilityToggle||b.host.querySelector('[data-evidence-toggle]');
     if(!toggle)return;
     toggle.checked=b.visible;
     toggle.onchange=()=>{

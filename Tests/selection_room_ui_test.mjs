@@ -58,6 +58,8 @@ try{
  assert.equal(document.querySelector('.sr-room').classList.contains('sr-stowed'),true,'Audio hides the whole overlay');
  assert.equal(document.querySelector('.sr-room').inert,true);assert.equal(window.getComputedStyle(document.querySelector('.sr-room')).left,'-10000px');
  assert.equal(returnButton().parentNode,document.querySelector('#app .nav'),'Call controls live in ordinary navigation');assert.equal(window.getComputedStyle(returnButton()).position,'static');
+ const callControls=document.createElement('div');callControls.id='clubCallControls';document.getElementById('app').prepend(callControls);room.sync();
+ assert.equal(returnButton().parentNode,callControls,'Call controls stay outside the collapsed phone menu');assert.equal(frame.iframe,initialFrame);assert.equal(joinCount,joinedRequests);
  assert.equal(q('videoChoice').hidden,true);assert.equal(q('useVideo').disabled,true);q('useVideo').checked=true;q('useVideo').dispatchEvent(new window.Event('change'));assert.equal(q('useVideo').checked,false,'Audio cannot become video mid-call');assert.deepEqual(videoChanges,[false]);
  returnButton().click();assert.equal(document.querySelector('.sr-room').inert,false);assert.equal(q('toggle').textContent,'Hide room');
  q('close').click();assert.equal(document.querySelector('.sr-room').classList.contains('sr-stowed'),true,'Close tucks the controls away without disconnecting');assert.equal(initialFrame.isConnected,true);assert.equal(destroyCount,0);

@@ -1,4 +1,4 @@
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.231';
+import {mountVideoCredits} from './video-credits.js?v=0.8.62.232';
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 export function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -87,7 +87,7 @@ export function createSelectionRoom(h){
   const stowed=!!(s.minimized&&s.inCall&&!s.useVideo);
   s.panel.classList.toggle('sr-stowed',stowed);s.panel.inert=stowed;s.panel.setAttribute('aria-hidden',String(stowed));
   s.reopen.hidden=!s.inCall;s.reopen.setAttribute('aria-expanded',String(!s.minimized));
-  if(s.inCall){const host=document.querySelector('#app .nav')||document.getElementById('app');if(host&&s.reopen.parentNode!==host)host.prepend(s.reopen);}
+  if(s.inCall){const host=document.getElementById('clubCallControls')||document.querySelector('#app .nav')||document.getElementById('app');if(host&&s.reopen.parentNode!==host)host.prepend(s.reopen);}
  }
  function setMinimized(s,value){s.minimized=value;s.panel.classList.toggle('sr-minimized',value);document.body.classList.toggle('sr-minimized',value);const body=s.panel.querySelector('.sr-body');body.inert=value;body.setAttribute('aria-hidden',String(value));text(s,'toggle',value?'Show room':'Hide room');el(s,'toggle').setAttribute('aria-expanded',String(!value));syncReturn(s);fit(s);if(value&&s.panel.contains(document.activeElement)&&s.inCall)s.reopen.focus({preventScroll:true});}
  function setDocked(s,value){s.docked=value;s.panel.classList.toggle('sr-docked',value);document.body.classList.toggle('sr-docked',value);text(s,'layout',(value?'Expand ':'Board + ')+(s.useVideo?'video':'room'));el(s,'layout').setAttribute('aria-pressed',String(!value));fit(s);}

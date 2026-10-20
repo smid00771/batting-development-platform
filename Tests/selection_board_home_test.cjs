@@ -69,6 +69,28 @@ for(const role of ['selector','captain'])test('live Season stats is visible to '
  assert.equal(h.s.statsOpen,true);assert.ok(h.calls.some(call=>call.stats));assert.equal(h.s.data.admin,false);
 });
 
+test('compact section picker opens the chosen section, repeats Home, and preserves the leave guard',async()=>{
+ const h=setup('app.js','selector');h.s.data.admin=true;await h.c.renderSelections();
+ const button=()=>h.document.getElementById('seSectionToggle');assert.match(button().textContent,/Selection Board/);
+ assert.equal(button().getAttribute('aria-expanded'),'false');button().click();
+ assert.equal(button().getAttribute('aria-expanded'),'true');assert.ok(h.document.querySelector('#seSectionLinks.se-sections-open'));
+ h.document.querySelector('[data-se-view="availability"]').click();assert.equal(h.s.view,'availability');assert.match(button().textContent,/Availability/);assert.equal(button().getAttribute('aria-expanded'),'false');
+ button().click();h.c.confirmLeaveSelections=()=>false;h.document.querySelector('[data-se-view="board"]').click();assert.equal(h.s.view,'availability');assert.equal(button().getAttribute('aria-expanded'),'true');
+ h.c.confirmLeaveSelections=()=>true;h.document.querySelector('[data-se-view="board"]').click();h.s.boardPanel='unselected';button().click();h.document.querySelector('[data-se-view="board"]').click();assert.equal(h.s.boardPanel,null);
+ const more=h.document.getElementById('seMore');assert.equal(more.open,false);assert.ok(more.querySelector('#seRefresh'));assert.ok(more.querySelector('#seFormIndicators'));
+ let adds=0;h.c.seFixtureEditor=()=>adds++;more.open=true;more.querySelector('#seNewFixture').click();assert.equal(adds,1);assert.equal(more.open,false);
+ h.c.confirmLeaveSelections=()=>false;more.querySelector('#seNewFixture').click();assert.equal(adds,1);
+ more.open=true;more.querySelector('summary').focus();more.dispatchEvent(new h.dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(more.open,false);assert.equal(h.document.activeElement,more.querySelector('summary'));
+ h.s.pending={action:'save_board',data:{}};h.c.drawSelections();assert.equal(h.document.getElementById('seNewFixture').disabled,true);assert.equal(h.document.getElementById('seFormIndicators').disabled,true);
+});
+
+test('phone main menu is a reversible disclosure with Escape and focus return',()=>{
+ const dom=new JSDOM('<div class="shell"><button id="clubMenuToggle" aria-expanded="false">Menu</button><nav id="clubMainNav"><button id="section">Teams & availability</button></nav></div>'),document=dom.window.document;
+ const c=vm.createContext({document});vm.runInContext(extract(fs.readFileSync('app.js','utf8'),'bindClubMobileMenu'),c);c.bindClubMobileMenu();
+ const button=document.getElementById('clubMenuToggle');button.click();assert.equal(button.getAttribute('aria-expanded'),'true');assert.ok(button.closest('.club-menu-open'));
+ document.getElementById('section').focus();document.getElementById('section').dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(button.getAttribute('aria-expanded'),'false');assert.equal(button.closest('.club-menu-open'),null);assert.equal(document.activeElement,button);
+});
+
 for(const file of ['app.js','demo.html'])test(file+': returning to Selection Board closes follow-up, comments and chat without changing saved work',async()=>{
  const h=setup(file);h.s.date='2099-10-17';await h.c.renderSelections();
  if(file==='demo.html'){h.document.querySelector('#seFollowup summary').click();await new Promise(r=>setTimeout(r,10));assert.equal(h.s.followupOpen,true);}else assert.equal(h.document.getElementById('seFollowup'),null);

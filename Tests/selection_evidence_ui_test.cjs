@@ -172,6 +172,13 @@ test('hiding form removes its space and dialog, survives redraws and reloads, an
  reloaded.mount(h.host,h.options);await tick();toggle=h.host.querySelector('[data-evidence-toggle]');assert.equal(toggle.checked,false);
  toggle.checked=true;toggle.dispatchEvent(new h.dom.window.Event('change'));await tick();assert.ok(h.host.querySelector('[data-evidence-open]'));assert.equal(reads,2);
 });
+test('the form checkbox in More retains its preference and controls the board after redraw',async()=>{
+ const h=await setup(),toggle=h.host.querySelector('[data-evidence-toggle]');h.host.before(toggle);
+ const options={...h.options,visibilityToggle:toggle};h.controller.mount(h.host,options);await tick();assert.ok(h.host.querySelector('[data-evidence-open]'));
+ toggle.checked=false;toggle.dispatchEvent(new h.dom.window.Event('change'));assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ h.host.innerHTML=h.markup();h.host.querySelector('[data-evidence-toggle]').remove();h.controller.mount(h.host,options);await tick();assert.equal(toggle.checked,false);assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ toggle.checked=true;toggle.dispatchEvent(new h.dom.window.Event('change'));await tick();assert.ok(h.host.querySelector('[data-evidence-open]'));assert.equal(h.calls(),1);
+});
 test('a pending response and Season stats updates cannot reveal indicators after the checkbox is cleared',async()=>{
  const h=await setup();let finish;h.reply(()=>new Promise(resolve=>finish=resolve));h.controller.mount(h.host,h.options);
  const toggle=h.host.querySelector('[data-evidence-toggle]');toggle.checked=false;toggle.dispatchEvent(new h.dom.window.Event('change'));
