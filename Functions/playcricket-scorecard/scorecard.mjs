@@ -26,12 +26,12 @@ export function normalizeScorecard(raw,expectedId){
    const p=people.get(b.participantId),dismissal=text(b.dismissalType),norm=dismissal.toLowerCase().replace(/[^a-z]/g,''),dnb=norm==='didnotbat',notOut=['notout','retirednotout','retiredhurt'].includes(norm),out=['bowled','caught','caughtandbowled','lbw','runout','stumped','hitwicket','retiredout','obstructingthefield','timedout','hittheballtwice','handledtheball'].includes(norm);
    if(!p||p.team!==i.battingTeamId||seen.has(b.participantId)||b.batInstance>1)throw Error('A batter could not be identified uniquely. Use manual entry for this scorecard.');seen.add(b.participantId);
    const supported=dnb||((notOut||out)&&integer(b.runsScored));if(!supported)warnings.push(`${p.name}: check the dismissal or score manually.`);
-   return {player_id:b.participantId,name:p.name,status:dnb?'did_not_bat':'played',runs:dnb?null:integer(b.runsScored)?b.runsScored:null,not_out:notOut,dismissal,dismissal_text:text(b.dismissalText,300),balls:reliableBalls&&integer(b.ballsFaced)?b.ballsFaced:null,fours:integer(b.foursScored)?b.foursScored:null,sixes:integer(b.sixesScored)?b.sixesScored:null,importable:supported&&complete};
+   return {player_id:b.participantId,name:p.name,status:dnb?'did_not_bat':'played',runs:dnb?null:integer(b.runsScored)?b.runsScored:null,not_out:notOut,dismissal,dismissal_text:text(b.dismissalText,300),balls:reliableBalls&&integer(b.ballsFaced)?b.ballsFaced:null,fours:integer(b.foursScored)?b.foursScored:null,sixes:integer(b.sixesScored)?b.sixesScored:null,...(matchComplete?{}:{figures_valid:supported}),importable:supported&&complete};
   });
   const total=integer(i.runsScored)?i.runsScored:null,extras=integer(i.totalExtras)?i.totalExtras:null,sum=batters.reduce((n,b)=>n+(b.runs||0),0);
   if(complete&&(total===null||extras===null||sum+extras!==total))warnings.push(`${text(i.name)}: PlayCricket’s batting scores and extras differ from its total. Individual figures are imported as shown.`);
   if(!reliableBalls)warnings.push(`${text(i.name)}: balls faced are unavailable.`);
-  if(!complete)warnings.push(`${text(i.name)}: still in progress; scores are preview only.`);
+  if(!complete)warnings.push(`${text(i.name)}: match in progress.`);
   const bowlingTeam=teams.find(t=>t.id!==i.battingTeamId),seenBowlers=new Set();
   if(i.bowling!=null&&(!Array.isArray(i.bowling)||i.bowling.length>30))throw Error('The bowling scorecard is incomplete.');
   const bowlers=(i.bowling||[]).map(b=>{
@@ -40,11 +40,11 @@ export function normalizeScorecard(raw,expectedId){
    seenBowlers.add(b.participantId);
    const balls=oversToBalls(b.oversBowled),valid=integer(b.wicketsTaken)&&b.wicketsTaken<=10&&integer(b.runsConceded);
    if(!valid)warnings.push(`${p.name}: bowling figures are unavailable.`);
-   return {player_id:b.participantId,name:p.name,team_id:bowlingTeam.id,wickets:integer(b.wicketsTaken)&&b.wicketsTaken<=10?b.wicketsTaken:null,runs:integer(b.runsConceded)?b.runsConceded:null,balls,overs:balls===null?null:`${Math.floor(balls/6)}${balls%6?'.'+balls%6:''}`,maidens:integer(b.maidensBowled)?b.maidensBowled:null,importable:valid&&complete};
+   return {player_id:b.participantId,name:p.name,team_id:bowlingTeam.id,wickets:integer(b.wicketsTaken)&&b.wicketsTaken<=10?b.wicketsTaken:null,runs:integer(b.runsConceded)?b.runsConceded:null,balls,overs:balls===null?null:`${Math.floor(balls/6)}${balls%6?'.'+balls%6:''}`,maidens:integer(b.maidensBowled)?b.maidensBowled:null,...(matchComplete?{}:{figures_valid:valid}),importable:valid&&complete};
   });
   return {bowlers,bowling_available:Array.isArray(i.bowling),complete,closure:text(i.inningsCloseType),id:i.id,team_id:i.battingTeamId,number:i.inningsNumber,name:text(i.name),runs:total,wickets:Number(i.numberOfWicketsFallen),extras,batters};
  });
- return {schema_version:2,provider:'playcricket_au',match_id:expectedId,url:`https://play.cricket.com.au/match/${expectedId}`,status:matchComplete?'completed':'in_progress',dates,format_key:format,format_label:text(raw.matchType),grade:text(raw.grade?.name),venue:text(raw.venue?.name),result:text(raw.matchSummary?.resultText),teams,innings,warnings:[...new Set(warnings)]};
+ return {schema_version:2,provider:'playcricket_au',match_id:expectedId,url:`https://play.cricket.com.au/match/${expectedId}`,status:matchComplete?'completed':'in_progress',source_status:status,dates,format_key:format,format_label:text(raw.matchType),grade:text(raw.grade?.name),venue:text(raw.venue?.name),result:text(raw.matchSummary?.resultText),teams,innings,warnings:[...new Set(warnings)]};
 }
 export async function readLimitedJson(response,limit=750000){if(!response.ok)throw Error('PlayCricket could not supply this scorecard. Try again later or enter results manually.');if(Number(response.headers.get('content-length'))>limit)throw Error('This scorecard is too large to import.');const reader=response.body.getReader();let bytes=0;const chunks=[];while(true){const {value,done}=await reader.read();if(done)break;bytes+=value.length;if(bytes>limit){await reader.cancel();throw Error('This scorecard is too large to import.');}chunks.push(value);}const all=new Uint8Array(bytes);let at=0;for(const c of chunks){all.set(c,at);at+=c.length;}try{return JSON.parse(new TextDecoder().decode(all));}catch{throw Error('PlayCricket returned an unreadable scorecard.');}}
 

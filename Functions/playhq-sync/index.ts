@@ -1,3 +1,4 @@
+import {sharedScorecard} from './shared-scorecard.mjs';
 import {publicAPI,clubTeams,gradeFixtures,gameSummary} from './public-api.mjs';
 const origins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 Deno.serve(async(req:Request)=>{
@@ -15,6 +16,23 @@ Deno.serve(async(req:Request)=>{
  }
  let club:string|undefined,connection:any;
  const worker=(action:string,data:unknown={})=>rpc('playhq_sync_worker',{p_action:action,p_data:{club_id:club,generation:connection?.generation,...data as object}},true);
+ async function checkJob(job:any){
+  const api=publicAPI({key:connection.key});
+  try{
+   let result:any;
+   if(job.kind==='fixtures')result=gradeFixtures(await api.fixtures(job.source_id),{teamId:job.team_id,gradeId:job.source_id,timezone:connection.timezone});
+   else {
+    const context=await worker('scorecard_context',{match_id:job.source_id,team_id:job.team_id});
+    const body=await api.summary(job.source_id);
+    result={...gameSummary(body,job.source_id),shared_scorecard:await sharedScorecard(body,context)};
+   }
+   await worker('finish',{job,result});return reply({checked:1});
+  }catch(error){
+   const status=(error as any).status||null;
+   await worker('job_error',{job,status,error:status?`PlayHQ request failed (${status})`:'PlayHQ could not be checked. Review fixture details or retry later.'});
+   return reply({checked:0,error:status?`PlayHQ request failed (${status})`:'PlayHQ could not be checked. Review fixture details or retry later.'},502);
+  }
+ }
  try{
   const raw=await req.text();if(raw.length>10000)return reply({error:'Request too large'},400);
   const input=JSON.parse(raw);
@@ -23,20 +41,15 @@ Deno.serve(async(req:Request)=>{
    // One leased job per invocation bounds work and prevents overlapping writes.
    const job=await worker('claim',{run_id:input.run_id,token:input.token});if(!job)return reply({checked:0});
    club=job.club_id;connection=await worker('connection');
-   const api=publicAPI({key:connection.key});
-   try{
-    const result=job.kind==='fixtures'?gradeFixtures(await api.fixtures(job.source_id),{teamId:job.team_id,gradeId:job.source_id,timezone:connection.timezone}):gameSummary(await api.summary(job.source_id),job.source_id);
-    await worker('finish',{job,result});return reply({checked:1});
-   }catch(error){
-    const status=(error as any).status||null;
-    await worker('job_error',{job,status,error:status?`PlayHQ request failed (${status})`:'PlayHQ could not be checked. Retry later.'});
-    return reply({checked:0,error:'PlayHQ check failed'},502);
-   }
+   return await checkJob(job);
   }
   club=input.club_id;
   // This user-scoped RPC checks membership and selector/admin authority before key access.
   await rpc('playhq_sync_api',{p_club_id:club,p_action:'status',p_data:{}});
   connection=await worker('connection');const api=publicAPI({key:connection.key});
+  if(input.action==='check'){
+   const job=await worker('claim_fixture',{fixture_id:input.fixture_id,kind:input.kind});return await checkJob(job);
+  }
   if(input.action==='seasons'){
    const seasons=await api.seasons(connection.association_id);await worker('verified');return reply({seasons});
   }

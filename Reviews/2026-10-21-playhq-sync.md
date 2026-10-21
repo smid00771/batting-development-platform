@@ -8,7 +8,7 @@ Recheck dates, times, per-day grounds and cancellations. Preserve selections,
 publication, bracketing, availability and coaching records. Never infer a
 cancellation merely because a match disappears from a response.
 
-Download available Day 1 figures as provisional, then update the same match and
+Download available Day 1 figures, then update the same match and
 innings after Day 2. Retry missing or manually delayed scores; periodically
 recheck corrections. Missing scores are not zero. No automatic award publication.
 Each subscribing club supplies its own API key. No team-list writeback to PlayHQ.
@@ -33,38 +33,64 @@ Appearance IDs are not assumed to equal existing PlayCricket participant IDs.
 Hidden names remain null. The fixture examples show UTC timestamps: convert using
 venue/club timezone before assigning dates to availability or selections.
 
-## Implemented
+## Implemented through 0.8.62.235
 
-Version 0.8.62.234 adds Import season fixtures and retains Enter fixtures manually.
 The import panel loads seasons and club teams, maps selected grades, previews games,
-and explicitly links matching manual fixtures before idempotent import.
-Credentials stay in Vault; the browser never receives a saved key.
+and explicitly links matching manual fixtures before idempotent import. Manual
+fixture entry remains. Credentials stay in Vault and are never returned to the browser.
 
-Private RLS tables, explicit RPC grants, membership checks and existing fixture
-save guards protect imports. Source changes are staged for review, never silently
-applied to published selections. The worker uses leased jobs and one-use scheduler
-tokens, bounded retries and stops polling on authentication failures. Future
-results are not due before the first playing day plus eight hours. Summary storage
-retains provisional results and subsequent updates to the same source match.
+Fixture changes have a current/proposed preview and revision-checked apply action.
+Existing publication locks and linked-record correction guards remain in force.
+Check scores now and Check fixture changes are available on linked fixtures.
+Explicit cancellations are retained; a missing match never means cancellation.
 
-The database migrations and edge function are deployed. City’s previously supplied
-key was saved with explicit user approval on 21 October. No provider verification,
-real fixture import or automatic polling has been completed. The cron is inactive.
+The worker now stores a shared scorecard, using separate PlayHQ namespaces for
+matches, teams, innings and match-scoped appearances. Fixture results, completed-match
+Season Stats and awards consume it. Identified club teams come from the verified
+provider filter; player histories still require explicit links. Hidden names stay
+unidentified. Known final WON/LOST outcomes come from source outcomes, not totals.
+
+Each award offers Include Day 1 scores only when an unfinished two-day game has
+figures after the first day, or reported stumps on that day. The default is off.
+Team/Player of the Week, centuries and five wickets use normal figures and graphics.
+An optional unfinished Results graphic says MATCH UPDATE and IN PROGRESS. The option
+is separate per award; it does not change stored match completion or season totals.
+Saved Day 1 graphics remain usable with the checkbox off, subject to score corrections.
+
+Database migrations and both scorecard edge functions are deployed. City's key was
+saved with explicit approval. The connection is still unverified, polling is disabled
+and the scheduler is inactive. No live provider import or browser/device check is claimed.
 
 ## Verification
 
-15 adapter and edge tests pass. Transactional database tests passed and rolled back:
-private permissions, draft import, repeat-import idempotency, future result timing,
-unverified activation rejection, scheduler token rejection and 403 stopping polling.
-Syntax and whitespace checks pass. No browser/physical-phone test was performed.
+- 19 PlayHQ adapter/edge tests: public headers, pagination, club filtering, date/time
+  conversion, private names, immutable source identities, corrections and error handling.
+- 16 season-stat tests: final-only totals, corrected snapshots, no inferred identities,
+  batting/bowling averages, roles, grades and unknown figures.
+- Fixture/shared results and award UI checks: one scorecard, manual fallback, scoped
+  Check now, review/apply, mapping order, compact Day 1 checkbox and normal milestones.
+- Real canvas rendering verifies MATCH UPDATE/IN PROGRESS instead of a final WIN.
+- Rollback database checks cover Day 1 timing, default-off, all award saves, source
+  isolation, saved graphic freshness, import idempotency, throttle, revision checks,
+  publication lock, team position preservation, namespace links and cancellations.
+- Existing award correction/publishing regression checks passed with synthetic rows
+  rolled back. Syntax/whitespace checks pass. No browser or physical-phone test performed.
+- Security advisor flags for the PlayHQ private tables are intentional deny-all RLS;
+  the authenticated security-definer entry point checks current membership before access.
+  Worker/store helpers are not executable by clients. See
+  https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable.
 
-## Remaining integration work
+## Remaining provider verification
 
-1. Resolve the environment HTTP 403 Request blocked response without bypassing it;
-   verify real seasons, fixtures, provider limits and an ongoing two-day summary.
-2. Add review/application of staged fixture changes through existing revision and
-   publication guards, with material-change notifications.
-3. Feed normalized results into the shared scorecard/player-linking pipeline after
-   verifying source IDs. Stored summaries do not yet supply Season Stats or awards.
-4. Finish Check now and activation controls after live coverage verification.
-5. Validate delayed scores, corrections and Day 1/2 before enabling scheduled sync.
+Resumed after the interrupted conversation on 21 October: 63 automated checks and
+both Day 1 / fixture-review database suites pass. The database suites roll back all
+test changes. Deployed edge-function files and the five follow-up migrations match
+the recovered source exactly. The missing baseline migration file was restored from
+its matching deployed source. Browser layout verification remains unavailable in the
+current runtime; the UI checks use a DOM and real canvas rendering, not a phone browser.
+
+Resolve the environment HTTP 403 Request blocked without bypassing it. Then verify real
+seasons/fixtures, provider limits, delayed entries, corrections and ongoing Day 1/Day 2
+coverage before activating scheduled checks. The current interface deliberately has
+no activation button before those checks. Match-scoped appearance IDs cannot establish
+cross-match player identity without confirmed links/provider guidance.

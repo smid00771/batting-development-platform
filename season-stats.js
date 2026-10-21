@@ -15,7 +15,7 @@ export function latestStatsCards(cards = []) {
   const latest = new Map();
   for (const card of cards) {
     const id = card.scorecard?.match_id;
-    if (!id || card.scorecard.provider && card.scorecard.provider !== 'playcricket_au') continue;
+    if (!id || card.scorecard.provider && !['playcricket_au','playhq_au'].includes(card.scorecard.provider)) continue;
     const previous = latest.get(id);
     const order = value => `${value.fetched_at || ''}:${value.snapshot_id || ''}`;
     if (!previous || order(card) > order(previous)) latest.set(id, card);
@@ -93,7 +93,7 @@ export function buildSeasonStats(context = {}, filters = {}) {
     if (!team) { issue('Choose our team'); continue; }
     const playerKey = source => {
       const link = identities.get(source);
-      return link?.roster_id ? 'roster:' + link.roster_id : link?.player_id ? 'player:' + link.player_id : 'playcricket:' + source;
+      return link?.roster_id ? 'roster:' + link.roster_id : link?.player_id ? 'player:' + link.player_id : (card.provider==='playhq_au'?'playhq:':'playcricket:') + source;
     };
     const observed = new Map();
     for (const player of team.players || []) if (player.player_id) observed.set(player.player_id, player);
