@@ -61,3 +61,11 @@ test('delayed scores keep getting checked; forbidden access stops automatic retr
  assert.equal(nextResultsCheck({...opts,httpStatus:403}),null);
 });
 test('cricket overs use six balls, not decimals',()=>{assert.equal(oversToBalls(2.5),17);assert.equal(oversToBalls(2.6),null);assert.equal(oversToBalls(null),null);});
+
+test('upcoming matches with no venue load; an invalid schedule defers only that match',()=>{
+ const body=sample('grade-v2');const all=body.rounds.flatMap(r=>r.games||[]);
+ for(const game of all)game.status='UPCOMING';body.playingSurfaces=[];
+ const out=gradeFixtures(body,{teamId:team,gradeId:grade,timezone:'Australia/Sydney'});
+ assert.equal(out.fixtures.length,2);assert.ok(out.fixtures.every(f=>!f.requires_review&&f.days.every(d=>d.ground===null)));
+ all[0].schedule=[];const partial=gradeFixtures(body,{teamId:team,gradeId:grade,timezone:'Australia/Sydney'});assert.equal(partial.fixtures.length,2);assert.equal(partial.fixtures[0].requires_review,true);assert.equal(partial.fixtures[1].requires_review,false);
+});

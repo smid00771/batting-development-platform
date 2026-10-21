@@ -42,3 +42,19 @@ test('provider denial is recorded once without a retry or leaking diagnostics',a
  };
  const response=await handler(request({action:'seasons',club_id:club}));assert.equal(response.status,403);assert.ok(!(await response.text()).includes('diagnostics'));assert.equal(upstream,1);assert.equal(errors,1);
 });
+
+test('scheduled season refresh uses its lease and stores club teams before completing',async()=>{
+ const season='11111111-1111-4111-8111-111111111111',grade='22222222-2222-4222-8222-222222222222';let saved=false,finished=false;
+ globalThis.fetch=async(url,opts)=>{
+  const endpoint=String(url);
+  if(endpoint.endsWith('/playhq_sync_worker')){const b=JSON.parse(opts.body);assert.equal(opts.headers.Authorization,'Bearer service-test');
+   if(b.p_action==='claim')return json({club_id:club,kind:'season',source_id:season,team_id:club,lease_id:'lease'});
+   if(b.p_action==='connection')return json({key:'club-secret-test',association_id:association,organisation_id:club,generation:'version'});
+   if(b.p_action==='finish'){assert.ok(saved);assert.equal(b.p_data.job.lease_id,'lease');assert.equal(b.p_data.result.teams.length,1);finished=true;return json({saved:true});}
+   throw Error('Unexpected worker action');
+  }
+  if(endpoint.endsWith('/playhq_store_teams')){saved=true;const b=JSON.parse(opts.body);assert.equal(b.p_club_id,club);return json({teams:b.p_teams});}
+  return json({data:endpoint.endsWith('/teams')?[{id:grade,club:{id:club},grade:{id:grade}},{id:club,club:{id:association}}]:[{id:grade,name:'First XI'}],metadata:{hasMore:false,nextCursor:null}});
+ };
+ const response=await handler(request({action:'run',run_id:'run',token:'a'.repeat(64)}));assert.equal(response.status,200);assert.ok(finished);assert.deepEqual(await response.json(),{checked:1});
+});

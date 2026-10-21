@@ -20,7 +20,11 @@ Deno.serve(async(req:Request)=>{
   const api=publicAPI({key:connection.key});
   try{
    let result:any;
-   if(job.kind==='fixtures')result=gradeFixtures(await api.fixtures(job.source_id),{teamId:job.team_id,gradeId:job.source_id,timezone:connection.timezone});
+   if(job.kind==='season'){
+    const [teams,grades]=await Promise.all([api.teams(job.source_id),api.grades(job.source_id)]);
+    const discovered=clubTeams(teams,connection.organisation_id).map((t:any)=>({...t,grade:t.grade?.id?{...t.grade,...grades.find((g:any)=>g.id===t.grade.id)}:null}));
+    result=await rpc('playhq_store_teams',{p_club_id:club,p_generation:connection.generation,p_season_id:job.source_id,p_teams:discovered},true);
+   }else if(job.kind==='fixtures')result=gradeFixtures(await api.fixtures(job.source_id),{teamId:job.team_id,gradeId:job.source_id,timezone:connection.timezone});
    else {
     const context=await worker('scorecard_context',{match_id:job.source_id,team_id:job.team_id});
     const body=await api.summary(job.source_id);

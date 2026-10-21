@@ -1,0 +1,58 @@
+begin;
+set local statement_timeout='25s';
+do $tests$
+declare c uuid:=gen_random_uuid();u uuid:=gen_random_uuid();org uuid:=gen_random_uuid();season uuid:=gen_random_uuid();gen uuid:=gen_random_uuid();g uuid:=gen_random_uuid();g2 uuid:=gen_random_uuid();team uuid:=gen_random_uuid();team2 uuid:=gen_random_uuid();srcg uuid:=gen_random_uuid();sg uuid:=gen_random_uuid();mid uuid:=gen_random_uuid();mid2 uuid:=gen_random_uuid();fid uuid:=gen_random_uuid();newfid uuid;row jsonb;rows jsonb;r jsonb;before_slots jsonb;rejected boolean;job jsonb;
+begin
+ insert into auth.users(id,email) values(u,'fixtures-'||u||'@example.invalid');
+ insert into public.user_profiles(user_id,display_name) values(u,'Synthetic admin');
+ insert into public.clubs(id,name,slug,created_by) values(c,'Any Club','fixtures-'||c,u);
+ insert into public.club_memberships(club_id,user_id,role,permission_role,involvement) values(c,u,'admin','admin','player');
+ insert into club_selection_private.access(club_id,mode,status,head_selector_id) values(c,'standalone','active',u);
+ insert into public.playing_groups(id,club_id,name) values(g,c,'Firsts'),(g2,c,'Seconds');
+ insert into club_selection_private.selection_groups(id,club_id,name) values(sg,c,'Club teams');
+ insert into club_selection_private.selection_group_grades values(c,g,sg),(c,g2,sg);
+ insert into club_selection_private.playhq_connections(club_id,organisation_id,association_id,secret_id,generation,updated_by,verified_at) values(c,org,gen_random_uuid(),gen_random_uuid(),gen,u,now());
+ insert into club_selection_private.playhq_grade_mappings values(c,season,team,srcg,g),(c,season,team2,srcg,g2);
+ perform club_selection_private.playhq_queue_season(c,season);
+ assert (select polling_enabled and active_season_id=season from club_selection_private.playhq_connections where club_id=c),'Saved season enables verified checks';
+ assert (select count(*)=3 from club_selection_private.playhq_jobs where club_id=c),'Metadata and both team jobs queued';
+ before_slots:='[{"d1":"saved-player","d2":null}]';
+ insert into club_selection_private.fixtures(id,club_id,details,slots) values(fid,c,jsonb_build_object('grade','Firsts','grade_group_id',g,'opposition','Visitors','format','limited_overs','days',jsonb_build_array(jsonb_build_object('date','2099-10-03','ground',''))),before_slots);
+ row:=jsonb_build_object('source_match_id',mid,'source_team_id',team,'source_grade_id',srcg,'opposition','Visitors','format','limited_overs','status','UPCOMING','requires_review',true,'days',jsonb_build_array(jsonb_build_object('date','2099-10-03','time','','ground','')));
+ rows:=jsonb_build_array(row,jsonb_set(jsonb_set(row,'{source_match_id}',to_jsonb(mid2)),'{days,0,date}','"2099-10-10"'),jsonb_set(row,'{days}','[]'));
+ r:=club_selection_private.playhq_import_all(c,season,srcg,team,rows);
+ assert r->>'created'='1' and r->>'linked'='1' and jsonb_array_length(r->'deferred')=1,'Future fixtures load; only missing dates deferred';
+ assert (select slots=before_slots from club_selection_private.fixtures where id=fid),'Existing selections preserved';
+ select fixture_id into newfid from club_selection_private.playhq_links where club_id=c and match_id=mid2;
+ assert (select published is null and jsonb_array_length(slots)=11 from club_selection_private.fixtures where id=newfid),'New fixtures are blank unpublished drafts';
+ r:=club_selection_private.playhq_import_all(c,season,srcg,team,rows);
+ assert r->>'created'='0' and (select count(*)=2 from club_selection_private.fixtures where club_id=c),'Repeated checks do not duplicate';
+ row:=jsonb_set(row,'{days,0,ground}','"New ground"');
+ r:=club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(row));
+ assert (select details#>>'{days,0,ground}'='New ground' from club_selection_private.fixtures where id=fid),'Missing venues update automatically';
+ update club_selection_private.fixtures set details=jsonb_set(details,'{days,0,ground}','"Club override"') where id=fid;
+ row:=jsonb_set(row,'{days,0,ground}','"Provider correction"');
+ perform club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(row));
+ assert (select details#>>'{days,0,ground}'='Club override' from club_selection_private.fixtures where id=fid),'Manual overrides survive checks';
+ row:=jsonb_set(row,'{days,0,date}','"2099-10-04"');
+ r:=club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(row));
+ assert r->>'attention'='1' and (select details#>>'{days,0,date}'='2099-10-03' from club_selection_private.fixtures where id=fid),'Date changes to selected teams await review';
+ assert (select pending_fixture is not null and pending_fixture->>'requires_review'='false' from club_selection_private.playhq_links where fixture_id=fid),'Supported provider changes can be reviewed';
+ -- The same game can appear against two separate club teams.
+ row:=jsonb_set(row,'{source_team_id}',to_jsonb(team2));
+ perform club_selection_private.playhq_import_all(c,season,srcg,team2,jsonb_build_array(row));
+ assert (select count(*)=2 from club_selection_private.playhq_links where club_id=c and match_id=mid),'Both club teams retain distinct fixtures';
+ rejected:=false;begin perform club_selection_private.playhq_import_all(c,gen_random_uuid(),srcg,team,rows);exception when raise_exception then rejected:=true;end;
+ assert rejected,'Wrong seasons rejected';
+ assert not has_function_privilege('authenticated','club_selection_private.playhq_import_all(uuid,uuid,uuid,uuid,jsonb)','EXECUTE'),'Private importer cannot be called directly';
+ -- A background fixture check discovers new games.
+ update club_selection_private.playhq_jobs set lease_id=gen_random_uuid(),leased_until=now()+interval '5 minutes' where club_id=c and kind='fixtures' and team_id=team returning to_jsonb(playhq_jobs.*) into job;
+ perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+ row:=jsonb_set(jsonb_set(rows->0,'{source_match_id}',to_jsonb(gen_random_uuid())),'{days,0,date}','"2099-10-17"');
+ perform public.playhq_sync_worker('finish',jsonb_build_object('club_id',c,'generation',gen,'job',job,'result',jsonb_build_object('fixtures',jsonb_build_array(row))));
+ assert (select count(*)=4 from club_selection_private.fixtures where club_id=c),'Worker imports newly released matches';
+ assert (select checked_at is not null from club_selection_private.playhq_jobs where club_id=c and kind='fixtures' and team_id=team),'Background completion persists status';
+ rejected:=false;begin perform public.playhq_sync_worker('finish',jsonb_build_object('club_id',c,'generation',gen,'job',job,'result',jsonb_build_object('fixtures',jsonb_build_array(row))));exception when raise_exception then rejected:=true;end;assert rejected,'Old worker lease cannot be replayed';
+end $tests$;
+rollback;
+select 'Automatic fixtures: loading, matching, idempotency, overrides, protected changes, team identity and scheduled discovery passed.' result;
