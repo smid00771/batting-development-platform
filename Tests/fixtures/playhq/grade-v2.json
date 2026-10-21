@@ -1,0 +1,279 @@
+{
+  "rounds": [
+    {
+      "id": "1b34d1d0-ad1d-4afb-a3c5-809442e49208",
+      "name": "Round 1",
+      "abbreviatedName": "R1",
+      "isFinalRound": false,
+      "byes": [
+        {
+          "teamID": "2f6eafeb-4ef8-4e75-a99c-7ce8860319bb"
+        }
+      ],
+      "games": [
+        {
+          "id": "e606f2c3-d4cf-4edb-a204-e6a738df545e",
+          "status": "FINAL",
+          "type": "T20",
+          "url": "https://playhq.com/cricket-australia/org/deniss-association/tournament-test-winter-2022/over-40-men/game-centre/e606f2c3",
+          "createdAt": "2022-01-13T14:21:06.706000000Z",
+          "updatedAt": "2022-01-13T19:24:50.322000000Z",
+          "pool": {
+            "id": "bf1d7db4-fe60-4a5b-bf15-be9e5d24e66b",
+            "name": "Pool A"
+          },
+          "schedule": [
+            {
+              "day": null,
+              "dateTime": "2022-01-03T21:00:00.000Z",
+              "playingSurfaceId": "2776ade6-542e-409d-b5fc-523ca2ffeeca"
+            }
+          ],
+          "teams": [
+            {
+              "id": "d3d78789-31b2-498a-a24d-3a76502acd94",
+              "isHomeTeam": true,
+              "outcome": "WON_BY_SUPER_OVER"
+            },
+            {
+              "id": "ac7d49c2-c539-4b61-a447-20559ca28562",
+              "isHomeTeam": false,
+              "outcome": "LOSS_BY_SUPER_OVER"
+            }
+          ],
+          "periods": [
+            {
+              "name": "AWAY_TEAM_FIRST_INNINGS",
+              "sequenceNo": 1,
+              "teams": [
+                {
+                  "id": "ac7d49c2-c539-4b61-a447-20559ca28562",
+                  "discipline": "BATTING",
+                  "outcome": {
+                    "status": "ALL_OUT",
+                    "statistics": [
+                      {
+                        "type": "TOTAL_OVERS",
+                        "value": 1
+                      },
+                      {
+                        "type": "TOTAL_SCORE",
+                        "value": 1
+                      },
+                      {
+                        "type": "TOTAL_OUTS",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "d3d78789-31b2-498a-a24d-3a76502acd94",
+                  "discipline": "BOWLING",
+                  "outcome": {
+                    "status": null,
+                    "statistics": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "HOME_TEAM_FIRST_INNINGS",
+              "sequenceNo": 2,
+              "teams": [
+                {
+                  "id": "d3d78789-31b2-498a-a24d-3a76502acd94",
+                  "discipline": "BATTING",
+                  "outcome": {
+                    "status": "ALL_OUT",
+                    "statistics": [
+                      {
+                        "type": "TOTAL_OVERS",
+                        "value": 1
+                      },
+                      {
+                        "type": "TOTAL_SCORE",
+                        "value": 1
+                      },
+                      {
+                        "type": "TOTAL_OUTS",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "ac7d49c2-c539-4b61-a447-20559ca28562",
+                  "discipline": "BOWLING",
+                  "outcome": {
+                    "status": null,
+                    "statistics": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AWAY_TEAM_OVERTIME",
+              "sequenceNo": 3,
+              "teams": [
+                {
+                  "id": "ac7d49c2-c539-4b61-a447-20559ca28562",
+                  "discipline": "BATTING",
+                  "outcome": {
+                    "status": "ALL_OUT",
+                    "statistics": [
+                      {
+                        "type": "TOTAL_OVERS",
+                        "value": 4
+                      },
+                      {
+                        "type": "TOTAL_SCORE",
+                        "value": 1
+                      },
+                      {
+                        "type": "TOTAL_OUTS",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "d3d78789-31b2-498a-a24d-3a76502acd94",
+                  "discipline": "BOWLING",
+                  "outcome": {
+                    "status": null,
+                    "statistics": []
+                  }
+                }
+              ]
+            },
+            {
+              "name": "HOME_TEAM_OVERTIME",
+              "sequenceNo": 4,
+              "teams": [
+                {
+                  "id": "d3d78789-31b2-498a-a24d-3a76502acd94",
+                  "discipline": "BATTING",
+                  "outcome": {
+                    "status": "END_OF_GAME",
+                    "statistics": [
+                      {
+                        "type": "TOTAL_OVERS",
+                        "value": 6
+                      },
+                      {
+                        "type": "TOTAL_SCORE",
+                        "value": 6
+                      },
+                      {
+                        "type": "TOTAL_OUTS",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "ac7d49c2-c539-4b61-a447-20559ca28562",
+                  "discipline": "BOWLING",
+                  "outcome": {
+                    "status": null,
+                    "statistics": []
+                  }
+                }
+              ]
+            }
+          ],
+          "match": null
+        }
+      ]
+    },
+    {
+      "id": "7bdc6979-5f13-4e97-9d26-16b8849bd452",
+      "name": "Round 2",
+      "abbreviatedName": "R2",
+      "isFinalRound": false,
+      "byes": [
+        {
+          "teamID": "2f6eafeb-4ef8-4e75-a99c-7ce8860319bb"
+        }
+      ],
+      "games": [
+        {
+          "id": "ac7d49c2-c539-4b61-a447-20559ca28562",
+          "status": "PENDING",
+          "type": "twoDay",
+          "url": "https://playhq.com/cricket-australia/org/deniss-association/tournament-test-winter-2022/over-40-men/game-centre/80210dad",
+          "createdAt": "2022-01-13T14:21:06.856000000Z",
+          "updatedAt": "2022-01-13T14:21:06.856000000Z",
+          "pool": {
+            "id": "bf1d7db4-fe60-4a5b-bf15-be9e5d24e66b",
+            "name": "Pool A"
+          },
+          "schedule": [
+            {
+              "day": 1,
+              "dateTime": "2022-01-10T21:00:00.000Z",
+              "playingSurfaceId": "2776ade6-542e-409d-b5fc-523ca2ffeeca"
+            },
+            {
+              "day": 2,
+              "dateTime": "2022-01-11T21:00:00.000Z",
+              "playingSurfaceId": "2776ade6-542e-409d-b5fc-523ca2ffeeca"
+            }
+          ],
+          "teams": [
+            {
+              "id": "d3d78789-31b2-498a-a24d-3a76502acd94",
+              "isHomeTeam": false,
+              "outcome": null
+            },
+            {
+              "id": "2f6eafeb-4ef8-4e75-a99c-7ce8860319bb",
+              "isHomeTeam": true,
+              "outcome": null
+            }
+          ],
+          "periods": null,
+          "match": null
+        }
+      ]
+    }
+  ],
+  "teams": [
+    {
+      "id": "d3d78789-31b2-498a-a24d-3a76502acd94",
+      "name": "A_O40"
+    },
+    {
+      "id": "ac7d49c2-c539-4b61-a447-20559ca28562",
+      "name": "B_O40"
+    },
+    {
+      "id": "2f6eafeb-4ef8-4e75-a99c-7ce8860319bb",
+      "name": "C_O40"
+    }
+  ],
+  "playingSurfaces": [
+    {
+      "id": "2776ade6-542e-409d-b5fc-523ca2ffeeca",
+      "name": "Test ground",
+      "abbreviatedName": "TG",
+      "longitude": 43,
+      "latitude": 23,
+      "venue": {
+        "id": "07d92eb8-28f0-4354-ba5a-7549ecb54250",
+        "name": "Denis's Venue",
+        "timezone": "Australia/Melbourne",
+        "address": {
+          "line1": null,
+          "suburb": "COOKTOWN",
+          "postcode": 4895,
+          "state": "QLD",
+          "country": "Australia",
+          "latitude": 23,
+          "longitude": 44
+        }
+      }
+    }
+  ]
+}
