@@ -33,32 +33,38 @@ Appearance IDs are not assumed to equal existing PlayCricket participant IDs.
 Hidden names remain null. The fixture examples show UTC timestamps: convert using
 venue/club timezone before assigning dates to availability or selections.
 
-## Implemented, offline only
+## Implemented
 
-`Functions/playhq-sync/public-api.mjs` implements the public client with complete
-pagination, club filtering, fixture conversion, separate result conversion,
-conservative change planning and a proposed result retry policy. Tests use two
-examples extracted from the uploaded specification, plus simulated error and
-partial-result responses. Run `node --test Tests/playhq_public_api_test.mjs`.
+Version 0.8.62.234 adds Import season fixtures and retains Enter fixtures manually.
+The import panel loads seasons and club teams, maps selected grades, previews games,
+and explicitly links matching manual fixtures before idempotent import.
+Credentials stay in Vault; the browser never receives a saved key.
 
-No database writes, scheduled jobs, connection UI or app controls are activated.
-The module does not yet write into the existing scorecard pipeline.
+Private RLS tables, explicit RPC grants, membership checks and existing fixture
+save guards protect imports. Source changes are staged for review, never silently
+applied to published selections. The worker uses leased jobs and one-use scheduler
+tokens, bounded retries and stops polling on authentication failures. Future
+results are not due before the first playing day plus eight hours. Summary storage
+retains provisional results and subsequent updates to the same source match.
+
+The database migrations and edge function are deployed. City’s previously supplied
+key was saved with explicit user approval on 21 October. No provider verification,
+real fixture import or automatic polling has been completed. The cron is inactive.
+
+## Verification
+
+15 adapter and edge tests pass. Transactional database tests passed and rolled back:
+private permissions, draft import, repeat-import idempotency, future result timing,
+unverified activation rejection, scheduler token rejection and 403 stopping polling.
+Syntax and whitespace checks pass. No browser/physical-phone test was performed.
 
 ## Remaining integration work
 
-1. Resolve the HTTP 403 Request blocked response from the corrected seasons
-   request. Do not retry through alternate routes to bypass an access block.
-2. Verify real seasons, team ownership, grade fixtures, statuses, pagination and
-   one ongoing two-day summary. Confirm provider polling limits.
-3. Add per-club server-only credential storage and authorised connection setup.
-4. Add explicit team mappings and a preview with manual-fixture linking to avoid
-   duplicates. Preserve source match IDs across date changes.
-5. Apply source updates transactionally with revision checks; retain publication
-   and selector authority. Notify affected people of material fixture changes.
-6. Integrate results with the existing shared scorecard and player-linking flow;
-   verify source identifiers before joining existing history. Keep missing names
-   unidentified and incomplete figures provisional.
-7. Add bounded scheduled jobs with leases, throttling, retry/backoff and visible
-   connection errors; auth failures stop polling. Add compact Check now.
-8. Verify manual fallback, repeated imports, late scores, venue changes, Day 1/2,
-   errors and cross-club isolation before enabling the live workflow.
+1. Resolve the environment HTTP 403 Request blocked response without bypassing it;
+   verify real seasons, fixtures, provider limits and an ongoing two-day summary.
+2. Add review/application of staged fixture changes through existing revision and
+   publication guards, with material-change notifications.
+3. Feed normalized results into the shared scorecard/player-linking pipeline after
+   verifying source IDs. Stored summaries do not yet supply Season Stats or awards.
+4. Finish Check now and activation controls after live coverage verification.
+5. Validate delayed scores, corrections and Day 1/2 before enabling scheduled sync.
