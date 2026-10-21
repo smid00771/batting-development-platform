@@ -1,4 +1,4 @@
-import {createSelectionGroups} from './selection-groups.js?v=0.8.62.239';
+import {createSelectionGroups} from './selection-groups.js?v=0.8.62.240';
 // Saved team links drive fixture loading. Source credentials stay server-side.
 export function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -66,10 +66,11 @@ export function createPlayHQImport(h){
     manual:h.manualGrades?()=>{if(canLeave()){active=null;h.manualGrades();}}:null,
     fixtures:context=>void run(s,()=>syncFixtures(s,context,{reload:true}))});s.setup.mount(setupHost,{context:s.groupContext,teams:s.teams||[],season:s.season,catalogue:s.catalogue});}
   }
+  if(!s.busy&&s.selectionGroupId&&s.setup?.addTeam(s.selectionGroupId))s.selectionGroupId=null;
   if(s.busy&&setupHost)setupHost.querySelectorAll('button,input,select').forEach(el=>el.disabled=true);
  }
  function canLeave(){if(!active||!live(active))return true;if(active.busy){h.alert('Please wait for the PlayHQ request to finish.');return false;}if(active.setup&&!active.setup.canLeave())return false;if(active.dirty&&!h.confirm('Leave these unsaved connection details?'))return false;active.dirty=false;return true;}
- return {canLeave,hasChanges:()=>!!(active&&live(active)&&(active.busy||active.dirty||active.setup?.hasChanges())),mount(host,{groups,existing}){const s=active={host,club:h.clubId(),groups,existing,status:null,busy:false,dirty:false,error:'',message:'',progress:''};void run(s,async()=>{
+ return {canLeave,hasChanges:()=>!!(active&&live(active)&&(active.busy||active.dirty||active.setup?.hasChanges())),mount(host,{groups,existing,selectionGroupId=null}){const s=active={host,selectionGroupId,club:h.clubId(),groups,existing,status:null,busy:false,dirty:false,error:'',message:'',progress:''};void run(s,async()=>{
   s.status=await rpc(s,'status');s.changes=(await review(s,'list')).changes;
   const previous=remembered.get(s.club);s.season=s.status.active_season_id||previous?.season||'';s.seasons=previous?.seasons;
   if(s.season&&s.status.configured){s.groupContext=await groupRPC(s,'context');s.teams=[];draw(s);await teams(s);s.setup=null;s.awaitingGrades=s.groupContext.mappings.filter(m=>m.season_id===s.season&&!s.teams.find(t=>t.id===m.team_id)?.grade?.id).map(m=>s.groupContext.grades.find(g=>g.id===m.grade_id)?.name).filter(Boolean);

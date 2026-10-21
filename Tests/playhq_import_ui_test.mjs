@@ -49,6 +49,7 @@ test('returning in a new session restores the saved season and groups without Lo
  assert.match(host.querySelector('[data-phq-saved]').textContent,/saved.*14 fixtures loaded through 06\/03\/2027.*Automatic checks are on/);
  assert.match(host.textContent,/Women/);assert.equal(calls.includes('seasons'),false);assert.equal(calls.includes('import_all'),false);
  assert.equal(host.querySelector('[data-sg-fixtures]').disabled,false,'Saved controls are enabled after loading');
+ ui.mount(host,{groups:[],existing:[],selectionGroupId:'sg'});await settle();assert.equal(host.querySelector('[data-field="selection_group_id"]').value,'sg','Adding from a specific group retains that group after the season loads');assert.ok(host.querySelector('[data-field="team_id"]'));
 });
 test('a fixture request failure leaves saved setup visible and offers a retry',async()=>{
  const dom=new JSDOM('<div id="host"></div>'),host=dom.window.document.getElementById('host');let fails=true;

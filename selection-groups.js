@@ -1,4 +1,4 @@
-import {createSelectionGroupManager} from './selection-group-manager.js?v=0.8.62.239';
+import {createSelectionGroupManager} from './selection-group-manager.js?v=0.8.62.240';
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -85,5 +85,5 @@ export function createSelectionGroups(h){
   s.host.querySelector('[data-sg-form]').onsubmit=e=>{e.preventDefault();void save();};
  }
  function canLeave(){if(manager)return manager.canLeave();if(!live())return true;if(s.busy||s.pending){h.alert('Please confirm the Selection Group save before leaving.');return false;}if(s.dirty&&!h.confirm('Leave these unsaved Selection Group choices?'))return false;s.dirty=false;return true;}
- return {canLeave,attach(host){if(s){s.host=host;draw();}},hasChanges:()=>manager?manager.hasChanges():!!(live()&&(s.dirty||s.busy||s.pending)),mount(host,{context,teams=[],season='',catalogue=null}){manager=null;s={host,context,teams,season,catalogue,draft:selectionGroupDraft(context,teams,season),busy:false,dirty:false,pending:null,saved:!!(context.selection_groups.length&&context.grades.every(g=>g.selection_group_id)),stage:'groups',search:'',newGroupName:'',error:''};draw();}};
+ return {canLeave,addTeam:groupId=>manager?.addTeam(groupId)||false,attach(host){if(s){s.host=host;draw();}},hasChanges:()=>manager?manager.hasChanges():!!(live()&&(s.dirty||s.busy||s.pending)),mount(host,{context,teams=[],season='',catalogue=null}){manager=null;s={host,context,teams,season,catalogue,draft:selectionGroupDraft(context,teams,season),busy:false,dirty:false,pending:null,saved:!!(context.selection_groups.length&&context.grades.every(g=>g.selection_group_id)),stage:'groups',search:'',newGroupName:'',error:''};draw();}};
 }
