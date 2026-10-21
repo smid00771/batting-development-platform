@@ -3,7 +3,7 @@ function source(file){return fs.readFileSync(new URL('../'+file,'file://'+__file
 function fn(src,name){const m=new RegExp('(?:async )?function '+name+'\\(').exec(src);assert.ok(m,name);const rest=src.slice(m.index),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);}
 for(const file of ['app.js','demo.html']){
  test(file+': captain, player, selector and socials navigation combine without losing prior roles',()=>{
-  const membership={permission_role:'captain',involvement:'both'},c=vm.createContext({membership,session:{user:{id:'me'}},hasMatchCaptainAccess:()=>false,seCanSetup:d=>d.admin||d.selector});
+  const membership={permission_role:'captain',involvement:'both'},c=vm.createContext({membership,session:{user:{id:'me'}},hasMatchCaptainAccess:()=>false,seFollowupRows:()=>[],seCanSetup:d=>d.admin||d.selector});
   vm.runInContext(['seBoardAccess','seHasAvailability','seIsCaptain','seSelectionTabs'].map(n=>fn(source(file),n)).join('\n'),c);
   const d={captain:true,roster:[],reviews:[],conversations:[],can_view_club_availability:true};
   const labels=()=>Array.from(c.seSelectionTabs(d),x=>x[1]);

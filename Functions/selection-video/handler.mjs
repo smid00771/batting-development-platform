@@ -18,13 +18,14 @@ export function createSelectionVideoHandler({env,fetcher=fetch}){
    if(!uuid.test(input.club_id||'')||!['status','join'].includes(input.action))return reply({error:'Choose a club and video action.'},400);
    if(input.action==='join'&&!uuid.test(input.request_id||''))return reply({error:'Video request required.'},400);
    if(input.use_video!==undefined&&typeof input.use_video!=='boolean')return reply({error:'Choose audio or video before starting the call.'},400);
+   if(input.selection_group_id!==undefined&&!uuid.test(input.selection_group_id||''))return reply({error:'Choose a Selection Group.'},400);
    input.club_id=input.club_id.toLowerCase();
    const base=env('SUPABASE_URL'),anon=env('SUPABASE_ANON_KEY');
    const headers={apikey:anon,Authorization:auth,'Content-Type':'application/json'};
    const user=await fetcher(base+'/auth/v1/user',{headers,signal:AbortSignal.timeout(10000)});
    if(!user.ok)return reply({error:'Sign in again to join Selection Room.'},401);
    const rpc=async(action,data={})=>{
-    const r=await fetcher(base+'/rest/v1/rpc/selection_room_api',{method:'POST',headers,body:JSON.stringify({p_club_id:input.club_id,p_action:action,p_data:data}),signal:AbortSignal.timeout(10000)});
+    const r=await fetcher(base+'/rest/v1/rpc/selection_room_api',{method:'POST',headers,body:JSON.stringify({p_club_id:input.club_id,p_action:action,p_data:{...data,selection_group_id:input.selection_group_id}}),signal:AbortSignal.timeout(10000)});
     const d=await r.json();if(!r.ok){const e=Error(d.message||'Selection Room could not connect.');e.status=d.code==='42501'?403:400;throw e;}return d;
    };
    const access=await rpc('access');
@@ -55,6 +56,10 @@ export function createSelectionVideoHandler({env,fetcher=fetch}){
    // tokens cannot publish camera, screen or custom video, or grant themselves permission.
    const token=await daily('/meeting-tokens','POST',{properties:{room_name:name,exp,eject_at_token_exp:true,is_owner:false,user_id:reservation.entry_id,user_name:reservation.user_name,start_audio_off:false,start_video_off:true,enable_prejoin_ui:false,enable_screenshare:video,enable_live_captions_ui:false,enable_recording_ui:false,start_cloud_recording:false,auto_start_transcription:false,permissions}});
    if(!token.ok||typeof token.data.token!=='string'||token.data.token.length<20)throw Error('Video could not prepare your place. Try again.');
+   // Permission may change while the provider requests are in flight. Never
+   // expose this token until the same entry and exact group are re-authorized.
+   const confirmed=await rpc('confirm_video',{entry_id:reservation.entry_id,room_name:name});
+   if(confirmed.confirmed!==true||confirmed.entry_id!==reservation.entry_id)throw Error('Your call access could not be confirmed. Try again.');
    return reply({url:url.href,token:token.data.token,expires_at:reservation.expires_at,user_name:reservation.user_name,call_mode:reservation.call_mode});
   }catch(error){
    return reply({error:error instanceof SyntaxError?'Check the video request.':error?.message||'Video could not connect.'},error?.status||400);

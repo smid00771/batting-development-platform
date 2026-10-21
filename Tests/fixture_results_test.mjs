@@ -63,3 +63,12 @@ test('Fixture details remains enabled on a locked selection card while player ch
   f.published=null;ctx.seFixtureLocked=()=>false;const draft=new JSDOM(ctx.seTeamCard(f)).window.document;assert.ok(draft.querySelector('[data-se-copylast]'));assert.equal(draft.querySelector('[data-se-export]'),null);
  }
 });
+
+test('Match Review link shares the scorecard heading and appears only when the server permits it',async()=>{
+ for(const allowed of [true,false]){
+  const dom=new JSDOM('<main></main>'),host=dom.window.document.querySelector('main');let opened;
+  const ui=createFixtureResults({supabase:{rpc:async()=>({data:{can_review:allowed,fixtures:[{id:'f',days:[],format:'limited_overs'}],cards:[]}})},escape,here:()=>true,openMatchReview:s=>opened=s.fixtureId});
+  ui.mount(host,{clubId:'c',fixtureId:'f'});await settle();const button=host.querySelector('[data-fixture-match-review]');
+  assert.equal(!!button,allowed);if(button){assert.equal(button.parentElement,host.querySelector('h3').parentElement);button.click();assert.equal(opened,'f');}
+ }
+});

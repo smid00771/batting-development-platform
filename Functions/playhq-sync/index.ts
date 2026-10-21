@@ -1,4 +1,4 @@
-import {sharedScorecard} from './shared-scorecard.mjs';
+import {linkedScorecard} from './linked-scorecard.mjs';
 import {publicAPI,clubTeams,gradeFixtures,gameSummary} from './public-api.mjs';
 const origins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 Deno.serve(async(req:Request)=>{
@@ -28,7 +28,7 @@ Deno.serve(async(req:Request)=>{
    else {
     const context=await worker('scorecard_context',{match_id:job.source_id,team_id:job.team_id});
     const body=await api.summary(job.source_id);
-    result={...gameSummary(body,job.source_id),shared_scorecard:await sharedScorecard(body,context)};
+    result={...gameSummary(body,job.source_id),shared_scorecard:await linkedScorecard(body,context)};
    }
    await worker('finish',{job,result});return reply({checked:1});
   }catch(error){

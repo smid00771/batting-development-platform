@@ -1,4 +1,4 @@
-import {createSelectionGroupManager} from './selection-group-manager.js?v=0.8.62.241';
+import {createSelectionGroupManager} from './selection-group-manager.js?v=0.8.62.245';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Read saved groups and the cached source names. Opening this page never imports.
 export function createSelectionGroupPage(h){

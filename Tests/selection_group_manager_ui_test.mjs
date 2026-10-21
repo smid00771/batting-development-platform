@@ -32,3 +32,16 @@ test('source details can retry without losing the preferred name',async()=>{
 test('an uncertain incremental save locks edits and retries the identical request',async()=>{
  const h=harness({failSave:true});h.host.querySelector('[data-sgm-add-group]').click();h.field('name','Summer teams');h.submit();await settle();assert.equal(h.ui.canLeave(),false);assert.equal(h.host.querySelector('[data-field="name"]').disabled,true);assert.match(h.host.textContent,/Save not confirmed/);h.submit();await settle();assert.deepEqual(h.calls[1],h.calls[0]);assert.equal(h.ui.canLeave(),true);assert.match(h.host.textContent,/Summer teams/);
 });
+
+test('Club Batting uses one inline group checkbox, hides without the product, and safely retries',async()=>{
+ const dom=new JSDOM('<div id="host"></div>'),host=dom.window.document.querySelector('#host'),calls=[];
+ let fail=true,ctx={can_edit:true,batting_available:true,revision:3,selection_groups:[{id:'group',name:'Masters',batting_enabled:false}],grades:[],mappings:[]};
+ const ui=createSelectionGroupManager({here:()=>true,confirm:()=>true,loadSeason:()=>{},manage:async(action,data)=>{calls.push({action,data});if(fail){fail=false;throw Error('Connection lost');}ctx={...ctx,revision:4,selection_groups:[{...ctx.selection_groups[0],batting_enabled:data.batting_enabled}]};return ctx;}});
+ const mount=()=>ui.mount(host,{context:ctx,teams:[],season:'',management:true});mount();
+ const rename=host.querySelector('[data-sgm-rename]'),add=host.querySelector('[data-sgm-group-team]'),box=host.querySelector('[data-sgm-batting]');
+ assert.equal(rename.nextElementSibling,add);assert.equal(box.closest('.sg-group-heading'),rename.closest('.sg-group-heading'));assert.equal(box.checked,false);
+ box.click();await settle();assert.equal(calls[0].action,'set_batting');assert.equal(calls[0].data.batting_enabled,true);assert.equal(ui.canLeave(),false);assert.ok(host.querySelector('[data-sgm-batting]').disabled);
+ host.querySelector('[data-sgm-retry-batting]').click();await settle();assert.deepEqual(calls[1],calls[0]);assert.equal(host.querySelector('[data-sgm-batting]').checked,true);assert.equal(ui.canLeave(),true);
+ assert.ok([...host.querySelectorAll('[role=status]')].every(el=>el.classList.contains('sr-only')),'Routine status takes no vertical space');
+ ctx={...ctx,batting_available:false};mount();assert.equal(host.querySelector('[data-sgm-batting]'),null);assert.doesNotMatch(host.textContent,/Club Batting/);
+});
