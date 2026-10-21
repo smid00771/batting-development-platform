@@ -3,7 +3,7 @@ import {createSelectionVideoHandler} from '../Functions/selection-video/handler.
 const club='c6022ec7-00d9-4c91-a208-710272a0b866',request='22222222-2222-4222-8222-222222222222';
 const roomName='cb-'+club.replaceAll('-',''),exp=Math.floor(Date.now()/1000)+5400;
 const roomData={name:roomName,privacy:'private',url:'https://club-test.daily.co/'+roomName,config:{exp}};
-let calls=[],key='server-only-key',allowed=true,enabled=true,missing=true,race=false,roomOverride={},failToken=false,managed=false,callMode='audio';
+let calls=[],key='server-only-key',allowed=true,enabled=true,missing=true,race=false,roomOverride={},failToken=false,managed=false,callMode='audio',denyConfirm=false,badConfirm=false;
 const response=(body,status=200)=>new Response(JSON.stringify(body),{status});
 const handler=createSelectionVideoHandler({env:n=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon',DAILY_API_KEY:key,DAILY_PLATFORM_API_KEY:key})[n],fetcher:async(url,options)=>{
  const body=options.body&&JSON.parse(options.body);calls.push({url,...options,body});
@@ -12,6 +12,7 @@ const handler=createSelectionVideoHandler({env:n=>({SUPABASE_URL:'https://test.s
   assert.equal(options.headers.Authorization,'Bearer session-token');
   if(!allowed)return response({code:'42501',message:'Assigned selectors only'},403);
   if(body.p_action==='access')return response({allowed:true,video_enabled:enabled,video_credit:{kind:'annual',enabled:managed}});
+  if(body.p_action==='confirm_video'){assert.equal(body.p_data.entry_id,request);assert.equal(body.p_data.room_name,roomName);return denyConfirm?response({code:'42501',message:'Call access revoked'},403):response({confirmed:!badConfirm,entry_id:request});}
   assert.equal(body.p_action,'reserve_video');assert.equal(body.p_data.request_id,request);
   return response({room_name:roomName,entry_id:request,user_name:'Selector',expires_at:new Date(exp*1000).toISOString(),call_mode:callMode});
  }
@@ -30,6 +31,9 @@ calls=[];r=await invoke();assert.equal(r.status,200);const data=await r.json();a
 const create=calls.find(c=>c.url.endsWith('/rooms'));assert.equal(create.body.privacy,'private');assert.equal(create.body.properties.exp,exp);assert.equal(create.body.properties.eject_at_room_exp,true);assert.equal(create.body.properties.enable_knocking,false);assert.equal(create.body.properties.enforce_unique_user_ids,true);
 const token=calls.find(c=>c.url.endsWith('/meeting-tokens')).body.properties;assert.equal(token.room_name,roomName);assert.equal(token.exp,exp);assert.equal(token.is_owner,false);assert.equal(token.eject_at_token_exp,true);assert.equal(token.user_id,request);assert.equal(token.start_cloud_recording,false);assert.equal(token.auto_start_transcription,false);assert.equal(token.permissions.canAdmin,false);assert.equal(token.start_audio_off,false,'Join call enables audio');assert.equal(token.start_video_off,true,'Camera starts off');assert.equal(token.enable_prejoin_ui,false,'The app controls the audio-first join');
 assert.equal(data.call_mode,'audio');assert.deepEqual(token.permissions.canSend,['audio']);assert.equal(token.enable_screenshare,false);assert.deepEqual(create.body.properties.permissions.canSend,['audio']);assert.equal(create.body.properties.enable_screenshare,false);
+assert.ok(calls.findIndex(c=>c.body?.p_action==='confirm_video')>calls.findIndex(c=>c.url.endsWith('/meeting-tokens')),'Authorization is checked after minting, before disclosure');
+calls=[];denyConfirm=true;r=await invoke('join',{selection_group_id:request});assert.equal(r.status,403);assert.equal((await r.json()).token,undefined);assert.ok(calls.some(c=>c.url.endsWith('/meeting-tokens')));assert.ok(calls.filter(c=>c.body?.p_action).every(c=>c.body.p_data.selection_group_id===request));denyConfirm=false;
+badConfirm=true;r=await invoke();assert.equal(r.status,400);assert.equal((await r.json()).token,undefined);badConfirm=false;
 // A later client cannot override the database's room-wide mode.
 calls=[];r=await invoke('join',{use_video:true});assert.equal(r.status,200);assert.equal((await r.json()).call_mode,'audio');assert.deepEqual(calls.find(c=>c.url.endsWith('/meeting-tokens')).body.properties.permissions.canSend,['audio']);
 callMode='video';calls=[];r=await invoke('join',{use_video:false});assert.equal(r.status,200);assert.equal((await r.json()).call_mode,'video');assert.equal(calls.find(c=>c.url.endsWith('/meeting-tokens')).body.properties.permissions.canSend,true);callMode='audio';

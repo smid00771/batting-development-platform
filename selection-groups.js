@@ -1,4 +1,4 @@
-import {createSelectionGroupManager} from './selection-group-manager.js?v=0.8.62.241';
+import {createSelectionGroupManager} from './selection-group-manager.js?v=0.8.62.245';
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');

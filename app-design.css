@@ -476,3 +476,23 @@
 #app .pc-connection .se-actions {margin-block:8px}
 #app .pc-connection .se-check {display:flex;align-items:flex-start;gap:8px;min-height:44px}
 #app .pc-connection .se-check input {flex-shrink:0;margin-top:4px}
+
+/* Keep group actions and participation on the existing heading row. */
+#app .sg-group-heading{display:flex;align-items:center;flex-wrap:nowrap;gap:8px}
+#app .sg-group-heading h4{margin:0;min-width:0;flex:1}
+#app .sg-group-heading>.se-actions{display:flex;flex-wrap:nowrap;flex-shrink:0;gap:4px}
+#app .sg-group-heading .btn{padding-inline:8px}
+#app .sg-batting{margin:0;flex-shrink:0;white-space:nowrap}
+@media(max-width:600px){#app .sg-group-heading .btn{font-size:11px;padding-inline:5px}#app .sg-group-heading{gap:4px;overflow-x:auto}#app .sg-batting{font-size:11px}#app .sg-group-heading h4{min-width:68px}}
+
+/* Keep Selection Group permissions within compact Settings rows. */
+#seGroupPermissions .gp-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#seGroupPermissions .gp-toolbar h2,#seGroupPermissions .gp-toolbar h3{margin:0;flex:1}
+#seGroupPermissions .gp-toolbar>label{margin:0;min-width:0}
+#seGroupPermissions .gp-group{flex:1;max-width:55%}
+#seGroupPermissions .gp-member{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:3px 0}
+#seGroupPermissions .gp-member select{width:auto;max-width:55%}
+#seGroupPermissions .gp-actions{margin-top:4px}
+#seGroupPermissions .gp-add,#seGroupPermissions .gp-link{flex:1;min-width:120px}
+#seGroupPermissions .gp-club,#seGroupPermissions .gp-invitations{margin:4px 0}
+#seGroupPermissions .gp-toolbar small{display:block}

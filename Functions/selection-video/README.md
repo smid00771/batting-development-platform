@@ -46,3 +46,5 @@ These are application limits, not an account-wide Daily billing cap: unrelated D
 Run `Tests/selection_room_ui_test.mjs` with jsdom available and `Tests/selection_video_test.mjs` with Node. Run `node --test Tests/selection_video_usage_test.mjs` for usage accounting. Run `Tests/selection_room_database_test.sql` and `Tests/selection_video_usage_database_test.sql` against the migrated database; both use synthetic clubs and roll them back. Provider tests use mocks. A real two-person call requires the Daily key and remains a separate deployment check.
 
 The demo page stores chat only in browser memory and never calls Daily.
+
+Group-scoped access is rechecked after Daily token creation and before the token is returned. Permission changes revoke existing entry identities through `selection-video-revoke`; revoked entries stay unusable even if access is later re-granted, so a fresh join request is needed. The companion database migration and revocation worker must be installed and enabled before scoped calls are opened. Existing usage settlement remains authoritative.

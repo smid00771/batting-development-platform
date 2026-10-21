@@ -133,7 +133,7 @@ export function createSelectionRoom(h){
   const ids=[...s.messages.keys()].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1),data=ids.length?{after:ids.at(-1)}:{};
   try{
    const result=await h.rpc(s.scope,'context',data);if(!same(s))return;
-   s.config=result;activeCall(s,result.active_call);chatSession(s,result.chat_session);messageRows(s,result.messages);backup(s);
+   s.config=result;activeCall(s,result.active_call);chatSession(s,result.chat_session);messageRows(s,result.messages);backup(s);compose(s);
    text(s,'connection','');el(s,'retry').hidden=true;
   }catch(error){
    if(!same(s))return;
@@ -142,10 +142,10 @@ export function createSelectionRoom(h){
   }finally{s.loading=false;if(same(s)){el(s,'retry').disabled=false;text(s,'retry','Reconnect chat');if(s.refreshAgain){s.refreshAgain=false;void refresh(s);}}}
  }
  function compose(s){
-  const area=el(s,'message'),button=el(s,'send');area.disabled=!!s.pending;button.disabled=s.sending||!s.draft.trim();button.textContent=s.sending?'Sending…':s.pending?'Retry send':'Send';
+  const area=el(s,'message'),button=el(s,'send');area.disabled=!!s.pending||s.config?.can_post===false;button.disabled=s.sending||!s.draft.trim()||s.config?.can_post===false;button.textContent=s.sending?'Sending…':s.pending?'Retry send':'Send';
  }
  async function send(s){
-  if(!same(s)||s.sending||!s.draft.trim())return;
+  if(!same(s)||s.sending||!s.draft.trim()||s.config?.can_post===false)return;
   if(!s.pending)s.pending={request_id:crypto.randomUUID(),body:s.draft.trim(),...(s.chatSession?{chat_session:s.chatSession}:{})};const pending=s.pending;persist(s);s.sending=true;compose(s);text(s,'sendStatus','');
   try{
    const result=await h.rpc(s.scope,'post',pending);if(!same(s)||s.pending!==pending)return;
@@ -289,7 +289,7 @@ export function createSelectionRoom(h){
   const s={scope,panel,reopen,minimized:false,inCall:false,onBoard:scope.onBoard!==false,messages:new Map(),chatSession:typeof saved.chat_session==='string'?saved.chat_session:undefined,draft:typeof saved.draft==='string'?saved.draft:'',pending:saved.pending||null,config:null,frame:null,useVideo:false,joining:false,joinSequence:0};room=s;document.body.append(panel);document.body.classList.add('sr-open');reopen.onclick=()=>{setMinimized(s,false);el(s,'mute').focus({preventScroll:true});};
   const nav=window.navigator,ios=/iPad|iPhone|iPod/.test(nav.userAgent)||nav.platform==='MacIntel'&&nav.maxTouchPoints>1;
   if(ios&&(nav.standalone||window.matchMedia?.('(display-mode: standalone)').matches)){const help=document.createElement('p');help.className='sr-status';help.textContent='Switching apps may pause your iPhone microphone. Try joining through Safari for calls.';el(s,'video').before(help);}
-  text(s,'subtitle','Selectors only · '+scope.club_name);el(s,'message').value=s.draft;compose(s);
+  text(s,'subtitle','Selectors only · '+(scope.group_name||scope.club_name));el(s,'message').value=s.draft;compose(s);
   if(h.credit)s.credits=mountVideoCredits(el(s,'credits'),{compact:true,timezone:scope.timezone,rpc:(action,data)=>h.credit(scope,action,data)});
   setDocked(s,true);el(s,'layout').onclick=()=>{setMinimized(s,false);setDocked(s,!s.docked);};
   s.resize=()=>scheduleFit(s);window.addEventListener('resize',s.resize);window.visualViewport?.addEventListener('resize',s.resize);window.visualViewport?.addEventListener('scroll',s.resize);
@@ -310,5 +310,5 @@ export function createSelectionRoom(h){
   s.timer=setInterval(()=>{sync();if(!same(s))return;if(document.visibilityState==='hidden'&&!s.frame)return;void refresh(s);if(Date.now()-(s.statusChecked||0)>30000)void videoStatus(s);},3000);
   await Promise.allSettled([refresh(s),videoStatus(s)]);
  }
- return {open,close,sync,isOpen:()=>!!room};
+ return {open,close,sync,isOpen:()=>!!room,activeScope:()=>room&&(room.frame||room.joining)?room.scope:null};
 }
