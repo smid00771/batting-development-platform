@@ -11,7 +11,7 @@ function setup(file,role='captain'){
   seasonStatsPanel:{mount:(host,options)=>{calls.push({stats:options});host.textContent='Season stats opened';}},seGradeLevel:()=>1,
   seRPC:async(action,data)=>{calls.push({action,data});return [];},seReadButton:async(b,l,run)=>run()
  });
- const names=['seFollowupPanel','seFollowupRows','seConversationControl','seBindBoardComments','seStatsAllowed','seToggleStats','seMountStats','seBoardAccess','seHasAvailability','seIsCaptain','seSelectionTabs','drawSelections','renderSelections','seChangeView','seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','sePublishedDates','sePublishedWeekStart','seClubDate','seMatchConversationClosed','seChat','seOpenBoardChat'];
+ const names=[...(file==='app.js'?['seSelectionFixtures']:[]),'seFollowupPanel','seFollowupRows','seConversationControl','seBindBoardComments','seStatsAllowed','seToggleStats','seMountStats','seBoardAccess','seHasAvailability','seIsCaptain','seSelectionTabs','drawSelections','renderSelections','seChangeView','seBoardMatchConversation','seBindBoardChats','seLoadBoardChat','sePublishedDates','sePublishedWeekStart','seClubDate','seMatchConversationClosed','seChat','seOpenBoardChat'];
  vm.runInContext(names.map(n=>extract(fs.readFileSync(file,'utf8'),n)).join('\n'),c);return {c,s,f,calls,document,dom};
 }
 for(const file of ['app.js','demo.html']){

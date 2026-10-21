@@ -55,7 +55,8 @@ Deno.serve(async(req:Request)=>{
   }
   if(input.action==='teams'){
    const [teams,grades]=await Promise.all([api.teams(input.season_id),api.grades(input.season_id)]);
-   return reply({teams:clubTeams(teams,connection.organisation_id),grades});
+   const discovered=clubTeams(teams,connection.organisation_id).map((t:any)=>({...t,grade:t.grade?.id?{...t.grade,...grades.find((g:any)=>g.id===t.grade.id)}:null}));
+   return reply(await rpc('playhq_store_teams',{p_club_id:club,p_generation:connection.generation,p_season_id:input.season_id,p_teams:discovered},true));
   }
   if(input.action==='preview'){
    const teams=clubTeams(await api.teams(input.season_id),connection.organisation_id);

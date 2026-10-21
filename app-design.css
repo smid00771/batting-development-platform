@@ -436,3 +436,29 @@
 
 /* Explicit hidden state takes precedence over every presentation component. */
 #app [hidden] {display:none!important}
+
+/* Season setup: one grade, one group decision; secondary setup stays collapsed. */
+#app .sg-row,#app .sg-source{display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,1fr);align-items:center;gap:6px 12px;border-bottom:1px solid var(--line);padding:7px 0}
+#app .sg-row small,#app .sg-source small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+#app .sg-row label,#app .sg-source label,#app .sg-names label,#app .sg-add-group label{margin:0;min-width:0}
+#app .sg-row input,#app .sg-row select,#app .sg-source select{margin:3px 0 0;width:100%;min-width:0}
+#app .sg-source details{grid-column:1/-1;font-size:12px}
+#app .sg-source details>summary,#app .sg-fallback>summary{min-height:44px;align-content:center;cursor:pointer}
+#app .sg-names{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px}
+#app .sg-add-group{display:flex;align-items:end;gap:6px;margin:6px 0 12px}
+#app .sg-add-group label{flex:1}
+#app .sg-link{border:0;background:none;color:var(--navy);text-decoration:underline;min-height:44px;padding:4px 6px;font:inherit;cursor:pointer}
+#app [data-sg-other]{margin:10px 0}
+#app [data-sg-other]>summary{min-height:44px;align-content:center;font-weight:600;cursor:pointer}
+#app .sg-summary p{margin:8px 0}
+#app .sg-fallback{font-size:12px}
+#app .se-board-group{display:flex;align-items:center;gap:6px;font-size:12px;min-width:0}
+#app .se-board-group select{margin:0;max-width:100%;min-width:0}
+#app [data-shared-grade]{padding:10px;margin-bottom:8px!important}
+#app [data-shared-grade] h3{margin:0 0 4px}
+#app [data-shared-grade]>details{font-size:12px}
+#app [data-shared-grade]>details>summary{cursor:pointer;min-height:44px;align-content:center}
+@media(max-width:500px){#app .sg-row,#app .sg-source{grid-template-columns:minmax(0,1fr)}#app .sg-add-group{flex-wrap:wrap}#app .se-board-group{flex:1 0 100%;justify-content:space-between}#app .se-board-group select{flex:1;max-width:72%}}
+
+#app .sg-group-names>summary{font-size:13px;min-height:44px;align-content:center;cursor:pointer;overflow-wrap:anywhere}
+#app .sg-group-names:has(.sg-names:empty){display:none}
