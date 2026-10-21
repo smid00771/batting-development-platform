@@ -1,6 +1,6 @@
 # Selection call revocation companion — 21 October 2026
 
-Prepared locally for the scoped Selection Group permission beta. No deployment, provider mutation or persistent database change was made during this implementation.
+Implemented for the scoped Selection Group permission beta. The implementation-stage tests were local; the subsequent live rollout is recorded below.
 
 ## Behavior
 
@@ -16,7 +16,7 @@ The service-only worker authenticates a one-use capability, claims up to five ro
 - `node Tests/selection_video_test.mjs` passes, including token-disclosure denial after revoked or malformed final confirmation.
 - `node --test Tests/selection_video_revoke_test.mjs`: 14 tests pass. Tests mock provider/database responses; no live provider request is made.
 - Handler syntax checks and `git diff --check` pass.
-- CLI-generated migration `20261021130827_selection_video_permission_revocations.sql` exactly matches `Database/selection_video_revocations.sql`; apply after the core permission migration.
+- CLI-generated migration `20261021202334_selection_video_permission_revocations.sql` exactly matches `Database/selection_video_revocations.sql`; apply after the core permission migration.
 
 The local schema snapshot omits some deployed constraints/defaults, with the required defaults added in the scratch harness. A full forced-rollback check against the deployed schema is a separate release verification, not claimed by these local results. The SQL suite uses synthetic IDs and an outer rollback. It temporarily enables the worker setting and queues transactional `pg_net` requests; [Supabase documents that HTTP requests start only after commit](https://supabase.com/docs/guides/database/extensions/pg_net), so a guaranteed rollback prevents dispatch.
 
@@ -25,3 +25,9 @@ The local schema snapshot omits some deployed constraints/defaults, with the req
 Deploy `selection-video-revoke` with gateway JWT verification disabled (one-use capability authentication), and the updated user-facing `selection-video` with normal JWT verification. The migration leaves the revocation cron job and private `selection_video_revocation_settings.enabled` false. After verifying worker capability/RPC reachability, enable both in one transaction. Until then, scoped calls and permission changes invalidating active tokens fail closed.
 
 [Daily documents](https://docs.daily.co/reference/rest-api/rooms/session/eject) that `ban:true` prevents the supplied `user_ids` rejoining. The implementation relies on that supported contract. Local mocks cannot establish deployed provider behavior: verify active ejection, old-token rejoin denial, disconnected-user rejoin denial and continued access for retained participants as rollout verification, with evidence required before wider public launch. The response contains ejected participant IDs, not a separately documented persisted-ban acknowledgement; an empty array is accepted for disconnected identities. If real verification contradicts Daily's documented contract, keep scoped calls disabled until resolved.
+
+## Beta deployment — 22 October 2026 (Australia/Sydney)
+
+Applied as `20261021202334_selection_video_permission_revocations.sql` after core permissions migration `20261021202135`. Deployed `selection-video` v8 with JWT verification and `selection-video-revoke` v1 with custom capability authentication. Reusing one live capability produced one HTTP 200 and one HTTP 401; the queue was empty, so no provider calls were requested. The worker flag and cron job were enabled together. All five deployed-schema SQL suites passed in rollback transactions. No real-club scope or membership was changed.
+
+A real disposable-room/browser test of active ejection, disconnected-user bans and old-token rejoin was not available in this environment. Those provider checks remain required launch evidence. The release relies on the documented Daily ban contract and retains the asynchronous/provider-outage limitations above.

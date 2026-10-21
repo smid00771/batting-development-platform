@@ -1,4 +1,4 @@
-# Selection Group permissions — prepared .246
+# Selection Group permissions — .246 beta release
 
 Club Admin manages each group's Head Selector and no-access/view/edit grants from the existing Settings permissions section. Group and member controls use compact rows; routine status is screen-reader-only. Existing access remains unchanged until a group-permissions save explicitly enables scoped access. Other groups keep their prior selectors during that transition.
 
@@ -20,10 +20,14 @@ The recovered SQL was corrected to preserve the .245 Club Batting participation 
 
 ## Release state
 
-Prepared locally; no permissions SQL or frontend was deployed by the permissions agent. The .245 write guard has its actual applied ledger filename `20261021125523_batting_group_write_guards.sql`. The new core migration is `20261021130100_selection_group_permissions.sql`.
+The core migration is live as `20261021202135_selection_group_permissions.sql`, with its companion applied as `20261021202334_selection_video_permission_revocations.sql`. Repository filenames now match the actual migration ledger. The .245 write guard remains live as `20261021125523_batting_group_write_guards.sql`.
 
-Root's public GitHub upload was rejected by automatic approval review because it could not verify authorisation to disclose this batch to the public repository. No workaround or subsequent upload was attempted. The exact existing repository and ownership were verified; explicit batch publication approval remains the final step. The .245 write guard is live, but neither the prepared website update nor .246 permissions/worker has been deployed.
+The initial public GitHub upload was held by automatic approval review. The user explicitly approved publication and merge on 22 October 2026 (Australia/Sydney). The connected GitHub app uploaded the reviewed source and opened PR #95; the uploaded tree exactly matches the tested local tree. The initial migration request stalled and was cancelled; a ledger/schema/activity check confirmed no change or lingering query before the successful retry. The .245 write guard was already live.
 
-Active provider-call revocation is prepared in the companion migration `20261021130827_selection_video_permission_revocations.sql` and its worker, with separate review evidence. Deploy the companion with the core migration; enable the worker only after the required capability/provider smoke verification. The core migration alone does not invalidate already issued Daily tokens. Provider behavior after disconnection and attempted token reuse remains a deployment verification requirement.
+Backend rollout verified on 22 October 2026 (Australia/Sydney): `selection-video` v8 is active with JWT verification; `selection-video-revoke` v1 is active with its custom one-use capability authentication. Two requests using the same capability produced exactly one HTTP 200 and one HTTP 401, with no queued provider work. The worker setting and cron job were then enabled in one transaction. All five database suites passed again against the deployed schema, with synthetic work rolled back. No real club scope, membership, call or publishing state was changed.
+
+The security advisor adds seven informational private RLS-without-policy findings for intentionally RPC-only tables, one anonymous executable-definer finding for token-bound invitation preview, and two authenticated findings for invitation acceptance and admin permissions. These are deliberate API surfaces with server checks; private tables and worker RPCs remain inaccessible to browser roles. The pre-existing leaked-password-protection warning remains. This is a targeted release review, not a full audit of the baseline.
+
+The frontend is published by PR #95 after backend verification. Real Daily active/disconnected rejoin behavior and physical phone/browser layout acceptance remain unverified and are required wider-launch evidence. Capability checks and database mocks do not establish those provider or device behaviors.
 
 Mirelion-led public branding, two product entrances and shared sign-in remain a mandatory wider-launch requirement, as recorded in the launch-readiness checklist. These permission changes are for the continuing beta work and do not complete that public-launch requirement.
