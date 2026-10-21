@@ -1,3 +1,5 @@
+Keep Settings first in the Teams & availability section navigation, immediately followed by Selection Groups. User clarification recorded 21 October 2026.
+
 Selection Groups is a dedicated management section within Teams & availability. It opens saved groups and indented teams directly, without a season download, fixture import or full setup flow. Keep adding, renaming and moving groups/teams and undoing source links in this section. Import season fixtures is for importing source data. User clarification recorded 21 October 2026.
 
 A club may save an empty Selection Group before its association publishes any season, teams or draw. No source connection is required to create the group. Teams may be added manually as the small fallback and linked to imported teams later. User clarification recorded 21 October 2026.
