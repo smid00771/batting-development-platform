@@ -468,3 +468,11 @@
 
 #app .sg-group-names>summary{font-size:13px;min-height:44px;align-content:center;cursor:pointer;overflow-wrap:anywhere}
 #app .sg-group-names:has(.sg-names:empty){display:none}
+
+/* Club-owned PlayCricket access. */
+#app .pc-connection textarea {width:100%;box-sizing:border-box}
+#app .pc-connection .se-form-grid {margin-top:10px}
+#app .pc-connection .se-form-grid > :is(h3,p,.se-check,.se-actions) {grid-column:1/-1}
+#app .pc-connection .se-actions {margin-block:8px}
+#app .pc-connection .se-check {display:flex;align-items:flex-start;gap:8px;min-height:44px}
+#app .pc-connection .se-check input {flex-shrink:0;margin-top:4px}
