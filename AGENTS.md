@@ -1,3 +1,5 @@
+Selection Groups is a dedicated management section within Teams & availability. It opens saved groups and indented teams directly, without a season download, fixture import or full setup flow. Keep adding, renaming and moving groups/teams and undoing source links in this section. Import season fixtures is for importing source data. User clarification recorded 21 October 2026.
+
 A club may save an empty Selection Group before its association publishes any season, teams or draw. No source connection is required to create the group. Teams may be added manually as the small fallback and linked to imported teams later. User clarification recorded 21 October 2026.
 
 After initial setup, provide small Add Selection Group and Add team actions rather than repeating the whole setup. Show source team and competition details before confirming an uncertain import, and allow an incorrect source link to be undone without losing existing selections, captain appointments or history. Do not infer that Sabres is City Summer Bash without evidence. User requirements recorded 21 October 2026.
