@@ -455,6 +455,7 @@
 #app [data-sg-other]{margin:10px 0}
 #app [data-sg-other]>summary{min-height:44px;align-content:center;font-weight:600;cursor:pointer}
 #app .sg-summary p{margin:8px 0}
+#app .sg-summary>section>.sg-source{margin-inline-start:18px}
 #app .sg-fallback{font-size:12px}
 #app .se-board-group{display:flex;align-items:center;gap:6px;font-size:12px;min-width:0}
 #app .se-board-group select{margin:0;max-width:100%;min-width:0}
