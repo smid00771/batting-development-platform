@@ -23,6 +23,17 @@ test('scheduled request without token cannot claim work',async()=>{
  globalThis.fetch=async()=>{throw Error('Must not call backend');};
  assert.equal((await handler(request({action:'run'}))).status,403);
 });
+test('season discovery enriches grade names and stores only this club’s source teams on the server',async()=>{
+ const season='11111111-1111-4111-8111-111111111111',grade='22222222-2222-4222-8222-222222222222',team='33333333-3333-4333-8333-333333333333';let stored;
+ globalThis.fetch=async(url,opts)=>{
+  const endpoint=String(url);
+  if(endpoint.endsWith('/playhq_sync_api'))return json({configured:true});
+  if(endpoint.endsWith('/playhq_sync_worker'))return json({key:'club-secret-test',association_id:association,organisation_id:club,generation:'version'});
+  if(endpoint.endsWith('/playhq_store_teams')){stored=JSON.parse(opts.body);assert.equal(opts.headers.Authorization,'Bearer service-test');return json({catalogue_id:'catalogue',teams:stored.p_teams});}
+  return json({data:endpoint.endsWith('/teams')?[{id:team,club:{id:club},grade:{id:grade}},{id:'other',club:{id:association},grade:{id:grade}}]:[{id:grade,name:'Club competition grade'}],metadata:{hasMore:false,nextCursor:null}});
+ };
+ const response=await handler(request({action:'teams',club_id:club,season_id:season})),body=await response.json();assert.equal(response.status,200);assert.equal(stored.p_teams.length,1);assert.equal(stored.p_teams[0].grade.name,'Club competition grade');assert.equal(stored.p_season_id,season);assert.equal(body.catalogue_id,'catalogue');assert.ok(!JSON.stringify(body).includes('club-secret'));
+});
 test('provider denial is recorded once without a retry or leaking diagnostics',async()=>{
  let upstream=0,errors=0;globalThis.fetch=async(url,opts)=>{
   if(String(url).endsWith('/playhq_sync_api'))return json({configured:true});

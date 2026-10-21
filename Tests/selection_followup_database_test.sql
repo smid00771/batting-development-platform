@@ -1,3 +1,4 @@
+-- Exercise grade-drop follow-ups only; left-out records are a separate workflow.
 -- Synthetic users and fixtures only; every inserted row is rolled back.
 do $tests$
 declare c uuid:=gen_random_uuid();other_c uuid:=gen_random_uuid();head_id uuid:=gen_random_uuid();selector_id uuid:=gen_random_uuid();
@@ -35,16 +36,16 @@ begin
   slots:=jsonb_build_array(jsonb_build_object('d1',p1,'d2',null),jsonb_build_object('d1',p3,'d2',null))||(select jsonb_agg(jsonb_build_object('d1',null,'d2',null)) from generate_series(1,9));
   insert into club_selection_private.fixtures(id,club_id,details,slots) values(current_id,c,details,slots);
   perform set_config('request.jwt.claim.sub',selector_id::text,true);
-  res:=public.club_selections_api(c,'context');assert jsonb_array_length(res->'conversations')=1,'Lower-grade move detected';move:=res->'conversations'->0;
+  res:=public.club_selections_api(c,'context');res:=jsonb_set(res,'{conversations}',coalesce((select jsonb_agg(x) from jsonb_array_elements(res->'conversations') x where x->>'kind'='lower_grade'),'[]'::jsonb));assert jsonb_array_length(res->'conversations')=1,'Lower-grade move detected';move:=res->'conversations'->0;
   assert move->>'previous_grade'='1st Grade';assert move->>'grade'='2nd Grade';assert move->>'roster_id'=p1::text;
   assert not exists(select 1 from jsonb_array_elements(club_selection_private.issues(current_id)) x where x->>'level'='error'),'Short team is a warning, not a hard error';
   res:=public.club_selections_api(c,'send_review',jsonb_build_object('ids',jsonb_build_array(current_id),'revisions',jsonb_build_object(current_id::text,1),'request_id',gen_random_uuid()));assert (res->>'sent')::boolean,'Incomplete team sent to captain';
   assert (select jsonb_array_length(review->'slots')=11 from club_selection_private.fixtures where id=current_id),'Vacancies retained';
   foreach u in array array[coach_id,captain_id] loop
-   perform set_config('request.jwt.claim.sub',u::text,true);res:=public.club_selections_api(c,'context');assert jsonb_array_length(res->'conversations')=1,'Coach and previous captain can see marker';
+   perform set_config('request.jwt.claim.sub',u::text,true);res:=public.club_selections_api(c,'context');res:=jsonb_set(res,'{conversations}',coalesce((select jsonb_agg(x) from jsonb_array_elements(res->'conversations') x where x->>'kind'='lower_grade'),'[]'::jsonb));assert jsonb_array_length(res->'conversations')=1,'Coach and previous captain can see marker';
   end loop;
   foreach u in array array[player_id,wrong_captain] loop
-   perform set_config('request.jwt.claim.sub',u::text,true);res:=public.club_selections_api(c,'context');assert res->'conversations'='[]','Player and captain from other competition cannot see marker';
+   perform set_config('request.jwt.claim.sub',u::text,true);res:=public.club_selections_api(c,'context');res:=jsonb_set(res,'{conversations}',coalesce((select jsonb_agg(x) from jsonb_array_elements(res->'conversations') x where x->>'kind'='lower_grade'),'[]'::jsonb));assert res->'conversations'='[]','Player and captain from other competition cannot see marker';
    rejected:=false;begin perform public.club_selections_api(c,'conversation',move||jsonb_build_object('request_id',gen_random_uuid(),'spoken',true));exception when raise_exception then rejected:=true;end;assert rejected,'Unauthorized marker rejected';
   end loop;
   perform set_config('request.jwt.claim.sub',outsider_id::text,true);
@@ -54,7 +55,7 @@ begin
   res:=public.club_selections_api(c,'conversation',req);assert (res->>'spoken')::boolean;
   assert public.club_selections_api(c,'conversation',req)=res,'Retry idempotent';
   perform set_config('request.jwt.claim.sub',coach_id::text,true);
-  res:=public.club_selections_api(c,'context');assert res->'conversations'->0->>'spoken_at' is not null,'Status shared';
+  res:=public.club_selections_api(c,'context');res:=jsonb_set(res,'{conversations}',coalesce((select jsonb_agg(x) from jsonb_array_elements(res->'conversations') x where x->>'kind'='lower_grade'),'[]'::jsonb));assert res->'conversations'->0->>'spoken_at' is not null,'Status shared';
   rejected:=false;begin perform public.club_selections_api(c,'conversation',move||jsonb_build_object('request_id',gen_random_uuid(),'spoken',false));exception when raise_exception then rejected:=true;end;assert rejected,'Stale toggle cannot overwrite colleague';
   move:=res->'conversations'->0;perform public.club_selections_api(c,'conversation',move||jsonb_build_object('request_id',gen_random_uuid(),'spoken',false));
   assert public.club_selections_api(c,'context')->'conversations'->0->>'spoken_at' is null,'Undo visible';
