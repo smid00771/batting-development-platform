@@ -427,6 +427,8 @@
   #app .se-counts {margin:6px 0;gap:4px}
   #app .se-chip {padding:2px 5px}
   #app .se-match-roles {margin:6px 0;gap:6px}
+  /* Role names should match the team list, with the full tap area retained. */
+  #app .se-match-roles select[data-se-match-role] {font-size:14px!important;font-weight:400;min-height:44px!important}
   #app .se-slot {min-height:44px;padding:0;gap:4px}
   #app .se-pick {font-size:14px;padding:4px 2px}
 }
