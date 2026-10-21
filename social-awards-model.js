@@ -47,7 +47,7 @@ export function resultsSummary(item){
  const score=innings=>innings.map(i=>Number.isFinite(i.runs)&&Number.isFinite(i.wickets)?`${i.wickets}/${i.runs}${/declared/i.test(i.closure||'')?' dec':''}`:'Score unavailable').join(' & ')||'Score unavailable';
  const batting=ours.flatMap(i=>(i.batters||[]).filter(b=>b.importable&&b.status==='played'&&Number.isFinite(b.runs)).map(b=>({...b,innings:i.number}))).sort((a,b)=>b.runs-a.runs||a.name.localeCompare(b.name)).slice(0,3);
  const bowling=theirs.flatMap(i=>(i.bowlers||[]).filter(b=>b.team_id===item.our_team&&b.importable&&Number.isFinite(b.wickets)&&b.wickets>0).map(b=>({...b,innings:i.number}))).sort((a,b)=>b.wickets-a.wickets||a.runs-b.runs||a.name.localeCompare(b.name)).slice(0,3);
- const text=(item.result||'').trim(),outcome=resultsOutcome(item);
+ const text=item.provisional?'Match in progress':(item.result||'').trim(),outcome=item.provisional?'IN PROGRESS':resultsOutcome(item);
  return {ourName,opposition,ourScore:score(ours),theirScore:score(theirs),batting,bowling,outcome,result:text||'Result not supplied'};
 }
 export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images={}}){
@@ -68,7 +68,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   text(item?awardFigures(item)+(kind==='century'?' RUNS':''):'',540,height*layout.figures_y/100,980,layout.figures_size);
   ctx.font=`900 30px ${ctx.socialFont}`;const grade=graphicGrade(item?.grade,layout);checkGraphicLabel(canvas,ctx,{source:item?.grade,label:grade,width:980-ctx.measureText(item?.opposition?' · v '+item.opposition:'').width,size:30,grade:true});text([grade,item?.opposition&&'v '+item.opposition].filter(Boolean).join(' · '),540,height*layout.grade_y/100,980,30);return;
  }
- if(!layout.includes_title)text('RESULTS',540,height*layout.title_y/100,990,layout.title_size);
+ if(!layout.includes_title)text(items.some(x=>x.provisional)?'MATCH UPDATE':'RESULTS',540,height*layout.title_y/100,990,layout.title_size);
  checkGraphicLabel(canvas,ctx,{source:week,label:week,width:970,size:layout.week_size});text(week,540,height*layout.week_y/100,970,layout.week_size);
  const sharedOpponent=resultsShareOpponent(items,images.opponentKeys);
  const logoPair=(opponent,summary,x,y,size,gap,colour)=>{

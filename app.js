@@ -1,27 +1,27 @@
-import {createPlayHQImport} from './playhq-import.js?v=0.8.62.234';
+import {createPlayHQImport} from './playhq-import.js?v=0.8.62.235';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.232';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.228';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.232';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.235';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.235';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.233 — Compact phone styling across the app
+// Club Batting 0.8.62.235 — PlayHQ fixture reviews and shared results
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.225';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.235';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.225';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.232';
 import {createSelectionRoom} from './selection-room.js?v=0.8.62.232';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.225';
-import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.208';
-import {createFixtureResults} from './fixture-results.js?v=0.8.62.213';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.225';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.235';
+import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.235';
+import {createFixtureResults} from './fixture-results.js?v=0.8.62.235';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.235';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.234';
+const APP_UI_VERSION='0.8.62.235';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -22954,9 +22954,9 @@ const seasonStatsPanel=createSeasonStatsPanel({supabase,updated:(scope,data)=>se
  navigate:recordSelectionNavigation,
  openFixture:(panel,id)=>{const s=ensureSelections();if(!confirmLeaveSelections())return;const f=s.data.fixtures.find(f=>f.id===id),known=panel.context?.fixtures.find(f=>f.id===id);if(!f&&!known)return;s.statsOpen=false;document.getElementById('seStatsHost')?.replaceChildren();document.getElementById('seSeasonStats')?.setAttribute('aria-expanded','false');seFixtureEditor(f||{id,details:known,result_only:true});}
 });
-const playhqImport=createPlayHQImport({supabase,clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),back:()=>{ensureSelections().navigationDrawer=null;drawSelections();},refresh:()=>seReload(),alert:message=>alert(message),confirm:message=>confirm(message)});
+const playhqImport=createPlayHQImport({supabase,clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),back:()=>{ensureSelections().navigationDrawer=null;drawSelections();},openFixture:id=>{const f=ensureSelections().data.fixtures.find(x=>x.id===id);if(f)seFixtureEditor(f);},refresh:()=>seReload(),alert:message=>alert(message),confirm:message=>confirm(message)});
 function seImportFixtures(){const s=ensureSelections();if(!seCanSetup())return;recordSelectionDrawer('playhq_import');playhqImport.mount(document.getElementById('seContent'),{groups:s.data.groups||[],existing:s.data.fixtures||[]});}
-const fixtureResults=createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,changed:seFixtureScoresChanged,teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}});
+const fixtureResults=createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,changed:seFixtureScoresChanged,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}});
 
 const socialAwards=createSocialAwards({sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),reviewUpdatedAward:socialReviewUpdatedAward,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,draw:socialDraw,message:socialMessage,canLeave:socialCanLeave,image:socialImage,fontReady:socialFontReady,text:socialText,download:socialBlobDownload,
  openScores:(s)=>socialResults.open(s),

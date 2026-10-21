@@ -43,7 +43,7 @@ export function clubTeams(teams,organisationId){
   return teams.filter(team=>String(team.club?.id||'').toLowerCase()===club);
 }
 
-function schedule(rows,surfaces,timezone){
+export function matchSchedule(rows,surfaces,timezone){
   if(!Array.isArray(rows)||!rows.length)throw Error('Match schedule is unavailable');
   return rows.map(row=>{
     const surface=surfaces.find(s=>s.id===row.playingSurfaceId);
@@ -70,7 +70,7 @@ export function gradeFixtures(body,{teamId,gradeId,timezone}){
       const opponent=game.teams.find(t=>t.id!==teamId);
       const kind=String(game.type||'').toLowerCase().replace(/[^a-z0-9]/g,'');
       const format=({t20:'t20',twenty20:'t20',oneday:'limited_overs',limitedovers:'limited_overs',twoday:'long_form',multiday:'long_form',test:'long_form'})[kind]||null;
-      fixtures.push({source:'playhq',source_match_id:game.id,source_grade_id:gradeId,source_team_id:teamId,source_status:game.status||null,source_updated_at:game.updatedAt||null,round:round.name||'',format,opposition:body.teams.find(t=>t.id===opponent?.id)?.name||null,opposition_id:opponent?.id||null,days:schedule(game.schedule,body.playingSurfaces,timezone),requires_review:!format||!opponent||game.schedule.length>2||!['PENDING','FINAL','IN_PROGRESS','INPROGRESS','LIVE','STUMPS'].includes(game.status)});
+      fixtures.push({source:'playhq',source_match_id:game.id,source_grade_id:gradeId,source_team_id:teamId,source_status:game.status||null,source_updated_at:game.updatedAt||null,round:round.name||'',format,opposition:body.teams.find(t=>t.id===opponent?.id)?.name||null,opposition_id:opponent?.id||null,days:matchSchedule(game.schedule,body.playingSurfaces,timezone),cancelled:['CANCELLED','CANCELED'].includes(game.status),requires_review:!format||!opponent||game.schedule.length>2||!['PENDING','FINAL','IN_PROGRESS','INPROGRESS','LIVE','STUMPS','CANCELLED','CANCELED'].includes(game.status)});
     }
   }
   return {fixtures,byes};
