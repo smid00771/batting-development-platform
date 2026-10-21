@@ -13,6 +13,7 @@ function harness({pending=false,failPreview=false,failSave=false}={}){
 test('saved setup adds one group without reopening or resubmitting existing setup',async()=>{
  const h=harness();assert.equal(h.host.querySelector('[data-sg-align]'),null);h.host.querySelector('[data-sgm-add-group]').click();h.field('name','Summer Bash');h.submit();await settle();
  assert.equal(h.calls.length,1);assert.equal(h.calls[0].action,'add_group');assert.equal(h.calls[0].data.name,'Summer Bash');assert.equal(h.calls[0].data.grades,undefined);assert.match(h.host.textContent,/Summer Bash/);assert.match(h.host.textContent,/First XI/);
+ h.host.querySelector('[data-sgm-group-team="sg2"]').click();assert.equal(h.host.querySelector('[data-field="selection_group_id"]').value,'sg2');h.field('team_id','candidate');await settle();h.submit();await settle();assert.equal(h.calls[1].action,'add_team');assert.equal(h.calls[1].data.selection_group_id,'sg2');assert.equal(h.calls[1].data.team_id,'candidate');
 });
 test('adding a team previews its actual source and fixtures before saving only that addition',async()=>{
  const h=harness();h.host.querySelector('[data-sgm-add-team]').click();assert.equal(h.host.querySelector('[data-sgm-form] .btn').disabled,true);h.field('team_id','candidate');await settle();
