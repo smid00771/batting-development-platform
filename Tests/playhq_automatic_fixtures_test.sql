@@ -38,6 +38,8 @@ begin
  r:=club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(row));
  assert r->>'attention'='1' and (select details#>>'{days,0,date}'='2099-10-03' from club_selection_private.fixtures where id=fid),'Date changes to selected teams await review';
  assert (select pending_fixture is not null and pending_fixture->>'requires_review'='false' from club_selection_private.playhq_links where fixture_id=fid),'Supported provider changes can be reviewed';
+ perform set_config('request.jwt.claim.sub',u::text,true);perform set_config('request.jwt.claims','{"role":"authenticated"}',true);
+ r:=public.playhq_sync_api(c,'status');assert r->>'fixture_count'='2' and r->>'fixture_through'='2099-10-10','Public status returns saved season fixture counts and dates';
  -- Published fixture metadata and completed fixtures stay protected.
  update club_selection_private.fixtures set published=jsonb_build_object('details',details,'slots',slots) where id=newfid;
  perform club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(jsonb_set(rows->1,'{days,0,ground}','"Published venue change"')));

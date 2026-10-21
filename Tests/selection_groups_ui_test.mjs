@@ -9,6 +9,14 @@ function harness({ctx=context(),sourceTeams=teams,save,confirm=()=>true}={}){con
  return {dom,host,ui,calls,alerts,captains:()=>captains,change(q,value){const el=host.querySelector(q);assert.ok(el,q);el.value=value;el.dispatchEvent(new dom.window.Event('change',{bubbles:true}));},input(q,value){const el=host.querySelector(q);assert.ok(el,q);el.value=value;el.dispatchEvent(new dom.window.Event('input',{bubbles:true}));},add(name){host.querySelector('[data-sg-new-name]').value=name;host.querySelector('[data-sg-new]').click();return [...host.querySelectorAll('[data-sg-group-name]')].at(-1).dataset.sgGroupName;},submit(){host.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));}};
 }
 function assignImports(h,group,ids=['team-a','team-b']){for(const id of ids)h.change(`[data-sg-import-group="${id}"]`,group);}
+test('initial season setup saves empty groups without choosing source teams',async()=>{
+ const ctx={...context(),grades:[],expected_grades:[]},h=harness({ctx});h.add('Future competition');assert.match(h.host.querySelector('form .se-actions .btn').textContent,/Save groups/);h.submit();await settle();assert.equal(h.calls.length,1);assert.deepEqual(h.calls[0].grades,[]);assert.equal(h.calls[0].groups[0].name,'Future competition');assert.match(h.host.textContent,/Selection Groups saved/);
+});
+test('a club without any season connection can create and reopen an empty group',async()=>{
+ const dom=new JSDOM('<div id="host"></div>'),host=dom.window.document.querySelector('#host');let ctx={...context(),grades:[],expected_grades:[]},calls=[];
+ const ui=createSelectionGroups({here:()=>true,alert:()=>{},confirm:()=>true,manage:async(action,data)=>{calls.push({action,data});ctx={...ctx,revision:3,selection_groups:[{id:'future',name:data.name}]};return ctx;}});
+ ui.mount(host,{context:ctx});assert.ok(host.querySelector('[data-sgm-add-group]'));host.querySelector('[data-sgm-add-group]').click();const input=host.querySelector('[data-field="name"]');input.value='Future teams';input.dispatchEvent(new dom.window.Event('input'));host.querySelector('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await settle();assert.equal(calls[0].action,'add_group');assert.equal(calls[0].data.season_id,'');assert.match(host.textContent,/Future teams.*No teams yet/s);ui.mount(host,{context:ctx});assert.match(host.textContent,/Future teams/);assert.equal(host.querySelector('[data-sg-form]'),null);
+});
 test('imported teams define groups first; existing grades inherit matches on screen two; only final save writes',async()=>{
  const h=harness(),first=h.add('Weekend teams');assignImports(h,first);const second=h.add('Evening teams');assignImports(h,second,['team-c']);
  assert.equal(h.host.querySelectorAll('input[type=checkbox]').length,0);assert.equal(h.host.querySelectorAll('[data-sg-grade],[data-sg-align],[data-sg-existing-name]').length,0,'First screen only groups imported teams');

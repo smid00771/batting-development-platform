@@ -1,4 +1,4 @@
-import {createSelectionGroups} from './selection-groups.js?v=0.8.62.238';
+import {createSelectionGroups} from './selection-groups.js?v=0.8.62.239';
 // Saved team links drive fixture loading. Source credentials stay server-side.
 export function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -28,12 +28,12 @@ export function createPlayHQImport(h){
   await h.refresh();
  }
  function draw(s){
-  if(!live(s))return;const disabled=s.busy?'disabled':'',saved=!!(s.groupContext?.mappings.some(m=>m.season_id===s.season)&&s.groupContext.grades.every(g=>g.selection_group_id));
+  if(!live(s))return;const disabled=s.busy?'disabled':'',saved=!!(s.groupContext?.selection_groups.length&&s.groupContext.grades.every(g=>g.selection_group_id));
   s.host.innerHTML=`<section class="se-card se-drawer"><div class="se-top"><h2>${saved?'Club season':'Set up your club season'}</h2><button class="btn ghost" data-phq-back ${disabled}>Back</button></div>
    ${s.status?.error?`<p role="alert">${esc(s.status.error)}</p>`:''}
    ${s.changes?.length?`<details><summary>${s.changes.length} fixtures need attention</summary>${s.changes.map(x=>`<div class="se-top"><span>${esc(x.grade)} · ${esc(x.opposition)}${x.result_error?`<small>${esc(x.result_error)}</small>`:''}</span><div class="se-actions">${x.pending?`<button class="btn ghost" data-phq-review="${esc(x.fixture_id)}" ${disabled}>Review change</button>`:''}<button class="btn ghost" data-phq-open="${esc(x.fixture_id)}" ${disabled}>Fixture details</button></div></div>`).join('')}</details>`:''}
    ${s.review?`<section><h3>Review fixture change</h3><p><strong>Current:</strong> ${esc(details(s.review.before))}</p><p><strong>PlayHQ:</strong> ${esc(details(s.review.after))}</p>${[...s.review.blockers,...s.review.warnings].map(x=>`<p>${esc(x)}</p>`).join('')}<div class="se-actions"><button class="btn" data-phq-apply ${disabled||!s.review.can_apply?'disabled':''}>Apply fixture change</button><button class="btn ghost" data-phq-open="${esc(s.review.fixture_id)}" ${disabled}>Fixture details</button></div></section>`:''}
-   ${saved?`<p class="se-form-note" data-phq-saved>Your grades and Selection Groups are saved. ${s.status?.fixture_count||0} fixtures loaded${s.status?.fixture_through?' through '+esc(date(s.status.fixture_through)):''}.${s.status?.polling_enabled?' Automatic checks are on.':''}</p>`:''}
+   ${saved?`<p class="se-form-note" data-phq-saved><strong>Your season setup is saved${s.status?.fixture_count?' and fixtures are loaded':''}.</strong> ${s.status?.fixture_count||0} fixtures loaded${s.status?.fixture_through?' through '+esc(date(s.status.fixture_through)):''}.${s.status?.polling_enabled?' Automatic checks are on.':''}</p>`:''}
    ${s.groupContext&&s.season?'<div data-phq-setup></div>':''}
    ${s.awaitingGrades?.length?`<p class="se-form-note" data-phq-awaiting>Waiting for PlayHQ grade details: ${s.awaitingGrades.map(esc).join(' · ')}. Their fixtures will load when those details arrive.</p>`:''}
    ${(s.status?.fixture_reports||[]).length?`<details><summary>Fixtures awaiting details</summary>${s.status.fixture_reports.map(r=>`<p>${esc(r.grade)}: ${esc(r.error||(r.deferred||[]).map(d=>[d.opposition,d.reason].filter(Boolean).join(' — ')).join(' · '))}</p>`).join('')}</details>`:''}
@@ -58,6 +58,9 @@ export function createPlayHQImport(h){
   if(setupHost&&s.groupContext){
    if(s.setup)s.setup.attach(setupHost);
    else{s.setup=createSelectionGroups({here:()=>live(s),alert:h.alert,confirm:h.confirm,
+    manage:async(action,data)=>{const r=await h.supabase.rpc('club_selection_group_manage',{p_club_id:s.club,p_action:action,p_data:data});if(r.error)throw Object.assign(Error(r.error.message),{code:r.error.code});return r.data;},
+    previewTeam:t=>source(s,'preview',{season_id:s.season,grade_id:t.grade.id,team_id:t.id}),
+    managed:async(context,action)=>{s.groupContext=context;if(action==='add_team'){s.busy=true;try{await syncFixtures(s,{...context,mappings:context.mappings.filter(m=>m.grade_id===context.changed_grade_id)});}catch(e){s.error='Your team is saved. Fixtures could not finish loading: '+e.message;}finally{s.busy=false;if(live(s))draw(s);}}else{s.status=await rpc(s,'status');await h.refresh();draw(s);}},
     save:data=>groupRPC(s,'save',data),saved:async context=>{s.groupContext=context;s.dirty=false;s.busy=true;try{await syncFixtures(s,context);}catch(e){s.error='Your groups are saved. Fixture loading could not finish: '+e.message;}finally{s.busy=false;if(live(s))draw(s);}},
     captains:h.captains?()=>{if(canLeave()){active=null;h.captains();}}:null,
     manual:h.manualGrades?()=>{if(canLeave()){active=null;h.manualGrades();}}:null,

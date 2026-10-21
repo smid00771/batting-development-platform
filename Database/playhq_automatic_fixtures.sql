@@ -140,7 +140,7 @@ begin
  if p_action='status' then
   return jsonb_build_object('configured',conn.club_id is not null,'active_season_id',conn.active_season_id,
    'fixture_count',(select count(*) from club_selection_private.playhq_links where club_id=p_club_id and season_id=conn.active_season_id),
-   'fixture_through',(select max(day->>'date') from club_selection_private.playhq_links l join club_selection_private.fixtures f on f.id=l.fixture_id cross join lateral jsonb_array_elements(f.details->'days') day where l.club_id=p_club_id and l.season_id=conn.active_season_id),
+   'fixture_through',(select max(day->>'date') from club_selection_private.playhq_links l join club_selection_private.fixtures fx on fx.id=l.fixture_id cross join lateral jsonb_array_elements(fx.details->'days') day where l.club_id=p_club_id and l.season_id=conn.active_season_id),
    'last_checked_at',(select max(checked_at) from club_selection_private.playhq_jobs where club_id=p_club_id and kind='fixtures'),
    'fixture_reports',coalesce((select jsonb_agg(jsonb_build_object('grade',g.name,'deferred',j.last_result->'deferred','error',j.last_error)) from club_selection_private.playhq_jobs j
      join club_selection_private.playhq_grade_mappings m on m.club_id=j.club_id and m.source_grade_id=j.source_id and m.team_id=j.team_id and m.season_id=conn.active_season_id
