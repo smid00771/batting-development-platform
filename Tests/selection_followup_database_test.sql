@@ -1,5 +1,7 @@
 -- Exercise grade-drop follow-ups only; left-out records are a separate workflow.
 -- Synthetic users and fixtures only; every inserted row is rolled back.
+begin;
+set local statement_timeout='15s';
 do $tests$
 declare c uuid:=gen_random_uuid();other_c uuid:=gen_random_uuid();head_id uuid:=gen_random_uuid();selector_id uuid:=gen_random_uuid();
  coach_id uuid:=gen_random_uuid();captain_id uuid:=gen_random_uuid();player_id uuid:=gen_random_uuid();outsider_id uuid:=gen_random_uuid();wrong_captain uuid:=gen_random_uuid();u uuid;
@@ -93,3 +95,4 @@ begin
  assert not exists(select 1 from public.clubs where id in(c,other_c));
 end $tests$;
 select 'Selection follow-up tests passed; all synthetic data rolled back.' as result;
+rollback;
