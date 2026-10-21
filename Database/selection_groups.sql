@@ -110,7 +110,7 @@ begin
  perform 1 from public.playing_groups where club_id=c and active order by id for update;
  ctx:=club_selection_private.selection_groups_context(c);
  if ctx->'revision' is distinct from p_data->'revision' or ctx->'expected_grades' is distinct from p_data->'expected_grades' then raise exception 'Club setup changed. Reload before confirming the grades';end if;
- if jsonb_typeof(p_data->'groups') is distinct from 'array' or jsonb_array_length(p_data->'groups') not between 1 and 100 or jsonb_typeof(p_data->'grades') is distinct from 'array' or jsonb_array_length(p_data->'grades') not between 1 and 500 then raise exception 'Create a Selection Group and assign your grades';end if;
+ if jsonb_typeof(p_data->'groups') is distinct from 'array' or jsonb_array_length(p_data->'groups') not between 1 and 100 or jsonb_typeof(p_data->'grades') is distinct from 'array' or jsonb_array_length(p_data->'grades') not between 0 and 500 then raise exception 'Create a Selection Group and assign your grades';end if;
  if exists(select 1 from jsonb_array_elements(p_data->'groups') x group by x->>'id' having count(*)>1) or exists(select 1 from jsonb_array_elements(p_data->'groups') x group by lower(btrim(x->>'name')) having count(*)>1) then raise exception 'Use a different name for each Selection Group';end if;
  if exists(select 1 from jsonb_array_elements(p_data->'grades') x group by x->>'id' having count(*)>1) then raise exception 'A grade can only belong to one Selection Group';end if;
  if exists(select 1 from public.playing_groups g where g.club_id=c and g.active and not exists(select 1 from jsonb_array_elements(p_data->'grades') x where x->>'id'=g.id::text)) then raise exception 'Confirm a Selection Group for every existing grade';end if;
