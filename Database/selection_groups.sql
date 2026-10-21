@@ -162,6 +162,7 @@ begin
  delete from club_selection_private.selection_groups g where g.club_id=c and not exists(select 1 from jsonb_array_elements(p_data->'groups') x where x->>'id'=g.id::text) and not exists(select 1 from club_selection_private.selection_group_grades m where m.selection_group_id=g.id);
  insert into club_selection_private.team_settings(club_id,timezone,revision,updated_by) values(c,club_selection_private.captain_timezone(c),1,me)
  on conflict(club_id) do update set revision=club_selection_private.team_settings.revision+1,updated_by=me,updated_at=now();
+ if cat.season_id is not null then perform club_selection_private.playhq_queue_season(c,cat.season_id);end if;
  ctx:=club_selection_private.selection_groups_context(c)||jsonb_build_object('can_edit',true,'saved',true);
  insert into club_selection_private.requests values(c,me,rid,'selection_groups',p_data,ctx,now());
  insert into club_selection_private.audit(club_id,actor_id,action,detail) values(c,me,'selection_groups',jsonb_build_object('request_id',rid,'groups',p_data->'groups','grades',p_data->'grades'));
