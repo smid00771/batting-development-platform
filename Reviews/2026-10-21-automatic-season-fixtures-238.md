@@ -1,6 +1,8 @@
-# Automatic season fixtures and saved setup — prepared 0.8.62.238
+# Automatic season fixtures and saved setup — 0.8.62.238
 
-Status: prepared, not deployed. Supabase apply_migration returned “Migration was declined” during automatic approval review on 21 October. No reason was supplied. Live migration history confirms this migration was not applied. Do not merge the frontend until database integration validation and the matching Edge Function deployment succeed.
+Status: approved database migration 20261021100007 applied; Edge Function version 4 deployed with existing internal authentication. The initial automatic approval rejection was resolved by the user's explicit approval. Frontend release follows backend validation.
+
+Live pilot: 11 fresh provider checks returned HTTP 200. All 66 available fixtures loaded (50 new, 16 existing linked); no deferred matches. All original selections, published snapshots, review state and season captains compare unchanged. New fixtures are blank unpublished drafts. Last senior playing day is 6 March 2027. Development League currently ends 24 October; two women's teams await source grade metadata. Verified season polling and the five-minute job dispatcher are active.
 
 ## Confirmed problem
 
@@ -19,13 +21,13 @@ The club's 12 grade mappings and Selection Groups were saved. The returning impo
 
 36 focused Node tests pass across PlayHQ parser, Edge handler, import UI and Selection Group setup. New cases cover UPCOMING with no venue, one bad schedule among otherwise valid games, scheduled metadata discovery, new-session restoration, immediate imports and recovery after a fixture fetch failure. JavaScript syntax and git diff whitespace checks pass.
 
-The synthetic transaction-rollback database test is prepared in Tests/playhq_automatic_fixtures_test.sql but has NOT run because the required migration was declined. It covers matching, idempotency, manual overrides, protected dates, same-match dual club teams, background discovery and stale leases. Database implementation is not yet claimed validated. No physical browser/device verification was available.
+The synthetic transaction-rollback database test in Tests/playhq_automatic_fixtures_test.sql passes, including published arrangements and completed-fixture protection. The existing pending-source-grade database test also passes. It covers matching, idempotency, manual overrides, protected dates, same-match dual club teams, background discovery and stale leases. No physical browser/device verification was available.
 
-## Release sequence after approval
+## Release sequence
 
-1. Apply the prepared migration; run the synthetic rollback test and relevant existing database tests; correct any failures before release.
-2. Deploy the matching playhq-sync Edge Function with its existing verify_jwt=false setting and internal request authentication intact.
-3. Run an authorised fresh season check for the pilot's saved mappings; verify all available fixtures, preservation of existing selections and regular scheduled checks.
+1. Completed: applied migration and validated synthetic database regressions.
+2. Completed: deployed Edge Function version 4 with existing verify_jwt=false and internal authentication.
+3. Completed: fresh pilot season and all ten ready-team checks; 66 linked fixtures, preserved selections/captains, active scheduling.
 4. Merge frontend release, confirm Pages completion and exact live asset contents.
 
 ## New requirements retained for the next implementation

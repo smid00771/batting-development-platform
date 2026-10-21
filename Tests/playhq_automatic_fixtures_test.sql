@@ -38,6 +38,14 @@ begin
  r:=club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(row));
  assert r->>'attention'='1' and (select details#>>'{days,0,date}'='2099-10-03' from club_selection_private.fixtures where id=fid),'Date changes to selected teams await review';
  assert (select pending_fixture is not null and pending_fixture->>'requires_review'='false' from club_selection_private.playhq_links where fixture_id=fid),'Supported provider changes can be reviewed';
+ -- Published fixture metadata and completed fixtures stay protected.
+ update club_selection_private.fixtures set published=jsonb_build_object('details',details,'slots',slots) where id=newfid;
+ perform club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(jsonb_set(rows->1,'{days,0,ground}','"Published venue change"')));
+ assert (select pending_fixture is not null from club_selection_private.playhq_links where fixture_id=newfid),'Published arrangements require review';
+ assert (select coalesce(details#>>'{days,0,ground}','')='' from club_selection_private.fixtures where id=newfid),'Published details are not overwritten';
+ update club_selection_private.fixtures set published=null,details=jsonb_set(details,'{days,0,date}','"2000-01-01"') where id=newfid;
+ perform club_selection_private.playhq_import_all(c,season,srcg,team,jsonb_build_array(jsonb_set(rows->1,'{days,0,ground}','"Completed venue change"')));
+ assert (select details#>>'{days,0,date}'='2000-01-01' and coalesce(details#>>'{days,0,ground}','')='' from club_selection_private.fixtures where id=newfid),'Completed fixtures are never changed by polling';
  -- The same game can appear against two separate club teams.
  row:=jsonb_set(row,'{source_team_id}',to_jsonb(team2));
  perform club_selection_private.playhq_import_all(c,season,srcg,team2,jsonb_build_array(row));
