@@ -437,13 +437,17 @@
 /* Explicit hidden state takes precedence over every presentation component. */
 #app [hidden] {display:none!important}
 
-/* Season setup: one grade, one group decision; secondary setup stays collapsed. */
-#app .sg-row,#app .sg-source{display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,1fr);align-items:center;gap:6px 12px;border-bottom:1px solid var(--line);padding:7px 0}
-#app .sg-row small,#app .sg-source small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
-#app .sg-row label,#app .sg-source label,#app .sg-names label,#app .sg-add-group label{margin:0;min-width:0}
-#app .sg-row input,#app .sg-row select,#app .sg-source select{margin:3px 0 0;width:100%;min-width:0}
+/* Season setup: group imported teams, then align existing grades; keep fallback compact. */
+#app .sg-row,#app .sg-source,#app .sg-match{display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,1fr);align-items:center;gap:6px 12px;border-bottom:1px solid var(--line);padding:7px 0}
+#app .sg-row small,#app .sg-source small,#app .sg-match small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+#app .sg-row label,#app .sg-source label,#app .sg-names label,#app .sg-add-group label,#app .sg-match label,#app .sg-unmatched label{margin:0;min-width:0}
+#app .sg-row input,#app .sg-row select,#app .sg-source select,#app .sg-match input,#app .sg-match select,#app .sg-unmatched input{margin:3px 0 0;width:100%;min-width:0}
 #app .sg-source details{grid-column:1/-1;font-size:12px}
 #app .sg-source details>summary,#app .sg-fallback>summary{min-height:44px;align-content:center;cursor:pointer}
+#app .sg-match>div,#app .sg-source>div{min-width:0;overflow-wrap:anywhere}
+#app .sg-match{grid-template-columns:minmax(0,1.2fr) minmax(160px,1fr) minmax(160px,1fr)}
+#app .sg-unmatched{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;padding:7px 0}
+#app [data-sg-match-group] h4{margin:12px 0 4px}
 #app .sg-names{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px}
 #app .sg-add-group{display:flex;align-items:end;gap:6px;margin:6px 0 12px}
 #app .sg-add-group label{flex:1}
@@ -458,7 +462,8 @@
 #app [data-shared-grade] h3{margin:0 0 4px}
 #app [data-shared-grade]>details{font-size:12px}
 #app [data-shared-grade]>details>summary{cursor:pointer;min-height:44px;align-content:center}
-@media(max-width:500px){#app .sg-row,#app .sg-source{grid-template-columns:minmax(0,1fr)}#app .sg-add-group{flex-wrap:wrap}#app .se-board-group{flex:1 0 100%;justify-content:space-between}#app .se-board-group select{flex:1;max-width:72%}}
+@media(max-width:760px){#app .sg-match{grid-template-columns:minmax(0,1fr)} }
+@media(max-width:500px){#app .sg-row,#app .sg-source,#app .sg-match{grid-template-columns:minmax(0,1fr)}#app .sg-add-group{flex-wrap:wrap}#app .se-board-group{flex:1 0 100%;justify-content:space-between}#app .se-board-group select{flex:1;max-width:72%}}
 
 #app .sg-group-names>summary{font-size:13px;min-height:44px;align-content:center;cursor:pointer;overflow-wrap:anywhere}
 #app .sg-group-names:has(.sg-names:empty){display:none}
