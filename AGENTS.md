@@ -1,3 +1,5 @@
+Each club requests its own PlayCricket public API credentials through Settings → Connect PlayCricket. Keep Request access and I have my club’s key paths together; clubs may continue manual setup while waiting. Preparing or copying a request is not submission: record sent status only on an authorised Club Admin’s explicit confirmation. Keys stay in server-side Vault and apply only to that club. User agreement recorded 21 October 2026.
+
 Keep Settings first in the Teams & availability section navigation, immediately followed by Selection Groups. User clarification recorded 21 October 2026.
 
 Selection Groups is a dedicated management section within Teams & availability. It opens saved groups and indented teams directly, without a season download, fixture import or full setup flow. Keep adding, renaming and moving groups/teams and undoing source links in this section. Import season fixtures is for importing source data. User clarification recorded 21 October 2026.
