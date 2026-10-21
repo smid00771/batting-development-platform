@@ -1,11 +1,11 @@
-import {createSelectionGroups} from './selection-groups.js?v=0.8.62.236';
-import {createPlayHQImport} from './playhq-import.js?v=0.8.62.236';
+import {createSelectionGroups} from './selection-groups.js?v=0.8.62.237';
+import {createPlayHQImport} from './playhq-import.js?v=0.8.62.237';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.232';
 import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.235';
 import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.235';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
-// Club Batting 0.8.62.236 — club-defined Selection Groups
+// Club Batting 0.8.62.237 — group imported teams, then align existing grades
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.235';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.225';
@@ -22,7 +22,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.236';
+const APP_UI_VERSION='0.8.62.237';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
