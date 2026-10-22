@@ -1,6 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),{webcrypto}=require('node:crypto');
 const {graphicGrade,checkGraphicLabel}=require('../social-graphic-design.js');
+const {teamSelectionText}=require('../social-team-layout.js');
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
 const app=fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8'),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
 function part(text,start,end){const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a);return text.slice(a,b);}
@@ -18,7 +19,7 @@ function setup({twoDay=false,split=false,frame='cutout',left=false,source=app}={
  const canvas=()=>{const draws=[],ctx={drawImage:(...args)=>draws.push(args),fillRect(){},save(){},restore(){},beginPath(){},rect(){},clip(){},ellipse(){},fillText(){},measureText:()=>({width:10})};return {width:1080,height:1350,dataset:{},getContext:()=>ctx,draws};};
  const preview=canvas(),summary={textContent:'Move photo',focus(){}};
  const document={querySelectorAll:selector=>selector.includes('position-panel')?panels:selector.includes('position-value')?outputs:selector.includes('position-reset')?resets:selector.includes('data-social-position')?inputs:[],querySelector:selector=>selector.includes('position-panel')?summary:selector.includes('data-social-canvas')?preview:selector.includes('position-reset')?resets[0]:inputs.find(i=>selector.includes(`data-axis="${i.dataset.axis}"`))||null};
- const c=vm.createContext({graphicGrade,checkGraphicLabel,console,URL,crypto:webcrypto,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;},
+ const c=vm.createContext({graphicGrade,checkGraphicLabel,teamSelectionText,console,URL,crypto:webcrypto,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;},
   socialHere:()=>true,socialMessage:(s,message)=>s.notice=message,socialLock(){},socialDraw(){},socialGuideSaved(){},socialGuideUploadNote(){},socialGuideState:()=>({}),socialGuideRemember(){},
   supabase:{rpc:async(name,args)=>{assert.equal(name,'club_social_award_label_api');assert.equal(args.p_action,'team_rounds');assert.equal(args.p_club_id,'club');return {data:{fixture:'Round 3'}};}},socialAwards:{settings:async()=>({})},socialDefaults:d=>({...d.design}),socialAsset:()=>null,socialAssetURL:async(s,a)=>a?'photo-url':null,socialImage:async(s,url)=>url?photo:null,
   socialFontReady:async()=>true,socialPhotoBounds:()=>({x:0,y:0,w:500,h:1000,transparent:frame==='cutout'}),socialInk:()=> '#fff',socialFixtureDates:()=>[],
@@ -149,4 +150,4 @@ test('a completed-fixture rejection clears the pending save and expired photo dr
  assert.equal(h.s.pending,null);assert.equal(Object.keys(h.s.photoPositions).length,0);assert.equal(h.s.notice,'Completed fixtures are read-only.');
 });
 
-test('team graphics use each fixture’s round without doubling the Round prefix',async()=>{const h=setup(),text=[];h.c.socialText=(_,value)=>text.push(String(value));await h.c.socialRefresh(h.s);for(const round of ['Round 3','2']){h.s.data.fixtures[0].round=round;text.length=0;await h.c.socialRender(h.s,h.card(),h.canvas());assert.ok(text.includes(round==='2'?'ROUND 2':'ROUND 3'));assert.ok(!text.some(x=>x.includes('ROUND ROUND')));}});
+test('team graphics combine each fixture’s round with its opposition above the grade',async()=>{const h=setup(),text=[];h.c.socialText=(_,value,x,y)=>text.push({value:String(value),y});await h.c.socialRefresh(h.s);for(const round of ['Round 3','2']){h.s.data.fixtures[0].round=round;text.length=0;await h.c.socialRender(h.s,h.card(),h.canvas());const match=text.find(x=>x.value===(round==='2'?'ROUND 2 V VISITORS':'ROUND 3 V VISITORS')),grade=text.find(x=>x.value==='THIRD GRADE');assert.ok(match.y<grade.y);assert.ok(!text.some(x=>x.value.includes('ROUND ROUND')));}});

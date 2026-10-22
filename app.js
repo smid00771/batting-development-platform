@@ -11,6 +11,7 @@ import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.248';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.248';
+import {teamSelectionText} from './social-team-layout.js?v=0.8.62.249';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.232';
 import {createSelectionRoom} from './selection-room.js?v=0.8.62.246';
@@ -25,7 +26,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.248';
+const APP_UI_VERSION='0.8.62.249';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -22296,8 +22297,8 @@ async function socialRender(s,card,canvas){
  // A complete background contains its own header: no strip, tint or seam is painted over it.
  if(combined)socialFitImage(ctx,sponsors,0,0,1080,headerH);
  else if(!integrated){if(logo)socialFitImage(ctx,logo,45,28,185,200);else{ctx.fillStyle=ink;socialText(ctx,s.data.brand.name.toUpperCase(),50,105,sponsors?230:975,sponsors?27:44,'700');}if(sponsors)socialFitImage(ctx,sponsors,265,24,765,225);else if(logo){ctx.fillStyle=ink;const t=socialWrap(ctx,s.data.brand.name.toUpperCase(),730,38,2);t.lines.forEach((l,i)=>socialText(ctx,l,282,100+i*(t.size+10),730,t.size));}}
- const bounds=portrait?socialPhotoBounds(portrait):null,largeCutout=!!bounds?.transparent&&design.frame==='cutout',listX=showPortrait&&left?581:52,listWidth=showPortrait?447:972,detailsX=largeCutout?listX:52,detailsWidth=largeCutout?listWidth:970;
- const metaY=headerH+39,titleY=headerH+130,footer=String(design.footer||'').trim(),bottom=footer?1275:1315;
+ const bounds=portrait?socialPhotoBounds(portrait):null,largeCutout=!!bounds?.transparent&&design.frame==='cutout',listX=showPortrait&&left?581:64,listWidth=showPortrait?(left?435:510):952,detailsX=showPortrait&&left?listX:64,detailsWidth=largeCutout?listWidth:1080-detailsX-64;
+ const metaY=headerH+29,titleY=headerH+170,footer=String(design.footer||'').trim(),bottom=footer?1275:1315;
  const scale=Math.max(.8,Math.min(1.25,(Number(design.photo_scale)||100)/100));
  let photoX=left?20:590,photoY=headerH+266,photoW=470,photoH=(footer?1300:1350)-photoY;
  if(largeCutout){const shift=Math.max(-100,Math.min(100,Number(design.photo_shift)||0)),end=footer?1300:1350;
@@ -22311,18 +22312,18 @@ async function socialRender(s,card,canvas){
   }else if(design.frame==='circle'){ctx.beginPath();ctx.ellipse(photoX+photoW/2,photoY+photoH/2,photoW/2,photoW/2,0,0,Math.PI*2);ctx.clip();socialFitImage(ctx,portrait,photoX,photoY+(photoH-photoW)/2,photoW,photoW,true);}
   else socialFitImage(ctx,portrait,photoX,photoY,photoW,photoH,design.frame==='rectangle');ctx.restore();
  }
- ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:52,headingWidth=largeCutout?690:975,textLines=[];
- const round=String(card.f.round||d.round||'').trim(),meta=[round?(/^round\b/i.test(round)?round:'Round '+round):'',d.competition].filter(Boolean).join(' · ');checkGraphicLabel(canvas,ctx,{source:meta,label:meta.toUpperCase(),width:970,size:29});textLines.push([meta.toUpperCase(),52,metaY,970,29,'700']);
- const gradeLabel=graphicGrade(d.grade,design).toUpperCase()+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?447:headingWidth,gradeSize=design.font==='bold'?108:78;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
- let y=titleY+44;const detailLines=['v '+d.opposition,seFormatLabel(d),...socialFixtureDates(card),d.ground].filter(Boolean);
- for(const [i,text] of detailLines.entries()){const wrapped=socialWrap(ctx,text,detailsWidth,i===0?40:36,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+7;}}
- const names=socialNames(card),baseY=Math.max(headerH+330,y+24),line=Math.min(60,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?51:40,line*.88),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
- socialDrawNameProtection(ctx,{x:listX-12,y:baseY-font-10,w:listWidth+24,h:(names.length-1)*line+font+24},protection);ctx.fillStyle=ink;textLines.forEach(args=>socialText(ctx,...args));
+ ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:64,headingWidth=largeCutout?690:952,textLines=[],matchText=teamSelectionText(card);
+ checkGraphicLabel(canvas,ctx,{source:matchText.match,label:matchText.match,width:952,size:32});textLines.push([matchText.match,64,metaY,952,32,'700']);
+ const gradeLabel=graphicGrade(d.grade,design).toUpperCase()+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?435:headingWidth,gradeSize=design.font==='bold'?144:94;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
+ let y=titleY+48;
+ for(const text of matchText.lines){const wrapped=socialWrap(ctx,text,detailsWidth,32,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+4;}}
+ const names=socialNames(card),baseY=Math.max(headerH+330,y+32),line=Math.min(62,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?58:42,line*.94),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
+ if(!integrated)socialDrawNameProtection(ctx,{x:listX-12,y:baseY-font-10,w:listWidth+24,h:(names.length-1)*line+font+24},protection);ctx.fillStyle=ink;textLines.forEach(args=>socialText(ctx,...args));
  if(d.cancelled){socialText(ctx,'MATCH',52,baseY+100,960,76,'700');socialText(ctx,'CANCELLED',52,baseY+190,960,76,'700');}
- else names.forEach((p,i)=>{const row=baseY+i*line,marked=!!portrait&&p.id===featured.id;socialText(ctx,(p.name+p.marks).toUpperCase(),listX,row,listWidth,font,'700',18);if(marked)socialMarker(ctx,design.marker,left?listX-28:listX+listWidth+26,row-font*.30,design.marker==='arrows'?ink:design.accent,ink,left);});
+ else{ctx.save();if(integrated&&protection.alpha){ctx.shadowColor=protection.shade===0?'#000000CC':'#FFFFFFCC';ctx.shadowBlur=4;ctx.shadowOffsetY=1.5;}names.forEach((p,i)=>{const row=baseY+i*line,marked=!!portrait&&p.id===featured.id,name=(p.name+p.marks).toUpperCase();socialText(ctx,name,listX,row,listWidth,font,'700',18);if(marked){const end=listX+Math.min(listWidth,ctx.measureText(name).width);socialMarker(ctx,design.marker,left?listX-28:end+37,row-font*.30,design.marker==='arrows'?ink:design.accent,ink,left);}});ctx.restore();}
  if(portrait&&!d.cancelled&&design.marker==='badge')socialMarker(ctx,'badge',left?55:1025,photoY+40,design.accent,ink);
  if(footer){checkGraphicLabel(canvas,ctx,{source:footer,label:footer,width:975,size:21});ctx.fillStyle=design.primary;ctx.fillRect(0,1300,1080,50);ctx.fillStyle=ink;socialText(ctx,footer,52,1331,975,21,'500');}
- Object.assign(canvas.dataset,{featuredPlayer:portrait?featured.id||'':'',photoMarker:portrait?design.marker:'',headerLayout:integrated?'integrated':combined?'banner':'separate',headerHeight:String(headerH),nameProtection:protection.alpha?'automatic':'none',nameProtectionAlpha:protection.alpha.toFixed(2),largeCutout:String(largeCutout),photoLeft:photoX.toFixed(1),photoTop:photoY.toFixed(1),photoShiftX:String(position.x),photoShiftY:String(position.y),photoHeight:photoH.toFixed(1),photoWidth:photoW.toFixed(1),typeface:design.font==='bold'?(fontLoaded?'Club Sporting':'Arial'):design.font});
+ Object.assign(canvas.dataset,{featuredPlayer:portrait?featured.id||'':'',photoMarker:portrait?design.marker:'',headerLayout:integrated?'integrated':combined?'banner':'separate',headerHeight:String(headerH),nameProtection:protection.alpha?(integrated?'text-shadow':'automatic'):'none',nameProtectionAlpha:protection.alpha.toFixed(2),largeCutout:String(largeCutout),photoLeft:photoX.toFixed(1),photoTop:photoY.toFixed(1),photoShiftX:String(position.x),photoShiftY:String(position.y),photoHeight:photoH.toFixed(1),photoWidth:photoW.toFixed(1),typeface:design.font==='bold'?(fontLoaded?'Club Sporting':'Arial'):design.font});
  return {warnings,missingPhoto:showPortrait&&!portrait,photoExpected:!!featured.asset,invalid:featured.invalid};
 }
 async function socialPaintAll(s,fs){
@@ -22727,7 +22728,7 @@ async function socialPrepApprove(s){
 function socialPrepCard(s,job){
  const person=job?.roster_id?s.data.players.find(p=>p.id===job.roster_id):null,returnCard=socialGuideState(s).returnCard,target=returnCard?s.data.fixtures.flatMap(socialCards).find(card=>card.key===returnCard):null,fixture=target?.f;
  if(fixture){const card=target||socialCards(fixture)[0];if(!person)return {card,sample:false};const f={...fixture,features:[...(fixture.features||[]).filter(choice=>choice.day!==card.day+1),{day:card.day+1,mode:'player',roster_id:person.id,asset_id:'prepared-preview'}]};return {card:{...card,f},sample:false};}
- const people=Array.from({length:11},(_,i)=>({id:i===3&&person?person.id:'sample-'+i,name:i===3&&person?person.name:'Example player '+(i+1)})),f={id:'layout-example',features:person?[{day:1,mode:'player',roster_id:person.id,asset_id:'prepared-preview'}]:[],published:{details:{grade:'EXAMPLE GRADE',opposition:'Example opposition',format:'limited_overs',overs:40,ground:'Example ground',days:[{date:new Date(Date.now()+7*86400000).toISOString().slice(0,10),start:'10:00'}],match_roles:{d1:{captain_id:people[0].id,keeper_id:people[1].id}}},players:people,slots:people.map(p=>({d1:p.id,d2:null}))}};return {card:{f,day:0,split:false,key:'layout-example:0'},sample:true};
+ const people=Array.from({length:11},(_,i)=>({id:i===3&&person?person.id:'sample-'+i,name:i===3&&person?person.name:'Example player '+(i+1)})),f={id:'layout-example',round:'1',features:person?[{day:1,mode:'player',roster_id:person.id,asset_id:'prepared-preview'}]:[],published:{details:{grade:'EXAMPLE GRADE',opposition:'Example opposition',format:'limited_overs',overs:40,ground:'Example ground',days:[{date:new Date(Date.now()+7*86400000).toISOString().slice(0,10),start:'10:00'}],match_roles:{d1:{captain_id:people[0].id,keeper_id:people[1].id}}},players:people,slots:people.map(p=>({d1:p.id,d2:null}))}};return {card:{f,day:0,split:false,key:'layout-example:0'},sample:true};
 }
 async function socialPrepPaint(s,job=null){
  const canvas=document.getElementById('prepCanvas'),label=document.getElementById('prepPreviewLabel');if(!canvas)return;
