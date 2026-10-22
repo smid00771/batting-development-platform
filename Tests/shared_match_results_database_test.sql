@@ -14,7 +14,7 @@ begin
   insert into public.club_memberships(club_id,user_id,role,permission_role) values(c,adm,'admin','admin'),(c,mgr,'player','none'),(c,ordinary,'player','none');
   insert into club_selection_private.access(club_id,mode,status) values(c,'standalone','active');
   insert into club_selection_private.social_managers values(c,mgr);
-  insert into public.playing_groups(id,club_id,name,active,created_by) values(gid,c,'1st Grade',true,adm);
+  insert into public.playing_groups(id,club_id,name,active,batting_enabled,created_by) values(gid,c,'1st Grade',true,true,adm);
   d:=jsonb_build_object('grade','1st Grade','competition','Test','format','limited_overs','opposition','Visitors','days',jsonb_build_array(jsonb_build_object('date','2026-10-17')),'brackets',false);
   insert into club_selection_private.fixtures(id,club_id,details,slots) values(f1,c,d,'[]'),(f2,c,d||'{"grade":"2nd Grade"}','[]'),(f3,c,d||'{"grade":"3rd Grade","format":"long_form","days":[{"date":"2026-10-17"},{"date":"2026-10-24"}]}','[]');
   card:=jsonb_build_object('provider','playcricket_au','schema_version',2,'status','completed','match_id',mid,'url','https://play.cricket.com.au/match/'||mid,'dates',jsonb_build_array('2026-10-17'),'grade','1st Grade','format_key','limited_overs','result','Shared Results Test Club won',
