@@ -20,7 +20,7 @@ function setup({twoDay=false,split=false,frame='cutout',left=false,source=app}={
  const document={querySelectorAll:selector=>selector.includes('position-panel')?panels:selector.includes('position-value')?outputs:selector.includes('position-reset')?resets:selector.includes('data-social-position')?inputs:[],querySelector:selector=>selector.includes('position-panel')?summary:selector.includes('data-social-canvas')?preview:selector.includes('position-reset')?resets[0]:inputs.find(i=>selector.includes(`data-axis="${i.dataset.axis}"`))||null};
  const c=vm.createContext({graphicGrade,checkGraphicLabel,console,URL,crypto:webcrypto,document,CSS:{escape:x=>x},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;},
   socialHere:()=>true,socialMessage:(s,message)=>s.notice=message,socialLock(){},socialDraw(){},socialGuideSaved(){},socialGuideUploadNote(){},socialGuideState:()=>({}),socialGuideRemember(){},
-  socialAwards:{settings:async()=>({})},socialDefaults:d=>({...d.design}),socialAsset:()=>null,socialAssetURL:async(s,a)=>a?'photo-url':null,socialImage:async(s,url)=>url?photo:null,
+  supabase:{rpc:async(name,args)=>{assert.equal(name,'club_social_award_label_api');assert.equal(args.p_action,'team_rounds');assert.equal(args.p_club_id,'club');return {data:{fixture:'Round 3'}};}},socialAwards:{settings:async()=>({})},socialDefaults:d=>({...d.design}),socialAsset:()=>null,socialAssetURL:async(s,a)=>a?'photo-url':null,socialImage:async(s,url)=>url?photo:null,
   socialFontReady:async()=>true,socialPhotoBounds:()=>({x:0,y:0,w:500,h:1000,transparent:frame==='cutout'}),socialInk:()=> '#fff',socialFixtureDates:()=>[],
   socialText(){},socialWrap:text=>({lines:[text],size:30}),socialNameProtection:()=>({alpha:0}),socialDrawNameProtection(){},socialMarker(){},seFormatLabel:()=> 'T20',seEsc:String,
   socialFitImage:(ctx,img,x,y,w,h)=>ctx.drawImage(img,x,y,w,h),
@@ -131,8 +131,8 @@ test('busy or unconfirmed saves cannot be overwritten by a new position',async()
 });
 
 test('production and parked demo retain the same saved-position controls',()=>{
- // The live renderer adds label suggestions; photo placement is checked for both renderers above.
- for(const [a,b] of boundaries.filter(([a])=>a!=='async function socialRender(')){assert.equal(part(app,a,b),part(demo,a,b));}
+ // The live renderer adds label suggestions and fixture rounds. Photo placement is checked independently of the parked demo’s older context loader.
+ for(const [a,b] of boundaries.filter(([a])=>!['async function socialRender(','async function socialRefresh('].includes(a))){assert.equal(part(app,a,b),part(demo,a,b));}
 });
 
 test('a delayed preview uses the saved position after save replaces the fixture context',async()=>{
@@ -148,3 +148,5 @@ test('a completed-fixture rejection clears the pending save and expired photo dr
  assert.equal(await h.c.socialSavePhotoPosition(h.s,h.card(),{x:-4,y:5}),false);
  assert.equal(h.s.pending,null);assert.equal(Object.keys(h.s.photoPositions).length,0);assert.equal(h.s.notice,'Completed fixtures are read-only.');
 });
+
+test('team graphics use each fixture’s round without doubling the Round prefix',async()=>{const h=setup(),text=[];h.c.socialText=(_,value)=>text.push(String(value));await h.c.socialRefresh(h.s);for(const round of ['Round 3','2']){h.s.data.fixtures[0].round=round;text.length=0;await h.c.socialRender(h.s,h.card(),h.canvas());assert.ok(text.includes(round==='2'?'ROUND 2':'ROUND 3'));assert.ok(!text.some(x=>x.includes('ROUND ROUND')));}});

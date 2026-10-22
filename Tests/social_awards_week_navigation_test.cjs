@@ -21,4 +21,11 @@ for(const kind of ['team_week','player_week']){
  test(kind+' refreshes same-week choices and layout with preservation',()=>{const t=setup(kind,{end:'2026-10-11',designDirty:true,layoutDirty:true,rows:[{key:'chosen-player'}],winner:{key:'winner'},blurb:'Keep me'}),before=t.s[t.key];assert.equal(t.open(),true);assert.equal(t.s[t.key],before);assert.equal(t.prompts.length,0);assert.equal(t.loads[0].options.preserve,true);assert.equal(t.loads[0].end,'2026-10-11');});
  test(kind+' does not leave an unconfirmed save',()=>{const t=setup(kind);t.context.socialCanLeave=()=>false;const before=t.s[t.key];assert.equal(t.open(),false);assert.equal(t.s[t.key],before);assert.equal(t.loads.length,0);});
 }
-test('production initializer uses the exact-week hook and weekly APIs expose existing load',()=>{assert.match(source,/createSocialAwards\(\{[^\n]*reviewUpdatedAward:socialReviewUpdatedAward,/);for(const file of ['team-of-week.js','player-of-week.js'])assert.match(fs.readFileSync(require('node:path').join(__dirname,'..',file),'utf8'),/return \{render,state,load\};/);});
+test('production initializer uses the exact-week hook and weekly APIs expose existing load',async()=>{assert.match(source,/createSocialAwards\(\{[^\n]*reviewUpdatedAward:socialReviewUpdatedAward,/);for(const [file,factory] of [['team-of-week.js','createTeamOfWeek'],['player-of-week.js','createPlayerOfWeek']]){const module=await import('../'+file);assert.equal(typeof module[factory]({}).load,'function');}});
+
+test('changing the shared awards week clears per-graphic labels without changing reusable styles',()=>{
+ const begin=source.indexOf('function socialAdoptResultsWeek(s,end){'),finish=source.indexOf('\nasync function socialResultsChanged(',begin),states=['awards','week','playerWeek'];
+ const s=Object.fromEntries(states.map(key=>[key,{end:'2026-10-18',title:'Round 2',layout:{text_colour:'#FFFFFF'},graphicAssistant:{candidate:false}}]));
+ const context={socialAwards:{state:s=>s.awards},socialWeek:{state:s=>s.week},socialPlayerWeek:{state:s=>s.playerWeek}};vm.createContext(context);vm.runInContext(source.slice(begin,finish),context);
+ context.socialAdoptResultsWeek(s,'2026-10-25');for(const key of states){assert.equal(s[key].title,'');assert.equal(s[key].end,'2026-10-25');assert.equal(s[key].layout.text_colour,'#FFFFFF');assert.equal(s[key].graphicAssistant,null);}
+});
