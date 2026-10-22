@@ -1,0 +1,3 @@
+# Beta pages carry noindex metadata. Wider public launch is a separate release.
+User-agent: *
+Allow: /
