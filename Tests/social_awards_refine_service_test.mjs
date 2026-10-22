@@ -94,3 +94,16 @@ test('every graphic profile uses scoped grades, caller permissions and revision 
   const unknown=setup({context,output});assert.equal((await refineAward({...base,preview_grades:['Foreign grade']},unknown.options)).status,400);assert.ok(!unknown.calls.some(c=>c.body?.p_action==='style_request'));
  }
 });
+
+test('week/round labels are bounded presentation text, separate from reusable styles and source dates',async()=>{
+ for(const kind of ['team_week','player_week','results','century','five_wickets']){
+  const layout=kind==='team_week'?{top:620,bottom:1230,left:65,figures_right:825,grade_right:1015}:{},context={design:{revision:3,layout},designs:{[kind]:{revision:3,layout}},candidates:[]};
+  const output={changes:{},grade_labels:[],graphic_label:'Round 2',artwork_brief:null,explanation:'Show Round 2.'};
+  const body={...request(),purpose:'graphic_refine',kind,current:layout,graphic_label:'WEEK ENDING 18/10/2026',brief:'Replace Week ending with Round 2 for this week.'};
+  const {calls,options}=setup({context,output}),result=await refineAward(body,options);assert.equal(result.status,200);assert.equal(result.body.graphic_label,'Round 2');assert.deepEqual(result.body.changes,{});assert.equal(result.body.artwork_brief,null);assert.equal(body.week_end,'2026-10-11');
+  const provider=calls.find(c=>c.url.includes('openai'));assert.equal(JSON.parse(provider.body.input[0].content[0].text).graphic_label,body.graphic_label);assert.match(provider.body.instructions,/must return graphic_label/);assert.match(provider.body.instructions,/never infer a round/);assert.ok(provider.body.text.format.schema.required.includes('graphic_label'));assert.equal(provider.body.text.format.schema.properties.changes.properties.graphic_label,undefined);
+  for(const value of ['', 'x'.repeat(61),'<script>x</script>','Round\n2',2]){const invalid=setup({context,output:{...output,graphic_label:value}});assert.equal((await refineAward(body,invalid.options)).status,502);}
+  const invalid=setup({context,output});assert.equal((await refineAward({...body,graphic_label:'<html>'},invalid.options)).status,400);assert.equal(invalid.calls.length,0);
+ }
+ const unsupported=setup({context:{design:{},revision:3},output:{changes:{},graphic_label:'Round 2'}});assert.equal((await refineAward({...request(),kind:'team_selections',current:{}},unsupported.options)).status,502);
+});

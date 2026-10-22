@@ -42,6 +42,7 @@ w.end='2026-10-18';release(answer({badge_style:'outline'}));await until(()=>!w.b
 // Distinct club palettes and typography remain available, with the same verified figures.
 await edit('Use a classic green and cream style.',answer({font:'classic',panel_colour:'#FFFAEB',grade_colour:'#225533',score_colour:'#225533',badge_style:'outline',win_colour:'#225533',loss_colour:'#992233',row_radius:12}));
 if(process.env.AWARDS_PREVIEW_DIR){fs.mkdirSync(process.env.AWARDS_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/green-classic.png',png());fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/gold-ribbon.png',first);}
+assert.equal(id('saTryRefinement').textContent,'Preview changes');assert.equal(id('saUseRefinement').textContent,'Apply changes');assert.equal(id('saUndoRefinement').textContent,'Undo changes');assert.match(id('saRefineStatus').textContent,/Proposed changes/);
 const approved=png();failSave=true;id('saUseRefinement').click();await settled();assert.equal(w.refinements.results.candidate,true);assert.equal(id('saConfirmGraphic').disabled,true);assert.match(id('saCreateStatus').textContent,/Artwork changed/);assert.equal(id('saUndoRefinement').disabled,true);assert.equal(id('saTryRefinement').disabled,true);assert.equal(module.canLeave(s),false);
 failSave=false;id('saUseRefinement').click();await settled();assert.equal(w.refinements.results.candidate,false);assert.equal(saves.length,1);assert.equal(id('saConfirmGraphic').disabled,false);assert.equal(context.designs.results.layout.font,'classic');
 id('saConfirmGraphic').click();await settled();assert.equal(context.editions.length,2);assert.deepEqual(Buffer.from(await files.get('club-social-awards'+context.editions[0].image_path).arrayBuffer()),approved);assert.deepEqual(context.editions[0].sources,items.slice(0,4).map(x=>({key:x.key,signature:x.signature})));
@@ -51,7 +52,7 @@ const count=requests.length;id('saUndoRefinement').click();await settled();asser
 // Crops are source-bound and separately labelled before use; other outcomes stay generated.
 const crops=[{label:'WIN',x:.39,y:.30,width:.18,height:.06},{label:'DEF',x:.39,y:.60,width:.18,height:.06}];await edit('Use our badge graphics.',answer({}, {badges:crops,example_path:examplePath}));assert.equal(document.querySelectorAll('[data-sa-badge]').length,2);assert.equal(w.layouts.results.badge_source,examplePath);assert.equal(id('saConfirmGraphic').disabled,true);id('saUseRefinement').click();await settled();
 // Artwork edits continue inside the existing editor, preserving the suggested brief.
-await edit('Move the painted title lower.',answer({}, {explanation:'Review an artwork change for the painted title.',artwork_brief:'Move only the painted title lower. Keep the club colours.'}));assert.equal(w.refinements.results.candidate,false);id('saRefineArtwork').click();await until(()=>!!backgroundHelp);assert.equal(backgroundHelp.options.brief,'Move only the painted title lower. Keep the club colours.');assert.equal(backgroundHelp.options.mode,'template');assert.equal(backgroundHelp.file.name,'Our previous results.png');
+await edit('Move the painted title lower.',answer({}, {explanation:'Review an artwork change for the painted title.',artwork_brief:'Move only the painted title lower. Keep the club colours.'}));assert.equal(w.refinements.results.candidate,true);await until(()=>!!backgroundHelp);assert.equal(id('saRefineArtwork'),null);assert.ok(backgroundHelp.options.proposal);assert.equal(backgroundHelp.options.brief,'Move only the painted title lower. Keep the club colours.');assert.equal(backgroundHelp.options.mode,'template');assert.equal(backgroundHelp.file.name,'Our previous results.png');backgroundHelp.options.proposal.undo();module.render(s);await settled();assert.equal(w.refinements.results.candidate,false);
 for(let i=0;i<context.editions.length;i++)assert.deepEqual(Buffer.from(await files.get('club-social-awards'+context.editions[i].image_path).arrayBuffer()),savedImages[i]);assert.equal(JSON.stringify(context.candidates),facts);
 console.log('Passed: current-preview input, isolated club style, repeated revisions, failure recovery, stale response rejection, source-bound badges, explicit approval, free undo, immutable facts/history, exact saved previews and in-app artwork handoff.');
 
@@ -64,3 +65,15 @@ for(const kind of ['results','century','five_wickets']){
  id('saUseRefinement').click();await settled();await module.load(s,false);module.render(s);await settled();assert.equal(w.layouts[kind].grade_labels[0].label,'Dev');assert.equal(JSON.stringify(context.candidates),factsBefore);
 }
 console.log('Passed: Results, Century and 5 Wickets display abbreviations persist without editing source grades.');
+
+// The same saved Week 2 label is drawn on every award, with AI proposals still reviewable.
+h.loadLabel=async()=>({label:'Week 2',mode:'week_number',revision:1,needs_label:false});
+const sharedLabelSaves=[];h.saveLabel=async(_,end,label)=>{sharedLabelSaves.push({end,label});w.awardLabel={label,mode:'week_number',revision:2};};
+for(const kind of ['results','century','five_wickets']){
+ s.view=kind;await module.load(s,false);w.focus='grade-'+kind;w.chosen=new Set(['grade-'+kind]);labels=[];module.render(s);await settled();assert.equal(w.title,'Week 2');assert.ok(labels.some(x=>x.toUpperCase()==='WEEK 2'));
+ const before=png(),writes=saves.length;
+ if(process.env.GRAPHIC_PREVIEW_DIR){fs.mkdirSync(process.env.GRAPHIC_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.GRAPHIC_PREVIEW_DIR+'/'+kind+'-week-2.png',before);}
+ await edit('Use Week 3 on all awards this week',answer({}, {graphic_label:'Week 3'}));assert.equal(w.title,'Week 3');assert.notDeepEqual(png(),before);assert.equal(sharedLabelSaves.length,kind==='results'?0:kind==='century'?1:2);id('saUndoRefinement').click();await settled();assert.equal(w.title,'Week 2');assert.deepEqual(png(),before);
+ await edit('Use Week 3 on all awards this week',answer({}, {graphic_label:'Week 3'}));id('saUseRefinement').click();await settled();assert.equal(sharedLabelSaves.at(-1).label,'Week 3');assert.equal(saves.length,writes,'Label acceptance does not write the reusable design');
+}
+console.log('Passed: Week 2 on Results, Century and Five Wickets; label proposal pixels, undo and shared acceptance.');

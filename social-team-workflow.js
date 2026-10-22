@@ -1,4 +1,4 @@
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.225';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.248';
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 export function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);
@@ -73,7 +73,7 @@ export function createTeamSocialWorkflow(h){
   ready:()=>canvas.isConnected&&canvas.dataset.assistantReady==='true',locked:()=>s.busy||!!s.pending||!!h.demo,busy:value=>{s.busy=value;},render:()=>h.draw(s),layout:()=>s.design,
   identity:()=>JSON.stringify([s.date,w.fixture,w.day,w.step,s.design,s.data.revision,s.data.fixtures]),grades:()=>canvas.dataset.sourceGrade?[canvas.dataset.sourceGrade]:[],revision:()=>s.data.revision,canvas:()=>canvas,here:()=>h.here(s)&&s.view==='graphics'&&s.teamWorkflow===w&&w.step===step,
   apply:design=>{s.design=design;s.dirty=true;},save:async()=>{const r=assistantState(w);r.saveCommand||={revision:s.data.revision,design:structuredClone(s.design),request_id:crypto.randomUUID()};await h.rpc(s,'settings',r.saveCommand);if(!await h.refresh(s))throw Error('The saved layout could not reload.');r.saveCommand=null;},
-  reload:async()=>{if(!await h.refresh(s))throw Error('The saved layout could not reload.');w.graphicAssistant=null;},artwork:brief=>h.editBackground(s,brief)};}
+  reload:async()=>{if(!await h.refresh(s))throw Error('The saved layout could not reload.');w.graphicAssistant=null;},saveBeforeArtwork:true,artwork:(brief,options)=>h.editBackground(s,brief,options)};}
  function syncAssistant(s,canvas){const c=assistantConfig(s,canvas);assistantControls(c.owner,c.prefix,{ready:c.ready(),locked:c.locked()});assistantSuggestions(c);}
  function canLeave(s){return assistantCanLeave(s.teamWorkflow,text=>h.message(s,text));}
  return {render,state,canLeave};

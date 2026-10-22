@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {JSDOM}=require('jsdom'),{webcrypto}=require('node:crypto');
 const app=fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8');
 function fn(name){const m=new RegExp('(?:async )?function '+name+'\\(').exec(app);assert.ok(m,name);const rest=app.slice(m.index),end=rest.slice(1).search(/\n(?:(?:async )?function |window\.addEventListener|const )/);return end<0?rest.split("\n")[0]:rest.slice(0,end+1);}
-const functions=['socialGuidePrepare','socialGuidePreparation','socialGuidePreparationFeedback','socialGuideReviewVersion','socialGuideRefineVersion','socialGuideRevertVersion','socialPrepStart','socialGuideReload','socialGuideResetImage','socialGuideRemember','socialGuideDraftKey','socialGuideNextState','socialGuideSaveAndContinue','socialSaveAwardBackground'];
+const functions=['socialGuidePrepare','socialGuidePreparation','socialGuidePreparationFeedback','socialGuideReviewVersion','socialGuideRefineVersion','socialGuideRevertVersion','socialPrepStart','socialGuideReload','socialGuideResetImage','socialGuideRemember','socialGuideDraftKey','socialGuideNextState','socialGuideSaveAndContinue','socialSaveAwardBackground','socialGuideReturnToAward','socialAwardBackground','socialGuideEnter'];
 function setup(){
  const dom=new JSDOM('<div id="prepStep"></div><button id="prepNext"></button>',{url:'https://example.test'}),document=dom.window.document,jobs=[],calls=[],applied=[];
  dom.window.HTMLElement.prototype.scrollIntoView=function(){};
@@ -69,3 +69,33 @@ test('an unresolved generation prevents reverting or submitting different artwor
  const h=setup();h.jobs.push({id:'earlier',kind:'master',state:'ready',source_path:'original.png',result_path:'earlier.png'});await h.c.socialPrepStart(h.s);h.s.guide.previousPreview='earlier';h.c.socialDraw();
  assert.equal(h.document.getElementById('prepRevert').disabled,true);await h.c.socialGuideRevertVersion(h.s,'earlier');assert.equal(h.s.guide.source,'asset:original');assert.equal(h.calls.length,1);
 });
+
+async function settle(h){for(let i=0;i<50;i++){await new Promise(resolve=>setTimeout(resolve,0));if(!h.s.busy)return;}throw Error('Preparation did not settle');}
+async function readyProposal(h){
+ h.s.guide.autoStart=true;h.c.socialDraw();h.c.socialDraw();await settle(h);
+ assert.equal(h.calls.length,1,'The original request starts image preparation exactly once');assert.equal(h.applied.length,0);
+ Object.assign(h.jobs[0],{state:'ready',result_path:'proposed.png'});await h.c.socialGuideReload(h.s);
+ assert.equal(h.document.getElementById('prepSaveVersion').textContent,'Apply changes');assert.equal(h.document.getElementById('prepUndoProposal').textContent,'Undo changes');
+ assert.match(h.document.getElementById('prepReview').textContent,/Proposed changes/);
+}
+test('assistant artwork starts automatically and Undo restores the original without saving',async()=>{
+ const h=setup();let undone=0;h.s.guide.awardReturn.proposal={undo:()=>undone++,applied:()=>assert.fail('Undo must not apply')};
+ await readyProposal(h);h.document.getElementById('prepUndoProposal').click();await settle(h);
+ assert.equal(undone,1);assert.equal(h.applied.length,0);assert.equal(h.calls.length,1);assert.equal(h.s.view,'results');assert.equal(h.s.guide.awardReturn,null);
+});
+test('Apply commits a prepared proposal only after review, then returns to the graphic',async()=>{
+ const h=setup(),order=[];h.s.guide.awardReturn.proposal={beforeApply:async()=>order.push('layout'),applied:()=>order.push('accepted'),undo:()=>assert.fail('Apply must not undo')};
+ const apply=h.s.guide.awardReturn.apply;h.s.guide.awardReturn.apply=async asset=>{order.push('background');await apply(asset);};
+ await readyProposal(h);assert.deepEqual(order,[]);h.document.getElementById('prepSaveVersion').click();await settle(h);
+ assert.deepEqual(order,['layout','background','accepted']);assert.equal(h.applied.length,1);assert.equal(await h.applied[0].blob.text(),'proposed.png');assert.equal(h.s.view,'results');assert.equal(h.s.guide.awardReturn,null);
+});
+test('an unconfirmed proposal save blocks Undo and different artwork until Apply succeeds',async()=>{
+ const h=setup();let accepted=0,tries=0;h.s.guide.awardReturn.proposal={applied:()=>accepted++,undo:()=>assert.fail('An unconfirmed save cannot undo')};
+ const apply=h.s.guide.awardReturn.apply;h.s.guide.awardReturn.apply=async asset=>{if(++tries===1)throw Error('Connection lost');await apply(asset);};
+ await readyProposal(h);h.document.getElementById('prepSaveVersion').click();await settle(h);
+ assert.equal(h.s.view,'guide');assert.equal(accepted,0);assert.equal(h.s.guide.awardReturn.proposal.saveUncertain,true);assert.equal(h.document.getElementById('prepUndoProposal').disabled,true);assert.equal(h.document.getElementById('prepChange').disabled,true);
+ assert.equal(await h.c.socialGuideReturnToAward(h.s,h.s.guide),false);assert.match(h.s.notice,/Save not confirmed/);
+ h.document.getElementById('prepSaveVersion').click();await settle(h);assert.equal(accepted,1);assert.equal(h.applied.length,1);assert.equal(h.s.view,'results');
+});
+
+test('an internal proposal enters preparation despite the ordinary unsaved-proposal navigation guard',()=>{const h=setup();h.s.view='results';h.s.guide.available=false;h.c.socialCanLeave=()=>{assert.fail('Internal handoff must retain, not discard, the proposal');};h.c.socialGuideSwitch=()=>{};const proposal={undo(){},applied(){}};h.c.socialAwardBackground(h.s,new File(['source'],'example.png'),async()=>{}, {brief:'Move heading',proposal});assert.equal(h.s.view,'guide');assert.equal(h.s.guide.awardReturn.proposal,proposal);assert.equal(h.s.guide.autoStart,true);assert.equal(h.calls.length,0);});
