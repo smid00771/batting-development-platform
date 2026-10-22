@@ -21,4 +21,12 @@ Marketing links preserve existing trial/sign-in routes. Homepage leads to the th
 
 All people, club records and scores are fictional. No City data, live provider credentials or database records were changed. Calls, connections, polling, invitations, messages, AI and posting are explicitly simulated. Demonstrating those screens does not establish real Meta readiness, API approval for another club or production server authorization. Help videos were not rerecorded. This update does not clear the wider launch requirements in `mirelion-public-launch-readiness.md`.
 
-Deployment and live-URL verification must be recorded after the demo and marketing links are merged; local validation alone is not a deployed result.
+## Deployment evidence
+
+- App/demo PR #101 merged as `13ac8f9aca80f4f14d6f5c9ee312248c284e0870`. The live `https://clubbatting.com/demo.html` was opened in the browser: the three-product chooser and combined ordinary-player journey rendered correctly.
+- The actual downloaded HTML exactly matches the tested generated artifact: SHA-256 `4682824e308a32879cd0bf4198fbe326072d7453de6e04aeec4cc50c1d2482c6`. The browser automation download callback timed out, but both resulting downloaded files were present and their hashes matched; no download failure is inferred from that callback.
+- Mirelion website PR #1 merged as `1e8e7d9aafee1f72b1138f2a3067ea54781d00ba`. GitHub Pages run `39858434337` completed successfully for that exact commit.
+- The new domain remains a separate open item: `https://mirelionhq.com/` returned an upstream connection failure in this browser. GitHub Pages still showed Enforce HTTPS unavailable after refresh. The marketing deployment succeeded, but HTTPS reachability and visual acceptance through that custom domain are not established here. No DNS or certificate settings were changed during this rebuild.
+
+![Live demo with three product choices](assets/mirelion-demo-2026-10-22.jpg)
+
