@@ -104,7 +104,7 @@ test('contact and privacy retain the existing working mailbox and deletion infor
 });
 test('unknown nested pages keep useful absolute home, asset and app links', () => {
   const document = new JSDOM(read('404.html'), { url: 'https://mirelionhq.com/missing/nested/page' }).window.document;
-  assert.equal(document.querySelector('link[rel="stylesheet"]').href, 'https://mirelionhq.com/marketing.css?v=0.8.62.247');
+  assert.equal(document.querySelector('link[rel="stylesheet"]').href, 'https://mirelionhq.com/marketing.css?v=20261022.1');
   assert.ok(document.querySelector('a[href="/"]'));
   assert.ok(document.querySelector('a[href="https://clubbatting.com/app.html"]'));
 });

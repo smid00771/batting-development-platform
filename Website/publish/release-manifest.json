@@ -4,18 +4,18 @@
   "stage": "beta",
   "files": {
     ".nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "404.html": "fded1b3972312b836d020d6bfca3145e6dea5dd75a1035013696721a34196f9f",
-    "app.html": "e051eaf5c8a867761e09105ee76c162a90a02d9677e5fbdf02173670cfd50409",
-    "batting.html": "6218bff78d3b3cc1456a1a5d2292ea9f9b7c0d2fcb8ae706a1b3e05577b2737e",
+    "404.html": "17280e7a0da7499d75dd473d48bf83ce295029af9e3e5ac77e43568fb454eddb",
+    "app.html": "dbb3f62af4b652bde99087321f53e4e9cfcc2d4a70596033c48a33a83157ff47",
+    "batting.html": "d4c7473596b42a09c4459386b6cf3fb4dae1d178ec2b905589c825c743080a8c",
     "CNAME": "0a1a3e7f399d7beaf0eeebea36aeb4827bc88dae09cfcb4816b8643887444244",
-    "contact.html": "3dd8cac75e639c1f35712fa4506a9fd36d6fe09f347e15493a96f4982455b3d1",
-    "enquire.html": "728198f6279fcdbc7f4a00f5fb33b15afa8055b391525834b8bde8c2aac8a3d3",
+    "contact.html": "eef0bb197c9a039a41303d7a688fd28e2be00572e277dc1185385ed7beec434c",
+    "enquire.html": "56fb4e0d89d481dbd6ebda798a469ee6f8a10c1e135bb9450c2fa8f75eeffb9f",
     "icons/mirelion.svg": "4298976dd23bcd15db5fe005ed3c185a70ba13d063411468474e88641059bb48",
-    "index.html": "b6251db96699dd9dabfefa28db4935fd82b55bb4980e613ae7f8f311851c5f9f",
-    "marketing.css": "d1fb96b0292419c739ef04c2ccf480867e9afa6bb7a7bfbe2e965df322ea810c",
+    "index.html": "419a27c0487150b514f12613fda446652289823e89d3d85c993b79db7e66c311",
+    "marketing.css": "fb3de192f73855a9b114bf4f5f59c120e159551e1782fb5b273e6ccb1d2cb1e9",
     "marketing.js": "c62ca14516508b14b9d4c3857538e9b36501bc422daea2432ee7130862411527",
-    "privacy.html": "021dcb033b1d7c6b2f557ebfae1949c4e9c879900ff9fc7e0cd52b7a129ccb06",
+    "privacy.html": "56be54da3c4c85b482b14976484a14734f9b643e7f7fe631bb5dba15a0e67b09",
     "robots.txt": "9a55f5005bdfd0214c4a520958be9758ba68b4cfb5ae9d3708e2aef43a865d5b",
-    "teams.html": "3080aa016ffce6061d76ecd0db7096bd19fe435349f5ff54d02c2acb5b9af5c3"
+    "teams.html": "788d9f978b8f709c3a8ce2d24a49725c6de0c585b5652e4f5518ba2cc1261401"
   }
 }

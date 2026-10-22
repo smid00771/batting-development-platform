@@ -2,6 +2,10 @@
 
 Prepared 22 October 2026 for `mirelionhq.com`, registered by the owner through VentraIP. This is the beta website domain setup, not the wider commercial launch or a move of the installed app.
 
+Hosting is now staged in [smid00771/mirelion-website](https://github.com/smid00771/mirelion-website). GitHub Pages is configured for `main / (root)` with `mirelionhq.com` as its custom domain. The ownership check still reports that the verification TXT record cannot be found. A public DNS check on 22 October returned the existing apex A record `103.42.108.46` and no `www` CNAME. Domain verification, the website DNS records below, HTTPS and live-domain acceptance remain outstanding.
+
+The homepage, both product pages and Contact page describe personal support for every club. Club-specific changes stay scoped to that club; established improvements can become shared features after testing. The wording explains Australian time zones and availability, with scope and timing agreed for larger requests. It does not offer a staffed live-chat service.
+
 ## Two website hosts, one app
 
 | Address | Purpose |
@@ -19,7 +23,7 @@ The current repository's root `CNAME` remains `clubbatting.com`. GitHub Pages ha
 
 ## Build the exact publish bundle
 
-The checked release is [mirelionhq-beta-2026-10-22.zip](releases/mirelionhq-beta-2026-10-22.zip) (15 files, 25,987 bytes). Its SHA-256 is `d365d5cc9e4e35df585c384476649d5fd2a2b9ee53c4da4fba051a2d5667410e`. The same 15 files are saved in `Website/publish` for review. Rebuild and replace both that snapshot and the archive if any source website file changes before activation; edit the source marketing pages, not the snapshot.
+The checked release is [mirelionhq-beta-2026-10-22.zip](releases/mirelionhq-beta-2026-10-22.zip) (15 files, 26,927 bytes). Its SHA-256 is `276a4d1b45ebb405a6041ef6b414a8c17267e1ad83bd952429789fba72423c6d`. The same 15 files are saved in `Website/publish` for review. Rebuild and replace both that snapshot and the archive if any source website file changes before activation; edit the source marketing pages, not the snapshot.
 
 From the source checkout, using Node 20 or later:
 

@@ -24,7 +24,8 @@ function siteLinks(html) {
     .replaceAll('href="./app.html"', `href="${config.appOrigin}/app.html"`)
     .replace(/href="\.\/enquire\.html(?:\?product=(batting|selections|both))?"/g,
       (_, product = '') => `href="${config.appOrigin}/app.html?trial_product=${product}"`)
-    .replaceAll(`href="mailto:${config.contactEmail}">Contact</a>`, 'href="./contact.html">Contact</a>');
+    .replaceAll(`href="mailto:${config.contactEmail}">Contact</a>`, 'href="./contact.html">Contact</a>')
+    .replaceAll(`href="mailto:${config.contactEmail}">Contact us</a>`, 'href="./contact.html">Contact us</a>');
 }
 
 function publicPage(name) {
@@ -58,7 +59,7 @@ function simplePage({ title, heading, body, path, script = '' }) {
 <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex, follow">
 <title>${title} — Mirelion</title><meta name="theme-color" content="#173d32">
 ${path ? `<link rel="canonical" href="${config.websiteOrigin}${path}">` : ''}
-<link rel="icon" type="image/svg+xml" href="/icons/mirelion.svg"><link rel="stylesheet" href="/marketing.css?v=0.8.62.247">
+<link rel="icon" type="image/svg+xml" href="/icons/mirelion.svg"><link rel="stylesheet" href="/marketing.css?v=20261022.1">
 <style>.simple-page{max-width:760px;min-height:45vh;padding-block:36px}.simple-page h1{font-size:clamp(32px,6vw,48px);line-height:1.1;letter-spacing:-1.4px;margin-bottom:20px}.simple-page h2{font-size:23px;margin:26px 0 10px}.simple-page p{margin:12px 0;overflow-wrap:anywhere}.simple-page a:not(.button){text-underline-offset:3px}.simple-page .hero-actions{margin-top:20px}@media(max-width:620px){.simple-page{padding-block:26px}}</style>
 ${script}</head><body><a class="skip-link" href="#main">Skip to content</a>
 ${nav(header)}<main id="main" class="container simple-page"><h1>${heading}</h1>${body}</main>${nav(footer)}
@@ -106,8 +107,11 @@ export function buildMirelionSite(directory = join(sourceRoot, 'Website/dist')) 
   for (const name of assets) files.set(name, read(name));
   files.set('app.html', handoffPage('app.html', 'Sign in'));
   files.set('enquire.html', handoffPage('enquire.html', 'Start your club’s free trial'));
-  files.set('contact.html', simplePage({ title: 'Help and contact', heading: 'How can we help?', path: '/contact.html',
-    body: `<p>For questions about Mirelion Select, Club Batting or getting your club started, email <a href="mailto:${config.contactEmail}">${config.contactEmail}</a>.</p>
+  files.set('contact.html', simplePage({ title: 'Help and contact', heading: 'Personal support for your club.', path: '/contact.html',
+    body: `<p>Every club can contact us for help getting started, solving a problem or requesting changes to how Mirelion Select or Club Batting works for them.</p>
+<p>Email <a href="mailto:${config.contactEmail}">${config.contactEmail}</a>. Tell us your club name, the page you’re using and what you’d like to work differently. We’ll work with you on practical changes to suit your club.</p>
+<p>Changes specific to your club stay scoped to your club. Improvements that prove useful more widely can become shared features after testing.</p>
+<p>Support is based in Australia. We respond as soon as we can around time zones and availability. For bigger changes, we’ll agree what’s possible and a timeframe with you.</p>
 <h2>Already using the app?</h2><p>Sign in with your existing account and open Help. Include your club name and the page you were using when asking for support.</p>
 <div class="hero-actions"><a class="button" href="${config.appOrigin}/app.html">Open the app <span aria-hidden="true">→</span></a><a class="text-link" href="/privacy.html#deletion">Privacy and deletion requests</a></div>` }));
   files.set('404.html', simplePage({ title: 'Page not found', heading: 'Let’s get you to the right place.',
