@@ -2,8 +2,6 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
 const path = require('node:path');
-const fs = require('node:fs');
-const {JSDOM} = require('jsdom');
 const {openDemo} = require('./helpers/demo_harness.cjs');
 
 const labels = (h, selector) => [...h.document.querySelectorAll(selector)].map(e => e.textContent.trim());
@@ -25,13 +23,13 @@ async function choice(h, kind, enabled) {
 }
 
 test('the complete demo opens on the selector board and retains it through app navigation', async t => {
-  const h = await openDemo(); t.after(h.close);
+  const h = await openDemo('selections'); t.after(h.close);
   assert.equal(h.document.getElementById('demoStage').value, 'selections');
   assert.ok(h.document.querySelector('[data-se-view="board"][aria-pressed="true"]'));
   assert.equal(h.document.querySelector('[data-se-view="published"]'), null);
   assert.ok(h.document.getElementById('seSeasonStats'));
   assert.ok(h.document.getElementById('seOpenRoom'));
-  assert.ok(h.document.querySelector('[data-se-view="socials"]'));
+  assert.equal(h.document.querySelector('[data-se-view="socials"]'), null);
   await h.click('[data-se-view="availability"]');
   await h.click('[data-se-view="board"]');
   const help = [...h.document.querySelectorAll('button')].find(b => b.textContent === 'Help & Tutorials');
@@ -44,7 +42,7 @@ test('the complete demo opens on the selector board and retains it through app n
 });
 
 test('award choices save through the complete demo and control Create posts', async t => {
-  const h = await openDemo(); t.after(h.close);
+  const h = await openDemo('socials'); t.after(h.close);
   await openAwards(h);
   assert.deepEqual(labels(h, '[data-social-view]'), ['Who handles socials', 'Social accounts', 'Socials Awards', 'Create posts']);
   assert.equal(h.document.querySelectorAll('[data-sa-choice]').length, 5);
@@ -84,20 +82,19 @@ test('a new award request is retained, shown, and cleared by Reset demo', async 
   noErrors(h);
 });
 
-test('the View menu exposes socials directly while player and admin-only examples retain their actual permissions', async t => {
-  const h = await openDemo(); t.after(h.close);
-  await h.choose('#demoStage', 'socials');
+test('role choices keep Socials, player and administrator permissions separate', async t => {
+  const h = await openDemo('socials'); t.after(h.close);
   assert.ok(h.document.querySelector('[data-social-view="awards"]'));
   await h.choose('#demoStage', 'social_awards');
   assert.ok(h.document.getElementById('saRequest'));
-  await h.choose('#demoStage', 'selected_teams');
+  await h.choose('#demoPersona', 'player');
   assert.ok(h.document.querySelector('[data-se-view="published"]'));
   assert.equal(h.document.querySelector('[data-se-view="board"]'), null);
   assert.equal(h.document.querySelector('[data-se-view="socials"]'), null);
-  await h.choose('#demoStage', 'selection_admin');
-  assert.match(h.document.getElementById('demoRole').textContent, /no selection role/);
+  await h.choose('#demoPersona', 'admin');
+  assert.match(h.document.getElementById('demoRole').textContent, /Club Admin/);
   assert.equal(h.document.querySelector('[data-se-view="board"]'), null);
-  await h.choose('#demoStage', 'selections');
+  await h.choose('#demoPersona', 'selector');
   assert.ok(h.document.querySelector('[data-se-view="board"]'));
   assert.equal(h.document.querySelector('[data-se-view="published"]'), null);
   noErrors(h);
@@ -107,21 +104,15 @@ test('the delivered demo retains the current shared awards modules and navigatio
   execFileSync(process.execPath, ['Scripts/sync-demo-socials.mjs', '--check'], {cwd: path.resolve(__dirname, '..')});
 });
 
-test('landing-page product links open the batting home and selector board in the complete demo', async () => {
-  const landing = new JSDOM(fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8'));
-  try {
-    const links = [...landing.window.document.querySelectorAll('.product-card a')].filter(a => a.textContent === 'Try the demo');
-    assert.equal(links.length, 2);
-    assert.deepEqual(links.map(a => new URL(a.getAttribute('href'), 'https://example.test/').searchParams.get('stage')), ['home', 'selections']);
-    for (const link of links) {
-      const stage = new URL(link.getAttribute('href'), 'https://example.test/').searchParams.get('stage');
-      const h = await openDemo(stage);
-      try {
-        assert.equal(h.document.getElementById('demoStage').value, stage);
-        if (stage === 'selections') assert.ok(h.document.querySelector('[data-se-view="board"][aria-pressed="true"]'));
-        else assert.match(h.document.getElementById('page').textContent, /Club Home/);
-        noErrors(h);
-      } finally {h.close();}
-    }
-  } finally {landing.window.close();}
+test('legacy demo links still open the correct product and a specific role', async () => {
+  for (const stage of ['home', 'selections']) {
+    const h = await openDemo(stage);
+    try {
+      assert.equal(h.document.getElementById('demoStage').value, stage);
+      assert.equal(h.document.getElementById('demoProduct').value, stage === 'home' ? 'batting' : 'select');
+      if (stage === 'selections') assert.ok(h.document.querySelector('[data-se-view="board"][aria-pressed="true"]'));
+      else assert.match(h.document.getElementById('page').textContent, /Club Home/);
+      noErrors(h);
+    } finally {h.close();}
+  }
 });

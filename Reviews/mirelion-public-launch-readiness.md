@@ -68,6 +68,15 @@ With Mirelion Select confirmed, the branding implementation can use the settled 
 
 ## Website implementation — .247
 
-The Mirelion homepage and dedicated Mirelion Select / Club Batting pages are implemented with shared navigation, sign-in, privacy/contact links and compact phone layouts. Trial and enquiry labels use the agreed product names while preserving stored product keys. The root router now also preserves Selection Group invitation links. The full demo remains parked and is no longer promoted by the new marketing pages.
+The Mirelion homepage and dedicated Mirelion Select / Club Batting pages are implemented with shared navigation, sign-in, privacy/contact links and compact phone layouts. Trial and enquiry labels use the agreed product names while preserving stored product keys. The root router now also preserves Selection Group invitation links. The .247 update removed links to the outdated demo. The 22 October rebuild below replaces it with current, separate product and role journeys.
 
 See `2026-10-21-mirelion-website-247.md` for scope and validation. This is a beta website update, not the wider launch decision. A Mirelion parent domain can present both products without separate accounts or a second app. Its exact name, ownership and full migration plan remain outstanding.
+
+
+## Demo reconstruction — 22 October 2026
+
+The user resumed the full rebuild and explicitly requested three product choices and an ordinary player account. The new demo embeds app 0.8.62.250 and 41 current shared modules, with separate named fictional accounts for player, captain, selector, Head of Selections, Club Admin, coach, Philosophy Lead, workshop participant, Socials Manager and a realistic combined role.
+
+`Reviews/2026-10-22-mirelion-demo-rebuild.md` records the focused automated and browser evidence. The downloadable HTML is generated from current source; `node Scripts/build-demo.mjs --check` detects drift. Product pages link to the corresponding demo role chooser and the homepage links to all three choices. The same artifact remains at `clubbatting.com/demo.html`; the Mirelion marketing host does not maintain a second demo copy.
+
+The new-club example starts with no provider connection, groups or fixtures. Its real UI demonstrates request preparation, explicit sent confirmation, example credentials and season setup. This is a simulated journey, not evidence of a second real club obtaining API access. Similarly, demonstrated role boundaries and social/AI workflows do not replace server security tests or real Meta/provider verification. Help videos have not been rerecorded. The wider public-launch gates above remain open.
