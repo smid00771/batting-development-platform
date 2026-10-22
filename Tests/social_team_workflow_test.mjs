@@ -80,8 +80,8 @@ assert.equal(photoWrites[0].bucket,'club-socials');assert.match(photoWrites[0].p
 for(const script of fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8').matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
 // The saved team-list logo is the default for every social editor; club branding remains the fallback.
 let logoSource={fixtures:[],assets:[{id:'shared-logo',kind:'logo',path:'club/logo.png'}],brand:{logo:'club-branding-logo'},design:{}};
-const logoHarness=vm.createContext({socialCards:cards,socialPhotoPositionContext:()=>'',socialRPC:async()=>structuredClone(logoSource),socialAwards:{settings:async()=>({enabled:[]})},socialHere:()=>true,socialDefaults:()=>({}),socialAsset:(s,kind)=>s.data.assets.find(a=>a.kind===kind),socialAssetURL:async(_,asset)=>'blob:'+asset.path,socialFixtureCompleted:()=>false});
+const logoHarness=vm.createContext({supabase:{rpc:async(name,args)=>{assert.equal(name,'club_social_award_label_api');assert.equal(args.p_action,'team_rounds');assert.equal(args.p_club_id,'club');return {data:{}};}},socialCards:cards,socialPhotoPositionContext:()=>'',socialRPC:async()=>structuredClone(logoSource),socialAwards:{settings:async()=>({enabled:[]})},socialHere:()=>true,socialDefaults:()=>({}),socialAsset:(s,kind)=>s.data.assets.find(a=>a.kind===kind),socialAssetURL:async(_,asset)=>'blob:'+asset.path,socialFixtureCompleted:()=>false});
 vm.runInContext(part('socialRefresh'),logoHarness);
-const logoState={data:{fixtures:[]}};await logoHarness.socialRefresh(logoState);assert.equal(logoState.data.brand.logo,'blob:club/logo.png');
+const logoState={scope:'user:club',data:{fixtures:[]}};await logoHarness.socialRefresh(logoState);assert.equal(logoState.data.brand.logo,'blob:club/logo.png');
 logoSource.assets=[];await logoHarness.socialRefresh(logoState);assert.equal(logoState.data.brand.logo,'club-branding-logo');
 console.log('Passed: three-stage workflow, single-grade editing, two-day teams, date-specific blurbs, combined review, explicit posting only, responsibility/cover separation, scoped creation menu and demo syntax. All backend calls mocked.');
