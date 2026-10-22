@@ -11,11 +11,11 @@ async function openDemo(stage = '') {
   virtualConsole.on('jsdomError', error => errors.push(error));
   const html = fs.readFileSync(path.join(__dirname, '../../demo.html'), 'utf8');
   const dom = new JSDOM(html, {
-    url: 'https://example.test/demo.html' + (stage ? '?stage=' + stage : ''),
+    url: 'https://example.test/demo.html' + (typeof stage === 'object' ? '?' + new URLSearchParams(stage) : stage ? '?stage=' + stage : ''),
     runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole,
     beforeParse(w) {
       Object.defineProperty(w, 'crypto', {value: webcrypto});
-      Object.assign(w, {structuredClone, TextEncoder, TextDecoder,
+      Object.assign(w, {structuredClone, TextEncoder, TextDecoder, Blob, File,
         scrollTo() {}, alert: text => alerts.push(text), confirm: () => true,
         requestAnimationFrame: fn => w.setTimeout(() => fn(w.performance.now()), 0),
         cancelAnimationFrame: id => w.clearTimeout(id),

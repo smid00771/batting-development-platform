@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="theme-color" content="#103e3b">
+<title>Mirelion · Explore the demo</title>
+<!-- DEMO_STYLES -->
+</head>
+<body class="mirelion-demo">
+<header id="demoBar" class="demo-bar" aria-label="Demo controls">
+ <a href="?" class="demo-brand" id="demoHome" aria-label="Mirelion demo home"><svg class="demo-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#103e3b"/><path d="M10 28V12l10 10 10-10v16" fill="none" stroke="#e4efc2" stroke-width="3.5" stroke-linejoin="round"/></svg><strong>Mirelion</strong><span class="demo-badge">DEMO</span></a>
+ <div class="demo-controls" id="demoControls" hidden>
+  <label><span class="sr-only">Product</span><select id="demoProduct" aria-label="Product"></select></label>
+  <label><span class="sr-only">View as</span><select id="demoPersona" aria-label="View as"></select></label>
+  <label><span class="sr-only">Journey</span><select id="demoStage" aria-label="Journey"></select></label>
+  <button type="button" id="demoReset" class="btn ghost">Reset demo</button>
+ </div>
+ <a href="https://clubbatting.com/app.html" class="demo-signin">Sign in</a>
+</header>
+<section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
+ <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App {{APP_VERSION}}.</p></details>
+</section>
+<p id="demoStatus" class="demo-status" role="status" hidden></p>
+<main id="demoWelcome"></main>
+<div id="app"></div>
+<noscript>This interactive demo needs JavaScript enabled.</noscript>
+<!-- DEMO_SCRIPT -->
+</body></html>
