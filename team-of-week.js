@@ -1,3 +1,4 @@
+import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.248';
 import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.248';
 import {readTeamWeekReference} from './team-week-reference.js?v=0.8.62.166';
@@ -70,14 +71,14 @@ export function createTeamOfWeek(h){
   }return s.week;
  }
  const current=(s,w)=>h.here(s)&&s.view==='team_week'&&s.week===w;
- async function rpc(s,action,data={}){const r=await h.supabase.rpc('team_of_week_api',{p_club_id:clubId(s),p_action:action,p_data:{include_provisional:!!state(s).includeDay1,...data}});if(r.error)throw Error(r.error.message||'Could not load Team of the Week.');return r.data;}
+ async function rpc(s,action,data={}){const scope=['context','profile','save_photo'].includes(action)&&h.scopeRequest?await h.scopeRequest(s,'team_week'):{};const r=await h.supabase.rpc('team_of_week_api',{p_club_id:clubId(s),p_action:action,p_data:{...scope,include_provisional:!!state(s).includeDay1,...data}});if(r.error)throw Error(r.error.message||'Could not load Team of the Week.');return r.data;}
  function message(s,text){const w=state(s);w.message=text;if(current(s,w)){const status=document.getElementById('twStatus');if(status)status.textContent=text;}}
  function designControls(s){
   const w=state(s);if(!current(s,w))return;const button=document.getElementById('twSaveDesign');if(!button)return;
   button.textContent=w.designSaving?'Saving…':!w.designDirty&&w.context?.design?.revision>0?'Saved':'Save layout';
   button.disabled=w.busy||!!w.pending||assistantState(w).candidate||w.designSaving||!w.designDirty;
  }
- function imageKey(s,w){return JSON.stringify([w.end,w.title,w.blurb,w.rows.map(p=>[p.key,p.display]),w.background,w.layout,s.data.brand.logo,s.design.primary,s.design.accent]);}
+ function imageKey(s,w){return JSON.stringify([w.end,w.context?.award_scope,w.title,w.blurb,w.rows.map(p=>[p.key,p.display]),w.background,w.layout,s.data.brand.logo,s.design.primary,s.design.accent]);}
  function saveControls(s){
   const w=state(s),key=imageKey(s,w),saved=w.savedImage?.key===key,ready=w.previewReady&&w.rows.length===11&&w.title.trim()&&sourcesReady(w)&&(!h.labelReady||h.labelReady(s,w.end)),button=document.getElementById('twSave'),downloadButton=document.getElementById('twDownloadImage'),status=document.getElementById('twSaveStatus');
   if(button){button.textContent=w.saving?'Saving…':saved?'Saved':'Save image';button.disabled=w.busy||!!w.pending||saved||!ready||assistantState(w).candidate;}
@@ -108,7 +109,7 @@ export function createTeamOfWeek(h){
   try{let data=await rpc(s,'context',{week_end:end});const awardLabel=await h.loadLabel?.(s,end);if(!current(s,w)||w.end!==end)return;
    const missing=h.demo?[]:data.cards.filter(c=>c.scorecard.schema_version!==2&&c.scorecard.status==='completed');let refreshNote='';
    if(missing.length){for(const c of missing.slice(0,12)){if(!current(s,w))return;message(s,'Loading batting and bowling: '+c.scorecard.grade+'…');try{await fetchCard(s,c.scorecard.url);}catch(error){refreshNote=error.message;break;}}data=await rpc(s,'context',{week_end:end});if(!current(s,w)||w.end!==end)return;}
-   const keepDraft=preserve&&!!old,rows=w.rows,keepLayout=keepDraft&&w.designDirty;w.context=data;
+   const keepDraft=preserve&&!!old&&(old.award_scope?.key||'all')===(data.award_scope?.key||'all'),rows=w.rows,keepLayout=keepDraft&&w.designDirty;w.context=data;h.adoptScope?.(s,'team_week',data.award_scope);
    if(keepLayout)w.context.design=old.design;else{w.layout=teamWeekLayout(data.design.layout,data.design.background_path);w.background=data.design.background_path;w.designDirty=false;w.layoutConflict=false;}
    const previousMatches=new Set((old?.cards||[]).filter(c=>w.selectedSources.has(c.snapshot_id)).map(c=>c.scorecard.match_id));
    w.selectedSources=new Set(data.cards.filter(c=>h.sharedResults?c.our_team&&c.scorecard.schema_version===2&&(c.scorecard.award_provisional||c.scorecard.status==='completed'&&c.scorecard.innings.every(i=>i.complete)):preserve?previousMatches.has(c.scorecard.match_id):true).map(c=>c.snapshot_id));
@@ -216,6 +217,7 @@ export function createTeamOfWeek(h){
  async function download(s,path){const r=await h.supabase.storage.from(bucket).download(path);if(r.error||!r.data)throw Error('The saved image could not load. Try again.');return r.data;}
  async function urlFor(s,path){const key='team-week:'+path;if(s.urls.has(key))return s.urls.get(key);const blob=await download(s,path);if(!h.here(s))throw Error('Club changed');const url=URL.createObjectURL(blob);s.urls.set(key,url);return url;}
  async function draw(s,canvas,rows,title,layout,background){
+  title=scopedAwardLabel(title,state(s).context?.award_scope);
   const [bg,logo]=await Promise.all([background?h.image(s,await urlFor(s,background)):null,layout.show_logo&&(layout.logo_path||s.data.brand.logo)?h.image(s,layout.logo_path?await urlFor(s,layout.logo_path):s.data.brand.logo):null]);
   await h.fontReady();canvas.width=bg?(bg.naturalWidth||bg.width):1080;canvas.height=bg?(bg.naturalHeight||bg.height):1350;const ctx=canvas.getContext('2d');canvas.graphicLabelWarnings=[];
   if(bg)ctx.drawImage(bg,0,0);else{const gradient=ctx.createLinearGradient(0,0,canvas.width,canvas.height);gradient.addColorStop(0,s.design.primary||'#073554');gradient.addColorStop(1,s.design.accent||'#128fd2');ctx.fillStyle=gradient;ctx.fillRect(0,0,canvas.width,canvas.height);}
@@ -248,7 +250,7 @@ export function createTeamOfWeek(h){
   if(w.savedImage?.key===imageKey(s,w)){saveNotice(s,'Saved to Saved weeks.');return;}
   if(!w.pending&&(!w.previewReady||w.rows.length!==11||!w.title.trim()||!sourcesReady(w)))return;
   w.busy=true;w.saving=true;saveNotice(s,w.pending?'Retrying image save…':'Creating image…');render(s);
-  try{if(!w.pending&&h.labelReady&&!h.labelReady(s,w.end))throw Error('Apply a shared label for all awards before saving.');if(!w.pending&&h.checkResults&&!await h.checkResults(s,w.end))return;if(!w.pending){const {key,blob}=await prepareImage(s);if(blob.size>10485760)throw Error('The finished image exceeds 10 MB. Use a smaller background original.');const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join('');w.pending={key,blob,request:{include_provisional:!!w.includeDay1,id:crypto.randomUUID(),week_end:w.end,title:w.title.trim(),blurb:w.blurb.trim(),rows:w.rows.map(p=>({key:p.key,display:p.display})),sha256:hash,bytes:blob.size}};}
+  try{if(!w.pending&&h.labelReady&&!h.labelReady(s,w.end))throw Error('Apply a shared label for all awards before saving.');if(!w.pending&&h.checkResults&&!await h.checkResults(s,w.end))return;if(!w.pending){const {key,blob}=await prepareImage(s);if(blob.size>10485760)throw Error('The finished image exceeds 10 MB. Use a smaller background original.');const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join('');w.pending={key,blob,request:{award_scope:structuredClone(w.context.award_scope||{mode:'all',ids:[]}),include_provisional:!!w.includeDay1,id:crypto.randomUUID(),week_end:w.end,title:w.title.trim(),blurb:w.blurb.trim(),rows:w.rows.map(p=>({key:p.key,display:p.display})),sha256:hash,bytes:blob.size}};}
    const p=w.pending;saveNotice(s,'Saving image…');const reserved=await rpc(s,'reserve_image',p.request);
    if(!reserved.sealed){saveNotice(s,`Uploading image (${(p.blob.size/1048576).toFixed(1)} MB)…`);const upload=await h.supabase.storage.from(bucket).upload(reserved.path,p.blob,{contentType:'image/png',upsert:false});if(upload.error){const existing=await download(s,reserved.path),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await existing.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join('');if(hash!==p.request.sha256)throw Error('Uploaded image differs. Keep this page open and retry.');}saveNotice(s,'Finishing save…');await rpc(s,'finish_image',{id:p.request.id});}
    if(!current(s,w))return;const name='Team-of-the-Week-'+p.request.week_end+'.png';w.savedImage={key:p.key||imageKey(s,w),name,blob:p.blob};w.pending=null;w.saving=false;
