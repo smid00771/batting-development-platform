@@ -2570,15 +2570,7 @@ window.__socialPrepareDemo=async body=>{
 };
 
 function demoDecorate(){
-  // Demo-only emphasis follows actual split selections, including after edits.
-  document.querySelectorAll('.se-slot').forEach(row=>{
-    const button=row.querySelector('[data-se-slot]'),fixture=demoSelections?.fixtures.find(f=>f.id===button?.dataset.seFixture),slot=fixture?.slots[Number(button?.dataset.seSlot)];
-    const split=fixture?.details.brackets&&fixture.details.days.length===2&&slot?.d1&&slot?.d2&&slot.d1!==slot.d2;
-    row.classList.toggle('demo-bracket',!!split);
-    const note=row.querySelector('.demo-bracket-note');
-    if(split&&!note)row.insertAdjacentHTML('afterbegin','<p class="demo-bracket-note">Bracketed place · one player each day</p>');
-    else if(!split&&note)note.remove();
-  });
+  // The current board supplies Day 1/Day 2 labels. Keep its slot grid intact.
   // Administrative actions are visible but not offered as working demo operations.
   for(const id of ['out','joinAnother','accountPassword','remindOverduePlayers','guideAsk','guideSendHandoff','guideHumanHandoff','copyPlayerWhatsApp','copyPlayerLink','copyStaffJoinLink','togglePlayerSignup','regeneratePlayerLink','openLeadHandover','sendLeadHandover','sendPhilosophyInvite','invitePhilosophyByEmail']){
     const node=document.getElementById(id);if(node){node.disabled=true;node.title='Available in your live club. These are fictional demo accounts.';}

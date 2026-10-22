@@ -30,3 +30,13 @@ All people, club records and scores are fictional. No City data, live provider c
 
 ![Live demo with three product choices](assets/mirelion-demo-2026-10-22.jpg)
 
+## Bracketed-player correction — 23 October 2026
+
+The Head of Selections screenshot exposed a legacy demo decorator inserting an extra paragraph before the slot number. The current board uses three grid columns (number, flexible player names, move handle), so the extra child pushed both day-specific players into the 44px handle column. Removed this demo-only insertion and its unused style; the current app already supplies Day 1/Day 2 labels and the bracket-pair explanation. Player data, selection rules and production application code are unchanged.
+
+- Reproduced the extra grid child in the delivered HTML before the fix.
+- All 32 focused demo tests pass after rebuilding; freshness and whitespace checks pass.
+- Executed the generated HTML for Head and Selector accounts in Select-only and combined products. Confirmed Luca Hayes/Day 1 and Tom Green/Day 2 remain in the same flexible names container before and after opening/closing the picker, with the slot number and move handle in their original positions and no selection-data changes.
+- Rebuilt artifact SHA-256: `adeace3bbb4ed589ae399e20faa65117f7c01e427012163d9308826b0674e796`.
+- New desktop/phone visual verification is unavailable: the browser tool timed out after 300 seconds while restoring its controls. The DOM checks above do not establish a fresh visual acceptance. No replacement screenshot is claimed.
+
