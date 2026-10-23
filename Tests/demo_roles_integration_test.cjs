@@ -141,15 +141,43 @@ test('all five awards remember their own scope, use one Week label, and omit aba
  await h.click('#saSaveChoices');await h.click('[data-social-view=graphics]');
  for(const kind of ['team_week','player_week','results','century','five_wickets']){
   await h.choose('#socialCreateMenu',kind);assert.ok(h.document.querySelector('#awardScope'));assert.ok(h.document.querySelector('canvas'));
-  await h.choose('#awardScopeMode','groups');const box=h.document.querySelector('[data-award-scope-id=sg-senior]');box.checked=true;box.dispatchEvent(new h.window.Event('change',{bubbles:true}));await h.click('#awardScopeApply');
+  assert.equal(h.document.querySelector('#awardScopeAll').checked,true);
+  await h.click('#awardScopeAll');await h.click('[data-award-scope-group=sg-senior]');await h.click('#awardScopeApply');
   assert.match(h.document.querySelector('#awardScope summary').textContent,/Senior cricket/);
   assert.equal(h.document.getElementById('awardWeekLabel').value,'Week 2');
   const pool=h.window.eval("socialState.view==='team_week'?socialState.week.context?.candidates:socialState.view==='player_week'?socialState.playerWeek.context?.candidates:socialState.awards.context?.candidates");assert.ok(pool?.length,kind+' has real fictional performances to explore');
   assert.ok(pool.every(p=>p.grade==='First XI'||p.grade==='Fifth Grade'));
+  await h.click('[data-award-scope-id=group-first]');await h.click('[data-award-scope-group=sg-masters]');
+  assert.equal(h.document.querySelector('[data-award-scope-group=sg-senior]').indeterminate,true);
+  await h.click('#awardScopeApply');assert.match(h.document.querySelector('#awardScope summary').textContent,/2 teams/);
+  assert.deepEqual(plain(h.window.eval('demoScope('+JSON.stringify(kind)+').award_scope.grade_ids')),['group-second','group-masters']);
+  const mixed=h.window.eval("socialState.view==='team_week'?socialState.week.context?.candidates:socialState.view==='player_week'?socialState.playerWeek.context?.candidates:socialState.awards.context?.candidates");
+  assert.ok(mixed?.length);assert.ok(mixed.every(p=>p.grade==='Fifth Grade'),'Partial groups exclude the other senior team; abandoned Masters has no performances');
   await h.click('[data-social-view=graphics]');
  }
- await h.choose('#socialCreateMenu','results');assert.match(h.document.querySelector('#awardScope summary').textContent,/Senior cricket/);
+ await h.choose('#socialCreateMenu','results');assert.match(h.document.querySelector('#awardScope summary').textContent,/2 teams/);assert.equal(h.document.querySelector('[data-award-scope-id=group-first]').checked,false);assert.equal(h.document.querySelector('[data-award-scope-id=group-masters]').checked,true);
  input(h,'#awardWeekLabel','Week 7');h.document.getElementById('awardWeekLabel').dispatchEvent(new h.window.Event('change',{bubbles:true}));await h.click('#awardLabelApply');await h.click('[data-social-view=graphics]');await h.choose('#socialCreateMenu','team_week');assert.equal(h.document.getElementById('awardWeekLabel').value,'Week 7');
  const results=h.window.eval('demoSharedResults.context(demoAddDay(demoUpcomingSaturday(),-6))');assert.equal(results.fixtures.find(f=>f.id==='masters-abandoned').no_play,'abandoned');
  clean(h);
+});
+
+test('separate Results images retain their own team combinations in the same post collection',async t=>{
+ const h=await openDemo({product:'select',role:'socials',journey:'social_awards'});t.after(h.close);
+ await h.click('[data-sa-choice=results]');await h.click('#saSaveChoices');await h.click('[data-social-view=graphics]');await h.choose('#socialCreateMenu','results');
+ const waitFor=async ready=>{for(let i=0;i<200;i++){await h.settle();if(ready())return;await new Promise(resolve=>setTimeout(resolve,5));}assert.fail(h.document.querySelector('#saCreateStatus')?.textContent||'Award save did not finish');};
+ const save=async count=>{
+  for(const box of h.document.querySelectorAll('[data-sa-result]'))if(!box.checked){box.checked=true;box.dispatchEvent(new h.window.Event('change',{bubbles:true}));}
+  await waitFor(()=>!h.document.querySelector('#saConfirmGraphic').disabled);await h.click('#saConfirmGraphic');
+  await waitFor(()=>h.document.querySelectorAll('[data-sa-select]').length===count&&!h.window.eval('socialState.awards.busy'));
+ };
+ await h.click('#awardScopeAll');await h.click('[data-award-scope-id=group-first]');await h.click('#awardScopeApply');await save(1);
+ const first=plain(h.window.eval('socialState.awards.context.editions[0]'));
+ assert.deepEqual(first.award_scope.grade_ids,['group-first']);
+ await h.click('[data-award-scope-id=group-first]');await h.click('[data-award-scope-id=group-second]');await h.click('[data-award-scope-group=sg-masters]');await h.click('#awardScopeApply');await save(2);
+ await h.choose('#socialCreateMenu','award_collection');
+ const editions=plain(h.window.eval('socialState.awards.context.editions'));
+ assert.equal(editions.length,2);assert.deepEqual(editions.find(e=>e.id===first.id).award_scope,first.award_scope);
+ assert.deepEqual(editions.find(e=>e.id!==first.id).award_scope.grade_ids,['group-second','group-masters']);
+ assert.equal(new Set(editions.map(e=>e.award_scope.key)).size,2);assert.ok(editions.every(e=>e.scores_current));
+ assert.equal(h.document.querySelectorAll('[data-sa-select]:checked').length,2);clean(h);
 });

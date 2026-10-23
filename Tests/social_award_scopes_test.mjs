@@ -5,10 +5,10 @@ import {createSocialAwardScopes,awardScopeKey,scopedAwardLabel} from '../social-
 import {createSharedMatchResults,weeklyResultCoverage} from '../shared-match-results.js';
 const {JSDOM}=createRequire(import.meta.url)('jsdom');
 const tick=()=>new Promise(r=>setTimeout(r,0));
-function setup(){
+function setup(choices){
  const dom=new JSDOM('<div id="controls"></div><div id="socialResults"></div>');globalThis.window=dom.window;globalThis.document=dom.window.document;
  const host=document.getElementById('controls'),s={scope:'user:club',view:'team_week'},calls=[],changed=[],saved=new Map();let fail=false,definite=false,ui;
- const all={mode:'all',ids:[],grade_ids:[],key:'all',label:'All'},options={groups:[{id:'grade',name:'Grade cricket'},{id:'masters',name:'Masters'}],grades:[{id:'first',name:'First XI',group_id:'grade'},{id:'second',name:'Second XI',group_id:'grade'},{id:'master',name:'Masters XI',group_id:'masters'}]};
+ const all={mode:'all',ids:[],grade_ids:[],key:'all',label:'All'},options=choices||{groups:[{id:'grade',name:'Grade cricket'},{id:'masters',name:'Masters'}],grades:[{id:'first',name:'First XI',group_id:'grade'},{id:'second',name:'Second XI',group_id:'grade'},{id:'master',name:'Masters XI',group_id:'masters'}]};
  const canonical=v=>({...v,key:awardScopeKey(v),grade_ids:v.mode==='all'?[]:v.mode==='grades'?v.ids:options.grades.filter(g=>v.ids.includes(g.group_id)).map(g=>g.id),label:v.mode==='all'?'All':(v.mode==='groups'?options.groups:options.grades).filter(x=>v.ids.includes(x.id)).map(x=>x.name).join(', ')});
  const api={rpc:async(_,args)=>{calls.push(structuredClone(args));const d=args.p_data,base=saved.get(d.kind)||{kind:d.kind,award_scope:all,revision:0,...options};if(args.p_action==='scope_context')return {data:structuredClone(base)};if(fail)return {error:{message:'Lost confirmation',...(definite?{code:'P0001'}:{})}};const data={...base,award_scope:canonical(d.award_scope),revision:base.revision+1};saved.set(d.kind,data);return {data:structuredClone(data)};}};
  const draw=()=>{host.innerHTML=ui.controls(s,String,false);ui.bind(s,host);};
@@ -24,13 +24,42 @@ test('group choices are per award, can combine groups, and snapshot the request'
  assert.equal(scopedAwardLabel('Week 2',q.award_scope),'Week 2 · Grade cricket');assert.equal(scopedAwardLabel('Week 2',{mode:'all'}),'Week 2');
 });
 test('compact picker previews choices, cancels, rejects empty choices and applies individual grades',async()=>{
- const t=setup();await t.ui.load(t.s,'team_week');t.draw();const el=id=>document.getElementById(id),change=(id,v)=>{el(id).value=v;el(id).dispatchEvent(new window.Event('change'));};
- assert.equal(el('awardScope').open,false);assert.match(t.host.textContent,/Selection groups included/);
- el('awardScope').open=true;change('awardScopeMode','groups');assert.equal(t.ui.canLeave(t.s),false);assert.equal(t.calls.filter(c=>c.p_action==='save_scope').length,0);
+ const t=setup();await t.ui.load(t.s,'team_week');t.draw();const el=id=>document.getElementById(id);
+ assert.equal(el('awardScope').open,false);assert.match(t.host.textContent,/Teams included/);assert.equal(el('awardScopeMode'),null);
+ el('awardScope').open=true;el('awardScopeAll').click();assert.equal(t.ui.canLeave(t.s),false);assert.equal(t.calls.filter(c=>c.p_action==='save_scope').length,0);
  el('awardScopeApply').click();await tick();assert.match(t.host.textContent,/at least one/);assert.equal(t.calls.filter(c=>c.p_action==='save_scope').length,0);
- document.querySelector('[data-award-scope-id="grade"]').click();el('awardScopeCancel').click();assert.equal(t.ui.canLeave(t.s),true);assert.equal((await t.ui.request(t.s,'team_week')).award_scope.mode,'all');
- change('awardScopeMode','grades');document.querySelector('[data-award-scope-id="first"]').click();el('awardScopeApply').click();await tick();
+ document.querySelector('[data-award-scope-group="grade"]').click();el('awardScopeCancel').click();assert.equal(t.ui.canLeave(t.s),true);assert.equal((await t.ui.request(t.s,'team_week')).award_scope.mode,'all');
+ el('awardScopeAll').click();document.querySelector('[data-award-scope-id="first"]').click();el('awardScopeApply').click();await tick();
  assert.deepEqual((await t.ui.request(t.s,'team_week')).award_scope.ids,['first']);assert.equal(el('awardScope').open,false);assert.deepEqual(t.changed,['team_week']);
+});
+test('each award can split a six-team group and combine its remaining teams with another group',async()=>{
+ const senior=['first','second','third','fourth','dev-navy','dev-sky'];
+ const choices={groups:[{id:'senior',name:'Senior Grade Teams'},{id:'masters',name:'Masters'}],grades:[...senior.map(id=>({id,name:id,group_id:'senior'})),{id:'masters-xi',name:'Masters XI',group_id:'masters'}]};
+ for(const kind of ['team_week','player_week','results','century','five_wickets']){
+  const t=setup(choices);t.s.view=kind;await t.ui.load(t.s,kind);t.draw();const el=id=>document.getElementById(id),team=id=>document.querySelector(`[data-award-scope-id="${id}"]`),group=id=>document.querySelector(`[data-award-scope-group="${id}"]`);
+  el('awardScopeAll').click();group('senior').click();team('dev-navy').click();team('dev-sky').click();
+  assert.equal(group('senior').indeterminate,true);assert.equal(group('senior').getAttribute('aria-checked'),'mixed');
+  assert.equal(el('awardScopeCount').textContent,'4 selected');el('awardScopeApply').click();await tick();
+  const firstImage=await t.ui.request(t.s,kind);assert.deepEqual(firstImage.award_scope.ids,senior.slice(0,4));
+  group('senior').click();group('senior').click();team('dev-navy').click();team('dev-sky').click();group('masters').click();
+  assert.equal(group('masters').checked,true);assert.equal(group('senior').indeterminate,true);assert.equal(el('awardScopeCount').textContent,'3 selected');
+  el('awardScopeApply').click();await tick();const secondImage=await t.ui.request(t.s,kind);
+  assert.equal(secondImage.award_scope.mode,'grades');assert.deepEqual(secondImage.award_scope.ids,['dev-navy','dev-sky','masters-xi']);
+  assert.deepEqual(firstImage.award_scope.grade_ids,senior.slice(0,4),'An earlier image retains its own teams');
+  assert.notEqual(awardScopeKey(firstImage.award_scope),awardScopeKey(secondImage.award_scope),'Both images retain distinct collection identities');
+  await t.ui.load(t.s,kind,{reload:true});t.draw();assert.equal(team('dev-navy').checked,true);assert.equal(team('first').checked,false);assert.equal(group('senior').indeterminate,true);
+ }
+});
+test('whole groups, ungrouped teams and unchanged saved choices retain their intended scope',async()=>{
+ const t=setup({groups:[{id:'a',name:'Group A'},{id:'b',name:'Group B'}],grades:[{id:'one',name:'One',group_id:'a'},{id:'two',name:'Two',group_id:'b'},{id:'loose',name:'Unassigned',group_id:null}]});await t.ui.load(t.s,'results');t.s.view='results';t.draw();
+ document.getElementById('awardScopeAll').click();document.querySelector('[data-award-scope-group="a"]').click();document.querySelector('[data-award-scope-group="b"]').click();document.getElementById('awardScopeApply').click();await tick();
+ assert.deepEqual((await t.ui.request(t.s,'results')).award_scope.ids,['a','b']);assert.equal((await t.ui.request(t.s,'results')).award_scope.mode,'groups');
+ document.querySelector('[data-award-scope-id="loose"]').click();document.getElementById('awardScopeApply').click();await tick();
+ assert.equal((await t.ui.request(t.s,'results')).award_scope.mode,'grades');assert.equal((await t.ui.request(t.s,'results')).award_scope.grade_ids.length,3);
+ const saves=t.calls.filter(c=>c.p_action==='save_scope').length;
+ document.querySelector('[data-award-scope-id="one"]').click();document.querySelector('[data-award-scope-id="one"]').click();document.getElementById('awardScopeApply').click();await tick();
+ assert.equal(t.calls.filter(c=>c.p_action==='save_scope').length,saves,'Reselecting the same teams must not replace an existing image identity');
+ document.getElementById('awardScopeAll').click();document.getElementById('awardScopeAll').click();document.getElementById('awardScopeApply').click();await tick();assert.equal((await t.ui.request(t.s,'results')).award_scope.mode,'all');
 });
 test('uncertain saves retry the exact choice; definite conflicts can reload',async()=>{
  const t=setup();await t.ui.load(t.s,'team_week');t.fail(true);await t.ui.save(t.s,'team_week',{mode:'groups',ids:['grade']});

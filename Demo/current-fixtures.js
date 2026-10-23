@@ -58,7 +58,7 @@ function demoSeedCurrent({empty=false}={}){
    const original=upcoming.find(f=>f.details.grade===card.grade);if(!original)continue;
    const days=[{date:card.dates[0],start:'12:00'}],round=1+Math.round((Date.parse(card.dates[0])-Date.parse(demoAddDay(first,-21)))/(7*86400000));
    const f={...fixtureClone(original),id:'history-'+card.match_id,details:{...fixtureClone(original.details),round:String(round),days,brackets:false},slots:original.slots.map(s=>({d1:s.d1,d2:null}))};
-   f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(original.published.players)};f.selection_unlocked_until=null;demoSelections.fixtures.push(f);demoSelections.result_sources[f.id]={match_id:card.match_id,team_id:card.teams[0].id};card.result='Harbour Example CC won';
+   f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(original.published.players)};f.selection_unlocked_until=null;demoSelections.fixtures.push(f);demoSelections.result_sources[f.id]={match_id:card.match_id,team_id:card.teams[0].id};card.teams[0].name=club.name;card.result=club.name+' won';
    if(round===3){card.innings[0].batters[0].runs=112;card.innings[1].bowlers[0].wickets=5;}
   }
   for(const f of upcoming.filter(f=>f.id==='selection-first'||f.id==='selection-second')){f.details.round='4';f.published.details.round='4';}
@@ -69,7 +69,7 @@ function demoSeedCurrent({empty=false}={}){
 function demoSourceTeams(){return [{id:'source-first',name:'Harbour First XI',grade:{id:'source-grade-first',name:'First XI'},competition:{name:'Example District'}},{id:'source-fifth',name:'Harbour Fifth Grade',grade:{id:'source-grade-fifth',name:'Fifth Grade'},competition:{name:'Example District'}}];}
 function demoWeekContext(){return {...fixtureClone(demoWeek),can_manage:isAdmin(),acknowledgements:demoSelections.fixtures.flatMap(f=>!f.published?[]:[...new Set(f.published.slots.flatMap(s=>[s.d1,s.d2]).filter(Boolean))].map(id=>({fixture_id:f.id,roster_id:id,publication:f.publication,linked:!!demoSelections.roster.find(p=>p.id===id)?.user_id,seen_at:demoWeek.acknowledgements.find(a=>a.fixture_id===f.id&&a.roster_id===id)?.seen_at||null})))};}
 function demoScope(kind){return demoAwardScopes[kind]||={revision:0,award_scope:{mode:'all',ids:[],grade_ids:demoGroups.grades.map(g=>g.id),key:'all',label:'All'}};}
-function demoScopeContext(kind){return {...fixtureClone(demoScope(kind)),groups:demoGroups.selection_groups.map(g=>({id:g.id,name:g.name})),grades:demoGroupContext().grades.map(g=>({id:g.id,name:g.name}))};}
+function demoScopeContext(kind){return {...fixtureClone(demoScope(kind)),groups:demoGroups.selection_groups.map(g=>({id:g.id,name:g.name})),grades:demoGroupContext().grades.map(g=>({id:g.id,name:g.name,group_id:g.selection_group_id}))};}
 const demoPreviousCurrentRpc=supabase.rpc;
 supabase.rpc=async function(name,args={}){
  const a=args.p_action,d=args.p_data||{},uid=session?.user.id;
