@@ -82,3 +82,8 @@ The user resumed the full rebuild and explicitly requested three product choices
 The new-club example starts with no provider connection, groups or fixtures. Its real UI demonstrates request preparation, explicit sent confirmation, example credentials and season setup. This is a simulated journey, not evidence of a second real club obtaining API access. Similarly, demonstrated role boundaries and social/AI workflows do not replace server security tests or real Meta/provider verification. Help videos have not been rerecorded. The wider public-launch gates above remain open.
 
 The 23 October bracketed-player demo correction removes a legacy layout insertion exposed in the Head of Selections view. The generated artifact passes all 32 focused tests plus paired-player DOM checks in Select-only and combined Head/Selector journeys. Fresh desktop/phone visual acceptance remains unverified because browser controls timed out; see the correction evidence in `2026-10-22-mirelion-demo-rebuild.md`.
+
+
+## 23 October 2026 — Mirelion Assist
+
+Private in-platform support messaging is prepared in app 0.8.62.254. The backend migration and synthetic rollback verification are complete; release and HTTPS visual acceptance are tracked in [the Assist review](2026-10-23-mirelion-assist-254.md). This does not change prices, trial lengths, public-domain readiness or the scope of public-launch approval.

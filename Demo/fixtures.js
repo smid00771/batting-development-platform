@@ -2572,7 +2572,7 @@ window.__socialPrepareDemo=async body=>{
 function demoDecorate(){
   // The current board supplies Day 1/Day 2 labels. Keep its slot grid intact.
   // Administrative actions are visible but not offered as working demo operations.
-  for(const id of ['out','joinAnother','accountPassword','remindOverduePlayers','guideAsk','guideSendHandoff','guideHumanHandoff','copyPlayerWhatsApp','copyPlayerLink','copyStaffJoinLink','togglePlayerSignup','regeneratePlayerLink','openLeadHandover','sendLeadHandover','sendPhilosophyInvite','invitePhilosophyByEmail']){
+  for(const id of ['out','joinAnother','accountPassword','remindOverduePlayers','guideAsk','copyPlayerWhatsApp','copyPlayerLink','copyStaffJoinLink','togglePlayerSignup','regeneratePlayerLink','openLeadHandover','sendLeadHandover','sendPhilosophyInvite','invitePhilosophyByEmail']){
     const node=document.getElementById(id);if(node){node.disabled=true;node.title='Available in your live club. These are fictional demo accounts.';}
   }
 
@@ -2584,8 +2584,9 @@ function demoDecorate(){
     // replace/remove them from a MutationObserver: it must be able to finish
     // binding handlers. Insert the demo explanation alongside the live card.
     if(!document.getElementById('demoGuideNote')){
-      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><a class="btn secondary" href="https://clubbatting.com/app.html?tab=guide">Sign in to your club</a></section>`);
+      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><div class="btnrow"><a class="btn secondary" href="https://clubbatting.com/app.html?tab=guide">Sign in to your club</a><button type="button" class="btn ghost" id="demoAssistLink">Message us · Mirelion Assist</button></div></section>`);
     }
+    const assistLink=document.getElementById('demoAssistLink');if(assistLink)assistLink.onclick=()=>document.getElementById('guideHumanHandoff')?.click();
     chat.hidden=true;
   }
   const question=document.getElementById('guideQuestion');if(question)question.disabled=true;

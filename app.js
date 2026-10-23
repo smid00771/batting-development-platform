@@ -1,3 +1,4 @@
+import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.254';
 import {createSocialAwardScopes} from './social-award-scopes.js?v=0.8.62.252';
 import {createSelectionGroupPermissions} from './selection-group-permissions.js?v=0.8.62.246';
 import {createSelectionGroupPage} from './selection-group-page.js?v=0.8.62.245';
@@ -27,7 +28,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.253';
+const APP_UI_VERSION='0.8.62.254';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1037,7 +1038,7 @@ async function boot(){
     const nextUserId=s2?.user?.id||null;
     matchDraftAuthChanged(previousUserId,nextUserId);
     session=s2;
-    if(previousUserId!==nextUserId){clubMessageState=null;clubMessageUnread=0;if(previousUserId)void phoneWorkerMessage('CB_SIGN_OUT');}
+    if(previousUserId!==nextUserId){mirelionAssist.reset();clubMessageState=null;clubMessageUnread=0;if(previousUserId)void phoneWorkerMessage('CB_SIGN_OUT');}
 
     // Supabase can emit SIGNED_IN again when an already-signed-in browser tab regains focus.
     // Rebuilding the SPA for that same-user event destroys the user's scroll position. Only a
@@ -1053,7 +1054,7 @@ async function boot(){
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
   window.addEventListener('popstate',handleAppNavigationHistory);
-  window.addEventListener('beforeunload',event=>{if((typeof selectionGroupPermissions!=='undefined'&&selectionGroupPermissions.hasChanges())||(typeof playCricketConnection!=='undefined'&&playCricketConnection.hasChanges())||(typeof playhqImport!=='undefined'&&playhqImport.hasChanges())||(typeof selectionGroupSetup!=='undefined'&&selectionGroupSetup.hasChanges())||(typeof clubWeek!=='undefined'&&clubWeek.hasChanges())||selectionState?.busy||selectionState?.pending||selectionState?.formDirty||coachingStaffDirty()||coachingStaffPending()||clubMessageDirty()||clubMessageState?.sending||teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(mirelionAssist.hasChanges()||(typeof selectionGroupPermissions!=='undefined'&&selectionGroupPermissions.hasChanges())||(typeof playCricketConnection!=='undefined'&&playCricketConnection.hasChanges())||(typeof playhqImport!=='undefined'&&playhqImport.hasChanges())||(typeof selectionGroupSetup!=='undefined'&&selectionGroupSetup.hasChanges())||(typeof clubWeek!=='undefined'&&clubWeek.hasChanges())||selectionState?.busy||selectionState?.pending||selectionState?.formDirty||coachingStaffDirty()||coachingStaffPending()||clubMessageDirty()||clubMessageState?.sending||teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -1904,18 +1905,18 @@ function clubSetupUnavailableReason(tab){
 }
 
 function canOpenClubTab(tab){
-  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','assist','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
-  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','assist','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
-  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','assist','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
-  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','join_club'].includes(tab))return false;
+  if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','assist','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
   if(tab==='club_teams')return !!(session&&membership&&club&&isAdmin());
   if(tab==='teams')return !!(session&&membership&&club);
-  if(selectionsStandalone()&&!['teams','permissions','club_settings','messages','phone_app','guide','join_club'].includes(tab))return false;
-  if(['join_club','messages','phone_app'].includes(tab))return !!(session&&membership&&club);
+  if(selectionsStandalone()&&!['teams','permissions','club_settings','messages','phone_app','guide','assist','join_club'].includes(tab))return false;
+  if(['join_club','messages','phone_app','assist'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
   if(['playerhome','innings'].includes(tab))return isPlayerUser();
   if(['permissions','groups','club_settings'].includes(tab))return !!(session&&membership&&club&&isAdmin());
@@ -2046,6 +2047,7 @@ async function expandClubHomeStage(key,progress){
 
 
 async function saveClubEditsBeforeNavigation(){
+  if(!mirelionAssist.canLeave())return false;
   if(currentTab==='club_teams'&&sharedTeamsDirty()){const s=sharedTeams();if(s.busy||s.pending){alert('Confirm the pending grade and captain save before leaving.');return false;}if(!confirm('Discard unsaved grade and captain changes?'))return false;s.drafts={};s.settings=null;}
   if(!confirmLeaveClubBranding())return false;
   if(!confirmLeaveSelections())return false;
@@ -2561,7 +2563,7 @@ function renderShell(){
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
 
   if(selectionsEnabled())nav.push(['teams','Teams & availability','selection']);
-  nav.push(['guide','Help & Tutorials','help']);
+  nav.push(['guide','Help & Tutorials','help'],['assist','Mirelion Assist','help']);
 
   if(productTrialWaiting())nav.unshift(['products','Your scheduled trial','club']);
   nav.splice(0,nav.length,...nav.filter(([tab])=>canOpenClubTab(tab)));
@@ -2593,6 +2595,7 @@ function renderShell(){
   </div>`;
 
   bindClubMobileMenu();
+  mirelionAssist.start();
   if(!selectionsStandalone())void refreshMyCoachingUpdates();
   void refreshClubMessageBadge();void syncPhoneDeviceSession();
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await signOutClubBatting();};
@@ -2908,6 +2911,7 @@ async function openClubSectionHome(nextTab){
   if(!canOpenClubTab(nextTab))return;
   if(currentTab==='players'&&await saveWorkspacePlayerPlanSilently()===false)return;
   if(!await saveClubEditsBeforeNavigation())return;
+  if(nextTab==='assist')mirelionAssist.home();
   ++appNavigationRequest;appNavigationRestoring=false;appNavigationBounce=null;
   recordAppNavigation(clubNavigationRoute());
   if(currentTab==='team_review'){++teamReviewSequence;ensureTeamReviewState().loading=false;}
@@ -3264,7 +3268,7 @@ function renderTab(){
     myplan:renderMyPlan,
     howwetrain:renderHowWeTrain,
     conversations:renderCoachConversations,
-    guide:renderClubBattingGuide
+    assist:renderMirelionAssist,guide:renderClubBattingGuide
   };
   try{
     const result=(map[currentTab]||renderMyPlan)();
@@ -4764,8 +4768,8 @@ const CLUB_BATTING_HELP = {
         "body": "Use Ask Guide for help with the current club process, a feature or where to go next. Your question and answer stay in the conversation. The Guide should name the real screen/control and respect your role."
       },
       {
-        "title": "Ask a person when needed",
-        "body": "Use I’d rather speak to someone and send the request with a short explanation. This requests a conversation and includes the Guide exchange; it does not guarantee a booked prediction or response time."
+        "title": "Message the Mirelion team",
+        "body": "Choose Message us to open Mirelion Assist. Send a message, read replies and suggest changes in the platform. You can choose to share your recent Guide conversation. We aim for a live exchange when time zones overlap."
       },
       {
         "title": "Know the limits",
@@ -5486,7 +5490,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
       <div class="guide-chat-compose"><textarea id="guideQuestion" aria-label="Your question for the Club Batting Guide" rows="2" placeholder="What would you like help with?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
       <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
-      <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button" aria-controls="guideHandoffBox" aria-expanded="false">I’d rather speak to someone</button><div id="guideHandoffBox" hidden><p class="help">Your request and Guide conversation go to the Club Batting team.</p><label for="guideHandoffReason">What would you like to discuss?</label><textarea id="guideHandoffReason" rows="2"></textarea><div class="btnrow"><button class="btn ghost" id="guideSendHandoff">Request a conversation</button><button class="btn ghost" id="guideCancelHandoff">Cancel</button></div></div></div>
+      <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">Message us · Mirelion Assist</button></div>
     </section>
   <h2 class="guide-process-heading" id="guideProcessHeading">Tutorials</h2>
   <div class="field"><input id="guideTopicSearch" type="search" aria-label="Search tutorials" placeholder="Search tutorials…"><small id="guideTopicSearchStatus" role="status"></small></div>
@@ -5574,20 +5578,9 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   };
   document.getElementById('guideAsk').onclick=submitQuestion;
   document.getElementById('guideQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();submitQuestion();}});
-  document.getElementById('guideHumanHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=false;document.getElementById('guideHumanHandoff').hidden=true;document.getElementById('guideHumanHandoff').setAttribute('aria-expanded','true');document.getElementById('guideHandoffReason').focus();};
-  document.getElementById('guideCancelHandoff').onclick=()=>{document.getElementById('guideHandoffBox').hidden=true;const button=document.getElementById('guideHumanHandoff');button.hidden=false;button.setAttribute('aria-expanded','false');button.focus();};
-  document.getElementById('guideSendHandoff').onclick=async()=>{
-    const reason=val('guideHandoffReason');
-    if(!reason){document.getElementById('guideHandoffReason').focus();return;}
-    const button=document.getElementById('guideSendHandoff');if(button.disabled)return;
-    const cancel=document.getElementById('guideCancelHandoff'),status=document.getElementById('guideChatStatus'),box=document.getElementById('guideHandoffBox');
-    button.disabled=true;button.textContent='Sending…';cancel.disabled=true;status.textContent='';
-    try{
-      const {error}=await supabase.rpc('request_club_batting_guide_handoff',{p_club_id:club.id,p_reason:reason});
-      if(error)throw error;
-      box.innerHTML='<div class="notice success compact">Request recorded for the Club Batting team.</div>';
-    }catch(error){status.textContent=error?.message||'Could not send your request. Try again.';}
-    finally{button.disabled=false;button.textContent='Request a conversation';cancel.disabled=false;}
+  document.getElementById('guideHumanHandoff').onclick=async()=>{
+    if(!await saveClubEditsBeforeNavigation())return;
+    assistFromGuide=true;currentTab='assist';await renderTab();
   };
 }
 
@@ -17762,7 +17755,7 @@ async function renderAdminInviteRoute(token){
 /* ---------------- PLATFORM ADMIN CONSOLE ---------------- */
 
 async function renderPlatformConsole(){
-  document.title='Club Batting · Platform Admin';
+  document.title='Mirelion · Platform Admin';
   if(!session){renderLogin();return;}
   await loadPlatformContext();
   if(!platformRole){await loadContext();return;}
@@ -17772,25 +17765,27 @@ async function renderPlatformConsole(){
 
   app.innerHTML=`${accountMenuStyles()}<div class="platform-shell">
     <header class="platform-header">
-      <div><div class="section-label">Private Platform Administration</div><h1>Club Batting</h1></div>
+      <div><div class="section-label">Private Platform Administration</div><h1>Mirelion</h1></div>
       <div class="header-actions">
         ${allMemberships.length?contextSwitcherHtml('platformContextSwitch',`<option value="platform">Platform Admin</option>${allMemberships.map(m=>`<option value="${m.club_id}">${esc(m.clubs?.name||'Club')}</option>`).join('')}`):''}
         ${accountMenuHtml({allowJoin:false,outId:'platformOut'})}
       </div>
     </header>
     <nav class="platform-nav">
-      ${[['home','Club Pipeline'],['add_clubs','Add club leads'],['clubs','Clubs'],['market','Market Discovery'],['guide_requests','Conversation requests'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
+      ${[['home','Club Pipeline'],['add_clubs','Add club leads'],['clubs','Clubs'],['market','Market Discovery'],['guide_requests','Mirelion Assist'],['settings','Platform Settings']].map(([k,l])=>`<button data-platform-view="${k}" class="${platformView===k?'active':''}">${l}</button>`).join('')}
     </nav>
     <main class="platform-page" id="platformPage"></main>
   </div>`;
 
   document.getElementById('accountPassword').onclick=openAccountPassword;
-  document.getElementById('platformOut').onclick=()=>signOutClubBatting();
+  document.getElementById('platformOut').onclick=()=>{if(mirelionAssist.canLeave())return signOutClubBatting();};
   if(document.getElementById('platformContextSwitch'))document.getElementById('platformContextSwitch').onchange=async e=>{
     if(e.target.value==='platform')return;
+    if(!mirelionAssist.canLeave()){e.target.value='platform';return;}
     localStorage.setItem('bdp-context','club');localStorage.setItem('bdp-club-id',e.target.value);await loadContext();
   };
-  document.querySelectorAll('[data-platform-view]').forEach(b=>b.onclick=()=>{if(platformView==='market')savePlatformMarketScroll();platformView=b.dataset.platformView;platformSelectedProspectId=null;platformSelectedOnboardingId=null;platformOnboardingSeed=null;renderPlatformView();});
+  document.querySelectorAll('[data-platform-view]').forEach(b=>b.onclick=()=>{if(!mirelionAssist.canLeave())return;if(b.dataset.platformView==='guide_requests')mirelionAssist.home();if(platformView==='market')savePlatformMarketScroll();platformView=b.dataset.platformView;platformSelectedProspectId=null;platformSelectedOnboardingId=null;platformOnboardingSeed=null;renderPlatformView();});
+  mirelionAssist.start();
   await renderPlatformView();
 }
 
@@ -17809,18 +17804,7 @@ async function renderPlatformView(){
 }
 
 async function renderPlatformGuideRequests(){
-  const page=document.getElementById('platformPage');
-  page.innerHTML='<div class="splash">Loading conversation requests…</div>';
-  const {data,error}=await supabase.rpc('platform_get_guide_requests');
-  if(platformView!=='guide_requests')return;
-  if(error){page.innerHTML=`<section class="card"><h2>Conversation requests could not load.</h2><p>${esc(error.message)}</p><button class="btn secondary" id="retryGuideRequests">Try again</button></section>`;document.getElementById('retryGuideRequests').onclick=renderPlatformGuideRequests;return;}
-  page.innerHTML=`<section class="card"><div class="section-label">Club Batting Guide</div><h1>Conversation requests</h1><p>Clubs and prospects who asked to speak to someone. Read their question and Guide conversation, contact them, then mark the request resolved.</p>${!data?.length?'<div class="notice">No conversation requests are waiting.</div>':''}</section>
-    ${(data||[]).map(t=>`<section class="card"><div class="section-label">${esc(new Date(t.updated_at).toLocaleString())}</div><h2>${esc(t.club_name)}</h2><p>${esc(t.reason||'The club asked to speak to someone.')}</p><p>${esc(t.contact_email||'No contact email available')}</p><details><summary>Guide conversation</summary>${(t.messages||[]).map(m=>`<p><strong>${m.role==='assistant'?'Guide':m.role==='system'?'System':'Club'}:</strong> ${esc(m.content)}</p>`).join('')||'<p>No chat messages preceded this request.</p>'}</details><div class="btnrow">${t.contact_email?`<a class="btn secondary" href="mailto:${encodeURIComponent(t.contact_email)}?subject=Club%20Batting%20conversation">Reply by email</a>`:''}<button class="btn ghost" data-close-guide-request="${esc(t.id)}">Mark resolved</button></div><div class="help" role="status" id="guide-request-${esc(t.id)}"></div></section>`).join('')}`;
-  document.querySelectorAll('[data-close-guide-request]').forEach(button=>button.onclick=async()=>{
-    button.disabled=true;const {error}=await supabase.rpc('platform_close_guide_request',{p_thread_id:button.dataset.closeGuideRequest});
-    if(error){document.getElementById('guide-request-'+button.dataset.closeGuideRequest).textContent=error.message;button.disabled=false;return;}
-    await renderPlatformGuideRequests();
-  });
+  return mirelionAssist.mount(document.getElementById('platformPage'));
 }
 
 function marketResearchClubReady(club,now=Date.now()){
@@ -18482,7 +18466,7 @@ async function renderPlatformProspects(){
     else if(suppressedEmail(p)&&['discovered','ready_to_contact','contacted','interested','maybe_later'].includes(p.status))addAttention(p,'contact','Replace the suppressed Club Contact email');
     if(p.status==='interested'&&!p.onboarding_prospect_id)addAttention(p,'trial',validEmail(p)?'Automatic Club Trial setup has not completed':'The Club Trial is waiting for a contact email');
   });
-  guideThreads.forEach(t=>addAttention(rows.find(p=>p.id===t.sales_prospect_id),'guide',t.human_handoff_reason||'The club asked to speak to someone'));
+  guideThreads.forEach(t=>addAttention(rows.find(p=>p.id===t.sales_prospect_id),'guide',t.human_handoff_reason||'The club requested help'));
   const needsAttention=[...attentionByProspect.values()];
   const deliveryExceptions=messages.filter(message=>outboundMessageNeedsAttention(message,emailSettings));
 
@@ -18707,7 +18691,7 @@ async function renderPlatformSalesProspectDetail(p){
   ].filter(Boolean);
 
   page.innerHTML=`<div class="btnrow"><button class="btn ghost" id="backSalesProspects">← Club Pipeline</button></div>
-    ${handoff?`<section class="admin-card guide-handoff-alert"><div><div class="section-label">Human handoff requested</div><h2>${esc(p.club_name)} would like to speak to someone.</h2><p>${esc(handoff.human_handoff_reason||'No reason supplied. Review the Guide conversation before contacting the club.')}</p></div></section>`:''}
+    ${handoff?`<section class="admin-card guide-handoff-alert"><div><div class="section-label">Help requested</div><h2>${esc(p.club_name)} requested help through the Guide.</h2><p>${esc(handoff.human_handoff_reason||'No reason supplied. Review the request in Mirelion Assist.')}</p></div></section>`:''}
     <div class="grid sales-detail-grid">
       <section class="admin-card">
         <div class="section-label">Prospect</div><h2>${esc(p.club_name)}</h2>
@@ -19752,7 +19736,7 @@ function waitForPhoneWorker(reg){
 async function signOutClubBatting(){
  if(phoneIsDemo())return supabase.auth.signOut();
  try{const reg=phoneRegistration||await navigator.serviceWorker?.getRegistration('./'),sub=await reg?.pushManager.getSubscription();if(sub&&session?.user){await Promise.race([supabase.rpc('phone_app_api',{p_club_id:club?.id||null,p_action:'disable',p_data:{endpoint:sub.endpoint}}),new Promise(resolve=>setTimeout(resolve,3000))]);}}catch{}
- await phoneWorkerMessage('CB_SIGN_OUT');clubMessageState=null;clubMessageUnread=0;return supabase.auth.signOut();
+ await phoneWorkerMessage('CB_SIGN_OUT');mirelionAssist.reset();clubMessageState=null;clubMessageUnread=0;return supabase.auth.signOut();
 }
 async function openPhoneApp(){if(!await saveClubEditsBeforeNavigation())return;currentTab='phone_app';await renderTab();}
 function phoneAppPrompt(){
@@ -23113,5 +23097,25 @@ const clubWeek=createClubWeekUI({
  availability:(id,date)=>{const s=ensureSelections();s.view='availability';s.availabilityMonth=date.slice(0,7);s.availabilityPlayerId=id;drawSelections();recordSelectionNavigation();},
  calendarBase:SUPABASE_URL+'/functions/v1/selection-calendar'
 });
+
+let assistFromGuide=false;
+const mirelionAssist=createMirelionAssist({
+  supabase,
+  getContext:()=>({userId:session?.user?.id,clubId:club?.id,platform:!!(platformRole&&document.getElementById('platformPage'))}),
+  onUnread:(count,context)=>{
+    const targets=context?.platform?'[data-platform-view="guide_requests"]':'[data-tab="assist"],#clubMenuToggle';
+    for(const button of document.querySelectorAll(targets)){
+      let badge=button.querySelector('[data-assist-unread]');
+      if(!count){badge?.remove();continue;}
+      if(!badge){badge=document.createElement('span');badge.dataset.assistUnread='';badge.className='coaching-unread-badge';button.append(' ',badge);}
+      badge.textContent=count>99?'99+':String(count);badge.setAttribute('aria-label',`${count} unread Assist messages`);
+    }
+  },
+  demo:!!window.__fixtureDb
+});
+async function renderMirelionAssist(){
+  const includeGuide=assistFromGuide;assistFromGuide=false;
+  return mirelionAssist.mount(document.getElementById('page'),{newMessage:includeGuide,includeGuide});
+}
 
 boot();
