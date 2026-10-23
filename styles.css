@@ -3135,6 +3135,6 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 #app .se-link-row{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
 #app .se-default-row{grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(0,1fr)) auto}
 #app .se-match-roles{flex-wrap:wrap}
-#app .se-match-roles>div{flex:1 1 170px;grid-template-columns:repeat(2,minmax(0,1fr))}
+#app .se-match-roles>div{flex:1 1 0;grid-template-columns:minmax(0,1fr)}
 @media(max-width:1100px){#app .se-roster-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){#app .se-link-row,#app .se-default-row{grid-template-columns:minmax(0,1fr)}}
