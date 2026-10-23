@@ -27,6 +27,7 @@ function bundle(file){
 }
 let app=read('app.js');
 const bindings=[];
+bindings.push('const {createMirelionAssistDemo}='+bundle('mirelion-assist-demo.js')+';');
 app=app.replace(/^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];?\s*$/gm,(_,names,specifier)=>{
  if(specifier.startsWith('https:')||specifier==='./config.js')return '';
  bindings.push('const {'+names+'}='+bundle(specifier.replace(/^\.\//,'').split('?')[0])+';');return '';

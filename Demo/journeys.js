@@ -13,6 +13,7 @@ const demoPeople={
  socials:{name:'Socials Manager',user:'user-social',products:['select','both'],description:'Team graphics, scoped awards and posting preparation.',access:'Assigned Socials Manager. Can create graphics and awards from published teams and scores. Cannot access draft selections or club administration.',select:['socials','social_awards','social_accounts'],batting:[]}
 };
 const demoExtraStages=[
+ {key:'assist',label:'Mirelion Assist',tab:'assist',hint:'Try private support messages and an explicitly fictional reply. Nothing is sent to Mirelion.'},
  {key:'selection_groups',label:'Selection Groups',tab:'teams',hint:'Open saved groups directly. Club Batting sharing is controlled separately for each group in the combined product.'},
  {key:'connection',label:'Connect PlayCricket',tab:'teams',hint:'Try the new-club request and example-key paths. Preparing a request does not mark it as sent.'},
  {key:'season',label:'Season & fixture imports',tab:'teams',hint:'Choose a season, assign imported teams to your groups, match existing grades, then save and appoint captains.'},
@@ -20,7 +21,7 @@ const demoExtraStages=[
 ];
 for(const stage of demoExtraStages)demoStages.push(stage);
 const demoStageLabels={selections:'Selection Board',selected_teams:'Published teams',selection_admin:'Settings',socials:'Create social posts',social_awards:'Socials Awards',plan:'My Player Plan',contributor:'Workshop contribution',people:'People & sign-up'};
-function demoTasks(product=demoProduct,persona=demoPersona){const p=demoPeople[persona];return [...new Set([...(product!=='batting'?p.select:[]),...(product!=='select'?p.batting:[]),'help'])];}
+function demoTasks(product=demoProduct,persona=demoPersona){const p=demoPeople[persona];return [...new Set([...(product!=='batting'?p.select:[]),...(product!=='select'?p.batting:[]),'help','assist'])];}
 function demoPersonas(product){return Object.entries(demoPeople).filter(([,p])=>p.products.includes(product));}
 function demoRoleDescription(product,id){if(id==='player')return product==='select'?'My availability, published teams and match acknowledgements.':product==='batting'?'My plan, training, match preparation and reflections.':demoPeople[id].description;return demoPeople[id].description;}
 function demoDefaultTask(product,role){if(role==='participant'&&product==='both')return 'contributor';return demoTasks(product,role)[0];}
@@ -57,7 +58,7 @@ async function demoNavigate(key,{reset=false,initial=false,product=demoProduct,p
   const rebuild=reset||!demoStarted||scenario!==demoScenario;
   if(demoStarted&&demoProduct!=='select'&&workshop)demoWorkshopSaved=demoWorkshopSnapshot();
   demoProduct=product;demoPersona=persona;demoScenario=scenario;
-  if(rebuild){demoSeedCurrent({empty:scenario==='newclub'});demoWorkshopSaved=demoWorkshopSnapshot();demoStarted=true;}else{fixtureResetGlobals();if(demoWorkshopSaved)demoRestoreWorkshopSnapshot(demoWorkshopSaved);}
+  if(rebuild){demoAssistTransport.reset();mirelionAssist.reset();demoSeedCurrent({empty:scenario==='newclub'});demoWorkshopSaved=demoWorkshopSnapshot();demoStarted=true;}else{fixtureResetGlobals();if(demoWorkshopSaved)demoRestoreWorkshopSnapshot(demoWorkshopSaved);}
   document.querySelectorAll('dialog').forEach(d=>d.remove());document.getElementById('demoWelcome').replaceChildren();document.getElementById('demoStatus').textContent='';document.getElementById('demoStatus').hidden=true;
   platformRole=null;platformAccessError=false;canBootstrapPlatform=false;
   const person=demoPeople[persona],user=person.user;session={user:{id:user,email:user.slice(5)+'@example.test'}};userProfile=fixtureClone(fixtureRows.user_profiles.find(p=>p.user_id===user));membership=fixtureClone(fixtureRows.club_memberships.find(m=>m.user_id===user));allMemberships=[{...membership,clubs:club}];

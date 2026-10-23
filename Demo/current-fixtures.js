@@ -222,3 +222,8 @@ function demoFilterAwardContext(context,scope){
  if(context.fixtures)context.fixtures=context.fixtures.filter(f=>names.has(f.grade));
  if(context.cards)context.cards=context.cards.filter(c=>names.has(c.scorecard.grade));
 }
+
+// Mirelion Assist uses the production UI with a tab-local, fictional transport.
+const demoAssistTransport=createMirelionAssistDemo(()=>({userId:session?.user?.id,clubName:club?.name,name:userProfile?.display_name}));
+const demoBeforeAssistRpc=window.__fixtureDb.rpc;
+window.__fixtureDb.rpc=function(name,args){return name==='mirelion_assist'?demoAssistTransport.rpc(name,args):demoBeforeAssistRpc.call(this,name,args);};
