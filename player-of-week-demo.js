@@ -2,7 +2,9 @@ import {createTeamWeekDemo} from './team-of-week-demo.js?v=0.8.62.199';
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 export function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
- return {async rpc(name,args){
+ return {
+ collection(end){const seen=new Set(),pool=sharedScores?.(end).candidates;return [...editions.values()].reverse().filter(e=>{const key=e.request.award_scope?.key||'all';if(!e.sealed||e.week_end!==end||seen.has(key))return false;seen.add(key);return true;}).map(e=>({id:e.id,kind:'player_week',week_end:e.week_end,label:'Player of the Week · '+e.winner.name,bucket:'club-player-week',image_path:e.image_path,image_sha:e.request.sha256,award_scope:structuredClone(e.request.award_scope||{mode:'all',ids:[]}),scores_current:!pool||JSON.stringify(e.winner)===JSON.stringify(pool.find(p=>p.key===e.winner.key)),performance_keys:[]}));},
+ async rpc(name,args){
   if(name!=='player_of_week_api')return {error:{message:'Unavailable in this demo'}};
   const data=args.p_data,action=args.p_action;
   if(action==='context'){const r=await scores.rpc('team_of_week_api',{...args,p_action:'context'});return {data:{cards:r.data.cards,candidates:r.data.candidates.map(p=>({...p,format:'limited_overs',previous:[],usual_grade:p.grade})),profiles:structuredClone(profiles),design:structuredClone(design),history:[...editions.values()].filter(e=>e.sealed).reverse().map(({request,...e})=>structuredClone(e))}};}

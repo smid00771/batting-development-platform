@@ -5,7 +5,7 @@ export function createSocialAwardsDemo(getState, getResults, getSocial, getMembe
   function state() {
     const club = getState();
     if (!records.has(club)) records.set(club, {
-      settings: {enabled: ['team_week', 'player_week'], revision: 0},
+      settings: {enabled: [...kinds], revision: 0},
       designs: {}, photos: [], requests: [], editions: []
     });
     return records.get(club);

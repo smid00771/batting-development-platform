@@ -25,24 +25,36 @@ function demoSeedCurrent({empty=false}={}){
  fixtureRows.feedback['player-combined']=demoEmptyFeedback();fixtureRows.player_plan_workflows.push({...fixtureClone(fixtureRows.player_plan_workflows[1]),id:'workflow-player-combined',player_id:'player-combined'});
  fixtureRows.club_access_grants=fixtureRows.club_access_grants.filter(g=>g.user_id==='user-coach');
  fixtureRows.club_access_grants.push({club_id:club.id,user_id:'user-jordan',scope:'playing_group',playing_group_id:'group-first',can_view:true,can_edit:true},{club_id:club.id,user_id:'user-combined',scope:'playing_group',playing_group_id:'group-second',can_view:true,can_edit:true});
- fixtureGroups[1].name='Fifth Grade';fixtureGroups.push({id:'group-masters',club_id:club.id,name:'Masters',active:true,sort_order:2});
+ fixtureGroups[0].name='1st Grade';fixtureGroups[1].name='2nd Grade';
+ const extraGrades=[['third','3rd Grade'],['fourth','4th Grade'],['dev-navy','Dev Navy'],['dev-sky','Dev Sky']];
+ for(const [key,name] of [...extraGrades,['masters','Masters']])fixtureGroups.push({id:'group-'+key,club_id:club.id,name,active:true,sort_order:fixtureGroups.length});
  const first=demoUpcomingSaturday(),second=demoAddDay(first,7);
- for(const p of demoSelections.roster){p.availability.available_dates=p.availability.available_dates.map(d=>d==='2026-10-10'?first:second);p.availability.checked_at=fixtureNow();}
+ for(const [i,p] of demoSelections.roster.entries()){p.grade=i<13?'1st Grade':'2nd Grade';p.availability.available_dates=p.availability.available_dates.map(d=>d==='2026-10-10'?first:second);p.availability.checked_at=fixtureNow();}
  Object.assign(demoSelections.roster[1],{name:'Jordan Ellis'});Object.assign(demoSelections.roster[2],{name:'Taylor Brooks'});Object.assign(demoSelections.roster[14],{name:'Robin Hart',user_id:'user-combined'});
  for(const [i,f] of demoSelections.fixtures.entries()){
-  f.details.days=[{date:first,start:'12:00'},{date:second,start:'12:00'}];Object.assign(f.details,{grade_group_id:i?'group-second':'group-first',round:'3',season:String(new Date().getFullYear()),staff:[]});
+  f.details.days=[{date:first,start:'12:00'},{date:second,start:'12:00'}];Object.assign(f.details,{grade:i?'2nd Grade':'1st Grade',grade_group_id:i?'group-second':'group-first',round:'3',season:String(new Date().getFullYear()),staff:[]});
   if(i)for(const key of ['d1','d2'])f.details.match_roles[key].captain_id=demoSelections.roster[14].id;
   // A published XI is available to players; staff can compare the next draft.
   f.publication=1;f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:demoSelections.roster.filter(p=>f.slots.some(s=>s.d1===p.id||s.d2===p.id)).map(p=>({id:p.id,name:p.name,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,keeper:p.keeper}))};
   f.published_at=fixtureNow();f.selection_unlocked_until=new Date(Date.now()+86400000*30).toISOString();
+ }
+ // Four more fictional sides keep the Dev teams in the same Selection Group as the senior grades.
+ const given=['Aiden','Blake','Charlie','Darcy','Evan','Finley','Harper','Jesse','Kai','Logan','Noah'],family=['Archer','Bates','Cowan','Dawson','Evans','Field','Grant','Hughes','Irwin','Jones','Kent'];
+ for(const [index,[key,grade]] of extraGrades.entries()){
+  const players=given.map((name,i)=>({id:key+'-player-'+i,name:name+' '+family[(i+index*2)%family.length],grade,external_id:'EXAMPLE-'+key+'-'+i,active:true,user_id:null,batting:i<6?'top':'lower',bowling:i>=6?'pace':'none',bowling_load:'frontline',keeper:i===5,availability:{revision:1,usual_available:true,blocks:[],available_dates:[first,second],unavailable_dates:[]}}));
+  demoSelections.roster.push(...players);
+  const f=fixtureClone(demoSelections.fixtures[0]),days=index<2?[{date:first,start:'12:00'},{date:second,start:'12:00'}]:[{date:first,start:'10:00'}];
+  Object.assign(f,{id:key+'-upcoming',revision:1,publication:1});
+  Object.assign(f.details,{grade,grade_group_id:'group-'+key,round:'4',format:index<2?'two_day':'limited_overs',overs:index<2?null:40,days,brackets:false,opposition:'River Example CC',match_roles:{d1:{captain_id:players[0].id,captain_manual:true,keeper_id:players[5].id,keeper_manual:true},...(index<2?{d2:{captain_id:players[0].id,captain_manual:true,keeper_id:players[5].id,keeper_manual:true}}:{})}});
+  f.slots=players.map(p=>({d1:p.id,d2:index<2?p.id:null}));f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(players)};demoSelections.fixtures.push(f);
  }
  demoSelections.selectors=['user-selector','user-head','user-masters-head'];demoSelections.access.head_selector_id='user-head';
  const mastersNames=['Drew Kelly','Lee Adams','Pat Foster','Cameron Ward','Les Turner','Andy Cross','Chris Cole','Ben Dunn','Glen Hill','Mark Ross','Paul Woods'];
  const mastersPlayers=mastersNames.map((name,i)=>({id:'masters-player-'+i,name,grade:'Masters',external_id:'EXAMPLE-M-'+i,active:true,user_id:null,batting:i<6?'top':'lower',bowling:i>6?'pace':'none',bowling_load:'frontline',keeper:i===5,availability:{revision:1,usual_available:false,blocks:[],available_dates:[demoAddDay(first,1)],unavailable_dates:[]}}));demoSelections.roster.push(...mastersPlayers);
  demoSelections.fixtures.push({id:'masters-upcoming',club_id:club.id,revision:1,publication:0,published:null,details:{grade:'Masters',grade_group_id:'group-masters',round:'2',format:'limited_overs',overs:40,competition:'Example Masters',opposition:'Valley Masters',ground:'Masters Oval',days:[{date:demoAddDay(first,1),start:'10:00'}],meeting:'Meet at 9:15 am.',min_quicks:3,min_batters:5,staff:[],match_roles:{d1:{captain_id:mastersPlayers[0].id,captain_manual:true,keeper_id:mastersPlayers[5].id,keeper_manual:true}}},slots:mastersPlayers.map(p=>({d1:p.id,d2:null}))});
  demoSeasonSetup().appointments={'group-first':'user-jordan','group-second':'user-combined'};
- demoGroups={revision:1,selection_groups:[{id:'sg-senior',name:'Senior cricket',batting_enabled:true},{id:'sg-masters',name:'Masters cricket',batting_enabled:false}],grades:fixtureGroups.map(g=>({...g,selection_group_id:g.id==='group-masters'?'sg-masters':'sg-senior'})),mappings:[],season:'demo-season',catalogue:'demo-catalogue',teams:demoSourceTeams()};
- demoPermissions={revision:1,club_head_id:'user-head',groups:[{id:'sg-senior',name:'Senior cricket',head_id:'user-head',members:[{user_id:'user-head',access:'edit'},{user_id:'user-selector',access:'edit'}]},{id:'sg-masters',name:'Masters cricket',head_id:'user-masters-head',members:[{user_id:'user-masters-head',access:'edit'},{user_id:'user-selector',access:'view'}]}],invites:[]};
+ demoGroups={revision:1,selection_groups:[{id:'sg-senior',name:'Senior Grade Teams',batting_enabled:true},{id:'sg-masters',name:'Masters',batting_enabled:false}],grades:fixtureGroups.map(g=>({...g,selection_group_id:g.id==='group-masters'?'sg-masters':'sg-senior'})),mappings:[],season:'demo-season',catalogue:'demo-catalogue',teams:demoSourceTeams()};
+ demoPermissions={revision:1,club_head_id:'user-head',groups:[{id:'sg-senior',name:'Senior Grade Teams',head_id:'user-head',members:[{user_id:'user-head',access:'edit'},{user_id:'user-selector',access:'edit'}]},{id:'sg-masters',name:'Masters',head_id:'user-masters-head',members:[{user_id:'user-masters-head',access:'edit'},{user_id:'user-selector',access:'view'}]}],invites:[]};
  demoSocial.managers=['user-social','user-combined'];demoSocial.settings={...demoSocial.settings,grade_labels:[],title:'TEAM SELECTIONS'};
  demoConnection={club_name:club.name,revision:0,request:{association:'Example District Cricket Association',club_url:'',contact_name:'Sam Taylor',contact_role:'Club Admin',contact_email:'sam@example.test'},state:empty?'not_requested':'connected',configured:!empty,verified:!empty,connection_version:empty?0:1,polling_enabled:!empty,organisation_id:empty?'':'11111111-1111-4111-8111-111111111111',association_id:empty?'':'22222222-2222-4222-8222-222222222222'};
  demoWeek={settings:{revision:1,reminders_enabled:false,acknowledgement_enabled:true,deadline_weekday:4,deadline_time:'18:00:00'},plans:[],calendar_active:false,acknowledgements:[]};
@@ -51,22 +63,29 @@ function demoSeedCurrent({empty=false}={}){
  demoSelections.access.mode=demoProduct==='select'?'standalone':'bundle';
  if(!empty){
   // Seed a useful previous week before a Socials Manager opens awards or stats.
-  const upcoming=demoSelections.fixtures;demoSelections.fixtures=upcoming.filter(f=>f.details.grade!=='Masters');
+  const upcoming=[...demoSelections.fixtures];
   demoSeasonStats({p_club_id:club.id,p_action:'context',p_data:{}});demoSelections.fixtures=upcoming;
   demoSelections.result_sources||={};
   for(const card of Object.values(demoScorecards)){
    const original=upcoming.find(f=>f.details.grade===card.grade);if(!original)continue;
    const days=[{date:card.dates[0],start:'12:00'}],round=1+Math.round((Date.parse(card.dates[0])-Date.parse(demoAddDay(first,-21)))/(7*86400000));
    const f={...fixtureClone(original),id:'history-'+card.match_id,details:{...fixtureClone(original.details),round:String(round),days,brackets:false},slots:original.slots.map(s=>({d1:s.d1,d2:null}))};
-   f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(original.published.players)};f.selection_unlocked_until=null;demoSelections.fixtures.push(f);demoSelections.result_sources[f.id]={match_id:card.match_id,team_id:card.teams[0].id};card.teams[0].name=club.name;card.result=club.name+' won';
-   if(round===3){card.innings[0].batters[0].runs=112;card.innings[1].bowlers[0].wickets=5;}
+   f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(original.published?.players||demoSelections.roster.filter(p=>f.slots.some(slot=>slot.d1===p.id)))};f.selection_unlocked_until=null;demoSelections.fixtures.push(f);demoSelections.result_sources[f.id]={match_id:card.match_id,team_id:card.teams[0].id};card.teams[0].name=club.name;
+   const batting=card.innings[0],bowling=card.innings[1];
+   if(round===3){batting.batters[0].runs=112;batting.batters[0].balls=124;}
+   bowling.bowlers.forEach((p,i)=>{p.wickets=(round===3?[5,2,1,1,1]:[3,2,2,2,1])[i]||0;});
+   batting.runs=batting.batters.reduce((total,p)=>total+(p.runs||0),12);batting.wickets=8;batting.overs=original.details.format==='limited_overs'?'40.0':'48.0';batting.bowling_available=true;
+   bowling.wickets=10;bowling.overs=original.details.format==='limited_overs'?'38.2':'46.2';bowling.runs=Math.max(100,batting.runs-28-round);
+   const totalConceded=bowling.runs-8;let remaining=totalConceded;
+   bowling.bowlers.forEach((p,i)=>{p.runs=i===bowling.bowlers.length-1?remaining:Math.floor(totalConceded/bowling.bowlers.length);remaining-=p.runs;});
+   card.result=club.name+' won by '+(batting.runs-bowling.runs)+' runs';
   }
   for(const f of upcoming.filter(f=>f.id==='selection-first'||f.id==='selection-second')){f.details.round='4';f.published.details.round='4';}
   const abandoned={id:'masters-abandoned',club_id:club.id,revision:1,publication:0,published:null,details:{grade:'Masters',grade_group_id:'group-masters',format:'limited_overs',round:'1',competition:'Example District',opposition:'Hill Example CC',ground:'Masters Oval',days:[{date:demoAddDay(first,-7),start:'12:00'}],cancelled:true,staff:[],match_roles:{d1:{captain_id:null,keeper_id:null}}},slots:Array.from({length:11},()=>({d1:null,d2:null}))};
   demoSelections.fixtures.push(abandoned);demoSelections.result_sources||={};demoSelections.result_sources[abandoned.id]={no_play:'abandoned'};
  }
 }
-function demoSourceTeams(){return [{id:'source-first',name:'Harbour First XI',grade:{id:'source-grade-first',name:'First XI'},competition:{name:'Example District'}},{id:'source-fifth',name:'Harbour Fifth Grade',grade:{id:'source-grade-fifth',name:'Fifth Grade'},competition:{name:'Example District'}}];}
+function demoSourceTeams(){return [{id:'source-first',name:'Harbour 1st Grade',grade:{id:'source-grade-first',name:'1st Grade'},competition:{name:'Example District'}},{id:'source-fifth',name:'Harbour 2nd Grade',grade:{id:'source-grade-fifth',name:'2nd Grade'},competition:{name:'Example District'}}];}
 function demoWeekContext(){return {...fixtureClone(demoWeek),can_manage:isAdmin(),acknowledgements:demoSelections.fixtures.flatMap(f=>!f.published?[]:[...new Set(f.published.slots.flatMap(s=>[s.d1,s.d2]).filter(Boolean))].map(id=>({fixture_id:f.id,roster_id:id,publication:f.publication,linked:!!demoSelections.roster.find(p=>p.id===id)?.user_id,seen_at:demoWeek.acknowledgements.find(a=>a.fixture_id===f.id&&a.roster_id===id)?.seen_at||null})))};}
 function demoScope(kind){return demoAwardScopes[kind]||={revision:0,award_scope:{mode:'all',ids:[],grade_ids:demoGroups.grades.map(g=>g.id),key:'all',label:'All'}};}
 function demoScopeContext(kind){return {...fixtureClone(demoScope(kind)),groups:demoGroups.selection_groups.map(g=>({id:g.id,name:g.name})),grades:demoGroupContext().grades.map(g=>({id:g.id,name:g.name,group_id:g.selection_group_id}))};}
@@ -167,7 +186,7 @@ supabase.rpc=async function(name,args={}){
    }
   }
   const result=await demoPreviousCurrentRpc(name,args);
-  if(name==='club_social_awards_api'&&a==='context'&&result.data)demoFilterAwardContext(result.data,d.award_scope||demoScope(d.kind).award_scope);
+  if(name==='club_social_awards_api'&&a==='context'&&result.data){result.data.editions.push(...demoTeamWeek.collection(d.week_end),...demoPlayerWeek.collection(d.week_end));demoFilterAwardContext(result.data,d.award_scope||demoScope(d.kind).award_scope);}
   if(name==='club_match_results_api'&&a==='context'&&result.data&&d.award_scope)demoFilterAwardContext(result.data,d.award_scope);
   return result;
  }catch(error){return demoFail(error.message);}
@@ -177,7 +196,7 @@ supabase.functions.invoke=async function(name,args={}){
  const body=args.body||{};
  if(name==='club-social-style'&&['graphic_refine','award_refine'].includes(body.purpose)){
   if(!demoIsSocial())return demoFail('Socials Manager access required');
-  const brief=(body.brief||'').toLowerCase(),changes={};let explanation='Demo preview: try “use gold text”, “make the names larger” or “shorten Fifth Grade to Fifth”.',label=null;
+  const brief=(body.brief||'').toLowerCase(),changes={};let explanation='Demo preview: try “use gold text”, “make the names larger” or “shorten 1st Grade to 1st”.',label=null;
   if(/gold|yellow/.test(brief)){changes.text_colour='#f6ca62';explanation='Demo preview: changed the text to gold.';}
   if(/larger|bigger/.test(brief)){if(body.kind==='team_week')changes.font_scale=115;else if(body.kind==='team_selections')changes.font='bold';else changes.name_size=Math.min(120,(body.current?.name_size||76)+12);explanation='Demo preview: increased the name emphasis.';}
   const short=/shorten (.+?) to (.+?)[.!]?$/.exec(body.brief||''),grades=body.preview_grades||[],grade=short&&grades.find(g=>g.toLowerCase()===short[1].toLowerCase());
