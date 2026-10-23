@@ -11,7 +11,7 @@ const fixtureNow=()=>new Date().toISOString();
 
 const fixtureDay=(offset=0)=>{const date=new Date();date.setDate(date.getDate()+offset);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
 
-const fixtureGroups=[{id:'group-first',club_id:'example-club',archived_at:null,name:'First XI',active:true,sort_order:0},{id:'group-second',club_id:'example-club',archived_at:null,name:'Second XI',active:true,sort_order:1}];
+const fixtureGroups=[{id:'group-first',club_id:'example-club',archived_at:null,name:'1st Grade',active:true,sort_order:0},{id:'group-second',club_id:'example-club',archived_at:null,name:'2nd Grade',active:true,sort_order:1}];
 
 function fixtureReadRows(table){
  const derived={philosophy_profiles:[publishedProfile],philosophy_dimension_catalogue:dimensions,club_philosophy_dimensions:[...publishedSelectedDims.values()],club_format_weights:[...publishedWeights.entries()].map(([key,weight])=>{const ix=key.indexOf(':');return {club_id:club.id,dimension_key:key.slice(0,ix),format_key:key.slice(ix+1),weight};}),philosophy_workshops:workshop?[workshop]:[],philosophy_versions:philosophyVersions,how_we_bat_drafts:howWeBatDraft?[howWeBatDraft]:[],how_we_bat_versions:howWeBatVersions,player_plan_structure_drafts:playerPlanStructureDraft?[playerPlanStructureDraft]:[],player_plan_structure_versions:playerPlanStructureVersions,playing_groups:fixtureGroups,clubs:[club]};
@@ -55,7 +55,7 @@ window.__fixtureRpc=async(name,args={})=>{
   case 'get_feedback_workspace':data={role:membership.permission_role,players:fixtureFeedbackPlayers()};break;
   case 'get_development_feedback_for_player':data=fixtureFeedbackPlayers().find(player=>player.id===args.p_player_id)||{};break;
   case 'get_player_plan_reminder_overview':data={reminders:[],cooldown_hours:48,email_mode:'preview'};break;
-  case 'get_my_player_plan_rollout':data={groups:[fixtureGroups[0]],requirements:[{format_key:'limited_overs',required:true,due_date:fixtureDay(14),sources:['First XI']}]};break;
+  case 'get_my_player_plan_rollout':data={groups:[fixtureGroups[0]],requirements:[{format_key:'limited_overs',required:true,due_date:fixtureDay(14),sources:['1st Grade']}]};break;
   case 'refresh_club_guide_interventions':data=[];break;
   case 'get_philosophy_workshop_status':data={contributors:fixtureRows.philosophy_contributors,mismatch_count:0,synthesis_response_count:3};break;
   case 'get_club_guide_snapshot':data={};break;
@@ -128,7 +128,7 @@ function fixtureResetGlobals(){
 
 const demoStages=[
   {key:'selection_admin',label:"Club setup — admin only",tab:'teams',role:'admin',hint:"Manage fixtures, players and roles. This example admin has no selection role. Choose Selection Board to explore the selector’s workspace."},
-  {key:'selections',label:"Selection Board",tab:'teams',role:'coach',hint:"Try Find matching pair in Fifth Grade’s highlighted place: Luca plays Day 1; Tom plays Day 2."},
+  {key:'selections',label:"Selection Board",tab:'teams',role:'coach',hint:"Try Find matching pair in 2nd Grade’s highlighted place: Luca plays Day 1; Tom plays Day 2."},
   {key:'socials',label:"Social Graphics",tab:'teams',role:'coach',hint:"Create team and award posts as the example Head of Selections and Socials Manager."},
   {key:'social_awards',label:"Socials Awards",tab:'teams',role:'coach',hint:"Choose the awards this club uses or try requesting another award. Requests stay in this demo."},
   {key:'availability',label:"Player availability",tab:'teams',role:'player',hint:"Mark each date you can play. Unmarked dates are unavailable; confirm both days of a two-day match."},
@@ -253,7 +253,7 @@ const demoEmptyFeedback=()=>({matches:[],training_observations:[],external_train
 const demoBaseSeed=demoSeedClub;
 
 demoSeedClub=function(){
-  fixtureGroups.splice(0,fixtureGroups.length,{id:'group-first',club_id:'example-club',name:'First XI',active:true,sort_order:0},{id:'group-second',club_id:'example-club',name:'Second XI',active:true,sort_order:1});
+  fixtureGroups.splice(0,fixtureGroups.length,{id:'group-first',club_id:'example-club',name:'1st Grade',active:true,sort_order:0},{id:'group-second',club_id:'example-club',name:'2nd Grade',active:true,sort_order:1});
   demoBaseSeed();fixtureRows.match_preparations=[];fixtureRows.match_preparation_receipts={};fixtureRows.match_preparation_seeded=false;demoPreparationSnapshot=null;demoIsPreparing=false;demoArchives=[];demoMessages=[];demoReceipts.clear();demoSeen.clear();
   Object.assign(workshop,{round_number:1,how_we_bat_selected_at:fixtureNow(),updated_at:fixtureNow()});
   howWeBatDraft.updated_at=fixtureNow();
@@ -1850,11 +1850,11 @@ function demoDuplicateSelection(fixtures,ids){
 
 function seedDemoSelections(){
  const names=['Alex Morgan','Jordan Lee','Taylor Quinn','Riley Cooper','Sam Patel','Chris Bell','Jamie Ford','Blake Hall','Drew Mason','Noah Reed','Will Scott','Evan Brooks','Charlie Gray','Luca Hayes','Mitch Lane','Oliver King','Max Taylor','Isaac Wood','Leo James','Ben Parker','Jack Smith','Finn West','Oscar Hill','Harry Cole','Tom Green','Nathan Ross','Eli Ward','Kane Adams'];
- const roster=names.map((name,i)=>({id:'selection-player-'+i,name,grade:i<13?'First XI':'Fifth Grade',external_id:'EXAMPLE-'+(100+i),active:true,user_id:i===0?'user-alex':i===1?'user-jordan':i===2?'user-taylor':null,batting:i%13<6?'top':'lower',bowling:i%13>=7?'pace':i%13===6?'spin':'none',bowling_load:'frontline',keeper:i%13===5,availability:{revision:1,usual_available:false,blocks:[],available_dates:['2026-10-10','2026-10-17'].filter(date=>!(i===13&&date==='2026-10-17')&&!(i===24&&date==='2026-10-10')),checked_at:'2026-10-06T08:00:00Z'}}));
+ const roster=names.map((name,i)=>({id:'selection-player-'+i,name,grade:i<13?'1st Grade':'2nd Grade',external_id:'EXAMPLE-'+(100+i),active:true,user_id:i===0?'user-alex':i===1?'user-jordan':i===2?'user-taylor':null,batting:i%13<6?'top':'lower',bowling:i%13>=7?'pace':i%13===6?'spin':'none',bowling_load:'frontline',keeper:i%13===5,availability:{revision:1,usual_available:false,blocks:[],available_dates:['2026-10-10','2026-10-17'].filter(date=>!(i===13&&date==='2026-10-17')&&!(i===24&&date==='2026-10-10')),checked_at:'2026-10-06T08:00:00Z'}}));
  for(const role of ['batting','bowling','bowling_load','keeper'])roster[24][role]=roster[13][role];
  const days=[{date:'2026-10-10',start:'12:00'},{date:'2026-10-17',start:'12:00'}];
  const f=(id,grade,n)=>({id,club_id:club.id,revision:1,publication:0,published:null,details:{grade,format:'long_form',overs:null,captain_id:null,match_roles:Object.fromEntries(['d1','d2'].map(day=>[day,{captain_id:roster[n+1].id,captain_manual:true,keeper_id:roster[n+5].id,keeper_manual:false}])),competition:'Example District',opposition:'Harbour Visitors',ground:'Example Oval',meeting:'Meet at 11:15 am.',days:structuredClone(days),brackets:n===13,min_quicks:3,min_batters:5,staff:['user-coach']},slots:Array.from({length:11},(_,i)=>({d1:roster[n+i].id,d2:roster[n===13&&i===0?24:n+i].id}))});
- demoSelections={access:{mode:'bundle',status:'pilot',timezone:'Australia/Sydney',revision:1,head_selector_id:'user-coach',fixture_defaults:{revision:0,rows:[]}},roster_revision:1,roster,fixtures:[f('selection-first','First XI',0),f('selection-second','Fifth Grade',13)],group_links:[],selectors:['user-coach'],review_posts:{},posts:{},history:{},receipts:{},billing:{pricing:{annual_price_cents:null,currency:'AUD',trial_days:21,revision:1},subscription:null,history:[]}};
+ demoSelections={access:{mode:'bundle',status:'pilot',timezone:'Australia/Sydney',revision:1,head_selector_id:'user-coach',fixture_defaults:{revision:0,rows:[]}},roster_revision:1,roster,fixtures:[f('selection-first','1st Grade',0),f('selection-second','2nd Grade',13)],group_links:[],selectors:['user-coach'],review_posts:{},posts:{},history:{},receipts:{},billing:{pricing:{annual_price_cents:null,currency:'AUD',trial_days:21,revision:1},subscription:null,history:[]}};
 }
 
 function demoMatchGroups(){return fixtureGroups.map(g=>({...g,captain_user_ids:g.captain_user_ids||fixtureRows.club_access_grants.filter(a=>a.club_id===club.id&&a.scope==='playing_group'&&a.playing_group_id===g.id&&(a.can_view||a.can_edit)&&fixtureRows.club_memberships.some(m=>m.user_id===a.user_id&&m.club_id===club.id&&m.permission_role==='captain')).map(a=>a.user_id)}));}
@@ -2636,7 +2636,7 @@ function demoPrepareMatchTutorial(stage){
  const id=stage.key==='team_review'?'tutorial-published-match':'tutorial-manual-match';
  let match=demoSelections.fixtures.find(f=>f.id===id);if(match)return match;
  const template=demoSelections.fixtures.find(f=>f.id==='selection-first')||demoSelections.fixtures[0];
- const details={...fixtureClone(template.details),grade:'First XI',grade_group_id:'group-first',days:[{date:'2026-10-08',start:'10:00'}],format:'limited_overs',overs:50,opposition:stage.key==='team_review'?'Bay Visitors':'Valley Visitors',brackets:false,match_roles:{d1:fixtureClone(template.details.match_roles.d1)}};
+ const details={...fixtureClone(template.details),grade:'1st Grade',grade_group_id:'group-first',days:[{date:'2026-10-08',start:'10:00'}],format:'limited_overs',overs:50,opposition:stage.key==='team_review'?'Bay Visitors':'Valley Visitors',brackets:false,match_roles:{d1:fixtureClone(template.details.match_roles.d1)}};
  const slots=stage.key==='team_review'?fixtureClone(template.slots).map(slot=>({...slot,d2:null})):Array.from({length:11},()=>({d1:null,d2:null}));
  match={id,club_id:club.id,revision:1,publication:stage.key==='team_review'?1:0,published:null,details,slots};
  if(stage.key==='team_review'){

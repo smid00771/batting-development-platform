@@ -10,24 +10,24 @@ import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.235';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.208';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.250';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.253';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.248';
 import {teamSelectionText} from './social-team-layout.js?v=0.8.62.249';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.232';
 import {createSelectionRoom} from './selection-room.js?v=0.8.62.246';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.250';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.253';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.250';
 import {createSocialAwardLabels} from './social-award-labels.js?v=0.8.62.248';
 import {createFixtureResults} from './fixture-results.js?v=0.8.62.245';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.250';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.253';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.252';
+const APP_UI_VERSION='0.8.62.253';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -23025,8 +23025,8 @@ function socialAdoptResultsWeek(s,end){
 async function socialResultsChanged(s){
  const api=s.view==='team_week'?socialWeek:s.view==='player_week'?socialPlayerWeek:socialAwards;
  api.state(s).sharedStale=false;
- if(api===socialAwards){await api.load(s,false);if(socialHere(s))api.render(s);}else await api.load(s,{preserve:true});
- for(const other of [socialAwards,socialWeek,socialPlayerWeek])if(other!==api)other.state(s).sharedStale=true;
+ if(api===socialAwards){await api.load(s,false);if(socialHere(s))api.render(s);}else{socialAwards.state(s).sharedStale=false;await socialAwards.load(s,false);await api.load(s,{preserve:true});}
+ for(const other of [socialWeek,socialPlayerWeek])if(other!==api)other.state(s).sharedStale=true;
 }
 function socialSetResultsWeek(s,end){socialAdoptResultsWeek(s,end);socialDraw(s);}
 const socialAwardScopes=createSocialAwardScopes({supabase,here:socialHere,draw:socialDraw,canEdit:s=>{if(s.view==='team_week'&&s.week?.designDirty||s.view==='player_week'&&s.playerWeek?.layoutDirty){socialMessage(s,'Save the award layout before changing selection groups.');return false;}return socialCanLeave();},message:socialMessage,changed:socialAwardScopeChanged,locked:s=>!!(s.busy||s.results?.busy||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.awards?.busy||s.awards?.pending||s.awards?.loading)});
@@ -23082,8 +23082,8 @@ const socialAwards=createSocialAwards({...socialAwardLabelHooks,sharedResults:tr
  savedPhoto:async(s,id)=>{const a=s.data.assets.find(a=>a.id===id);if(!a)throw Error('Photo not found');const r=await supabase.storage.from('club-socials').download(a.path);if(r.error)throw Error(r.error.message);return {blob:r.data,name:a.label||'Saved player photo.png'};},
  openCutout:async(s,item,file,apply)=>{const view=s.view,matches=s.data.players.filter(p=>p.active!==false&&(p.external_id===item.player_id||p.name.trim().toLowerCase()===item.name.trim().toLowerCase())),person=matches.length===1?matches[0].id:'';s.deferNavigation=true;socialGuideEnter(s,2,person);s.deferNavigation=false;const g=socialGuideState(s);g.awardReturn={view,apply,savedAsset:null};if(file){socialGuideResetImage(g);g.file=file;g.fileURL=URL.createObjectURL(file);g.needsHelp=true;socialGuideRemember(g);}s.notice=person?'Create and save the cut-out, then return to the award.':'Select '+item.name+' from your players before creating the cut-out.';socialDraw(s);},
  reviewAwards:async(s,items,caption)=>{const w=s.awards;if(w.busy)return;w.busy=true;const button=document.getElementById('saReviewPost'),label=button?.textContent;if(button){button.disabled=true;button.textContent='Checking results…';}try{if(await socialResults.check(s,w.end,{award_edition_ids:items.map(e=>e.id)}))return await socialPublishing.startAwards(s,items,caption);}finally{w.busy=false;if(socialHere(s)&&['awards','award_collection','results','five_wickets','century'].includes(s.view))socialAwards.render(s);else if(button?.isConnected){button.disabled=false;button.textContent=label;}}},postingHistory:(s,host)=>socialPublishing.awardsHistory(s,host)});
-const socialPlayerWeek=createPlayerOfWeek({...socialAwardLabelHooks,sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,text:socialText,openScores:(s)=>socialResults.open(s),savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),savedPhoto:async(s,id)=>{const asset=s.data.assets.find(a=>a.id===id);if(!asset)throw Error('Photo not found');return await (await fetch(await socialAssetURL(s,asset))).blob();}});
-const socialWeek=createTeamOfWeek({...socialAwardLabelHooks,sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),teamCheck:mountScorecardTeam,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,extractUrl:matchReviewExtractUrl,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,fitImage:socialFitImage,text:socialText});
+const socialPlayerWeek=createPlayerOfWeek({...socialAwardLabelHooks,sharedResults:true,postPreview:(s,host,locked)=>socialAwards.mountPost(s,host,locked),savedAward:(s,id)=>socialAwards.addToPost(s,id),checkResults:(s,end)=>socialResults.check(s,end),navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,text:socialText,openScores:(s)=>socialResults.open(s),savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),savedPhoto:async(s,id)=>{const asset=s.data.assets.find(a=>a.id===id);if(!asset)throw Error('Photo not found');return await (await fetch(await socialAssetURL(s,asset))).blob();}});
+const socialWeek=createTeamOfWeek({...socialAwardLabelHooks,sharedResults:true,postPreview:(s,host,locked)=>socialAwards.mountPost(s,host,locked),savedAward:(s,id)=>socialAwards.addToPost(s,id),checkResults:(s,end)=>socialResults.check(s,end),teamCheck:mountScorecardTeam,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,extractUrl:matchReviewExtractUrl,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,fitImage:socialFitImage,text:socialText});
 const socialSandbox=createSocialSandbox({here:socialHere,escape:seEsc,defaults:socialDefaults,groups:()=>ensureSelections().data?.groups||[],cards:socialCards,featured:socialFeatured,renderImage:socialRender,normalize:socialNormaliseUpload,message:socialMessage,download:socialBlobDownload,applyDesign:async(s,design)=>{if(s.busy||s.pending)return;if(await socialSave(s,'settings',{revision:s.data.revision,design}))socialMessage(s,'Club layout saved for upcoming teams.');}});
 async function socialTeamEditBackground(s,brief,options={}){
  if(!options.proposal&&!socialCanLeave())return;const asset=socialAsset(s,'background')||socialAsset(s,'reference');

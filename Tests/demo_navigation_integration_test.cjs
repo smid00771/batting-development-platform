@@ -46,7 +46,7 @@ test('award choices save through the complete demo and control Create posts', as
   await openAwards(h);
   assert.deepEqual(labels(h, '[data-social-view]'), ['Who handles socials', 'Social accounts', 'Socials Awards', 'Create posts']);
   assert.equal(h.document.querySelectorAll('[data-sa-choice]').length, 5);
-  await choice(h, 'century', true); await choice(h, 'five_wickets', true);
+  await choice(h, 'century', true); await choice(h, 'five_wickets', true); await choice(h, 'results', false);
   await h.click('#saSaveChoices');
   assert.match(h.document.getElementById('saStatus').textContent, /Award choices saved/);
   await h.click('[data-social-view="graphics"]');
