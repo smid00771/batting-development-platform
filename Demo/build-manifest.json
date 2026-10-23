@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.250",
+  "appVersion": "0.8.62.251",
   "sources": {
     "app-design.css": "dba9ff33ffb4162cf716c18ffee25a631ca662748d8222db376589a145162b92",
-    "app.js": "64d4f3a618e2738986775b60e0d15a8e13038eb19d84a3a7ba190dd76c570011",
+    "app.js": "890bacd5d46f58c51cc67a371f79098efd1e66cd01b83cb03d6f96348cba3aba",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
     "club-week.js": "8cf32ed2eb59ce212ad26677133fd539ea9a4e52443527b89cb396e37d3c8c9f",
     "Demo/current-fixtures.js": "62cf64a8f0d56e7cf01f1f45a84943125a1c60198af3d86e6e9f2ec8d8ffdf05",
