@@ -28,7 +28,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.256';
+const APP_UI_VERSION='0.8.62.257';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

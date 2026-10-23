@@ -75,6 +75,8 @@ for(const file of ['app.js','demo.html']){
 }
 test('delivered Head of Selections demo saves a shared keeper, then a day-specific keeper, with one season captain',async t=>{
  const h=await openDemo({product:'select',role:'head',journey:'selections'});t.after(h.close);
+ // The board may initially show a different week's fixtures, especially on Saturdays.
+ await h.choose('#seBoardDate',h.window.eval('demoSelections.fixtures.find(f=>f.id==="selection-second").details.days[0].date'));
  const query='[data-se-team="selection-second"]',keepers=()=>[...h.document.querySelectorAll(query+' [data-se-match-role="keeper"]')];
  assert.equal(keepers().length,1);assert.match(h.document.querySelector(query+' [data-se-role-group="captain"]').textContent,/Robin Hart/);
  const options=[...keepers()[0].options],original=keepers()[0].value,next=options.find(o=>o.value&&o.value!==original&&o.value!=='__se_separate_days__').value;
