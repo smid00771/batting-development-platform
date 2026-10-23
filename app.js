@@ -1,4 +1,4 @@
-import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.255';
+import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.256';
 import {createSocialAwardScopes} from './social-award-scopes.js?v=0.8.62.252';
 import {createSelectionGroupPermissions} from './selection-group-permissions.js?v=0.8.62.246';
 import {createSelectionGroupPage} from './selection-group-page.js?v=0.8.62.245';
@@ -28,7 +28,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.255';
+const APP_UI_VERSION='0.8.62.256';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
