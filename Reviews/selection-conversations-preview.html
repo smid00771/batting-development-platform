@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selection conversations — fictional review</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#24344c;font:15px/1.45 system-ui}main{max-width:1050px;margin:auto;padding:16px}h1{font-size:21px;margin:0}p{margin:6px 0 12px}button{min-height:44px;font:inherit;border:1px solid #cdd6e3;border-radius:6px;background:white;padding:6px 12px;color:inherit;cursor:pointer}button[aria-pressed=true]{background:#17245f;color:white}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.se-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}.se-card{padding:12px;background:white;border:1px solid #dbe3ed;border-radius:10px}.se-card h2{font-size:18px;margin:0}.se-card small{color:#52627a}.se-player-cell{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:56px;padding:4px 7px;margin:4px 0}.position{color:#52627a;font-size:12px;margin-right:8px}.season-stats{padding:12px;background:white;border:1px solid #dbe3ed;border-radius:10px}.ss-caption{font-size:13px;color:#52627a}@media(max-width:650px){main{padding:10px}.se-grid{grid-template-columns:minmax(0,1fr);gap:12px}h1{font-size:18px}}
+</style>
+<main><h1>Selection conversations</h1><p>Fictional players · shared application comparison and form components</p><div class="toolbar"><button id="board" aria-pressed="true">Selection Board</button><button id="compare" aria-pressed="false">Compare grades</button><label><input id="show" type="checkbox" checked> Show form indicators</label></div><section id="view"></section></main>
+<script type="module">
+import {selectionEvidenceFixture} from '../Tests/fixtures/selection_evidence_fixture.mjs';
+import {buildSeasonStats} from '../season-stats.js?v=0.8.62.260';
+import {buildSelectionEvidence} from '../selection-evidence.js?v=0.8.62.260';
+import {evidenceStyles,renderEvidenceBadges,bindEvidenceDetails,clearEvidenceLinks} from '../selection-evidence-ui.js?v=0.8.62.260';
+import {renderGradeComparison} from '../season-stats-panel.js?v=0.8.62.260';
+const fixture=selectionEvidenceFixture();
+fixture.roster.forEach(p=>p.fielding=p.id.startsWith('g1')?'strong':'needs_work');
+const stats=buildSeasonStats(fixture.context),model=buildSelectionEvidence(stats,fixture.teams,fixture.roster),view=document.querySelector('#view');
+let mode='board';
+function render(){
+ clearEvidenceLinks(view);
+ const visible=document.querySelector('#show').checked;
+ if(mode==='compare')view.innerHTML='<div class="season-stats">'+renderGradeComparison(stats,...fixture.teams,fixture.roster,model,'bowling')+'</div>';
+ else view.innerHTML=evidenceStyles+'<div class="se-grid">'+fixture.teams.map(team=>'<article class="se-card" data-se-team="'+team.id+'"><h2>'+team.grade+'</h2><small>Long form · 24 Oct</small>'+team.slots.map((slot,i)=>{const p=fixture.roster.find(p=>p.id===slot.d1);return '<div class="se-player-cell"><span><span class="position">'+(i+1)+'</span>'+p.name+'</span>'+renderEvidenceBadges(model.player(team.id,p.id),undefined,{compact:true})+'</div>';}).join('')+'</article>').join('')+'</div>';
+ if(!visible)view.querySelectorAll('[data-evidence-open]').forEach(e=>e.remove());
+ else bindEvidenceDetails(view,model);
+ document.querySelector('#board').setAttribute('aria-pressed',mode==='board');document.querySelector('#compare').setAttribute('aria-pressed',mode==='compare');
+}
+document.querySelector('#board').onclick=()=>{mode='board';render();};document.querySelector('#compare').onclick=()=>{mode='compare';render();};document.querySelector('#show').onchange=render;render();
+</script></html>
