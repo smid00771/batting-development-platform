@@ -3729,7 +3729,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.261.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.262.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -4730,6 +4730,18 @@ function compareSelectedGrades(summary, first, second, roster = []) {
   return Array.from({length:Math.max(first.slots?.length || 0,second.slots?.length || 0)}, (_, index) => ({position:index+1, first:cell(first, first.slots?.[index]), second:cell(second, second.slots?.[index])}));
 }
 
+// A season comparison includes every recorded appearance, even after a grade
+// move. Lists are alphabetical; their row numbers are never batting positions.
+function compareSeasonGrades(summary, first, second, roster = []) {
+  if (!first || !second || first.grade === second.grade || first.competition !== second.competition || first.format !== second.format) return [];
+  const players = new Map(roster.map(p => [p.id,p]));
+  const list = team => summary.rows.filter(row => row.group === groupKey(team.competition,team.grade) && row.format === team.format)
+    .map(stats => ({id:stats.roster_id || stats.id,name:players.get(stats.roster_id)?.name || stats.name,stats,day:null}))
+    .sort((a,b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  const a=list(first),b=list(second);
+  return Array.from({length:Math.max(a.length,b.length)},(_,index)=>({position:null,first:a[index]?[a[index]]:[],second:b[index]?[b[index]]:[]}));
+}
+
 function buildSeasonStats(context = {}, filters = {}) {
   const season = context.season || {}, today = context.today || season.end;
   const fixtures = (context.fixtures || []).filter(f => inSeason(dates(f)[0], season)).map(f => ({...f,format:statsFormat(f.format)}));
@@ -4905,7 +4917,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   }));
   return {rows:result, groups:[...groups.values()].sort((a,b) => a.grade.localeCompare(b.grade, undefined, {numeric:true}) || a.competition.localeCompare(b.competition)), formats:[...formats], issues:[...issues.values()], included, playing, season};
 }
-return {STATS_FORMATS,statsFormat,statsOvers,statsRate,latestStatsCards,compareSelectedGrades,buildSeasonStats};
+return {STATS_FORMATS,statsFormat,statsOvers,statsRate,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
 const __demoModule15=(()=>{
@@ -5151,6 +5163,7 @@ function assess(team,person,row) {
   return {bat:evaluate('bat',bat),ball:evaluate('ball',ball)};
 }
 function battingPositionFits(higher, lower) {
+  if (!Number.isInteger(higher.position) || !Number.isInteger(lower.position)) return false;
   if (!role(higher.person) || role(higher.person) !== role(lower.person)) return false;
   if (higher.position <= 2) return lower.position <= 2;
   if (higher.position <= 4) return lower.position >= 3 && Math.abs(lower.position-higher.position) <= 1;
@@ -5168,7 +5181,7 @@ function possiblePair(higher,lower,guide) {
   if (higher.person.id === lower.person.id || higher.person.active === false || lower.person.active === false) return null;
   if (higher.person.keeper && !lower.person.keeper) return null;
   const dates=team=>(team.days||[]).map(day=>day.date).join(',');
-  if (dates(higher.team) && dates(higher.team)===dates(lower.team) && higher.selectedDays.some(day=>!lower.selectedDays.includes(day))) return null;
+  if (!higher.seasonRecord && !lower.seasonRecord && dates(higher.team) && dates(higher.team)===dates(lower.team) && higher.selectedDays.some(day=>!lower.selectedDays.includes(day))) return null;
   const hb=battingEvidence(higher.stats),lb=battingEvidence(lower.stats),hw=bowlingEvidence(higher.stats,higher.person,higher.team.format),lw=bowlingEvidence(lower.stats,lower.person,lower.team.format);
   const needBowling=bowler(higher.person) || !!higher.stats?.bowling_balls;
   if (needBowling && !bowlingJobFits(higher.person,lower.person,higher.team.format)) return null;
@@ -5188,8 +5201,16 @@ function possiblePair(higher,lower,guide) {
   const economyCase=higher.team.format === 'limited_overs' && lower.ball?.state === 'strong' && workloadFit
     && equivalentWickets >= hw.wickets*.85 && equivalentEconomy < hw.economy && equivalentEconomy <= hw.economy*.85;
   if (needBowling && (!hw.ready || !lw.ready)) return null;
-  let kind='',reason='';
-  if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
+  // Frontline quicks are compared for their bowling job independently of their
+  // batting label. Batting and fielding remain separate selection context; the
+  // roster does not record opening/first-change bowling roles.
+  const frontlineQuicks=[higher,lower].every(item=>item.person.bowling==='pace' && item.person.bowling_load==='frontline');
+  let kind='',reason='',focus='';
+  if (frontlineQuicks && (bowlGain || economyCase || bowlComparable)) {
+    kind=bowlGain?'fit':economyCase?'tradeoff':'close';focus='bowling';
+    reason=bowlGain?'Bowling case · frontline quicks':economyCase?'Economy gain · wicket-taking trade-off':'Close bowling figures · frontline quicks';
+  }
+  else if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
   else if (needBowling && (bowlGain || economyCase)) {
     // Preserve an all-rounder's batting job. A lower-order bowler can be
     // compared on bowling without inventing a batting average from DNBs.
@@ -5205,10 +5226,10 @@ function possiblePair(higher,lower,guide) {
     else if (lowerOrderBowling && bowlComparable) {kind='close';reason='Close bowling figures';}
   }
   if (!kind) return null;
-  return {higher,lower,kind,reason,guide,equivalentBat,equivalentWickets,equivalentEconomy,
+  return {higher,lower,kind,reason,focus,guide,equivalentBat,equivalentWickets,equivalentEconomy,
     targetAverage:hb.average === null || hb.average === undefined ? null : hb.average/guide.batting};
 }
-function buildSelectionEvidence(summary,teams=[],people=[]) {
+function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}={}) {
   const roster=new Map(people.map(person=>[person.id,person])), players=new Map(), pairs=[];
   const validTeams=teams.filter(team=>eligibleTeam(team,summary.season));
   const playerKey=(teamId,playerId)=>JSON.stringify([teamId,playerId]);
@@ -5219,12 +5240,18 @@ function buildSelectionEvidence(summary,teams=[],people=[]) {
       const selectedDays=(team.days||[]).filter((_,day)=>slot['d'+(day+1)]===id).map(day=>day.date);
       players.set(playerKey(team.id,id),{key:playerKey(team.id,id),team,person,position:index+1,selectedDays,stats,otherGrades:otherGradeRows(summary,team,id),links:[],...assess(team,person,stats)});
     }
+    if (seasonPlayers) for (const stats of summary.rows) {
+      if (stats.competition!==team.competition || stats.grade!==team.grade || stats.format!==team.format) continue;
+      const person=roster.get(stats.roster_id),key=playerKey(team.id,stats.roster_id);
+      if (!person || person.active===false || players.has(key)) continue;
+      players.set(key,{key,team,person,position:null,seasonRecord:true,selectedDays:[],stats,otherGrades:otherGradeRows(summary,team,person.id),links:[],...assess(team,person,stats)});
+    }
   }
   for (let i=0;i<validTeams.length;i++) for (let j=i+1;j<validTeams.length;j++) {
     const guide=gradeGuide(validTeams[i],validTeams[j]); if (!guide) continue;
     const high=[...players.values()].filter(p=>p.team.id===guide.higher.id), low=[...players.values()].filter(p=>p.team.id===guide.lower.id);
     for (const higher of high) for (const lower of low) {
-      if (high.some(p=>p.person.id===lower.person.id)) continue;
+      if (high.some(p=>p.person.id===lower.person.id && !p.seasonRecord)) continue;
       const pair=possiblePair(higher,lower,guide); if (pair) pairs.push(pair);
     }
   }
@@ -5303,10 +5330,10 @@ function otherGradeRecords(item) {
 }
 function pairDetails(pair,index=0) {
   const {higher,lower}=pair, symbol=pair.kind==='tradeoff'?'≈':'↔';
-  return `<details class="se-evidence-pair" ${pair.number&&index===0?'open':''}><summary><strong>${pair.number?symbol+pair.number+' ':''}${escape(higher.person.name)} / ${escape(lower.person.name)}</strong><small>${escape(pair.reason)}</small></summary><div class="se-evidence-pair-grid">${[higher,lower].map(item=>`<div><strong>${escape(item.person.name)}</strong><small>${escape(item.team.grade)} · selected at ${item.position}</small><small>${escape(battingRoleLabel(item.person))}${item.ball?.applicable?' · '+escape(bowlingRoleLabel(item.person)):''}</small><small>Fielding: ${escape(fieldingLabel(item.person))} · selector rating</small>${record(item)}</div>`).join('')}</div>${pair.targetAverage!==null?`<p class="se-evidence-target">Rough batting target in ${escape(lower.team.grade)}: <strong>${number(pair.targetAverage)} average</strong>.<br>${escape(lower.person.name)}: roughly <strong>${number(pair.equivalentBat)}</strong> in ${escape(higher.team.grade)}.</p>`:''}${higher.ball?.applicable?`<p class="se-evidence-small">Rough bowling equivalent for ${escape(lower.person.name)}: ${number(pair.equivalentWickets)} wickets per 100 balls · ${number(pair.equivalentEconomy)} economy. Compare actual overs and the bowling job as well.</p>`:''}<p class="se-evidence-small">Check availability, actual batting opportunities, recorded fielding observations and team balance. Fielding is a selector rating, considered alongside the figures and especially relevant in shorter formats. Selected positions show the proposed order, not historical batting positions.</p></details>`;
+  return `<details class="se-evidence-pair" ${pair.number&&index===0?'open':''}><summary><strong>${pair.number?symbol+pair.number+' ':''}${escape(higher.person.name)} / ${escape(lower.person.name)}</strong><small>${escape(pair.reason)}</small></summary><p class="se-evidence-small">Discussion only · this link does not recommend dropping ${escape(higher.person.name)}. A player can have a case to move up while another presses for their place.</p><div class="se-evidence-pair-grid">${[higher,lower].map(item=>`<div><strong>${escape(item.person.name)}</strong><small>${escape(item.team.grade)} · ${item.position ? 'selected at '+item.position : 'season record'}</small><small>${escape(battingRoleLabel(item.person))}${item.ball?.applicable?' · '+escape(bowlingRoleLabel(item.person)):''}</small><small>Fielding: ${escape(fieldingLabel(item.person))} · selector rating</small>${record(item)}</div>`).join('')}</div>${pair.focus!=='bowling'&&pair.targetAverage!==null?`<p class="se-evidence-target">Rough batting target in ${escape(lower.team.grade)}: <strong>${number(pair.targetAverage)} average</strong>.<br>${escape(lower.person.name)}: roughly <strong>${number(pair.equivalentBat)}</strong> in ${escape(higher.team.grade)}.</p>`:''}${higher.ball?.applicable?`<p class="se-evidence-small"><strong>Bowling comparison in ${escape(higher.team.grade)}</strong><br>${escape(higher.person.name)} (actual): ${decimal(higher.stats?.bowling_balls ? higher.stats.wickets*100/higher.stats.bowling_balls : null)} wickets per 100 balls · ${decimal(higher.stats?.bowling_balls ? higher.stats.conceded*6/higher.stats.bowling_balls : null)} economy.<br>${escape(lower.person.name)} (rough equivalent): ${decimal(pair.equivalentWickets)} wickets per 100 balls · ${decimal(pair.equivalentEconomy)} economy.${pair.focus==='bowling'?' Batting and fielding are separate considerations for this bowling comparison.':' Compare actual overs and the bowling job as well.'}</p>`:''}<p class="se-evidence-small">Check availability, actual batting opportunities, recorded fielding observations and team balance. Fielding is a selector rating, considered alongside the figures and especially relevant in shorter formats. Selected positions show the proposed order, not historical batting positions.</p></details>`;
 }
 function help() {
-  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy. In the limited-overs trial, strong wicket-taking allows economy up to 35% above the pooled reference; the expensive-bowling check starts at 50% above it. Long form and T20 retain the 10% allowance and 25% expensive-bowling threshold. A limited-overs comparison can also flag at least 15% better economy with wicket-taking within 15% of the incumbent after the rough grade adjustment; it is labelled a trade-off. These are trial allowances, not measured format-specific benchmarks. Economical containment can offset fewer wickets. These are rough starting rules, not selection decisions.</li><li>Matching ↔ numbers link a selection conversation, including close calls within the rough 15% comparison range; ≈ flags a performance trade-off. A line joins the linked players when their grades are side by side. Click or tap the line to compare those players. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Possible swaps preserve batting roles and quick/spin type. Long-form comparisons preserve frontline/part-time roles and check observed workload. Opening/first-change and off-spin/leg-spin jobs are not yet recorded.</li></ul></details>`;
+  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy. In the limited-overs trial, strong wicket-taking allows economy up to 35% above the pooled reference; the expensive-bowling check starts at 50% above it. Long form and T20 retain the 10% allowance and 25% expensive-bowling threshold. A limited-overs comparison can also flag at least 15% better economy with wicket-taking within 15% of the incumbent after the rough grade adjustment; it is labelled a trade-off. These are trial allowances, not measured format-specific benchmarks. Economical containment can offset fewer wickets. These are rough starting rules, not selection decisions.</li><li>Matching ↔ numbers link a selection conversation, including close calls within the rough 15% comparison range; ≈ flags a performance trade-off. A line joins the linked players when their grades are side by side. Click or tap the line to compare those players. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Batting-led comparisons preserve batting roles. Frontline quicks can be compared on bowling alone regardless of batting-order labels; batting and fielding remain separate considerations. Quick/spin type is preserved. Long-form comparisons preserve frontline/part-time roles and check observed workload. Opening/first-change and off-spin/leg-spin jobs are not yet recorded.</li></ul></details>`;
 }
 function assessmentDetails(item,key,label,job) {
   const evidence=item[key],base=evidence.baseline;
@@ -5377,7 +5404,8 @@ function bindEvidenceLinks(host, model, here = () => true) {
       const button = buttons.find(button => button.dataset.evidenceOpen === key);
       const row = button?.closest('.se-player-cell,[data-evidence-row]');
       const column = row?.closest('[data-se-team],.ss-compare-cell');
-      return row && column ? {button,row,column} : null;
+      const anchor = root.matches('.ss-compare') ? row?.querySelector('[data-evidence-anchor]') || button : button;
+      return row && column ? {button,row,column,anchor} : null;
     };
     const links = pairs.map(pair => ({pair,ends:[endpoint(pair.higher.key),endpoint(pair.lower.key)]})).filter(link => link.ends.every(Boolean));
     if (!links.length) continue;
@@ -5418,7 +5446,7 @@ function bindEvidenceLinks(host, model, here = () => true) {
       svg.setAttribute('width', String(bounds.width)); svg.setAttribute('height', String(bounds.height));
       svg.setAttribute('viewBox', `0 0 ${bounds.width || 1} ${bounds.height || 1}`);
       for (const link of links) {
-        const ends = link.ends.map(end => ({...end,box:end.row.getBoundingClientRect(),card:end.column.getBoundingClientRect(),buttonBox:end.button.getBoundingClientRect()})).sort((a,b)=>a.box.left-b.box.left);
+        const ends = link.ends.map(end => ({...end,box:end.row.getBoundingClientRect(),card:end.column.getBoundingClientRect(),anchorBox:end.anchor.getBoundingClientRect()})).sort((a,b)=>a.box.left-b.box.left);
         const [left,right] = ends;
         // Board cards must share a grid row. Compare-grade cells can be at
         // different batting positions, but must still be in separate columns.
@@ -5428,7 +5456,7 @@ function bindEvidenceLinks(host, model, here = () => true) {
         link.group.style.display = sideBySide ? '' : 'none';
         if (!sideBySide) continue;
         const x1 = left.box.right-bounds.left, x2 = right.box.left-bounds.left;
-        const y1 = left.buttonBox.top+left.buttonBox.height/2-bounds.top, y2 = right.buttonBox.top+right.buttonBox.height/2-bounds.top;
+        const y1 = left.anchorBox.top+left.anchorBox.height/2-bounds.top, y2 = right.anchorBox.top+right.anchorBox.height/2-bounds.top;
         const middle = (x1+x2)/2;
         const curve=`M ${x1} ${y1} C ${middle} ${y1} ${middle} ${y2} ${x2} ${y2}`;
         link.path.setAttribute('d',curve);link.hit.setAttribute('d',curve);
@@ -5527,7 +5555,7 @@ return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,renderEvidence
 })();
 
 const __demoModule12=(()=>{
-const {buildSeasonStats, compareSelectedGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule13;
+const {buildSeasonStats, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule13;
 const {buildSelectionEvidence}=__demoModule14;
 const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule16;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -5548,9 +5576,9 @@ const css = `<style>
 .season-stats{margin:12px 0;padding:16px;border:1px solid #dbe3ed;border-radius:10px;background:white;color:#24344c}.season-stats h2{margin:0}.ss-top,.ss-filters,.ss-modes,.ss-season form{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.ss-top{justify-content:space-between}.ss-filters{align-items:end;margin:12px 0}.ss-filters label{display:grid;gap:4px;flex:1;min-width:130px}.ss-filters input,.ss-filters select{width:100%}.ss-modes{gap:4px}.ss-modes [aria-pressed=true],.ss-compare-mode [aria-pressed=true]{background:var(--navy,#17245f);color:#fff}.season-stats .btn{min-height:44px}.ss-season{font-size:13px;margin:8px 0}.ss-season summary{cursor:pointer;min-height:36px;align-content:center}.ss-season form{margin:8px 0}.ss-caption{font-size:13px;color:#52627a;margin:8px 0}.ss-status:empty{display:none}.ss-issues{background:#fff8e8;border:1px solid #e7c684;border-radius:7px;padding:8px 12px;margin:12px 0}.ss-issues.ss-source-notes{background:#f4f5f2;border-color:#dbe3d9}.ss-source-notes .ss-issue{border-color:#dbe3d9}.ss-issues summary{cursor:pointer;min-height:36px;align-content:center;font-weight:600}.ss-issue{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #e7d5b3}.ss-issue small{display:block}.ss-row{border-top:1px solid #e1e7ee}.ss-row summary{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;min-height:64px;cursor:pointer;list-style:none;padding:10px 2px}.ss-row summary::-webkit-details-marker{display:none}.ss-row summary:focus-visible{outline:2px solid #17245f;outline-offset:2px}.ss-name{font-weight:650;overflow-wrap:anywhere}.ss-name small{display:block;font-weight:400;font-size:12px;color:#52627a;margin-top:3px}.ss-values{text-align:right;font-size:13px;white-space:nowrap}.ss-values strong{display:block;font-size:17px}.ss-values small{display:block;margin-top:4px}.ss-row summary .ss-name:before{content:'▸ ';color:#52627a}.ss-row[open] summary .ss-name:before{content:'▾ '}.ss-detail{padding:0 2px 12px}.ss-metrics{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;margin:0 0 12px}.ss-metrics dt{color:#52627a}.ss-metrics dd{margin:2px 0 0;font-weight:600}.ss-match{display:flex;justify-content:space-between;align-items:start;gap:12px;padding:8px 0;border-top:1px solid #edf0f5;font-size:13px}.ss-match small{display:block;color:#52627a;margin-top:3px}.ss-match-score{text-align:right;flex-shrink:0}.ss-compare-controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin-top:12px}.ss-compare-controls label{display:grid;gap:4px;flex:1;min-width:110px}.ss-compare-mode{display:grid;gap:4px;min-width:0}.ss-compare-mode>span{font-size:13px;font-weight:600;line-height:1.4}.ss-compare-mode>div{display:flex;gap:4px}.ss-compare-mode .btn{flex:1;white-space:nowrap}.ss-compare-controls select{width:100%;min-height:44px}.ss-search{max-width:280px}.ss-empty{margin:16px 0}.ss-refresh{margin-left:auto}@media(max-width:480px){.ss-compare-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.ss-compare-controls label{min-width:0}.ss-compare-mode .btn,#app .ss-compare-mode .btn{padding:8px 3px}.season-stats{padding:12px}.ss-filters{gap:8px}.ss-filters label{min-width:110px}.ss-search{max-width:none}.ss-values{font-size:12px}.ss-values strong{font-size:16px}.ss-row summary{gap:6px}.ss-match{gap:8px}}
 </style>`;
 
-function renderGradeComparison(summary, first, second, roster, evidence = buildSelectionEvidence(summary, [first,second].filter(Boolean), roster), mode = 'batting', openable = null) {
-  const rows = compareSelectedGrades(summary, first, second, roster);
-  if (!rows.length) return '<p class="ss-empty">Choose two teams in the same competition and format.</p>';
+function renderGradeComparison(summary, first, second, roster, evidence = buildSelectionEvidence(summary, [first,second].filter(Boolean), roster), mode = 'batting', openable = null, seasonPlayers = false) {
+  const rows = (seasonPlayers ? compareSeasonGrades : compareSelectedGrades)(summary, first, second, roster);
+  if (!rows.length) return '<p class="ss-empty">'+(seasonPlayers ? 'No recorded appearances for these grades in this format.' : 'Choose two teams in the same competition and format.')+'</p>';
   if (!rows.some(row => row.first.length || row.second.length)) return '<p class="ss-empty">No players selected for these teams yet.</p>';
   const bowling = mode === 'bowling';
   const figures = stats => {
@@ -5560,8 +5588,23 @@ function renderGradeComparison(summary, first, second, roster, evidence = buildS
     if (!stats.bowling_innings) return '<small>No bowling recorded</small>';
     return `<span>${numeric(stats.bowling_average)} average</span><small>${stats.wickets} wickets · ${statsOvers(stats.bowling_balls) ?? '—'} overs · ${stats.bowling_innings} inns</small><small>${numeric(stats.economy)} Econ · ${numeric(stats.bowling_strike_rate)} S/R</small>`;
   };
-  const cell = (players,team) => players.length ? players.map(player => `<div data-evidence-row><strong>${playerName(player.id,player.name,openable)}</strong>${player.day ? `<small>Day ${player.day}</small>` : ''}${figures(player.stats)}${renderEvidenceBadges(evidence.player(team.id,player.id))}</div>`).join('') : '<small>Vacant</small>';
-  return evidenceStyles + `<style>.ss-compare{margin:12px 0}.ss-compare-row{display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,1fr);gap:10px;border-top:1px solid #e1e7ee;padding:10px 0;align-items:start}.ss-compare-cell{min-width:0;overflow-wrap:anywhere}.ss-compare-cell strong,.ss-compare-cell span,.ss-compare-cell small{display:block}.ss-compare-cell strong{font-size:14px}.ss-compare-cell span{margin-top:5px;font-size:14px}.ss-compare-cell small{font-size:12px;color:#52627a;margin:3px 0}.ss-compare-cell>div+div{border-top:1px dashed #dbe3ed;margin-top:8px;padding-top:8px}.ss-position{font-size:12px;color:#52627a;padding-top:2px}.ss-compare-head{font-weight:700}.ss-compare-head small{display:block;font-size:12px;font-weight:400}</style><p class="ss-caption">${first.lineupPublished ? 'Published' : 'Selected'} batting order · ${escape(STATS_FORMATS[first.format] || first.format)} season ${bowling ? 'bowling' : 'batting'} figures in each grade. Averages are not adjusted for grade strength. Open Form guide for the rough assessment.</p><div class="ss-compare" role="table" aria-label="Selected batting orders and season ${bowling ? 'bowling' : 'batting'} figures"><div class="ss-compare-row ss-compare-head" role="row"><span role="columnheader">#</span><span role="columnheader">${escape(first.grade)}${first.days?.[0]?.date ? `<small>Line-up: ${escape(date(first.days[0].date))}</small>` : ''}</span><span role="columnheader">${escape(second.grade)}${second.days?.[0]?.date ? `<small>Line-up: ${escape(date(second.days[0].date))}</small>` : ''}</span></div>${rows.map(row => `<div class="ss-compare-row" role="row"><span class="ss-position" role="rowheader">${row.position}</span><div class="ss-compare-cell" role="cell">${cell(row.first,first)}</div><div class="ss-compare-cell" role="cell">${cell(row.second,second)}</div></div>`).join('')}</div>`;
+  const badge = (player,team) => {
+    const selected=evidence.player(team.id,player.id);
+    if (selected || !seasonPlayers || !player.stats) return renderEvidenceBadges(selected);
+    const item=evidence.forRow(player.stats),key='stats:'+player.stats.id;
+    if (item) evidence.players.set(key,{...item,key});
+    return renderEvidenceBadges(item,key);
+  };
+  const cell = (players,team) => players.length ? players.map(player => `<div data-evidence-row><strong data-evidence-anchor>${playerName(player.id,player.name,openable)}</strong>${player.day ? `<small>Day ${player.day}</small>` : ''}${figures(player.stats)}${badge(player,team)}</div>`).join('') : seasonPlayers ? '' : '<small>Vacant</small>';
+  return evidenceStyles + `<style>.ss-compare{margin:12px 0}
+.ss-compare-row{display:grid;grid-template-columns:20px minmax(0,1fr) clamp(44px,6vw,72px) minmax(0,1fr);column-gap:0;row-gap:10px;border-top:1px solid #e1e7ee;padding:10px 0;align-items:start}
+.ss-compare-row>:last-child{grid-column:4}
+.ss-compare-season .ss-compare-row{grid-template-columns:minmax(0,1fr) clamp(44px,6vw,72px) minmax(0,1fr)}
+.ss-compare-season .ss-compare-row>:last-child{grid-column:3}
+.ss-compare [data-evidence-row].se-comparison-linked{box-shadow:none;border-radius:0;background:none}
+.ss-compare .se-comparison-active>[data-evidence-anchor]{background:#fff4d9;box-shadow:0 0 0 3px #fff4d9;border-radius:3px}
+.ss-compare .se-evidence-connectors g{opacity:.75}
+.ss-compare .se-evidence-connectors g.se-comparison-active,.ss-compare .se-evidence-connectors [role=button]:focus-visible{opacity:1}.ss-compare-cell{min-width:0;overflow-wrap:anywhere}.ss-compare-cell strong,.ss-compare-cell span,.ss-compare-cell small{display:block}.ss-compare-cell strong{font-size:14px}.ss-compare-cell span{margin-top:5px;font-size:14px}.ss-compare-cell small{font-size:12px;color:#52627a;margin:3px 0}.ss-compare-cell>div+div{border-top:1px dashed #dbe3ed;margin-top:8px;padding-top:8px}.ss-position{font-size:12px;color:#52627a;padding-top:2px}.ss-compare-head{font-weight:700}.ss-compare-head small{display:block;font-size:12px;font-weight:400}</style><p class="ss-caption">${seasonPlayers ? 'All season players, alphabetically' : (first.lineupPublished ? 'Published' : 'Selected')+' batting order'} · ${escape(STATS_FORMATS[first.format] || first.format)} season ${bowling ? 'bowling' : 'batting'} figures in each grade. Averages are not adjusted for grade strength. Open Form guide for the rough assessment.</p><div class="ss-compare${seasonPlayers ? ' ss-compare-season' : ''}" role="table" aria-label="${seasonPlayers ? 'All season players and' : 'Selected batting orders and'} season ${bowling ? 'bowling' : 'batting'} figures"><div class="ss-compare-row ss-compare-head" role="row">${seasonPlayers ? '' : '<span role="columnheader">#</span>'}<span role="columnheader">${escape(first.grade)}${!seasonPlayers && first.days?.[0]?.date ? `<small>Line-up: ${escape(date(first.days[0].date))}</small>` : ''}</span><span role="columnheader">${escape(second.grade)}${!seasonPlayers && second.days?.[0]?.date ? `<small>Line-up: ${escape(date(second.days[0].date))}</small>` : ''}</span></div>${rows.map(row => `<div class="ss-compare-row" role="row">${seasonPlayers ? '' : `<span class="ss-position" role="rowheader">${row.position}</span>`}<div class="ss-compare-cell" role="cell">${cell(row.first,first)}</div><div class="ss-compare-cell" role="cell">${cell(row.second,second)}</div></div>`).join('')}</div>`;
 }
 
 function renderStatsRows(rows, mode = 'batting', evidence = null, openable = null) {
@@ -5634,12 +5677,14 @@ function createSeasonStatsPanel(h) {
     const formatPublished = publishedTeams.filter(t => t.format === state.format);
     const dates = [...new Set(formatTeams.map(teamDate).filter(Boolean))].sort().reverse();
     const populated = dates.filter(day => formatTeams.some(t => teamDate(t) === day && t.slots?.some(slot => slot.d1 || slot.d2)));
-    const comparisonDate = dates.includes(state.compareDate) ? state.compareDate
+    const comparisonDate = state.compareDate === 'season' ? 'season' : dates.includes(state.compareDate) ? state.compareDate
       : formatPublished.length ? 'published'
       : populated.includes(s.boardDate) ? s.boardDate
       : populated.find(day => day <= (s.boardDate || data?.today || '9999-12-31')) || populated[0]
       || (dates.includes(s.boardDate) ? s.boardDate : dates[0]);
-    const teams = (comparisonDate === 'published' ? formatPublished : formatTeams.filter(t => !comparisonDate || teamDate(t) === comparisonDate)).sort((a,b) => (a.level ?? 999) - (b.level ?? 999) || a.grade.localeCompare(b.grade, undefined, {numeric:true}));
+    const seasonTeams = new Map();
+    [...formatTeams].sort((a,b)=>teamDate(a).localeCompare(teamDate(b))).concat(formatPublished).forEach(t=>seasonTeams.set(JSON.stringify([t.competition,t.grade]),t));
+    const teams = (comparisonDate === 'season' ? [...seasonTeams.values()] : comparisonDate === 'published' ? formatPublished : formatTeams.filter(t => !comparisonDate || teamDate(t) === comparisonDate)).sort((a,b) => (a.level ?? 999) - (b.level ?? 999) || a.grade.localeCompare(b.grade, undefined, {numeric:true}));
     const showCompetition = new Set(teams.map(t => t.competition)).size > 1;
     const teamLabel = team => escape(team.grade) + (showCompetition ? ' · ' + escape(team.competition || 'Competition unknown') : '');
     const previous = id => [...allTeams,...publishedTeams].find(t => t.id === id);
@@ -5655,14 +5700,14 @@ function createSeasonStatsPanel(h) {
     const formats = [...knownFormats,...(data ? buildSeasonStats(data).formats : []).filter(f => !knownFormats.includes(f))];
     const formatPicker = `<label class="ss-format">Format<select data-stats-filter="format" ${disabled}>${formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(STATS_FORMATS[f] || f)}</option>`).join('')}</select></label>`;
     const totals = data ? buildSeasonStats(data, state.compare ? {...state, groups:[primary, secondary].filter(Boolean).map(team => JSON.stringify([String(team.competition || '').trim(), String(team.grade || '').trim()]))} : state) : null;
-    s.evidence = data ? buildSelectionEvidence(buildSeasonStats(data),state.compare?[primary,secondary].filter(Boolean):[],s.roster) : null;
+    s.evidence = data ? buildSelectionEvidence(buildSeasonStats(data),state.compare?[primary,secondary].filter(Boolean):[],s.roster,{seasonPlayers:state.compare && comparisonDate === 'season'}) : null;
     s.host.innerHTML = evidenceStyles + css + `<section class="season-stats" aria-label="Season stats"><div class="ss-top"><h2 tabindex="-1">Season stats</h2><button type="button" class="btn ghost" data-stats-close>Close stats</button></div>${data ? `
       ${data.can_set_season ? `<details class="ss-season" ${state.seasonDraft ? 'open' : ''}><summary>${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</summary><form data-stats-season><label>Starts<input type="date" name="start" value="${escape(state.seasonDraft?.start ?? data.season.start)}" required ${disabled}></label><label>Ends<input type="date" name="end" value="${escape(state.seasonDraft?.end ?? data.season.end)}" required ${disabled}></label><button type="submit" class="btn secondary" ${disabled}>${s.savingSeason ? 'Saving…' : 'Save season dates'}</button></form></details>` : `<p class="ss-caption">${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</p>`}
       ${!state.compare ? `<div class="ss-filters">${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${formatPicker}</div>` : ''}
       <div class="ss-modes" aria-label="Statistics type"><button class="btn ghost" type="button" data-stats-mode="batting" aria-pressed="${state.mode !== 'bowling' && !state.compare}">Batting</button><button class="btn ghost" type="button" data-stats-mode="bowling" aria-pressed="${state.mode === 'bowling' && !state.compare}">Bowling</button>${canCompare ? `<button class="btn ghost" type="button" data-stats-compare aria-pressed="${!!state.compare}">Compare grades</button>` : ''}<button class="btn ghost ss-refresh" type="button" data-stats-refresh ${disabled}>${s.busy ? 'Updating…' : 'Update totals'}</button></div>
       <p class="ss-caption">${totals.included} completed ${totals.included === 1 ? 'scorecard' : 'scorecards'} · ${escape(STATS_FORMATS[state.format] || 'Current season')}${totals.playing ? ' · ' + totals.playing + ' in progress' : ''}</p>
       ${renderStatsIssues(totals.issues)}
-      ${state.compare ? `<div class="ss-compare-controls">${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Line-ups<select data-stats-date>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${dates.map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(buildSeasonStats(data), primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s)) : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `${totals.rows.length > 12 ? `<label class="ss-search">Find player<input type="search" data-stats-search value="${escape(state.search || '')}"></label>` : ''}<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
+      ${state.compare ? `<div class="ss-compare-controls">${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Players<select data-stats-date><option value="season" ${comparisonDate === 'season' ? 'selected' : ''}>All season players</option>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${dates.map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(buildSeasonStats(data), primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s), comparisonDate === 'season') : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `${totals.rows.length > 12 ? `<label class="ss-search">Find player<input type="search" data-stats-search value="${escape(state.search || '')}"></label>` : ''}<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
     if (totals && !state.compare) renderRows(s, totals, open);
     bindPlayerLinks(s);
     if (s.evidence) bindEvidenceDetails(s.host,s.evidence,()=>here(s));
@@ -5672,7 +5717,7 @@ function createSeasonStatsPanel(h) {
     s.host.querySelectorAll('[data-stats-mode]').forEach(el => el.onclick = () => {state.mode = el.dataset.statsMode; state.compare = false; draw(s); h.navigate?.();});
     s.host.querySelectorAll('[data-stats-compare-mode]').forEach(el => el.onclick = () => {state.mode = el.dataset.statsCompareMode; draw(s); h.navigate?.(); s.host.querySelector(`[data-stats-compare-mode="${state.mode}"]`)?.focus({preventScroll:true});});
     s.host.querySelector('[data-stats-compare]')?.addEventListener('click', () => {state.compare = !state.compare; state.grade = ''; draw(s); h.navigate?.();});
-    s.host.querySelector('[data-stats-date]')?.addEventListener('change', e => {state.compareDate = e.target.value; state.firstTeam = ''; state.secondTeam = ''; draw(s); h.navigate?.();});
+    s.host.querySelector('[data-stats-date]')?.addEventListener('change', e => {state.compareDate = e.target.value; draw(s); h.navigate?.();});
     s.host.querySelectorAll('[data-stats-team]').forEach(el => el.onchange = () => {state[el.dataset.statsTeam] = el.value; if (el.dataset.statsTeam === 'firstTeam') {state.secondTeam = ''; state.format = teams.find(t => t.id === el.value)?.format || state.format;} draw(s); h.navigate?.();});
     s.host.querySelector('[data-stats-search]')?.addEventListener('input', e => {state.search = e.target.value; renderRows(s, totals, open);});
     s.host.querySelectorAll('[data-stats-fixture]').forEach(el => el.onclick = () => {if (canLeave()) h.openFixture(s, el.dataset.statsFixture);});
@@ -8396,7 +8441,7 @@ const {selectionCallLink}=__demoModule27;
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.261';
+const APP_UI_VERSION='0.8.62.262';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

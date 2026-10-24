@@ -51,6 +51,27 @@ test('Compare grades uses the same connection and detached views release their o
  assert.equal(h.root.querySelector('.se-evidence-connectors'),null);h.dom.window.close();
 });
 
+test('Compare grades connects player names even when their statistics and form labels have different heights',async()=>{
+ const h=await setup(true);
+ const anchors=h.rows.map((row,i)=>{
+  const name=h.dom.window.document.createElement('strong');name.dataset.evidenceAnchor='';
+  name.textContent=(i?h.pair.lower:h.pair.higher).person.name;row.prepend(name);
+  name.getBoundingClientRect=()=>box(i?350:20,i?185:100,280,i?40:20);
+  h.buttons[i].getBoundingClientRect=()=>box(i?350:20,i?350:210,150,72);
+  return name;
+ });
+ h.ui.bindEvidenceLinks(h.host,h.model);
+ const group=h.root.querySelector('[data-evidence-connection]');
+ assert.equal(group.querySelector('.se-evidence-line').getAttribute('d'),'M 300 110 C 325 110 325 205 350 205');
+ assert.deepEqual([...group.querySelectorAll('circle')].map(dot=>dot.getAttribute('cy')),['110','205']);
+ anchors[1].getBoundingClientRect=()=>box(350,200,280,60);
+ h.dom.window.dispatchEvent(new h.dom.window.Event('resize'));
+ assert.equal(group.querySelector('.se-evidence-line').getAttribute('d'),'M 300 110 C 325 110 325 230 350 230');
+ group.dispatchEvent(new h.dom.window.MouseEvent('click',{bubbles:true,cancelable:true}));
+ assert.ok(h.host.querySelector('dialog').textContent.includes(h.pair.lower.person.name));
+ h.ui.clearEvidenceLinks(h.host);h.dom.window.close();
+});
+
 test('clicking a line opens only that pair, including fielding, and restores focus without choosing a player',async()=>{
  const h=await setup(false,1),group=h.root.querySelector('[data-evidence-connection]'),hit=group.querySelector('.se-evidence-hit');
  h.pair.higher.person.fielding='strong';h.pair.lower.person.fielding='needs_work';

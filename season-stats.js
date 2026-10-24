@@ -38,6 +38,18 @@ export function compareSelectedGrades(summary, first, second, roster = []) {
   return Array.from({length:Math.max(first.slots?.length || 0,second.slots?.length || 0)}, (_, index) => ({position:index+1, first:cell(first, first.slots?.[index]), second:cell(second, second.slots?.[index])}));
 }
 
+// A season comparison includes every recorded appearance, even after a grade
+// move. Lists are alphabetical; their row numbers are never batting positions.
+export function compareSeasonGrades(summary, first, second, roster = []) {
+  if (!first || !second || first.grade === second.grade || first.competition !== second.competition || first.format !== second.format) return [];
+  const players = new Map(roster.map(p => [p.id,p]));
+  const list = team => summary.rows.filter(row => row.group === groupKey(team.competition,team.grade) && row.format === team.format)
+    .map(stats => ({id:stats.roster_id || stats.id,name:players.get(stats.roster_id)?.name || stats.name,stats,day:null}))
+    .sort((a,b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  const a=list(first),b=list(second);
+  return Array.from({length:Math.max(a.length,b.length)},(_,index)=>({position:null,first:a[index]?[a[index]]:[],second:b[index]?[b[index]]:[]}));
+}
+
 export function buildSeasonStats(context = {}, filters = {}) {
   const season = context.season || {}, today = context.today || season.end;
   const fixtures = (context.fixtures || []).filter(f => inSeason(dates(f)[0], season)).map(f => ({...f,format:statsFormat(f.format)}));

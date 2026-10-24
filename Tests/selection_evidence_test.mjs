@@ -14,6 +14,39 @@ function scenario(options={}) {
 const bowl={bowling_balls:300,bowling_innings:5,wickets:10,conceded:150,economy:3};
 function allrounders(){const s=scenario();for(const p of s.roster)Object.assign(p,{bowling:'pace',bowling_load:'frontline'});Object.assign(s.summary.rows[0],bowl);Object.assign(s.summary.rows[1],bowl);Object.assign(s.summary.rows[2],bowl,{wickets:15,conceded:120,economy:2.4});return s;}
 
+test('frontline quick bowling comparisons do not depend on batting labels, positions or opportunities',()=>{
+ for(const batting of ['top','middle','lower','unknown']){
+  const s=allrounders();s.high.format=s.low.format='limited_overs';
+  s.summary.rows.forEach(r=>Object.assign(r,{format:'limited_overs',runs:0,innings:0,not_outs:0,average:null}));
+  s.roster[0].batting=batting;s.roster[2].batting='lower';
+  const before=JSON.stringify(s.summary),pair=s.build().pairs.find(p=>p.higher.person.id==='incumbent');
+  assert.equal(pair.focus,'bowling');assert.equal(pair.kind,'fit');assert.match(pair.reason,/frontline quicks/);
+  assert.equal(JSON.stringify(s.summary),before);assert.equal(s.roster[0].batting,batting);
+ }
+});
+
+test('frontline quick comparison still requires opportunity, compatible workload, complete figures and keeper cover',()=>{
+ for(const change of [{bowling_innings:1},{bowling_balls:59},{bowling_complete:false},{wickets:null}]){
+  const s=allrounders();s.high.format=s.low.format='limited_overs';s.summary.rows.forEach(r=>r.format='limited_overs');
+  s.roster[0].batting='middle';s.roster[2].batting='lower';Object.assign(s.summary.rows[0],change);
+  assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));
+ }
+ const s=allrounders();s.roster[0].keeper=true;
+ assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));
+ s.roster[0].keeper=false;s.roster[2].bowling_load='part_time';assert.equal(s.build().pairs.length,0);
+ s.roster[2].bowling_load='unknown';assert.equal(s.build().pairs.length,0);
+ s.roster[2].bowling_load='frontline';s.roster[2].bowling='spin';assert.equal(s.build().pairs.length,0);
+});
+
+test('season-wide bowling comparisons include earlier grade records without assigning historical batting positions',()=>{
+ const s=allrounders();s.high.slots=[{d1:'incumbent'}];s.roster[1].batting='middle';s.roster[2].batting='lower';
+ assert.equal(s.build().player('high','peer'),undefined);
+ const m=buildSelectionEvidence(s.summary,[s.high,s.low],s.roster,{seasonPlayers:true});
+ const historic=m.player('high','peer');assert.equal(historic.position,null);assert.equal(historic.seasonRecord,true);
+ assert.ok(m.pairs.some(p=>p.higher===historic && p.focus==='bowling'));
+ assert.equal(battingPositionFits(historic,m.player('low','candidate')),false);
+});
+
 test('moving up a grade preserves lower-grade form as context without manufacturing a higher-grade rating or swap',()=>{
  const s=scenario(),lower=s.summary.rows[2];s.high.slots.push({d1:'candidate'});s.low.slots=[];
  const before=JSON.stringify(s.summary),m=s.build(),promoted=m.player('high','candidate');
@@ -267,8 +300,8 @@ test('bowling colours retain zero wickets and recognise economical containment',
  Object.assign(s.summary.rows[0],{conceded:30,economy:.6});m=s.build();assert.notEqual(m.player('high','incumbent').ball.state,'low');
  assert.equal(bowlingEvidence(s.summary.rows[0],s.roster[0],'long_form').wickets,0);
 });
-test('bowling comparisons retain an all-rounder batting trade-off and keeper cover',()=>{
- const s=allrounders();Object.assign(s.summary.rows[0],{runs:160,average:40});Object.assign(s.summary.rows[2],{runs:40,average:10,wickets:30,conceded:90});
+test('spin all-rounder comparisons retain their batting trade-off and keeper cover',()=>{
+ const s=allrounders();s.roster.forEach(p=>p.bowling='spin');Object.assign(s.summary.rows[0],{runs:160,average:40});Object.assign(s.summary.rows[2],{runs:40,average:10,wickets:30,conceded:90});
  let pair=s.build().pairs.find(p=>p.higher.person.id==='incumbent');assert.equal(pair.kind,'tradeoff');assert.equal(pair.reason,'Bowling gain · batting trade-off');
  s.roster[0].keeper=true;assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));
 });

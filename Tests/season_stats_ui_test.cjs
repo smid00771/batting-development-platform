@@ -54,6 +54,34 @@ test('comparison toggles batting and bowling without losing teams, date, focus o
  h.click('[data-stats-compare-mode=batting]');assert.deepEqual(selection(),chosen);assert.match(cell(),/140 runs · 4 inns/);assert.equal(h.dom.window.document.activeElement.dataset.statsCompareMode,'batting');
  h.panel.mount(h.host,{...h.options,state:{...h.s.state,mode:'bowling'}});assert.match(cell(),/12 wickets/);assert.equal(h.host.querySelector('[data-stats-compare-mode=bowling]').getAttribute('aria-pressed'),'true');
 });
+
+test('all season players shows both grade records after a player moves, without inventing a batting position',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ const moved=f.roster[0];
+ f.context.identities.find(p=>p.source_id==='source-g2p0').roster_id=moved.id;
+ f.teams[0].slots[0]={};f.teams[0].published.slots[0]={};
+ f.teams[1].slots[0]={d1:moved.id};f.teams[1].published.slots[0]={d1:moved.id};
+ const opened=[],h=await harness(f.context,{teams:f.teams,roster:f.roster},{canOpenPlayer:()=>true,openPlayer:(s,id)=>opened.push(id)});
+ h.click('[data-stats-compare]');assert.equal(h.host.querySelectorAll(`[data-stats-open-player="${moved.id}"]`).length,1);
+ const selected=[h.s.state.firstTeam,h.s.state.secondTeam];
+ change(h,'[data-stats-date]','season');
+ assert.deepEqual([h.s.state.firstTeam,h.s.state.secondTeam],selected);
+ assert.equal(h.host.querySelectorAll(`[data-stats-open-player="${moved.id}"]`).length,2);
+ const records=[...h.host.querySelectorAll(`[data-stats-open-player="${moved.id}"]`)].map(n=>n.closest('[data-evidence-row]').textContent);
+ assert.ok(records.some(text=>text.includes('10 average')&&text.includes('40 runs')));
+ assert.ok(records.some(text=>text.includes('38 average')&&text.includes('152 runs')));
+ assert.equal(h.host.querySelectorAll('.ss-position').length,0);
+ assert.doesNotMatch(h.host.querySelector('.ss-compare').textContent,/Vacant|Line-up:/);
+ const historic=h.host.querySelector(`[data-stats-open-player="${moved.id}"]`).closest('[data-evidence-row]');
+ historic.querySelector('[data-evidence-open]').click();
+ assert.match(h.host.querySelector('dialog').textContent,/Form guide · 1st Grade/);
+ h.host.querySelector('[data-evidence-close]').click();
+ h.click('[data-stats-compare-mode=bowling]');assert.equal(h.host.querySelector('[data-stats-date]').value,'season');
+ h.click('[data-stats-refresh]');await tick();assert.equal(h.host.querySelectorAll(`[data-stats-open-player="${moved.id}"]`).length,2);
+ h.click(`[data-stats-open-player="${moved.id}"]`);assert.deepEqual(opened,[moved.id]);
+ change(h,'[data-stats-date]','published');assert.equal(h.host.querySelectorAll(`[data-stats-open-player="${moved.id}"]`).length,1);
+ assert.equal(h.host.querySelector('[data-stats-compare-mode=bowling]').getAttribute('aria-pressed'),'true');
+});
 test('refresh acknowledges progress, ignores repeat clicks and recovers from failure',async()=>{
  const h=await harness();let finish;h.reply(()=>new Promise(r=>finish=r));h.click('[data-stats-refresh]');assert.equal(h.host.querySelector('[data-stats-refresh]').disabled,true);assert.match(h.host.textContent,/Updating/);h.click('[data-stats-refresh]');assert.equal(h.calls.length,2);
  finish({data:null,error:{message:'Connection lost'}});await tick();assert.equal(h.host.querySelector('[data-stats-refresh]').disabled,false);assert.match(h.host.querySelector('[role=alert]').textContent,/Connection lost/);
@@ -150,7 +178,7 @@ test('cancelled and out-of-season lineups are unavailable; competition labels an
  const valid=datedTeams('2026-10-17'),other=valid.map(t=>({...t,id:'other-'+t.id,competition:'Other competition'}));
  const excluded=[...datedTeams('2025-10-17'),...datedTeams('2026-10-24').map(t=>({...t,cancelled:true}))];
  const h=await harness(data(),{boardDate:'2026-10-24',teams:[...valid,...other,...excluded]});h.click('[data-stats-compare]');
- assert.deepEqual([...h.host.querySelector('[data-stats-date]').options].map(o=>o.value),['2026-10-17']);
+ assert.deepEqual([...h.host.querySelector('[data-stats-date]').options].map(o=>o.value),['season','2026-10-17']);
  assert.deepEqual([...h.host.querySelectorAll('[data-stats-team]')].map(el=>el.selectedOptions[0].textContent),['First · NDCA','Second · NDCA']);
  const second=h.host.querySelector('[data-stats-team=secondTeam]');assert.ok([...second.options].every(o=>o.textContent.endsWith(' · NDCA')));
  change(h,'[data-stats-team=firstTeam]',other[0].id);

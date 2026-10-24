@@ -143,6 +143,7 @@ function assess(team,person,row) {
   return {bat:evaluate('bat',bat),ball:evaluate('ball',ball)};
 }
 export function battingPositionFits(higher, lower) {
+  if (!Number.isInteger(higher.position) || !Number.isInteger(lower.position)) return false;
   if (!role(higher.person) || role(higher.person) !== role(lower.person)) return false;
   if (higher.position <= 2) return lower.position <= 2;
   if (higher.position <= 4) return lower.position >= 3 && Math.abs(lower.position-higher.position) <= 1;
@@ -160,7 +161,7 @@ function possiblePair(higher,lower,guide) {
   if (higher.person.id === lower.person.id || higher.person.active === false || lower.person.active === false) return null;
   if (higher.person.keeper && !lower.person.keeper) return null;
   const dates=team=>(team.days||[]).map(day=>day.date).join(',');
-  if (dates(higher.team) && dates(higher.team)===dates(lower.team) && higher.selectedDays.some(day=>!lower.selectedDays.includes(day))) return null;
+  if (!higher.seasonRecord && !lower.seasonRecord && dates(higher.team) && dates(higher.team)===dates(lower.team) && higher.selectedDays.some(day=>!lower.selectedDays.includes(day))) return null;
   const hb=battingEvidence(higher.stats),lb=battingEvidence(lower.stats),hw=bowlingEvidence(higher.stats,higher.person,higher.team.format),lw=bowlingEvidence(lower.stats,lower.person,lower.team.format);
   const needBowling=bowler(higher.person) || !!higher.stats?.bowling_balls;
   if (needBowling && !bowlingJobFits(higher.person,lower.person,higher.team.format)) return null;
@@ -180,8 +181,16 @@ function possiblePair(higher,lower,guide) {
   const economyCase=higher.team.format === 'limited_overs' && lower.ball?.state === 'strong' && workloadFit
     && equivalentWickets >= hw.wickets*.85 && equivalentEconomy < hw.economy && equivalentEconomy <= hw.economy*.85;
   if (needBowling && (!hw.ready || !lw.ready)) return null;
-  let kind='',reason='';
-  if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
+  // Frontline quicks are compared for their bowling job independently of their
+  // batting label. Batting and fielding remain separate selection context; the
+  // roster does not record opening/first-change bowling roles.
+  const frontlineQuicks=[higher,lower].every(item=>item.person.bowling==='pace' && item.person.bowling_load==='frontline');
+  let kind='',reason='',focus='';
+  if (frontlineQuicks && (bowlGain || economyCase || bowlComparable)) {
+    kind=bowlGain?'fit':economyCase?'tradeoff':'close';focus='bowling';
+    reason=bowlGain?'Bowling case · frontline quicks':economyCase?'Economy gain · wicket-taking trade-off':'Close bowling figures · frontline quicks';
+  }
+  else if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
   else if (needBowling && (bowlGain || economyCase)) {
     // Preserve an all-rounder's batting job. A lower-order bowler can be
     // compared on bowling without inventing a batting average from DNBs.
@@ -197,10 +206,10 @@ function possiblePair(higher,lower,guide) {
     else if (lowerOrderBowling && bowlComparable) {kind='close';reason='Close bowling figures';}
   }
   if (!kind) return null;
-  return {higher,lower,kind,reason,guide,equivalentBat,equivalentWickets,equivalentEconomy,
+  return {higher,lower,kind,reason,focus,guide,equivalentBat,equivalentWickets,equivalentEconomy,
     targetAverage:hb.average === null || hb.average === undefined ? null : hb.average/guide.batting};
 }
-export function buildSelectionEvidence(summary,teams=[],people=[]) {
+export function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}={}) {
   const roster=new Map(people.map(person=>[person.id,person])), players=new Map(), pairs=[];
   const validTeams=teams.filter(team=>eligibleTeam(team,summary.season));
   const playerKey=(teamId,playerId)=>JSON.stringify([teamId,playerId]);
@@ -211,12 +220,18 @@ export function buildSelectionEvidence(summary,teams=[],people=[]) {
       const selectedDays=(team.days||[]).filter((_,day)=>slot['d'+(day+1)]===id).map(day=>day.date);
       players.set(playerKey(team.id,id),{key:playerKey(team.id,id),team,person,position:index+1,selectedDays,stats,otherGrades:otherGradeRows(summary,team,id),links:[],...assess(team,person,stats)});
     }
+    if (seasonPlayers) for (const stats of summary.rows) {
+      if (stats.competition!==team.competition || stats.grade!==team.grade || stats.format!==team.format) continue;
+      const person=roster.get(stats.roster_id),key=playerKey(team.id,stats.roster_id);
+      if (!person || person.active===false || players.has(key)) continue;
+      players.set(key,{key,team,person,position:null,seasonRecord:true,selectedDays:[],stats,otherGrades:otherGradeRows(summary,team,person.id),links:[],...assess(team,person,stats)});
+    }
   }
   for (let i=0;i<validTeams.length;i++) for (let j=i+1;j<validTeams.length;j++) {
     const guide=gradeGuide(validTeams[i],validTeams[j]); if (!guide) continue;
     const high=[...players.values()].filter(p=>p.team.id===guide.higher.id), low=[...players.values()].filter(p=>p.team.id===guide.lower.id);
     for (const higher of high) for (const lower of low) {
-      if (high.some(p=>p.person.id===lower.person.id)) continue;
+      if (high.some(p=>p.person.id===lower.person.id && !p.seasonRecord)) continue;
       const pair=possiblePair(higher,lower,guide); if (pair) pairs.push(pair);
     }
   }
