@@ -78,7 +78,7 @@ test('early bowling uses the whole-grade reference equally for quicks and spinne
  Object.assign(s.summary.rows[1],{wickets:3,conceded:51,bowling_balls:72,bowling_innings:2});
  Object.assign(s.summary.rows[2],{wickets:5,conceded:35,bowling_balls:96,bowling_innings:2});
  const m=s.build(),spinner=m.player('high','incumbent').ball,quick=m.player('high','peer').ball,lower=m.player('low','candidate').ball;
- assert.equal(spinner.state,'steady');assert.equal(quick.state,'steady');assert.deepEqual(spinner.baseline,quick.baseline);
+ assert.equal(spinner.state,'strong');assert.equal(quick.state,'strong');assert.deepEqual(spinner.baseline,quick.baseline);
  assert.equal(lower.state,'strong');assert.equal(lower.early,true);assert.equal(lower.baseline.economy,115400*6/214773);
  s.summary.rows=s.summary.rows.slice(2);assert.deepEqual(s.build().player('low','candidate').ball,lower);
  Object.assign(s.summary.rows[0],{bowling_innings:1});assert.equal(s.build().player('low','candidate').ball.state,'building');
@@ -280,10 +280,26 @@ test('cancelled or prior-season lineups do not produce links and no input data i
  s.low.cancelled=true;assert.equal(s.build().pairs.length,0);s.low.cancelled=false;s.low.days[0].date='2025-10-17';assert.equal(s.build().pairs.length,0);
 });
 
-test('a numbered marker appears at both ends and no person receives multiple numbered swaps',()=>{
+test('every qualifying conversation has matching numbers, including several candidates for one place',()=>{
  const s=scenario();s.roster.push(person('second-candidate'));s.low.slots.push({d1:'second-candidate'});s.summary.rows.push(row('second-candidate','2nd Grade',60));
- const m=s.build();for(const p of m.players.values())assert.ok(p.links.filter(p=>p.number).length<=1);
+ const m=s.build();assert.ok([...m.players.values()].some(p=>p.links.length>1));
+ assert.equal(new Set(m.pairs.map(p=>p.number)).size,m.pairs.length);assert.ok(m.pairs.every(p=>p.number));
  for(const pair of m.pairs.filter(p=>p.number)){assert.ok(pair.higher.links.includes(pair));assert.ok(pair.lower.links.includes(pair));}
+});
+test('close batting calls use the same grade adjustment and opportunity checks as stronger cases',()=>{
+ const s=scenario();s.summary.rows[2]=row('candidate','2nd Grade',17);
+ let pair=s.build().pairs.find(p=>p.higher.person.id==='incumbent');
+ assert.equal(pair.kind,'close');assert.equal(pair.reason,'Close batting figures');
+ assert.equal(pair.equivalentBat,8.5);assert.equal(pair.higher.stats.average,10);
+ s.summary.rows[2]=row('candidate','2nd Grade',16.5);
+ assert.equal(s.build().pairs.length,0,'Below the rough comparable range');
+ s.summary.rows[2]=row('candidate','2nd Grade',17,{innings:2,not_outs:0});
+ assert.equal(s.build().pairs.length,0,'An early positive flag does not waive the full comparison sample');
+});
+test('conversation eligibility is unchanged by names, reputation or pathway labels',()=>{
+ const s=scenario(),before=s.build().pairs.map(p=>[p.higher.person.id,p.lower.person.id,p.kind]).sort();
+ s.roster.forEach((p,i)=>Object.assign(p,{name:['Established favourite','Unknown player','Academy captain'][i],reputation:100-i,academy:i===0}));
+ assert.deepEqual(s.build().pairs.map(p=>[p.higher.person.id,p.lower.person.id,p.kind]).sort(),before);
 });
 test('bracketed players must cover the incumbent’s selected days in the same round',()=>{
  const s=scenario();s.high.days=s.low.days=[{date:'2026-10-17'},{date:'2026-10-24'}];s.high.slots[0].d2='incumbent';
