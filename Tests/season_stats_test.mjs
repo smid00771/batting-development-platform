@@ -12,6 +12,20 @@ const fixture = (id='f1',extra={}) => ({id,grade:'1st Grade',competition:'Distri
 const context = (cards=[card()],extra={}) => ({season:{start:'2026-07-01',end:'2027-06-30',label:'2026/27',revision:0},today:'2026-10-17',cards,fixtures:[],identities:[{source_id:'p1',roster_id:'r1',name:'Alex'},{source_id:'p2',roster_id:'r2',name:'Jamie'}],...extra});
 const player = (summary,id='r1') => summary.rows.find(p=>p.roster_id===id);
 
+test('withheld PlayHQ details are distinguished from repeated or malformed player IDs',()=>{
+ const c=card();c.scorecard.provider='playhq_au';
+ c.scorecard.innings[0].batters.push(batter(null,0,false,{name:null,importable:false}));
+ let messages=buildSeasonStats(context([c])).issues.flatMap(i=>i.messages);
+ assert.ok(messages.some(m=>m.startsWith('PlayCricket has withheld some player details')));
+ assert.equal(buildSeasonStats(context([c])).issues[0].requires_attention,false);
+ assert.ok(!messages.includes('Check repeated or missing player IDs'));
+ c.scorecard.innings[0].batters.push(batter());
+ messages=buildSeasonStats(context([c])).issues.flatMap(i=>i.messages);
+ assert.ok(messages.includes('Check repeated or missing player IDs'));
+ assert.equal(buildSeasonStats(context([c])).issues[0].requires_attention,true);
+ assert.equal(player(buildSeasonStats(context([c]))).runs,50);
+});
+
 test('corrections replace the entire match; duplicate imports never add totals',()=>{
  const old=card(),updated=clone(old);updated.snapshot_id='new';updated.fetched_at='2026-10-12T00:00:00Z';updated.scorecard.innings[0].batters[0].runs=80;
  const result=buildSeasonStats(context([old,updated,old,updated]));
@@ -115,4 +129,12 @@ test('demo seeds shared fictional data once, reuses corrections and enforces rol
  assert.equal(buildSeasonStats(rpc(args)).included,3);assert.equal(buildSeasonStats(rpc(args)).rows[0].hundreds,1);
  member={user_id:'nobody',permission_role:'none'};assert.throws(()=>rpc(args),/access/);member={user_id:'u',permission_role:'none'};
  assert.throws(()=>rpc({...args,p_action:'set_season',p_data:{}}),/Admin/);
+});
+
+test('unlinked PlayHQ appearances explain unchanged totals, then join only after confirmation',()=>{
+ const a=card('today',{provider:'playhq_au'}),b=card('previous');a.scorecard.teams[0].players[0].player_id='appearance';a.scorecard.innings[0].batters[0].player_id='appearance';
+ const c=context([a,b]),first=buildSeasonStats(c);
+ assert.equal(player(first).runs,50);assert.ok(first.issues.some(i=>i.messages.includes('Link 1 scorecard player to update their season totals')));
+ c.identities.push({source_id:'appearance',roster_id:'r1',name:'Alex'});
+ const confirmed=buildSeasonStats(c);assert.equal(player(confirmed).runs,100);assert.ok(!confirmed.issues.some(i=>i.messages.some(m=>m.startsWith('Link '))));
 });

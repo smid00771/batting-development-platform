@@ -148,3 +148,20 @@ test('demo can confirm a batting-only identity from innings without inventing a 
  const state={roster:[],fixtures:[]},people=[{id:'original',display_name:'Ollie Smith'}],card={dates:['2026-10-10'],teams:[{id:'ours'}],innings:[{team_id:'ours',batters:[{player_id:'source',name:'Oliver Smith'}]}]},rpc=createScorecardTeamDemo(()=>state,()=>card,()=>people);
  const result=await rpc('confirm_identity',{snapshot_id:'s',request_id:'once',team_id:'ours',source_player_id:'source',player_id:'original',expected_name:'Ollie Smith'});assert.equal(result.player_id,'original');assert.equal(result.roster_id,null);assert.equal(people[0].display_name,'Oliver Smith');assert.equal(state.roster.length,0);
 });
+
+test('withheld PlayHQ players do not block confirmation of visible players or silently guess identities',async()=>{
+ const ctx=context();ctx.card.provider='playhq_au';ctx.card.teams[0].lineup_available=false;ctx.card.teams[0].players.push({player_id:null,name:null});ctx.links=[{source_id:'source-a',roster_id:'a'}];
+ const h=harness(async(args,name)=>{
+  if(name==='confirm_scorecard_player'){ctx.links.push({source_id:'source-b',roster_id:'b'});return {data:{confirmed:true}};}
+  assert.equal(args.p_action,'context','An incomplete lineup must not be applied as a full XI');return {data:ctx};
+ });await settle();
+ assert.match(h.host.textContent,/withheld some player details/);assert.equal(h.host.querySelectorAll('[data-pc-same]').length,1);assert.equal(h.host.querySelector('[data-pc-same]').textContent,'Yes, link player');
+ assert.equal(h.calls.length,1);h.host.querySelector('[data-pc-same]').click();await settle();
+ assert.equal(h.changed,1);assert.equal(h.host.querySelector('[data-pc-same]'),null);assert.equal(h.host.querySelector('[data-pc-apply]'),null);
+ assert.equal(h.calls.filter(c=>c.name==='confirm_scorecard_player').length,1);
+});
+test('a full-name suggestion for a new PlayHQ appearance still needs confirmation without a saved source link',async()=>{
+ const ctx=context();ctx.card.provider='playhq_au';const h=harness(async args=>({data:ctx}));await settle();
+ assert.equal(h.host.querySelectorAll('[data-pc-same]').length,2);assert.equal(h.calls.length,1);assert.equal(h.host.querySelector('[data-pc-apply]'),null);
+ assert.doesNotThrow(()=>scorecardPlayerMatches([{player_id:null,name:null}],ctx.roster));
+});

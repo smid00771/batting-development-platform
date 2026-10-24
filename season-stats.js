@@ -42,12 +42,15 @@ export function buildSeasonStats(context = {}, filters = {}) {
   const cards = latestStatsCards(context.cards), identities = new Map((context.identities || []).map(x => [x.source_id, x]));
   const rows = new Map(), issues = new Map(), groups = new Map(), formats = new Set(), matched = new Set();
   let included = 0, playing = 0;
-  const problem = (id, message, fixture, card, grade, competition, format) => {
+  const matchesFilters = (group, format) => (!filters.grade || filters.grade === group)
+    && (!Array.isArray(filters.groups) || filters.groups.includes(group))
+    && (!filters.format || filters.format === format);
+  const problem = (id, message, fixture, card, grade, competition, format, requiresAttention = true) => {
     const group = groupKey(competition, grade);
-    if (filters.grade && filters.grade !== group || filters.format && filters.format !== format) return;
+    if (!matchesFilters(group, format)) return;
     const old = issues.get(id);
-    if (old) { if (!old.messages.includes(message)) old.messages.push(message); return; }
-    issues.set(id, {id, messages:[message], fixture_id:fixture?.id || null, grade:grade || 'Match', competition:competition || '', date:dates(fixture || {})[0] || card?.dates?.[0], url:card?.url || null});
+    if (old) { if (!old.messages.includes(message)) old.messages.push(message); old.requires_attention ||= requiresAttention; return; }
+    issues.set(id, {id, messages:[message], requires_attention:requiresAttention, fixture_id:fixture?.id || null, grade:grade || 'Match', competition:competition || '', date:dates(fixture || {})[0] || card?.dates?.[0], url:card?.url || null});
   };
   const observeGroup = (competition, grade, format) => {
     const id = groupKey(competition, grade);
@@ -85,8 +88,8 @@ export function buildSeasonStats(context = {}, filters = {}) {
     const competition = fixture?.competition || card.competition || '';
     const format = card.format_key || fixture?.format || 'unknown';
     const group = observeGroup(competition, grade, format);
-    if (filters.grade && filters.grade !== group || filters.format && filters.format !== format) continue;
-    const issue = message => problem(card.match_id, message, fixture, card, grade, competition, format);
+    if (!matchesFilters(group, format)) continue;
+    const issue = (message, requiresAttention = true) => problem(card.match_id, message, fixture, card, grade, competition, format, requiresAttention);
     if (card.status !== 'completed') { playing++; if (date < today) issue('Scores still in progress'); continue; }
     if (date > today) { issue('Check the match date'); continue; }
     const team = card.teams?.find(t => t.id === wrapped.our_team);
@@ -102,6 +105,8 @@ export function buildSeasonStats(context = {}, filters = {}) {
         if (player.player_id && (innings.team_id === team.id || player.team_id === team.id)) observed.set(player.player_id, player);
       }
     }
+    const unlinked = card.provider === 'playhq_au' ? [...observed.keys()].filter(source => !identities.get(source)?.roster_id && !identities.get(source)?.player_id).length : 0;
+    if (unlinked) issue(`Link ${unlinked} scorecard player${unlinked === 1 ? '' : 's'} to update their season totals`);
     const seenIdentity = new Map(), conflicts = new Set();
     for (const source of observed.keys()) {
       const id = playerKey(source);
@@ -154,7 +159,11 @@ export function buildSeasonStats(context = {}, filters = {}) {
       }
       const people = batting ? innings.batters || [] : innings.bowlers || [], seen = new Set();
       for (const player of people) {
-        if (!player.player_id || seen.has(player.player_id)) { issue('Check repeated or missing player IDs'); continue; }
+        if (!player.player_id || seen.has(player.player_id)) {
+          const withheld = card.provider === 'playhq_au' && !player.player_id && !player.name;
+          issue(withheld ? 'PlayCricket has withheld some player details; those figures cannot be assigned' : 'Check repeated or missing player IDs', !withheld);
+          continue;
+        }
         seen.add(player.player_id);
         if (!batting && player.team_id !== team.id) { issue('Check the bowling team'); continue; }
         const target = rowFor(player);

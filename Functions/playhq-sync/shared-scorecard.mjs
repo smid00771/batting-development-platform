@@ -5,6 +5,9 @@ import {gameSummary,matchSchedule} from './public-api.mjs';
 const valid=n=>Number.isInteger(n)&&n>=0&&n<=9999;
 const number=n=>valid(n)?n:null;
 const text=v=>String(v??'').trim().slice(0,200);
+// A bowling team's appearances also include fielding-only records. Keep partial
+// bowling records for review, but do not invent a spell for a catcher or keeper.
+const hasBowling=statistics=>['OVERS','WICKETS','RUNS','MAIDENS','WIDES','NO_BALLS','ECONOMY','HAT_TRICKS'].some(key=>Object.hasOwn(statistics,key));
 export async function sourceId(kind,match,id=match){
  const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`clubbatting:playhq:v1:${kind}:${match}:${id}`)));
  hash[6]=(hash[6]&15)|128;hash[8]=(hash[8]&63)|128;
@@ -43,7 +46,7 @@ export async function sharedScorecard(body,context){
     not_out:notOut?true:out?false:null,balls:number(s.BALLS_FACED),fours:number(s.FOURS),sixes:number(s.SIXES),dismissal:text(a.status).replaceAll('_',' ').toLowerCase(),
     figures_valid:!!a.name&&(dnb||(notOut||out)&&valid(s.TOTAL_RUNS)),importable:!!a.name&&complete&&(dnb||(notOut||out)&&valid(s.TOTAL_RUNS))};
   });
-  const bowlers=(bowl?.players||[]).map(a=>({player_id:a.name?ids.get(a.source_appearance_id):null,name:a.name,team_id:teamIds.get(a.team_id),
+  const bowlers=(bowl?.players||[]).filter(a=>hasBowling(a.statistics)).map(a=>({player_id:a.name?ids.get(a.source_appearance_id):null,name:a.name,team_id:teamIds.get(a.team_id),
    wickets:valid(a.statistics.WICKETS)&&a.statistics.WICKETS<=10?a.statistics.WICKETS:null,runs:number(a.statistics.RUNS),balls:a.balls_bowled,
    overs:a.balls_bowled===null?null:`${Math.floor(a.balls_bowled/6)}.${a.balls_bowled%6}`,maidens:number(a.statistics.MAIDENS),
    figures_valid:!!a.name&&valid(a.statistics.WICKETS)&&a.statistics.WICKETS<=10&&valid(a.statistics.RUNS),importable:!!a.name&&complete&&valid(a.statistics.WICKETS)&&a.statistics.WICKETS<=10&&valid(a.statistics.RUNS)}));

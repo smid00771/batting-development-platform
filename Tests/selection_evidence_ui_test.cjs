@@ -214,7 +214,7 @@ test('player text is escaped in markers, dialogs and comparison explanations',as
 test('live board adapter passes only its visible date and permits captains/selectors, not ordinary players',()=>{
  const source=fs.readFileSync('app.js','utf8');const extract=name=>{const start=source.indexOf('function '+name+'('),end=source.indexOf('\nfunction ',start+1);return source.slice(start,end);};
  const host={},calls=[],s={key:'u:c',view:'board',date:'2026-10-24',data:{captain:true,roster:[],fixtures:[{id:'this',details:{days:[{date:'2026-10-24'}]},slots:[]},{id:'old',details:{days:[{date:'2026-10-17'}]},slots:[]}]}};
- const c=vm.createContext({document:{getElementById:()=>host},currentTab:'teams',club:{id:'c'},ensureSelections:()=>s,selectionEvidence:{mount:(host,options)=>calls.push(options)}});
+ const c=vm.createContext({document:{getElementById:()=>host},currentTab:'teams',club:{id:'c'},ensureSelections:()=>s,seSelectionFixtures:()=>s.data.fixtures,selectionEvidence:{mount:(host,options)=>calls.push(options)}});
  vm.runInContext(extract('seBoardAccess')+'\n'+extract('seMountSelectionEvidence'),c);c.seMountSelectionEvidence();assert.deepEqual(Array.from(calls[0].teams,t=>t.id),['this']);
  s.data.captain=false;c.seMountSelectionEvidence();assert.equal(calls.length,1);s.data.selector=true;c.seMountSelectionEvidence();assert.equal(calls.length,2);
  c.currentTab='plan';c.seMountSelectionEvidence();assert.equal(calls.length,2);
