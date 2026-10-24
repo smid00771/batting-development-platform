@@ -8,7 +8,7 @@ function harness(source){
  const target=fixture('target','2099-10-31'),s={data:{selector:true,access:{timezone:'Australia/Sydney',fixture_defaults:{rows:[]}},members:[],fixtures:[target],roster:[{id:'a',name:'Alex',active:true},{id:'b',name:'Blair',active:true},{id:'c',name:'Casey',active:false}]}};
  let confirmed=true,saved=true;const unavailable=new Set();
  const c=vm.createContext({document,FormData:dom.window.FormData,structuredClone,ensureSelections:()=>s,recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},seCanSetup:()=>true,seFixtureLocked:()=>false,seEsc:String,seGradeFields:()=>'<select name="grade"><option value="5th Grade">5th Grade</option></select>',SE_FORMATS:[['t20','T20'],['limited_overs','Limited Overs'],['long_form','Long-form']],seOpt:(opts,value)=>opts.map(([v,label])=>`<option value="${v}" ${v===value?'selected':''}>${label}</option>`).join(''),fixtureResults:{canLeave:()=>true},fixtureCorrectionDecorateEditor(){},seMountFixtureScores(){},seReadGrade:()=>({grade:'5th Grade',grade_group_id:null}),seBindGrade(){},confirmLeaveSelections:()=>true,drawSelections(){},seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Unknown',seDate:String,seNotice:message=>notices.push(message),confirm:message=>{prompts.push(message);return confirmed;},seDayStatus:(p,day)=>unavailable.has(p.id+':'+day.date)?'unknown':'available',seMutate:async(action,data,options)=>{requests.push({action,data,options});return saved;}});
- vm.runInContext(['seFixtureEditor','seCopyLast'].map(name=>extract(source,name)).join('\n'),c);
+ vm.runInContext(['seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seFixtureEditor','seCopyLast'].map(name=>extract(source,name)).join('\n'),c);
  return {c,s,target,document,requests,prompts,notices,unavailable,confirm:value=>confirmed=value,saved:value=>saved=value,submit:()=>document.getElementById('seFixtureForm').onsubmit({preventDefault(){}})};
 }
 for(const file of ['app.js','demo.html']){
@@ -30,7 +30,12 @@ for(const file of ['app.js','demo.html']){
  test(file+': copy skips cancelled and empty fixtures and retains eleven positions',async()=>{
   const h=harness(source),played=fixture('played','2099-10-10');played.published={details:structuredClone(played.details),slots:structuredClone(played.slots)};
   const cancelled=fixture('cancelled','2099-10-17',{cancelled:true});cancelled.published={details:structuredClone(cancelled.details),slots:[]};const empty=fixture('empty','2099-10-24',{slots:[]});h.s.data.fixtures.push(played,cancelled,empty);
-  await h.c.seCopyLast('target');const copy=h.requests[0].data.fixtures[0];assert.equal(copy.slots.length,11);assert.deepEqual(plain(copy.slots[0]),{d1:'a',d2:'b'});assert.ok(copy.slots.slice(1).every(x=>x.d1===null&&x.d2===null));if(file==='app.js')assert.equal(h.prompts.length,0,'Copy works directly without a confirmation dialog');else assert.match(h.prompts[0],/5th Grade · 2099-10-10/);assert.match(h.notices.at(-1),/Copied 5th Grade · 2099-10-10/);assert.deepEqual(plain(h.requests[0].options.undo),[h.target]);
+  await h.c.seCopyLast('target');const copy=h.requests[0].data.fixtures[0];assert.equal(copy.slots.length,11);assert.deepEqual(plain(copy.slots[0]),{d1:'a',d2:'b'});assert.ok(copy.slots.slice(1).every(x=>x.d1===null&&x.d2===null));assert.equal(h.prompts.length,0,'Copy works directly without a confirmation dialog');assert.match(h.notices.at(-1),/Copied 5th Grade · 2099-10-10/);assert.deepEqual(plain(h.requests[0].options.undo),[h.target]);
+ });
+ test(file+': copy permits the same player in separate morning and afternoon T20s',async()=>{
+  const h=harness(source),oneDay=(match,start,grade='5th Grade')=>{match.details={...match.details,grade,format:'t20',days:[{date:'2099-10-31',start}]};match.slots=match.slots.map(slot=>({d1:slot.d1,d2:null}));return match;};
+  oneDay(h.target,'14:00');const previous=oneDay(fixture('previous','2099-10-10',{slots:[{d1:'a',d2:null}]}),'10:00');previous.details.days[0].date='2099-10-10';const morning=oneDay(fixture('morning','2099-10-31',{slots:[{d1:'a',d2:null}]}),'10:00','Cup morning');h.s.data.fixtures.push(previous,morning);
+  await h.c.seCopyLast('target');assert.equal(h.requests[0].data.fixtures[0].slots[0].d1,'a');
  });
  test(file+': copy uses a coherent published snapshot and preserves availability checks',async()=>{
   const h=harness(source),played=fixture('played','2099-10-10',{slots:[{d1:'c',d2:'c'}]});played.published={details:structuredClone(played.details),slots:[{d1:'a',d2:'b'}]};played.details.grade='Different draft grade';h.s.data.fixtures.push(played);h.unavailable.add('b:2099-11-07');await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:'a',d2:null});
@@ -43,7 +48,7 @@ for(const file of ['app.js','demo.html']){
   h.target.published=null;h.c.seFixtureLocked=()=>true;await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.equal(h.prompts.length,0);
  });
  test(file+': no usable source, rejected confirmation and failed save never claim success',async()=>{
-  const h=harness(source);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/no earlier team/);h.s.data.fixtures.push(fixture('played','2099-10-10'));if(file==='demo.html'){h.confirm(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);h.confirm(true);}h.saved(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.ok(h.notices.every(x=>!x.startsWith('Copied')));
+  const h=harness(source);await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/no earlier team/);h.s.data.fixtures.push(fixture('played','2099-10-10'));h.saved(false);await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.ok(h.notices.every(x=>!x.startsWith('Copied')));
  });
 }
 

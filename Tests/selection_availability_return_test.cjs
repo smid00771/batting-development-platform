@@ -14,7 +14,7 @@ function harness({direct=false,fail=false}={}){
   seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seEsc:esc,seAvailabilityDateSetup(){},drawSelections:draw,seSlotButton:()=>dom.window.document.getElementById('slot'),
   seGuardFixtureEdit:()=>true,seButtonWorking:()=>()=>{},seLock(){},seNotice:text=>s.notice=text,refreshClubMessageBadge(){},
   seRPC:async(action,data)=>{calls.push({action,data:structuredClone(data)});if(failures-->0)throw Error('Connection interrupted');if(action==='availability'){player.availability={revision:3,available_dates:[...data.available_dates]};return {saved:true};}return {saved:true};},seReload:async()=>true});
- vm.runInContext(['sePickerOpenAvailability','seReturnFromAvailability','seAvailability','seMutate','sePersist','seDayStatus','seCopyLast'].map(extract).join('\n'),c);
+ vm.runInContext(['sePickerOpenAvailability','seReturnFromAvailability','seAvailability','seMutate','sePersist','seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seCopyLast'].map(extract).join('\n'),c);
  if(direct)c.seAvailability('player');else c.sePickerOpenAvailability('player');
  const save=async()=>{dom.window.document.querySelector('[data-se-date="2026-10-24"]').click();await dom.window.document.getElementById('seAvailabilityForm').onsubmit({preventDefault(){}});};
  return {c,s,f,player,calls,scroll,dom,active,save};

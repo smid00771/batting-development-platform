@@ -9,7 +9,7 @@ function harness({twoDays=false}={}){
  const fixtures=[team('A',{twoDays}),team('B',{twoDays})],roster=fixtures.flatMap(f=>f.slots.map((slot,i)=>({id:slot.d1,name:slot.d1,active:true,user_id:null,batting:'top',bowling:'none',keeper:i===1,availability:{available_dates:[...dates]}})));
  const state={access:{mode:'standalone',status:'pilot',head_selector_id:'coach',timezone:'UTC'},roster,roster_revision:1,fixtures,selectors:['coach'],receipts:{},posts:{},review_posts:{},history:{},group_links:[]};
  const c=vm.createContext({Date,Intl,structuredClone,crypto,console,club:{id:'club'},session:{user:{id:'coach'}},membership:{permission_role:'coach'},userProfile:{display_name:'Test coach'},fixtureRows:{club_memberships:[{club_id:'club',user_id:'coach',permission_role:'coach'}],user_profiles:[{user_id:'coach',display_name:'Test coach'}]},demoSelections:state,ensureSelections:()=>({data:state}),fixtureNow:()=>new Date().toISOString(),window:{__fixtureRpc:async()=>({data:null,error:{message:'Unexpected RPC'}})},demoCaptainUsers:()=>['coach'],demoSeasonGroups:()=>[],demoTemporaryCaptainDays:()=>[],demoSharedFixtureGroup:()=>null,demoMatchGroups:()=>[],demoMatchSelectionAccounts(){},demoSyncRepublicationAlerts:()=>0,demoConversations:()=>[],demoSelectionAccountEmail:()=>null,demoPublicationHead:()=> 'coach'});
- const helpers=['seDayStatus','seOverlap','seCounts','seShortTeams','seFixtureCompleted','seFixtureLocked','seMatchGroup','seMatchRoles','sePrepareMatch','seMatchRoleIssues','seTrimSlots','seMovePlan','demoDuplicateSelection','demoSelectionIssues'];
+ const helpers=['seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seCounts','seShortTeams','seFixtureCompleted','seFixtureLocked','seMatchGroup','seMatchRoles','sePrepareMatch','seMatchRoleIssues','seTrimSlots','seMovePlan','demoDuplicateSelection','demoSelectionIssues'];
  vm.runInContext(helpers.map(extract).join('\n'),c);
  const start=source.indexOf('const previousSelectionFixtureRpc=window.__fixtureRpc;'),end=source.indexOf('// Fictional quote for exploring the form.',start);assert.ok(start>0&&end>start);
  vm.runInContext(source.slice(start,end),c);
@@ -50,6 +50,14 @@ test('demo prepares both teams before mutating either, even if preparation fails
 test('demo rejects an unavailable transferred player without changing either fixture',async()=>{
  const h=harness(),before=plain(h.state.fixtures),plan=h.c.seMovePlan(...h.state.fixtures,3,4);h.state.roster.find(p=>p.id==='A-3').availability.available_dates=[];
  const result=await h.rpc('save_board',{fixtures:plan.fixtures});assert.match(result.error.message,/availability/);assert.deepEqual(plain(h.state.fixtures),before);
+});
+
+test('demo saves and publishes one player in separate same-day T20s',async()=>{
+ const h=harness(),[morning,afternoon]=h.state.fixtures;for(const [fixture,start] of [[morning,'10:00'],[afternoon,'14:00']]){fixture.details.format='t20';fixture.details.days[0].start=start;}
+ const next=structuredClone(afternoon);next.slots[2].d1='A-0';let result=await h.rpc('save_board',{fixtures:[next]});assert.equal(result.error,null,'10:00 and 14:00 do not clash');
+ assert.ok(!h.c.demoSelectionIssues(h.state.fixtures[1]).some(issue=>/overlapping game/.test(issue.text)));
+ const overlap=structuredClone(h.state.fixtures[1]);overlap.details.days[0].start='12:00';result=await h.rpc('save_board',{fixtures:[overlap]});assert.match(result.error.message,/overlapping games/);
+ result=await h.rpc('publish',{...publicationData(h.state,['B']),acknowledge_balance:true});assert.equal(result.error,null);assert.equal(result.data.published,true);
 });
 
 test('demo retains explicit acknowledgment for a short team and permits its captain check',async()=>{

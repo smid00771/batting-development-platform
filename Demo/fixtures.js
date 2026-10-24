@@ -1843,9 +1843,12 @@ function demoMatchSelectionAccounts(target=null){
 }
 
 function demoDuplicateSelection(fixtures,ids){
- const chosen=new Map(),key=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' ');
- for(const f of fixtures){if(f.details.cancelled)continue;f.details.days.forEach((day,j)=>f.slots.forEach(slot=>{const player=demoSelections.roster.find(p=>p.id===slot['d'+(j+1)]);if(!player)return;const k=day.date+':'+key(player.name),entry=chosen.get(k)||{name:player.name,date:day.date,count:0,changed:false};entry.count++;entry.changed=entry.changed||ids.includes(f.id);chosen.set(k,entry);}));}
- const bad=[...chosen.values()].find(x=>x.count>1&&x.changed);return bad?`${bad.name} is already selected on ${bad.date}. Choose one place per player per date.`:'';
+ const picks=[],key=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' ');
+ for(const f of fixtures){if(f.details.cancelled)continue;f.details.days.forEach((day,j)=>f.slots.forEach((slot,position)=>{const player=demoSelections.roster.find(p=>p.id===slot['d'+(j+1)]);if(player)picks.push({fixture:f,day,position,player,nameKey:key(player.name)});}));}
+ for(let i=0;i<picks.length;i++)for(let j=i+1;j<picks.length;j++){const first=picks[i],second=picks[j];if(first.nameKey!==second.nameKey||!ids.includes(first.fixture.id)&&!ids.includes(second.fixture.id)||!seOverlap(first.day,second.day,first.fixture.details,second.fixture.details))continue;
+  return `${first.player.name} is already selected in overlapping games on ${first.day.date} (${first.fixture.details.grade} at ${first.day.start||'time not set'} and ${second.fixture.details.grade} at ${second.day.start||'time not set'}). Change the player or fixture time.`;
+ }
+ return '';
 }
 
 function seedDemoSelections(){
@@ -1894,7 +1897,7 @@ function demoConversations(uid){
 return out;
 }
 
-function demoSelectionIssues(f){if(f.details.cancelled)return [];const out=[];f.details.days.forEach((d,i)=>{const c=seCounts(f,demoSelections.roster,i);if(c.players>11)out.push({level:'error',code:'over_team',text:`Day ${i+1}: ${c.players} players selected; move or clear ${c.players-11} before sending or publishing`});else if(c.players<11)out.push({level:c.players>0?'warning':'error',code:'short_team',text:`Day ${i+1}: ${c.players} of 11 places filled`});if(c.quicks<f.details.min_quicks)out.push({level:'warning',text:`Day ${i+1}: only ${c.quicks} frontline quicks`});if(!c.keepers&&!f.details.match_roles?.['d'+(i+1)]?.keeper_id)out.push({level:'warning',text:`Day ${i+1}: no wicketkeeper`});f.slots.forEach(sl=>{const p=demoSelections.roster.find(p=>p.id===sl['d'+(i+1)]);if(p&&seDayStatus(p,d)!=='available')out.push({level:'error',text:p.name+': '+seDayStatus(p,d)+' on '+d.date});});});if(f.slots.length>11&&!out.some(issue=>issue.code==='over_team'))out.push({level:'error',code:'over_slots',text:'Draft has more than 11 places; move or clear the extra places before sending or publishing'});return out.concat(seMatchRoleIssues(f,f.details.match_roles||{}).map(i=>({...i,match_role:true})));}
+function demoSelectionIssues(f){if(f.details.cancelled)return [];const out=[];f.details.days.forEach((d,i)=>{const c=seCounts(f,demoSelections.roster,i);if(c.players>11)out.push({level:'error',code:'over_team',text:`Day ${i+1}: ${c.players} players selected; move or clear ${c.players-11} before sending or publishing`});else if(c.players<11)out.push({level:c.players>0?'warning':'error',code:'short_team',text:`Day ${i+1}: ${c.players} of 11 places filled`});if(c.quicks<f.details.min_quicks)out.push({level:'warning',text:`Day ${i+1}: only ${c.quicks} frontline quicks`});if(!c.keepers&&!f.details.match_roles?.['d'+(i+1)]?.keeper_id)out.push({level:'warning',text:`Day ${i+1}: no wicketkeeper`});f.slots.forEach(sl=>{const p=demoSelections.roster.find(p=>p.id===sl['d'+(i+1)]);if(p&&seDayStatus(p,d)!=='available')out.push({level:'error',text:p.name+': '+seDayStatus(p,d)+' on '+d.date});if(p&&demoSelections.fixtures.some(other=>other.id!==f.id&&!other.details.cancelled&&other.details.days.some((day,j)=>seOverlap(d,day,f.details,other.details)&&other.slots.some(slot=>slot['d'+(j+1)]===p.id))))out.push({level:'error',text:p.name+' is also selected in an overlapping game on '+d.date});});});if(f.slots.length>11&&!out.some(issue=>issue.code==='over_team'))out.push({level:'error',code:'over_slots',text:'Draft has more than 11 places; move or clear the extra places before sending or publishing'});return out.concat(seMatchRoleIssues(f,f.details.match_roles||{}).map(i=>({...i,match_role:true})));}
 
 function demoPublicationHead(now=new Date()){
  const a=demoSelections.access,today=now.toLocaleDateString('en-CA',{timeZone:a.timezone||'Australia/Sydney'}),member=id=>fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===id);

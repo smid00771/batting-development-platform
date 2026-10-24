@@ -1,5 +1,83 @@
 -- Server guards for per-group selection visibility, editing and publication.
 
+create or replace function club_selection_private.fixture_day_conflict(left_details jsonb,left_day jsonb,right_details jsonb,right_day jsonb) returns boolean
+language plpgsql immutable set search_path='' as $$
+declare
+ left_start_text text:=btrim(coalesce(left_day->>'start',''));right_start_text text:=btrim(coalesce(right_day->>'start',''));
+ left_end_text text:=btrim(coalesce(left_day->>'end',''));right_end_text text:=btrim(coalesce(right_day->>'end',''));
+ left_start integer;right_start integer;left_end integer;right_end integer;overs integer;
+begin
+ if coalesce(left_day->>'date','') is distinct from coalesce(right_day->>'date','') then return false;end if;
+ -- Without two trustworthy starts there is no safe way to prove the games do not clash.
+ if left_start_text !~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$' or right_start_text !~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$' then return true;end if;
+ left_start:=split_part(left_start_text,':',1)::integer*60+split_part(left_start_text,':',2)::integer;
+ right_start:=split_part(right_start_text,':',1)::integer*60+split_part(right_start_text,':',2)::integer;
+ if left_end_text<>'' then
+  if left_end_text !~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$' then return true;end if;
+  left_end:=split_part(left_end_text,':',1)::integer*60+split_part(left_end_text,':',2)::integer;
+  if left_end<=left_start then return true;end if;
+ else
+  overs:=case when coalesce(left_details->>'overs','')~'^[0-9]{1,3}$' then (left_details->>'overs')::integer end;
+  left_end:=left_start+case when left_details->>'format'='t20' then 210 when left_details->>'format'='limited_overs' and overs>0 then greatest(180,least(600,overs*8+45)) else 480 end;
+ end if;
+ if right_end_text<>'' then
+  if right_end_text !~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$' then return true;end if;
+  right_end:=split_part(right_end_text,':',1)::integer*60+split_part(right_end_text,':',2)::integer;
+  if right_end<=right_start then return true;end if;
+ else
+  overs:=case when coalesce(right_details->>'overs','')~'^[0-9]{1,3}$' then (right_details->>'overs')::integer end;
+  right_end:=right_start+case when right_details->>'format'='t20' then 210 when right_details->>'format'='limited_overs' and overs>0 then greatest(180,least(600,overs*8+45)) else 480 end;
+ end if;
+ return left_start<right_end and right_start<left_end;
+end $$;
+revoke all on function club_selection_private.fixture_day_conflict(jsonb,jsonb,jsonb,jsonb) from public,anon,authenticated,service_role;
+
+create or replace function club_selection_private.issues(f uuid) returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare m club_selection_private.fixtures%rowtype;s jsonb;d jsonb;p club_selection_private.roster%rowtype;
+ i int:=0;key text;pid uuid;seen uuid[];q int;b int;k int;st text;notes jsonb:='[]';n int;
+begin
+ select * into m from club_selection_private.fixtures where id=f;
+ for d in select * from jsonb_array_elements(m.details->'days') loop
+ i:=i+1;key:='d'||i::text;seen:='{}';q:=0;b:=0;k:=0;n:=0;
+ for s in select * from jsonb_array_elements(m.slots) loop
+ pid:=nullif(s->>key,'')::uuid;if pid is null then continue;end if;n:=n+1;
+ select * into p from club_selection_private.roster where id=pid and club_id=m.club_id and active;
+ if not found then notes:=notes||jsonb_build_array(jsonb_build_object('level','error','text','An inactive or unknown player is selected'));continue;end if;
+ if pid=any(seen) then notes:=notes||jsonb_build_array(jsonb_build_object('level','error','text',p.name||' is selected twice on Day '||i));end if;seen:=array_append(seen,pid);
+ st:=club_selection_private.day_status(pid,d);
+ if st<>'available' then notes:=notes||jsonb_build_array(jsonb_build_object('level','error','text',p.name||': '||st||' on '||(d->>'date')));end if;
+ if p.bowling='pace' and p.bowling_load='frontline' then q:=q+1;end if;
+ if p.batting in ('top','middle') then b:=b+1;end if;if p.keeper then k:=k+1;end if;
+ if p.batting='unknown' or p.bowling='unknown' then notes:=notes||jsonb_build_array(jsonb_build_object('level','warning','text',p.name||': role details incomplete'));end if;
+ if exists(select 1 from club_selection_private.fixtures other,jsonb_array_elements(other.details->'days') with ordinality od(day,j),jsonb_array_elements(other.slots) os
+  where other.club_id=m.club_id and other.id<>m.id and not coalesce((other.details->>'cancelled')::boolean,false) and os->>('d'||od.j::text)=pid::text
+  and club_selection_private.fixture_day_conflict(m.details,d,other.details,od.day)) then
+ notes:=notes||jsonb_build_array(jsonb_build_object('level','error','text',p.name||' is also selected in an overlapping game on '||(d->>'date')));end if;
+ end loop;
+ if n>11 then
+ notes:=notes||jsonb_build_array(jsonb_build_object('level','error','code','over_team','day',i,'count',n,'text','Day '||i||': '||n||' players selected ('||(n-11)||' too many)'));
+ elsif n<11 then
+ notes:=notes||jsonb_build_array(jsonb_build_object('level',case when n between 1 and 10 then 'warning' else 'error' end,'code','short_team','text','Day '||i||': '||n||' of 11 places filled'));end if;
+ if q<coalesce((m.details->>'min_quicks')::int,3) then notes:=notes||jsonb_build_array(jsonb_build_object('level','warning','text','Day '||i||': only '||q||' frontline quicks'));end if;
+ if b<coalesce((m.details->>'min_batters')::int,5) then notes:=notes||jsonb_build_array(jsonb_build_object('level','warning','text','Day '||i||': only '||b||' top/middle-order batters'));end if;
+ if k=0 and nullif(m.details->'match_roles'->key->>'keeper_id','') is null then notes:=notes||jsonb_build_array(jsonb_build_object('level','warning','text','Day '||i||': no wicketkeeper'));end if;
+ end loop;
+ if jsonb_array_length(m.slots)>11 and not exists(select 1 from jsonb_array_elements(notes) issue where issue->>'code'='over_team') then
+  notes:=notes||jsonb_build_array(jsonb_build_object('level','error','code','over_slots','text','Arrange the selected players into 11 slots before sharing the team'));end if;
+ if not (m.details ? 'match_roles') then return notes;end if;
+ for i in 1..jsonb_array_length(m.details->'days') loop
+  foreach key in array array['captain','keeper'] loop
+   if (not coalesce((m.details->'match_roles'->('d'||i)->>(key||'_manual'))::boolean,false) and
+    (m.details->'match_roles'->('d'||i)->>(key||'_id')) is distinct from (club_selection_private.match_details(m.club_id,m.details-'match_roles',m.slots)->'match_roles'->('d'||i)->>(key||'_id')))
+   or not exists(select 1 from club_selection_private.roster r,jsonb_array_elements(m.slots) slot
+    where r.club_id=m.club_id and r.active and r.id::text=m.details->'match_roles'->('d'||i)->>(key||'_id') and slot->>('d'||i)=r.id::text)
+   then notes:=notes||jsonb_build_array(jsonb_build_object('level','error','match_role',true,'text','Day '||i||': choose '||case when key='captain' then 'a captain' else 'who is keeping' end));end if;
+  end loop;
+ end loop;
+ return notes;
+end $$;
+
 CREATE OR REPLACE FUNCTION club_selection_private.api(p_club_id uuid, p_action text, p_data jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -423,18 +501,24 @@ begin
     on conflict(id) do update set details=excluded.details,slots=excluded.slots,revision=club_selection_private.fixtures.revision+1,updated_by=me,updated_at=now();
    end loop;
    -- Check the final batch, so a confirmed transfer/swap can vacate the old place atomically.
-   -- Compare actual dates, including Day 2, and normalized names for legacy duplicate records.
+   -- Compare actual dates and match windows, including Day 2 and legacy duplicate-name records.
    for x in
-    select jsonb_build_object('name',min(rp.name),'date',ad.day->>'date')
-    from club_selection_private.fixtures fx
-    cross join lateral jsonb_array_elements(fx.details->'days') with ordinality ad(day,n)
-    cross join lateral jsonb_array_elements(fx.slots) ps(slot)
-    join club_selection_private.roster rp on rp.club_id=c and rp.id=nullif(ps.slot->>('d'||ad.n::text),'')::uuid
-    where fx.club_id=c and not coalesce((fx.details->>'cancelled')::boolean,false)
-    group by club_selection_private.account_name_key(rp.name),ad.day->>'date'
-    having count(*)>1 and bool_or(fx.id=any(ids))
+    with picks as (
+     select fx.id fixture_id,fx.details,ad.day,ad.n day_number,ps.position,rp.name,club_selection_private.account_name_key(rp.name) name_key
+     from club_selection_private.fixtures fx
+     cross join lateral jsonb_array_elements(fx.details->'days') with ordinality ad(day,n)
+     cross join lateral jsonb_array_elements(fx.slots) with ordinality ps(slot,position)
+     join club_selection_private.roster rp on rp.club_id=c and rp.id=nullif(ps.slot->>('d'||ad.n::text),'')::uuid
+     where fx.club_id=c and not coalesce((fx.details->>'cancelled')::boolean,false)
+    )
+    select jsonb_build_object('name',first_pick.name,'date',first_pick.day->>'date','first_grade',first_pick.details->>'grade','first_time',coalesce(nullif(first_pick.day->>'start',''),'time not set'),'second_grade',second_pick.details->>'grade','second_time',coalesce(nullif(second_pick.day->>'start',''),'time not set'))
+    from picks first_pick join picks second_pick on first_pick.name_key=second_pick.name_key and first_pick.day->>'date'=second_pick.day->>'date'
+     and (first_pick.fixture_id,first_pick.day_number,first_pick.position)<(second_pick.fixture_id,second_pick.day_number,second_pick.position)
+    where (first_pick.fixture_id=any(ids) or second_pick.fixture_id=any(ids)) and club_selection_private.fixture_day_conflict(first_pick.details,first_pick.day,second_pick.details,second_pick.day)
+    order by first_pick.day->>'date',first_pick.name,first_pick.fixture_id,first_pick.day_number,first_pick.position
+    limit 1
    loop
-    raise exception '% is already selected on %. Choose one place per player per date.',x->>'name',x->>'date';
+    raise exception '% is already selected in overlapping games on % (% at % and % at %). Change the player or fixture time.',x->>'name',x->>'date',x->>'first_grade',x->>'first_time',x->>'second_grade',x->>'second_time';
    end loop;
    res:=jsonb_build_object('saved',true,'ids',ids,'revisions',(select jsonb_object_agg(f.id::text,f.revision) from club_selection_private.fixtures f where f.id=any(ids)));
   else
@@ -442,18 +526,24 @@ begin
    ids:=array(select distinct jsonb_array_elements_text(p_data->'ids')::uuid);
    if coalesce(array_length(ids,1),0) not between 1 and 30 then raise exception 'Choose teams to publish';end if;
    -- Check the final batch, so a confirmed transfer/swap can vacate the old place atomically.
-   -- Compare actual dates, including Day 2, and normalized names for legacy duplicate records.
+   -- Compare actual dates and match windows, including Day 2 and legacy duplicate-name records.
    for x in
-    select jsonb_build_object('name',min(rp.name),'date',ad.day->>'date')
-    from club_selection_private.fixtures fx
-    cross join lateral jsonb_array_elements(fx.details->'days') with ordinality ad(day,n)
-    cross join lateral jsonb_array_elements(fx.slots) ps(slot)
-    join club_selection_private.roster rp on rp.club_id=c and rp.id=nullif(ps.slot->>('d'||ad.n::text),'')::uuid
-    where fx.club_id=c and not coalesce((fx.details->>'cancelled')::boolean,false)
-    group by club_selection_private.account_name_key(rp.name),ad.day->>'date'
-    having count(*)>1 and bool_or(fx.id=any(ids))
+    with picks as (
+     select fx.id fixture_id,fx.details,ad.day,ad.n day_number,ps.position,rp.name,club_selection_private.account_name_key(rp.name) name_key
+     from club_selection_private.fixtures fx
+     cross join lateral jsonb_array_elements(fx.details->'days') with ordinality ad(day,n)
+     cross join lateral jsonb_array_elements(fx.slots) with ordinality ps(slot,position)
+     join club_selection_private.roster rp on rp.club_id=c and rp.id=nullif(ps.slot->>('d'||ad.n::text),'')::uuid
+     where fx.club_id=c and not coalesce((fx.details->>'cancelled')::boolean,false)
+    )
+    select jsonb_build_object('name',first_pick.name,'date',first_pick.day->>'date','first_grade',first_pick.details->>'grade','first_time',coalesce(nullif(first_pick.day->>'start',''),'time not set'),'second_grade',second_pick.details->>'grade','second_time',coalesce(nullif(second_pick.day->>'start',''),'time not set'))
+    from picks first_pick join picks second_pick on first_pick.name_key=second_pick.name_key and first_pick.day->>'date'=second_pick.day->>'date'
+     and (first_pick.fixture_id,first_pick.day_number,first_pick.position)<(second_pick.fixture_id,second_pick.day_number,second_pick.position)
+    where (first_pick.fixture_id=any(ids) or second_pick.fixture_id=any(ids)) and club_selection_private.fixture_day_conflict(first_pick.details,first_pick.day,second_pick.details,second_pick.day)
+    order by first_pick.day->>'date',first_pick.name,first_pick.fixture_id,first_pick.day_number,first_pick.position
+    limit 1
    loop
-    raise exception '% is already selected on %. Choose one place per player per date.',x->>'name',x->>'date';
+    raise exception '% is already selected in overlapping games on % (% at % and % at %). Change the player or fixture time.',x->>'name',x->>'date',x->>'first_grade',x->>'first_time',x->>'second_grade',x->>'second_time';
    end loop;
    -- Every changed team is checked first. Cross-grade moves publish atomically.
    for fid in select unnest(ids) loop
@@ -467,8 +557,8 @@ begin
       and not coalesce(p_data->'acknowledge_short' ? fid::text,false) then raise exception 'Confirm publishing this team with vacant places';end if;
      if exists(select 1 from jsonb_array_elements(notes) n where n->>'level'='warning' and n->>'code' is distinct from 'short_team') and not coalesce((p_data->>'acknowledge_balance')::boolean,false) then raise exception 'Review and acknowledge the balance warnings before publishing';end if;
      if exists(select 1 from club_selection_private.fixtures other,jsonb_array_elements(other.published->'details'->'days') with ordinality od(day,j),jsonb_array_elements(other.published->'slots') os,jsonb_array_elements(m.details->'days') with ordinality md(day,j),jsonb_array_elements(m.slots) ms
-       where other.club_id=c and other.id<>all(ids) and not coalesce((other.published->'details'->>'cancelled')::boolean,false) and md.day->>'date'=od.day->>'date' and nullif(ms->>('d'||md.j::text),'')=os->>('d'||od.j::text)
-       and (coalesce(md.day->>'start','')='' or coalesce(od.day->>'start','')='' or coalesce(md.day->>'end','')='' or coalesce(od.day->>'end','')='' or ((md.day->>'start')<(od.day->>'end') and (md.day->>'end')>(od.day->>'start')))) then raise exception 'A player is still published in another team. Include both changed teams in this publication';end if;
+       where other.club_id=c and other.id<>all(ids) and not coalesce((other.published->'details'->>'cancelled')::boolean,false) and nullif(ms->>('d'||md.j::text),'')=os->>('d'||od.j::text)
+       and club_selection_private.fixture_day_conflict(m.details,md.day,other.published->'details',od.day)) then raise exception 'A player is still published in an overlapping game. Include both changed teams in this publication';end if;
     end if;
    end loop;
    for fid in select unnest(ids) loop

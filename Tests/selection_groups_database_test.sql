@@ -59,7 +59,7 @@ begin
  assert exists(select 1 from jsonb_array_elements(ctx->'fixtures') f where f->>'id'=current_fixture::text and f->>'selection_group_id'=a::text),'Board fixture is assigned without rewriting its details';
  insert into club_selection_private.fixtures(id,club_id,details) values(duplicate_fixture,c,d);
  bad:=jsonb_build_object('request_id',gen_random_uuid(),'fixtures',jsonb_build_array(jsonb_build_object('id',duplicate_fixture,'revision',1,'details',d,'slots',slots)));
- rejected:=false;begin perform public.club_selections_api(c,'save_board',bad);exception when raise_exception then rejected:=sqlerrm like '%already selected%';end;assert rejected,'Duplicate-date check still covers other Selection Groups';
+ rejected:=false;begin perform public.club_selections_api(c,'save_board',bad);exception when raise_exception then rejected:=sqlerrm like '%already selected%';end;assert rejected,'Overlapping-game check still covers other Selection Groups when times are unknown';
  assert not has_table_privilege('authenticated','club_selection_private.selection_group_grades','INSERT'),'No direct client writes';
  assert not has_function_privilege('anon','public.club_selection_groups(uuid,text,jsonb)','EXECUTE'),'Anonymous API denied';
  assert has_function_privilege('authenticated','public.club_selection_groups(uuid,text,jsonb)','EXECUTE'),'Signed-in API available';
