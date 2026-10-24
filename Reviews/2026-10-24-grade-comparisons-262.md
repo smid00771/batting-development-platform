@@ -1,0 +1,9 @@
+# Grade comparison clarity — 0.8.62.262
+
+Season stats comparison lines now use a 44–72px horizontal gutter and anchor beside player names. The large outlines around whole statistics cells are removed; hover and keyboard focus highlight the linked names. Selection Board geometry and the exact-pair click, keyboard, clipping and focus-restoration behaviour are preserved.
+
+The existing Players dropdown offers All season players alongside the default last published teams and dated current line-ups. Each grade retains its own competition, format and season figures. A player who moved grades appears in both relevant season lists. These lists are alphabetical, have no batting-position numbers and retain confirmed player links. Historical-only records are labelled as season records; their row order is never used as a batting position.
+
+Frontline quicks can qualify for a bowling comparison regardless of their batting labels or batting innings. Batting and fielding remain separate context, and the bowling comparison displays the incumbent's actual wicket rate/economy beside the candidate's rough equivalent. Bowling type, workload, sample thresholds, incomplete figures, keeper cover and existing permissions remain enforced. Opening/first-change bowling jobs are not inferred. Links are explicitly discussions, not directions to drop an incumbent; simultaneous cases above and below can coexist.
+
+Validation: 119 focused statistics, evidence, geometry, interaction, identity, grade-movement, role and navigation checks passed. Read-only verification against the pilot's saved figures confirmed a moved player has separate records in two grades and a frontline quick comparison is no longer suppressed by a middle-order batting label. No production selections, ratings or database rows were changed. Generated-demo navigation/role checks and released desktop/390px visual checks are recorded in the pull request.
