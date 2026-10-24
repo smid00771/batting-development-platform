@@ -3729,7 +3729,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.263.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.264.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -8441,7 +8441,7 @@ const {selectionCallLink}=__demoModule27;
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.263';
+const APP_UI_VERSION='0.8.62.264';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -29710,9 +29710,11 @@ function seTeamCard(f){const s=ensureSelections(),d=f.details,roles=seMatchRoles
 async function seCopyLast(id){
  const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id);if(!f||s.busy||s.pending)return;
  if(f.published||seFixtureLocked(f)){seNotice('Copy previous team is only available for an unpublished, unlocked team.');return;}
- const last=s.data.fixtures.filter(x=>x.id!==id&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>x.details?.grade===f.details.grade&&x.details.competition===f.details.competition&&x.details.format===f.details.format&&x.details.days?.[0]?.date<f.details.days[0].date&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date))[0];
+ const targetDay=f.details.days[0],targetStart=seClockMinutes(targetDay.start);
+ const earlier=details=>{const day=details.days?.[0];if(!day?.date)return false;if(day.date<targetDay.date)return true;const start=seClockMinutes(day.start);return day.date===targetDay.date&&start!==null&&targetStart!==null&&start<targetStart&&!details.days.some(previous=>f.details.days.some(next=>seOverlap(previous,next,details,f.details)));};
+ const last=s.data.fixtures.filter(x=>x.id!==id&&x.draft_visible!==false&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>x.details?.grade===f.details.grade&&(!x.details.grade_group_id||!f.details.grade_group_id||x.details.grade_group_id===f.details.grade_group_id)&&x.details.competition===f.details.competition&&x.details.format===f.details.format&&earlier(x.details)&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date)||(seClockMinutes(b.details.days[0].start)??-1)-(seClockMinutes(a.details.days[0].start)??-1))[0];
  if(!last){seNotice('There is no earlier team to copy for this competition and grade.');return;}
- const source=last.details.grade+' · '+seDate(last.details.days[0].date);
+ const source=last.details.grade+' · '+seDate(last.details.days[0].date)+(last.details.days[0].start?' · '+last.details.days[0].start:'');
  const roster=new Map(s.data.roster.map(p=>[p.id,p])),used=[],identity=id=>String(roster.get(id)?.name||id||'').trim().toLowerCase().replace(/\s+/g,' ');
  // Match the server's overlapping-game guard, including legacy duplicate names.
  // Never remove a player from another team to make a previous line-up fit.

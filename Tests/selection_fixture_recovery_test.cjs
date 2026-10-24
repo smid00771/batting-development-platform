@@ -40,6 +40,18 @@ for(const file of ['app.js','demo.html']){
  test(file+': copy uses a coherent published snapshot and preserves availability checks',async()=>{
   const h=harness(source),played=fixture('played','2099-10-10',{slots:[{d1:'c',d2:'c'}]});played.published={details:structuredClone(played.details),slots:[{d1:'a',d2:'b'}]};played.details.grade='Different draft grade';h.s.data.fixtures.push(played);h.unavailable.add('b:2099-11-07');await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:'a',d2:null});
  });
+ test(file+': copy selects the morning line-up itself before its result or publication exists',async()=>{
+  const h=harness(source),oneDay=(id,start,player='a')=>{const f=fixture(id,'2099-10-31',{slots:[{d1:player,d2:null}]});f.details={...f.details,format:'t20',brackets:false,days:[{date:'2099-10-31',start}]};return f;};
+  Object.assign(h.target,oneDay('target','14:00','b'));const morning=oneDay('morning','10:00');h.s.data.fixtures.push(morning);
+  await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.equal(h.requests[0].data.fixtures[0].slots[0].d1,'a');assert.match(h.notices.at(-1),/10:00/);assert.deepEqual(plain(h.requests[0].options.undo),[h.target]);assert.equal(morning.slots[0].d1,'a');
+ });
+ test(file+': copy orders same-date games by time and rejects later, overlapping, unknown-time and other-team sources',async()=>{
+  const h=harness(source),oneDay=(id,start,player='a')=>{const f=fixture(id,'2099-10-31',{slots:[{d1:player,d2:null}]});f.details={...f.details,grade_group_id:'grade',format:'t20',brackets:false,days:[{date:'2099-10-31',start}]};return f;};
+  Object.assign(h.target,oneDay('target','18:00','b'));
+  const morning=oneDay('morning','10:00','b'),afternoon=oneDay('afternoon','14:00'),overlap=oneDay('overlap','16:00','c'),later=oneDay('later','22:00','c'),unknown=oneDay('unknown','','c'),other=oneDay('other','14:15','c');other.details.grade_group_id='different-grade';
+  h.s.data.fixtures.push(morning,other,afternoon,overlap,later,unknown);await h.c.seCopyLast('target');assert.equal(h.requests[0].data.fixtures[0].slots[0].d1,'a');assert.match(h.notices.at(-1),/14:00/);
+  for(const start of ['14:00','16:00','22:00','']){const blocked=harness(source);Object.assign(blocked.target,oneDay('target','14:00','b'));blocked.s.data.fixtures.push(oneDay('source',start));await blocked.c.seCopyLast('target');assert.equal(blocked.requests.length,0,start);}
+ });
  test(file+': copy cannot retain a one-day-only player in an unbracketed two-day team',async()=>{
   const h=harness(source);h.target.details.brackets=false;h.s.data.fixtures.push(fixture('played','2099-10-10'));h.unavailable.add('a:2099-11-07');await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:null,d2:null});
  });
