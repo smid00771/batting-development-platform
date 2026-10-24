@@ -6,10 +6,10 @@ import {createPlayHQImport} from './playhq-import.js?v=0.8.62.245';
 import {createPlayCricketConnection} from './playcricket-connection.js?v=0.8.62.245';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.248';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.246';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.263';
-import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.263';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.263';
-import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.263';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.264';
+import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.264';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.264';
+import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.253';
@@ -21,7 +21,7 @@ import {createSelectionRoom} from './selection-room.js?v=0.8.62.246';
 import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.253';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.250';
 import {createSocialAwardLabels} from './social-award-labels.js?v=0.8.62.248';
-import {createFixtureResults} from './fixture-results.js?v=0.8.62.263';
+import {createFixtureResults} from './fixture-results.js?v=0.8.62.264';
 import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.253';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
@@ -29,7 +29,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.263';
+const APP_UI_VERSION='0.8.62.264';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -21298,9 +21298,11 @@ function seTeamCard(f){const s=ensureSelections(),d=f.details,roles=seMatchRoles
 async function seCopyLast(id){
  const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id);if(!f||s.busy||s.pending)return;
  if(f.published||seFixtureLocked(f)){seNotice('Copy previous team is only available for an unpublished, unlocked team.');return;}
- const last=s.data.fixtures.filter(x=>x.id!==id&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>x.details?.grade===f.details.grade&&x.details.competition===f.details.competition&&x.details.format===f.details.format&&x.details.days?.[0]?.date<f.details.days[0].date&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date))[0];
+ const targetDay=f.details.days[0],targetStart=seClockMinutes(targetDay.start);
+ const earlier=details=>{const day=details.days?.[0];if(!day?.date)return false;if(day.date<targetDay.date)return true;const start=seClockMinutes(day.start);return day.date===targetDay.date&&start!==null&&targetStart!==null&&start<targetStart&&!details.days.some(previous=>f.details.days.some(next=>seOverlap(previous,next,details,f.details)));};
+ const last=s.data.fixtures.filter(x=>x.id!==id&&x.draft_visible!==false&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>x.details?.grade===f.details.grade&&(!x.details.grade_group_id||!f.details.grade_group_id||x.details.grade_group_id===f.details.grade_group_id)&&x.details.competition===f.details.competition&&x.details.format===f.details.format&&earlier(x.details)&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date)||(seClockMinutes(b.details.days[0].start)??-1)-(seClockMinutes(a.details.days[0].start)??-1))[0];
  if(!last){seNotice('There is no earlier team to copy for this competition and grade.');return;}
- const source=last.details.grade+' · '+seDate(last.details.days[0].date);
+ const source=last.details.grade+' · '+seDate(last.details.days[0].date)+(last.details.days[0].start?' · '+last.details.days[0].start:'');
  const roster=new Map(s.data.roster.map(p=>[p.id,p])),used=[],identity=id=>String(roster.get(id)?.name||id||'').trim().toLowerCase().replace(/\s+/g,' ');
  // Match the server's overlapping-game guard, including legacy duplicate names.
  // Never remove a player from another team to make a previous line-up fit.
