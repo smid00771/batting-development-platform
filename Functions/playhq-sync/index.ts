@@ -12,7 +12,7 @@ Deno.serve(async(req:Request)=>{
  const auth=req.headers.get('authorization')||'';
  async function rpc(name:string,data:unknown,backend=false){
   const r=await fetch(base+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:backend?service:anon,Authorization:backend?'Bearer '+service:auth,'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(20000)});
-  const value=await r.json();if(!r.ok)throw Error(value.message||'PlayHQ connection request failed');return value;
+  const value=await r.json();if(!r.ok){const error=Error(value.message||'PlayHQ connection request failed');(error as any).rpcCode=value.code;throw error;}return value;
  }
  let club:string|undefined,connection:any;
  const worker=(action:string,data:unknown={})=>rpc('playhq_sync_worker',{p_action:action,p_data:{club_id:club,generation:connection?.generation,...data as object}},true);
@@ -72,6 +72,9 @@ Deno.serve(async(req:Request)=>{
   return reply({error:'Unknown PlayHQ action'},400);
  }catch(error){
   const status=(error as any).status;
+  // Only expose these known retry instructions; never return arbitrary RPC diagnostics.
+  const retryMessages=new Set(['A check is already running. Try again shortly','Wait 30 seconds before checking again']);
+  if((error as any).rpcCode==='P0001'&&retryMessages.has((error as Error).message))return reply({error:(error as Error).message==='A check is already running. Try again shortly'?'A score check is already running. If the last request failed, try again in five minutes.':'Wait 30 seconds before checking again.'},409);
   if(connection&&status)await worker('error',{status,error:`PlayHQ request failed (${status})`}).catch(()=>{});
   return reply({error:status?`PlayHQ request failed (${status}). Manual fixture entry is still available.`:'Could not complete the PlayHQ request. Check the connection and try again.'},status===401||status===403?403:400);
  }

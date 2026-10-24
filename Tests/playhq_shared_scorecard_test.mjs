@@ -40,3 +40,19 @@ test('wrong team, grade and moved match dates are rejected before sharing',async
  await assert.rejects(sharedScorecard(raw,{...context,source_fixture:{...context.source_fixture,days:[{date:'2023-11-24'}]}}),/changed playing dates/);
  assert.notEqual(await sourceId('appearance','match-a','same'),await sourceId('appearance','match-b','same'));
 });
+test('fielding-only appearances do not create incomplete bowling spells',async()=>{
+ const b=known(),innings=b.data.periods[0].teams.find(t=>t.discipline==='BOWLING');
+ const first=innings.appearances[0],second=innings.appearances[1];
+ first.statistics=[{type:'TOTAL_CATCHES',value:1},{type:'STUMPINGS',value:2}];
+ second.statistics=[{type:'OVERS',value:1},{type:'WICKETS',value:0},{type:'RUNS',value:0}];
+ const c=await sharedScorecard(b,context),bowlers=c.innings[0].bowlers;
+ const firstId=await sourceId('appearance',b.data.id,first.id),secondId=await sourceId('appearance',b.data.id,second.id);
+ assert.ok(!bowlers.some(p=>p.player_id===firstId));
+ const zero=bowlers.find(p=>p.player_id===secondId);
+ assert.deepEqual([zero.wickets,zero.runs,zero.balls,zero.importable],[0,0,6,true]);
+ second.statistics=[{type:'OVERS',value:1},{type:'RUNS',value:3}];
+ const partial=(await sharedScorecard(b,context)).innings[0].bowlers.find(p=>p.player_id===secondId);
+ assert.equal(partial.importable,false);assert.equal(partial.wickets,null);assert.equal(partial.runs,3);
+ first.statistics=[];
+ assert.ok(!(await sharedScorecard(b,context)).innings[0].bowlers.some(p=>p.player_id===firstId));
+});

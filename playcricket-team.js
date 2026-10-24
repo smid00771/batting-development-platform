@@ -1,9 +1,10 @@
 /* Compare the trusted scorecard automatically; ask only for missing identities and the change. */
 import {matchReviewNameParts,matchReviewShortNameMatches} from './player-name-matching.js?v=0.8.62.204';
+const visiblePlayers=team=>(team?.players||[]).filter(p=>p.player_id&&p.name);
 const normal=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 export function scorecardPlayerMatches(players,roster,links=[]){
  const matches={},used=new Set();
- for(const p of players){
+ for(const p of players.filter(p=>p.player_id&&p.name)){
   const saved=[...new Set(links.filter(l=>l.source_id===p.player_id).map(l=>l.roster_id))],registered=roster.filter(r=>String(r.external_id||'').toLowerCase()===p.player_id.toLowerCase());
   const candidates=saved.length?roster.filter(r=>saved.includes(r.id)):registered.length?registered:roster.filter(r=>normal(r.name)===normal(p.name));
   const r=candidates.length===1?candidates[0]:null;
@@ -19,7 +20,7 @@ export function scorecardFixture(context,teamId,hint=''){
 }
 export function scorecardPlayerCandidates(players,roster,links=[],matches={}){
  const result={};
- for(const p of players){
+ for(const p of players.filter(p=>p.player_id&&p.name)){
   const current=roster.find(r=>r.id===matches[p.player_id]);
   if(current&&!current.imported_stub&&!current.identity_unlinked&&current.active!==false)continue;
   result[p.player_id]=roster.filter(r=>r.active!==false&&!r.imported_stub&&r.id!==current?.id&&
@@ -36,9 +37,11 @@ export function createScorecardTeams(h){
  function live(s){return s.host?.isConnected&&s.here()&&s.scope===h.scope();}
  function setMatches(s){
   const team=s.context.card.teams.find(t=>t.id===s.teamId),fixture=s.context.fixtures.find(f=>f.id===s.fixtureId);
-  s.matches=scorecardPlayerMatches(team?.players||[],s.context.roster,s.context.links);s.candidates=scorecardPlayerCandidates(team?.players||[],s.context.roster,s.context.links,s.matches);s.rejected={};s.days={};s.plan=null;s.deferred=false;s.error=false;s.saved=false;
+  s.matches=scorecardPlayerMatches(visiblePlayers(team),s.context.roster,s.context.links);s.candidates=scorecardPlayerCandidates(visiblePlayers(team),s.context.roster,s.context.links,s.matches);s.rejected={};s.days={};s.plan=null;s.deferred=false;s.error=false;s.saved=false;
+  // A suggested name is not a confirmed match-scoped identity.
+  if(s.context.card.provider==='playhq_au')for(const p of visiblePlayers(team)){const r=s.context.roster.find(r=>r.id===s.matches[p.player_id]);if(r&&!(s.context.links||[]).some(l=>l.source_id===p.player_id&&l.roster_id===r.id))s.candidates[p.player_id]=[r];}
   for(const [id,candidates] of Object.entries(s.candidates))if(candidates.length)s.matches[id]='';
-  for(const p of team?.players||[]){const id=s.matches[p.player_id];s.days[p.player_id]=fixture?.brackets?fixture.days.filter((_,i)=>fixture.slots.some(slot=>slot['d'+(i+1)]===id)).map(d=>d.date):(fixture?.days||[]).map(d=>d.date);}
+  for(const p of visiblePlayers(team)){const id=s.matches[p.player_id];s.days[p.player_id]=fixture?.brackets?fixture.days.filter((_,i)=>fixture.slots.some(slot=>slot['d'+(i+1)]===id)).map(d=>d.date):(fixture?.days||[]).map(d=>d.date);}
  }
  function payload(s){return {fixture_id:s.fixtureId,team_id:s.teamId,mapping:(s.context.card.teams.find(t=>t.id===s.teamId)?.players||[]).map(p=>({source_id:p.player_id,roster_id:s.matches[p.player_id],days:s.days[p.player_id]||[]}))};}
  function needsChoice(s,p){const id=s.matches?.[p.player_id];return !id||!s.days?.[p.player_id]?.length||id!=='new'&&Object.values(s.matches).filter(value=>value===id).length>1;}
@@ -84,11 +87,11 @@ export function createScorecardTeams(h){
  function draw(s){
   if(!live(s))return;const ctx=s.context,locked=s.busy||!!s.pending||!!s.identityPending;
   if(ctx?.enabled===false){s.host.innerHTML='';return;}
-  const team=ctx?.card.teams.find(t=>t.id===s.teamId),fixture=ctx?.fixtures.find(f=>f.id===s.fixtureId),target=s.plan?.fixtures[0],others=s.plan?.fixtures.slice(1)||[],players=team?.players||[];
-  const unresolved=players.filter(p=>needsChoice(s,p)),canCheck=ctx&&ctx.card.status==='completed'&&team?.lineup_available;
+  const team=ctx?.card.teams.find(t=>t.id===s.teamId),fixture=ctx?.fixtures.find(f=>f.id===s.fixtureId),target=s.plan?.fixtures[0],others=s.plan?.fixtures.slice(1)||[],players=visiblePlayers(team);
+  const unresolved=players.filter(p=>needsChoice(s,p)),canCheck=ctx&&ctx.card.status==='completed'&&players.length>0;
   const changes=target?[target.added.length?'In: '+target.added.join(', '):'',target.removed.length?'Out: '+target.removed.join(', '):''].filter(Boolean):[];
   const warning=!!s.plan?.changed&&!s.saved;
-  if((s.saved||s.plan&&!s.plan.changed)&&!s.busy&&!s.error&&!s.pending&&!s.identityPending){s.host.innerHTML='';return;}
+  if((s.saved||s.plan&&!s.plan.changed&&!unresolved.length)&&!s.busy&&!s.error&&!s.pending&&!s.identityPending){s.host.innerHTML='';return;}
   if(s.deferred&&warning&&!s.busy&&!s.pending){s.host.innerHTML='<p data-pc-result tabindex="-1" role="status">Team left unchanged. It differs from PlayCricket.</p><button type="button" class="btn ghost" data-pc-review>Review change</button>';s.host.querySelector('[data-pc-review]').onclick=()=>void preview(s,true);return;}
   s.host.innerHTML=`<section class="pc-team ${warning?'pc-team-warning':''}" aria-label="PlayCricket team check">
    <style>.pc-team{margin:12px 0;border:1px solid #ccd7df;border-radius:8px;padding:12px}.pc-team-warning{border:2px solid #b86a00;background:#fff8e9}.pc-team p{margin:6px 0}.pc-team label{display:block;margin:8px 0}.pc-team select{max-width:100%;width:100%;min-height:44px}.pc-team button{min-height:44px;margin:8px 8px 0 0}.pc-team [role=status]:empty{display:none}.pc-team-player{border-top:1px solid #dce2e8;padding:7px 0}</style>
@@ -96,8 +99,8 @@ export function createScorecardTeams(h){
    ${ctx&&!ctx.fixtures.length?'<p>No fixture has these match dates. Add or correct the fixture in Teams, then check again.</p>':ctx?`
    ${!s.teamId?`<label>Our PlayCricket team<select data-pc-team ${locked?'disabled':''}>${option('','Choose our team',true)}${ctx.card.teams.map(t=>option(t.id,t.name,false)).join('')}</select></label>`:''}
    ${ctx.fixtures.length&&!fixture?`<label>Club fixture<select data-pc-fixture ${locked?'disabled':''}>${option('','Choose the matching fixture',true)}${ctx.fixtures.map(f=>option(f.id,f.grade+' v '+f.opposition+' · '+f.days.map(d=>d.date).join(' / '),false)).join('')}</select></label>`:''}
-   ${ctx.card.status!=='completed'?'<p>The team can be updated when the scorecard is complete.</p>':team&&!team.lineup_available?'<p>Refresh the scorecard to load its full listed team.</p>':''}
-   ${canCheck&&fixture&&unresolved.length&&!s.saved?unresolved.map(p=>{const candidates=s.rejected?.[p.player_id]?[]:s.candidates?.[p.player_id]||[],candidate=candidates.length===1?candidates[0]:null;return `<div class="pc-team-player">${candidate?`<p>Is <strong>${esc(p.name)}</strong> the same player as <strong>${esc(candidate.name)}</strong>?</p><button type="button" class="btn" data-pc-same="${esc(p.player_id)}" data-roster="${esc(candidate.id)}" ${locked?'disabled':''}>Yes, use PlayCricket name</button><button type="button" class="btn ghost" data-pc-different="${esc(p.player_id)}" ${locked?'disabled':''}>No</button>`:`<label>${esc(p.name)}<select data-pc-player="${esc(p.player_id)}" ${locked?'disabled':''}>${option('','Choose club player',!s.matches[p.player_id])}${ctx.roster.filter(r=>r.active!==false&&!r.imported_stub).map(r=>option(r.id,r.name,s.matches[p.player_id]===r.id)).join('')}${option('new','Add new player',s.matches[p.player_id]==='new')}</select></label>`}${fixture.brackets&&!candidate?`<label>Played on<select data-pc-days="${esc(p.player_id)}" ${locked?'disabled':''}>${option('','Choose playing days',!s.days[p.player_id]?.length)}${fixture.days.map(d=>option(d.date,d.date.split('-').reverse().join('/'),s.days[p.player_id]?.length===1&&s.days[p.player_id][0]===d.date)).join('')}${fixture.days.length>1?option(fixture.days.map(d=>d.date).join(','),'Both days',s.days[p.player_id]?.length===fixture.days.length):''}</select></label>`:''}</div>`;}).join(''):''}
+   ${ctx.card.status!=='completed'?'<p>The team can be updated when the scorecard is complete.</p>':team&&!team.lineup_available?'<p>PlayCricket has withheld some player details. The visible players can still be linked to their season stats.</p>':''}
+   ${canCheck&&fixture&&unresolved.length&&!s.saved?unresolved.map(p=>{const candidates=s.rejected?.[p.player_id]?[]:s.candidates?.[p.player_id]||[],candidate=candidates.length===1?candidates[0]:null;return `<div class="pc-team-player">${candidate?`<p>Is <strong>${esc(p.name)}</strong> the same player as <strong>${esc(candidate.name)}</strong>?</p><button type="button" class="btn" data-pc-same="${esc(p.player_id)}" data-roster="${esc(candidate.id)}" ${locked?'disabled':''}>${ctx.card.provider==='playhq_au'?'Yes, link player':'Yes, use PlayCricket name'}</button><button type="button" class="btn ghost" data-pc-different="${esc(p.player_id)}" ${locked?'disabled':''}>No</button>`:`<label>${esc(p.name)}<select data-pc-player="${esc(p.player_id)}" ${locked?'disabled':''}>${option('','Choose club player',!s.matches[p.player_id])}${ctx.roster.filter(r=>r.active!==false&&!r.imported_stub).map(r=>option(r.id,r.name,s.matches[p.player_id]===r.id)).join('')}${option('new','Add new player',s.matches[p.player_id]==='new')}</select></label>`}${fixture.brackets&&!candidate?`<label>Played on<select data-pc-days="${esc(p.player_id)}" ${locked?'disabled':''}>${option('','Choose playing days',!s.days[p.player_id]?.length)}${fixture.days.map(d=>option(d.date,d.date.split('-').reverse().join('/'),s.days[p.player_id]?.length===1&&s.days[p.player_id][0]===d.date)).join('')}${fixture.days.length>1?option(fixture.days.map(d=>d.date).join(','),'Both days',s.days[p.player_id]?.length===fixture.days.length):''}</select></label>`:''}</div>`;}).join(''):''}
    ${changes.map(t=>`<p>${esc(t)}</p>`).join('')}
    ${others.map(f=>`<p><strong>${esc(f.grade)}:</strong> ${esc([...new Set(f.departures.map(p=>p.name))].join(', '))} will be removed, leaving a highlighted gap.</p>`).join('')}
    ${warning&&!changes.length&&!others.length?'<p>The saved lineup or playing days will be corrected.</p>':''}

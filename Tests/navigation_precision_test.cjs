@@ -18,6 +18,21 @@ test('Back and Forward restore the Results week and selected award after image p
  const forward=h.entries[1];await h.c.handleAppNavigationHistory({state:forward});assert.equal(h.social.view,'guide');assert.equal(h.social.guide.file.name,'example.png');assert.equal(h.social.guide.awardReturn.apply,apply);
  assert.equal(JSON.stringify(h.entries).includes('example.png'),false,'Image contents and callbacks stay out of browser history');
 });
+test('opening player attributes locates and expands the exact player; Back restores the comparison',async()=>{
+ const h=harness();h.s.view='board';h.s.statsOpen=true;h.s.statsFilters={compare:true,mode:'bowling',compareDate:'published',firstTeam:'first',secondTeam:'second'};
+ h.s.data.roster=[{id:'r1',name:'Alex',active:true},{id:'r2',name:'Alex',active:true}];
+ h.s.rosterGrade='grade:Other';h.s.signupOnly=true;
+ let allowed=true,permission=true,scrolled=null;
+ h.c.seCanSetup=()=>permission;h.c.confirmLeaveSelections=()=>allowed;
+ h.c.drawSelections=()=>{h.c.document.getElementById('seContent').innerHTML='<div data-se-roster-id="r1"></div><div data-se-roster-id="r2"></div>';for(const row of h.c.document.querySelectorAll('[data-se-roster-id]'))row.scrollIntoView=()=>scrolled=row.dataset.seRosterId;h.visit();};
+ vm.runInContext(fn('seOpenStatsPlayer'),h.c);h.visit();
+ allowed=false;h.c.seOpenStatsPlayer({},'r2');assert.equal(h.s.view,'board');
+ allowed=true;permission=false;h.c.seOpenStatsPlayer({},'r2');assert.equal(h.s.view,'board');
+ permission=true;h.c.seOpenStatsPlayer({},'unknown');assert.equal(h.s.view,'board');
+ h.c.seOpenStatsPlayer({},'r2');assert.equal(h.s.view,'roster');assert.equal(h.s.statsOpen,false);assert.equal(h.s.rosterOpen,'r2');assert.equal(h.s.rosterSearch,'Alex');assert.equal(h.s.rosterGrade,'');assert.equal(h.s.signupOnly,false);assert.equal(scrolled,'r2');assert.equal(h.c.document.activeElement.dataset.seRosterId,'r2');
+ const forward=h.history.state;await h.history.back();assert.equal(h.s.view,'board');assert.equal(h.s.statsOpen,true);assert.equal(h.s.statsFilters.mode,'bowling');assert.equal(h.s.statsFilters.compareDate,'published');assert.equal(h.s.statsFilters.secondTeam,'second');
+ await h.c.handleAppNavigationHistory({state:forward});assert.equal(h.s.rosterOpen,'r2');assert.equal(h.s.rosterSearch,'Alex');
+});
 test('grade, playing day, step and fixture date are distinct navigation stops',async()=>{
  const h=harness();h.social.view='graphics';h.visit();h.social.teamWorkflow.fixture='third';h.social.teamWorkflow.day=0;h.visit();h.social.teamWorkflow.step='review';h.visit();h.social.date='2026-10-24';h.visit();
  assert.equal(h.entries.length,4);await h.history.back();assert.equal(h.social.date,'2026-10-17');assert.equal(h.social.teamWorkflow.step,'review');await h.history.back();assert.equal(h.social.teamWorkflow.fixture,'third');assert.equal(h.social.teamWorkflow.step,'photos');await h.history.back();assert.equal(h.social.teamWorkflow.fixture,'second');assert.equal(h.social.teamWorkflow.day,1);

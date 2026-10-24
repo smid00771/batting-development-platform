@@ -1,4 +1,4 @@
-import {buildSeasonStats, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.235';
+import {buildSeasonStats, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.258';
 import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.226';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));

@@ -1,6 +1,6 @@
 -- Synthetic club only. All publication messages and memberships roll back.
 do $tests$
-declare c uuid:=gen_random_uuid();head_id uuid:=gen_random_uuid();admin_id uuid:=gen_random_uuid();
+declare c uuid:=gen_random_uuid();head_id uuid:=gen_random_uuid();admin_id uuid:=gen_random_uuid();viewer_id uuid:=gen_random_uuid();sg uuid:=gen_random_uuid();
  player_users uuid[]:=array(select gen_random_uuid() from generate_series(1,6));
  fixtures uuid[]:=array(select gen_random_uuid() from generate_series(1,6));
  grades uuid[]:=array(select gen_random_uuid() from generate_series(1,8));
@@ -10,13 +10,13 @@ declare c uuid:=gen_random_uuid();head_id uuid:=gen_random_uuid();admin_id uuid:
  rejected boolean;message_count integer;membership_count integer;
 begin
  begin
-  foreach u in array array[head_id,admin_id]||player_users loop
+  foreach u in array array[head_id,admin_id,viewer_id]||player_users loop
    insert into auth.users(id,email) values(u,'publication-test-'||u||'@example.invalid');
    insert into public.user_profiles(user_id,display_name) values(u,case when u=any(player_users) then 'Synthetic player '||array_position(player_users,u) else 'Synthetic staff '||u end);
   end loop;
   insert into public.clubs(id,name,slug,created_by) values(c,'Synthetic publication test','publication-test-'||c,admin_id);
   insert into public.club_memberships(club_id,user_id,role,permission_role,involvement)
-   values(c,head_id,'player','none','player'),(c,admin_id,'admin','admin',null);
+   values(c,head_id,'player','none','player'),(c,admin_id,'admin','admin',null),(c,viewer_id,'player','none','player');
   foreach u in array player_users loop
    insert into public.club_memberships(club_id,user_id,role,permission_role,involvement) values(c,u,'player','none','player');
   end loop;
@@ -24,6 +24,8 @@ begin
   for i in 1..8 loop
    insert into public.playing_groups(id,club_id,name,active,created_by) values(grades[i],c,'Grade '||i,true,admin_id);
   end loop;
+  insert into club_selection_private.selection_groups(id,club_id,name,batting_enabled) values(sg,c,'Synthetic seniors',true);
+  insert into club_selection_private.selection_group_grades(club_id,grade_id,selection_group_id) select c,g,sg from unnest(grades) g;
   for i in 1..12 loop
    insert into public.players(id,club_id,user_id,display_name,active) values(players[i],c,case when i<=6 then player_users[i] end,'Synthetic player '||i,true);
    insert into club_selection_private.roster(id,club_id,user_id,name,active) values(roster[i],c,case when i<=6 then player_users[i] end,'Synthetic player '||i,true);
@@ -42,7 +44,7 @@ begin
    insert into club_selection_private.fixtures(id,club_id,details,slots) values(fixtures[i],c,d,slots);
   end loop;
   assert not exists(select 1 from club_selection_private.group_links where club_id=c),'Reproduces shared grades without legacy mappings';
-  perform set_config('request.jwt.claim.sub',player_users[1]::text,true);
+  perform set_config('request.jwt.claim.sub',viewer_id::text,true);
   assert public.club_selections_api(c,'context')->'fixtures'='[]','Players cannot see drafts';
   req:=jsonb_build_object('request_id',gen_random_uuid(),'ids',to_jsonb(fixtures),'revisions',(select jsonb_object_agg(f.id::text,f.revision) from club_selection_private.fixtures f where f.club_id=c),'acknowledge_short',to_jsonb(fixtures));
   rejected:=false;begin perform public.club_selections_api(c,'publish',req);exception when raise_exception then rejected:=true;end;assert rejected,'Player cannot publish';

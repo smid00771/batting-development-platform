@@ -2,10 +2,10 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),{JSDOM}=r
 const tick=()=>new Promise(r=>setImmediate(r));
 const data=()=>({season:{start:'2026-07-01',end:'2027-06-30',label:'2026/27',revision:0},today:'2026-10-17',can_set_season:true,fixtures:[],cards:[],identities:[]});
 const teams=[{id:'first',level:1,grade:'First',competition:'District',format:'long_form',slots:[{d1:'r1'}]},{id:'second',level:2,grade:'Second',competition:'District',format:'long_form',slots:[{d1:'r2'}]}];
-async function harness(response=data(), overrides={}) {
+async function harness(response=data(), overrides={}, hooks={}) {
  const {createSeasonStatsPanel}=await import('../season-stats-panel.js'),dom=new JSDOM('<main><div id="stats"></div></main>'),host=dom.window.document.getElementById('stats'),calls=[],messages=[];
  let close=0,navigations=0,allowed=true,inside=true,reply=async()=>({data:response,error:null});
- const panel=createSeasonStatsPanel({supabase:{rpc:async(name,args)=>{calls.push({name,args});return reply(name,args);}},here:()=>inside,close:()=>close++,navigate:()=>navigations++,alert:m=>messages.push(m),confirm:()=>allowed,openFixture:(s,id)=>messages.push(id)});
+ const panel=createSeasonStatsPanel({supabase:{rpc:async(name,args)=>{calls.push({name,args});return reply(name,args);}},here:()=>inside,close:()=>close++,navigate:()=>navigations++,alert:m=>messages.push(m),confirm:()=>allowed,openFixture:(s,id)=>messages.push(id),...hooks});
  const options={clubId:'club',scope:'club:user',state:{mode:'batting',format:'long_form'},teams:structuredClone(teams),roster:[{id:'r1',name:'Alex'},{id:'r2',name:'Jordan'}],...overrides},s=panel.mount(host,options);await tick();
  return {panel,s,options,dom,host,calls,messages,close:()=>close,navigations:()=>navigations,reply:fn=>reply=fn,inside:v=>inside=v,allow:v=>allowed=v,click:sel=>host.querySelector(sel).click(),input(sel,value){const el=host.querySelector(sel);el.value=value;el.dispatchEvent(new dom.window.Event('input',{bubbles:true}));},submit(){host.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));}};
 }
@@ -15,6 +15,27 @@ test('modes and grade comparison visibly change state, with no invented promotio
  h.click('[data-stats-compare]');assert.equal(h.host.querySelector('[data-stats-compare]').getAttribute('aria-pressed'),'true');assert.equal(h.host.querySelectorAll('[role=row]').length,2);assert.match(h.host.textContent,/Alex/);assert.match(h.host.textContent,/Jordan/);assert.match(h.host.textContent,/No linked season figures/);assert.doesNotMatch(h.host.textContent,/Promote|Worth reviewing/);
  assert.equal(h.host.querySelector('[data-stats-compare-mode=bowling]').getAttribute('aria-pressed'),'true');
  h.click('[data-stats-mode=batting]');assert.equal(h.s.state.compare,false);assert.equal(h.host.querySelector('[role=table]'),null);assert.equal(h.navigations(),3);
+});
+test('comparison names open the exact player and respect draft and access guards',async()=>{
+ const opened=[],h=await harness(data(),{}, {canOpenPlayer:()=>true,openPlayer:(s,id)=>opened.push(id)});
+ h.click('[data-stats-compare]');h.click('[data-stats-open-player="r2"]');assert.deepEqual(opened,['r2']);
+ assert.match(h.host.querySelector('[data-stats-open-player="r1"]').getAttribute('aria-label'),/Player attributes for Alex/);
+ h.input('[name=start]','2026-08-01');h.allow(false);h.click('[data-stats-open-player="r1"]');assert.deepEqual(opened,['r2']);
+ h.allow(true);h.click('[data-stats-open-player="r1"]');assert.deepEqual(opened,['r2','r1']);
+ h.inside(false);h.click('[data-stats-open-player="r2"]');assert.deepEqual(opened,['r2','r1']);
+ const denied=await harness(data(),{}, {canOpenPlayer:()=>false,openPlayer:()=>assert.fail('No attribute access')});
+ denied.click('[data-stats-compare]');assert.equal(denied.host.querySelector('[data-stats-open-player]'),null);
+});
+test('stats links use confirmed roster IDs and do not toggle match history',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture(),opened=[];
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster},{canOpenPlayer:()=>true,openPlayer:(s,id)=>opened.push(id)});
+ const button=h.host.querySelector('[data-stats-open-player]'),row=button.closest('details');
+ assert.ok(f.roster.some(p=>p.id===button.dataset.statsOpenPlayer));assert.equal(row.open,false);
+ button.click();assert.deepEqual(opened,[button.dataset.statsOpenPlayer]);assert.equal(row.open,false);
+ h.click('[data-stats-refresh]');await tick();h.click('[data-stats-open-player]');assert.equal(opened.length,2);
+ const unlinked=structuredClone(f.context);unlinked.identities=[];
+ const other=await harness(unlinked,{teams:f.teams,roster:f.roster},{canOpenPlayer:()=>true,openPlayer:()=>assert.fail('Unconfirmed source identity')});
+ assert.equal(other.host.querySelector('[data-stats-rows] [data-stats-open-player]'),null);
 });
 test('comparison toggles batting and bowling without losing teams, date, focus or navigation state',async()=>{
  const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
@@ -68,6 +89,25 @@ test('fixture attention opens the existing fixture details and normal matches do
  const h=await harness({...data(),fixtures:[{id:'missing',grade:'First',format:'long_form',competition:'District',days:[{date:'2026-10-10'}]}]});
  assert.match(h.host.textContent,/1 match needs attention/);h.click('[data-stats-fixture]');assert.equal(h.messages.at(-1),'missing');
  const empty=await harness();assert.equal(empty.host.querySelector('.ss-issues'),null);
+});
+test('grade comparison counts only scorecards and issues in the two displayed grades',async()=>{
+ const matches=['First','Third'].map((grade,i)=>({id:'missing-'+i,grade,format:'long_form',competition:'District',days:[{date:'2026-10-10'}]}));
+ const third={...structuredClone(teams[0]),id:'third',level:3,grade:'Third'};
+ const h=await harness({...data(),fixtures:matches},{teams:[...structuredClone(teams),third]});
+ assert.match(h.host.querySelector('.ss-issues summary').textContent,/2 matches need attention/);
+ h.click('[data-stats-compare]');
+ assert.equal(h.host.querySelector('.ss-issues summary').textContent,'1 match needs attention');
+ assert.equal(h.host.querySelector('[data-stats-fixture]').dataset.statsFixture,'missing-0');
+ const second=h.host.querySelector('[data-stats-team=secondTeam]');second.value='third';second.dispatchEvent(new h.dom.window.Event('change'));
+ assert.equal(h.host.querySelector('.ss-issues summary').textContent,'2 matches need attention');
+ h.click('[data-stats-mode=batting]');assert.equal(h.host.querySelector('.ss-issues summary').textContent,'2 matches need attention');
+});
+test('withheld source details remain visible without an actionable warning',async()=>{
+ const c={snapshot_id:'hidden',our_team:'us',fixture_id:'f',scorecard:{provider:'playhq_au',match_id:'m',status:'completed',dates:['2026-10-10'],grade:'First',competition:'District',format_key:'long_form',teams:[{id:'us',players:[]}],innings:[{id:'i',number:1,team_id:'us',complete:true,batters:[{player_id:null,name:null,runs:30,importable:false}]}]}};
+ const h=await harness({...data(),cards:[c],fixtures:[{id:'f',grade:'First',competition:'District',format:'long_form',days:[{date:'2026-10-10'}]}]});
+ assert.equal(h.host.querySelector('.ss-issues summary').textContent,'1 source note');
+ assert.ok(h.host.querySelector('.ss-source-notes'));assert.match(h.host.textContent,/those figures cannot be assigned/);
+ assert.doesNotMatch(h.host.textContent,/needs attention|matches need/);
 });
 test('parked demo retains the statistics engine and adapter; live presentation may change independently',()=>{
  const demo=fs.readFileSync('demo.html','utf8');for(const file of ['season-stats.js','season-stats-demo.js']){
@@ -127,7 +167,7 @@ test('last published teams are the default even when upcoming draft teams alread
  const published=publishedTeams('2026-10-17'),draft=datedTeams('2026-10-24');draft[0].slots=[{d1:'r2'}];
  const h=await harness(data(),{boardDate:'2026-10-24',teams:[...publishedTeams('2026-10-10'),...published,...draft]});h.click('[data-stats-compare]');
  assert.equal(h.host.querySelector('[data-stats-date]').value,'published');assert.equal(h.s.state.firstTeam,'first-2026-10-17');
- assert.match(h.host.querySelector('[role=table]').textContent,/First17 Oct/);assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Alex/);
+ assert.match(h.host.querySelector('[role=table]').textContent,/FirstLine-up: 17 Oct/);assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Alex/);
  change(h,'[data-stats-date]','2026-10-24');assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Jordan/);
  change(h,'[data-stats-date]','published');assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Alex/);
 });
@@ -136,7 +176,7 @@ test('each grade uses its latest published snapshot and order, excluding unpubli
  first.published.slots=[{d1:'r2',d2:'r1'},{d1:'r1'}];first.slots=[{d1:'r1'}];
  const h=await harness(data(),{boardDate:'2026-10-24',teams:[...previous,first]});h.click('[data-stats-compare]');
  assert.equal(h.s.state.firstTeam,first.id);assert.equal(h.s.state.secondTeam,previous[1].id);
- const table=h.host.querySelector('[role=table]');assert.match(table.textContent,/First24 Oct/);assert.match(table.textContent,/Second17 Oct/);
+ const table=h.host.querySelector('[role=table]');assert.match(table.textContent,/FirstLine-up: 24 Oct/);assert.match(table.textContent,/SecondLine-up: 17 Oct/);
  const cells=table.querySelectorAll('[role=cell]');assert.match(cells[0].textContent,/JordanDay 1.*AlexDay 2/);assert.match(cells[2].textContent,/Alex/);
  first.published.slots=[{d1:'r1'}];h.panel.mount(h.host,h.options);assert.match(h.host.querySelectorAll('[role=cell]')[0].textContent,/Alex/);assert.doesNotMatch(h.host.querySelectorAll('[role=cell]')[0].textContent,/Jordan/);
 });

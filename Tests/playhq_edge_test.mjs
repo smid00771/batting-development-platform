@@ -58,3 +58,17 @@ test('scheduled season refresh uses its lease and stores club teams before compl
  };
  const response=await handler(request({action:'run',run_id:'run',token:'a'.repeat(64)}));assert.equal(response.status,200);assert.ok(finished);assert.deepEqual(await response.json(),{checked:1});
 });
+
+test('an existing check lease returns a useful retry response without exposing arbitrary database errors',async()=>{
+ for(const message of ['A check is already running. Try again shortly','Wait 30 seconds before checking again','private SQL diagnostic club-secret-test']){
+  globalThis.fetch=async(url,opts)=>{
+   if(String(url).endsWith('/playhq_sync_api'))return json({configured:true});
+   const b=JSON.parse(opts.body);if(b.p_action==='connection')return json({key:'club-secret-test',generation:'version'});
+   assert.equal(b.p_action,'claim_fixture');return json({code:'P0001',message},400);
+  };
+  const r=await handler(request({action:'check',club_id:club,fixture_id:'fixture',kind:'results'})),body=await r.text();
+  assert.equal(r.status,message.startsWith('private')?400:409);assert.ok(!body.includes('club-secret-test'));
+  if(message.startsWith('A check'))assert.match(body,/five minutes/);
+  if(message.startsWith('Wait'))assert.match(body,/30 seconds/);
+ }
+});

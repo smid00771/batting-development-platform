@@ -17,7 +17,7 @@ class PublicationDate extends Date{
  constructor(...args){super(...(args.length?args:['2099-10-17T12:00:00Z']));}
  static now(){return new Date('2099-10-17T12:00:00Z').getTime();}
 }
-function harness({warn=true,short=false,failReload=false,badResponse=false,prepare=false}={}){
+function harness({stale=false,timeout=false,warn=true,short=false,failReload=false,badResponse=false,prepare=false}={}){
  const dom=new JSDOM('<main id="sePage"></main>',{url:'https://example.invalid'}),document=dom.window.document;
  const roster=Array.from({length:66},(_,i)=>({id:'p'+i,name:'Player '+i,user_id:'u'+i}));
  const fixtures=Array.from({length:6},(_,i)=>({id:'f'+i,revision:1,publication:0,published:null,details:{grade:'Grade '+i,opposition:'Visitors',days:[{date:'2099-10-17'}]},slots:Array.from({length:11},(_,j)=>({d1:short&&j===10?null:'p'+(i*11+j),d2:null})),issues:warn?[{level:'warning',text:'Role details incomplete'}]:[]}));
@@ -33,7 +33,7 @@ function harness({warn=true,short=false,failReload=false,badResponse=false,prepa
   supabase:{rpc:async(_,args)=>{const {p_action:action,p_data:data}=args;requests.push({action,data:structuredClone(data)});
    if(receipts.has(data.request_id))return {data:receipts.get(data.request_id)};
    if(action==='save_board'){server=server.map(f=>({...data.fixtures.find(x=>x.id===f.id)||f,revision:f.revision+1}));return {data:{saved:true}};}
-   assert.equal(action,'publish');if(badResponse)return {data:{saved:true}};
+   assert.equal(action,'publish');if(stale)return {error:{code:'P0001',message:'Draft changed. Review the latest team before publishing'}};if(timeout)return {error:{code:'57014',message:'canceling statement due to statement timeout'}};if(badResponse)return {data:{saved:true}};
    publicationCount++;server=server.map(f=>({...f,publication:1,published:{details:structuredClone(f.details),slots:structuredClone(f.slots),players:structuredClone(roster)}}));
    const result={published:true,recipients:7,groups:{added_memberships:12,unlinked_players:[],unmapped_grades:[]}};receipts.set(data.request_id,result);return {data:result};}},
   seReload:async()=>{if(shouldFail){shouldFail=false;throw Error('Connection lost while refreshing');}s.data.fixtures=structuredClone(server);return true;},
@@ -71,8 +71,10 @@ assert.equal(retry.requests[1].data.request_id,requestId);assert.equal(retry.pub
 // Short teams remain an explicit decision; hard errors and non-head users cannot publish.
 const short=harness({warn:false,short:true});short.ctx.sePublishReview(short.s.data.fixtures);await short.document.getElementById('seConfirmPublish').onclick();assert.equal(short.requests.length,0);assert.match(short.document.getElementById('sePublishStatus').textContent,/vacant places/);
 short.document.querySelectorAll('[data-se-ack-short]').forEach(el=>el.checked=true);await short.document.getElementById('seConfirmPublish').onclick();assert.equal(short.requests[0].data.acknowledge_short.length,6);
-const denied=harness();denied.s.data.head_selector=false;denied.ctx.sePublishReview(denied.s.data.fixtures);assert.equal(denied.document.getElementById('seConfirmPublish').disabled,true);assert.match(denied.document.body.textContent,/Only the current Head/);
+const denied=harness();denied.s.data.head_selector=false;denied.ctx.sePublishReview(denied.s.data.fixtures);assert.equal(denied.document.getElementById('seConfirmPublish').disabled,true);assert.match(denied.document.body.textContent,/Head Selector for each selected group/);
 denied.s.data.head_selector=true;denied.s.data.fixtures[0].issues.push({level:'error',text:'Player unavailable'});denied.ctx.sePublishReview(denied.s.data.fixtures);assert.equal(denied.document.getElementById('seConfirmPublish').disabled,true);assert.match(denied.document.body.textContent,/Fix these issues/);
+const stale=harness({warn:false,stale:true});stale.ctx.sePublishReview(stale.s.data.fixtures);await stale.document.getElementById('seConfirmPublish').onclick();assert.equal(stale.s.pending,null);assert.equal(stale.publicationCount(),0);assert.match(stale.document.getElementById('seNotice').textContent,/team changed.*Review the latest team/);
+const timed=harness({warn:false,timeout:true});timed.ctx.sePublishReview(timed.s.data.fixtures);await timed.document.getElementById('seConfirmPublish').onclick();assert.equal(timed.s.pending,null);assert.equal(timed.publicationCount(),0);assert.match(timed.document.getElementById('seNotice').textContent,/Publishing timed out.*not published.*saved selections are safe/);
 const bad=harness({warn:false,badResponse:true});bad.ctx.sePublishReview(bad.s.data.fixtures);await bad.document.getElementById('seConfirmPublish').onclick();assert.ok(bad.s.pending);assert.equal(bad.s.view,'board');assert.match(bad.document.getElementById('seNotice').textContent,/Publication was not confirmed/);
 }
 for(const script of demo.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
