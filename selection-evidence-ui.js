@@ -1,5 +1,5 @@
-import {buildSeasonStats, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.260';
-import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.260';
+import {buildSeasonStats, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.261';
+import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.261';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
@@ -11,6 +11,7 @@ export const evidenceStyles=`<style>
 .se-evidence-button.se-evidence-compact{flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center;gap:3px;max-width:84px;min-width:44px;min-height:44px;padding:3px}.se-evidence-compact .se-evidence-mark{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;padding:2px;flex-shrink:0}.se-evidence-mark svg{display:block;width:16px;height:16px}.se-evidence-mark.steady{border-color:#cbd5e1}.se-evidence-compact .se-evidence-link{font-size:12px;line-height:1;border-radius:3px;padding:1px}.se-has-evidence>.se-evidence .se-evidence-compact{max-width:84px}
 .se-evidence-links-host{position:relative}.se-evidence-connectors{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2}.se-evidence-connectors g{stroke:#b47a24;fill:#b47a24;stroke-width:2;opacity:.55}.se-evidence-connectors g.tradeoff{stroke:#66768f;fill:#66768f;stroke-dasharray:4 3}.se-evidence-connectors g.close{stroke-dasharray:2 3}.se-evidence-connectors g.se-comparison-active{stroke-width:3;opacity:1}.se-comparison-linked{box-shadow:inset 0 0 0 1px #d9b879;border-radius:6px}.se-comparison-linked.se-comparison-active{box-shadow:inset 0 0 0 2px #b47a24;background-color:#fff9ed}
 .se-evidence-compact:has(.se-evidence-link){display:grid;grid-template-columns:repeat(2,21px);align-content:center;gap:1px 3px}.se-evidence-compact .se-evidence-link{grid-column:1/-1;text-align:center;white-space:normal;font-size:10px;line-height:12px;overflow-wrap:anywhere}
+.se-evidence-connectors .se-evidence-hit{stroke:transparent;stroke-width:24;stroke-dasharray:none;fill:none;pointer-events:stroke;cursor:pointer}.se-evidence-connectors [role=button]:focus-visible{outline:none;opacity:1;stroke-width:3}.se-evidence-connectors [role=button]:focus-visible .se-evidence-line{stroke:#17245f}
 .se-other-grades{font-size:13px;overflow-wrap:anywhere}.se-other-grades small{color:#52627a;font-size:12px}
 </style>`;
 
@@ -64,7 +65,7 @@ function pairDetails(pair,index=0) {
   return `<details class="se-evidence-pair" ${pair.number&&index===0?'open':''}><summary><strong>${pair.number?symbol+pair.number+' ':''}${escape(higher.person.name)} / ${escape(lower.person.name)}</strong><small>${escape(pair.reason)}</small></summary><div class="se-evidence-pair-grid">${[higher,lower].map(item=>`<div><strong>${escape(item.person.name)}</strong><small>${escape(item.team.grade)} · selected at ${item.position}</small><small>${escape(battingRoleLabel(item.person))}${item.ball?.applicable?' · '+escape(bowlingRoleLabel(item.person)):''}</small><small>Fielding: ${escape(fieldingLabel(item.person))} · selector rating</small>${record(item)}</div>`).join('')}</div>${pair.targetAverage!==null?`<p class="se-evidence-target">Rough batting target in ${escape(lower.team.grade)}: <strong>${number(pair.targetAverage)} average</strong>.<br>${escape(lower.person.name)}: roughly <strong>${number(pair.equivalentBat)}</strong> in ${escape(higher.team.grade)}.</p>`:''}${higher.ball?.applicable?`<p class="se-evidence-small">Rough bowling equivalent for ${escape(lower.person.name)}: ${number(pair.equivalentWickets)} wickets per 100 balls · ${number(pair.equivalentEconomy)} economy. Compare actual overs and the bowling job as well.</p>`:''}<p class="se-evidence-small">Check availability, actual batting opportunities, recorded fielding observations and team balance. Fielding is a selector rating, considered alongside the figures and especially relevant in shorter formats. Selected positions show the proposed order, not historical batting positions.</p></details>`;
 }
 function help() {
-  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy. In the limited-overs trial, strong wicket-taking allows economy up to 35% above the pooled reference; the expensive-bowling check starts at 50% above it. Long form and T20 retain the 10% allowance and 25% expensive-bowling threshold. A limited-overs comparison can also flag at least 15% better economy with wicket-taking within 15% of the incumbent after the rough grade adjustment; it is labelled a trade-off. These are trial allowances, not measured format-specific benchmarks. Economical containment can offset fewer wickets. These are rough starting rules, not selection decisions.</li><li>Matching ↔ numbers link a selection conversation, including close calls within the rough 15% comparison range; ≈ flags a performance trade-off. A line joins the linked players when their grades are side by side. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Possible swaps preserve batting roles and quick/spin type. Long-form comparisons preserve frontline/part-time roles and check observed workload. Opening/first-change and off-spin/leg-spin jobs are not yet recorded.</li></ul></details>`;
+  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy. In the limited-overs trial, strong wicket-taking allows economy up to 35% above the pooled reference; the expensive-bowling check starts at 50% above it. Long form and T20 retain the 10% allowance and 25% expensive-bowling threshold. A limited-overs comparison can also flag at least 15% better economy with wicket-taking within 15% of the incumbent after the rough grade adjustment; it is labelled a trade-off. These are trial allowances, not measured format-specific benchmarks. Economical containment can offset fewer wickets. These are rough starting rules, not selection decisions.</li><li>Matching ↔ numbers link a selection conversation, including close calls within the rough 15% comparison range; ≈ flags a performance trade-off. A line joins the linked players when their grades are side by side. Click or tap the line to compare those players. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Possible swaps preserve batting roles and quick/spin type. Long-form comparisons preserve frontline/part-time roles and check observed workload. Opening/first-change and off-spin/leg-spin jobs are not yet recorded.</li></ul></details>`;
 }
 function assessmentDetails(item,key,label,job) {
   const evidence=item[key],base=evidence.baseline;
@@ -78,9 +79,23 @@ function assessmentDetails(item,key,label,job) {
 export function renderEvidenceDetails(item) {
   return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}<p class="se-evidence-small">Fielding: <strong>${escape(fieldingLabel(item.person))}</strong> · selector rating</p>${otherGradeRecords(item)}${item.links.length?`<h3>Selection conversations</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No selection conversation meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
 }
+export function renderEvidenceComparison(pair) {
+  const early=[pair.higher,pair.lower].some(item=>item.bat?.early||item.ball?.early);
+  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">Selection comparison</h2><p class="se-evidence-small">${escape(STATS_FORMATS[pair.higher.team.format]||pair.higher.team.format)} · current season${early?' · early sample':''}</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${pairDetails(pair)}${help()}`;
+}
+function showEvidenceDialog(host,content,trigger) {
+  host.querySelector('.se-evidence-dialog')?.remove();
+  const dialog=host.ownerDocument.createElement('dialog');dialog.className='se-evidence-dialog';dialog.setAttribute('aria-labelledby','seEvidenceTitle');dialog.innerHTML=content;host.append(dialog);
+  const close=()=>{dialog.close?.();dialog.remove();if(trigger.isConnected)trigger.focus({preventScroll:true});};
+  dialog.querySelector('[data-evidence-close]').onclick=close;
+  dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
+  if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
+  dialog.querySelector('[data-evidence-close]').focus();
+}
 // Keep the relationship on the board. Lines occupy the existing column gap;
 // stacked cards retain the same numbered markers without a misleading line.
 const evidenceLinkBindings = new WeakMap();
+let evidenceClipSequence=0;
 export function clearEvidenceLinks(host) { evidenceLinkBindings.get(host)?.(); }
 export function bindEvidenceLinks(host, model, here = () => true) {
   clearEvidenceLinks(host);
@@ -105,8 +120,8 @@ export function bindEvidenceLinks(host, model, here = () => true) {
     marked.forEach(row => row.classList.remove('se-comparison-linked','se-comparison-active'));
     evidenceLinkBindings.delete(host);
   }
-  function highlight(key) {
-    const active = new Set(pairs.filter(pair => pair.higher.key === key || pair.lower.key === key).map(pair => String(pair.number)));
+  function highlight(key,number) {
+    const active = new Set(pairs.filter(pair => number!==undefined ? pair.number===number : pair.higher.key === key || pair.lower.key === key).map(pair => String(pair.number)));
     const activeRows=new Set();
     layers.forEach(({links}) => links.forEach(({pair,group,ends}) => {
       const on = active.has(String(pair.number));
@@ -125,13 +140,25 @@ export function bindEvidenceLinks(host, model, here = () => true) {
     };
     const links = pairs.map(pair => ({pair,ends:[endpoint(pair.higher.key),endpoint(pair.lower.key)]})).filter(link => link.ends.every(Boolean));
     if (!links.length) continue;
-    const svg = make('svg', {'class':'se-evidence-connectors','aria-hidden':'true',focusable:'false'});
+    const svg = make('svg', {'class':'se-evidence-connectors',role:'group','aria-label':'Selection comparisons',focusable:'false'});
+    const defs=make('defs',{});svg.append(defs);
     root.classList.add('se-evidence-links-host'); root.append(svg);
     for (const link of links) {
-      link.group = make('g', {'data-evidence-connection':link.pair.number,'class':link.pair.kind});
-      link.path = make('path', {fill:'none'});
-      link.dots = [make('circle', {r:3}),make('circle', {r:3})];
-      link.group.append(link.path,...link.dots); svg.append(link.group);
+      const clipId='se-evidence-hit-'+(++evidenceClipSequence),clip=make('clipPath',{id:clipId,clipPathUnits:'userSpaceOnUse'});
+      link.clip=make('rect',{});clip.append(link.clip);defs.append(clip);
+      link.group = make('g', {'data-evidence-connection':link.pair.number,'class':link.pair.kind,role:'button',tabindex:0,focusable:'true','aria-label':`Compare ${link.pair.higher.person.name} and ${link.pair.lower.person.name}. ${link.pair.reason}`});
+      link.path = make('path', {fill:'none','class':'se-evidence-line','aria-hidden':'true'});
+      link.hit=make('path',{'class':'se-evidence-hit','clip-path':`url(#${clipId})`,'aria-hidden':'true'});
+      link.dots = [make('circle', {r:3,'aria-hidden':'true'}),make('circle', {r:3,'aria-hidden':'true'})];
+      link.group.append(link.path,...link.dots,link.hit); svg.append(link.group);
+      const open=event=>{
+        event.preventDefault();event.stopPropagation();
+        if(!here()||link.group.style.display==='none')return;
+        showEvidenceDialog(host,renderEvidenceComparison(link.pair),link.group);
+      };
+      for(const [type,fn] of [['click',open],['keydown',event=>{if(event.key==='Enter'||event.key===' ')open(event);}],['pointerenter',()=>highlight('',link.pair.number)],['focus',()=>highlight('',link.pair.number)],['pointerleave',()=>highlight('')],['blur',()=>highlight('')]]){
+        link.group.addEventListener(type,fn);listeners.push([link.group,type,fn]);
+      }
       link.ends.forEach(end => {marked.add(end.row); end.row.classList.add('se-comparison-linked');});
     }
     layers.push({root,svg,links});
@@ -162,7 +189,10 @@ export function bindEvidenceLinks(host, model, here = () => true) {
         const x1 = left.box.right-bounds.left, x2 = right.box.left-bounds.left;
         const y1 = left.buttonBox.top+left.buttonBox.height/2-bounds.top, y2 = right.buttonBox.top+right.buttonBox.height/2-bounds.top;
         const middle = (x1+x2)/2;
-        link.path.setAttribute('d', `M ${x1} ${y1} C ${middle} ${y1} ${middle} ${y2} ${x2} ${y2}`);
+        const curve=`M ${x1} ${y1} C ${middle} ${y1} ${middle} ${y2} ${x2} ${y2}`;
+        link.path.setAttribute('d',curve);link.hit.setAttribute('d',curve);
+        // The wider hit area stays inside the gap and cannot cover player controls.
+        for(const [key,value] of Object.entries({x:x1,y:0,width:x2-x1,height:bounds.height}))link.clip.setAttribute(key,String(value));
         link.dots.forEach((dot,index)=>{dot.setAttribute('cx',String(index?x2:x1));dot.setAttribute('cy',String(index?y2:y1));});
       }
     }
@@ -184,13 +214,7 @@ export function bindEvidenceDetails(host,model,here=()=>true) {
   host.querySelectorAll('[data-evidence-open]').forEach(button=>button.onclick=event=>{
     event.preventDefault();event.stopPropagation(); if(!here())return;
     const item=model.players.get(button.dataset.evidenceOpen);if(!item)return;
-    host.querySelector('.se-evidence-dialog')?.remove();
-    const dialog=host.ownerDocument.createElement('dialog');dialog.className='se-evidence-dialog';dialog.setAttribute('aria-labelledby','seEvidenceTitle');dialog.innerHTML=renderEvidenceDetails(item);host.append(dialog);
-    const close=()=>{dialog.close?.();dialog.remove();if(button.isConnected)button.focus({preventScroll:true});};
-    dialog.querySelector('[data-evidence-close]').onclick=close;
-    dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
-    if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
-    dialog.querySelector('[data-evidence-close]').focus();
+    showEvidenceDialog(host,renderEvidenceDetails(item),button);
   });
   bindEvidenceLinks(host,model,here);
 }

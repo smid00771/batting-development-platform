@@ -6,10 +6,10 @@
 <main><h1>Selection conversations</h1><p>Fictional players · shared application comparison and form components</p><div class="toolbar"><button id="board" aria-pressed="true">Selection Board</button><button id="compare" aria-pressed="false">Compare grades</button><label><input id="show" type="checkbox" checked> Show form indicators</label></div><section id="view"></section></main>
 <script type="module">
 import {selectionEvidenceFixture} from '../Tests/fixtures/selection_evidence_fixture.mjs';
-import {buildSeasonStats} from '../season-stats.js?v=0.8.62.260';
-import {buildSelectionEvidence} from '../selection-evidence.js?v=0.8.62.260';
-import {evidenceStyles,renderEvidenceBadges,bindEvidenceDetails,clearEvidenceLinks} from '../selection-evidence-ui.js?v=0.8.62.260';
-import {renderGradeComparison} from '../season-stats-panel.js?v=0.8.62.260';
+import {buildSeasonStats} from '../season-stats.js?v=0.8.62.261';
+import {buildSelectionEvidence} from '../selection-evidence.js?v=0.8.62.261';
+import {evidenceStyles,renderEvidenceBadges,bindEvidenceDetails,clearEvidenceLinks} from '../selection-evidence-ui.js?v=0.8.62.261';
+import {renderGradeComparison} from '../season-stats-panel.js?v=0.8.62.261';
 const fixture=selectionEvidenceFixture();
 fixture.roster.forEach(p=>p.fielding=p.id.startsWith('g1')?'strong':'needs_work');
 const stats=buildSeasonStats(fixture.context),model=buildSelectionEvidence(stats,fixture.teams,fixture.roster),view=document.querySelector('#view');
