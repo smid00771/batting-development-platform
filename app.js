@@ -6,10 +6,10 @@ import {createPlayHQImport} from './playhq-import.js?v=0.8.62.245';
 import {createPlayCricketConnection} from './playcricket-connection.js?v=0.8.62.245';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.248';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.246';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.260';
-import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.260';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.260';
-import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.260';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.261';
+import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.261';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.261';
+import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.261';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.253';
@@ -21,7 +21,7 @@ import {createSelectionRoom} from './selection-room.js?v=0.8.62.246';
 import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.253';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.250';
 import {createSocialAwardLabels} from './social-award-labels.js?v=0.8.62.248';
-import {createFixtureResults} from './fixture-results.js?v=0.8.62.260';
+import {createFixtureResults} from './fixture-results.js?v=0.8.62.261';
 import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.253';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
@@ -29,7 +29,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.260';
+const APP_UI_VERSION='0.8.62.261';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.260",
+  "appVersion": "0.8.62.261",
   "sources": {
     "app-design.css": "cbf99dacf8b1a444708384b5f2f441cc3e6fa21b6c93307d939ecd589fce2cd5",
-    "app.js": "aedbd97418a56b01646b51b7a21c264ba0cfded3d1fbaa9c4dd2c1c58df90ce5",
+    "app.js": "19393465c0f3e46ae75afc56f499e59730f78ad693e5eba2bddc8f3d4b7b1fcd",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
     "club-week.js": "8cf32ed2eb59ce212ad26677133fd539ea9a4e52443527b89cb396e37d3c8c9f",
     "Demo/current-fixtures.js": "b7040dc89713bad76a79004c716139c08034d9deb98fea00edbc5d34a8e19ba1",
@@ -24,9 +24,9 @@
     "player-week-ranking.js": "c7ffa893ca459c6c561ffc150fa3cac05e372a418dc3a1c457d2fbc72b4432b5",
     "playhq-import.js": "1b43756a5c33f1d6d591cec560b8345cff01c308902e0b1eb541651c5747d8dd",
     "season-stats-demo.js": "5e14bc429b80cf91a8758aa362b89ba3cde59dc69a5f68b4e74ce55ba0209746",
-    "season-stats-panel.js": "7274df641f4e7e21798f62e69f6967e7241f02a620062f1aa4d982f16a7b8870",
+    "season-stats-panel.js": "cd9a19792863453552cc4e154f1af1759e8c34922f7bd1cc0905ee884cb67d13",
     "season-stats.js": "e6f87d507b7f86728b1ef2e331400f5406cf49d6878928ea63bddb15eb0b0697",
-    "selection-evidence-ui.js": "465b41a96d042a14e39e24376951541d714d2aab3dc829ff40ee2e420e974c7c",
+    "selection-evidence-ui.js": "3770926f7eb7a5a37221d42ec297989f2d9275d269cf95d5b0cac43909186384",
     "selection-evidence.js": "b0078e6e5ad53677557ef7dbebb5c143f4d58023e1dc639381939e4959728e0d",
     "selection-group-manager.js": "24f3322e3c88fd9846267d1c212db2c82336d2445a2919a2dee3c7aa169a28bc",
     "selection-group-page.js": "4122c3df57fb3a456f5923abd4cdbdcde1958aa05c762d5021010ea392465619",
