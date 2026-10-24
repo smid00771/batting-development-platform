@@ -29,6 +29,8 @@ export function gradeGuide(first, second) {
 const role = person => ['top','middle','lower'].includes(person?.batting) ? person.batting : null;
 const bowler = person => ['pace','spin'].includes(person?.bowling);
 const bowlingRole = person => bowler(person) && ['frontline','part_time'].includes(person.bowling_load) ? person.bowling + ':' + person.bowling_load : null;
+export const FIELDING_RATINGS = [['unknown','Not assessed'],['needs_work','Needs work'],['reliable','Reliable'],['strong','Strong']];
+export const fieldingLabel = person => FIELDING_RATINGS.find(([key])=>key===person?.fielding)?.[1] || 'Not assessed';
 export const battingRoleLabel = person => ({top:'Top order',middle:'Middle order',lower:'Lower order'})[person?.batting] || 'Batting role not set';
 export const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : 'Spinner') + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
 const integer = value => Number.isInteger(value) && value >= 0;

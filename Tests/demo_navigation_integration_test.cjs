@@ -132,3 +132,21 @@ test('browser Back restores the stats comparison format and bowling view after o
  assert.equal(h.document.querySelector('[data-stats-team=firstTeam]').value,before.statsFilters.firstTeam);
  noErrors(h);
 });
+
+test('fielding saves in player attributes and remains visible in the complete demo Form guide',async t=>{
+ const h=await openDemo('selections');t.after(h.close);
+ await h.click('#seSeasonStats');await h.click('[data-stats-compare]');
+ const player=h.document.querySelector('[data-stats-open-player]'),id=player.dataset.statsOpenPlayer;
+ player.click();await h.settle();
+ const input='[data-se-roster-id="'+id+'"] [name=fielding]';
+ assert.equal(h.document.querySelector(input).value,'unknown');
+ await h.choose(input,'strong');await h.click('#seSaveRosterRoles');
+ assert.equal(h.document.querySelector('#seSaveRosterRoles').textContent,'Saved');
+ await h.click('[data-se-view=board]');await h.click('[data-se-view=roster]');
+ assert.equal(h.document.querySelector(input).value,'strong');
+ await h.click('[data-se-view=board]');await h.click('#seSeasonStats');await h.click('[data-stats-compare]');
+ const button=[...h.document.querySelectorAll('[data-evidence-open]')].find(b=>b.dataset.evidenceOpen.includes(id));
+ assert.ok(button);button.click();await h.settle();
+ assert.match(h.document.querySelector('.se-evidence-dialog').textContent,/Fielding: Strong · selector rating/);
+ noErrors(h);
+});

@@ -20,6 +20,14 @@ function bundle(file){
   return 'const {'+names+'}='+bundle(dependency)+';';
  });
  const exports=[...source.matchAll(/^export (?:async )?(?:const|let|function|class) (\w+)/gm)].map(m=>m[1]);
+ source=source.replace(/^export\s*\{([^}]+)\}\s*;?\s*$/gm,(_,names)=>{
+  for(const name of names.split(',').map(n=>n.trim()).filter(Boolean)){
+   const match=/^(\w+)(?:\s+as\s+(\w+))?$/.exec(name);
+   if(!match)throw Error('Unsupported named export in '+file);
+   exports.push(match[2]?match[2]+':'+match[1]:match[1]);
+  }
+  return '';
+ });
  source=source.replace(/^export /gm,'');
  if(/^import\s|^export\s/m.test(source))throw Error('Unsupported module syntax in '+file);
  definitions.push('const '+id+'=(()=>{\n'+isolate(source).trim()+'\nreturn {'+exports.join(',')+'};\n})();');
