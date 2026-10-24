@@ -1,13 +1,13 @@
 {
-  "appVersion": "0.8.62.262",
+  "appVersion": "0.8.62.263",
   "sources": {
     "app-design.css": "cbf99dacf8b1a444708384b5f2f441cc3e6fa21b6c93307d939ecd589fce2cd5",
-    "app.js": "ff517a3676529dff733dc4ba5b761c447b369b99edbc03b46a928308dadeddbc",
+    "app.js": "a73464e8d5f9a6b00a1171988b31d29c75e7c1fc0d66bf0f42ae41985112d8fb",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
     "club-week.js": "8cf32ed2eb59ce212ad26677133fd539ea9a4e52443527b89cb396e37d3c8c9f",
     "Demo/current-fixtures.js": "b7040dc89713bad76a79004c716139c08034d9deb98fea00edbc5d34a8e19ba1",
     "Demo/demo.css": "e8692b88ac16b44b09c26ecfea033e1f5e66e0efeedd80efe604d6819ba00c6c",
-    "Demo/fixtures.js": "0c47b51e89f32e8c01514257bea2e9e403b3323e35ffbcbe14a9d4424915f439",
+    "Demo/fixtures.js": "adf17ed8279213aaaef31cd7e6c09e863cae300385dcb02def2b8f78311fa141",
     "Demo/isolation.js": "689a8f962fc599e79d573e5dc88203f4cdd775e98cfb249787e45eb5e7650c77",
     "Demo/journeys.js": "7cbb3aaf657741f1164741989b4a0a46fc7adc9bd176326744bde7f8940a0408",
     "Demo/template.html": "8c5fb6efad47392cdae57171eb64f2ec0975ab7a5bbf63892fccab923b2e34e0",

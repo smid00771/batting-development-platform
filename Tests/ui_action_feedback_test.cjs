@@ -34,9 +34,9 @@ function setup(){
   else{h.c.seLock(false);assert.equal(button.disabled,true,'An outstanding read stays disabled after mutation unlock');resolve();await pending;}
   assert.equal(button.disabled,false);assert.equal(button.dataset.seWasDisabled,undefined);
  }
- for(const code of ['P0001',undefined]){
+ for(const message of ['Alex is already selected on 2026-10-24. Choose one place per player per date.','Alex is already selected in overlapping games on 2026-10-24 (Morning at 10:00 and Afternoon at 12:00). Change the player or fixture time.'])for(const code of ['P0001',undefined]){
   const h=setup();h.c.sePrepareMatch=x=>x;const promise=h.c.seMutate('save_board',{fixtures:[{id:'dev',revision:2,slots:[]}]});
-  h.requests[0].reject(Object.assign(Error('Alex is already selected on 2026-10-24. Choose one place per player per date.'),{code}));await promise;
+  h.requests[0].reject(Object.assign(Error(message),{code}));await promise;
   assert.equal(h.s.busy,false);if(code){assert.equal(h.s.pending,null,'A confirmed refusal cannot trap the board in retry');assert.match(h.s.notice,/Team was not changed/);}else{assert.ok(h.s.pending,'An unverified network failure keeps safe retry');}
  }
  {

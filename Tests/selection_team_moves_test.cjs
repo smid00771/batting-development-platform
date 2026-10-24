@@ -10,7 +10,7 @@ function harness(fixtures=[team('A'),team('B'),team('C')]){
  const roster=[...new Set(fixtures.flatMap(f=>f.slots.flatMap(slot=>[slot.d1,slot.d2])).filter(Boolean))].map(id=>({id,name:id,active:true,availability:{available_dates:[...dates]}}));
  const s={key:'selector:club',view:'board',busy:false,pending:null,undo:[],data:{selector:true,fixtures,roster,access:{timezone:'UTC'}}},calls=[],notices=[],orders=[];let saveResult=true;
  const c=vm.createContext({Date,Intl,structuredClone,ensureSelections:()=>s,selectionState:s,currentTab:'teams',selectionsScopeKey:()=>s.key,seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Vacant',seNotice:text=>notices.push(text),seDate:String,sePickerSaved(){s.active=null;},seBoard(){},seFocusOrder(){},seMoveOrder:async(...args)=>{orders.push(args);return true;},seMutate:async(action,data,options)=>{calls.push({action,data,options});return saveResult;}});
- vm.runInContext(['seDayStatus','seOverlap','seUsed','seFixtureCompleted','seFixtureLocked','seOrderName','seTeamNumbers','seBlankSlots','seClearTeam','seTrimSlots','seOverflow','seOverflowText','seTransferProblem','seMovePlan','seMovePlayer','seClearOrder'].map(extract).join('\n'),c);
+ vm.runInContext(['seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seDayTime','seUsed','seFixtureCompleted','seFixtureLocked','seOrderName','seTeamNumbers','seBlankSlots','seClearTeam','seTrimSlots','seOverflow','seOverflowText','seTransferProblem','seMovePlan','seMovePlayer','seClearOrder'].map(extract).join('\n'),c);
  return {c,s,calls,notices,orders,saved:value=>saveResult=value};
 }
 const occupied=(f,day='d1')=>f.slots.map(slot=>slot[day]).filter(Boolean);
@@ -74,6 +74,17 @@ test('compatibility excludes only moved source cells and retains other-team/date
  const h=harness(),[a,b,c]=h.s.data.fixtures;assert.equal(h.c.seTransferProblem(a,b,0,h.s.data),'');
  c.slots[4].d1='A-0';assert.ok(h.c.seTransferProblem(a,b,0,h.s.data));c.slots[4].d1='C-4';a.slots[2].d1='A-0';assert.ok(h.c.seTransferProblem(a,b,0,h.s.data),'Another occurrence in the source is still a conflict');a.slots[2].d1='A-2';
  h.s.data.roster.find(p=>p.id==='C-4').name='A-0';assert.ok(h.c.seTransferProblem(a,b,0,h.s.data),'A separately selected duplicate-name entry is not silently merged');
+});
+
+test('same-day T20 selections use match times instead of blocking the whole date',()=>{
+ const first=team('Morning'),second=team('Afternoon');
+ for(const fixture of [first,second]){fixture.details.format='t20';fixture.details.days[0].start=fixture===first?'10:00':'14:00';}
+ second.slots[0].d1='Morning-0';const h=harness([first,second]),player=h.s.data.roster.find(p=>p.id==='Morning-0');
+ assert.equal(h.c.seUsed(player,first.details.days[0],[second],{},first.details),false,'10:00 and 14:00 T20s do not overlap');
+ second.details.days[0].start='12:00';assert.equal(h.c.seUsed(player,first.details.days[0],[second],{},first.details),true,'Overlapping T20s remain blocked');
+ delete second.details.days[0].start;assert.equal(h.c.seUsed(player,first.details.days[0],[second],{},first.details),true,'Missing time remains a safe conflict');
+ assert.equal(h.c.seDayTime(first.details.days[0]),dates[0]+' · 10:00');
+ assert.match(source,/d\.days\.map\(seDayTime\)/,'Selection Board fixture headings include each start time');
 });
 
 test('one unavailable bracket partner prevents moving either partner',()=>{
