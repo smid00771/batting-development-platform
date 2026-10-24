@@ -138,3 +138,16 @@ test('unlinked PlayHQ appearances explain unchanged totals, then join only after
  c.identities.push({source_id:'appearance',roster_id:'r1',name:'Alex'});
  const confirmed=buildSeasonStats(c);assert.equal(player(confirmed).runs,100);assert.ok(!confirmed.issues.some(i=>i.messages.some(m=>m.startsWith('Link '))));
 });
+
+test('explicit source format aliases are canonicalised without using dates or pooling unknown formats',()=>{
+ const cards=[card('long',{format_key:'two_day'}),card('short',{format_key:'one day'}),card('t20',{format_key:'T20'}),card('unknown',{format_key:'unclassified'})];
+ cards[0].scorecard.innings[0].batters[0].runs=10;
+ cards[1].scorecard.innings[0].batters[0].runs=50;
+ const c=context(cards),before=JSON.stringify(c),stats=buildSeasonStats(c);
+ assert.equal(stats.rows.filter(r=>r.roster_id==='r1').length,4);
+ assert.equal(player(buildSeasonStats(c,{format:'limited_overs'})).runs,50);
+ assert.equal(player(buildSeasonStats(c,{format:'long_form'})).runs,10);
+ assert.equal(buildSeasonStats(c,{format:'t20'}).included,1);
+ assert.equal(buildSeasonStats(c,{format:'unknown'}).included,1);
+ assert.equal(JSON.stringify(c),before);
+});

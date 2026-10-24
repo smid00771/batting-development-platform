@@ -32,6 +32,12 @@ const bowlingRole = person => bowler(person) && ['frontline','part_time'].includ
 export const battingRoleLabel = person => ({top:'Top order',middle:'Middle order',lower:'Lower order'})[person?.batting] || 'Batting role not set';
 export const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : 'Spinner') + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
 const integer = value => Number.isInteger(value) && value >= 0;
+// User-approved rough trial, not a measured format-specific benchmark. The
+// historical exports pool formats; allow more runs in limited-overs cricket
+// while still requiring strong wicket-taking for a positive flag.
+export const bowlingEconomyRules = format => format === 'limited_overs'
+  ? {strongMaximum:1.35,expensiveMinimum:1.5,trial:true}
+  : {strongMaximum:1.1,expensiveMinimum:1.25,trial:false};
 export function battingEvidence(row) {
   if (!row || row.batting_complete === false) return {ready:false,reason:row ? 'Batting figures incomplete' : 'No linked season figures'};
   if (![row.runs,row.innings,row.not_outs].every(integer) || row.not_outs > row.innings) return {ready:false,reason:'Check batting figures'};
@@ -110,15 +116,16 @@ function assess(team,person,row) {
         reason=knownRole==='lower'?'No lower-order batting benchmark · negative flags withheld':'Average at least 25% below the grade reference';
       }
     } else {
+      const economyRules=bowlingEconomyRules(team.format);
       const wicketsStrong=evidence.wickets > base.wickets && evidence.wickets >= 1.25*base.wickets;
       const economyStrong=evidence.economy < base.economy && evidence.economy <= .8*base.economy;
       const wicketsLow=evidence.wickets < base.wickets && evidence.wickets <= .75*base.wickets;
-      const economyLow=evidence.economy > base.economy && evidence.economy >= 1.25*base.economy;
-      if (wicketsStrong && evidence.economy <= 1.1*base.economy || economyStrong && evidence.wickets >= .9*base.wickets) {
+      const economyLow=evidence.economy > base.economy && evidence.economy >= economyRules.expensiveMinimum*base.economy;
+      if (wicketsStrong && evidence.economy <= economyRules.strongMaximum*base.economy || economyStrong && evidence.wickets >= .9*base.wickets) {
         state='strong';reason=wicketsStrong && economyStrong?'Strong wicket-taking and economy':wicketsStrong?'Strong wicket-taking with economy in range':'Strong economy with wicket-taking in range';
       } else if (wicketsLow && evidence.economy >= .9*base.economy || economyLow && evidence.wickets <= 1.1*base.wickets) {
         state='low';reason=wicketsLow?'Fewer wickets per ball without enough economy advantage':'Higher economy without enough wicket-taking advantage';
-      } else if (wicketsStrong && evidence.economy > 1.1*base.economy) reason='Strong wicket-taking offsets higher economy';
+      } else if (wicketsStrong && evidence.economy > economyRules.strongMaximum*base.economy) reason='Strong wicket-taking offsets higher economy';
       else if (economyStrong && evidence.wickets < .9*base.wickets) reason='Economical bowling offsets fewer wickets';
     }
     // Missing playing-list roles must not hide strong recorded performances.
@@ -165,16 +172,27 @@ function possiblePair(higher,lower,guide) {
   const bowlComparable=workloadFit && equivalentWickets >= hw.wickets*.85 && closeEnough(equivalentEconomy,hw.economy);
   const bowlGain=workloadFit && equivalentWickets >= hw.wickets && closeEnough(equivalentEconomy,hw.economy)
     && (equivalentWickets > hw.wickets || equivalentEconomy < hw.economy);
+  // Limited-overs containment can merit a review even when the rough grade
+  // conversion trims wicket-taking slightly. Keep this explicitly a trade-off,
+  // with the existing comparable-wicket floor and a material economy gain.
+  const economyCase=higher.team.format === 'limited_overs' && lower.ball?.state === 'strong' && workloadFit
+    && equivalentWickets >= hw.wickets*.85 && equivalentEconomy < hw.economy && equivalentEconomy <= hw.economy*.85;
   if (needBowling && (!hw.ready || !lw.ready)) return null;
   let kind='',reason='';
   if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
-  else if (needBowling && bowlGain) {
+  else if (needBowling && (bowlGain || economyCase)) {
     // Preserve an all-rounder's batting job. A lower-order bowler can be
     // compared on bowling without inventing a batting average from DNBs.
     if (['top','middle'].includes(role(higher.person))) {
       if (!batFit || !hb.ready || !lb.ready) return null;
-      kind=equivalentBat >= hb.average*.85 ? 'fit' : 'tradeoff';reason=kind === 'fit' ? 'Bowling case · batting cover retained' : 'Bowling gain · batting trade-off';
-    } else if (role(higher.person) === 'lower' && role(lower.person) === 'lower' && lower.position >= 6) {kind='fit';reason='Bowling case';}
+      kind=bowlGain && equivalentBat >= hb.average*.85 ? 'fit' : 'tradeoff';reason=!bowlGain ? 'Economy gain · wicket-taking trade-off' : kind === 'fit' ? 'Bowling case · batting cover retained' : 'Bowling gain · batting trade-off';
+    } else if (role(higher.person) === 'lower' && role(lower.person) === 'lower' && lower.position >= 6) {kind=bowlGain?'fit':'tradeoff';reason=bowlGain?'Bowling case':'Economy gain · wicket-taking trade-off';}
+  }
+  if (!kind) {
+    const batClose=batFit && hb.ready && lb.ready && equivalentBat > 0 && equivalentBat >= hb.average*.85;
+    const lowerOrderBowling=needBowling && role(higher.person)==='lower' && role(lower.person)==='lower' && lower.position>=6;
+    if (batClose && (!needBowling || bowlComparable)) {kind='close';reason=needBowling?'Close batting and bowling figures':'Close batting figures';}
+    else if (lowerOrderBowling && bowlComparable) {kind='close';reason='Close bowling figures';}
   }
   if (!kind) return null;
   return {higher,lower,kind,reason,guide,equivalentBat,equivalentWickets,equivalentEconomy,
@@ -201,12 +219,9 @@ export function buildSelectionEvidence(summary,teams=[],people=[]) {
     }
   }
   pairs.sort((a,b)=>a.higher.position-b.higher.position || (a.kind==='fit'?0:1)-(b.kind==='fit'?0:1) || (b.equivalentBat || 0)-(a.equivalentBat || 0) || a.lower.person.name.localeCompare(b.lower.person.name));
-  // One numbered comparison per person keeps both ends recognisable on the
-  // board. Other valid options remain in the opened comparison details.
-  const linked=new Set();let next=1;
-  for (const pair of [...pairs].sort((a,b)=>(a.kind==='fit'?0:1)-(b.kind==='fit'?0:1))) {
-    if(!linked.has(pair.higher.key)&&!linked.has(pair.lower.key)){pair.number=next++;linked.add(pair.higher.key);linked.add(pair.lower.key);}
-  }
+  // Every qualifying conversation has a number at both ends. The UI draws
+  // the relationship where columns allow and highlights connected players.
+  pairs.forEach((pair,index)=>{pair.number=index+1;});
   pairs.forEach(pair=>{pair.id=JSON.stringify([pair.higher.key,pair.lower.key]);pair.higher.links.push(pair);pair.lower.links.push(pair);});
   return {players,pairs,player:(teamId,playerId)=>players.get(playerKey(teamId,playerId)),
     forRow(row) {const person=roster.get(row.roster_id);return person && person.active !== false ? {person,stats:row,team:row,otherGrades:otherGradeRows(summary,row,person.id),links:[],...assess(row,person,row)} : null;}};

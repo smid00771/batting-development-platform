@@ -8,6 +8,8 @@ const dates = fixture => (fixture.days || []).map(day => typeof day === 'string'
 const inSeason = (date, season) => !!date && date >= season.start && date <= season.end;
 const groupKey = (competition, grade) => JSON.stringify([String(competition || '').trim(), String(grade || '').trim()]);
 export const STATS_FORMATS = {limited_overs:'Limited overs', t20:'T20', long_form:'Long form', unknown:'Format unknown'};
+export const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'limited_overs',oneday:'limited_overs',
+  longform:'long_form',twoday:'long_form',multiday:'long_form',test:'long_form',t20:'t20',twenty20:'t20'})[key(value)] || 'unknown';
 export const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 export const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
 
@@ -38,7 +40,7 @@ export function compareSelectedGrades(summary, first, second, roster = []) {
 
 export function buildSeasonStats(context = {}, filters = {}) {
   const season = context.season || {}, today = context.today || season.end;
-  const fixtures = (context.fixtures || []).filter(f => inSeason(dates(f)[0], season));
+  const fixtures = (context.fixtures || []).filter(f => inSeason(dates(f)[0], season)).map(f => ({...f,format:statsFormat(f.format)}));
   const cards = latestStatsCards(context.cards), identities = new Map((context.identities || []).map(x => [x.source_id, x]));
   const rows = new Map(), issues = new Map(), groups = new Map(), formats = new Set(), matched = new Set();
   let included = 0, playing = 0;
@@ -73,7 +75,7 @@ export function buildSeasonStats(context = {}, filters = {}) {
       }
     }
     if (!fixture) {
-      const candidates = fixtures.filter(f => dates(f)[0] === date && (!card.format_key || f.format === card.format_key) && (!card.competition || key(f.competition) === key(card.competition)) && key(f.grade) === key(wrapped.grade_hint || card.grade));
+      const candidates = fixtures.filter(f => dates(f)[0] === date && (!card.format_key || f.format === statsFormat(card.format_key)) && (!card.competition || key(f.competition) === key(card.competition)) && key(f.grade) === key(wrapped.grade_hint || card.grade));
       if (candidates.length === 1) fixture = candidates[0];
       else if (candidates.length > 1) {
         problem(card.match_id, 'Match this scorecard to its fixture', null, card, card.grade, '', card.format_key || 'unknown');
@@ -86,7 +88,7 @@ export function buildSeasonStats(context = {}, filters = {}) {
     if (fixture?.no_play || fixture?.cancelled) continue;
     const grade = fixture?.grade || wrapped.grade_hint || card.grade || 'Grade unknown';
     const competition = fixture?.competition || card.competition || '';
-    const format = card.format_key || fixture?.format || 'unknown';
+    const format = statsFormat(card.format_key || fixture?.format);
     const group = observeGroup(competition, grade, format);
     if (!matchesFilters(group, format)) continue;
     const issue = (message, requiresAttention = true) => problem(card.match_id, message, fixture, card, grade, competition, format, requiresAttention);

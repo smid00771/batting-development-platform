@@ -186,12 +186,50 @@ test('cancelled and prior-season publications never replace current eligible pub
  const h=await harness(data(),{boardDate:'2026-10-24',teams:[...older,...valid,...cancelled]});h.click('[data-stats-compare]');
  assert.equal(h.s.state.firstTeam,valid[0].id);assert.equal(h.s.state.secondTeam,valid[1].id);
 });
-test('published teams in multiple formats have distinct labels and retain the chosen statistics format',async()=>{
+test('published teams are selected within the explicit format and never switch formats implicitly',async()=>{
  const long=publishedTeams('2026-10-17'),short=publishedTeams('2026-10-24');short.forEach(t=>{t.format='t20';t.published.details.format='t20';});
  const h=await harness(data(),{boardDate:'2026-10-24',teams:[...long,...short]});h.click('[data-stats-compare]');
- const first=h.host.querySelector('[data-stats-team=firstTeam]');assert.equal(new Set([...first.options].map(o=>o.textContent)).size,4);
- change(h,'[data-stats-team=firstTeam]',short[0].id);assert.equal(h.s.state.format,'t20');assert.equal(h.s.state.secondTeam,short[1].id);
+ const first=h.host.querySelector('[data-stats-team=firstTeam]');assert.equal(first.options.length,2);assert.ok([...first.options].every(o=>long.some(t=>t.id===o.value)));
+ change(h,'[data-stats-filter=format]','t20');
+ assert.equal(h.host.querySelector('[data-stats-team=firstTeam]').value,short[0].id);assert.equal(h.s.state.format,'t20');assert.equal(h.s.state.secondTeam,short[1].id);
  assert.ok([...h.host.querySelector('[data-stats-team=secondTeam]').options].every(o=>short.some(t=>t.id===o.value)));
  h.click('[data-stats-mode=batting]');h.s.state.format='long_form';h.panel.mount(h.host,h.options);h.click('[data-stats-compare]');
  assert.equal(h.s.state.firstTeam,long[0].id);assert.equal(h.s.state.secondTeam,long[1].id);
+});
+
+test('limited overs is the current-format default and long form stays an explicit empty reference view',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ f.context.cards.forEach(c=>c.scorecard.format_key='limited_overs');
+ f.context.fixtures.forEach(t=>t.format='limited_overs');
+ f.teams.forEach(t=>{t.format='limited_overs';t.published.details.format='limited_overs';});
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster,state:{},preferredFormat:'limited_overs'});
+ assert.equal(h.host.querySelector('[data-stats-filter=format]').value,'limited_overs');
+ h.click('[data-stats-compare]');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan10 average/);
+ assert.ok(h.host.querySelector('[data-stats-filter=format]'));
+ change(h,'[data-stats-filter=format]','long_form');
+ assert.equal(h.s.state.compare,true);assert.equal(h.host.querySelector('[role=table]'),null);
+ assert.match(h.host.textContent,/0 completed scorecards · Long form/);
+ assert.match(h.host.textContent,/No comparable Long form line-ups/);
+ assert.doesNotMatch(h.host.textContent,/Alex Rowan|10 average/);
+ h.click('[data-stats-refresh]');await tick();assert.equal(h.s.state.format,'long_form');
+ h.click('[data-stats-mode=bowling]');assert.match(h.host.textContent,/No bowling figures for Long form/);
+ change(h,'[data-stats-filter=format]','limited_overs');
+ assert.match(h.host.querySelector('[data-stats-rows]').textContent,/wickets/);
+ h.click('[data-stats-compare]');assert.equal(h.s.state.mode,'bowling');
+ assert.equal(h.s.state.firstTeam,f.teams[0].id);assert.equal(h.s.state.secondTeam,f.teams[1].id);
+});
+
+test('a published long-form lineup cannot replace the limited-overs selection and figures',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ const short=structuredClone(f.teams).map(t=>({...t,id:'short-'+t.id,format:'limited_overs',published:{...t.published,details:{...t.published.details,format:'limited_overs'}}}));
+ const shortCards=structuredClone(f.context.cards).map(c=>({...c,snapshot_id:'short-'+c.snapshot_id,fixture_id:'short-'+c.fixture_id,scorecard:{...c.scorecard,match_id:'short-'+c.scorecard.match_id,format_key:'limited_overs'}}));
+ shortCards.forEach(c=>c.scorecard.innings[0].batters.forEach(b=>{if(b.status!=='did_not_bat')b.runs+=20;}));
+ const shortFixtures=structuredClone(f.context.fixtures).map(t=>({...t,id:'short-'+t.id,match_id:'short-'+t.match_id,format:'limited_overs'}));
+ const h=await harness({...f.context,cards:[...f.context.cards,...shortCards],fixtures:[...f.context.fixtures,...shortFixtures]},
+  {teams:[...f.teams,...short],roster:f.roster,state:{format:'limited_overs',mode:'batting'}});
+ h.click('[data-stats-compare]');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan30 average120 runs/);
+ change(h,'[data-stats-filter=format]','long_form');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan10 average40 runs/);
+ assert.doesNotMatch(h.host.querySelector('[role=table]').textContent,/30 average120 runs/);
+ change(h,'[data-stats-filter=format]','limited_overs');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan30 average120 runs/);
+ assert.equal(h.calls.length,1);
 });

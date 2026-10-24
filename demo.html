@@ -3729,7 +3729,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.258.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.259.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -4700,6 +4700,8 @@ const dates = fixture => (fixture.days || []).map(day => typeof day === 'string'
 const inSeason = (date, season) => !!date && date >= season.start && date <= season.end;
 const groupKey = (competition, grade) => JSON.stringify([String(competition || '').trim(), String(grade || '').trim()]);
 const STATS_FORMATS = {limited_overs:'Limited overs', t20:'T20', long_form:'Long form', unknown:'Format unknown'};
+const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'limited_overs',oneday:'limited_overs',
+  longform:'long_form',twoday:'long_form',multiday:'long_form',test:'long_form',t20:'t20',twenty20:'t20'})[key(value)] || 'unknown';
 const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
 
@@ -4730,7 +4732,7 @@ function compareSelectedGrades(summary, first, second, roster = []) {
 
 function buildSeasonStats(context = {}, filters = {}) {
   const season = context.season || {}, today = context.today || season.end;
-  const fixtures = (context.fixtures || []).filter(f => inSeason(dates(f)[0], season));
+  const fixtures = (context.fixtures || []).filter(f => inSeason(dates(f)[0], season)).map(f => ({...f,format:statsFormat(f.format)}));
   const cards = latestStatsCards(context.cards), identities = new Map((context.identities || []).map(x => [x.source_id, x]));
   const rows = new Map(), issues = new Map(), groups = new Map(), formats = new Set(), matched = new Set();
   let included = 0, playing = 0;
@@ -4765,7 +4767,7 @@ function buildSeasonStats(context = {}, filters = {}) {
       }
     }
     if (!fixture) {
-      const candidates = fixtures.filter(f => dates(f)[0] === date && (!card.format_key || f.format === card.format_key) && (!card.competition || key(f.competition) === key(card.competition)) && key(f.grade) === key(wrapped.grade_hint || card.grade));
+      const candidates = fixtures.filter(f => dates(f)[0] === date && (!card.format_key || f.format === statsFormat(card.format_key)) && (!card.competition || key(f.competition) === key(card.competition)) && key(f.grade) === key(wrapped.grade_hint || card.grade));
       if (candidates.length === 1) fixture = candidates[0];
       else if (candidates.length > 1) {
         problem(card.match_id, 'Match this scorecard to its fixture', null, card, card.grade, '', card.format_key || 'unknown');
@@ -4778,7 +4780,7 @@ function buildSeasonStats(context = {}, filters = {}) {
     if (fixture?.no_play || fixture?.cancelled) continue;
     const grade = fixture?.grade || wrapped.grade_hint || card.grade || 'Grade unknown';
     const competition = fixture?.competition || card.competition || '';
-    const format = card.format_key || fixture?.format || 'unknown';
+    const format = statsFormat(card.format_key || fixture?.format);
     const group = observeGroup(competition, grade, format);
     if (!matchesFilters(group, format)) continue;
     const issue = (message, requiresAttention = true) => problem(card.match_id, message, fixture, card, grade, competition, format, requiresAttention);
@@ -4903,7 +4905,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   }));
   return {rows:result, groups:[...groups.values()].sort((a,b) => a.grade.localeCompare(b.grade, undefined, {numeric:true}) || a.competition.localeCompare(b.competition)), formats:[...formats], issues:[...issues.values()], included, playing, season};
 }
-return {STATS_FORMATS,statsOvers,statsRate,latestStatsCards,compareSelectedGrades,buildSeasonStats};
+return {STATS_FORMATS,statsFormat,statsOvers,statsRate,latestStatsCards,compareSelectedGrades,buildSeasonStats};
 })();
 
 const __demoModule15=(()=>{
@@ -5038,6 +5040,12 @@ const bowlingRole = person => bowler(person) && ['frontline','part_time'].includ
 const battingRoleLabel = person => ({top:'Top order',middle:'Middle order',lower:'Lower order'})[person?.batting] || 'Batting role not set';
 const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : 'Spinner') + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
 const integer = value => Number.isInteger(value) && value >= 0;
+// User-approved rough trial, not a measured format-specific benchmark. The
+// historical exports pool formats; allow more runs in limited-overs cricket
+// while still requiring strong wicket-taking for a positive flag.
+const bowlingEconomyRules = format => format === 'limited_overs'
+  ? {strongMaximum:1.35,expensiveMinimum:1.5,trial:true}
+  : {strongMaximum:1.1,expensiveMinimum:1.25,trial:false};
 function battingEvidence(row) {
   if (!row || row.batting_complete === false) return {ready:false,reason:row ? 'Batting figures incomplete' : 'No linked season figures'};
   if (![row.runs,row.innings,row.not_outs].every(integer) || row.not_outs > row.innings) return {ready:false,reason:'Check batting figures'};
@@ -5116,15 +5124,16 @@ function assess(team,person,row) {
         reason=knownRole==='lower'?'No lower-order batting benchmark · negative flags withheld':'Average at least 25% below the grade reference';
       }
     } else {
+      const economyRules=bowlingEconomyRules(team.format);
       const wicketsStrong=evidence.wickets > base.wickets && evidence.wickets >= 1.25*base.wickets;
       const economyStrong=evidence.economy < base.economy && evidence.economy <= .8*base.economy;
       const wicketsLow=evidence.wickets < base.wickets && evidence.wickets <= .75*base.wickets;
-      const economyLow=evidence.economy > base.economy && evidence.economy >= 1.25*base.economy;
-      if (wicketsStrong && evidence.economy <= 1.1*base.economy || economyStrong && evidence.wickets >= .9*base.wickets) {
+      const economyLow=evidence.economy > base.economy && evidence.economy >= economyRules.expensiveMinimum*base.economy;
+      if (wicketsStrong && evidence.economy <= economyRules.strongMaximum*base.economy || economyStrong && evidence.wickets >= .9*base.wickets) {
         state='strong';reason=wicketsStrong && economyStrong?'Strong wicket-taking and economy':wicketsStrong?'Strong wicket-taking with economy in range':'Strong economy with wicket-taking in range';
       } else if (wicketsLow && evidence.economy >= .9*base.economy || economyLow && evidence.wickets <= 1.1*base.wickets) {
         state='low';reason=wicketsLow?'Fewer wickets per ball without enough economy advantage':'Higher economy without enough wicket-taking advantage';
-      } else if (wicketsStrong && evidence.economy > 1.1*base.economy) reason='Strong wicket-taking offsets higher economy';
+      } else if (wicketsStrong && evidence.economy > economyRules.strongMaximum*base.economy) reason='Strong wicket-taking offsets higher economy';
       else if (economyStrong && evidence.wickets < .9*base.wickets) reason='Economical bowling offsets fewer wickets';
     }
     // Missing playing-list roles must not hide strong recorded performances.
@@ -5171,16 +5180,27 @@ function possiblePair(higher,lower,guide) {
   const bowlComparable=workloadFit && equivalentWickets >= hw.wickets*.85 && closeEnough(equivalentEconomy,hw.economy);
   const bowlGain=workloadFit && equivalentWickets >= hw.wickets && closeEnough(equivalentEconomy,hw.economy)
     && (equivalentWickets > hw.wickets || equivalentEconomy < hw.economy);
+  // Limited-overs containment can merit a review even when the rough grade
+  // conversion trims wicket-taking slightly. Keep this explicitly a trade-off,
+  // with the existing comparable-wicket floor and a material economy gain.
+  const economyCase=higher.team.format === 'limited_overs' && lower.ball?.state === 'strong' && workloadFit
+    && equivalentWickets >= hw.wickets*.85 && equivalentEconomy < hw.economy && equivalentEconomy <= hw.economy*.85;
   if (needBowling && (!hw.ready || !lw.ready)) return null;
   let kind='',reason='';
   if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
-  else if (needBowling && bowlGain) {
+  else if (needBowling && (bowlGain || economyCase)) {
     // Preserve an all-rounder's batting job. A lower-order bowler can be
     // compared on bowling without inventing a batting average from DNBs.
     if (['top','middle'].includes(role(higher.person))) {
       if (!batFit || !hb.ready || !lb.ready) return null;
-      kind=equivalentBat >= hb.average*.85 ? 'fit' : 'tradeoff';reason=kind === 'fit' ? 'Bowling case · batting cover retained' : 'Bowling gain · batting trade-off';
-    } else if (role(higher.person) === 'lower' && role(lower.person) === 'lower' && lower.position >= 6) {kind='fit';reason='Bowling case';}
+      kind=bowlGain && equivalentBat >= hb.average*.85 ? 'fit' : 'tradeoff';reason=!bowlGain ? 'Economy gain · wicket-taking trade-off' : kind === 'fit' ? 'Bowling case · batting cover retained' : 'Bowling gain · batting trade-off';
+    } else if (role(higher.person) === 'lower' && role(lower.person) === 'lower' && lower.position >= 6) {kind=bowlGain?'fit':'tradeoff';reason=bowlGain?'Bowling case':'Economy gain · wicket-taking trade-off';}
+  }
+  if (!kind) {
+    const batClose=batFit && hb.ready && lb.ready && equivalentBat > 0 && equivalentBat >= hb.average*.85;
+    const lowerOrderBowling=needBowling && role(higher.person)==='lower' && role(lower.person)==='lower' && lower.position>=6;
+    if (batClose && (!needBowling || bowlComparable)) {kind='close';reason=needBowling?'Close batting and bowling figures':'Close batting figures';}
+    else if (lowerOrderBowling && bowlComparable) {kind='close';reason='Close bowling figures';}
   }
   if (!kind) return null;
   return {higher,lower,kind,reason,guide,equivalentBat,equivalentWickets,equivalentEconomy,
@@ -5207,30 +5227,29 @@ function buildSelectionEvidence(summary,teams=[],people=[]) {
     }
   }
   pairs.sort((a,b)=>a.higher.position-b.higher.position || (a.kind==='fit'?0:1)-(b.kind==='fit'?0:1) || (b.equivalentBat || 0)-(a.equivalentBat || 0) || a.lower.person.name.localeCompare(b.lower.person.name));
-  // One numbered comparison per person keeps both ends recognisable on the
-  // board. Other valid options remain in the opened comparison details.
-  const linked=new Set();let next=1;
-  for (const pair of [...pairs].sort((a,b)=>(a.kind==='fit'?0:1)-(b.kind==='fit'?0:1))) {
-    if(!linked.has(pair.higher.key)&&!linked.has(pair.lower.key)){pair.number=next++;linked.add(pair.higher.key);linked.add(pair.lower.key);}
-  }
+  // Every qualifying conversation has a number at both ends. The UI draws
+  // the relationship where columns allow and highlights connected players.
+  pairs.forEach((pair,index)=>{pair.number=index+1;});
   pairs.forEach(pair=>{pair.id=JSON.stringify([pair.higher.key,pair.lower.key]);pair.higher.links.push(pair);pair.lower.links.push(pair);});
   return {players,pairs,player:(teamId,playerId)=>players.get(playerKey(teamId,playerId)),
     forRow(row) {const person=roster.get(row.roster_id);return person && person.active !== false ? {person,stats:row,team:row,otherGrades:otherGradeRows(summary,row,person.id),links:[],...assess(row,person,row)} : null;}};
 }
-return {NDCA_GUIDE,evidenceGrade,gradeGuide,battingRoleLabel,bowlingRoleLabel,battingEvidence,bowlingEvidence,gradeBenchmark,battingPositionFits,bowlingJobFits,buildSelectionEvidence};
+return {NDCA_GUIDE,evidenceGrade,gradeGuide,battingRoleLabel,bowlingRoleLabel,bowlingEconomyRules,battingEvidence,bowlingEvidence,gradeBenchmark,battingPositionFits,bowlingJobFits,buildSelectionEvidence};
 })();
 
 const __demoModule16=(()=>{
 const {buildSeasonStats, statsOvers, STATS_FORMATS}=__demoModule13;
-const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule14;
+const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule14;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
 const states={strong:['↑','Strong'],low:['↓','Below guide'],slow:['·','Slow start'],building:['·','Not yet rated'],steady:['','Within guide']};
 const evidenceStyles=`<style>
-.se-evidence-button{border:0;border-radius:6px;background:transparent;display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:3px;min-height:44px;min-width:44px;max-width:110px;padding:4px;cursor:pointer;color:#24344c;font:600 11px/1.3 system-ui}.se-evidence-button:hover{background:#eef2f7}.se-evidence-button:focus-visible{outline:2px solid #17245f;outline-offset:2px}.se-evidence-button .se-evidence-chip{display:inline-flex;gap:3px;align-items:center;border:1px solid transparent;border-radius:4px;padding:2px 4px;white-space:nowrap;font-size:11px;line-height:1.3;margin:0}.se-evidence-chip.strong{background:#d9f2e7;color:#175c41;border-color:#a7d6c0}.se-evidence-chip.low{background:#fff0cf;color:#784500;border-color:#e6c37b}.se-evidence-chip.slow{background:#fff9ed;color:#78664b;border-color:#eee3ce}.se-evidence-chip.building{background:#edf0f4;color:#526074;border-color:#d3dae3}.se-evidence-link{color:#243f92;background:#e9edfc}.se-evidence-link.tradeoff{color:#596477;background:#edf0f4}.se-evidence:empty{display:none}.se-has-evidence{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px}.se-has-evidence>.se-conversation-status{grid-column:1/-1}.se-has-evidence>.se-evidence .se-evidence-button{max-width:72px}.se-evidence-dialog{box-sizing:border-box;width:min(560px,calc(100% - 24px));max-height:85dvh;overflow:auto;border:1px solid #cdd6e3;border-radius:12px;padding:16px;color:#24344c;background:white;box-shadow:0 12px 60px #17245f30;font:14px/1.4 system-ui}.se-evidence-dialog::backdrop{background:#15233a66}.se-evidence-dialog h2{font-size:18px;margin:0}.se-evidence-dialog h3{font-size:15px;margin:12px 0 4px}.se-evidence-heading{display:flex;align-items:start;justify-content:space-between;gap:10px}.se-evidence-close{min-width:44px;min-height:44px;border:1px solid #cdd6e3;border-radius:6px;background:white;color:#24344c;cursor:pointer}.se-evidence-dialog p{margin:7px 0}.se-evidence-dialog p>small{display:block}.se-evidence-small{color:#52627a;font-size:12px}.se-evidence-metrics{display:flex;gap:12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #e1e7ee}.se-evidence-metrics>div{flex:1;min-width:150px}.se-evidence-metrics strong{display:block}.se-evidence-pair{border-bottom:1px solid #e1e7ee;padding:4px 0}.se-evidence-pair>summary,.se-evidence-help>summary{cursor:pointer;min-height:44px;align-content:center}.se-evidence-pair>summary small{display:block;margin-left:15px;color:#52627a}.se-evidence-pair-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.se-evidence-pair-grid>div{min-width:0;overflow-wrap:anywhere}.se-evidence-pair-grid strong,.se-evidence-pair-grid small{display:block}.se-evidence-target{background:#eef2fb;padding:8px;border-radius:6px}.se-evidence-help{font-size:12px;color:#52627a}.se-evidence-help ul{padding-left:18px;margin:4px 0 10px}.se-evidence-help li{margin:5px 0}.se-evidence-dialog .se-evidence-chip{display:inline-block;padding:2px 5px;border-radius:4px}.ss-name .se-evidence-button{vertical-align:middle;margin-left:4px}.ss-compare-cell .se-evidence-button{justify-content:flex-start;padding-left:0}.se-evidence-inline{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.se-evidence-button{border:0;border-radius:6px;background:transparent;display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:3px;min-height:44px;min-width:44px;max-width:110px;padding:4px;cursor:pointer;color:#24344c;font:600 11px/1.3 system-ui}.se-evidence-button:hover{background:#eef2f7}.se-evidence-button:focus-visible{outline:2px solid #17245f;outline-offset:2px}.se-evidence-button .se-evidence-chip{display:inline-flex;gap:3px;align-items:center;border:1px solid transparent;border-radius:4px;padding:2px 4px;white-space:nowrap;font-size:11px;line-height:1.3;margin:0}.se-evidence-chip.strong{background:#d9f2e7;color:#175c41;border-color:#a7d6c0}.se-evidence-chip.low{background:#fff0cf;color:#784500;border-color:#e6c37b}.se-evidence-chip.slow{background:#fff9ed;color:#78664b;border-color:#eee3ce}.se-evidence-chip.building{background:#edf0f4;color:#526074;border-color:#d3dae3}.se-evidence-link{color:#81520c;background:#fff2d9}.se-evidence-link.tradeoff{color:#596477;background:#edf0f4}.se-evidence:empty{display:none}.se-has-evidence{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px}.se-has-evidence>.se-conversation-status{grid-column:1/-1}.se-has-evidence>.se-evidence .se-evidence-button{max-width:72px}.se-evidence-dialog{box-sizing:border-box;width:min(560px,calc(100% - 24px));max-height:85dvh;overflow:auto;border:1px solid #cdd6e3;border-radius:12px;padding:16px;color:#24344c;background:white;box-shadow:0 12px 60px #17245f30;font:14px/1.4 system-ui}.se-evidence-dialog::backdrop{background:#15233a66}.se-evidence-dialog h2{font-size:18px;margin:0}.se-evidence-dialog h3{font-size:15px;margin:12px 0 4px}.se-evidence-heading{display:flex;align-items:start;justify-content:space-between;gap:10px}.se-evidence-close{min-width:44px;min-height:44px;border:1px solid #cdd6e3;border-radius:6px;background:white;color:#24344c;cursor:pointer}.se-evidence-dialog p{margin:7px 0}.se-evidence-dialog p>small{display:block}.se-evidence-small{color:#52627a;font-size:12px}.se-evidence-metrics{display:flex;gap:12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #e1e7ee}.se-evidence-metrics>div{flex:1;min-width:150px}.se-evidence-metrics strong{display:block}.se-evidence-pair{border-bottom:1px solid #e1e7ee;padding:4px 0}.se-evidence-pair>summary,.se-evidence-help>summary{cursor:pointer;min-height:44px;align-content:center}.se-evidence-pair>summary small{display:block;margin-left:15px;color:#52627a}.se-evidence-pair-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.se-evidence-pair-grid>div{min-width:0;overflow-wrap:anywhere}.se-evidence-pair-grid strong,.se-evidence-pair-grid small{display:block}.se-evidence-target{background:#eef2fb;padding:8px;border-radius:6px}.se-evidence-help{font-size:12px;color:#52627a}.se-evidence-help ul{padding-left:18px;margin:4px 0 10px}.se-evidence-help li{margin:5px 0}.se-evidence-dialog .se-evidence-chip{display:inline-block;padding:2px 5px;border-radius:4px}.ss-name .se-evidence-button{vertical-align:middle;margin-left:4px}.ss-compare-cell .se-evidence-button{justify-content:flex-start;padding-left:0}.se-evidence-inline{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .se-evidence-button{flex-direction:column;align-items:stretch;gap:2px;max-width:100%;padding:3px;text-align:left}.se-evidence-button .se-evidence-chip{white-space:normal;font-size:11px;gap:2px;padding:1px 3px}.se-evidence-button .se-evidence-title{font-size:10px;line-height:1.3;margin:0;color:#526074;font-weight:600}.se-evidence-title .se-evidence-link{display:inline-block;margin-left:3px;font-size:10px}.se-evidence-chip.steady{color:#526074;background:transparent}.se-has-evidence>.se-evidence .se-evidence-button{max-width:160px}.ss-name .se-evidence-button{margin-left:0}.se-evidence-sample{font-size:11px;color:#526074}.se-evidence-close{flex-shrink:0;white-space:nowrap;padding:6px 10px}.se-evidence-source{margin:8px 0;color:#52627a;font-size:12px}
-.se-evidence-button.se-evidence-compact{flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center;gap:3px;max-width:68px;min-width:44px;min-height:44px;padding:3px}.se-evidence-compact .se-evidence-mark{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;padding:2px;flex-shrink:0}.se-evidence-mark svg{display:block;width:16px;height:16px}.se-evidence-mark.steady{border-color:#cbd5e1}.se-evidence-compact .se-evidence-link{font-size:12px;line-height:1;border-radius:3px;padding:1px}.se-has-evidence>.se-evidence .se-evidence-compact{max-width:68px}
+.se-evidence-button.se-evidence-compact{flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center;gap:3px;max-width:84px;min-width:44px;min-height:44px;padding:3px}.se-evidence-compact .se-evidence-mark{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;padding:2px;flex-shrink:0}.se-evidence-mark svg{display:block;width:16px;height:16px}.se-evidence-mark.steady{border-color:#cbd5e1}.se-evidence-compact .se-evidence-link{font-size:12px;line-height:1;border-radius:3px;padding:1px}.se-has-evidence>.se-evidence .se-evidence-compact{max-width:84px}
+.se-evidence-links-host{position:relative}.se-evidence-connectors{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2}.se-evidence-connectors g{stroke:#b47a24;fill:#b47a24;stroke-width:2;opacity:.55}.se-evidence-connectors g.tradeoff{stroke:#66768f;fill:#66768f;stroke-dasharray:4 3}.se-evidence-connectors g.close{stroke-dasharray:2 3}.se-evidence-connectors g.se-comparison-active{stroke-width:3;opacity:1}.se-comparison-linked{box-shadow:inset 0 0 0 1px #d9b879;border-radius:6px}.se-comparison-linked.se-comparison-active{box-shadow:inset 0 0 0 2px #b47a24;background-color:#fff9ed}
+.se-evidence-compact:has(.se-evidence-link){display:grid;grid-template-columns:repeat(2,21px);align-content:center;gap:1px 3px}.se-evidence-compact .se-evidence-link{grid-column:1/-1;text-align:center;white-space:normal;font-size:10px;line-height:12px;overflow-wrap:anywhere}
 .se-other-grades{font-size:13px;overflow-wrap:anywhere}.se-other-grades small{color:#52627a;font-size:12px}
 </style>`;
 
@@ -5246,8 +5265,8 @@ function renderEvidenceBadges(item,key=item?.key,{compact=false}={}) {
   if (item.links.some(p=>p.number)) {
     const shown=item.links.filter(p=>p.number);
     const tradeoff=shown.every(p=>p.kind==='tradeoff');
-    link=compact?`<span class="se-evidence-link ${tradeoff?'tradeoff':''}" aria-hidden="true">${tradeoff?'≈':'↔'}</span>`:`<span class="se-evidence-chip se-evidence-link ${tradeoff?'tradeoff':''}">${shown.map(p=>(p.kind==='tradeoff'?'≈':'↔')+p.number).join(' ')}</span>`;
-    labels.push(item.links.length+' possible '+(item.links.length===1?'comparison':'comparisons'));
+    link=compact?`<span class="se-evidence-link ${tradeoff?'tradeoff':''}" aria-hidden="true">${tradeoff?'≈':'↔'}${shown.map(p=>p.number).join('·')}</span>`:`<span class="se-evidence-chip se-evidence-link ${tradeoff?'tradeoff':''}">${shown.map(p=>(p.kind==='tradeoff'?'≈':'↔')+p.number).join(' ')}</span>`;
+    labels.push(...shown.map(p=>'Comparison '+p.number+' with '+(p.higher.key===item.key?p.lower:p.higher).person.name));
   }
   return parts.length||link?`<button type="button" class="se-evidence-button${compact?' se-evidence-compact':''}" data-evidence-open="${escape(key)}" aria-label="${escape(item.person.name+': Form guide. '+labels.join('; ')+'. View performance details')}" title="${escape(labels.join(' · '))}">${compact?parts.join('')+link:`<span class="se-evidence-title">Form guide${item.bat?.early||item.ball?.early?' · early':''}${link}</span>${parts.join('')}`}</button>`:'';
 }
@@ -5279,25 +5298,127 @@ function otherGradeRecords(item) {
   const recent=[...(stats.history || [])].sort((a,b)=>String(b.date || '').localeCompare(String(a.date || '')))[0];
   return `<p class="se-other-grades" aria-label="Recent form in another grade"><strong>${escape(stats.grade)}</strong> · ${escape(batting)} · ${escape(bowling)}${recent?`<small>Latest${date(recent.date)?' · '+escape(date(recent.date)):''}: Bat ${escape(scores(recent,'batting'))} · Bowl ${escape(scores(recent,'bowling'))}</small>`:''}</p>`;
 }
-function pairDetails(pair) {
+function pairDetails(pair,index=0) {
   const {higher,lower}=pair, symbol=pair.kind==='tradeoff'?'≈':'↔';
-  return `<details class="se-evidence-pair"><summary><strong>${pair.number?symbol+pair.number+' ':''}${escape(higher.person.name)} / ${escape(lower.person.name)}</strong><small>${escape(pair.reason)}</small></summary><div class="se-evidence-pair-grid">${[higher,lower].map(item=>`<div><strong>${escape(item.person.name)}</strong><small>${escape(item.team.grade)} · selected at ${item.position}</small><small>${escape(battingRoleLabel(item.person))}${item.ball?.applicable?' · '+escape(bowlingRoleLabel(item.person)):''}</small>${record(item)}</div>`).join('')}</div>${pair.targetAverage!==null?`<p class="se-evidence-target">Rough batting target in ${escape(lower.team.grade)}: <strong>${number(pair.targetAverage)} average</strong>.<br>${escape(lower.person.name)}: roughly <strong>${number(pair.equivalentBat)}</strong> in ${escape(higher.team.grade)}.</p>`:''}${higher.ball?.applicable?`<p class="se-evidence-small">Rough bowling equivalent for ${escape(lower.person.name)}: ${number(pair.equivalentWickets)} wickets per 100 balls · ${number(pair.equivalentEconomy)} economy. Compare actual overs and the bowling job as well.</p>`:''}<p class="se-evidence-small">Check availability, actual batting opportunities and team balance. Selected positions show the proposed order, not historical batting positions.</p></details>`;
+  return `<details class="se-evidence-pair" ${pair.number&&index===0?'open':''}><summary><strong>${pair.number?symbol+pair.number+' ':''}${escape(higher.person.name)} / ${escape(lower.person.name)}</strong><small>${escape(pair.reason)}</small></summary><div class="se-evidence-pair-grid">${[higher,lower].map(item=>`<div><strong>${escape(item.person.name)}</strong><small>${escape(item.team.grade)} · selected at ${item.position}</small><small>${escape(battingRoleLabel(item.person))}${item.ball?.applicable?' · '+escape(bowlingRoleLabel(item.person)):''}</small>${record(item)}</div>`).join('')}</div>${pair.targetAverage!==null?`<p class="se-evidence-target">Rough batting target in ${escape(lower.team.grade)}: <strong>${number(pair.targetAverage)} average</strong>.<br>${escape(lower.person.name)}: roughly <strong>${number(pair.equivalentBat)}</strong> in ${escape(higher.team.grade)}.</p>`:''}${higher.ball?.applicable?`<p class="se-evidence-small">Rough bowling equivalent for ${escape(lower.person.name)}: ${number(pair.equivalentWickets)} wickets per 100 balls · ${number(pair.equivalentEconomy)} economy. Compare actual overs and the bowling job as well.</p>`:''}<p class="se-evidence-small">Check availability, actual batting opportunities, recorded fielding observations and team balance. This guide does not rate fielding. Selected positions show the proposed order, not historical batting positions.</p></details>`;
 }
 function help() {
-  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy; strong wicket-taking can offset a higher economy rate, and economical containment can offset fewer wickets. These are rough starting rules, not selection decisions.</li><li>↔ links a possible comparison; ≈ flags a batting/bowling trade-off. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Possible swaps preserve batting roles and quick/spin type. Long-form comparisons preserve frontline/part-time roles and check observed workload. Opening/first-change and off-spin/leg-spin jobs are not yet recorded.</li></ul></details>`;
+  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy. In the limited-overs trial, strong wicket-taking allows economy up to 35% above the pooled reference; the expensive-bowling check starts at 50% above it. Long form and T20 retain the 10% allowance and 25% expensive-bowling threshold. A limited-overs comparison can also flag at least 15% better economy with wicket-taking within 15% of the incumbent after the rough grade adjustment; it is labelled a trade-off. These are trial allowances, not measured format-specific benchmarks. Economical containment can offset fewer wickets. These are rough starting rules, not selection decisions.</li><li>Matching ↔ numbers link a selection conversation, including close calls within the rough 15% comparison range; ≈ flags a performance trade-off. A line joins the linked players when their grades are side by side. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Possible swaps preserve batting roles and quick/spin type. Long-form comparisons preserve frontline/part-time roles and check observed workload. Opening/first-change and off-spin/leg-spin jobs are not yet recorded.</li></ul></details>`;
 }
 function assessmentDetails(item,key,label,job) {
   const evidence=item[key],base=evidence.baseline;
   const reason=item.stats ? evidence.reason : `No ${item.team.grade} figures in this format this season`;
   const reference=base ? key==='bat' ? `${number(base.average)} batting average · ${number(base.records)} historical records`
-    : `${number(base.average)} bowling average · ${decimal(base.economy)} economy · ${decimal(base.wickets)} wickets/100 balls · ${number(base.records)} historical records` : '';
+    : `${number(base.average)} bowling average · ${decimal(base.economy)} economy · ${decimal(base.wickets)} wickets/100 balls · ${number(base.records)} historical records${bowlingEconomyRules(item.team.format).trial ? ` · Limited-overs trial: strong wicket-taking allows economy up to ${decimal(base.economy*bowlingEconomyRules(item.team.format).strongMaximum)}` : ''}` : '';
   const actual=key==='bat' ? `${number(item.stats?.innings)} innings · ${number((item.stats?.innings??0)-(item.stats?.not_outs??0))} dismissals`
     : `${number(item.stats?.bowling_innings)} innings · ${statsOvers(item.stats?.bowling_balls)??'—'} overs`;
   return `<div><strong>${label} <span class="se-evidence-chip ${evidence.state}">${states[evidence.state][0]} ${states[evidence.state][1]}</span></strong><span class="se-evidence-small">${escape(job)}</span><p class="se-evidence-small">${escape(reason)}</p>${base?`<small class="se-evidence-small">Grade reference: ${escape(reference)}</small>`:''}${evidence.ready||evidence.early?`<p class="se-evidence-sample">${evidence.early?'Early sample · ':''}${escape(actual)}</p>`:''}</div>`;
 }
 function renderEvidenceDetails(item) {
-  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}${otherGradeRecords(item)}${item.links.length?`<h3>Possible comparisons</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No linked comparison meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
+  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}${otherGradeRecords(item)}${item.links.length?`<h3>Selection conversations</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No selection conversation meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
 }
+// Keep the relationship on the board. Lines occupy the existing column gap;
+// stacked cards retain the same numbered markers without a misleading line.
+const evidenceLinkBindings = new WeakMap();
+function clearEvidenceLinks(host) { evidenceLinkBindings.get(host)?.(); }
+function bindEvidenceLinks(host, model, here = () => true) {
+  clearEvidenceLinks(host);
+  const roots = [...host.querySelectorAll('.se-grid,.ss-compare')];
+  const pairs = (model.pairs || []).filter(pair => pair.number);
+  if (!roots.length || !pairs.length) return;
+  const view = host.ownerDocument.defaultView, ns = 'http://www.w3.org/2000/svg';
+  const layers = [], marked = new Set(), listeners = [];
+  let observer, frame, disposed = false;
+  const make = (tag, attributes) => {
+    const node = host.ownerDocument.createElementNS(ns, tag);
+    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+    return node;
+  };
+  function cleanup() {
+    if (disposed) return;
+    disposed = true; observer?.disconnect();
+    if (frame !== undefined) view.cancelAnimationFrame?.(frame);
+    view.removeEventListener('resize', schedule);
+    listeners.forEach(([node, type, fn]) => node.removeEventListener(type, fn));
+    layers.forEach(({root,svg}) => {svg.remove(); root.classList.remove('se-evidence-links-host');});
+    marked.forEach(row => row.classList.remove('se-comparison-linked','se-comparison-active'));
+    evidenceLinkBindings.delete(host);
+  }
+  function highlight(key) {
+    const active = new Set(pairs.filter(pair => pair.higher.key === key || pair.lower.key === key).map(pair => String(pair.number)));
+    const activeRows=new Set();
+    layers.forEach(({links}) => links.forEach(({pair,group,ends}) => {
+      const on = active.has(String(pair.number));
+      group.classList.toggle('se-comparison-active', on);
+      if(on)ends.forEach(end => activeRows.add(end.row));
+    }));
+    marked.forEach(row => row.classList.toggle('se-comparison-active',activeRows.has(row)));
+  }
+  for (const root of roots) {
+    const buttons = [...root.querySelectorAll('[data-evidence-open]')];
+    const endpoint = key => {
+      const button = buttons.find(button => button.dataset.evidenceOpen === key);
+      const row = button?.closest('.se-player-cell,[data-evidence-row]');
+      const column = row?.closest('[data-se-team],.ss-compare-cell');
+      return row && column ? {button,row,column} : null;
+    };
+    const links = pairs.map(pair => ({pair,ends:[endpoint(pair.higher.key),endpoint(pair.lower.key)]})).filter(link => link.ends.every(Boolean));
+    if (!links.length) continue;
+    const svg = make('svg', {'class':'se-evidence-connectors','aria-hidden':'true',focusable:'false'});
+    root.classList.add('se-evidence-links-host'); root.append(svg);
+    for (const link of links) {
+      link.group = make('g', {'data-evidence-connection':link.pair.number,'class':link.pair.kind});
+      link.path = make('path', {fill:'none'});
+      link.dots = [make('circle', {r:3}),make('circle', {r:3})];
+      link.group.append(link.path,...link.dots); svg.append(link.group);
+      link.ends.forEach(end => {marked.add(end.row); end.row.classList.add('se-comparison-linked');});
+    }
+    layers.push({root,svg,links});
+    for (const button of buttons) {
+      for (const [type,fn] of [['pointerenter',()=>highlight(button.dataset.evidenceOpen)],['focus',()=>highlight(button.dataset.evidenceOpen)],['pointerleave',()=>highlight('')],['blur',()=>highlight('')]]) {
+        button.addEventListener(type,fn); listeners.push([button,type,fn]);
+      }
+    }
+  }
+  if (!layers.length) return;
+  function draw() {
+    frame = undefined;
+    if (!host.isConnected || !here() || layers.every(layer => !layer.root.isConnected)) {cleanup(); return;}
+    for (const {root,svg,links} of layers) {
+      const bounds = root.getBoundingClientRect();
+      svg.setAttribute('width', String(bounds.width)); svg.setAttribute('height', String(bounds.height));
+      svg.setAttribute('viewBox', `0 0 ${bounds.width || 1} ${bounds.height || 1}`);
+      for (const link of links) {
+        const ends = link.ends.map(end => ({...end,box:end.row.getBoundingClientRect(),card:end.column.getBoundingClientRect(),buttonBox:end.button.getBoundingClientRect()})).sort((a,b)=>a.box.left-b.box.left);
+        const [left,right] = ends;
+        // Board cards must share a grid row. Compare-grade cells can be at
+        // different batting positions, but must still be in separate columns.
+        const board = left.column.hasAttribute('data-se-team');
+        const sideBySide = left.box.width > 0 && right.box.width > 0 && right.box.left >= left.box.right + 4
+          && (!board || Math.abs(left.card.top-right.card.top) < 4);
+        link.group.style.display = sideBySide ? '' : 'none';
+        if (!sideBySide) continue;
+        const x1 = left.box.right-bounds.left, x2 = right.box.left-bounds.left;
+        const y1 = left.buttonBox.top+left.buttonBox.height/2-bounds.top, y2 = right.buttonBox.top+right.buttonBox.height/2-bounds.top;
+        const middle = (x1+x2)/2;
+        link.path.setAttribute('d', `M ${x1} ${y1} C ${middle} ${y1} ${middle} ${y2} ${x2} ${y2}`);
+        link.dots.forEach((dot,index)=>{dot.setAttribute('cx',String(index?x2:x1));dot.setAttribute('cy',String(index?y2:y1));});
+      }
+    }
+  }
+  function schedule() {
+    if (disposed || frame !== undefined) return;
+    if (view.requestAnimationFrame) frame = view.requestAnimationFrame(draw); else draw();
+  }
+  evidenceLinkBindings.set(host,cleanup);
+  if (view.ResizeObserver) {
+    observer = new view.ResizeObserver(schedule);
+    layers.forEach(({root,links}) => {observer.observe(root);links.forEach(link=>link.ends.forEach(end=>observer.observe(end.row)));});
+  }
+  view.addEventListener('resize',schedule);
+  draw();
+}
+
 function bindEvidenceDetails(host,model,here=()=>true) {
   host.querySelectorAll('[data-evidence-open]').forEach(button=>button.onclick=event=>{
     event.preventDefault();event.stopPropagation(); if(!here())return;
@@ -5310,6 +5431,7 @@ function bindEvidenceDetails(host,model,here=()=>true) {
     if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
     dialog.querySelector('[data-evidence-close]').focus();
   });
+  bindEvidenceLinks(host,model,here);
 }
 
 function createSelectionEvidence(h) {
@@ -5317,6 +5439,7 @@ function createSelectionEvidence(h) {
   const preferences=new Map(),preferenceKey=scope=>'club-selections-form-indicators:'+scope;
   const here=b=>board===b && b.host.isConnected && h.here(b);
   function clear(b) {
+    clearEvidenceLinks(b.host);
     b.host.querySelector('.se-evidence-dialog')?.remove();
     b.host.querySelectorAll('[data-se-evidence]').forEach(slot=>{slot.replaceChildren();slot.closest('.se-player-cell')?.classList.remove('se-has-evidence');});
   }
@@ -5369,18 +5492,18 @@ function createSelectionEvidence(h) {
     finally {if(pending===task)pending=null;}
   }
   return {
-    mount(host,options){if(!host)return;const b={...options,host};if(board?.scope!==b.scope){cache=null;generation++;}board=b;bindVisibility(b);if(b.visible)void load(b);else clear(b);},
+    mount(host,options){if(!host)return;if(board)clearEvidenceLinks(board.host);const b={...options,host};if(board?.scope!==b.scope){cache=null;generation++;}board=b;bindVisibility(b);if(b.visible)void load(b);else clear(b);},
     invalidate(){cache=null;generation++;if(board&&here(board))void load(board);},
     adopt(scope,data){if(board?.scope!==scope)return;cache={scope,data,time:Date.now()};generation++;if(here(board))paint(board,data);}
   };
 }
-return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,bindEvidenceDetails,createSelectionEvidence};
+return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,clearEvidenceLinks,bindEvidenceLinks,bindEvidenceDetails,createSelectionEvidence};
 })();
 
 const __demoModule12=(()=>{
-const {buildSeasonStats, compareSelectedGrades, STATS_FORMATS, statsOvers}=__demoModule13;
+const {buildSeasonStats, compareSelectedGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule13;
 const {buildSelectionEvidence}=__demoModule14;
-const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails}=__demoModule16;
+const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule16;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
 const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? new Intl.DateTimeFormat('en-AU', {day:'numeric', month:'short', timeZone:'UTC'}).format(new Date(value + 'T12:00:00Z')) : '';
@@ -5411,8 +5534,8 @@ function renderGradeComparison(summary, first, second, roster, evidence = buildS
     if (!stats.bowling_innings) return '<small>No bowling recorded</small>';
     return `<span>${numeric(stats.bowling_average)} average</span><small>${stats.wickets} wickets · ${statsOvers(stats.bowling_balls) ?? '—'} overs · ${stats.bowling_innings} inns</small><small>${numeric(stats.economy)} Econ · ${numeric(stats.bowling_strike_rate)} S/R</small>`;
   };
-  const cell = (players,team) => players.length ? players.map(player => `<div><strong>${playerName(player.id,player.name,openable)}</strong>${player.day ? `<small>Day ${player.day}</small>` : ''}${figures(player.stats)}${renderEvidenceBadges(evidence.player(team.id,player.id))}</div>`).join('') : '<small>Vacant</small>';
-  return evidenceStyles + `<style>.ss-compare{margin:12px 0}.ss-compare-row{display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,1fr);gap:10px;border-top:1px solid #e1e7ee;padding:10px 0;align-items:start}.ss-compare-cell{min-width:0;overflow-wrap:anywhere}.ss-compare-cell strong,.ss-compare-cell span,.ss-compare-cell small{display:block}.ss-compare-cell strong{font-size:14px}.ss-compare-cell span{margin-top:5px;font-size:14px}.ss-compare-cell small{font-size:12px;color:#52627a;margin:3px 0}.ss-compare-cell>div+div{border-top:1px dashed #dbe3ed;margin-top:8px;padding-top:8px}.ss-position{font-size:12px;color:#52627a;padding-top:2px}.ss-compare-head{font-weight:700}.ss-compare-head small{display:block;font-size:12px;font-weight:400}</style><p class="ss-caption">${first.lineupPublished ? 'Published' : 'Selected'} batting order · season ${bowling ? 'bowling' : 'batting'} figures in each grade. Averages are not adjusted for grade strength. Open Form guide for the rough assessment.</p><div class="ss-compare" role="table" aria-label="Selected batting orders and season ${bowling ? 'bowling' : 'batting'} figures"><div class="ss-compare-row ss-compare-head" role="row"><span role="columnheader">#</span><span role="columnheader">${escape(first.grade)}${first.days?.[0]?.date ? `<small>Line-up: ${escape(date(first.days[0].date))}</small>` : ''}</span><span role="columnheader">${escape(second.grade)}${second.days?.[0]?.date ? `<small>Line-up: ${escape(date(second.days[0].date))}</small>` : ''}</span></div>${rows.map(row => `<div class="ss-compare-row" role="row"><span class="ss-position" role="rowheader">${row.position}</span><div class="ss-compare-cell" role="cell">${cell(row.first,first)}</div><div class="ss-compare-cell" role="cell">${cell(row.second,second)}</div></div>`).join('')}</div>`;
+  const cell = (players,team) => players.length ? players.map(player => `<div data-evidence-row><strong>${playerName(player.id,player.name,openable)}</strong>${player.day ? `<small>Day ${player.day}</small>` : ''}${figures(player.stats)}${renderEvidenceBadges(evidence.player(team.id,player.id))}</div>`).join('') : '<small>Vacant</small>';
+  return evidenceStyles + `<style>.ss-compare{margin:12px 0}.ss-compare-row{display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,1fr);gap:10px;border-top:1px solid #e1e7ee;padding:10px 0;align-items:start}.ss-compare-cell{min-width:0;overflow-wrap:anywhere}.ss-compare-cell strong,.ss-compare-cell span,.ss-compare-cell small{display:block}.ss-compare-cell strong{font-size:14px}.ss-compare-cell span{margin-top:5px;font-size:14px}.ss-compare-cell small{font-size:12px;color:#52627a;margin:3px 0}.ss-compare-cell>div+div{border-top:1px dashed #dbe3ed;margin-top:8px;padding-top:8px}.ss-position{font-size:12px;color:#52627a;padding-top:2px}.ss-compare-head{font-weight:700}.ss-compare-head small{display:block;font-size:12px;font-weight:400}</style><p class="ss-caption">${first.lineupPublished ? 'Published' : 'Selected'} batting order · ${escape(STATS_FORMATS[first.format] || first.format)} season ${bowling ? 'bowling' : 'batting'} figures in each grade. Averages are not adjusted for grade strength. Open Form guide for the rough assessment.</p><div class="ss-compare" role="table" aria-label="Selected batting orders and season ${bowling ? 'bowling' : 'batting'} figures"><div class="ss-compare-row ss-compare-head" role="row"><span role="columnheader">#</span><span role="columnheader">${escape(first.grade)}${first.days?.[0]?.date ? `<small>Line-up: ${escape(date(first.days[0].date))}</small>` : ''}</span><span role="columnheader">${escape(second.grade)}${second.days?.[0]?.date ? `<small>Line-up: ${escape(date(second.days[0].date))}</small>` : ''}</span></div>${rows.map(row => `<div class="ss-compare-row" role="row"><span class="ss-position" role="rowheader">${row.position}</span><div class="ss-compare-cell" role="cell">${cell(row.first,first)}</div><div class="ss-compare-cell" role="cell">${cell(row.second,second)}</div></div>`).join('')}</div>`;
 }
 
 function renderStatsRows(rows, mode = 'batting', evidence = null, openable = null) {
@@ -5464,48 +5587,56 @@ function createSeasonStatsPanel(h) {
   }
   function draw(s) {
     if (!here(s)) return;
+    clearEvidenceLinks(s.host);
     const state = s.state, data = s.context;
     const open = new Set([...s.host.querySelectorAll('[data-stats-player][open]')].map(el => el.dataset.statsPlayer));
     const disabled = s.busy ? 'disabled' : '';
     const teamDate = team => team.days?.[0]?.date || '';
     const available = team => !team.cancelled && (!data || !teamDate(team) || teamDate(team) >= data.season.start && teamDate(team) <= data.season.end);
-    const allTeams = (s.teams || []).filter(available);
+    const allTeams = (s.teams || []).filter(available).map(t => ({...t,format:statsFormat(t.format)}));
     const latestPublished = new Map();
     for (const fixture of s.teams || []) {
       if (!fixture.published?.details || !Array.isArray(fixture.published.slots)) continue;
       const team = {...fixture, ...fixture.published.details, slots:fixture.published.slots, level:fixture.published.level ?? fixture.level, lineupPublished:true};
+      team.format = statsFormat(team.format);
       if (!available(team)) continue;
       const key = JSON.stringify([team.competition, team.grade, team.format]), previous = latestPublished.get(key);
       if (!previous || teamDate(team) > teamDate(previous)) latestPublished.set(key, team);
     }
     const publishedTeams = [...latestPublished.values()];
-    const dates = [...new Set(allTeams.map(teamDate).filter(Boolean))].sort().reverse();
-    const populated = dates.filter(day => allTeams.some(t => teamDate(t) === day && t.slots?.some(slot => slot.d1 || slot.d2)));
+    const formatTeams = allTeams.filter(t => t.format === state.format);
+    const formatPublished = publishedTeams.filter(t => t.format === state.format);
+    const dates = [...new Set(formatTeams.map(teamDate).filter(Boolean))].sort().reverse();
+    const populated = dates.filter(day => formatTeams.some(t => teamDate(t) === day && t.slots?.some(slot => slot.d1 || slot.d2)));
     const comparisonDate = dates.includes(state.compareDate) ? state.compareDate
-      : publishedTeams.length ? 'published'
+      : formatPublished.length ? 'published'
       : populated.includes(s.boardDate) ? s.boardDate
       : populated.find(day => day <= (s.boardDate || data?.today || '9999-12-31')) || populated[0]
       || (dates.includes(s.boardDate) ? s.boardDate : dates[0]);
-    const teams = (comparisonDate === 'published' ? publishedTeams : allTeams.filter(t => !comparisonDate || teamDate(t) === comparisonDate)).sort((a,b) => (a.level ?? 999) - (b.level ?? 999) || a.grade.localeCompare(b.grade, undefined, {numeric:true}));
+    const teams = (comparisonDate === 'published' ? formatPublished : formatTeams.filter(t => !comparisonDate || teamDate(t) === comparisonDate)).sort((a,b) => (a.level ?? 999) - (b.level ?? 999) || a.grade.localeCompare(b.grade, undefined, {numeric:true}));
     const showCompetition = new Set(teams.map(t => t.competition)).size > 1;
-    const teamLabel = team => escape(team.grade) + (showCompetition ? ' · ' + escape(team.competition || 'Competition unknown') : '') + (teams.some(other => other.grade === team.grade && other.competition === team.competition && other.format !== team.format) ? ' · ' + escape(STATS_FORMATS[team.format] || team.format) : '');
-    const primary = teams.find(t => t.id === state.firstTeam && (state.compare || t.format === state.format)) || teams.find(t => t.format === state.format) || teams[0];
-    const lower = primary ? teams.filter(t => t.id !== primary.id && t.competition === primary.competition && t.format === primary.format) : [];
-    const secondary = lower.find(t => t.id === state.secondTeam) || lower.find(t => t.level > primary?.level) || lower[0];
+    const teamLabel = team => escape(team.grade) + (showCompetition ? ' · ' + escape(team.competition || 'Competition unknown') : '');
+    const previous = id => [...allTeams,...publishedTeams].find(t => t.id === id);
+    const sameGrade = (team, old) => old && team.grade === old.grade && team.competition === old.competition;
+    const primary = teams.find(t => t.id === state.firstTeam) || teams.find(t => sameGrade(t,previous(state.firstTeam))) || teams[0];
+    const lower = primary ? teams.filter(t => t.id !== primary.id && t.competition === primary.competition) : [];
+    const secondary = lower.find(t => t.id === state.secondTeam) || lower.find(t => sameGrade(t,previous(state.secondTeam))) || lower.find(t => t.level > primary?.level) || lower[0];
     if (primary) state.firstTeam = primary.id;
     if (secondary) state.secondTeam = secondary.id;
     const canCompare = publishedTeams.some(t => publishedTeams.some(other => other.id !== t.id && other.competition === t.competition && other.format === t.format)) || allTeams.some(t => allTeams.some(other => other.id !== t.id && teamDate(other) === teamDate(t) && other.competition === t.competition && other.format === t.format));
     if (!canCompare) state.compare = false;
-    if (state.compare && primary) state.format = primary.format;
+    const knownFormats = ['limited_overs','long_form','t20'];
+    const formats = [...knownFormats,...(data ? buildSeasonStats(data).formats : []).filter(f => !knownFormats.includes(f))];
+    const formatPicker = `<label class="ss-format">Format<select data-stats-filter="format" ${disabled}>${formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(STATS_FORMATS[f] || f)}</option>`).join('')}</select></label>`;
     const totals = data ? buildSeasonStats(data, state.compare ? {...state, groups:[primary, secondary].filter(Boolean).map(team => JSON.stringify([String(team.competition || '').trim(), String(team.grade || '').trim()]))} : state) : null;
     s.evidence = data ? buildSelectionEvidence(buildSeasonStats(data),state.compare?[primary,secondary].filter(Boolean):[],s.roster) : null;
     s.host.innerHTML = evidenceStyles + css + `<section class="season-stats" aria-label="Season stats"><div class="ss-top"><h2 tabindex="-1">Season stats</h2><button type="button" class="btn ghost" data-stats-close>Close stats</button></div>${data ? `
       ${data.can_set_season ? `<details class="ss-season" ${state.seasonDraft ? 'open' : ''}><summary>${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</summary><form data-stats-season><label>Starts<input type="date" name="start" value="${escape(state.seasonDraft?.start ?? data.season.start)}" required ${disabled}></label><label>Ends<input type="date" name="end" value="${escape(state.seasonDraft?.end ?? data.season.end)}" required ${disabled}></label><button type="submit" class="btn secondary" ${disabled}>${s.savingSeason ? 'Saving…' : 'Save season dates'}</button></form></details>` : `<p class="ss-caption">${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</p>`}
-      ${!state.compare ? `<div class="ss-filters">${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${totals.formats.length > 1 ? `<label>Format<select data-stats-filter="format" ${disabled}>${totals.formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(STATS_FORMATS[f] || f)}</option>`).join('')}</select></label>` : ''}</div>` : ''}
+      ${!state.compare ? `<div class="ss-filters">${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${formatPicker}</div>` : ''}
       <div class="ss-modes" aria-label="Statistics type"><button class="btn ghost" type="button" data-stats-mode="batting" aria-pressed="${state.mode !== 'bowling' && !state.compare}">Batting</button><button class="btn ghost" type="button" data-stats-mode="bowling" aria-pressed="${state.mode === 'bowling' && !state.compare}">Bowling</button>${canCompare ? `<button class="btn ghost" type="button" data-stats-compare aria-pressed="${!!state.compare}">Compare grades</button>` : ''}<button class="btn ghost ss-refresh" type="button" data-stats-refresh ${disabled}>${s.busy ? 'Updating…' : 'Update totals'}</button></div>
       <p class="ss-caption">${totals.included} completed ${totals.included === 1 ? 'scorecard' : 'scorecards'} · ${escape(STATS_FORMATS[state.format] || 'Current season')}${totals.playing ? ' · ' + totals.playing + ' in progress' : ''}</p>
       ${renderStatsIssues(totals.issues)}
-      ${state.compare ? `<div class="ss-compare-controls"><div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || publishedTeams.length ? `<label>Line-ups<select data-stats-date>${publishedTeams.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${dates.map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${renderGradeComparison(buildSeasonStats(data), primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s))}` : `${totals.rows.length > 12 ? `<label class="ss-search">Find player<input type="search" data-stats-search value="${escape(state.search || '')}"></label>` : ''}<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
+      ${state.compare ? `<div class="ss-compare-controls">${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Line-ups<select data-stats-date>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${dates.map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(buildSeasonStats(data), primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s)) : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `${totals.rows.length > 12 ? `<label class="ss-search">Find player<input type="search" data-stats-search value="${escape(state.search || '')}"></label>` : ''}<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
     if (totals && !state.compare) renderRows(s, totals, open);
     bindPlayerLinks(s);
     if (s.evidence) bindEvidenceDetails(s.host,s.evidence,()=>here(s));
@@ -5514,7 +5645,7 @@ function createSeasonStatsPanel(h) {
     s.host.querySelectorAll('[data-stats-filter]').forEach(el => el.onchange = () => {state[el.dataset.statsFilter] = el.value; draw(s); h.navigate?.();});
     s.host.querySelectorAll('[data-stats-mode]').forEach(el => el.onclick = () => {state.mode = el.dataset.statsMode; state.compare = false; draw(s); h.navigate?.();});
     s.host.querySelectorAll('[data-stats-compare-mode]').forEach(el => el.onclick = () => {state.mode = el.dataset.statsCompareMode; draw(s); h.navigate?.(); s.host.querySelector(`[data-stats-compare-mode="${state.mode}"]`)?.focus({preventScroll:true});});
-    s.host.querySelector('[data-stats-compare]')?.addEventListener('click', () => {state.compare = !state.compare; state.grade = ''; state.format = primary?.format || state.format; draw(s); h.navigate?.();});
+    s.host.querySelector('[data-stats-compare]')?.addEventListener('click', () => {state.compare = !state.compare; state.grade = ''; draw(s); h.navigate?.();});
     s.host.querySelector('[data-stats-date]')?.addEventListener('change', e => {state.compareDate = e.target.value; state.firstTeam = ''; state.secondTeam = ''; draw(s); h.navigate?.();});
     s.host.querySelectorAll('[data-stats-team]').forEach(el => el.onchange = () => {state[el.dataset.statsTeam] = el.value; if (el.dataset.statsTeam === 'firstTeam') {state.secondTeam = ''; state.format = teams.find(t => t.id === el.value)?.format || state.format;} draw(s); h.navigate?.();});
     s.host.querySelector('[data-stats-search]')?.addEventListener('input', e => {state.search = e.target.value; renderRows(s, totals, open);});
@@ -5534,7 +5665,7 @@ function createSeasonStatsPanel(h) {
     const rows = totals.rows.filter(row => (!bowling || row.bowling_innings > 0 || row.bowling_complete === false) && (!state.search || row.name.toLowerCase().includes(state.search.trim().toLowerCase())))
       .sort((a,b) => bowling ? b.wickets - a.wickets || (a.bowling_average ?? Infinity) - (b.bowling_average ?? Infinity) || a.name.localeCompare(b.name) : b.runs - a.runs || b.innings - a.innings || a.name.localeCompare(b.name));
     const host = s.host.querySelector('[data-stats-rows]'); if (!host) return;
-    host.innerHTML = rows.length ? renderStatsRows(rows, state.mode, s.evidence, openablePlayers(s)) : `<p class="ss-empty">${state.search ? 'No matching players.' : bowling ? 'No bowling figures in the loaded scorecards.' : 'No completed scorecards in this season yet. Add scores in Fixture details or Match Review.'}</p>`;
+    host.innerHTML = rows.length ? renderStatsRows(rows, state.mode, s.evidence, openablePlayers(s)) : `<p class="ss-empty">${state.search ? 'No matching players.' : bowling ? 'No bowling figures for '+escape(STATS_FORMATS[state.format] || 'this format')+' in this season yet.' : 'No completed '+escape(STATS_FORMATS[state.format] || 'matching format')+' scorecards in this season yet.'}</p>`;
     host.querySelectorAll('[data-stats-player]').forEach(el => {el.open = open.has(el.dataset.statsPlayer);});
     bindPlayerLinks(s,host);
     if(s.evidence)bindEvidenceDetails(s.host,s.evidence,()=>here(s));
@@ -5549,13 +5680,14 @@ function createSeasonStatsPanel(h) {
       if (settings) delete s.state.seasonDraft;
       const all = buildSeasonStats(data);
       if (!all.groups.some(g => g.id === s.state.grade)) s.state.grade = '';
-      if (!all.formats.includes(s.state.format)) s.state.format = all.formats.includes(s.preferredFormat) ? s.preferredFormat : all.formats.includes('limited_overs') ? 'limited_overs' : all.formats[0] || 'limited_overs';
+      if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = statsFormat(s.preferredFormat) !== 'unknown' ? statsFormat(s.preferredFormat) : 'limited_overs';
       s.message = settings ? 'Season dates saved.' : '';
     } catch (error) {if (here(s)) {s.error = true; s.message = error.message || 'Season stats could not be loaded.';}}
     finally {s.busy = false; s.savingSeason = false; draw(s); if (s.stale && here(s) && !s.state.seasonDraft) void load(s);}
   }
   return {canLeave, invalidate() {h.invalidateBoard?.(); if (active) {active.stale = true; if (here(active) && !active.busy && !active.state.seasonDraft) void load(active);}}, mount(host, options) {
     if (active?.host === host && active.scope === options.scope) {Object.assign(active,options); draw(active); if (active.stale && !active.busy && !active.state.seasonDraft) void load(active); return active;}
+    if (active) clearEvidenceLinks(active.host);
     const s = {...options, host, state:options.state || {}, context:null, busy:false, message:'', error:false}; active = s; void load(s); return s;
   }};
 }
@@ -8235,7 +8367,7 @@ const {selectionCallLink}=__demoModule27;
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.258';
+const APP_UI_VERSION='0.8.62.259';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -34394,7 +34526,16 @@ function startClubDemo(){
  document.getElementById('demoStage').onchange=e=>{window.demoReady=demoNavigate(e.target.value,{push:true});};
  document.getElementById('demoReset').onclick=()=>{if(confirm('Reset all changes to this fictional club?'))window.demoReady=demoNavigate(demoCurrentStage,{reset:true});};
  new MutationObserver(demoDecorate).observe(document.getElementById('app'),{childList:true,subtree:true});
- window.addEventListener('popstate',e=>{if(e.state?.demoRoute){const r=e.state.demoRoute;window.demoReady=demoNavigate(r.key,r);}else if(e.state?.demoWelcome)demoShowWelcome(e.state.demoWelcome===true?null:e.state.demoWelcome);});
+ window.addEventListener('popstate',e=>{
+  if(e.state?.demoRoute){
+   const r=e.state.demoRoute;
+   // In-page history belongs to the shared app. Re-entering the journey would
+   // reset the stats panel, selected format and player view on every Back.
+   const sameJourney=r.product===demoProduct&&r.persona===demoPersona&&r.key===demoCurrentStage&&r.scenario===demoScenario;
+   window.demoReady=sameJourney&&validAppNavigationMarker(e.state.clubBattingNavigation)
+    ? handleAppNavigationHistory(e) : demoNavigate(r.key,r);
+  }else if(e.state?.demoWelcome)demoShowWelcome(e.state.demoWelcome===true?null:e.state.demoWelcome);
+ });
  const route=demoInitialRoute();if(route)return demoNavigate(route.key,{...route,initial:true});demoShowWelcome(new URLSearchParams(location.search).get('product'));return Promise.resolve();
 }
 window.demoReady=startClubDemo();

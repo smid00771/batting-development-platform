@@ -107,7 +107,16 @@ function startClubDemo(){
  document.getElementById('demoStage').onchange=e=>{window.demoReady=demoNavigate(e.target.value,{push:true});};
  document.getElementById('demoReset').onclick=()=>{if(confirm('Reset all changes to this fictional club?'))window.demoReady=demoNavigate(demoCurrentStage,{reset:true});};
  new MutationObserver(demoDecorate).observe(document.getElementById('app'),{childList:true,subtree:true});
- window.addEventListener('popstate',e=>{if(e.state?.demoRoute){const r=e.state.demoRoute;window.demoReady=demoNavigate(r.key,r);}else if(e.state?.demoWelcome)demoShowWelcome(e.state.demoWelcome===true?null:e.state.demoWelcome);});
+ window.addEventListener('popstate',e=>{
+  if(e.state?.demoRoute){
+   const r=e.state.demoRoute;
+   // In-page history belongs to the shared app. Re-entering the journey would
+   // reset the stats panel, selected format and player view on every Back.
+   const sameJourney=r.product===demoProduct&&r.persona===demoPersona&&r.key===demoCurrentStage&&r.scenario===demoScenario;
+   window.demoReady=sameJourney&&validAppNavigationMarker(e.state.clubBattingNavigation)
+    ? handleAppNavigationHistory(e) : demoNavigate(r.key,r);
+  }else if(e.state?.demoWelcome)demoShowWelcome(e.state.demoWelcome===true?null:e.state.demoWelcome);
+ });
  const route=demoInitialRoute();if(route)return demoNavigate(route.key,{...route,initial:true});demoShowWelcome(new URLSearchParams(location.search).get('product'));return Promise.resolve();
 }
 window.demoReady=startClubDemo();

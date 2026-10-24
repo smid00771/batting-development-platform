@@ -75,15 +75,16 @@ test('compact other-grade context shows only the latest grade and match, preserv
  Object.assign(other,{batting_complete:true,bowling_complete:true,wickets:0});h.host.innerHTML=h.ui.renderEvidenceDetails(item);section=h.host.querySelector('.se-other-grades');
  assert.match(section.textContent,/Bat: 57 runs \(1 inn, unbeaten\)/);assert.match(section.textContent,/Bowl avg — \(0 wkts\)/);assert.doesNotMatch(section.textContent,/Bat avg 0|Bowl avg 0/);
 });
-test('one form guide control includes neutral bowling and explains the historical reference and early sample',async()=>{
+test('one form guide control explains the limited-overs allowance, pooled reference and early sample',async()=>{
  const h=await setup(),p=h.fixture.roster.find(p=>p.id==='g1p4');
  const stats={roster_id:p.id,competition:'NDCA',grade:'1st Grade',format:'limited_overs',runs:0,innings:0,not_outs:0,batting_complete:true,
   wickets:5,conceded:82,bowling_balls:113,bowling_innings:2,bowling_complete:true,economy:82*6/113};
  const item=h.engine.buildSelectionEvidence({rows:[stats]},[],[p]).forRow(stats);item.key='example';
  h.host.innerHTML=h.ui.renderEvidenceBadges(item);
- assert.equal(h.host.querySelectorAll('button').length,1);assert.match(h.host.textContent,/Bowling:  Within guide/);assert.match(h.host.textContent,/Form guide · early/);
+ assert.equal(h.host.querySelectorAll('button').length,1);assert.match(h.host.textContent,/Bowling: ↑ Strong/);assert.match(h.host.textContent,/Form guide · early/);
  h.host.innerHTML=h.ui.renderEvidenceDetails(item);assert.match(h.host.textContent,/NDCA 2021\/22–2025\/26/);assert.match(h.host.textContent,/768 historical records/);
  assert.match(h.host.textContent,/All roles and match formats/);assert.match(h.host.textContent,/Early sample · 2 innings · 18.5 overs/);
+ assert.match(h.host.textContent,/Limited-overs trial: strong wicket-taking allows economy up to 4.56/);
  assert.doesNotMatch(h.host.textContent,/comparable club records|current club records/);
 });
 test('strong bowling with an unset role remains visible and explains the missing swap information',async()=>{
@@ -203,7 +204,7 @@ test('comparison and normal Season stats markers both open without expanding the
  let button=h.host.querySelector('[data-evidence-open]');button.click();assert.ok(h.host.querySelector('dialog'));assert.equal(h.host.querySelectorAll('[data-stats-player][open]').length,0);
  h.host.querySelector('[data-evidence-close]').click();h.host.querySelector('[data-stats-compare]').click();
  assert.equal(h.host.querySelector('[data-stats-date]').value,'published');
- button=h.host.querySelector('[data-evidence-open]');button.click();assert.match(h.host.querySelector('dialog').textContent,/Possible comparisons/);
+ button=h.host.querySelector('[data-evidence-open]');button.click();assert.match(h.host.querySelector('dialog').textContent,/Selection conversations/);
  assert.equal(mounted.state.compare,true);
 });
 test('player text is escaped in markers, dialogs and comparison explanations',async()=>{
