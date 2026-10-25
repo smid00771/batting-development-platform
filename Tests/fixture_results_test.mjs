@@ -57,7 +57,7 @@ test('no-play status can be recorded and undone without editing the team',async(
 test('Fixture details remains enabled on a locked selection card while player changes stay locked',()=>{
  for(const file of ['app.js','demo.html']){
   const source=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),a=source.indexOf('function seTeamCard('),b=source.indexOf('\nfunction ',a+1),f={id:'fixture',details:{grade:'First XI',opposition:'Visitors',days:[{date:'2026-10-10'}]},published:{},slots:[],issues:[]};
-  const ctx={ensureSelections:()=>({data:{}}),seMatchRoles:()=>({}),seMatchRoleIssues:()=>[],seDraftChanged:()=>false,seOverflowText:()=>'',seEsc:escape,seFixtureLocked:()=>true,seDate:String,seBoardComments:()=>'',seBoardMatchConversation:()=>'',seScorecardNote:()=>'',seFixtureLockControls:()=>'',seBoardCounts:()=>'',seTeamChangeNotice:()=>'',seMatchRoleFields:()=>'<button data-player-change>Player</button>'};vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('function seFixtureDetailsAction('),source.indexOf('function seReadOnlyTeamCard('))+source.slice(a,b),ctx);
+  const ctx={ensureSelections:()=>({data:{}}),seMatchRoles:()=>({}),seMatchRoleIssues:()=>[],seDraftChanged:()=>false,seOverflowText:()=>'',seEsc:escape,seFixtureLocked:()=>true,seDate:String,seDayTime:d=>d.date,seBoardPublishedTeam:()=>'',seBoardComments:()=>'',seBoardMatchConversation:()=>'',seScorecardNote:()=>'',seFixtureLockControls:()=>'',seBoardCounts:()=>'',seTeamChangeNotice:()=>'',seMatchRoleFields:()=>'<button data-player-change>Player</button>'};vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('function seFixtureDetailsAction('),source.indexOf('function seReadOnlyTeamCard('))+source.slice(a,b),ctx);
   const dom=new JSDOM(ctx.seTeamCard(f)),doc=dom.window.document;doc.querySelectorAll('[data-se-locked="true"] button').forEach(x=>x.disabled=true);
   assert.equal(doc.querySelector('[data-se-edit]').disabled,false,file);assert.equal(doc.querySelector('[data-player-change]').disabled,true);assert.equal(doc.querySelector('[data-se-copylast]'),null);assert.equal(doc.querySelector('[data-se-export]'),null);
   f.published=null;ctx.seFixtureLocked=()=>false;const draft=new JSDOM(ctx.seTeamCard(f)).window.document;assert.ok(draft.querySelector('[data-se-copylast]'));assert.equal(draft.querySelector('[data-se-export]'),null);
@@ -71,4 +71,11 @@ test('Match Review link shares the scorecard heading and appears only when the s
   ui.mount(host,{clubId:'c',fixtureId:'f'});await settle();const button=host.querySelector('[data-fixture-match-review]');
   assert.equal(!!button,allowed);if(button){assert.equal(button.parentElement,host.querySelector('h3').parentElement);button.click();assert.equal(opened,'f');}
  }
+});
+test('saved scorecard status is delivered to the current drawer only',async()=>{
+ const dom=new JSDOM('<main></main>'),host=dom.window.document.querySelector('main'),loads=[];let reply,active=true;
+ const ui=createFixtureResults({supabase:{rpc:()=>new Promise(resolve=>reply=resolve)},escape,here:()=>active,loaded:(s,card)=>loads.push([s.fixtureId,card?.scorecard?.status])});
+ const context={fixtures:[{id:'f',match_id:'match',days:[],format:'t20'}],cards:[{fixture_id:'f',snapshot_id:'saved',our_team:'ours',scorecard:{match_id:'match',status:'completed',teams:[{id:'ours',name:'Example club'}],innings:[]}}]};
+ ui.mount(host,{clubId:'c',fixtureId:'f'});reply({data:context});await settle();assert.deepEqual(loads,[['f','completed']]);
+ ui.mount(host,{clubId:'c',fixtureId:'f'});active=false;reply({data:context});await settle();assert.equal(loads.length,1,'An old response cannot update a page that has been left');dom.window.close();
 });
