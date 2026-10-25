@@ -11,17 +11,16 @@ export function awardBalls(row){
  const overs=/^(\d+)(?:\.([0-5]))?$/.exec(String(row.overs??''));
  return overs?Number(overs[1])*6+Number(overs[2]||0):null;
 }
-const played=row=>row.status!=='did_not_bat'&&number(row.runs)!==null;
 function battingRate(rows,minBalls){
- const innings=rows.filter(played);
- if(!innings.length||innings.some(row=>number(row.balls)===null||number(row.balls)===0&&number(row.runs)>0))return null;
+ const innings=rows.filter(row=>row.status!=='did_not_bat');
+ if(!innings.length||innings.some(row=>number(row.runs)===null||!Number.isInteger(number(row.balls))||number(row.balls)===0&&number(row.runs)>0))return null;
  const balls=sum(innings,'balls');
  return balls>=minBalls?sum(innings,'runs')/balls:null;
 }
 function bowlingRate(rows){
- if(!rows.length||rows.some(row=>awardBalls(row)===null||number(row.runs)===null))return null;
+ if(!rows.length||rows.some(row=>awardBalls(row)===null||number(row.runs)===null||awardBalls(row)===0&&(number(row.runs)>0||number(row.wickets)>0)))return null;
  const balls=rows.reduce((total,row)=>total+awardBalls(row),0);
- return balls>=18?{rate:sum(rows,'runs')/balls,balls,wickets:sum(rows,'wickets')}:null;
+ return balls>=18?{rate:sum(rows,'runs')/balls,balls,wickets:rows.every(row=>number(row.wickets)!==null)?sum(rows,'wickets'):null}:null;
 }
 const overs=balls=>`${Math.floor(balls/6)}${balls%6?'.'+balls%6:''}`;
 const won=(card,team)=>{
@@ -34,20 +33,21 @@ export function awardPerformance(p,cards=[]){
  const card=matches.length===1?matches[0].scorecard:null;
  const format=card?.format_key||p.format;
  const limited=['limited_overs','t20'].includes(format);
- // Format guides are used only for positive rate credit when complete peers are absent.
- const guideBat=format==='t20'?1.25:format==='limited_overs'?.8:null;
- const guideBowl=format==='t20'?7.5/6:format==='limited_overs'?5/6:format==='long_form'?.5:null;
+ // Rates are judged within this match, never against a generic format or grade.
  const innings=card?.innings||[],ourInnings=innings.filter(i=>i.team_id===p.team_id);
  const otherBatters=innings.flatMap(i=>i.batters||[]).filter(b=>b.player_id!==p.player_id);
- const matchBatRate=battingRate(otherBatters,30);
- const notes=[],components={runs,wickets:wickets*20,pace:0,share:0,finish:0,control:0,strike:0};
- for(const b of batting){
+ const matchBatRate=innings.length&&innings.every(i=>i.batters?.length)?battingRate(otherBatters,30):null;
+ const notes=[],battingComparisons=[],bowlingComparisons=[],components={runs,wickets:wickets*20,pace:0,share:0,finish:0,control:0,strike:0};
+ for(const [index,b] of batting.entries()){
   const value=number(b.runs)??0,balls=number(b.balls),rate=balls>0?value/balls:null;
   const linked=ourInnings.filter(i=>(i.batters||[]).some(x=>x.player_id===p.player_id&&x.runs===b.runs&&x.balls===b.balls&&x.not_out===b.not_out));
   const inning=linked.length===1?linked[0]:null;
-  const reference=matchBatRate>0?matchBatRate:guideBat;
+  if(inning&&rate!==null&&matchBatRate!==null)battingComparisons[index]=`SR ${(100*rate).toFixed(0)} vs rest of match ${(100*matchBatRate).toFixed(0)}`;
   // No slow-batting penalty: an anchor in a difficult match can be valuable.
-  if(limited&&value>=20&&balls>=10&&reference>0)components.pace+=value*.25*clamp(rate/reference-1,0,1);
+  // Half the runs above the other batters' rate over these balls, bounded by
+  // half this innings' runs. Unlike the old bonus, it keeps distinguishing
+  // twice the match rate from four or six times it.
+  if(limited&&inning&&value>=20&&balls>=10&&matchBatRate!==null)components.pace+=value*.5*clamp(1-matchBatRate/rate,0,1);
   if(value>0&&inning?.complete&&number(inning.runs)>=value){
    const share=value/inning.runs;
    components.share+=value*.3*share;
@@ -58,15 +58,18 @@ export function awardPerformance(p,cards=[]){
   const chase=limited&&card?.status==='completed'&&!card.award_provisional&&innings.length===2&&innings.every(i=>i.complete)&&inning===innings[1]&&innings[0].team_id!==p.team_id&&won(card,p.team_id)&&!/retired|hurt|absent/i.test(`${b.dismissal||''} ${b.dismissal_text||''}`);
   if(chase&&b.not_out===true&&value>0){components.finish+=Math.min(6,value*.1);notes.push('Not out in completed chase');}
  }
- for(const b of bowling){
+ for(const [index,b] of bowling.entries()){
   const balls=awardBalls(b),conceded=number(b.runs),taken=number(b.wickets)??0;
   if(!balls||conceded===null)continue;
   const linked=innings.filter(i=>i.team_id!==p.team_id&&(i.bowlers||[]).some(x=>x.player_id===p.player_id&&x.runs===b.runs&&x.wickets===b.wickets&&awardBalls(x)===balls));
   const peers=linked.length===1?bowlingRate((linked[0].bowlers||[]).filter(x=>x.player_id!==p.player_id)):null;
-  const reference=peers?.rate??guideBowl;
-  // Credit runs saved over the actual workload, capped per innings. A one-over
-  // cameo cannot receive the same economy credit as a sustained restrictive spell.
-  if(balls>=12&&reference!==null)components.control+=Math.min(20,Math.max(0,reference*balls-conceded)*.6);
+  // Compare total conceded / total legal balls, never an unweighted average of
+  // individual economies. Exclude this bowler and the opposition's attack.
+  if(peers)bowlingComparisons[index]=`Econ ${(6*conceded/balls).toFixed(2)} vs team-mates ${(6*peers.rate).toFixed(2)}`;
+  // One point per run below the rest-of-attack rate over this actual spell.
+  // The six-points-per-over and 60-per-innings ceilings stop a brief spell or
+  // an extreme peer rate overwhelming the guide. Missing peers earn no credit.
+  if(balls>=12&&peers)components.control+=Math.min(60,balls,Math.max(0,peers.rate*balls-conceded));
   if(taken>0&&peers?.wickets>=2){
    const peerStrike=peers.balls/peers.wickets;
    components.strike+=taken*20*.15*clamp(1-balls/taken/peerStrike,0,1);
@@ -77,6 +80,10 @@ export function awardPerformance(p,cards=[]){
  const conceded=bowling.length&&bowling.every(b=>number(b.runs)!==null)?sum(bowling,'runs'):null;
  const battingPoints=runs+components.pace+components.share+components.finish,bowlingPoints=components.wickets+components.control+components.strike;
  const allround=runs>=20&&(wickets>=1||components.control>=8);
- const reason=[runs?`${runs} runs${batBalls>0?` from ${batBalls} · SR ${(100*runs/batBalls).toFixed(0)}`:''}`:'',bowling.length?`${wickets}/${conceded??p.conceded??'—'}${bowlBalls>0?` in ${overs(bowlBalls)} overs${conceded!==null?` · Econ ${(6*conceded/bowlBalls).toFixed(2)}`:''}`:''}`:'',...notes].filter(Boolean).join(' · ')||'No runs or wickets';
- return {points:round(battingPoints+bowlingPoints),battingPoints:round(battingPoints),bowlingPoints:round(bowlingPoints),allround,components,reason};
+ const bowlingStandout=wickets>=2||components.control>=20;
+ const strikeRate=batting.length===1&&battingComparisons[0]||batBalls>0&&`SR ${(100*runs/batBalls).toFixed(0)}`;
+ const economy=bowling.length===1&&bowlingComparisons[0]||bowlBalls>0&&conceded!==null&&`Econ ${(6*conceded/bowlBalls).toFixed(2)}`;
+ const comparisons=[...(batting.length>1?battingComparisons.flatMap((text,index)=>text?[`Batting innings ${index+1}: ${text}`]:[]):[]),...(bowling.length>1?bowlingComparisons.flatMap((text,index)=>text?[`Bowling innings ${index+1}: ${text}`]:[]):[])];
+ const reason=[runs?`${runs} runs${batBalls>0?` from ${batBalls} · ${strikeRate}`:''}`:'',bowling.length?`${wickets}/${conceded??p.conceded??'—'}${bowlBalls>0?` in ${overs(bowlBalls)} overs${economy?` · ${economy}`:''}`:''}`:'',...notes,...comparisons].filter(Boolean).join(' · ')||'No runs or wickets';
+ return {points:round(battingPoints+bowlingPoints),battingPoints:round(battingPoints),bowlingPoints:round(bowlingPoints),allround,bowlingStandout,components,reason};
 }

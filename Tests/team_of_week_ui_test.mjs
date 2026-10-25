@@ -107,7 +107,7 @@ console.log('Passed: score refresh preserves manual XI and dirty layout, reconci
 const conflictRpc=api.rpc.bind(api),conflictBase=s.week.context.design.revision;
 api.rpc=async(name,args)=>{if(args.p_action==='save_design'){const saved=await conflictRpc(name,{...args,p_action:'context',p_data:{week_end:s.week.end}});if(args.p_data.revision!==saved.data.design.revision)return {error:{message:'The background settings changed. Reload before saving'}};}return conflictRpc(name,args);};
 await api.rpc('team_of_week_api',{p_club_id:'club-test',p_action:'save_design',p_data:{revision:conflictBase,background_path:s.week.background,layout:{...s.week.layout,text_colour:'#11aa77'}}});
-const conflictRows=s.week.rows.map(({rank,points,reason,...p})=>structuredClone(p)),conflictWeek=s.week.end,conflictTitle=s.week.title;s.week.blurb='Keep this week’s caption.';
+const conflictRows=s.week.rows.map(({rank,points,reason,bowlingStandout,...p})=>structuredClone(p)),conflictWeek=s.week.end,conflictTitle=s.week.title;s.week.blurb='Keep this week’s caption.';
 document.getElementById('twColour').value='#7711aa';document.getElementById('twColour').dispatchEvent(new window.Event('input'));await until(()=>s.week.previewReady);
 assert.equal(document.getElementById('twReloadLayout'),null);document.getElementById('twSaveDesign').click();await until(()=>!s.week.busy&&s.week.previewReady);
 assert.equal(s.week.layoutConflict,true);assert.equal(s.week.context.design.revision,conflictBase);assert.match(document.getElementById('twStatus').textContent,/Reload saved layout/);assert.ok(document.getElementById('twReloadLayout'));
