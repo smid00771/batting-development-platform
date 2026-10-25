@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.266",
+  "appVersion": "0.8.62.267",
   "sources": {
     "app-design.css": "cbf99dacf8b1a444708384b5f2f441cc3e6fa21b6c93307d939ecd589fce2cd5",
-    "app.js": "a48de543c058d93ea8ef7c38cc29da9f4a26053c5106acadb1ff1cb651c2010d",
+    "app.js": "dc37d170142264dd46bf521f587614c1fe0622ac97d5d95b07b3cb24eaad441d",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
     "club-week.js": "8cf32ed2eb59ce212ad26677133fd539ea9a4e52443527b89cb396e37d3c8c9f",
@@ -51,7 +51,7 @@
     "social-team-workflow.js": "46c6d964d65efecc5b89bdfd5413d346664f14713b525adbfcc1c0904778804a",
     "styles.css": "2eb131ae2558239bad24075528d1eeafca383947422cadec00aca2f8e1946015",
     "team-of-week-demo.js": "719293b7bb41d0dce84028faded53b5f6bdc4486f8dd8adec437c380d56704c6",
-    "team-of-week.js": "248ae4ceaa9cda63f6643ed320fac4214011329955243f9c57499e19e9e02e5c",
+    "team-of-week.js": "4c2eb54d84f7eefd9a5a289ced55504b1e7a36bdd5084f38e5f1e13a5e7f846d",
     "team-week-reference.js": "33f58bd63b375aaeb944d1d2bcc1cacbbf1c426425b4e64e919cef9b80264e52",
     "video-credits.js": "79c9f32e0c0f913053334a832b315bb838e3d8de32ab86a965f5cf37ab6aaecb"
   }
