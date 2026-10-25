@@ -26,7 +26,7 @@ export function createFixtureResults(h){
  const live=s=>current===s&&s.host.isConnected&&h.here(s);
  async function rpc(s,action,data={}){const r=await h.supabase.rpc('club_match_results_api',{p_club_id:s.clubId,p_action:action,p_data:{fixture_id:s.fixtureId,...data}});if(r.error)throw Error(r.error.message);return r.data;}
  function selected(s){return s.context?weeklyResultCoverage(s.context).rows.find(r=>r.id===s.fixtureId)?.card:null;}
- async function read(s){const result=await rpc(s,'fixture');if(!Array.isArray(result?.fixtures)||!Array.isArray(result?.cards))throw Error('Scorecard could not be checked.');if(live(s)){s.context=result;const c=selected(s);if(!s.dirty)s.url=c?.scorecard.url||'';}return result;}
+ async function read(s){const result=await rpc(s,'fixture');if(!Array.isArray(result?.fixtures)||!Array.isArray(result?.cards))throw Error('Scorecard could not be checked.');if(live(s)){s.context=result;const c=selected(s);if(!s.dirty)s.url=c?.scorecard.url||'';h.loaded?.(s,c);}return result;}
  function draw(s){
   if(!live(s))return;const c=selected(s),f=s.context?.fixtures[0],locked=s.busy?'disabled':'',candidates=(s.context?.cards||[]).filter(x=>!x.fixture_id||x.fixture_id===s.fixtureId);
   const previous=s.host.querySelectorAll('[data-score-team]'),openTeams=previous.length?new Set([...previous].filter(el=>el.open).map(el=>el.dataset.scoreTeam)):null;

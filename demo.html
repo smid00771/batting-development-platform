@@ -3289,6 +3289,9 @@ details.admin-card[open]>summary>span:last-child{transform:rotate(180deg)}
 #app .se-fixture-summary .se-fixture-lock {justify-content:flex-start;gap:4px 12px;background:none;border:0;border-radius:0;padding:0;margin:4px 0 0}
 #app .se-fixture-summary .se-fixture-lock p {margin:0}
 #app .se-fixture-summary .se-fixture-lock small {font-size:12px;color:var(--muted)}
+#app .se-emergency-correction {border:0;background:none;margin:0;padding:0;color:var(--muted);font-size:12px}
+#app .se-emergency-correction>summary {width:fit-content;min-height:44px;box-sizing:border-box;padding:12px 0;cursor:pointer;font-size:12px;font-weight:400}
+#app .se-emergency-correction .btn {font-size:12px}
 #app .se-calendar button[data-se-availability="unavailable"] {background:#fff0ee;border-color:#cb6c6c;color:#8e242b}
 #app .se-availability-key {display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin:4px 0 10px}
 #app .se-availability-key span:first-child {color:#154e32}
@@ -3729,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.264.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.265.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -7701,7 +7704,7 @@ function createFixtureResults(h){
  const live=s=>current===s&&s.host.isConnected&&h.here(s);
  async function rpc(s,action,data={}){const r=await h.supabase.rpc('club_match_results_api',{p_club_id:s.clubId,p_action:action,p_data:{fixture_id:s.fixtureId,...data}});if(r.error)throw Error(r.error.message);return r.data;}
  function selected(s){return s.context?weeklyResultCoverage(s.context).rows.find(r=>r.id===s.fixtureId)?.card:null;}
- async function read(s){const result=await rpc(s,'fixture');if(!Array.isArray(result?.fixtures)||!Array.isArray(result?.cards))throw Error('Scorecard could not be checked.');if(live(s)){s.context=result;const c=selected(s);if(!s.dirty)s.url=c?.scorecard.url||'';}return result;}
+ async function read(s){const result=await rpc(s,'fixture');if(!Array.isArray(result?.fixtures)||!Array.isArray(result?.cards))throw Error('Scorecard could not be checked.');if(live(s)){s.context=result;const c=selected(s);if(!s.dirty)s.url=c?.scorecard.url||'';h.loaded?.(s,c);}return result;}
  function draw(s){
   if(!live(s))return;const c=selected(s),f=s.context?.fixtures[0],locked=s.busy?'disabled':'',candidates=(s.context?.cards||[]).filter(x=>!x.fixture_id||x.fixture_id===s.fixtureId);
   const previous=s.host.querySelectorAll('[data-score-team]'),openTeams=previous.length?new Set([...previous].filter(el=>el.open).map(el=>el.dataset.scoreTeam)):null;
@@ -8441,7 +8444,7 @@ const {selectionCallLink}=__demoModule27;
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.264';
+const APP_UI_VERSION='0.8.62.265';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -28948,10 +28951,23 @@ function seFixtureCompleted(f,now=new Date(),timezone=ensureSelections().data?.a
 function seFixtureLocked(f,now=new Date()){
  return !!(f?.published||seFixtureCompleted(f,now))&&!(Date.parse(f.selection_unlocked_until||'')>now.getTime());
 }
-function seFixtureLockControls(f){
+function seFixtureLockControls(f,location='board'){
  if(!f.published&&!seFixtureCompleted(f))return '';
  const s=ensureSelections(),locked=seFixtureLocked(f),allowed=s.data.group_permissions_enabled?f.can_edit===true&&(!f.published||f.can_unlock===true):!f.published||s.data.head_selector||s.data.access.head_selector_id===session?.user?.id;
+ if(f.result_complete===true&&locked)return allowed&&location==='details'?`<details class="se-emergency-correction"><summary>Emergency correction</summary><button type="button" class="btn ghost" data-se-fixture-lock="${seEsc(f.id)}">Unlock for changes</button></details>`:'';
  return `<div class="se-fixture-lock"><p>${locked?(f.published?'Published · locked':'Completed · locked'):'Open for changes · republish to notify players'}</p>${allowed?`<button type="button" class="btn ghost" data-se-fixture-lock="${seEsc(f.id)}">${locked?'Unlock for changes':'Lock again'}</button>`:'<small>Head of Selections can unlock</small>'}</div>`;
+}
+function seRenderFixtureLockControls(f){
+ const primary=document.getElementById('seFixturePrimaryLock'),emergency=document.getElementById('seFixtureEmergencyLock');if(!primary||!emergency)return;
+ const s=ensureSelections(),quiet=f.result_complete===true&&seFixtureLocked(f),controls=seCanSetup()&&!f.result_only?seFixtureLockControls(f,'details'):'';
+ primary.innerHTML=quiet?'':controls;emergency.innerHTML=quiet?controls:'';
+ (quiet?emergency:primary).querySelector('[data-se-fixture-lock]')?.addEventListener('click',async()=>{if(!confirmLeaveSelections())return;await seToggleFixtureLock(f.id);const current=s.data.fixtures.find(x=>x.id===f.id);if(current)seFixtureEditor(current);});
+}
+function seFixtureResultLoaded(drawer,card){
+ const s=ensureSelections();if(s.key!==drawer.scope||s.navigationDrawer!==drawer.drawer)return;
+ const f=s.data.fixtures.find(x=>x.id===drawer.fixtureId);if(!f)return;
+ const linked=card?.fixture_id===f.id||drawer.context?.fixtures?.some(x=>x.id===f.id&&x.match_id&&x.match_id===card?.scorecard?.match_id);
+ f.result_complete=!!linked&&!!card?.snapshot_id&&card.scorecard?.status==='completed';seRenderFixtureLockControls(f);
 }
 async function seToggleFixtureLock(id){
  const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id);if(!f||s.busy||s.pending||!seCanSetup())return;
@@ -29113,8 +29129,8 @@ function seFixtureEditor(f=null){
  const s=ensureSelections();if(!f&&!seCanSetup())return;
  if(f&&(seFixtureLocked(f)||!seCanSetup()||f.result_only||s.data.group_permissions_enabled&&f.can_edit!==true)){
   const d=f.published?.details||f.details;
-  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-fixture-summary"><div class="se-top"><div class="se-fixture-title"><h2>Fixture details</h2><div class="se-fixture-heading"><h3>${seEsc(d.grade)} · v ${seEsc(d.opposition)}</h3>${d.competition?`<span>${seEsc(d.competition)}</span>`:''}</div></div><button type="button" class="btn ghost" id="seLockedBack">Back</button></div><p class="se-fixture-meta">${[(d.days||[]).map(x=>seDate(x.date)+(x.start?' · '+x.start:'')).join(' / '),seFormatLabel(d),d.ground].filter(Boolean).map(seEsc).join(' · ')}</p>${d.meeting?`<p class="se-fixture-meeting">${seEsc(d.meeting)}</p>`:''}${seCanSetup()&&!f.result_only?seFixtureLockControls(f):''}</section><div id="fixtureResults"></div>`;
-  document.querySelector('[data-se-fixture-lock]')?.addEventListener('click',async()=>{if(!confirmLeaveSelections())return;await seToggleFixtureLock(f.id);const current=s.data.fixtures.find(x=>x.id===f.id);if(current)seFixtureEditor(current);});
+  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-fixture-summary"><div class="se-top"><div class="se-fixture-title"><h2>Fixture details</h2><div class="se-fixture-heading"><h3>${seEsc(d.grade)} · v ${seEsc(d.opposition)}</h3>${d.competition?`<span>${seEsc(d.competition)}</span>`:''}</div></div><button type="button" class="btn ghost" id="seLockedBack">Back</button></div><p class="se-fixture-meta">${[(d.days||[]).map(x=>seDate(x.date)+(x.start?' · '+x.start:'')).join(' / '),seFormatLabel(d),d.ground].filter(Boolean).map(seEsc).join(' · ')}</p>${d.meeting?`<p class="se-fixture-meeting">${seEsc(d.meeting)}</p>`:''}<div id="seFixturePrimaryLock"></div></section><div id="fixtureResults"></div><div id="seFixtureEmergencyLock"></div>`;
+  seRenderFixtureLockControls(f);
   document.getElementById('seLockedBack').onclick=()=>{if(confirmLeaveSelections())drawSelections();};seMountFixtureScores(f);return;
  }
  const d=f?.details||{grade:'',competition:'',opposition:'',ground:'',meeting:'',format:'',overs:null,days:[{date:s.date||'',start:'12:00'}],brackets:false,min_quicks:3,min_batters:5,staff:[]};
@@ -31507,7 +31523,7 @@ async function openFixtureMatchReview(fixture){
  resetTeamReviewState();const s=ensureTeamReviewState();s.group=f.group_id;s.fixtures=data.fixtures;s.teamsEnabled=data.teams_enabled;teamReviewUseFixture(f,s);
  currentTab='team_review';await renderTab();
 }
-const fixtureResults=createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}});
+const fixtureResults=createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}});
 
 const socialAwards=createSocialAwards({...socialAwardLabelHooks,sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),reviewUpdatedAward:socialReviewUpdatedAward,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,draw:socialDraw,message:socialMessage,canLeave:socialCanLeave,image:socialImage,fontReady:socialFontReady,text:socialText,download:socialBlobDownload,
  openScores:(s)=>socialResults.open(s),
@@ -34471,7 +34487,8 @@ supabase.rpc=async function(name,args={}){
     Object.assign(c,{group_permissions_enabled:true,selection_editor:editor,selector,selection_setup:demoGroupContext(),selection_group_access:demoPermissions.groups.map(g=>({id:g.id,level:demoGrant(g.id),head_id:g.head_id,can_view:demoGrant(g.id)>0||demoSelections.fixtures.some(f=>demoGroupFor(f)===g.id&&demoCaptainUsers(f.details).includes(uid))})),access:{...c.access,mode:demoProduct==='select'?'standalone':'bundle'}});
     c.fixtures=demoSelections.fixtures.filter(f=>isAdmin()||demoGrant(demoGroupFor(f))>0||demoCaptainUsers(f.details).includes(uid)||f.published).map(f=>{
      const group=demoGroupFor(f),view=demoGrant(group)>0||demoCaptainUsers(f.details).includes(uid),head=demoGroupHead(group),base=view?fixtureClone(f):{id:f.id,publication:f.publication,published:fixtureClone(f.published),...(f.published?{details:fixtureClone(f.published.details),slots:fixtureClone(f.published.slots)}:isAdmin()?{details:fixtureClone(f.details),revision:f.revision}:{})};
-     return {...base,selection_group_id:group,draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:view?demoSelectionIssues(f):[]};
+     const source=demoSelections.result_sources?.[f.id],completed=!!source?.match_id&&!source.no_play&&Object.values(demoScorecards).some(card=>card.match_id===source.match_id&&card.status==='completed');
+     return {...base,result_complete:completed,selection_group_id:group,draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:view?demoSelectionIssues(f):[]};
     });c.can_view_board=selector||c.captain;return demoOK(c);
    }
   }

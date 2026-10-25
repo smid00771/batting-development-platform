@@ -181,7 +181,8 @@ supabase.rpc=async function(name,args={}){
     Object.assign(c,{group_permissions_enabled:true,selection_editor:editor,selector,selection_setup:demoGroupContext(),selection_group_access:demoPermissions.groups.map(g=>({id:g.id,level:demoGrant(g.id),head_id:g.head_id,can_view:demoGrant(g.id)>0||demoSelections.fixtures.some(f=>demoGroupFor(f)===g.id&&demoCaptainUsers(f.details).includes(uid))})),access:{...c.access,mode:demoProduct==='select'?'standalone':'bundle'}});
     c.fixtures=demoSelections.fixtures.filter(f=>isAdmin()||demoGrant(demoGroupFor(f))>0||demoCaptainUsers(f.details).includes(uid)||f.published).map(f=>{
      const group=demoGroupFor(f),view=demoGrant(group)>0||demoCaptainUsers(f.details).includes(uid),head=demoGroupHead(group),base=view?fixtureClone(f):{id:f.id,publication:f.publication,published:fixtureClone(f.published),...(f.published?{details:fixtureClone(f.published.details),slots:fixtureClone(f.published.slots)}:isAdmin()?{details:fixtureClone(f.details),revision:f.revision}:{})};
-     return {...base,selection_group_id:group,draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:view?demoSelectionIssues(f):[]};
+     const source=demoSelections.result_sources?.[f.id],completed=!!source?.match_id&&!source.no_play&&Object.values(demoScorecards).some(card=>card.match_id===source.match_id&&card.status==='completed');
+     return {...base,result_complete:completed,selection_group_id:group,draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:view?demoSelectionIssues(f):[]};
     });c.can_view_board=selector||c.captain;return demoOK(c);
    }
   }

@@ -6,10 +6,10 @@ import {createPlayHQImport} from './playhq-import.js?v=0.8.62.245';
 import {createPlayCricketConnection} from './playcricket-connection.js?v=0.8.62.245';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.248';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.246';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.264';
-import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.264';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.264';
-import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.265';
+import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.265';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.265';
+import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.265';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.253';
@@ -21,7 +21,7 @@ import {createSelectionRoom} from './selection-room.js?v=0.8.62.246';
 import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.253';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.250';
 import {createSocialAwardLabels} from './social-award-labels.js?v=0.8.62.248';
-import {createFixtureResults} from './fixture-results.js?v=0.8.62.264';
+import {createFixtureResults} from './fixture-results.js?v=0.8.62.265';
 import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.253';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
@@ -29,7 +29,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.264';
+const APP_UI_VERSION='0.8.62.265';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -20536,10 +20536,23 @@ function seFixtureCompleted(f,now=new Date(),timezone=ensureSelections().data?.a
 function seFixtureLocked(f,now=new Date()){
  return !!(f?.published||seFixtureCompleted(f,now))&&!(Date.parse(f.selection_unlocked_until||'')>now.getTime());
 }
-function seFixtureLockControls(f){
+function seFixtureLockControls(f,location='board'){
  if(!f.published&&!seFixtureCompleted(f))return '';
  const s=ensureSelections(),locked=seFixtureLocked(f),allowed=s.data.group_permissions_enabled?f.can_edit===true&&(!f.published||f.can_unlock===true):!f.published||s.data.head_selector||s.data.access.head_selector_id===session?.user?.id;
+ if(f.result_complete===true&&locked)return allowed&&location==='details'?`<details class="se-emergency-correction"><summary>Emergency correction</summary><button type="button" class="btn ghost" data-se-fixture-lock="${seEsc(f.id)}">Unlock for changes</button></details>`:'';
  return `<div class="se-fixture-lock"><p>${locked?(f.published?'Published · locked':'Completed · locked'):'Open for changes · republish to notify players'}</p>${allowed?`<button type="button" class="btn ghost" data-se-fixture-lock="${seEsc(f.id)}">${locked?'Unlock for changes':'Lock again'}</button>`:'<small>Head of Selections can unlock</small>'}</div>`;
+}
+function seRenderFixtureLockControls(f){
+ const primary=document.getElementById('seFixturePrimaryLock'),emergency=document.getElementById('seFixtureEmergencyLock');if(!primary||!emergency)return;
+ const s=ensureSelections(),quiet=f.result_complete===true&&seFixtureLocked(f),controls=seCanSetup()&&!f.result_only?seFixtureLockControls(f,'details'):'';
+ primary.innerHTML=quiet?'':controls;emergency.innerHTML=quiet?controls:'';
+ (quiet?emergency:primary).querySelector('[data-se-fixture-lock]')?.addEventListener('click',async()=>{if(!confirmLeaveSelections())return;await seToggleFixtureLock(f.id);const current=s.data.fixtures.find(x=>x.id===f.id);if(current)seFixtureEditor(current);});
+}
+function seFixtureResultLoaded(drawer,card){
+ const s=ensureSelections();if(s.key!==drawer.scope||s.navigationDrawer!==drawer.drawer)return;
+ const f=s.data.fixtures.find(x=>x.id===drawer.fixtureId);if(!f)return;
+ const linked=card?.fixture_id===f.id||drawer.context?.fixtures?.some(x=>x.id===f.id&&x.match_id&&x.match_id===card?.scorecard?.match_id);
+ f.result_complete=!!linked&&!!card?.snapshot_id&&card.scorecard?.status==='completed';seRenderFixtureLockControls(f);
 }
 async function seToggleFixtureLock(id){
  const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id);if(!f||s.busy||s.pending||!seCanSetup())return;
@@ -20701,8 +20714,8 @@ function seFixtureEditor(f=null){
  const s=ensureSelections();if(!f&&!seCanSetup())return;
  if(f&&(seFixtureLocked(f)||!seCanSetup()||f.result_only||s.data.group_permissions_enabled&&f.can_edit!==true)){
   const d=f.published?.details||f.details;
-  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-fixture-summary"><div class="se-top"><div class="se-fixture-title"><h2>Fixture details</h2><div class="se-fixture-heading"><h3>${seEsc(d.grade)} · v ${seEsc(d.opposition)}</h3>${d.competition?`<span>${seEsc(d.competition)}</span>`:''}</div></div><button type="button" class="btn ghost" id="seLockedBack">Back</button></div><p class="se-fixture-meta">${[(d.days||[]).map(x=>seDate(x.date)+(x.start?' · '+x.start:'')).join(' / '),seFormatLabel(d),d.ground].filter(Boolean).map(seEsc).join(' · ')}</p>${d.meeting?`<p class="se-fixture-meeting">${seEsc(d.meeting)}</p>`:''}${seCanSetup()&&!f.result_only?seFixtureLockControls(f):''}</section><div id="fixtureResults"></div>`;
-  document.querySelector('[data-se-fixture-lock]')?.addEventListener('click',async()=>{if(!confirmLeaveSelections())return;await seToggleFixtureLock(f.id);const current=s.data.fixtures.find(x=>x.id===f.id);if(current)seFixtureEditor(current);});
+  document.getElementById('seContent').innerHTML=`<section class="se-card se-drawer se-fixture-summary"><div class="se-top"><div class="se-fixture-title"><h2>Fixture details</h2><div class="se-fixture-heading"><h3>${seEsc(d.grade)} · v ${seEsc(d.opposition)}</h3>${d.competition?`<span>${seEsc(d.competition)}</span>`:''}</div></div><button type="button" class="btn ghost" id="seLockedBack">Back</button></div><p class="se-fixture-meta">${[(d.days||[]).map(x=>seDate(x.date)+(x.start?' · '+x.start:'')).join(' / '),seFormatLabel(d),d.ground].filter(Boolean).map(seEsc).join(' · ')}</p>${d.meeting?`<p class="se-fixture-meeting">${seEsc(d.meeting)}</p>`:''}<div id="seFixturePrimaryLock"></div></section><div id="fixtureResults"></div><div id="seFixtureEmergencyLock"></div>`;
+  seRenderFixtureLockControls(f);
   document.getElementById('seLockedBack').onclick=()=>{if(confirmLeaveSelections())drawSelections();};seMountFixtureScores(f);return;
  }
  const d=f?.details||{grade:'',competition:'',opposition:'',ground:'',meeting:'',format:'',overs:null,days:[{date:s.date||'',start:'12:00'}],brackets:false,min_quicks:3,min_batters:5,staff:[]};
@@ -23095,7 +23108,7 @@ async function openFixtureMatchReview(fixture){
  resetTeamReviewState();const s=ensureTeamReviewState();s.group=f.group_id;s.fixtures=data.fixtures;s.teamsEnabled=data.teams_enabled;teamReviewUseFixture(f,s);
  currentTab='team_review';await renderTab();
 }
-const fixtureResults=createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}});
+const fixtureResults=createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}});
 
 const socialAwards=createSocialAwards({...socialAwardLabelHooks,sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),reviewUpdatedAward:socialReviewUpdatedAward,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,draw:socialDraw,message:socialMessage,canLeave:socialCanLeave,image:socialImage,fontReady:socialFontReady,text:socialText,download:socialBlobDownload,
  openScores:(s)=>socialResults.open(s),

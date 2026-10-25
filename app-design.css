@@ -140,6 +140,9 @@
 #app .se-fixture-summary .se-fixture-lock {justify-content:flex-start;gap:4px 12px;background:none;border:0;border-radius:0;padding:0;margin:4px 0 0}
 #app .se-fixture-summary .se-fixture-lock p {margin:0}
 #app .se-fixture-summary .se-fixture-lock small {font-size:12px;color:var(--muted)}
+#app .se-emergency-correction {border:0;background:none;margin:0;padding:0;color:var(--muted);font-size:12px}
+#app .se-emergency-correction>summary {width:fit-content;min-height:44px;box-sizing:border-box;padding:12px 0;cursor:pointer;font-size:12px;font-weight:400}
+#app .se-emergency-correction .btn {font-size:12px}
 #app .se-calendar button[data-se-availability="unavailable"] {background:#fff0ee;border-color:#cb6c6c;color:#8e242b}
 #app .se-availability-key {display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin:4px 0 10px}
 #app .se-availability-key span:first-child {color:#154e32}
