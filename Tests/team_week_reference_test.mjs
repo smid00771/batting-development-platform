@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {teamWeekReadLayout} from '../Website_Files/team-week-reference.js';
+import {teamWeekReadLayout} from '../team-week-reference.js';
 function tsv(lines){let i=0;return 'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n'+lines.flatMap(([y,words])=>words.map(([x,text,width=80,height=35])=>`5\t1\t${++i}\t1\t1\t1\t${x}\t${y}\t${width}\t${height}\t95\t${text}`)).join('\n');}
 test('separate OCR blocks become player rows and reusable relative positions',()=>{const source=tsv([[280,[[50,'TEAM',140,80],[210,'OF',70,80],[300,'THE',100,80],[420,'WEEK',220,80]]],[390,[[50,'WEEK'],[150,'1']]],[470,[[50,'ALEX'],[160,'CARTER'],[580,'60'],[700,'4TH']]],[900,[[50,'SAM'],[160,'RILEY'],[580,'4/27'],[700,'18T']]]]);const r=teamWeekReadLayout(source,820,1020);assert.equal(r.hasTitle,true);assert.deepEqual(r.names,[{name:'ALEX CARTER',grade:'4TH'},{name:'SAM RILEY',grade:'1ST'}]);assert.ok(r.layout.top>600&&r.layout.top<700);assert.ok(r.layout.bottom>1150&&r.layout.bottom<1250);assert.ok(r.layout.title_y<r.layout.week_y);assert.ok(r.layout.figures_right<r.layout.grade_right);assert.ok(!('figures' in r.names[0]),'OCR scores must never replace imported figures');});
 test('a branded background without a title or roster cannot invent either',()=>{const r=teamWeekReadLayout(tsv([[80,[[30,'CITY'],[200,'SPONSOR']]],[940,[[20,'SABRES']]]]),820,1020);assert.equal(r.hasTitle,false);assert.deepEqual(r.names,[]);assert.deepEqual(r.layout,{});});

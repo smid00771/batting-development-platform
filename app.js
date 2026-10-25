@@ -18,18 +18,18 @@ import {teamSelectionText} from './social-team-layout.js?v=0.8.62.249';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
 import {mountVideoCredits} from './video-credits.js?v=0.8.62.232';
 import {createSelectionRoom} from './selection-room.js?v=0.8.62.246';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.267';
+import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.269';
 import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.250';
 import {createSocialAwardLabels} from './social-award-labels.js?v=0.8.62.248';
 import {createFixtureResults} from './fixture-results.js?v=0.8.62.268';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.266';
+import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.269';
 import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
 import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.268';
+const APP_UI_VERSION='0.8.62.269';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

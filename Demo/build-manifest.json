@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.268",
+  "appVersion": "0.8.62.269",
   "sources": {
     "app-design.css": "418152d2e9b3e80e76c23a65ab98559717c862300da94051a74026d382af7758",
-    "app.js": "efbbe20d0f0d50557e011abb280bb6cf31346ce1be3e6ff41575e3ee4102ca0d",
+    "app.js": "6219c88dc55123e4e8f6abdf6c7c676972a1b88abcc62c7fcb33785e41d0ecfd",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
     "club-week.js": "8cf32ed2eb59ce212ad26677133fd539ea9a4e52443527b89cb396e37d3c8c9f",
@@ -21,8 +21,8 @@
     "playcricket-team.js": "912f8e427a0f84674e9dfba466a0aca23f9109ee8bec2dfb6f0ecb384744ec0a",
     "player-name-matching.js": "4766437046117f9dd7d84e11375a7c6e078e9c7e043b815c6dc9f6f1ff6ec42b",
     "player-of-week-demo.js": "46538d9faa486bc56955a8e0e7c5a5bc716f675bb1763312367cd13896c11272",
-    "player-of-week.js": "adf6574117f992685c8995b14765b8ff3a7fca19598494162a922dfb6e782d45",
-    "player-week-ranking.js": "692201b0c4babccc9512b7931a81abf206d76f59e2aa79d8e6c19198e10d3d35",
+    "player-of-week.js": "d9286aae4c4577bc0ea548e966abbbdeddd0062d68280ae8cc95e582cf98aacb",
+    "player-week-ranking.js": "319ea48d4d97043f57d71fa7149bfe37919864e2e8a84a5f176860202d2d0dc6",
     "playhq-import.js": "1b43756a5c33f1d6d591cec560b8345cff01c308902e0b1eb541651c5747d8dd",
     "season-stats-demo.js": "5e14bc429b80cf91a8758aa362b89ba3cde59dc69a5f68b4e74ce55ba0209746",
     "season-stats-panel.js": "27a2264035efc9622cdc472b583fef0b7fb769e4676c484c14347e01c3cd1986",
@@ -51,7 +51,8 @@
     "social-team-workflow.js": "46c6d964d65efecc5b89bdfd5413d346664f14713b525adbfcc1c0904778804a",
     "styles.css": "2eb131ae2558239bad24075528d1eeafca383947422cadec00aca2f8e1946015",
     "team-of-week-demo.js": "719293b7bb41d0dce84028faded53b5f6bdc4486f8dd8adec437c380d56704c6",
-    "team-of-week.js": "4c2eb54d84f7eefd9a5a289ced55504b1e7a36bdd5084f38e5f1e13a5e7f846d",
+    "team-of-week.js": "cdb3e5a1ade3ea33cf5e1ce5ad6b82246a75ab248d0a6dc674a35505c47de9fe",
+    "team-week-basic.js": "9036c2f2fa8e39e01d1d698944233f983f830401f98392ac629c25321d18d79e",
     "team-week-reference.js": "33f58bd63b375aaeb944d1d2bcc1cacbbf1c426425b4e64e919cef9b80264e52",
     "video-credits.js": "79c9f32e0c0f913053334a832b315bb838e3d8de32ab86a965f5cf37ab6aaecb"
   }

@@ -119,3 +119,19 @@ assert.deepEqual(s.week.rows,conflictRows);assert.equal(s.week.end,conflictWeek)
 document.getElementById('twColour').value='#225588';document.getElementById('twColour').dispatchEvent(new window.Event('input'));document.getElementById('twSaveDesign').click();await until(()=>!s.week.busy&&s.week.previewReady);
 assert.equal(s.week.context.design.revision,conflictBase+2);assert.equal(s.week.layoutConflict,false);assert.equal(s.week.designDirty,false);api.rpc=conflictRpc;
 console.log('Passed: Team of the Week layout conflict, cancelled recovery, confirmed recovery preserving XI/caption/week, and successful subsequent save.');
+
+// Basic uses the same verified graphic-save path and cannot rewrite a saved Smart edition.
+const historyBefore=structuredClone(s.week.context.history),smartDraft=s.week.rows.map(p=>p.player_id);
+document.querySelector('[name=twMethod][value=basic]').click();await until(()=>s.week.previewReady);
+assert.equal(s.week.review.contenders.length,13);assert.equal(s.week.rows.length,0);
+for(let i=0;i<11;i++){document.querySelector('.tw-choice input:not(:checked):not(:disabled)').click();await until(()=>s.week.previewReady);}
+const basicDraft=s.week.rows.map(p=>p.player_id);
+document.getElementById('twSuggest').click();await until(()=>s.week.previewReady);assert.deepEqual(s.week.rows.map(p=>p.player_id),basicDraft,'Refreshing Basic suggestions retains human choices');
+document.getElementById('twSave').click();await until(()=>!s.week.busy&&!s.week.pending&&s.week.context.history.length===historyBefore.length+1);
+assert.equal(document.getElementById('twSave').textContent,'Saved');
+assert.deepEqual(s.week.context.history.slice(1),historyBefore,'Existing editions remain byte-for-byte unchanged');
+const basicRequest=calls.filter(c=>c.p_action==='reserve_image').at(-1).p_data;
+assert.equal(basicRequest.rows.length,11);assert.deepEqual(basicRequest.rows.map(p=>p.key),s.week.rows.map(p=>p.key));
+document.querySelector('[name=twMethod][value=smart]').click();await until(()=>s.week.previewReady);assert.deepEqual(s.week.rows.map(p=>p.player_id),smartDraft);
+document.querySelector('[name=twMethod][value=basic]').click();await until(()=>s.week.previewReady);assert.deepEqual(s.week.rows.map(p=>p.player_id),basicDraft);assert.equal(document.getElementById('twSave').textContent,'Saved');
+console.log('Passed: Basic thirteen-player pool, eleven manual picks, save/download path, preserved editions and independent Smart draft.');

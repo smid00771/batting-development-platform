@@ -44,7 +44,7 @@ test('both delivered award screens use scorecard context, including Team of the 
  assert.equal(h.window.eval('socialWeek.state(socialEnsure()).rows[0].display'),'bowling');
  await h.choose('#socialCreateMenu','player_week');
  await h.window.eval('socialPlayerWeek.load(socialEnsure())');await h.settle();
- assert.match(h.document.querySelector('.pw-contenders').textContent,/Standout bowling/);
+ assert.match(h.document.querySelector('.pw-contenders').textContent,/Bowling option/);
  assert.match(h.document.querySelector('.pw-contenders').textContent,/0\/15/);
  assert.equal(h.window.eval('socialPlayerWeek.state(socialEnsure()).winner'),null);
  assert.deepEqual(h.errors.map(e=>e.message),[]);

@@ -111,7 +111,7 @@ test('sustained control can outrank more wickets and qualify for both awards wit
  assert.equal(ranked[0].key,economical.key,'One wicket plus an exceptional ten-over spell can beat three wickets in a collapse');
  for(const p of [economical,zero]){
   assert.ok(teamWeekRecommendations(pool,[],cs).contenders.some(x=>x.key===p.key));
-  assert.ok(playerWeekRecommendations([p],{},[],'2026-10-25',false,cs).shortlist.some(x=>x.key===p.key&&x.reasons.includes('Standout bowling')));
+  assert.ok(playerWeekRecommendations([p],{},[],'2026-10-25',false,cs).shortlist.some(x=>x.key===p.key&&x.reasons.includes('Bowling option')));
   assert.equal(teamWeekDisplay(teamWeekRank([p],'overall',cs)[0]),'bowling','The graphic must show the qualifying spell, including 0 wickets');
  }
  const combined={...zero,runs:22,batting:[{runs:22,balls:25,not_out:false}]};
