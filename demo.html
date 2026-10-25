@@ -3732,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.265.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.268.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -7315,11 +7315,105 @@ async function readTeamWeekReference(example,background,{candidateNames=[],textC
 return {teamWeekReadWords,teamWeekReadLayout,readTeamWeekReference};
 })();
 
+const __demoModule30=(()=>{
+/* A transparent award guide, not a grade-conversion or selection model.
+   Keep source figures intact. Missing context supplies no invented match facts. */
+const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
+const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
+const round=value=>Math.round(value*10)/10;
+const sum=(rows,key)=>rows.reduce((total,row)=>total+(number(row[key])??0),0);
+function awardBalls(row){
+ const balls=number(row.balls);
+ if(balls!==null)return Number.isInteger(balls)?balls:null;
+ // Cricket's 7.5 overs means 47 balls, never 7.5 decimal overs.
+ const overs=/^(\d+)(?:\.([0-5]))?$/.exec(String(row.overs??''));
+ return overs?Number(overs[1])*6+Number(overs[2]||0):null;
+}
+function battingRate(rows,minBalls){
+ const innings=rows.filter(row=>row.status!=='did_not_bat');
+ if(!innings.length||innings.some(row=>number(row.runs)===null||!Number.isInteger(number(row.balls))||number(row.balls)===0&&number(row.runs)>0))return null;
+ const balls=sum(innings,'balls');
+ return balls>=minBalls?sum(innings,'runs')/balls:null;
+}
+function bowlingRate(rows){
+ if(!rows.length||rows.some(row=>awardBalls(row)===null||number(row.runs)===null||awardBalls(row)===0&&(number(row.runs)>0||number(row.wickets)>0)))return null;
+ const balls=rows.reduce((total,row)=>total+awardBalls(row),0);
+ return balls>=18?{rate:sum(rows,'runs')/balls,balls,wickets:rows.every(row=>number(row.wickets)!==null)?sum(rows,'wickets'):null}:null;
+}
+const overs=balls=>`${Math.floor(balls/6)}${balls%6?'.'+balls%6:''}`;
+const won=(card,team)=>{
+ const name=card.teams?.find(t=>t.id===team)?.name;
+ return name&&String(card.result||'').toLowerCase().startsWith(name.toLowerCase()+' won');
+};
+function awardPerformance(p,cards=[]){
+ const batting=p.batting||[],bowling=p.bowling||[],runs=number(p.runs)??sum(batting,'runs'),wickets=number(p.wickets)??sum(bowling,'wickets');
+ const matches=cards.filter(c=>c.snapshot_id===p.snapshot_id&&c.our_team===p.team_id&&c.scorecard?.match_id===p.match_id);
+ const card=matches.length===1?matches[0].scorecard:null;
+ const format=card?.format_key||p.format;
+ const limited=['limited_overs','t20'].includes(format);
+ // Rates are judged within this match, never against a generic format or grade.
+ const innings=card?.innings||[],ourInnings=innings.filter(i=>i.team_id===p.team_id);
+ const otherBatters=innings.flatMap(i=>i.batters||[]).filter(b=>b.player_id!==p.player_id);
+ const matchBatRate=innings.length&&innings.every(i=>i.batters?.length)?battingRate(otherBatters,30):null;
+ const notes=[],battingComparisons=[],bowlingComparisons=[],components={runs,wickets:wickets*20,pace:0,share:0,finish:0,control:0,strike:0};
+ for(const [index,b] of batting.entries()){
+  const value=number(b.runs)??0,balls=number(b.balls),rate=balls>0?value/balls:null;
+  const linked=ourInnings.filter(i=>(i.batters||[]).some(x=>x.player_id===p.player_id&&x.runs===b.runs&&x.balls===b.balls&&x.not_out===b.not_out));
+  const inning=linked.length===1?linked[0]:null;
+  if(inning&&rate!==null&&matchBatRate!==null)battingComparisons[index]=`SR ${(100*rate).toFixed(0)} vs rest of match ${(100*matchBatRate).toFixed(0)}`;
+  // No slow-batting penalty: an anchor in a difficult match can be valuable.
+  // Half the runs above the other batters' rate over these balls, bounded by
+  // half this innings' runs. Unlike the old bonus, it keeps distinguishing
+  // twice the match rate from four or six times it.
+  if(limited&&inning&&value>=20&&balls>=10&&matchBatRate!==null)components.pace+=value*.5*clamp(1-matchBatRate/rate,0,1);
+  if(value>0&&inning?.complete&&number(inning.runs)>=value){
+   const share=value/inning.runs;
+   components.share+=value*.3*share;
+   if(share>=.3)notes.push(`${Math.round(share*100)}% of ${inning.runs}`);
+  }
+  // Only an unambiguous completed two-innings limited-overs win earns finishing credit.
+  // Do not infer a target, pitch difficulty, batting position or wickets at entry.
+  const chase=limited&&card?.status==='completed'&&!card.award_provisional&&innings.length===2&&innings.every(i=>i.complete)&&inning===innings[1]&&innings[0].team_id!==p.team_id&&won(card,p.team_id)&&!/retired|hurt|absent/i.test(`${b.dismissal||''} ${b.dismissal_text||''}`);
+  if(chase&&b.not_out===true&&value>0){components.finish+=Math.min(6,value*.1);notes.push('Not out in completed chase');}
+ }
+ for(const [index,b] of bowling.entries()){
+  const balls=awardBalls(b),conceded=number(b.runs),taken=number(b.wickets)??0;
+  if(!balls||conceded===null)continue;
+  const linked=innings.filter(i=>i.team_id!==p.team_id&&(i.bowlers||[]).some(x=>x.player_id===p.player_id&&x.runs===b.runs&&x.wickets===b.wickets&&awardBalls(x)===balls));
+  const peers=linked.length===1?bowlingRate((linked[0].bowlers||[]).filter(x=>x.player_id!==p.player_id)):null;
+  // Compare total conceded / total legal balls, never an unweighted average of
+  // individual economies. Exclude this bowler and the opposition's attack.
+  if(peers)bowlingComparisons[index]=`Econ ${(6*conceded/balls).toFixed(2)} vs team-mates ${(6*peers.rate).toFixed(2)}`;
+  // One point per run below the rest-of-attack rate over this actual spell.
+  // The six-points-per-over and 60-per-innings ceilings stop a brief spell or
+  // an extreme peer rate overwhelming the guide. Missing peers earn no credit.
+  if(balls>=12&&peers)components.control+=Math.min(60,balls,Math.max(0,peers.rate*balls-conceded));
+  if(taken>0&&peers?.wickets>=2){
+   const peerStrike=peers.balls/peers.wickets;
+   components.strike+=taken*20*.15*clamp(1-balls/taken/peerStrike,0,1);
+  }
+ }
+ const batBalls=batting.length&&batting.every(b=>number(b.balls)!==null)?sum(batting,'balls'):null;
+ const bowlBalls=bowling.length&&bowling.every(b=>awardBalls(b)!==null)?bowling.reduce((n,b)=>n+awardBalls(b),0):null;
+ const conceded=bowling.length&&bowling.every(b=>number(b.runs)!==null)?sum(bowling,'runs'):null;
+ const battingPoints=runs+components.pace+components.share+components.finish,bowlingPoints=components.wickets+components.control+components.strike;
+ const allround=runs>=20&&(wickets>=1||components.control>=8);
+ const bowlingStandout=wickets>=2||components.control>=20;
+ const strikeRate=batting.length===1&&battingComparisons[0]||batBalls>0&&`SR ${(100*runs/batBalls).toFixed(0)}`;
+ const economy=bowling.length===1&&bowlingComparisons[0]||bowlBalls>0&&conceded!==null&&`Econ ${(6*conceded/bowlBalls).toFixed(2)}`;
+ const comparisons=[...(batting.length>1?battingComparisons.flatMap((text,index)=>text?[`Batting innings ${index+1}: ${text}`]:[]):[]),...(bowling.length>1?bowlingComparisons.flatMap((text,index)=>text?[`Bowling innings ${index+1}: ${text}`]:[]):[])];
+ const reason=[runs?`${runs} runs${batBalls>0?` from ${batBalls} · ${strikeRate}`:''}`:'',bowling.length?`${wickets}/${conceded??p.conceded??'—'}${bowlBalls>0?` in ${overs(bowlBalls)} overs${economy?` · ${economy}`:''}`:''}`:'',...notes,...comparisons].filter(Boolean).join(' · ')||'No runs or wickets';
+ return {points:round(battingPoints+bowlingPoints),battingPoints:round(battingPoints),bowlingPoints:round(bowlingPoints),allround,bowlingStandout,components,reason};
+}
+return {awardBalls,awardPerformance};
+})();
+
 const __demoModule28=(()=>{
 const {scopedAwardLabel}=__demoModule2;
 const {graphicGrade,checkGraphicLabel}=__demoModule9;
 const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule20;
 const {readTeamWeekReference}=__demoModule29;
+const {awardPerformance}=__demoModule30;
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 function teamWeekFigures(player,display=player.display){
@@ -7327,20 +7421,20 @@ function teamWeekFigures(player,display=player.display){
  const bowling=(player.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
  return display==='batting'?batting:display==='bowling'?bowling:[batting,bowling].filter(Boolean).join(' & ');
 }
-function teamWeekDisplay(p){return p.wickets>0?(p.runs>=20&&p.batting?.length?'both':'bowling'):p.batting?.length?'batting':p.bowling?.length?'bowling':'batting';}
+function teamWeekDisplay(p){return p.wickets>0||p.bowlingStandout?(p.runs>=20&&p.batting?.length?'both':'bowling'):p.batting?.length?'batting':p.bowling?.length?'bowling':'batting';}
 function teamWeekOrder(rows){
  const category=p=>p.display==='batting'?0:p.display==='both'?1:2;
  return [...rows].sort((a,b)=>category(a)-category(b)||(category(a)===2?b.wickets-a.wickets||a.conceded-b.conceded:b.runs-a.runs||b.wickets-a.wickets)||a.key.localeCompare(b.key));
 }
-function teamWeekWorthwhile(p){return p.runs>=25||p.wickets>=2||(p.runs>=20&&p.wickets>=1);}
-function teamWeekDraft(candidates){
+function teamWeekWorthwhile(p){return p.runs>=25||p.wickets>=2||(p.runs>=20&&p.wickets>=1)||p.bowlingStandout===true;}
+function teamWeekDraft(candidates,cards=[]){
  // Use the best performances, without reserving places for any role.
- const ranked=teamWeekRank(candidates).filter(teamWeekWorthwhile),seen=new Set(),chosen=[];
+ const ranked=teamWeekRank(candidates,'overall',cards).filter(teamWeekWorthwhile),seen=new Set(),chosen=[];
  for(const p of ranked){if(seen.has(p.player_id))continue;seen.add(p.player_id);chosen.push({...p,display:teamWeekDisplay(p)});if(chosen.length===11)break;}
  return teamWeekOrder(chosen);
 }
-function teamWeekRecommendations(candidates,example=[]){
- const seen=new Set(),ranked=teamWeekRank(candidates).filter(p=>{if(seen.has(p.player_id))return false;seen.add(p.player_id);return true;});
+function teamWeekRecommendations(candidates,example=[],cards=[]){
+ const seen=new Set(),ranked=teamWeekRank(candidates,'overall',cards).filter(p=>{if(seen.has(p.player_id))return false;seen.add(p.player_id);return true;});
  const worthy=ranked.filter(teamWeekWorthwhile),leading=worthy.slice(0,11),cutoff=leading.at(-1)?.points||0;
  const margin=points=>Math.max(8,points*.12);
  const close=leading.length===11?worthy.slice(11).filter(p=>cutoff-p.points<=margin(cutoff)):[];
@@ -7356,12 +7450,11 @@ function teamWeekRecommendations(candidates,example=[]){
  const proposed=teamWeekOrder([...strong,...choices.slice(0,11-strong.length).map(p=>({...p,display:teamWeekDisplay(p)}))]);
  return {proposed,strong,shortlist,contenders,clear:proposed.length===11&&!shortlist.length,qualifying:worthy.length};
 }
-function teamWeekRank(candidates,mode='overall'){
- const leadingRuns=Math.max(50,...candidates.map(p=>p.runs)),leadingWickets=Math.max(3,...candidates.map(p=>p.wickets));
- const points=p=>{const batting=100*p.runs/leadingRuns,bowling=100*p.wickets/leadingWickets;return Math.round((Math.max(batting,bowling)+(p.runs>=20&&p.wickets>=2?.4*Math.min(batting,bowling):0))*10)/10;};
- const overall=(a,b)=>points(b)-points(a)||b.wickets-a.wickets||a.conceded-b.conceded||b.runs-a.runs||a.key.localeCompare(b.key);
- const sorted=[...candidates].filter(p=>mode==='batting'?p.batting.length:mode==='bowling'?p.bowling.length>0:mode==='allround'?p.runs>=20&&p.wickets>=2:true).sort((a,b)=>mode==='batting'?b.runs-a.runs||overall(a,b):mode==='bowling'?b.wickets-a.wickets||a.conceded-b.conceded||overall(a,b):overall(a,b));
- return sorted.map((p,i)=>({...p,rank:i+1,points:points(p),reason:[p.runs?`${p.runs} runs`:'',p.wickets?`${p.wickets} wicket${p.wickets===1?'':'s'}`:'',p.runs>=20&&p.wickets>=2?'all-round bonus':''].filter(Boolean).join(' · ')||'No runs or wickets'}));
+function teamWeekRank(candidates,mode='overall',cards=[]){
+ const scores=new Map(candidates.map(p=>[p,awardPerformance(p,cards)]));
+ const overall=(a,b)=>scores.get(b).points-scores.get(a).points||b.wickets-a.wickets||b.runs-a.runs||a.key.localeCompare(b.key);
+ const sorted=[...candidates].filter(p=>mode==='batting'?p.batting?.length:mode==='bowling'?p.bowling?.length:mode==='allround'?scores.get(p).allround:true).sort((a,b)=>mode==='batting'?scores.get(b).battingPoints-scores.get(a).battingPoints||overall(a,b):mode==='bowling'?scores.get(b).bowlingPoints-scores.get(a).bowlingPoints||overall(a,b):overall(a,b));
+ return sorted.map((p,i)=>({...p,bowlingStandout:scores.get(p).bowlingStandout,rank:i+1,points:mode==='batting'?scores.get(p).battingPoints:mode==='bowling'?scores.get(p).bowlingPoints:scores.get(p).points,reason:scores.get(p).reason}));
 }
 function teamWeekMatchExample(candidates,reference,layout={}){
  const normal=v=>String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -7380,7 +7473,7 @@ function teamWeekLayout(layout={},background=null){
 }
 function createTeamOfWeek(h){
  const esc=h.escape,bucket='club-team-week';
- const css=`<style>.tw-setup{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}.tw-setup label{display:block;margin:12px 0}.tw-setup input[type=file][hidden]{display:none}.tw-artwork{display:grid;justify-items:start;gap:8px;margin:12px 0}.tw-artwork strong{max-width:100%;overflow-wrap:anywhere;font-size:14px}.tw-artwork img{display:block;width:auto;max-width:100%;height:140px;object-fit:contain;border:1px solid #dce2ee;border-radius:4px;background:#f4f6fa}.tw-artwork p{margin:0}.tw-setup h4{margin:0 0 10px}.tw-badge{display:inline-block;font-size:12px;color:#126941;background:#eaf7ed;border-radius:4px;padding:2px 5px}.tw-rank{font-weight:800;color:#073554}.tw-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}.tw-settings summary{cursor:pointer;font-weight:bold}.tw-example{max-height:170px;max-width:100%;object-fit:contain}.tw-match label{display:grid;gap:5px;margin:10px 0}.tw-setup .tw-notes{margin:6px 0}@media(max-width:850px){.tw-setup{grid-template-columns:1fr}}.tw-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.tw-controls label{display:grid;gap:5px}.tw-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(250px,.8fr);gap:22px;margin-top:20px}.tw-panel{border:1px solid #dce2ee;border-radius:10px;padding:16px;background:white;min-width:0}.tw-panel h3{margin-top:0}.tw-source{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #e1e7ef}.tw-source select{width:100%;max-width:420px}.tw-source small{display:block;margin:5px 0}.tw-xi{list-style:none;padding:0;counter-reset:xi}.tw-xi li{padding:9px 0;border-bottom:1px solid #e1e7ef;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tw-xi li:before{counter-increment:xi;content:counter(xi);font-weight:bold;width:22px}.tw-player{flex:1;min-width:140px}.tw-player small{display:block}.tw-xi select{max-width:140px}.tw-icon{min-width:34px;min-height:34px;border:1px solid #c9d2e2;background:white;border-radius:5px;cursor:pointer}.tw-icon:disabled{opacity:.4;cursor:default}.tw-preview canvas,.tw-history img{display:block;width:100%;height:auto;border-radius:6px}.tw-preview{position:sticky;top:20px;align-self:start}.tw-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:12px 0}.tw-choice{display:block;border:2px solid #dce2ee;border-radius:9px;padding:12px;background:#f8fafc;cursor:pointer}.tw-choice:has(input:checked){border-color:#126941;background:#eef9f1}.tw-choice strong{display:block;margin:7px 0;font-size:17px}.tw-choice small{display:block;margin:5px 0;color:#52627a}.tw-choice input{width:22px;height:22px;vertical-align:middle;margin-right:6px}.tw-table{overflow:auto;max-height:480px}.tw-table table{width:100%;border-collapse:collapse}.tw-table th,.tw-table td{text-align:left;padding:9px 5px;border-bottom:1px solid #e1e7ef;font-size:14px}.tw-table input[type=checkbox],.tw-source input[type=checkbox]{width:20px;height:20px}.tw-settings label{display:block;margin:12px 0}.tw-settings input[type=range]{width:100%}.tw-history{margin-top:22px}.tw-history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,320px));gap:18px}.tw-status{min-height:24px}.tw-notes{font-size:13px;color:#52627a}.tw-warning{background:#fff3dc;padding:9px;border-radius:6px}@media(max-width:850px){.tw-layout{grid-template-columns:1fr}.tw-preview{position:static;max-width:450px;width:100%;box-sizing:border-box;margin:auto}.tw-controls input{max-width:100%}}.award-day1{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px}.award-day1 input{width:18px;height:18px}.tw-status:empty{display:none}</style>`;
+ const css=`<style>.tw-setup{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}.tw-setup label{display:block;margin:12px 0}.tw-setup input[type=file][hidden]{display:none}.tw-artwork{display:grid;justify-items:start;gap:8px;margin:12px 0}.tw-artwork strong{max-width:100%;overflow-wrap:anywhere;font-size:14px}.tw-artwork img{display:block;width:auto;max-width:100%;height:140px;object-fit:contain;border:1px solid #dce2ee;border-radius:4px;background:#f4f6fa}.tw-artwork p{margin:0}.tw-setup h4{margin:0 0 10px}.tw-badge{display:inline-block;font-size:12px;color:#126941;background:#eaf7ed;border-radius:4px;padding:2px 5px}.tw-rank{font-weight:800;color:#073554}.tw-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}.tw-settings summary{cursor:pointer;font-weight:bold}.tw-example{max-height:170px;max-width:100%;object-fit:contain}.tw-match label{display:grid;gap:5px;margin:10px 0}.tw-setup .tw-notes{margin:6px 0}@media(max-width:850px){.tw-setup{grid-template-columns:1fr}}.tw-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.tw-controls label{display:grid;gap:5px}.tw-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(250px,.8fr);gap:22px;margin-top:20px}.tw-panel{border:1px solid #dce2ee;border-radius:10px;padding:16px;background:white;min-width:0}.tw-panel h3{margin-top:0}.tw-source{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #e1e7ef}.tw-source select{width:100%;max-width:420px}.tw-source small{display:block;margin:5px 0}.tw-xi{list-style:none;padding:0;counter-reset:xi}.tw-xi li{padding:9px 0;border-bottom:1px solid #e1e7ef;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tw-xi li:before{counter-increment:xi;content:counter(xi);font-weight:bold;width:22px}.tw-player{flex:1;min-width:140px}.tw-player small{display:block}.tw-xi select{max-width:140px}.tw-icon{min-width:34px;min-height:34px;border:1px solid #c9d2e2;background:white;border-radius:5px;cursor:pointer}.tw-icon:disabled{opacity:.4;cursor:default}.tw-preview canvas,.tw-history img{display:block;width:100%;height:auto;border-radius:6px}.tw-preview{position:sticky;top:20px;align-self:start}.tw-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:12px 0}.tw-choice{display:block;border:2px solid #dce2ee;border-radius:9px;padding:12px;background:#f8fafc;cursor:pointer}.tw-choice:has(input:checked){border-color:#126941;background:#eef9f1}.tw-choice strong{display:block;margin:7px 0;font-size:17px}.tw-choice small{display:block;margin:5px 0;color:#52627a}.tw-choice input{width:22px;height:22px;vertical-align:middle;margin-right:6px}.tw-table{overflow:auto;max-height:480px}.tw-table table{width:100%;min-width:660px;border-collapse:collapse}.tw-table th,.tw-table td:not(:nth-child(3)){white-space:nowrap}.tw-table td:nth-child(3){min-width:220px;max-width:340px}.tw-table th,.tw-table td{text-align:left;padding:9px 5px;border-bottom:1px solid #e1e7ef;font-size:14px}.tw-table input[type=checkbox],.tw-source input[type=checkbox]{width:20px;height:20px}.tw-settings label{display:block;margin:12px 0}.tw-settings input[type=range]{width:100%}.tw-history{margin-top:22px}.tw-history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,320px));gap:18px}.tw-status{min-height:24px}.tw-notes{font-size:13px;color:#52627a}.tw-warning{background:#fff3dc;padding:9px;border-radius:6px}@media(max-width:850px){.tw-layout{grid-template-columns:1fr}.tw-preview{position:static;max-width:450px;width:100%;box-sizing:border-box;margin:auto}.tw-controls input{max-width:100%}}.award-day1{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px}.award-day1 input{width:18px;height:18px}.tw-status:empty{display:none}</style>`;
  const clubId=s=>s.scope.split(':').slice(1).join(':');
  const dateAdd=(value,days)=>{const d=new Date(value+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);};
  function state(s){
@@ -7407,7 +7500,7 @@ function createTeamOfWeek(h){
  function saveNotice(s,text){const w=state(s);w.saveNotice=text;w.saveNoticeKey=imageKey(s,w);message(s,text);if(current(s,w))saveControls(s);}
  function candidates(w){return (w.context?.candidates||[]).filter(p=>w.selectedSources.has(p.snapshot_id));}
  function example(w){return w.layout.reference?.week_end===w.end?teamWeekMatchExample(candidates(w),w.layout.reference,w.layout):{matched:[],unmatched:[]};}
- function recommend(w){w.review=teamWeekRecommendations(candidates(w),example(w).matched);w.rows=teamWeekOrder(w.review.strong);}
+ function recommend(w){w.review=teamWeekRecommendations(candidates(w),example(w).matched,w.context.cards);w.rows=teamWeekOrder(w.review.strong);}
  function sourcesReady(w){const cards=(w.context?.cards||[]).filter(c=>w.selectedSources.has(c.snapshot_id));return cards.length>0&&cards.every(c=>c.our_team&&c.scorecard.schema_version===2&&(c.scorecard.award_provisional||c.scorecard.status==='completed'&&c.scorecard.innings.every(i=>i.complete)));}
  function reconcileRows(w,rows){
   const pool=candidates(w),used=new Set(),removed=[];
@@ -7419,7 +7512,7 @@ function createTeamOfWeek(h){
    const display=previous.display==='batting'?player.batting.length:previous.display==='bowling'?player.bowling.length:player.batting.length&&player.bowling.length;
    return [{...player,display:display?previous.display:teamWeekDisplay(player)}];
   });
-  w.review=teamWeekRecommendations(pool,example(w).matched);
+  w.review=teamWeekRecommendations(pool,example(w).matched,w.context.cards);
   return removed;
  }
  async function load(s,{preserve=false}={}){
@@ -7440,7 +7533,7 @@ function createTeamOfWeek(h){
   h.navigation?.();
   const w=state(s),host=document.getElementById('socialContent');if(w.sharedStale&&!w.busy){w.sharedStale=false;void load(s,{preserve:true});return;}if(!host)return;const scroll=typeof window!=='undefined'?window.scrollY:0;w.open||={};host.querySelectorAll('details[data-tw-open]').forEach(e=>w.open[e.dataset.twOpen]=e.open);
   if(!w.context){host.innerHTML=w.loadAttempted&&!w.busy?`<p role="status">${esc(w.message)}</p><button class="btn" id="twRetryLoad">Retry loading scores</button>`:'<p role="status">Loading Team of the Week…</p>';document.getElementById('twRetryLoad')?.addEventListener('click',()=>void load(s));if(!w.busy&&!w.loadAttempted)void load(s);return;}
-  const locked=w.busy||!!w.pending||assistantState(w).candidate,pool=candidates(w),count=w.rows.length,ready=sourcesReady(w),cards=w.context.cards,ref=example(w),ranked=teamWeekRank(pool,w.rankMode||'overall'),ranking=new Map(teamWeekRank(pool).map(p=>[p.key,p]));
+  const locked=w.busy||!!w.pending||assistantState(w).candidate,pool=candidates(w),count=w.rows.length,ready=sourcesReady(w),cards=w.context.cards,ref=example(w),ranked=teamWeekRank(pool,w.rankMode||'overall',cards),ranking=new Map(teamWeekRank(pool,'overall',cards).map(p=>[p.key,p]));
   const range=(id,key,label,min,max,step=1)=>`<label>${label} <output id="${id}Value">${w.layout[key]}</output><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${w.layout[key]}" ${locked?'disabled':''}></label>`;
   const artwork=(id,label,source,name,active=true,empty=`No ${label} uploaded`)=>`<div class="tw-artwork" id="${id}Current">${source?`<span class="tw-badge">${active?'In use':'Saved · not shown'}</span><strong id="${id}Name">${esc(name||'Saved '+label)}</strong><img id="${id}Preview" alt="Current ${label}">`:`<p class="tw-notes" id="${id}Name">${esc(empty)}</p>`}</div><button type="button" class="btn secondary" id="${id}Choose" ${locked?'disabled':''}>${source?'Replace':'Upload'} ${label}</button><input type="file" id="${id}" aria-label="Choose ${label}" accept="image/png,image/jpeg,image/webp" hidden ${locked?'disabled':''}>`;
   host.innerHTML=css+`<section><h3>Team of the Week</h3><div class="tw-controls"><label>Week ending<input id="twEnd" type="date" value="${esc(w.end)}" ${locked?'disabled':''}></label><label ${h.loadLabel?'hidden':''}>Graphic label<input id="twTitle" maxlength="60" value="${esc(w.title)}" ${locked?'disabled':''}></label><button class="btn secondary" id="twReload" ${locked?'disabled':''}>${w.loading?'Loading…':'Reload imported scores'}</button></div>${w.context.provisional_available?`<label class="award-day1"><input id="twDay1" type="checkbox" ${w.includeDay1?'checked':''} ${locked?'disabled':''}> Include Day 1 scores</label>`:''}<p class="tw-notes">${h.demo?'Demo uses sample performances. ':''}${esc(dateAdd(w.end,-6))} to ${esc(w.end)} · ${w.includeDay1?'Completed matches and available Day 1 scores.':'Completed matches finishing in this period.'}</p><p id="twStatus" class="tw-status" role="status" aria-live="polite">${esc(w.message)}</p>
@@ -7449,9 +7542,9 @@ function createTeamOfWeek(h){
    <section class="tw-panel"><h4>3. Optional logo</h4><label><input id="twShowLogo" type="checkbox" ${w.layout.show_logo?'checked':''} ${locked||!(w.layout.logo_path||s.data.brand.logo)?'disabled':''}> Add a logo</label>${artwork('twLogo','logo',w.layout.logo_path||s.data.brand.logo,w.layout.logo_path?w.layout.logo_name:'Saved club logo',w.layout.show_logo)}${s.data.brand.logo&&w.layout.logo_path?`<button class="btn ghost" id="twClubLogo" ${locked?'disabled':''}>Use saved club logo</button>`:''}${w.layout.show_logo?range('twLogoX','logo_x','Left–right',0,100)+range('twLogoY','logo_y','Up–down',0,100)+range('twLogoSize','logo_width','Size (%)',3,60):''}</section></div>
    <details data-tw-open="scores" ${cards.length===0||!ready?'open':''}><summary>Scorecards · ${w.selectedSources.size} selected</summary>${cards.map(c=>`<div class="tw-source"><input type="checkbox" data-tw-source="${esc(c.snapshot_id)}" aria-label="Include ${esc(c.scorecard.grade)}" ${w.selectedSources.has(c.snapshot_id)?'checked':''} ${locked?'disabled':''}><div><strong>${esc(c.scorecard.grade)}</strong><small><a href="${esc(c.scorecard.url)}" target="_blank" rel="noopener">${esc(c.scorecard.teams.map(t=>t.name).join(' v '))}</a></small>${c.our_team?`<small>Our team: ${esc(c.scorecard.teams.find(t=>t.id===c.our_team)?.name||'')}</small>`:`<label>Match club<select data-tw-team="${esc(c.snapshot_id)}" ${locked?'disabled':''}><option value="">Choose our team</option>${c.scorecard.teams.map(t=>`<option value="${esc(t.id)}" ${t.id===c.our_team?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>`}<small>${c.scorecard.award_provisional?'Day 1 scores included':c.scorecard.status!=='completed'?'Match in progress · excluded':c.scorecard.schema_version!==2?'Bowling needs refreshing':!c.scorecard.innings.every(i=>i.complete)?'An innings is unfinished · excluded':c.our_team&&c.scorecard.innings.some(i=>i.team_id!==c.our_team&&!i.bowling_available)?'Batting loaded · bowling not supplied':c.our_team?'Batting and bowling loaded':'Choose our team to include performances'}</small><div data-tw-team-check="${esc(c.snapshot_id)}"></div></div></div>`).join('')}<div class="social-actions"><button class="btn secondary" id="twRefresh" ${h.demo||locked||!w.selectedSources.size?'disabled':''}>Refresh selected from PlayCricket</button></div><label>Add a PlayCricket match link<input id="twLink" type="url" placeholder="https://play.cricket.com.au/match/…" style="width:100%;box-sizing:border-box" ${locked?'disabled':''}></label><button class="btn secondary" id="twAdd" style="margin-top:8px" ${h.demo||locked?'disabled':''}>Load scorecard</button></details>
    <div class="social-actions"><button class="btn" id="twSuggest" ${locked||!ready||!pool.length?'disabled':''}>${count?'Review suggested selections':'Suggest selections'}</button><strong>${count}/11 selected</strong></div>${!ready&&cards.length?'<p class="tw-warning">Refresh missing bowling. Untick unfinished scorecards.</p>':''}
-   <details data-tw-open="method"><summary>How the XI is suggested</summary><p class="tw-notes">The strongest performances, with no fixed mix of batters, bowlers or all-rounders. Each player appears once. All grades count equally. Usually 11–15 worthwhile performances, with fewer when the week is quiet. Clear selections are ticked; close calls need your choice. An example can guide those choices, but does not settle them.</p><p class="tw-notes">Batting rating: runs ÷ the greater of 50 or this week's leading runs × 100. Bowling rating: wickets ÷ the greater of 3 or this week's leading wickets × 100. Overall uses the stronger rating. At least 20 runs and 2 wickets adds 40% of the weaker rating. Bowling ties favour fewer runs conceded. Shortlisting starts at 25 runs, 2 wickets, or 20 runs with a wicket. Similar ratings around the final place stay open; ties may take the list past 15. All performances remain available below. You choose the XI.</p></details>
-   <div class="tw-layout"><div class="tw-panel">${w.review?`<h3 id="twShortlistHeading">Shortlist · ${w.review.contenders.length} players</h3><p id="twShortlistSummary" class="tw-notes">${w.review.clear?'Clear-cut XI. All 11 are selected for review.':w.review.shortlist.length?`${w.review.strong.length} strong selections · choose ${11-w.review.strong.length} from ${w.review.shortlist.length} close calls.`:`${w.review.strong.length} worthwhile performances. Review all performances below to fill the remaining places.`}</p><details data-tw-open="strong" open><summary>Strong selections · ${w.review.strong.length}</summary><p class="tw-notes">Clearer choices from the imported figures. You can still change them.</p><ul>${w.review.strong.map(p=>`<li><b>#${ranking.get(p.key)?.rank||'—'} ${esc(p.name)}</b> · ${esc(teamWeekFigures(p))} · ${esc(teamWeekGrade(p.grade))}${ref.matched.some(x=>x.key===p.key)?' <span class="tw-badge">In example</span>':''}</li>`).join('')||'<li>No clear separation—review the shortlist.</li>'}</ul></details>${w.review.shortlist.length?`<h3 style="margin-top:18px">${count===11?'Close calls · review your choices':`Places to decide · ${Math.max(0,11-count)}`}</h3><p class="tw-notes">Compare runs, wickets and grade. Tick your choices.</p><div class="tw-choices">${w.review.shortlist.map(p=>{const selected=w.rows.some(x=>x.key===p.key),same=w.rows.some(x=>x.player_id===p.player_id);return `<label class="tw-choice"><input type="checkbox" data-tw-pick="${esc(p.key)}" aria-label="Choose ${esc(p.name)} for the XI" ${selected?'checked':''} ${locked||!selected&&(count>=11||same)?'disabled':''}>${selected?'In your XI':'Add to XI'}<strong>${esc(p.name)}</strong><span>Batting: <b>${esc(teamWeekFigures(p,'batting')||'—')}</b></span><br><span>Bowling: <b>${esc(teamWeekFigures(p,'bowling')||'—')}</b></span><small>#${ranking.get(p.key)?.rank} · ${ranking.get(p.key)?.points} rating · ${esc(teamWeekGrade(p.grade))}</small></label>`;}).join('')}</div><button class="btn ghost" id="twUseSuggested" ${locked?'disabled':''}>Confirm suggested XI</button>`:''}`:''}<h3 style="margin-top:20px">Your XI · ${count}/11</h3><button class="btn ghost" id="twArrange" ${locked||count<2?'disabled':''}>Arrange batting order</button>${count?`<ol class="tw-xi">${w.rows.map((p,i)=>`<li><div class="tw-player"><strong>${esc(p.name)}</strong><small>${esc(teamWeekFigures(p))} · ${esc(teamWeekGrade(p.grade))}</small></div><select data-tw-display="${i}" aria-label="Figures for ${esc(p.name)}" ${locked?'disabled':''}>${[['batting','Batting'],['bowling','Bowling'],['both','Both']].filter(([key])=>key==='batting'?p.batting.length:key==='bowling'?p.bowling.length:p.batting.length&&p.bowling.length).map(([key,label])=>`<option value="${key}" ${key===p.display?'selected':''}>${label}</option>`).join('')}</select><button class="tw-icon" data-tw-up="${i}" aria-label="Move ${esc(p.name)} up" ${locked||i===0?'disabled':''}>↑</button><button class="tw-icon" data-tw-down="${i}" aria-label="Move ${esc(p.name)} down" ${locked||i===count-1?'disabled':''}>↓</button><button class="tw-icon" data-tw-remove="${i}" aria-label="Remove ${esc(p.name)}" ${locked?'disabled':''}>×</button></li>`).join('')}</ol>`:'<p>Choose players from the ranking below.</p>'}
-   <h3>Ranked performances</h3><div class="tw-toolbar"><label>Rank by <select id="twRankMode" ${locked?'disabled':''}>${[['overall','Overall'],['batting','Batting'],['bowling','Bowling'],['allround','All-round']].map(([v,label])=>`<option value="${v}" ${(w.rankMode||'overall')===v?'selected':''}>${label}</option>`).join('')}</select></label></div><div class="tw-table"><table><thead><tr><th>Rank</th><th>Select</th><th>Player</th><th>Batting</th><th>Bowling</th><th>Grade</th><th>Rating</th></tr></thead><tbody>${ranked.map(p=>{const selected=w.rows.some(x=>x.key===p.key),samePlayer=w.rows.some(x=>x.player_id===p.player_id),fromExample=ref.matched.find(x=>x.key===p.key);return `<tr><td class="tw-rank">${p.rank}</td><td><input type="checkbox" data-tw-pick="${esc(p.key)}" aria-label="Select ${esc(p.name)} ${esc(p.grade)}" ${selected?'checked':''} ${locked||!ready||!selected&&(count>=11||samePlayer)?'disabled':''}></td><td><strong>${esc(p.name)}</strong><small style="display:block">${esc(p.reason)}</small>${fromExample?'<span class="tw-badge">In example</span>':''}</td><td>${esc(teamWeekFigures(p,'batting')||'—')}</td><td>${esc(teamWeekFigures(p,'bowling')||'—')}</td><td>${esc(teamWeekGrade(p.grade))}</td><td>${p.points}</td></tr>`;}).join('')}</tbody></table></div></div>
+   <details data-tw-open="method"><summary>How the XI is suggested</summary><p class="tw-notes">The strongest performances, with no fixed mix of batters, bowlers or all-rounders. Each player appears once. All grades count equally. Usually 11–15 worthwhile performances, with fewer when the week is quiet. Clear selections are ticked; close calls need your choice. An example can guide those choices, but does not settle them.</p><p class="tw-notes">The guide adds batting and bowling: 1 point per run and 20 per wicket, plus bounded match-context credit. Batting pace is compared with the other batters across both teams; bowling economy and wicket-taking rate with the rest of your own attack in that innings. Rates are weighted by balls, excluding the player. Sustained economical bowling can qualify with few or no wickets. Innings share and finishing a chase also count. Missing comparison figures add no rate credit. No grade multiplier or guessed pitch or opposition strength. Close calls remain yours to decide.</p></details>
+   <div class="tw-layout"><div class="tw-panel">${w.review?`<h3 id="twShortlistHeading">Shortlist · ${w.review.contenders.length} players</h3><p id="twShortlistSummary" class="tw-notes">${w.review.clear?'Clear-cut XI. All 11 are selected for review.':w.review.shortlist.length?`${w.review.strong.length} strong selections · choose ${11-w.review.strong.length} from ${w.review.shortlist.length} close calls.`:`${w.review.strong.length} worthwhile performances. Review all performances below to fill the remaining places.`}</p><details data-tw-open="strong" open><summary>Strong selections · ${w.review.strong.length}</summary><p class="tw-notes">Clearer choices from the imported figures. You can still change them.</p><ul>${[...w.review.strong].sort((a,b)=>(ranking.get(a.key)?.rank??Infinity)-(ranking.get(b.key)?.rank??Infinity)).map(p=>`<li><b>#${ranking.get(p.key)?.rank||'—'} ${esc(p.name)}</b> · ${esc(teamWeekFigures(p))} · ${esc(teamWeekGrade(p.grade))}${ref.matched.some(x=>x.key===p.key)?' <span class="tw-badge">In example</span>':''}</li>`).join('')||'<li>No clear separation—review the shortlist.</li>'}</ul></details>${w.review.shortlist.length?`<h3 style="margin-top:18px">${count===11?'Close calls · review your choices':`Places to decide · ${Math.max(0,11-count)}`}</h3><p class="tw-notes">Compare both skills and match context. Tick your choices.</p><div class="tw-choices">${w.review.shortlist.map(p=>{const selected=w.rows.some(x=>x.key===p.key),same=w.rows.some(x=>x.player_id===p.player_id);return `<label class="tw-choice"><input type="checkbox" data-tw-pick="${esc(p.key)}" aria-label="Choose ${esc(p.name)} for the XI" ${selected?'checked':''} ${locked||!selected&&(count>=11||same)?'disabled':''}>${selected?'In your XI':'Add to XI'}<strong>${esc(p.name)}</strong><span>Batting: <b>${esc(teamWeekFigures(p,'batting')||'—')}</b></span><br><span>Bowling: <b>${esc(teamWeekFigures(p,'bowling')||'—')}</b></span><small>#${ranking.get(p.key)?.rank} · ${ranking.get(p.key)?.points} rating · ${esc(teamWeekGrade(p.grade))} · ${esc(ranking.get(p.key)?.reason||'')}</small></label>`;}).join('')}</div><button class="btn ghost" id="twUseSuggested" ${locked?'disabled':''}>Confirm suggested XI</button>`:''}`:''}<h3 style="margin-top:20px">Your XI · ${count}/11</h3><button class="btn ghost" id="twArrange" ${locked||count<2?'disabled':''}>Arrange batting order</button>${count?`<ol class="tw-xi">${w.rows.map((p,i)=>`<li><div class="tw-player"><strong>${esc(p.name)}</strong><small>${esc(teamWeekFigures(p))} · ${esc(teamWeekGrade(p.grade))}</small></div><select data-tw-display="${i}" aria-label="Figures for ${esc(p.name)}" ${locked?'disabled':''}>${[['batting','Batting'],['bowling','Bowling'],['both','Both']].filter(([key])=>key==='batting'?p.batting.length:key==='bowling'?p.bowling.length:p.batting.length&&p.bowling.length).map(([key,label])=>`<option value="${key}" ${key===p.display?'selected':''}>${label}</option>`).join('')}</select><button class="tw-icon" data-tw-up="${i}" aria-label="Move ${esc(p.name)} up" ${locked||i===0?'disabled':''}>↑</button><button class="tw-icon" data-tw-down="${i}" aria-label="Move ${esc(p.name)} down" ${locked||i===count-1?'disabled':''}>↓</button><button class="tw-icon" data-tw-remove="${i}" aria-label="Remove ${esc(p.name)}" ${locked?'disabled':''}>×</button></li>`).join('')}</ol>`:'<p>Choose players from the ranking below.</p>'}
+   <h3>Ranked performances</h3><div class="tw-toolbar"><label>Rank by <select id="twRankMode" ${locked?'disabled':''}>${[['overall','Overall'],['batting','Batting'],['bowling','Bowling'],['allround','All-round']].map(([v,label])=>`<option value="${v}" ${(w.rankMode||'overall')===v?'selected':''}>${label}</option>`).join('')}</select></label></div><div class="tw-table" tabindex="0" role="region" aria-label="Ranked performances; scroll horizontally for figures"><table><thead><tr><th>Rank</th><th>Select</th><th>Player</th><th>Batting</th><th>Bowling</th><th>Grade</th><th>Rating</th></tr></thead><tbody>${ranked.map(p=>{const selected=w.rows.some(x=>x.key===p.key),samePlayer=w.rows.some(x=>x.player_id===p.player_id),fromExample=ref.matched.find(x=>x.key===p.key);return `<tr><td class="tw-rank">${p.rank}</td><td><input type="checkbox" data-tw-pick="${esc(p.key)}" aria-label="Select ${esc(p.name)} ${esc(p.grade)}" ${selected?'checked':''} ${locked||!ready||!selected&&(count>=11||samePlayer)?'disabled':''}></td><td><strong>${esc(p.name)}</strong><small style="display:block">${esc(p.reason)}</small>${fromExample?'<span class="tw-badge">In example</span>':''}</td><td>${esc(teamWeekFigures(p,'batting')||'—')}</td><td>${esc(teamWeekFigures(p,'bowling')||'—')}</td><td>${esc(teamWeekGrade(p.grade))}</td><td>${p.points}</td></tr>`;}).join('')}</tbody></table></div></div>
    <div class="tw-panel tw-preview"><canvas id="twCanvas" width="1080" height="1350" aria-label="Team of the Week graphic preview"></canvas><p id="twPreviewStatus" role="status" class="tw-notes"></p>${assistantHTML(w,esc,'twAI')}<label style="display:block;margin-top:12px">Award note (optional)<textarea id="twBlurb" rows="3" maxlength="2000" style="width:100%;box-sizing:border-box" ${locked?'disabled':''}>${esc(w.blurb)}</textarea></label><button class="btn ghost" id="twDownloadBlurb" ${!w.blurb.trim()?'disabled':''}>Download blurb</button><div class="social-actions"><button class="btn" id="twSave" disabled>${h.savedAward?'Save image & add to post':'Save image'}</button><button class="btn secondary" id="twDownloadImage" disabled>Download image</button></div><p id="twSaveStatus" class="tw-notes" role="status" aria-live="polite"></p>${w.pending?'<p class="tw-warning">Image save is not confirmed. Retry to finish saving the same image.</p><button class="btn" id="twRetry">Retry image save</button><button class="btn ghost" id="twCancelSave">Clear unconfirmed save</button>':''}<details class="tw-settings" data-tw-open="layout"><summary>Adjust layout</summary>${!w.layout.includes_title?range('twTitleY','title_y','Title up–down',0,1300,5)+range('twTitleSize','title_size','Title size',40,160):''}${range('twWeekY','week_y','Week label up–down',0,1320,5)}${range('twTop','top','List top',50,1200,5)}${range('twBottom','bottom','List bottom',150,1320,5)}${range('twFont','font_scale','Player text size (%)',75,120,5)}<label>Text colour<input type="color" id="twColour" value="${esc(w.layout.text_colour)}" ${locked?'disabled':''}></label></details><button class="btn secondary" id="twSaveDesign" ${locked||!w.designDirty?'disabled':''}>Save layout</button>${w.layoutConflict?'<button class="btn ghost" id="twReloadLayout" '+(w.busy?'disabled':'')+'>Reload saved layout</button>':''}</div></div>
    ${h.postPreview?'<div id="twPostPreview"></div>':''}<details class="tw-history" data-tw-open="history"><summary>Saved weeks · ${w.context.history.length}</summary><p class="tw-notes">Saved originals. These have not been automatically posted.</p><div class="tw-history-grid">${w.context.history.map(e=>`<article class="tw-panel"><h4>${esc(e.title)}</h4><p>${esc(e.week_end)}</p><img data-tw-history="${esc(e.image_path)}" alt="${esc(e.title)} — saved Team of the Week"><button class="btn ghost" data-tw-download="${esc(e.id)}">Download saved image</button>${e.blurb?`<details><summary>Saved blurb</summary><p style="white-space:pre-wrap">${esc(e.blurb)}</p><button class="btn ghost" data-tw-saved-blurb="${esc(e.id)}">Download saved blurb</button></details>`:''}</article>`).join('')||'<p>No saved Team of the Week images yet.</p>'}</div></details></section>`;
   if(!h.demo&&!h.sharedResults)host.querySelectorAll('[data-tw-team-check]').forEach(el=>{const card=cards.find(c=>c.snapshot_id===el.dataset.twTeamCheck);h.teamCheck?.(el,{clubId:clubId(s),snapshotId:card.snapshot_id,teamId:card.our_team,here:()=>current(s,w),changed:()=>{w.message='Teams updated to match PlayCricket.';}});});
@@ -7469,7 +7562,7 @@ function createTeamOfWeek(h){
   el('twSuggest').onclick=()=>{recommend(w);w.message=w.review.proposed.length<11?`${w.review.proposed.length} worthwhile performances. Review all performances to complete the XI.`:w.review.clear?'Clear-cut XI. Review the 11 selections.':`${w.review.contenders.length} shortlisted · choose ${11-w.rows.length} remaining places.`;render(s);};
   el('twUseSuggested')?.addEventListener('click',()=>{w.rows=teamWeekOrder(w.review.proposed);w.message='Suggested XI confirmed. Review the graphic before saving.';render(s);});
   el('twArrange').onclick=()=>{w.rows=teamWeekOrder(w.rows);w.message='Batters first, then all-rounders, then bowlers.';render(s);};
-  host.querySelectorAll('[data-tw-pick]').forEach(e=>e.onchange=()=>{if(e.checked){const p=pool.find(p=>p.key===e.dataset.twPick);if(w.rows.length<11&&!w.rows.some(x=>x.player_id===p.player_id))w.rows.push({...p,display:teamWeekDisplay(p)});}else w.rows=w.rows.filter(p=>p.key!==e.dataset.twPick);w.rows=teamWeekOrder(w.rows);render(s);});
+  host.querySelectorAll('[data-tw-pick]').forEach(e=>e.onchange=()=>{if(e.checked){const p=ranking.get(e.dataset.twPick);if(w.rows.length<11&&!w.rows.some(x=>x.player_id===p.player_id))w.rows.push({...p,display:teamWeekDisplay(p)});}else w.rows=w.rows.filter(p=>p.key!==e.dataset.twPick);w.rows=teamWeekOrder(w.rows);render(s);});
   for(const [attr,direction] of [['up',-1],['down',1]])host.querySelectorAll(`[data-tw-${attr}]`).forEach(e=>e.onclick=()=>{const i=Number(e.dataset[attr==='up'?'twUp':'twDown']);[w.rows[i],w.rows[i+direction]]=[w.rows[i+direction],w.rows[i]];render(s);});
   host.querySelectorAll('[data-tw-remove]').forEach(e=>e.onclick=()=>{w.rows.splice(Number(e.dataset.twRemove),1);render(s);});
   host.querySelectorAll('[data-tw-display]').forEach(e=>e.onchange=()=>{w.rows[Number(e.dataset.twDisplay)].display=e.value;w.rows=teamWeekOrder(w.rows);render(s);});
@@ -7584,7 +7677,7 @@ function createTeamOfWeek(h){
 return {teamWeekGrade,teamWeekFigures,teamWeekDisplay,teamWeekOrder,teamWeekWorthwhile,teamWeekDraft,teamWeekRecommendations,teamWeekRank,teamWeekMatchExample,teamWeekLayout,createTeamOfWeek};
 })();
 
-const __demoModule30=(()=>{
+const __demoModule31=(()=>{
 /* One set of club scorecards, reused by Teams awards and Club Batting. */
 const resultWeekEnd=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+(7-d.getUTCDay())%7);return d.toISOString().slice(0,10);};
 const key=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -7633,7 +7726,7 @@ function createSharedMatchResults(h){
 return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,createSharedMatchResults};
 })();
 
-const __demoModule31=(()=>{
+const __demoModule32=(()=>{
 const {graphicLabel}=__demoModule9;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
@@ -7676,9 +7769,9 @@ function createSocialAwardLabels(h){
 return {createSocialAwardLabels};
 })();
 
-const __demoModule32=(()=>{
+const __demoModule33=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
-const {weeklyResultCoverage,cardStatus}=__demoModule30;
+const {weeklyResultCoverage,cardStatus}=__demoModule31;
 const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
@@ -7742,31 +7835,31 @@ function createFixtureResults(h){
 return {renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule34=(()=>{
+const __demoModule35=(()=>{
+const {awardPerformance}=__demoModule30;
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
  return {batting,bowling,text:[batting&&`${batting} runs`,bowling&&`${bowling} bowling`].filter(Boolean).join(' · ')};
 }
-function playerWeekRecommendations(candidates,profiles={},history=[],end,preferNew=false){
+function playerWeekRecommendations(candidates,profiles={},history=[],end,preferNew=false,cards=[]){
  const number=v=>Number.isFinite(Number(v))?Number(v):0;
- const highRuns=Math.max(50,...candidates.map(p=>number(p.runs))),highWickets=Math.max(3,...candidates.map(p=>number(p.wickets)));
  const latest=new Map();for(const e of [...history].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))))if(!latest.has(e.week_end))latest.set(e.week_end,e);
  const recent=[...latest.values()].filter(e=>e.week_end<end&&(new Date(end+'T12:00:00Z')-new Date(e.week_end+'T12:00:00Z'))/86400000<=28);
  const rows=candidates.map(p=>{
-  const bat=100*number(p.runs)/highRuns,bowl=100*number(p.wickets)/highWickets,profile=profiles[p.player_id]||{},prior=(p.previous||[]).filter(q=>p.format&&q.format===p.format&&q.grade===p.grade),bats=prior.filter(q=>q.batting?.length),bowls=prior.filter(q=>q.bowling?.length);
+  const rating=awardPerformance(p,cards),profile=profiles[p.player_id]||{},prior=(p.previous||[]).filter(q=>p.format&&q.format===p.format&&q.grade===p.grade),bats=prior.filter(q=>q.batting?.length),bowls=prior.filter(q=>q.bowling?.length);
   const avg=(xs,key)=>xs.reduce((n,q)=>n+number(q[key]),0)/xs.length;
   const runAverage=bats.length>=3?avg(bats,'runs'):null,wicketAverage=bowls.length>=3?avg(bowls,'wickets'):null;
   const aboveBat=runAverage!==null&&p.runs>=25&&p.runs>=Math.max(runAverage*1.5,runAverage+15),aboveBowl=wicketAverage!==null&&p.wickets>=2&&p.wickets>=Math.max(wicketAverage*1.5,wicketAverage+1);
-  return {...p,profile,points:Math.max(bat,bowl)+(p.runs>=20&&p.wickets>=2?.4*Math.min(bat,bowl):0),runAverage,wicketAverage,priorBatCount:bats.length,priorBowlCount:bowls.length,aboveForm:aboveBat||aboveBowl,recentWins:recent.filter(e=>e.winner?.player_id===p.player_id).map(e=>e.week_end),reasons:[]};
- }).sort((a,b)=>b.points-a.points||b.wickets-a.wickets||a.name.localeCompare(b.name));
- const chosen=new Map(),worth=p=>p.runs>=25||p.wickets>=2||(p.runs>=20&&p.wickets>=1);
+  return {...p,profile,...rating,runAverage,wicketAverage,priorBatCount:bats.length,priorBowlCount:bowls.length,aboveForm:aboveBat||aboveBowl,recentWins:recent.filter(e=>e.winner?.player_id===p.player_id).map(e=>e.week_end),reasons:[]};
+ }).sort((a,b)=>b.points-a.points||b.wickets-a.wickets||b.runs-a.runs||a.key.localeCompare(b.key));
+ const chosen=new Map(),worth=p=>p.runs>=25||p.wickets>=2||(p.runs>=20&&p.wickets>=1)||p.bowlingStandout;
  const add=(p,reason)=>{if(!p)return;const old=chosen.get(p.player_id);if(old){if(old.key===p.key&&!old.reasons.includes(reason))old.reasons.push(reason);return;}p.reasons.push(reason);chosen.set(p.player_id,p);};
  const pool=rows.filter(worth);
  const prioritise=xs=>preferNew?[...xs].sort((a,b)=>Number(!!a.recentWins.length)-Number(!!b.recentWins.length)):xs;
- for(const p of prioritise([...pool].sort((a,b)=>b.runs-a.runs)).filter(p=>p.runs>=25).slice(0,2))add(p,'Standout batting');
- for(const p of prioritise([...pool].sort((a,b)=>b.wickets-a.wickets||a.conceded-b.conceded)).filter(p=>p.wickets>=2).slice(0,2))add(p,'Standout bowling');
- add(prioritise(pool).find(p=>p.runs>=20&&p.wickets>=2),'All-round contribution');
+ for(const p of prioritise([...pool].sort((a,b)=>b.battingPoints-a.battingPoints)).filter(p=>p.runs>=25).slice(0,2))add(p,'Standout batting');
+ for(const p of prioritise([...pool].sort((a,b)=>b.bowlingPoints-a.bowlingPoints)).filter(p=>p.bowlingStandout).slice(0,2))add(p,'Standout bowling');
+ add(prioritise(pool).find(p=>p.allround),'All-round contribution');
  const grades=new Set();for(const p of prioritise(pool)){if(grades.has(p.grade))continue;grades.add(p.grade);add(p,'Strong performance in '+p.grade);}
  for(const p of prioritise(pool).filter(p=>p.aboveForm).slice(0,2))add(p,'Above recent returns');
  for(const p of prioritise(rows).filter(p=>p.profile.stage==='emerging'&&(p.runs>=15||p.wickets>=1)).slice(0,2))add(p,'Emerging player to consider');
@@ -7776,11 +7869,11 @@ function playerWeekRecommendations(candidates,profiles={},history=[],end,preferN
 return {playerWeekFigures,playerWeekRecommendations};
 })();
 
-const __demoModule33=(()=>{
+const __demoModule34=(()=>{
 const {scopedAwardLabel}=__demoModule2;
 const {graphicGrade,checkGraphicLabel}=__demoModule9;
 const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule20;
-const {playerWeekFigures,playerWeekRecommendations}=__demoModule34;
+const {playerWeekFigures,playerWeekRecommendations}=__demoModule35;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
 }
@@ -7794,12 +7887,12 @@ function createPlayerOfWeek(h){
  const current=(s,w)=>h.here(s)&&s.view==='player_week'&&s.playerWeek===w;
  async function rpc(s,action,data={}){const scope=['context','profile','save_photo'].includes(action)&&h.scopeRequest?await h.scopeRequest(s,'player_week'):{};const r=await h.supabase.rpc('player_of_week_api',{p_club_id:club(s),p_action:action,p_data:{...scope,include_provisional:!!state(s).includeDay1,...data}});if(r.error)throw Error(r.error.message);return r.data;}
  function notice(s,text){const w=state(s);w.message=text;if(current(s,w))for(const id of ['pwStatus','pwSaveStatus'])if(el(id))el(id).textContent=text;}
- function recommendations(w){return playerWeekRecommendations(w.context.candidates,w.context.profiles,w.context.history,w.end,w.preferNew);}
+ function recommendations(w){return playerWeekRecommendations(w.context.candidates,w.context.profiles,w.context.history,w.end,w.preferNew,w.context.cards);}
  function imageKey(w){return JSON.stringify([w.end,w.context?.award_scope,w.winner?.key,w.winner?.batting,w.winner?.bowling,w.title,w.blurb,w.layout,w.photo]);}
  function controls(s){const w=state(s);assistantControls(w,'pwAI',{ready:w.previewReady,locked:w.busy||!!w.pending||!!h.demo});const saved=w.saved?.key===imageKey(w),ready=!!w.winner&&w.previewReady&&!!w.title.trim()&&(!h.labelReady||h.labelReady(s,w.end));if(el('pwSave')){el('pwSave').textContent=w.saving?'Saving…':saved?'Saved':w.pending?'Retry save':h.savedAward?'Save winner & add to post':'Save winner & image';el('pwSave').disabled=w.busy||assistantState(w).candidate||saved||!w.pending&&!ready;}if(el('pwDownload')){el('pwDownload').textContent=w.downloading?'Preparing…':'Download image';el('pwDownload').disabled=w.busy||assistantState(w).candidate||!ready;}if(el('pwSaveLayout')){el('pwSaveLayout').textContent=w.layoutSaving?'Saving…':!w.layoutDirty&&w.context?.design.revision?'Saved':'Save layout';el('pwSaveLayout').disabled=w.busy||!!w.pending||assistantState(w).candidate||!w.layoutDirty;}}
  async function load(s,{preserve=false}={}){const w=state(s),end=w.end,old=w.context;if(w.loading)return;w.loading=true;w.busy=true;w.attempted=true;notice(s,'Loading imported performances…');if(current(s,w))render(s);try{const data=await rpc(s,'context',{week_end:end}),awardLabel=await h.loadLabel?.(s,end);if(!current(s,w)||w.end!==end)return;w.context=data;h.adoptScope?.(s,'player_week',data.award_scope);if(preserve&&old&&w.layoutDirty)w.context.design=old.design;else{w.layout=playerWeekLayout(data.design.layout);w.layoutDirty=false;w.layoutConflict=false;}w.awardLabel=awardLabel;if(!preserve||!w.title)w.title=awardLabel?awardLabel.label||'':w.title||'WEEK ENDING '+shortDate(end);if(w.winner)w.winner=data.candidates.find(p=>p.key===w.winner.key)||null;w.message=data.candidates.length?'Choose a contender, then review their graphic.':'No completed scores for this week. Add them in This week’s results.';}catch(e){notice(s,e.message);}finally{w.busy=false;w.loading=false;if(current(s,w))render(s);}}
  async function run(s,fn){const w=state(s);if(w.busy||w.pending)return;w.busy=true;render(s);try{await fn(w);}catch(e){notice(s,e.message);}finally{w.busy=false;if(current(s,w))render(s);}}
- function candidateCard(w,p){const f=playerWeekFigures(p),selected=w.winner?.key===p.key,profile=p.profile||{};return `<article class="pw-contender ${selected?'pw-selected':''}"><div class="pw-candidate-head"><strong>${esc(p.name)}</strong><span>${esc(p.grade)}</span></div><p class="pw-figures">${f.batting?`<span>Batting <b>${esc(f.batting)}</b></span>`:''}${f.bowling?`<span>Bowling <b>${esc(f.bowling)}</b></span>`:''}</p><p class="pw-note">${esc(p.reasons?.join(' · ')||'Imported performance')}${p.usual_grade?' · Usual grade: '+esc(p.usual_grade):''}</p>${p.aboveForm?`<p class="pw-note">${p.runAverage!==null?`Recent batting: ${p.runAverage.toFixed(1)} runs/match (${p.priorBatCount} matches). `:''}${p.wicketAverage!==null?`Recent bowling: ${p.wicketAverage.toFixed(1)} wickets/match (${p.priorBowlCount} matches).`:''}</p>`:''}${profile.stage&&profile.stage!=='unspecified'?`<span class="pw-badge">${esc(stageLabel[profile.stage])}</span>`:''}${p.recentWins.length?`<span class="pw-badge pw-repeat">Won ${p.recentWins.map(shortDate).join(', ')}</span>`:''}${profile.note?`<p class="pw-note">${esc(profile.note)}</p>`:''}<div class="pw-actions"><button class="btn ${selected?'secondary':''}" data-pw-choose="${esc(p.key)}" ${w.busy||w.pending||assistantState(w).candidate||selected?'disabled':''}>${selected?'Chosen winner':'Choose winner'}</button><button class="btn ghost" data-pw-context="${esc(p.player_id)}" ${w.busy||w.pending||assistantState(w).candidate?'disabled':''}>Player context</button></div></article>`;}
+ function candidateCard(w,p){const f=playerWeekFigures(p),selected=w.winner?.key===p.key,profile=p.profile||{};return `<article class="pw-contender ${selected?'pw-selected':''}"><div class="pw-candidate-head"><strong>${esc(p.name)}</strong><span>${esc(p.grade)}</span></div><p class="pw-figures">${f.batting?`<span>Batting <b>${esc(f.batting)}</b></span>`:''}${f.bowling?`<span>Bowling <b>${esc(f.bowling)}</b></span>`:''}</p><p class="pw-note">${esc([p.reasons?.join(' · '),p.reason].filter(Boolean).join(' · ')||'Imported performance')}${p.usual_grade?' · Usual grade: '+esc(p.usual_grade):''}</p>${p.aboveForm?`<p class="pw-note">${p.runAverage!==null?`Recent batting: ${p.runAverage.toFixed(1)} runs/match (${p.priorBatCount} matches). `:''}${p.wicketAverage!==null?`Recent bowling: ${p.wicketAverage.toFixed(1)} wickets/match (${p.priorBowlCount} matches).`:''}</p>`:''}${profile.stage&&profile.stage!=='unspecified'?`<span class="pw-badge">${esc(stageLabel[profile.stage])}</span>`:''}${p.recentWins.length?`<span class="pw-badge pw-repeat">Won ${p.recentWins.map(shortDate).join(', ')}</span>`:''}${profile.note?`<p class="pw-note">${esc(profile.note)}</p>`:''}<div class="pw-actions"><button class="btn ${selected?'secondary':''}" data-pw-choose="${esc(p.key)}" ${w.busy||w.pending||assistantState(w).candidate||selected?'disabled':''}>${selected?'Chosen winner':'Choose winner'}</button><button class="btn ghost" data-pw-context="${esc(p.player_id)}" ${w.busy||w.pending||assistantState(w).candidate?'disabled':''}>Player context</button></div></article>`;}
  const css=`<style>.pw-controls,.pw-actions,.pw-figures{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pw-controls{margin:15px 0;align-items:end}.pw-controls label,.pw-field{display:grid;gap:6px}.pw-note{font-size:13px;color:#52627a;line-height:1.5;margin:7px 0}.pw-status{min-height:24px;white-space:pre-wrap}.pw-contenders{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:12px}.pw-contender,.pw-panel{border:1px solid #dce2ee;border-radius:10px;padding:16px;background:white;min-width:0}.pw-selected{border:2px solid #19724a;background:#f2faf4}.pw-candidate-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}.pw-candidate-head strong{font-size:18px}.pw-candidate-head span{color:#52627a;font-size:14px}.pw-figures span{padding:6px 9px;background:#edf3fb;border-radius:5px}.pw-badge{display:inline-block;background:#eaf4fd;color:#16466e;border-radius:5px;padding:4px 7px;margin:3px 5px 5px 0;font-size:12px}.pw-repeat{background:#fff3db;color:#754b08}.pw-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.85fr);gap:20px;margin:22px 0}.pw-panel h3{margin-top:0}.pw-preview{position:sticky;top:16px;align-self:start}.pw-preview canvas{display:block;width:100%;height:auto;border-radius:5px}.pw-artwork{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}.pw-asset{border:1px solid #e0e5ef;padding:12px;border-radius:8px}.pw-asset strong{display:block;font-size:14px;overflow-wrap:anywhere;margin:7px 0}.pw-asset img{display:block;width:auto;max-width:100%;height:110px;object-fit:contain;margin:8px 0;background:#f1f4f8}.pw-asset input[hidden]{display:none}.pw-panel input:not([type=checkbox]),.pw-panel select,.pw-panel textarea{width:100%;box-sizing:border-box}.pw-panel input[type=color]{width:70px;height:36px}.pw-panel label{margin:12px 0}.pw-panel input[type=range]{width:100%}.pw-panel summary,summary.pw-summary{font-weight:700;cursor:pointer;min-height:30px}.pw-field input[type=checkbox]{width:20px;height:20px}.pw-context{border-left:4px solid #42679a;margin:14px 0}.pw-history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,320px));gap:15px}.pw-history-grid img{width:100%;height:auto}.pw-warning{padding:10px;background:#fff3dc;border-radius:5px}@media(max-width:850px){.pw-grid{grid-template-columns:1fr}.pw-preview{position:static;width:100%;max-width:450px;box-sizing:border-box;margin:auto}.pw-artwork{grid-template-columns:1fr}}.award-day1{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px}.award-day1 input{width:18px;height:18px}.pw-status:empty{display:none}</style>`;
  function render(s){
   h.navigation?.();
@@ -7816,7 +7909,7 @@ function createPlayerOfWeek(h){
   <div class="pw-contenders">${review.shortlist.map(p=>candidateCard(w,p)).join('')||'<p>No standout figures yet. You can still choose from all performances below.</p>'}</div>
   <details data-pw-open="all"><summary class="pw-summary" style="margin-top:16px">All performances · ${review.all.length}</summary><label class="pw-field">Find a player<input id="pwSearch" type="search" placeholder="Player or grade" value="${esc(w.search||'')}"></label><div class="pw-contenders" id="pwAll">${review.all.filter(p=>!w.search||(p.name+' '+p.grade).toLowerCase().includes(w.search.toLowerCase())).map(p=>candidateCard(w,p)).join('')}</div></details>
   ${contextPlayer?`<section class="pw-panel pw-context"><h3>Player context · ${esc(contextPlayer.name)}</h3><p class="pw-note">Shared with the club’s award editors. Not added to the post.</p><label class="pw-field">Experience<select id="pwStage">${Object.entries(stageLabel).map(([key,label])=>`<option value="${key}" ${(profile.stage||'unspecified')===key?'selected':''}>${label}</option>`).join('')}</select></label><label class="pw-field">Context for the decision<textarea id="pwContextNote" maxlength="300" rows="2" placeholder="e.g. First senior fifty; new to this grade">${esc(profile.note||'')}</textarea></label><div class="pw-actions"><button class="btn" id="pwSaveContext" ${locked?'disabled':''}>Save context</button><button class="btn ghost" id="pwCloseContext" ${locked?'disabled':''}>Close</button></div></section>`:''}
-  <details data-pw-open="method"><summary class="pw-summary" style="margin-top:14px">How contenders are suggested</summary><p class="pw-note">Leading batters, bowlers and all-rounders, plus a strong performance from each grade. Emerging players and returns well above their own recent figures add options. Grades are not given a fixed multiplier. Age and experience are never guessed.</p><p class="pw-note">Recent form uses at least 3 imported matches from the previous 12 weeks, in the same grade and format. Missing history adds no penalty. Recent winners are flagged, never excluded. All imported performances remain available.</p></details>
+  <details data-pw-open="method"><summary class="pw-summary" style="margin-top:14px">How contenders are suggested</summary><p class="pw-note">Uses the same guide as Team of the Week. Both skills count: batting pace against the other batters in the match, bowling economy and wicket-taking rate against the rest of your own attack, plus innings share and chase completion. Rates are weighted by balls and exclude the player; missing comparison figures add no rate credit. Exceptional economy can qualify with few or no wickets. Leading batters, bowlers and all-rounders, plus a strong performance from each grade. Emerging players and returns above their recent figures add options. No grade multiplier or guessed age, experience or pitch conditions.</p><p class="pw-note">Recent form uses at least 3 imported matches from the previous 12 weeks, in the same grade and format. Missing history adds no penalty. Recent winners are flagged, never excluded. All imported performances remain available.</p></details>
   <div class="pw-grid"><section class="pw-panel"><h3>Winner & artwork</h3><div class="pw-actions"><p><strong id="pwWinner">${esc(w.winner?.name||'Choose a winner above')}</strong>${w.winner?' · '+esc(w.winner.grade):''}</p>${w.winner?`<button class="btn ghost" id="pwUndoChoice" ${locked?'disabled':''}>Undo choice</button>`:''}</div>${savedWeek.length?`<p class="pw-note">Saved for this week: ${esc(savedWeek[0].winner.name)}. Saving again creates a new image; earlier images stay in Saved weeks.</p>`:''}
   <label class="pw-field" ${h.loadLabel?'hidden':''}>Week label<input id="pwTitle" maxlength="60" value="${esc(w.title)}" ${locked?'disabled':''}></label><label class="pw-field">Award note (optional)<textarea id="pwBlurb" maxlength="2000" rows="3" placeholder="Why this performance deserves recognition…" ${locked?'disabled':''}>${esc(w.blurb)}</textarea></label>
   <div class="pw-artwork">${artwork('background','Background',w.layout.background_path,w.layout.background_name,'Club colours in use')}${artwork('photo','Player photo',w.photo?.path,w.photo?.name,'No player photo chosen')}${artwork('logo','Logo',w.layout.logo_path||s.data.brand.logo,w.layout.logo_path?w.layout.logo_name:'Saved club logo','No logo uploaded')}${artwork('example','Reference',w.layout.example_path,w.layout.example_name,'Optional previous example')}</div>
@@ -7895,7 +7988,7 @@ function createPlayerOfWeek(h){
 return {playerWeekLayout,createPlayerOfWeek};
 })();
 
-const __demoModule35=(()=>{
+const __demoModule36=(()=>{
 // Local design trials. Only the explicit Apply action can save club settings.
 function createSocialSandbox(h){
  const names=['Alex Sample','Jordan Sample','Taylor Sample','Casey Sample','Morgan Sample','Riley Sample','Cameron Sample','Sam Sample','Jamie Sample','Charlie Sample','Robin Sample'];
@@ -7998,7 +8091,7 @@ function createSocialSandbox(h){
 return {createSocialSandbox};
 })();
 
-const __demoModule36=(()=>{
+const __demoModule37=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -8037,7 +8130,7 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule37=(()=>{
+const __demoModule38=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -8095,7 +8188,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule38=(()=>{
+const __demoModule39=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -8123,8 +8216,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule39=(()=>{
-const {createTeamWeekDemo}=__demoModule38;
+const __demoModule40=(()=>{
+const {createTeamWeekDemo}=__demoModule39;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -8144,7 +8237,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule40=(()=>{
+const __demoModule41=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -8184,7 +8277,7 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule41=(()=>{
+const __demoModule42=(()=>{
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday) {
   const copy = value => structuredClone(value);
@@ -8242,7 +8335,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule42=(()=>{
+const __demoModule43=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -8387,29 +8480,29 @@ const {createSelectionRoom}=__demoModule27;
 
 const {createTeamOfWeek,teamWeekLayout}=__demoModule28;
 
-const {createSharedMatchResults}=__demoModule30;
+const {createSharedMatchResults}=__demoModule31;
 
-const {createSocialAwardLabels}=__demoModule31;
+const {createSocialAwardLabels}=__demoModule32;
 
-const {createFixtureResults}=__demoModule32;
+const {createFixtureResults}=__demoModule33;
 
-const {createPlayerOfWeek}=__demoModule33;
+const {createPlayerOfWeek}=__demoModule34;
 
-const {createSocialSandbox}=__demoModule35;
+const {createSocialSandbox}=__demoModule36;
 
-const {renderSocialPlatformSetup}=__demoModule36;
+const {renderSocialPlatformSetup}=__demoModule37;
 
-const {createScorecardTeamDemo}=__demoModule37;
+const {createScorecardTeamDemo}=__demoModule38;
 
-const {createTeamWeekDemo}=__demoModule38;
+const {createTeamWeekDemo}=__demoModule39;
 
-const {createPlayerWeekDemo}=__demoModule39;
+const {createPlayerWeekDemo}=__demoModule40;
 
-const {createSharedResultsDemo}=__demoModule40;
+const {createSharedResultsDemo}=__demoModule41;
 
-const {createSeasonStatsDemo}=__demoModule41;
+const {createSeasonStatsDemo}=__demoModule42;
 
-const {createSocialAwardsDemo}=__demoModule42;
+const {createSocialAwardsDemo}=__demoModule43;
 
 const {selectionCallLink}=__demoModule27;
 
@@ -8444,7 +8537,7 @@ const {selectionCallLink}=__demoModule27;
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.265';
+const APP_UI_VERSION='0.8.62.268';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
