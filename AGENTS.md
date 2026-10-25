@@ -1,3 +1,7 @@
+Player of the Week also offers Basic and Smart methods: raw figures versus the existing match-context guide. Offer several candidates for a human to choose, flagging stand-outs only when there is clear separation. Preserve the human choice when switching methods, existing saved awards, and the compact phone layout. User request, 26 October 2026.
+
+Team of the Week offers Basic and Smart modes. Basic reserves the highest raw runs + 20 × wickets all-rounder, then six batters by runs and six bowlers by wickets/fewer conceded, counting each person once and leaving the final XI to the club. Smart retains the existing match-context guide. Explain both in the existing collapsed help, keep controls compact, and preserve separate draft choices and saved editions. User request, 26 October 2026.
+
 Players shared by grade and Masters teams keep one club playing-list identity. A team's Club Batting opt-out must not block scorecard identity confirmation merely because that player already has a batting profile through another team. Keep the team's coaching opt-out, existing profiles, grade history and explicit identity-conflict checks intact. User clarification, 25 October 2026.
 
 Show Team of the Week’s Strong selections in ascending overall rank, starting at #1. This is a display order; retain the chosen graphic’s batting/all-round/bowling arrangement. User request, 25 October 2026.
