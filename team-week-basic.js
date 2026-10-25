@@ -24,7 +24,8 @@ export function teamWeekBasicRecommendations(candidates){
  const take=(mode,count)=>{
   for(const p of teamWeekBasicRank(candidates,mode)){
    if(used.has(p.player_id))continue;
-   used.add(p.player_id);groups[mode].push({...p,basicRole:mode,display:mode==='allround'?'both':mode});
+   const f=rawAwardFigures(p),both=f.batting&&f.bowling&&f.runs>=20&&f.wickets>0;
+   used.add(p.player_id);groups[mode].push({...p,basicRole:mode,display:mode==='allround'||both?'both':mode});
    if(groups[mode].length===count)break;
   }
  };

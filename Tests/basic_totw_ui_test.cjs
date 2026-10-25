@@ -6,7 +6,8 @@ test('delivered Basic/Smart controls keep separate drafts, require eleven human 
  const h=await openDemo({product:'select',role:'socials',journey:'socials'});t.after(h.close);
  const original=h.window.__fixtureDb.rpc.bind(h.window.__fixtureDb);
  const make=(id,runs,wickets=0)=>({key:id,snapshot_id:'basic-card',match_id:'basic-match',team_id:'basic-club',player_id:id,name:id,grade:'Test Grade',runs,wickets,conceded:20,batting:runs?[{runs}]:[],bowling:wickets?[{wickets,runs:20,balls:60}]:[]});
- let players=[...Array.from({length:7},(_,i)=>make('Batter '+i,100-i*5)),...Array.from({length:7},(_,i)=>make('Bowler '+i,0,5-i%3)),make('All-rounder',50,3)];
+ let players=[...Array.from({length:6},(_,i)=>make('Batter '+i,100-i*5)),...Array.from({length:7},(_,i)=>make('Bowler '+i,0,5-i%3)),make('All-rounder',50,3)];
+ players[5]={...make('Dominic Wood',47,2),conceded:8,bowling:[{wickets:2,runs:8,balls:24}]};
  const card={snapshot_id:'basic-card',our_team:'basic-club',scorecard:{schema_version:2,match_id:'basic-match',status:'completed',grade:'Test Grade',url:'#',teams:[{id:'basic-club',name:'Test Club'},{id:'visitors',name:'Visitors'}],innings:[{team_id:'basic-club',complete:true,bowling_available:true},{team_id:'visitors',complete:true,bowling_available:true}]}};
  let revision=0;
  h.window.__fixtureDb.rpc=async(name,args)=>{
@@ -29,6 +30,13 @@ test('delivered Basic/Smart controls keep separate drafts, require eleven human 
  assert.equal(state().rows.length,11);assert.equal(new Set(keys()).size,11);
  assert.equal(h.document.querySelectorAll('.tw-choice input:not(:checked):disabled').length,2);
  assert.equal(h.document.getElementById('twSave').disabled,false);
+ const dominic=()=>state().rows.find(p=>p.player_id==='Dominic Wood');assert.equal(dominic().display,'both');
+ assert.equal(state().review.groups.batting.find(p=>p.player_id==='Dominic Wood').basicRole,'batting');
+ await h.choose('select[aria-label="Figures for Dominic Wood"]','batting');
+ const brief=h.document.getElementById('twAIBrief');brief.value="Show Dominic Wood's bowling figures also";brief.dispatchEvent(new h.window.Event('input'));
+ await h.click('#twAITry');assert.equal(dominic().display,'both');assert.equal(h.document.getElementById('twSave').disabled,true);
+ await h.click('#twAIUndo');assert.equal(dominic().display,'batting');
+ await h.click('#twAITry');await h.click('#twAIUse');assert.equal(dominic().display,'both');assert.equal(h.document.getElementById('twSave').disabled,false);
  const basic=keys();await h.click('[name=twMethod][value=smart]');assert.deepEqual(keys(),smart);
  assert.deepEqual(Array.from(state().review.contenders,p=>[p.key,p.points]),smartPoints);
  await h.click('[name=twMethod][value=basic]');assert.deepEqual(keys(),basic);

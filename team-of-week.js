@@ -1,9 +1,9 @@
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.248';
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.248';
+import {graphicGrade,checkGraphicLabel,graphicPlayerDisplays} from './social-graphic-design.js?v=0.8.62.270';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.270';
 import {readTeamWeekReference} from './team-week-reference.js?v=0.8.62.166';
 import {awardPerformance} from './award-performance.js?v=0.8.62.266';
-import {teamWeekBasicRank,teamWeekBasicRecommendations} from './team-week-basic.js?v=0.8.62.269';
+import {teamWeekBasicRank,teamWeekBasicRecommendations} from './team-week-basic.js?v=0.8.62.270';
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 export function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 export function teamWeekFigures(player,display=player.display){
@@ -276,6 +276,7 @@ export function createTeamOfWeek(h){
   finally{w.busy=false;w.saving=false;if(current(s,w))render(s);}
  }
  function assistantConfig(s,artwork){const w=state(s);return {owner:w,prefix:'twAI',kind:'team_week',club:clubId(s),supabase:h.supabase,date:()=>w.end,
+  players:()=>w.rows,setPlayers:changes=>{const patch=new Map(graphicPlayerDisplays(changes,w.rows).map(p=>[p.key,p.display]));w.rows=w.rows.map(p=>({...p,display:patch.get(p.key)||p.display}));},
   ready:()=>!!w.previewReady,locked:()=>w.busy||!!w.pending||!!h.demo,busy:value=>{w.busy=value;},render:()=>render(s),layout:()=>w.layout,label:()=>w.title,setLabel:value=>{w.title=value;},identity:()=>imageKey(s,w),grades:()=>w.rows.map(p=>p.grade),revision:()=>w.context.design.revision,canvas:()=>document.getElementById('twCanvas'),here:()=>current(s,w),apply:layout=>{w.layout=layout;w.designDirty=true;},save:()=>saveDesign(s),saveLabel:()=>h.saveLabel?.(s,w.end,w.title),conflict:()=>{w.layoutConflict=true;},reload:async()=>{const data=await rpc(s,'context',{week_end:w.end});if(h.reloadLabel){w.awardLabel=await h.reloadLabel(s,w.end);w.title=w.awardLabel.label||'';}w.context.design=data.design;w.layout=teamWeekLayout(data.design.layout,data.design.background_path);w.background=data.design.background_path;w.designDirty=false;w.layoutConflict=false;w.graphicAssistant=null;},artwork};}
  return {render,state,load,canLeave:s=>assistantCanLeave(s.week,text=>message(s,text))};
 }

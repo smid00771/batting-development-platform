@@ -1,6 +1,6 @@
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
-import {withGradeLabels,graphicLabel} from './social-graphic-design.js?v=0.8.62.248';
-import {labelSuggestions,assistantCSS,proposalMessage} from './social-graphic-assistant.js?v=0.8.62.248';
+import {withGradeLabels,graphicLabel} from './social-graphic-design.js?v=0.8.62.270';
+import {labelSuggestions,assistantCSS,proposalMessage} from './social-graphic-assistant.js?v=0.8.62.270';
 import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.235';
 import {visualSettings,refinedAwardLayout} from './social-awards-design.js?v=0.8.62.193';
 

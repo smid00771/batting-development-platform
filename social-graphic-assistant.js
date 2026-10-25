@@ -1,4 +1,4 @@
-import {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel} from './social-graphic-design.js?v=0.8.62.248';
+import {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays} from './social-graphic-design.js?v=0.8.62.270';
 
 export const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
@@ -17,8 +17,8 @@ export function labelSuggestions(host,canvas,{locked=false,apply,request}){
 
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export function proposalMessage(result,changed){const explanation=String(result.explanation||'').trim().slice(0,700);return changed?'Proposed changes: '+(explanation||'Review the graphic above.'):'No changes were made to the preview. '+(explanation.match(/(?:^|[.!?]\s+)([^.!?]+\?)\s*$/)?.[1]||'Try a more specific request.');}
-const snapshot=c=>({layout:structuredClone(c.layout()),label:c.label?.()??null});
-function restore(c,value){if(!same(c.layout(),value.layout))c.apply(structuredClone(value.layout));if(c.setLabel&&value.label!==null)c.setLabel(value.label);}
+const snapshot=c=>({layout:structuredClone(c.layout()),label:c.label?.()??null,...(c.players?{players:c.players().map(p=>({key:p.key,display:p.display}))}:{})});
+function restore(c,value){if(value.players&&c.setPlayers)c.setPlayers(value.players);if(!same(c.layout(),value.layout))c.apply(structuredClone(value.layout));if(c.setLabel&&value.label!==null)c.setLabel(value.label);}
 function stage(c,r,before,next){r.baseline??=before;r.history.push(before);r.history=r.history.slice(-10);restore(c,next);r.candidate=!same(snapshot(c),r.baseline);}
 function undo(c,r){const previous=r.history.pop();if(!previous)return;restore(c,previous);r.candidate=!same(snapshot(c),r.baseline);r.artworkBrief='';r.artworkPending=false;r.message=r.candidate?'Previous proposal restored.':'Changes undone.';}
 export function assistantSuggestions(c){
@@ -38,11 +38,12 @@ export function bindAssistant(c){
  el('Brief').oninput=e=>{(r.briefs||={})[c.prefix]=e.target.value;sync();};
  const run=async fn=>{if(c.locked())return;c.busy(true);c.render();try{await fn();}catch(e){if(c.here())r.message=e.message||'The change could not be prepared.';}finally{c.busy(false);if(c.here())c.render();}};
  el('Try').onclick=()=>{if(!c.ready()||c.locked()||r.artworkPending||r.saveUncertain||!(r.briefs?.[c.prefix]||'').trim())return;const brief=r.briefs[c.prefix].trim(),canvas=c.canvas(),before=snapshot(c),identity=c.identity(),grades=c.grades(),revision=c.revision();let artwork='';r.message='Preparing proposed changes…';void run(async()=>{
-  const response=await c.supabase.functions.invoke('club-social-style',{body:{purpose:'graphic_refine',kind:c.kind,club_id:c.club,week_end:c.date(),design_revision:revision,preview_grades:grades,grade_labels:before.layout.grade_labels||[],...(c.label?{graphic_label:before.label||null}:{}),brief,current:graphicSettings(c.kind,before.layout),title_in_background:!!before.layout.includes_title,preview:await graphicPreview(canvas)}});
+  const response=await c.supabase.functions.invoke('club-social-style',{body:{purpose:'graphic_refine',kind:c.kind,club_id:c.club,week_end:c.date(),design_revision:revision,preview_grades:grades,grade_labels:before.layout.grade_labels||[],...(c.players?{preview_players:before.players,include_provisional:c.owner.includeDay1===true,award_scope:c.owner.context?.award_scope}:{}),...(c.label?{graphic_label:before.label||null}:{}),brief,current:graphicSettings(c.kind,before.layout),title_in_background:!!before.layout.includes_title,preview:await graphicPreview(canvas)}});
   if(response.error||response.data?.error){let message=response.data?.error;try{message||=(await response.error.context?.clone().json())?.error;}catch{}throw Error(message||response.error?.message||'The suggestion could not be prepared.');}
   if(!c.here()||c.identity()!==identity)return;
   const result=response.data,label=graphicLabel(result.graphic_label);if(label!==null&&!c.setLabel)throw Error('This graphic does not support that label change.');
-  const next={layout:refinedGraphicLayout(c.kind,before.layout,result,grades),label:label??before.label};artwork=String(result.artwork_brief||'').trim().slice(0,1500);
+  const playerChanges=graphicPlayerDisplays(result.player_displays||[],c.players?.()||[]),displays=new Map(playerChanges.map(p=>[p.key,p.display]));
+  const next={...before,layout:refinedGraphicLayout(c.kind,before.layout,result,grades),label:label??before.label,...(before.players?{players:before.players.map(p=>({...p,display:displays.get(p.key)||p.display}))}:{})};artwork=String(result.artwork_brief||'').trim().slice(0,1500);
   if(!same(next,before)||artwork){stage(c,r,before,next);if(artwork){r.candidate=true;r.artworkPending=true;}}
   r.message=artwork?'Preparing proposed artwork changes…':proposalMessage(result,!same(next,before));
  }).then(async()=>{if(!artwork||!c.here())return;try{if(!c.artwork)throw Error('Background editing is unavailable.');await c.artwork(artwork,{proposal:{

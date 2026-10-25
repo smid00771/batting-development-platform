@@ -20,6 +20,16 @@ test('Basic bowlers rank by wickets then runs conceded, regardless of match pace
  assert.deepEqual(teamWeekBasicRank([expensive,cheap,more],'bowling').map(p=>p.key),['more','cheap','expensive']);
  assert.equal(teamWeekBasicRank([cheap,expensive],'batting')[0].key,'expensive');
 });
+test('a batting shortlist place shows both significant contributions, including Dominic’s 47 and 2/8',()=>{
+ const dominic={...player('dominic',47,2,8),name:'Dominic Wood'},allround=player('allround',52,2,49);
+ const r=teamWeekBasicRecommendations([dominic,allround,player('bat',70),player('bowl',0,4,20)]);
+ assert.equal(r.groups.allround[0].key,'allround');
+ const selected=r.groups.batting.find(p=>p.key==='dominic');
+ assert.equal(selected.basicRole,'batting');assert.equal(selected.display,'both');assert.equal(selected.runs,47);assert.equal(selected.conceded,8);
+ assert.equal(new Set(r.contenders.map(p=>p.player_id)).size,r.contenders.length);
+ const bowling=teamWeekBasicRecommendations([player('best-allround',100,4),player('bowling',24,3),...Array.from({length:6},(_,i)=>player('bat-'+i,50+i))]).groups.bowling[0];
+ assert.equal(bowling.basicRole,'bowling');assert.equal(bowling.display,'both');
+});
 test('Basic and Smart retain distinct rankings for the same real match comparisons',()=>{
  function match(id,runs,peerRuns){
   const p={...player(id,0,3,runs),snapshot_id:id,team_id:'ours',match_id:id};p.bowling[0].balls=60;
