@@ -1,4 +1,4 @@
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.248';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.270';
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 export function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);

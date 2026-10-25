@@ -1,5 +1,5 @@
 import {awardPerformance} from './award-performance.js?v=0.8.62.266';
-import {rawAwardFigures} from './team-week-basic.js?v=0.8.62.269';
+import {rawAwardFigures} from './team-week-basic.js?v=0.8.62.270';
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 export function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');

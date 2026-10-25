@@ -204,7 +204,16 @@ supabase.functions.invoke=async function(name,args={}){
   const grade_labels=grade?[{grade,label:short[2]}]:[];if(grade)explanation='Demo preview: changed the display label to '+short[2]+'.';
   const week=/\bweek\s+(\d+)\b/i.exec(body.brief||'');if(week&&body.kind!=='team_selections'){label='Week '+week[1];explanation='Demo preview: proposed '+label+' for all awards this week.';}
   if(body.kind==='team_selections'&&changes.text_colour){delete changes.text_colour;changes.accent='#f6ca62';}
-  return demoOK({changes,grade_labels,explanation,artwork_brief:null,graphic_label:label});
+  const player_displays=[];
+  if(body.kind==='team_week'&&body.preview_players?.length&&/bowling|batting/.test(brief)){
+   const context=await supabase.rpc('team_of_week_api',{p_action:'context',p_data:{week_end:body.week_end,include_provisional:body.include_provisional,award_scope:body.award_scope}});
+   const selected=new Set(body.preview_players.map(p=>p.key)),matches=(context.data?.candidates||[]).filter(p=>selected.has(p.key)&&brief.includes(p.name.toLowerCase()));
+   if(matches.length===1){const p=matches[0],display=/also|both|batting and bowling|bowling and batting/.test(brief)?'both':/bowling/.test(brief)?'bowling':'batting';
+    if((display==='bowling'||p.batting.length)&&(display==='batting'||p.bowling.length)){player_displays.push({key:p.key,display});explanation='Demo preview: show '+(display==='both'?'batting and bowling':display)+' figures for '+p.name+'.';}
+    else explanation='Those figures are not recorded for '+p.name+'.';
+   }else explanation='Which selected player should show those figures?';
+  }
+  return demoOK({changes,grade_labels,player_displays,explanation,artwork_brief:null,graphic_label:label});
  }
  if(name==='playhq-sync'){
   if(!isAdmin())return demoFail('Club Admin access required');if(!demoConnection.configured)return demoFail('Connect the example credentials first');

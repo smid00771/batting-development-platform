@@ -107,3 +107,41 @@ test('week/round labels are bounded presentation text, separate from reusable st
  }
  const unsupported=setup({context:{design:{},revision:3},output:{changes:{},graphic_label:'Round 2'}});assert.equal((await refineAward({...request(),kind:'team_selections',current:{}},unsupported.options)).status,502);
 });
+
+const figuresFixture=()=>{
+ const dominic={key:'card:team:dominic',name:'Dominic Wood',grade:'Dev League Sky',batting:[{runs:47}],bowling:[{wickets:2,runs:8}]};
+ const other={key:'card:team:other',name:'Other Player',grade:'Dev League Sky',batting:[{runs:80}],bowling:[]};
+ const layout={top:620,bottom:1230,left:65,figures_right:825,grade_right:1015};
+ return {dominic,other,context:{design:{revision:3,layout},candidates:[dominic,other]},body:{...request(),purpose:'graphic_refine',kind:'team_week',current:layout,brief:"Show Dominic Wood's bowling figures also",preview_players:[{key:dominic.key,display:'batting'}],include_provisional:true,award_scope:{mode:'grades',ids:['dev-sky']}}};
+};
+test('bowling also uses verified selected-player keys and a display-only schema, preserving week and scope',async()=>{
+ const {dominic,context,body}=figuresFixture(),player_displays=[{key:dominic.key,display:'both'}];
+ const {calls,options}=setup({context,output:{changes:{},grade_labels:[],graphic_label:null,player_displays,explanation:'Show both recorded figures.',artwork_brief:null}});
+ const before=JSON.stringify(context),result=await refineAward(body,options);assert.equal(result.status,200);assert.deepEqual(result.body.player_displays,player_displays);assert.equal(JSON.stringify(context),before);
+ const provider=calls.find(c=>c.url.includes('openai')),prompt=JSON.parse(provider.body.input[0].content[0].text),schema=provider.body.text.format.schema;
+ assert.deepEqual(prompt.available_players,[{key:dominic.key,name:dominic.name,grade:dominic.grade,display:'batting',available_figures:['batting','bowling']}]);
+ assert.equal(prompt.design_brief,body.brief);assert.deepEqual(schema.properties.player_displays.items.properties.key.enum,[dominic.key]);
+ assert.deepEqual(Object.keys(schema.properties.player_displays.items.properties),['key','display']);assert.equal(schema.properties.player_displays.items.additionalProperties,false);
+ assert.ok(schema.required.includes('player_displays'));assert.match(provider.body.instructions,/ALSO.*display: "both"/);assert.match(provider.body.instructions,/ask which player if ambiguous/);
+ assert.deepEqual(calls.find(c=>c.body?.p_action==='context').body.p_data,{week_end:body.week_end,include_provisional:true,award_scope:body.award_scope});
+ assert.ok(!calls.some(c=>/save|reserve|finish/.test(c.body?.p_action||'')));
+});
+test('invalid, missing or unavailable preview players fail before using the club allowance',async()=>{
+ const {dominic,other,context,body}=figuresFixture();
+ for(const preview_players of [[{key:'foreign',display:'both'}],[{key:dominic.key,display:'batting',name:'Forged player'}],[{key:dominic.key,display:'batting'},{key:dominic.key,display:'both'}],[{key:other.key,display:'both'}],[{key:dominic.key,display:'allround'}],{}]){
+  const {calls,options}=setup({context});const result=await refineAward({...body,preview_players},options);assert.equal(result.status,400);assert.ok(!calls.some(c=>c.body?.p_action==='style_request'||c.url.includes('openai')));
+ }
+ const denied=setup({context});assert.equal((await refineAward({...body,kind:'player_week',current:{}},denied.options)).status,400);
+});
+test('assistant output cannot invent figures, use an unselected player or show a missing bowling record',async()=>{
+ const {dominic,other,context,body}=figuresFixture();
+ for(const player_displays of [[{key:dominic.key,display:'both',wickets:5}],[{key:other.key,display:'batting'}],[{key:dominic.key,display:'both'},{key:dominic.key,display:'bowling'}],[{key:dominic.key,display:'allround'}]]){
+  const {options}=setup({context,output:{changes:{},grade_labels:[],player_displays}});assert.equal((await refineAward(body,options)).status,502);
+ }
+ const missing=setup({context,output:{changes:{},player_displays:[{key:other.key,display:'bowling'}]}});
+ assert.equal((await refineAward({...body,preview_players:[{key:other.key,display:'batting'}]},missing.options)).status,502);
+ // Existing frontends do not send players and retain the previous schema and response.
+ const legacy=setup({context,output:{changes:{},grade_labels:[],artwork_brief:null}}),legacyBody={...body};delete legacyBody.preview_players;
+ const result=await refineAward(legacyBody,legacy.options);assert.equal(result.status,200);assert.equal(result.body.player_displays,undefined);
+ assert.equal(legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.player_displays,undefined);
+});

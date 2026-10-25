@@ -1,7 +1,7 @@
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.248';
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.248';
-import {playerWeekFigures,playerWeekRecommendations} from './player-week-ranking.js?v=0.8.62.269';
+import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.270';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.270';
+import {playerWeekFigures,playerWeekRecommendations} from './player-week-ranking.js?v=0.8.62.270';
 
 export function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
