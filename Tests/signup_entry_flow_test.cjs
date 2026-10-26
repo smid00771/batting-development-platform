@@ -4,7 +4,7 @@ function between(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length)
 function setup(source,{session=null,url='https://example.test/app.html?player_join=invite%26token&code=old#old'}={}){
  const window=new JSDOM('<main id="app"></main>',{url}).window;
  let forgotten=0,remembered=0,loaded=0;
- const context=vm.createContext({document:window.document,app:window.document.querySelector('#app'),location:window.location,history:window.history,localStorage:window.localStorage,URL,URLSearchParams,session,authActionInFlight:false,
+ const context=vm.createContext({document:window.document,app:window.document.querySelector('#app'),location:window.location,history:window.history,localStorage:window.localStorage,fixtureLocalStorage:window.localStorage,URL,URLSearchParams,session,authActionInFlight:false,
   platformRole:'owner',platformAccessError:false,canBootstrapPlatform:false,club:{id:'old'},membership:{},allMemberships:[{}],userProfile:{},joinedAvailabilityClub:null,currentTab:null,
   esc:value=>String(value||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),sharedSignupIntro:()=>'',clubSignupReturnHtml:()=>'',authEntryLinks:()=>'',rememberClubSignupEntry:()=>remembered++,forgetClubSignupEntry:()=>forgotten++,loadPlatformContext:async()=>{},loadContext:async()=>loaded++,
   val:id=>window.document.getElementById(id)?.value.trim()||'',

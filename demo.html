@@ -3732,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.270.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.271.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -3800,11 +3800,11 @@ return {createMirelionAssistDemo};
 
 const __demoModule1=(()=>{
 const escapeAssist=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const assistCategories={help:'Help with the platform',enquiry:'Product enquiry',idea:'Suggest a change'};
+const assistCategories={help:'Help with the platform',enquiry:'Products and subscriptions',idea:'Suggest a change'};
 const assistTime=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 const assistStatus=(t,platform)=>t.status==='resolved'?'Resolved':t.last_side==='club'?(platform?'Needs a reply':'Waiting for Mirelion'):(platform?'Waiting for club':'Mirelion replied');
 
-function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=false}){
+function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavigate=()=>{},demo=false}){
  const states=new Map();let mounted=null,timer=null,identity=null,epoch=0;
  const scope=c=>c?.userId?(c.platform?'platform':c.clubId)?`${c.userId}:${c.platform?'platform':c.clubId}`:'':'';
  const current=c=>scope(c)===scope(getContext());
@@ -3867,7 +3867,7 @@ function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=false}){
     ${isNew?`<div class="assist-fields"><label>What is this about?<select name="category">${Object.entries(assistCategories).map(([v,l])=>`<option value="${v}" ${d.category===v?'selected':''}>${l}</option>`).join('')}</select></label><label>Subject<input name="subject" maxlength="120" required value="${escapeAssist(d.subject)}" placeholder="A short description"></label></div>`:''}
     <label>${isNew?'Your message':'Reply'}<textarea name="body" maxlength="6000" rows="3" required placeholder="${isNew?'Tell us what your club needs…':'Write your reply…'}">${escapeAssist(d.body)}</textarea></label>
     ${isNew?`<label class="assist-include"><input type="checkbox" name="include_guide" ${d.include_guide?'checked':''}> Include my recent Guide conversation</label>`:''}
-    <div class="btnrow"><button class="btn secondary" type="submit" data-assist-send>Send message</button><small class="help">${demo?'Demo only · messages stay in this tab':'Replies stay here · updates automatically'}</small></div>
+    <div class="btnrow"><button class="btn secondary" type="submit" data-assist-send>Send message</button><small class="help">${demo?'Demo only · messages stay in this tab':c.platform?'Reply in Assist · email alerts link back here':'Replies stay here · unread replies get an email alert'}</small></div>
    </form>`;
   pane.querySelector('form').oninput=()=>{
    const f=pane.querySelector('form');saveDraft(s,{body:f.elements.body.value,...(isNew?{subject:f.elements.subject.value,category:f.elements.category.value,include_guide:f.elements.include_guide.checked}:{})});
@@ -3891,7 +3891,7 @@ function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=false}){
   if(!valid(m)||m.s.busy)return;
   if(m.s.pending&&m.s.selected!==id){status(m,'Retry the unconfirmed message before opening another conversation.');return;}
   m.s.selected=id;m.detail=null;m.messages=[];m.lastRead=null;m.oldestLoaded=false;m.hasOlder=false;m.threadBusy=false;m.loadVersion=(m.loadVersion||0)+1;
-  renderList(m);renderCompose(m);status(m,'');if(id)await loadThread(m);
+  renderList(m);renderCompose(m);status(m,'');if(id)await loadThread(m);if(valid(m))onNavigate();
  }
  function renderMessages(m){
   const box=m.host.querySelector('[data-assist-messages]');if(!box)return;
@@ -3974,13 +3974,13 @@ function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=false}){
    host.querySelectorAll('[data-assist-legacy-close]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await rpc(m.context,'legacy_close',{thread_id:b.dataset.assistLegacyClose});await legacyRequests(m);}catch(e){status(m,e.message);b.disabled=false;}});
   }catch(e){status(m,'Earlier requests could not load. '+e.message);}
  }
- async function mount(host,{newMessage=false,includeGuide=false}={}){
+ async function mount(host,{newMessage=false,includeGuide=false,threadId}={}){
   const c=getContext();if(!host||!scope(c))return;
   if(identity&&identity!==c.userId)reset();identity=c.userId;
-  const s=state(c);if(newMessage&&!s.pending)s.selected=null;if(includeGuide)s.newDraft.include_guide=true;
+  const s=state(c);if(threadId!==undefined&&!s.pending)s.selected=threadId;if(newMessage&&!s.pending)s.selected=null;if(includeGuide)s.newDraft.include_guide=true;
   const m={host,s,context:{...c},epoch,detail:null,messages:[],loadVersion:0};mounted=m;
   host.innerHTML=`${assistStyles()}<section class="assist"><header class="assist-heading"><div><h1>Mirelion Assist</h1><p>${c.platform?'Club messages and requests':'Personal support for your club'}</p></div>${c.platform?'':'<button type="button" class="btn secondary" data-assist-new>Message us</button>'}</header>
-   ${c.platform?'<p class="help">Read, reply and follow up with clubs here.</p>':'<p class="help">Message the team for help or suggest a change. We aim for a live exchange when time zones overlap; replies stay here.</p><details class="assist-promise"><summary>Changes for your club</summary><p>We build requested improvements when we believe they add to the product. Some requests may work as an option just for your club. We’ll agree what is possible, the scope and timing with you.</p></details>'}
+   ${c.platform?'<p class="help">Read and reply here. New unread club messages alert support@mirelionhq.com; email alerts open the same conversation.</p>':'<p class="help">Message us for help, problems or ideas. Your conversation stays here; we’ll email you when an unread reply is waiting.</p><details class="assist-promise"><summary>Support, email and changes for your club</summary><p>Email alerts link back to this conversation. Reply here to keep the history together. If you cannot use Assist, email <a href="mailto:support@mirelionhq.com">support@mirelionhq.com</a>. Direct emails are handled by email and are not automatically added here.</p><p>We aim for a live exchange when time zones overlap. We’ll agree what is possible, the scope and timing of requested changes. Useful improvements may become shared features; some requests may suit an option just for your club.</p></details>'}
    ${demo?'<p class="help"><strong>Fictional demonstration.</strong> Messages and example replies stay in this tab.</p>':''}
    <div class="assist-layout"><aside class="assist-inbox" aria-label="Assist conversations"><div class="assist-filters"><label class="assist-sr-only" for="assistFilter">Conversation status</label><select id="assistFilter" data-assist-filter><option value="open">Open</option><option value="resolved">Resolved</option></select><label class="assist-sr-only" for="assistSearch">Search conversations</label><input id="assistSearch" data-assist-search type="search" ${s.threads.length||s.search||s.offset?'':'hidden'} placeholder="Search conversations…" value="${escapeAssist(s.search)}"></div><div data-assist-list>Loading messages…</div><div class="btnrow"><button class="btn ghost" type="button" data-assist-previous hidden>Previous</button><button class="btn ghost" type="button" data-assist-more hidden>More conversations</button></div></aside><section class="assist-conversation"><div data-assist-conversation></div><p data-assist-feedback class="help" role="status" aria-live="polite"></p></section></div></section>`;
   m.root=host.querySelector('.assist');
@@ -3991,9 +3991,9 @@ function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=false}){
   host.querySelector('[data-assist-more]').onclick=()=>{s.offset+=50;host.querySelector('[data-assist-previous]').hidden=false;void refresh(m);};
   host.querySelector('[data-assist-previous]').onclick=()=>{s.offset=Math.max(0,s.offset-50);host.querySelector('[data-assist-previous]').hidden=!s.offset;void refresh(m);};
   host.querySelector('[data-assist-new]')?.addEventListener('click',()=>void open(m,null));
-  renderCompose(m);await refresh(m);await legacyRequests(m);schedule();
+  renderCompose(m);await refresh(m);await legacyRequests(m);schedule();if(valid(m))onNavigate();
  }
- return {mount,start,reset,unread,hasChanges,canLeave,home:()=>{const s=states.get(scope(getContext()));if(s&&!s.pending){s.selected=null;s.filter='open';s.offset=0;}},refresh:()=>mounted?refresh(mounted):unread()};
+ return {mount,start,reset,unread,hasChanges,canLeave,navigation:(platform=false)=>({threadId:states.get(scope({...getContext(),platform}))?.selected||null}),home:()=>{const s=states.get(scope(getContext()));if(s&&!s.pending){s.selected=null;s.filter='open';s.offset=0;}},refresh:()=>mounted?refresh(mounted):unread()};
 }
 
 function assistStyles(){return `<style>
@@ -4007,6 +4007,19 @@ return {createMirelionAssist};
 })();
 
 const __demoModule2=(()=>{
+const assistUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assistLaunchFromSearch(search){
+ const params=new URLSearchParams(search);
+ const platform=params.get('platform')==='1';
+ if(params.get('tab')!=='assist'&&!(platform&&params.has('assist_thread')))return null;
+ const raw=params.get('assist_thread');
+ return {platform,threadId:assistUuid.test(raw||'')?raw:null};
+}
+return {assistLaunchFromSearch};
+})();
+
+const __demoModule3=(()=>{
 const AWARD_SCOPE_KINDS=['team_week','player_week','results','five_wickets','century'];
 const awardScopeKey=value=>!value||value.mode==='all'?'all':value.mode+':'+[...new Set(value.ids||[])].sort().join(',');
 const scopedAwardLabel=(label,scope)=>!scope||scope.mode==='all'?label:[label,scope.label].filter(Boolean).join(' · ');
@@ -4080,7 +4093,7 @@ function createSocialAwardScopes(h){
 return {AWARD_SCOPE_KINDS,awardScopeKey,scopedAwardLabel,createSocialAwardScopes};
 })();
 
-const __demoModule3=(()=>{
+const __demoModule4=(()=>{
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const choices=(rows,value)=>rows.map(([id,name])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(name)}</option>`).join('');
 const definiteError=e=>/^(P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(e?.code||'');
@@ -4143,7 +4156,7 @@ function createSelectionGroupPermissions(h){
 return {createSelectionGroupPermissions};
 })();
 
-const __demoModule5=(()=>{
+const __demoModule6=(()=>{
 // Incremental changes to an already saved club setup.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const label=t=>[t?.grade?.name,t?.name!==t?.grade?.name?t?.name:null].filter(Boolean).join(' · ');
@@ -4202,8 +4215,8 @@ function createSelectionGroupManager(h){
 return {createSelectionGroupManager};
 })();
 
-const __demoModule4=(()=>{
-const {createSelectionGroupManager}=__demoModule5;
+const __demoModule5=(()=>{
+const {createSelectionGroupManager}=__demoModule6;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Read saved groups and the cached source names. Opening this page never imports.
 function createSelectionGroupPage(h){
@@ -4239,8 +4252,8 @@ function createSelectionGroupPage(h){
 return {createSelectionGroupPage};
 })();
 
-const __demoModule7=(()=>{
-const {createSelectionGroupManager}=__demoModule5;
+const __demoModule8=(()=>{
+const {createSelectionGroupManager}=__demoModule6;
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -4332,8 +4345,8 @@ function createSelectionGroups(h){
 return {selectionGroupDraft,createSelectionGroups};
 })();
 
-const __demoModule6=(()=>{
-const {createSelectionGroups}=__demoModule7;
+const __demoModule7=(()=>{
+const {createSelectionGroups}=__demoModule8;
 // Saved team links drive fixture loading. Source credentials stay server-side.
 function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -4417,7 +4430,7 @@ function createPlayHQImport(h){
 return {createPlayHQImport};
 })();
 
-const __demoModule8=(()=>{
+const __demoModule9=(()=>{
 const PLAYCRICKET_SUPPORT='https://playcricket-support.zendesk.com/hc/en-us/requests/new';
 const PLAYHQ_ACCESS_GUIDE='https://support.playhq.com/hc/en-us/articles/23949453276572-How-To-Use-PlayHQ-API-s';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4481,7 +4494,7 @@ function createPlayCricketConnection(h){
 return {PLAYCRICKET_SUPPORT,PLAYHQ_ACCESS_GUIDE,accessRequestText,createPlayCricketConnection};
 })();
 
-const __demoModule9=(()=>{
+const __demoModule10=(()=>{
 // Presentation only. Source grades, players and match figures are never rewritten.
 const normal=value=>String(value||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
 function gradeLabels(value=[],grades=null){
@@ -4574,7 +4587,7 @@ For changes to background pixels, baked-in headings, logos or sponsors, return a
 return {gradeLabels,withGradeLabels,graphicGrade,checkGraphicLabel,gradeLabelSchema,GRAPHIC_FIELDS,graphicPatch,graphicSettings,graphicLabelKinds,graphicLabelSchema,graphicLabelInstructions,graphicLabel,refinedGraphicLayout,graphicPlayerDisplays,graphicSchema,graphicInstructions};
 })();
 
-const __demoModule11=(()=>{
+const __demoModule12=(()=>{
 // Shared, side-effect-free helpers for club-week planning. Publication remains server-authorised.
 const dayKey = index => `d${index + 1}`;
 function availability(person, date) {
@@ -4654,8 +4667,8 @@ function forecast(roster,fixtures,today,days=21) {
 return {dayKey,availability,missingAvailability,selectedOn,openPlaces,roleMatch,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,shareLink,forecast};
 })();
 
-const __demoModule10=(()=>{
-const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule11;
+const __demoModule11=(()=>{
+const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule12;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLabel=date=>date?new Date(date+'T12:00:00Z').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}):'';
 const button=(text,action,extra='')=>`<button type="button" class="btn ghost" data-cw="${action}" ${extra}>${esc(text)}</button>`;
@@ -4705,7 +4718,7 @@ function createClubWeekUI(h){
 return {createClubWeekUI};
 })();
 
-const __demoModule13=(()=>{
+const __demoModule14=(()=>{
 /* Read-only current-season projection of the shared scorecards.
  * Rebuild from the latest snapshot: imports and corrections never increment totals.
  * Player identity is source-ID based; only confirmed links join two identities.
@@ -4936,7 +4949,7 @@ function buildSeasonStats(context = {}, filters = {}) {
 return {STATS_FORMATS,statsFormat,statsOvers,statsRate,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
-const __demoModule15=(()=>{
+const __demoModule16=(()=>{
 // Generated by Tools/build_ndca_benchmarks.py; aggregate data only.
 const freeze=value=>{Object.values(value).forEach(v=>{if(v&&typeof v==='object')freeze(v);});return Object.freeze(value);};
 const NDCA_BENCHMARKS=freeze({
@@ -5033,8 +5046,8 @@ const NDCA_BENCHMARKS=freeze({
 return {NDCA_BENCHMARKS};
 })();
 
-const __demoModule14=(()=>{
-const {NDCA_BENCHMARKS}=__demoModule15;
+const __demoModule15=(()=>{
+const {NDCA_BENCHMARKS}=__demoModule16;
 
 /* Rough selection guides, not forecasts or automatic team changes.
  * Historical parameters: NDCA 2021/22–2025/26, same player/club/season
@@ -5282,9 +5295,9 @@ function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}
 return {NDCA_GUIDE,evidenceGrade,gradeGuide,FIELDING_RATINGS,fieldingLabel,battingRoleLabel,bowlingRoleLabel,bowlingEconomyRules,battingEvidence,bowlingEvidence,gradeBenchmark,battingPositionFits,bowlingJobFits,buildSelectionEvidence,NDCA_BENCHMARKS};
 })();
 
-const __demoModule16=(()=>{
-const {buildSeasonStats, statsOvers, STATS_FORMATS}=__demoModule13;
-const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule14;
+const __demoModule17=(()=>{
+const {buildSeasonStats, statsOvers, STATS_FORMATS}=__demoModule14;
+const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule15;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
@@ -5570,10 +5583,10 @@ function createSelectionEvidence(h) {
 return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,renderEvidenceComparison,clearEvidenceLinks,bindEvidenceLinks,bindEvidenceDetails,createSelectionEvidence};
 })();
 
-const __demoModule12=(()=>{
-const {buildSeasonStats, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule13;
-const {buildSelectionEvidence}=__demoModule14;
-const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule16;
+const __demoModule13=(()=>{
+const {buildSeasonStats, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule14;
+const {buildSelectionEvidence}=__demoModule15;
+const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule17;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
 const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? new Intl.DateTimeFormat('en-AU', {day:'numeric', month:'short', timeZone:'UTC'}).format(new Date(value + 'T12:00:00Z')) : '';
@@ -5781,7 +5794,7 @@ function createSeasonStatsPanel(h) {
 return {renderGradeComparison,renderStatsRows,createSeasonStatsPanel};
 })();
 
-const __demoModule18=(()=>{
+const __demoModule19=(()=>{
 // Name similarity proposes a human confirmation; it never establishes identity.
 function matchReviewNameParts(value){
  let name=String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\((?:c|capt|captain|wk|wkt|keeper|c\s*\/\s*wk)\)/g,'').replace(/['’]/g,'');
@@ -5807,9 +5820,9 @@ function matchReviewShortNameMatches(a,b){
 return {matchReviewNameParts,matchReviewGivenNameMatches,matchReviewShortNameMatches};
 })();
 
-const __demoModule17=(()=>{
+const __demoModule18=(()=>{
 /* Compare the trusted scorecard automatically; ask only for missing identities and the change. */
-const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule18;
+const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule19;
 const visiblePlayers=team=>(team?.players||[]).filter(p=>p.player_id&&p.name);
 const normal=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function scorecardPlayerMatches(players,roster,links=[]){
@@ -5945,8 +5958,8 @@ function createScorecardTeams(h){
 return {scorecardPlayerMatches,scorecardFixture,scorecardPlayerCandidates,createScorecardTeams};
 })();
 
-const __demoModule20=(()=>{
-const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule9;
+const __demoModule21=(()=>{
+const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule10;
 const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
 // A measured warning offers a choice; it never guesses and saves an abbreviation.
@@ -6007,7 +6020,7 @@ function assistantCanLeave(owner,notify){const r=owner?.graphicAssistant;if(r?.c
 return {assistantCSS,labelSuggestions,proposalMessage,assistantSuggestions,assistantState,assistantHTML,assistantControls,graphicPreview,bindAssistant,assistantCanLeave};
 })();
 
-const __demoModule22=(()=>{
+const __demoModule23=(()=>{
 // Shared renderer/AI contract. This contains visual settings only, never match data.
 const AWARD_STYLE_FIELDS={
  title_y:[0,100],title_size:[20,160],week_y:[0,100],week_size:[18,44],
@@ -6076,9 +6089,9 @@ For requests needing new photographic/illustrated artwork, background alteration
 return {AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions};
 })();
 
-const __demoModule21=(()=>{
-const {graphicGrade,checkGraphicLabel}=__demoModule9;
-const {safeAwardStyle}=__demoModule22;
+const __demoModule22=(()=>{
+const {graphicGrade,checkGraphicLabel}=__demoModule10;
+const {safeAwardStyle}=__demoModule23;
 const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
  {key:'player_week',label:'Player of the Week',description:'Choose and recognise one player.'},
@@ -6196,12 +6209,12 @@ function drawResultBadge(ctx,text,{label,x,y,maxHeight,layout:d,example}){
 return {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardCaption,awardBatches,resultsShareOpponent,resultsOutcome,resultsSummary,drawAwardGraphic};
 })();
 
-const __demoModule19=(()=>{
-const {scopedAwardLabel}=__demoModule2;
-const {withGradeLabels,graphicLabel}=__demoModule9;
-const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule20;
-const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule21;
-const {visualSettings,refinedAwardLayout}=__demoModule22;
+const __demoModule20=(()=>{
+const {scopedAwardLabel}=__demoModule3;
+const {withGradeLabels,graphicLabel}=__demoModule10;
+const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule21;
+const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule22;
+const {visualSettings,refinedAwardLayout}=__demoModule23;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
 
@@ -6433,8 +6446,8 @@ async function renderSocialAwardRequests({supabase,escape:esc},host){
 return {createSocialAwards,renderSocialAwardRequests};
 })();
 
-const __demoModule23=(()=>{
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule20;
+const __demoModule24=(()=>{
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule21;
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);
@@ -6517,7 +6530,7 @@ function createTeamSocialWorkflow(h){
 return {createTeamSocialWorkflow};
 })();
 
-const __demoModule24=(()=>{
+const __demoModule25=(()=>{
 const clean=value=>String(value??'').trim();
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'TH':({1:'ST',2:'ND',3:'RD'}[n%10]||'TH'));
 function dateLabel(value){
@@ -6544,7 +6557,7 @@ function teamSelectionText(card){
 return {teamSelectionText};
 })();
 
-const __demoModule25=(()=>{
+const __demoModule26=(()=>{
 /* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143; local preview cache .225. */
 function createSocialPublishing(h){
  const {supabase}=h,esc=h.escape,demo=!!h.demo;
@@ -6884,7 +6897,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
 return {createSocialPublishing};
 })();
 
-const __demoModule26=(()=>{
+const __demoModule27=(()=>{
 // Balances are participant-seconds; show the equivalent time for four people.
 function videoTime(seconds){
  const minutes=Math.floor(Math.max(0,Number(seconds)||0)/240);
@@ -6959,8 +6972,8 @@ function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sydney',o
 return {videoTime,videoDuration,mountVideoCredits};
 })();
 
-const __demoModule27=(()=>{
-const {mountVideoCredits}=__demoModule26;
+const __demoModule28=(()=>{
+const {mountVideoCredits}=__demoModule27;
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -7277,7 +7290,7 @@ function createSelectionRoom(h){
 return {selectionCallLink,selectionRoomGeometry,selectionCallElapsed,createSelectionRoom};
 })();
 
-const __demoModule29=(()=>{
+const __demoModule30=(()=>{
 /* Local text recognition. Images are passed to a browser worker, never to a reading service.
    Pinned Tesseract engine/language files download from jsDelivr; no image is sent there. */
 function teamWeekReadWords(tsv){
@@ -7329,7 +7342,7 @@ async function readTeamWeekReference(example,background,{candidateNames=[],textC
 return {teamWeekReadWords,teamWeekReadLayout,readTeamWeekReference};
 })();
 
-const __demoModule30=(()=>{
+const __demoModule31=(()=>{
 /* A transparent award guide, not a grade-conversion or selection model.
    Keep source figures intact. Missing context supplies no invented match facts. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
@@ -7422,7 +7435,7 @@ function awardPerformance(p,cards=[]){
 return {awardBalls,awardPerformance};
 })();
 
-const __demoModule31=(()=>{
+const __demoModule32=(()=>{
 /* Basic TOTW uses recorded figures only. Keep Smart's match-context guide separate. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
 const total=(rows,key)=>rows.length&&rows.every(row=>number(row[key])!==null)?rows.reduce((n,row)=>n+number(row[key]),0):null;
@@ -7463,13 +7476,13 @@ function teamWeekBasicRecommendations(candidates){
 return {rawAwardFigures,teamWeekBasicRank,teamWeekBasicRecommendations};
 })();
 
-const __demoModule28=(()=>{
-const {scopedAwardLabel}=__demoModule2;
-const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule9;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule20;
-const {readTeamWeekReference}=__demoModule29;
-const {awardPerformance}=__demoModule30;
-const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule31;
+const __demoModule29=(()=>{
+const {scopedAwardLabel}=__demoModule3;
+const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule10;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule21;
+const {readTeamWeekReference}=__demoModule30;
+const {awardPerformance}=__demoModule31;
+const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule32;
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 function teamWeekFigures(player,display=player.display){
@@ -7749,7 +7762,7 @@ function createTeamOfWeek(h){
 return {teamWeekGrade,teamWeekFigures,teamWeekDisplay,teamWeekOrder,teamWeekWorthwhile,teamWeekDraft,teamWeekRecommendations,teamWeekRank,teamWeekMatchExample,teamWeekLayout,createTeamOfWeek};
 })();
 
-const __demoModule32=(()=>{
+const __demoModule33=(()=>{
 /* One set of club scorecards, reused by Teams awards and Club Batting. */
 const resultWeekEnd=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+(7-d.getUTCDay())%7);return d.toISOString().slice(0,10);};
 const key=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -7798,8 +7811,8 @@ function createSharedMatchResults(h){
 return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,createSharedMatchResults};
 })();
 
-const __demoModule33=(()=>{
-const {graphicLabel}=__demoModule9;
+const __demoModule34=(()=>{
+const {graphicLabel}=__demoModule10;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
  const state=s=>s.awardLabels||(s.awardLabels={weeks:{},loads:{},draft:null,pending:null,busy:false,error:''});
@@ -7841,9 +7854,9 @@ function createSocialAwardLabels(h){
 return {createSocialAwardLabels};
 })();
 
-const __demoModule34=(()=>{
+const __demoModule35=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
-const {weeklyResultCoverage,cardStatus}=__demoModule32;
+const {weeklyResultCoverage,cardStatus}=__demoModule33;
 const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
@@ -7907,9 +7920,9 @@ function createFixtureResults(h){
 return {renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule36=(()=>{
-const {awardPerformance}=__demoModule30;
-const {rawAwardFigures}=__demoModule31;
+const __demoModule37=(()=>{
+const {awardPerformance}=__demoModule31;
+const {rawAwardFigures}=__demoModule32;
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
@@ -7964,11 +7977,11 @@ function playerWeekRecommendations(candidates,profiles={},history=[],end,preferN
 return {playerWeekFigures,playerWeekRecommendations};
 })();
 
-const __demoModule35=(()=>{
-const {scopedAwardLabel}=__demoModule2;
-const {graphicGrade,checkGraphicLabel}=__demoModule9;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule20;
-const {playerWeekFigures,playerWeekRecommendations}=__demoModule36;
+const __demoModule36=(()=>{
+const {scopedAwardLabel}=__demoModule3;
+const {graphicGrade,checkGraphicLabel}=__demoModule10;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule21;
+const {playerWeekFigures,playerWeekRecommendations}=__demoModule37;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
 }
@@ -8105,7 +8118,7 @@ function createPlayerOfWeek(h){
 return {playerWeekLayout,createPlayerOfWeek};
 })();
 
-const __demoModule37=(()=>{
+const __demoModule38=(()=>{
 // Local design trials. Only the explicit Apply action can save club settings.
 function createSocialSandbox(h){
  const names=['Alex Sample','Jordan Sample','Taylor Sample','Casey Sample','Morgan Sample','Riley Sample','Cameron Sample','Sam Sample','Jamie Sample','Charlie Sample','Robin Sample'];
@@ -8208,7 +8221,7 @@ function createSocialSandbox(h){
 return {createSocialSandbox};
 })();
 
-const __demoModule38=(()=>{
+const __demoModule39=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -8247,7 +8260,7 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule39=(()=>{
+const __demoModule40=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -8305,7 +8318,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule40=(()=>{
+const __demoModule41=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -8333,8 +8346,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule41=(()=>{
-const {createTeamWeekDemo}=__demoModule40;
+const __demoModule42=(()=>{
+const {createTeamWeekDemo}=__demoModule41;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -8354,7 +8367,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule42=(()=>{
+const __demoModule43=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -8394,7 +8407,7 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule43=(()=>{
+const __demoModule44=(()=>{
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday) {
   const copy = value => structuredClone(value);
@@ -8452,7 +8465,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule44=(()=>{
+const __demoModule45=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -8561,67 +8574,70 @@ const {createMirelionAssistDemo}=__demoModule0;
 
 const {createMirelionAssist}=__demoModule1;
 
-const {createSocialAwardScopes}=__demoModule2;
+const {assistLaunchFromSearch}=__demoModule2;
 
-const {createSelectionGroupPermissions}=__demoModule3;
+const {createSocialAwardScopes}=__demoModule3;
 
-const {createSelectionGroupPage}=__demoModule4;
+const {createSelectionGroupPermissions}=__demoModule4;
 
-const {createPlayHQImport}=__demoModule6;
+const {createSelectionGroupPage}=__demoModule5;
 
-const {createPlayCricketConnection}=__demoModule8;
+const {createPlayHQImport}=__demoModule7;
 
-const {graphicGrade,checkGraphicLabel}=__demoModule9;
+const {createPlayCricketConnection}=__demoModule9;
 
-const {createClubWeekUI}=__demoModule10;
+const {graphicGrade,checkGraphicLabel}=__demoModule10;
 
-const {createSeasonStatsPanel}=__demoModule12;
+const {createClubWeekUI}=__demoModule11;
 
-const {FIELDING_RATINGS,fieldingLabel}=__demoModule14;
+const {createSeasonStatsPanel}=__demoModule13;
 
-const {createSelectionEvidence}=__demoModule16;
+const {FIELDING_RATINGS,fieldingLabel}=__demoModule15;
 
-const {createScorecardTeams}=__demoModule17;
+const {createSelectionEvidence}=__demoModule17;
 
-const {createSocialAwards,renderSocialAwardRequests}=__demoModule19;
+const {createScorecardTeams}=__demoModule18;
 
-const {createTeamSocialWorkflow}=__demoModule23;
+const {createSocialAwards,renderSocialAwardRequests}=__demoModule20;
 
-const {teamSelectionText}=__demoModule24;
+const {createTeamSocialWorkflow}=__demoModule24;
 
-const {createSocialPublishing}=__demoModule25;
+const {teamSelectionText}=__demoModule25;
 
-const {mountVideoCredits}=__demoModule26;
+const {createSocialPublishing}=__demoModule26;
 
-const {createSelectionRoom}=__demoModule27;
+const {mountVideoCredits}=__demoModule27;
 
-const {createTeamOfWeek,teamWeekLayout}=__demoModule28;
+const {createSelectionRoom}=__demoModule28;
 
-const {createSharedMatchResults}=__demoModule32;
+const {createTeamOfWeek,teamWeekLayout}=__demoModule29;
 
-const {createSocialAwardLabels}=__demoModule33;
+const {createSharedMatchResults}=__demoModule33;
 
-const {createFixtureResults}=__demoModule34;
+const {createSocialAwardLabels}=__demoModule34;
 
-const {createPlayerOfWeek}=__demoModule35;
+const {createFixtureResults}=__demoModule35;
 
-const {createSocialSandbox}=__demoModule37;
+const {createPlayerOfWeek}=__demoModule36;
 
-const {renderSocialPlatformSetup}=__demoModule38;
+const {createSocialSandbox}=__demoModule38;
 
-const {createScorecardTeamDemo}=__demoModule39;
+const {renderSocialPlatformSetup}=__demoModule39;
 
-const {createTeamWeekDemo}=__demoModule40;
+const {createScorecardTeamDemo}=__demoModule40;
 
-const {createPlayerWeekDemo}=__demoModule41;
+const {createTeamWeekDemo}=__demoModule41;
 
-const {createSharedResultsDemo}=__demoModule42;
+const {createPlayerWeekDemo}=__demoModule42;
 
-const {createSeasonStatsDemo}=__demoModule43;
+const {createSharedResultsDemo}=__demoModule43;
 
-const {createSocialAwardsDemo}=__demoModule44;
+const {createSeasonStatsDemo}=__demoModule44;
 
-const {selectionCallLink}=__demoModule27;
+const {createSocialAwardsDemo}=__demoModule45;
+
+const {selectionCallLink}=__demoModule28;
+
 
 
 
@@ -8654,7 +8670,7 @@ const {selectionCallLink}=__demoModule27;
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.270';
+const APP_UI_VERSION='0.8.62.271';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -9854,7 +9870,7 @@ async function routeAuth(){
 }
 
 function authEntryLinks(){
-  return '<p class="help"><a href="./">Mirelion home</a> · <a href="./demo.html?stage=help">Explore the tutorials</a></p>';
+  return '<p class="help"><a href="./">Mirelion home</a> · <a href="./demo.html?stage=help">Explore the tutorials</a> · <a href="./contact.html">Help and contact</a></p>';
 }
 
 // Keep only a short-lived club invitation in this tab. Never store email,
@@ -10180,6 +10196,8 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   capturePhoneLaunch(launchParams);
   const routeClub=launchParams.get('club');
   const routeTab=launchParams.get('tab');
+  const assistLaunch=assistLaunchFromSearch(location.search);
+  if(assistLaunch)pendingAssistLaunch=assistLaunch;
   if(routeClub && !allMemberships.some(m=>m.club_id===routeClub)){
     app.innerHTML=`<div class="login"><div class="section-label">Club Batting</div><h1>This club link is for a different account.</h1><p>Sign in with the email address that received the invitation. If you already use that address, ask your club to check your registration.</p><div class="btnrow"><button class="btn secondary" id="launchSignOut">Sign out</button><button class="btn ghost" id="launchMyClubs">Open my clubs</button></div></div>`;
     document.getElementById('launchSignOut').onclick=()=>signOutClubBatting();
@@ -10191,13 +10209,14 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
     return;
   }
 
-  if(!navigation && !routeClub && platformRole && (launchParams.has('platform') || fixtureLocalStorage.getItem('bdp-context')==='platform')){
+  if(!navigation && !routeClub && platformRole && (launchParams.has('platform') || (routeTab!=='assist'&&fixtureLocalStorage.getItem('bdp-context')==='platform'))){
+    if(assistLaunch)platformView='guide_requests';
     if(launchParams.has('platform')){const target=new URL(location.href);target.searchParams.delete('platform');history.replaceState({},'',target);}
     return renderPlatformConsole();
   }
 
   if(!allMemberships.length){
-    if(platformRole)return renderPlatformConsole();
+    if(platformRole){if(assistLaunch)platformView='guide_requests';return renderPlatformConsole();}
     renderNoClub();
     return;
   }
@@ -10236,8 +10255,8 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=productTrialWaiting()?'products':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(joinedAvailabilityClub===club.id&&selectionsEnabled()){ensureSelections().view='availability';currentTab='teams';joinedAvailabilityClub=null;}
-  if(routeClub===club.id){
-    if(['products','playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app','teams'].includes(routeTab) && canOpenClubTab(routeTab)){
+  if(routeClub===club.id || (!routeClub&&routeTab==='assist')){
+    if(['products','playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app','teams','assist'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
       if(routeTab==='myplan')builderSection='core';
       if(routeTab==='teams'){const q=new URLSearchParams(location.search);ensureSelections().weekLaunch={view:q.get('team_view'),date:q.get('team_date'),fixture:q.get('fixture'),plan:q.get('replacement')};}
@@ -10257,7 +10276,7 @@ function clearClubLaunchRoute(){
   const url=new URL(location.href||`${location.origin}${location.pathname}${location.search}`);
   url.searchParams.delete('club');
   url.searchParams.delete('tab');
-  for(const key of ['message','coaching','prepare','team_view','team_date','fixture','replacement'])url.searchParams.delete(key);
+  for(const key of ['message','coaching','prepare','team_view','team_date','fixture','replacement','assist_thread'])url.searchParams.delete(key);
   history.replaceState({},'',url.pathname+url.search+url.hash);
 }
 
@@ -11569,6 +11588,7 @@ async function openClubSectionHome(nextTab){
 }
 function clubNavigationRoute(){
   const route={scope:'club',clubId:club?.id,tab:currentTab};
+  if(currentTab==='assist')route.assist=mirelionAssist.navigation();
   if(currentTab==='teams'){const s=ensureSelections();route.selections=selectionNavigationRoute(s);}
   if(currentTab==='players')Object.assign(route,{
     playerId:playersWorkspaceSelectedId,playerSection:playersWorkspaceSection,
@@ -11680,7 +11700,7 @@ function bindSelectionBackButtons(){
 }
 
 function platformNavigationRoute(){
-  return {scope:'platform',view:platformView,prospectId:platformSelectedProspectId,onboardingId:platformSelectedOnboardingId};
+  return {scope:'platform',view:platformView,prospectId:platformSelectedProspectId,onboardingId:platformSelectedOnboardingId,...(platformView==='guide_requests'?{assist:mirelionAssist.navigation(true)}:{})};
 }
 function teamReviewNavigationIdentity(saved={}){
   return JSON.stringify([saved.fixture_id||[saved.match_date||'',saved.format_key||'limited_overs',String(saved.opposition||'').trim().replace(/\s+/g,' ').toLowerCase(),saved.group||'__all__'],Number(saved.innings_number)||1]);
@@ -11689,7 +11709,7 @@ function appNavigationKey(route){
   return JSON.stringify([route.scope,route.clubId,route.tab,route.playerId,route.playerId?route.playerSection:null,
     route.playerId?[route.matchOpenId,route.developmentMode,route.developmentMatchId,route.observationEditId]:null,
     route.planSection,route.homeStage,route.tab==='guide'?route.viewState?.guideTopic:null,route.innings?.openId,route.innings?.editId,route.messages?.mode,route.messages?.openId,
-    route.previewKey,route.view,route.prospectId,route.onboardingId,
+    route.previewKey,route.view,route.prospectId,route.onboardingId,route.assist?.threadId,
     route.tab==='make_your_call'?(route.makeYourCall?.results?.view||'board'):null,route.selections,
     route.teamReview?[route.teamReview.view,teamReviewNavigationIdentity(route.teamReview),route.teamReview.observation_player_id]:null,
     route.makeYourCall?.results?.openKind,route.makeYourCall?.results?.openStart]);
@@ -11700,6 +11720,7 @@ function validAppNavigationMarker(marker){
 }
 function restorePlatformNavigationState(route){
   platformView=route.view==='selections'?'clubs':['home','add_clubs','clubs','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
+  if(platformView==='guide_requests')pendingAssistLaunch={threadId:route.assist?.threadId||null,platform:true};
   platformSelectedProspectId=route.prospectId||null;
   platformSelectedOnboardingId=route.onboardingId||null;
 }
@@ -11751,6 +11772,7 @@ function restoreClubNavigationState(route){
   if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
   const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
   currentTab=canOpenClubTab(tab)?tab:selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  if(currentTab==='assist')pendingAssistLaunch={threadId:route.assist?.threadId||null,platform:false};
   if(currentTab==='teams'){const s=ensureSelections(),saved=route.selections||{};s.view=saved.view||'published';s.date=saved.date||'';s.selectionGroup=saved.selectionGroup||'';s.publishedWeek=saved.publishedWeek||'';s.boardDateChosen=!!s.date;s.boardPanel=saved.boardPanel||null;s.followupOpen=saved.followupOpen===true;s.boardChatOpen=typeof saved.boardChatOpen==='string'?saved.boardChatOpen:null;s.boardCommentOpen=typeof saved.boardCommentOpen==='string'?saved.boardCommentOpen:null;s.statsOpen=saved.statsOpen===true;s.statsFilters={grade:saved.statsFilters?.grade||'',format:saved.statsFilters?.format||'',mode:saved.statsFilters?.mode==='bowling'?'bowling':'batting',compare:!!saved.statsFilters?.compare,compareDate:saved.statsFilters?.compareDate||'',firstTeam:saved.statsFilters?.firstTeam||'',secondTeam:saved.statsFilters?.secondTeam||''};s.rosterPanel=saved.rosterPanel||null;s.rosterOpen=saved.rosterOpen||null;s.rosterSearch=saved.rosterSearch||'';s.rosterGrade=saved.rosterGrade||'';s.signupOnly=!!saved.signupOnly;s.active=null;s.navigationDrawer=saved.drawer||null;s.restoreDrawer=saved.drawer||null;s.availabilityPlayerId=typeof saved.availabilityPlayerId==='string'?saved.availabilityPlayerId:null;s.availabilityMonth=/^\d{4}-\d{2}$/.test(saved.availabilityMonth||'')?saved.availabilityMonth:null;restoreSocialNavigation(saved.social);}
   if(currentTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=route.makeYourCall?.week||null;s.season=route.makeYourCall?.season||null;s.month=route.makeYourCall?.month||null;restoreCallResultsState(route.makeYourCall?.results||{});}
   if(currentTab==='players'){
@@ -26431,7 +26453,9 @@ async function renderPlatformView(){
 }
 
 async function renderPlatformGuideRequests(){
-  return mirelionAssist.mount(document.getElementById('platformPage'));
+  const launch=pendingAssistLaunch;pendingAssistLaunch=null;
+  if(launch){const url=new URL(location.href);url.searchParams.delete('assist_thread');url.searchParams.delete('tab');history.replaceState(history.state,'',url);}
+  return mirelionAssist.mount(document.getElementById('platformPage'),launch||{});
 }
 
 function marketResearchClubReady(club,now=Date.now()){
@@ -31773,10 +31797,11 @@ const clubWeek=createClubWeekUI({
  calendarBase:SUPABASE_URL+'/functions/v1/selection-calendar'
 });
 
-let assistFromGuide=false;
+let assistFromGuide=false,pendingAssistLaunch=null;
 const mirelionAssist=createMirelionAssist({
   supabase,
   getContext:()=>({userId:session?.user?.id,clubId:club?.id,platform:!!(platformRole&&document.getElementById('platformPage'))}),
+  onNavigate:()=>recordAppNavigation(document.getElementById('platformPage')?platformNavigationRoute():clubNavigationRoute()),
   onUnread:(count,context)=>{
     const targets=context?.platform?'[data-platform-view="guide_requests"]':'[data-tab="assist"],#clubMenuToggle';
     for(const button of document.querySelectorAll(targets)){
@@ -31790,7 +31815,8 @@ const mirelionAssist=createMirelionAssist({
 });
 async function renderMirelionAssist(){
   const includeGuide=assistFromGuide;assistFromGuide=false;
-  return mirelionAssist.mount(document.getElementById('page'),{newMessage:includeGuide,includeGuide});
+  const launch=pendingAssistLaunch;pendingAssistLaunch=null;
+  return mirelionAssist.mount(document.getElementById('page'),{...launch,newMessage:includeGuide,includeGuide});
 }
 
 

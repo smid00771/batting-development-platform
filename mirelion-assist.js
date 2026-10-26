@@ -1,9 +1,9 @@
 const escapeAssist=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const assistCategories={help:'Help with the platform',enquiry:'Product enquiry',idea:'Suggest a change'};
+const assistCategories={help:'Help with the platform',enquiry:'Products and subscriptions',idea:'Suggest a change'};
 const assistTime=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 const assistStatus=(t,platform)=>t.status==='resolved'?'Resolved':t.last_side==='club'?(platform?'Needs a reply':'Waiting for Mirelion'):(platform?'Waiting for club':'Mirelion replied');
 
-export function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=false}){
+export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavigate=()=>{},demo=false}){
  const states=new Map();let mounted=null,timer=null,identity=null,epoch=0;
  const scope=c=>c?.userId?(c.platform?'platform':c.clubId)?`${c.userId}:${c.platform?'platform':c.clubId}`:'':'';
  const current=c=>scope(c)===scope(getContext());
@@ -66,7 +66,7 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=f
     ${isNew?`<div class="assist-fields"><label>What is this about?<select name="category">${Object.entries(assistCategories).map(([v,l])=>`<option value="${v}" ${d.category===v?'selected':''}>${l}</option>`).join('')}</select></label><label>Subject<input name="subject" maxlength="120" required value="${escapeAssist(d.subject)}" placeholder="A short description"></label></div>`:''}
     <label>${isNew?'Your message':'Reply'}<textarea name="body" maxlength="6000" rows="3" required placeholder="${isNew?'Tell us what your club needs…':'Write your reply…'}">${escapeAssist(d.body)}</textarea></label>
     ${isNew?`<label class="assist-include"><input type="checkbox" name="include_guide" ${d.include_guide?'checked':''}> Include my recent Guide conversation</label>`:''}
-    <div class="btnrow"><button class="btn secondary" type="submit" data-assist-send>Send message</button><small class="help">${demo?'Demo only · messages stay in this tab':'Replies stay here · updates automatically'}</small></div>
+    <div class="btnrow"><button class="btn secondary" type="submit" data-assist-send>Send message</button><small class="help">${demo?'Demo only · messages stay in this tab':c.platform?'Reply in Assist · email alerts link back here':'Replies stay here · unread replies get an email alert'}</small></div>
    </form>`;
   pane.querySelector('form').oninput=()=>{
    const f=pane.querySelector('form');saveDraft(s,{body:f.elements.body.value,...(isNew?{subject:f.elements.subject.value,category:f.elements.category.value,include_guide:f.elements.include_guide.checked}:{})});
@@ -90,7 +90,7 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=f
   if(!valid(m)||m.s.busy)return;
   if(m.s.pending&&m.s.selected!==id){status(m,'Retry the unconfirmed message before opening another conversation.');return;}
   m.s.selected=id;m.detail=null;m.messages=[];m.lastRead=null;m.oldestLoaded=false;m.hasOlder=false;m.threadBusy=false;m.loadVersion=(m.loadVersion||0)+1;
-  renderList(m);renderCompose(m);status(m,'');if(id)await loadThread(m);
+  renderList(m);renderCompose(m);status(m,'');if(id)await loadThread(m);if(valid(m))onNavigate();
  }
  function renderMessages(m){
   const box=m.host.querySelector('[data-assist-messages]');if(!box)return;
@@ -173,13 +173,13 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=f
    host.querySelectorAll('[data-assist-legacy-close]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await rpc(m.context,'legacy_close',{thread_id:b.dataset.assistLegacyClose});await legacyRequests(m);}catch(e){status(m,e.message);b.disabled=false;}});
   }catch(e){status(m,'Earlier requests could not load. '+e.message);}
  }
- async function mount(host,{newMessage=false,includeGuide=false}={}){
+ async function mount(host,{newMessage=false,includeGuide=false,threadId}={}){
   const c=getContext();if(!host||!scope(c))return;
   if(identity&&identity!==c.userId)reset();identity=c.userId;
-  const s=state(c);if(newMessage&&!s.pending)s.selected=null;if(includeGuide)s.newDraft.include_guide=true;
+  const s=state(c);if(threadId!==undefined&&!s.pending)s.selected=threadId;if(newMessage&&!s.pending)s.selected=null;if(includeGuide)s.newDraft.include_guide=true;
   const m={host,s,context:{...c},epoch,detail:null,messages:[],loadVersion:0};mounted=m;
   host.innerHTML=`${assistStyles()}<section class="assist"><header class="assist-heading"><div><h1>Mirelion Assist</h1><p>${c.platform?'Club messages and requests':'Personal support for your club'}</p></div>${c.platform?'':'<button type="button" class="btn secondary" data-assist-new>Message us</button>'}</header>
-   ${c.platform?'<p class="help">Read, reply and follow up with clubs here.</p>':'<p class="help">Message the team for help or suggest a change. We aim for a live exchange when time zones overlap; replies stay here.</p><details class="assist-promise"><summary>Changes for your club</summary><p>We build requested improvements when we believe they add to the product. Some requests may work as an option just for your club. We’ll agree what is possible, the scope and timing with you.</p></details>'}
+   ${c.platform?'<p class="help">Read and reply here. New unread club messages alert support@mirelionhq.com; email alerts open the same conversation.</p>':'<p class="help">Message us for help, problems or ideas. Your conversation stays here; we’ll email you when an unread reply is waiting.</p><details class="assist-promise"><summary>Support, email and changes for your club</summary><p>Email alerts link back to this conversation. Reply here to keep the history together. If you cannot use Assist, email <a href="mailto:support@mirelionhq.com">support@mirelionhq.com</a>. Direct emails are handled by email and are not automatically added here.</p><p>We aim for a live exchange when time zones overlap. We’ll agree what is possible, the scope and timing of requested changes. Useful improvements may become shared features; some requests may suit an option just for your club.</p></details>'}
    ${demo?'<p class="help"><strong>Fictional demonstration.</strong> Messages and example replies stay in this tab.</p>':''}
    <div class="assist-layout"><aside class="assist-inbox" aria-label="Assist conversations"><div class="assist-filters"><label class="assist-sr-only" for="assistFilter">Conversation status</label><select id="assistFilter" data-assist-filter><option value="open">Open</option><option value="resolved">Resolved</option></select><label class="assist-sr-only" for="assistSearch">Search conversations</label><input id="assistSearch" data-assist-search type="search" ${s.threads.length||s.search||s.offset?'':'hidden'} placeholder="Search conversations…" value="${escapeAssist(s.search)}"></div><div data-assist-list>Loading messages…</div><div class="btnrow"><button class="btn ghost" type="button" data-assist-previous hidden>Previous</button><button class="btn ghost" type="button" data-assist-more hidden>More conversations</button></div></aside><section class="assist-conversation"><div data-assist-conversation></div><p data-assist-feedback class="help" role="status" aria-live="polite"></p></section></div></section>`;
   m.root=host.querySelector('.assist');
@@ -190,9 +190,9 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},demo=f
   host.querySelector('[data-assist-more]').onclick=()=>{s.offset+=50;host.querySelector('[data-assist-previous]').hidden=false;void refresh(m);};
   host.querySelector('[data-assist-previous]').onclick=()=>{s.offset=Math.max(0,s.offset-50);host.querySelector('[data-assist-previous]').hidden=!s.offset;void refresh(m);};
   host.querySelector('[data-assist-new]')?.addEventListener('click',()=>void open(m,null));
-  renderCompose(m);await refresh(m);await legacyRequests(m);schedule();
+  renderCompose(m);await refresh(m);await legacyRequests(m);schedule();if(valid(m))onNavigate();
  }
- return {mount,start,reset,unread,hasChanges,canLeave,home:()=>{const s=states.get(scope(getContext()));if(s&&!s.pending){s.selected=null;s.filter='open';s.offset=0;}},refresh:()=>mounted?refresh(mounted):unread()};
+ return {mount,start,reset,unread,hasChanges,canLeave,navigation:(platform=false)=>({threadId:states.get(scope({...getContext(),platform}))?.selected||null}),home:()=>{const s=states.get(scope(getContext()));if(s&&!s.pending){s.selected=null;s.filter='open';s.offset=0;}},refresh:()=>mounted?refresh(mounted):unread()};
 }
 
 function assistStyles(){return `<style>
