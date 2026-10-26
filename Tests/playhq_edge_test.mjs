@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {sharedScorecard} from '../Functions/playhq-sync/shared-scorecard.mjs';
 let handler;
 globalThis.Deno={env:{get:name=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon-test',SUPABASE_SERVICE_ROLE_KEY:'service-test'})[name]},serve:fn=>handler=fn};
 await import('../Functions/playhq-sync/index.ts');
@@ -70,5 +72,60 @@ test('an existing check lease returns a useful retry response without exposing a
   assert.equal(r.status,message.startsWith('private')?400:409);assert.ok(!body.includes('club-secret-test'));
   if(message.startsWith('A check'))assert.match(body,/five minutes/);
   if(message.startsWith('Wait'))assert.match(body,/30 seconds/);
+ }
+});
+
+test('Socials logo access is checked before reading a snapshot, credentials or provider data',async()=>{
+ const calls=[];globalThis.fetch=async(url,opts)=>{calls.push(String(url));assert.equal(opts.headers.Authorization,'Bearer user-test');assert.equal(JSON.parse(opts.body).p_action,'settings');return json({message:'Socials access required'},403);};
+ const r=await handler(request({action:'logos',club_id:club,snapshot_id:'snapshot'}));
+ assert.equal(r.status,400);assert.deepEqual(calls,['https://test.supabase.co/rest/v1/rpc/club_social_awards_api']);
+});
+
+test('logos use the authorised stored match and paginated season, never browser source IDs',async()=>{
+ const season='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',grade='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',match='cccccccc-cccc-4ccc-8ccc-cccccccccccc',source='dddddddd-dddd-4ddd-8ddd-dddddddddddd',logo='https://res.cloudinary.com/playhq/image/upload/v1/test.png';
+ let pages=0;
+ globalThis.fetch=async(url,opts)=>{
+  const endpoint=String(url);
+  if(endpoint.endsWith('/club_social_awards_api'))return json({enabled:['results']});
+  if(endpoint.endsWith('/playhq_logo_context')){assert.equal(opts.headers.Authorization,'Bearer service-test');assert.deepEqual(JSON.parse(opts.body),{p_club_id:club,p_snapshot_id:'saved-snapshot'});return json({season_id:season,grade_id:grade,match_id:match,teams:[{id:'saved-team',source_team_id:source}]});}
+  if(endpoint.endsWith('/playhq_sync_worker'))return json({key:'club-secret-test',generation:'logo-generation'});
+  assert.equal(opts.headers.Authorization,undefined);assert.equal(opts.headers['x-api-key'],'club-secret-test');
+  if(endpoint.endsWith('/summary')){assert.ok(endpoint.includes(match));return json({data:{id:match,gradeId:grade,teams:[{id:source,organisation:{id:association}}]}});}
+  pages++;assert.ok(endpoint.includes('/seasons/'+season+'/teams'));
+  return pages===1?json({data:[],metadata:{hasMore:true,nextCursor:'next'}}):json({data:[{id:'different-season-team',club:{id:association,logo:{sizes:[{url:logo}]}}}],metadata:{hasMore:false}});
+ };
+ const r=await handler(request({action:'logos',club_id:club,snapshot_id:'saved-snapshot',match_id:'untrusted',season_id:'untrusted'})),body=await r.text();
+ assert.equal(r.status,200);assert.equal(pages,2);assert.equal(JSON.parse(body).teams[0].id,'saved-team');assert.equal(JSON.parse(body).teams[0].logo_url,logo);assert.ok(!body.includes('club-secret'));assert.ok(!body.includes('players'));
+});
+
+test('unlinked or cross-club snapshots stop before credential access',async()=>{
+ let calls=0;globalThis.fetch=async(url)=>{calls++;if(String(url).endsWith('/club_social_awards_api'))return json({});assert.ok(String(url).endsWith('/playhq_logo_context'));return json({message:'Linked scorecard unavailable'},400);};
+ const r=await handler(request({action:'logos',club_id:club,snapshot_id:'other-club-snapshot'}));assert.equal(r.status,400);assert.equal(calls,2);
+});
+
+test('future imports retain all score identities and figures; failed artwork does not stop scores',async()=>{
+ const raw=JSON.parse(fs.readFileSync(new URL('./fixtures/playhq/summary-v2.json',import.meta.url),'utf8'));
+ const season='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',context={season_id:season,timezone:'Australia/Melbourne',source_fixture:{source_match_id:raw.data.id,source_grade_id:raw.data.gradeId,source_team_id:raw.data.teams[0].id,format:'t20',days:[{date:'2023-11-25'}]}};
+ const before=await sharedScorecard(raw,context);
+ for(const fail of [false,true]){
+  let saved;
+  globalThis.fetch=async(url,opts)=>{
+   const endpoint=String(url);
+   if(endpoint.endsWith('/playhq_sync_api'))return json({});
+   if(endpoint.endsWith('/playhq_sync_worker')){
+    const b=JSON.parse(opts.body);
+    if(b.p_action==='connection')return json({key:'club-secret-test',generation:'import-logos-'+fail});
+    if(b.p_action==='claim_fixture')return json({kind:'results',source_id:raw.data.id,team_id:raw.data.teams[0].id});
+    if(b.p_action==='scorecard_context')return json(context);
+    if(b.p_action==='finish'){saved=b.p_data.result.shared_scorecard;return json({saved:true});}
+    throw Error('Unexpected action '+b.p_action);
+   }
+   if(endpoint.endsWith('/summary'))return json(raw);
+   if(fail)return json({},503);
+   return json({data:raw.data.teams.map(t=>({id:t.id,grade:{id:raw.data.gradeId},club:{id:t.organisation.id,logo:{sizes:[{url:'https://assets.playhq.com/ca/test/logo.png'}]}}})),metadata:{hasMore:false}});
+  };
+  const r=await handler(request({action:'check',club_id:club,fixture_id:'fixture',kind:'results'}));assert.equal(r.status,200);
+  assert.equal(saved.match_id,before.match_id);assert.deepEqual(saved.innings,before.innings);assert.deepEqual(saved.teams.map(t=>[t.id,t.players]),before.teams.map(t=>[t.id,t.players]));
+  assert.equal(!!saved.teams[0].logo_url,!fail);
  }
 });

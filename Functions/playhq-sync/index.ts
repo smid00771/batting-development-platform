@@ -1,5 +1,7 @@
 import {linkedScorecard} from './linked-scorecard.mjs';
 import {publicAPI,clubTeams,gradeFixtures,gameSummary} from './public-api.mjs';
+import {teamLogos,summaryLogoTeams,seasonLogoCache} from './team-logos.mjs';
+const cachedSeasonTeams=seasonLogoCache();
 const origins=new Set(['https://mirelionhq.com','https://www.mirelionhq.com','https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
@@ -16,6 +18,7 @@ Deno.serve(async(req:Request)=>{
  }
  let club:string|undefined,connection:any;
  const worker=(action:string,data:unknown={})=>rpc('playhq_sync_worker',{p_action:action,p_data:{club_id:club,generation:connection?.generation,...data as object}},true);
+ const logoTeams=(api:any,season:string)=>cachedSeasonTeams(`${club}:${connection.generation}:${season}`,()=>api.teams(season));
  async function checkJob(job:any){
   const api=publicAPI({key:connection.key});
   try{
@@ -28,7 +31,12 @@ Deno.serve(async(req:Request)=>{
    else {
     const context=await worker('scorecard_context',{match_id:job.source_id,team_id:job.team_id});
     const body=await api.summary(job.source_id);
-    result={...gameSummary(body,job.source_id),shared_scorecard:await linkedScorecard(body,context)};
+    const card=await linkedScorecard(body,context);
+    if(card?.provider==='playhq_au'&&context.season_id){
+     // Artwork failure must not stop score imports. Results can retry on demand.
+     try{const logos=await teamLogos(card.teams,await logoTeams(api,context.season_id),card.upstream_grade_id);card.teams=card.teams.map((t:any)=>({...t,...logos.find((l:any)=>l.id===t.id)}));}catch{}
+    }
+    result={...gameSummary(body,job.source_id),shared_scorecard:card};
    }
    await worker('finish',{job,result});return reply({checked:1});
   }catch(error){
@@ -48,6 +56,14 @@ Deno.serve(async(req:Request)=>{
    return await checkJob(job);
   }
   club=input.club_id;
+  if(input.action==='logos'){
+   // Socials Managers need artwork access, not selector/configuration authority.
+   await rpc('club_social_awards_api',{p_club_id:club,p_action:'settings',p_data:{}});
+   const context=await rpc('playhq_logo_context',{p_club_id:club,p_snapshot_id:input.snapshot_id},true);
+   connection=await worker('connection');const api=publicAPI({key:connection.key});
+   const teams=context.teams.every((t:any)=>t.source_organisation_id)?context.teams:summaryLogoTeams(context.teams,await api.summary(context.match_id),context.match_id,context.grade_id);
+   return reply({teams:await teamLogos(teams,await logoTeams(api,context.season_id),context.grade_id)});
+  }
   // This user-scoped RPC checks membership and selector/admin authority before key access.
   await rpc('playhq_sync_api',{p_club_id:club,p_action:'status',p_data:{}});
   connection=await worker('connection');const api=publicAPI({key:connection.key});

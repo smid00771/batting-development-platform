@@ -31,7 +31,7 @@ export async function sharedScorecard(body,context){
  const teams=game.teams.map(t=>{
   const members=game.appearances.filter(a=>a.teamId===t.id&&a.roleType==='Player');
   const players=members.map(a=>({player_id:a.visible===true?ids.get(a.id):null,name:a.visible===true?text([a.firstName,a.lastName].filter(Boolean).join(' ')):null}));
-  return {id:teamIds.get(t.id),name:text(t.name),organisation:text(t.organisation?.name),organisation_id:null,
+  return {id:teamIds.get(t.id),name:text(t.name),organisation:text(t.organisation?.name),organisation_id:null,source_organisation_id:t.organisation?.id||null,
    source_team_id:t.id,lineup_available:players.length>0&&players.length<=30&&players.every(p=>p.player_id&&p.name),players};
  });
  const warnings=[],innings=[],counts=new Map();

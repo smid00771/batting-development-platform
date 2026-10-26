@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.272",
+  "appVersion": "0.8.62.273",
   "sources": {
     "app-design.css": "418152d2e9b3e80e76c23a65ab98559717c862300da94051a74026d382af7758",
-    "app.js": "16ae0298b3e5f43ab8dd517d6548875edba772743b92fa7af090a09cb56ec7ac",
+    "app.js": "42808abca5082cfba6e708c48319843400cea984ec429065eb206e417f1c723c",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
@@ -43,7 +43,7 @@
     "social-awards-demo.js": "8d0ab9202439ab3ac97ad5300208b74aa5bf84e81454e6a7331f3732947a9f75",
     "social-awards-design.js": "e5936db242c8036b393c33b99d35bb68ef29821e7a3e66583853bdb0f083728d",
     "social-awards-model.js": "864b978dc31c3b233dc7876facfa69aabd2852f728261f0ef0bbf21ddc62416b",
-    "social-awards.js": "07053593fc292dd10f89e2beec04b7f2b115e4604235db0a3d0daa4cca475e74",
+    "social-awards.js": "e65e710fcd9f72b4756276be7bb1a83d15e6644d36aebeb55b90d73d022385e0",
     "social-graphic-assistant.js": "21cebf3a5550ab00de5fbb125c6405fff8ef3f16aec8ab44efacd1b884a7cfb0",
     "social-graphic-design.js": "7e917309e17f4eb0414830ecd1d88a11dec9c6fbcb805c6f6000d5b5ba3620b4",
     "social-platform-setup.js": "5cb47516ce5a4f1e35df454721764fd687e9a710059d06fd69e8351fa72b5547",
