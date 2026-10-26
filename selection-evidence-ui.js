@@ -1,5 +1,6 @@
 import {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.275';
 import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.262';
+import {returningPlayers, returningComparison} from './selection-returning.js?v=0.8.62.276';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
@@ -13,22 +14,29 @@ export const evidenceStyles=`<style>
 .se-evidence-compact:has(.se-evidence-link){display:grid;grid-template-columns:repeat(2,21px);align-content:center;gap:1px 3px}.se-evidence-compact .se-evidence-link{grid-column:1/-1;text-align:center;white-space:normal;font-size:10px;line-height:12px;overflow-wrap:anywhere}
 .se-evidence-connectors .se-evidence-hit{stroke:transparent;stroke-width:24;stroke-dasharray:none;fill:none;pointer-events:stroke;cursor:pointer}.se-evidence-connectors [role=button]:focus-visible{outline:none;opacity:1;stroke-width:3}.se-evidence-connectors [role=button]:focus-visible .se-evidence-line{stroke:#17245f}
 .se-other-grades{font-size:13px;overflow-wrap:anywhere}.se-other-grades small{color:#52627a;font-size:12px}
+.se-return-linked{box-shadow:inset 0 0 0 1px #38857d;border-radius:6px}.se-return-mark{color:#21665f;font-weight:700}.se-evidence-compact .se-return-mark{white-space:nowrap}.se-return-team,#app .se-return-team{display:inline-flex;align-items:center;min-height:44px;padding:0 2px;margin:-14px 0;border:0;background:transparent;color:#21665f;font:600 11px/18px system-ui;text-decoration:underline;cursor:pointer}.se-return-choice{display:block;min-height:44px;width:100%;margin:4px 0;padding:7px;text-align:left;border:1px solid #cdd6e3;border-radius:6px;background:white;color:#24344c;font:inherit;cursor:pointer}.se-return-choice small{display:block;font-size:12px;color:#52627a}
 </style>`;
 
-export function renderEvidenceBadges(item,key=item?.key,{compact=false}={}) {
+export function renderEvidenceBadges(item,key=item?.key,{compact=false,form=true}={}) {
   if (!item || !key) return '';
   const parts=[], labels=[];let link='';
-  for (const [kind,label] of [['bat','Batting'],['ball','Bowling']]) {
+  for (const [kind,label] of form?[['bat','Batting'],['ball','Bowling']]:[]) {
     const evidence=item[kind]; if (!evidence) continue;
     const icon=kind==='bat'?'<path d="m14 3 3 3-8 11-5-5Z"/><path d="m16 4 3-3"/>':'<circle cx="10" cy="10" r="7"/><path d="M6 4c5 3 3 9 8 12"/>';
     parts.push(compact?`<span class="se-evidence-chip se-evidence-mark ${evidence.state}" data-evidence-kind="${kind}" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false">${icon}</svg></span>`:`<span class="se-evidence-chip ${evidence.state}">${label}: ${states[evidence.state][0]} ${states[evidence.state][1]}</span>`);
     labels.push(label+': '+states[evidence.state][1]+(evidence.early?' (early sample)':''));
   }
-  if (item.links.some(p=>p.number)) {
+  if (form&&item.links.some(p=>p.number)) {
     const shown=item.links.filter(p=>p.number);
     const tradeoff=shown.every(p=>p.kind==='tradeoff');
     link=compact?`<span class="se-evidence-link ${tradeoff?'tradeoff':''}" aria-hidden="true">${tradeoff?'≈':'↔'}${shown.map(p=>p.number).join('·')}</span>`:`<span class="se-evidence-chip se-evidence-link ${tradeoff?'tradeoff':''}">${shown.map(p=>(p.kind==='tradeoff'?'≈':'↔')+p.number).join(' ')}</span>`;
     labels.push(...shown.map(p=>'Comparison '+p.number+' with '+(p.higher.key===item.key?p.lower:p.higher).person.name));
+  }
+  if(item.returns?.length){
+    const names=[...new Set(item.returns.map(pair=>pair.entry.person.name))];
+    labels.push('Potential in: '+names.join(', '));
+    const mark=`<span class="se-return-mark" aria-hidden="true">↩${names.length}</span>`;
+    link=link?link.replace('</span>',' · '+mark+'</span>'):`<span class="se-evidence-link">${compact?mark:'Potential in '+mark}</span>`;
   }
   return parts.length||link?`<button type="button" class="se-evidence-button${compact?' se-evidence-compact':''}" data-evidence-open="${escape(key)}" aria-label="${escape(item.person.name+': Form guide. '+labels.join('; ')+'. View performance details')}" title="${escape(labels.join(' · '))}">${compact?parts.join('')+link:`<span class="se-evidence-title">Form guide${item.bat?.early||item.ball?.early?' · early':''}${link}</span>${parts.join('')}`}</button>`:'';
 }
@@ -38,6 +46,16 @@ function record(item) {
   const batting=s.batting_complete===false?'Figures incomplete':`${s.runs} runs · ${s.innings} inns · ${s.not_outs} not out`;
   const bowling=s.bowling_complete===false?'Figures incomplete':`${s.wickets} wickets · ${statsOvers(s.bowling_balls)??'—'} overs · ${s.bowling_innings} inns · ${s.wickets?decimal(s.conceded/s.wickets):'—'} average · ${decimal(s.economy)} economy`;
   return `<p><strong>${number(s.average)} batting average</strong><small>${escape(batting)}</small></p>${item.ball?.applicable?`<p><strong>${escape(bowling)}</strong></p>`:''}`;
+}
+const returnDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(value+'T12:00:00Z')):'';
+const returnDays=pair=>pair.entry.team.days.length>1?' · '+pair.target.days.map(day=>'Day '+(day+1)).join(' / '):'';
+function returnRecord(stats,person){return stats.matches?record({stats,ball:{applicable:['pace','spin'].includes(person?.bowling)||stats.bowling_balls>0}})+(stats.bowling_complete&&stats.bowling_balls?`<p class="se-evidence-small">${decimal(stats.wickets*100/stats.bowling_balls)} wickets/100 balls</p>`:''):'<p class="se-evidence-small">No saved figures for this period.</p>';}
+function returnDetails(pair,index=0){
+  const {entry,target,incoming,current,notes}=pair,other=target.incumbent;
+  return `<details class="se-evidence-pair" ${index===0?'open':''}><summary><strong>${escape(entry.person.name)} → ${escape(other?.name||'Vacant place')} · No. ${target.position}${escape(returnDays(pair))}</strong><small>Potential in · available again${pair.early?' · early samples':''}${target.joinedDuringAbsence?' · current player joined this team during the absence':''}</small></summary><p class="se-evidence-small">${escape(entry.person.name)} was unavailable for ${entry.missed.length} ${entry.missed.length===1?'game':'games'} in ${escape(entry.team.grade)}; last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><div class="se-evidence-pair-grid"><div><strong>${escape(entry.person.name)}</strong><small>Before absence · last ${incoming.matches} recorded ${incoming.matches===1?'game':'games'} (up to 3)</small><small>${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))}</small><small>Fielding: ${escape(fieldingLabel(entry.person))}</small>${returnRecord(incoming,entry.person)}</div><div><strong>${escape(other?.name||'Vacant place')}</strong>${other?`<small>While away · ${current.matches} of ${entry.missed.length} ${entry.missed.length===1?'game':'games'} recorded</small><small>${escape(battingRoleLabel(other))} · ${escape(bowlingRoleLabel(other))}</small><small>Fielding: ${escape(fieldingLabel(other))}</small>${returnRecord(current,other)}`:'<p>This place is currently vacant.</p>'}</div></div>${notes.map(note=>`<p class="se-evidence-small">${escape(note)}</p>`).join('')}<p class="se-evidence-small">Separate periods in the same grade and format. These figures support a selection discussion; returning availability does not reserve a place.</p></details>`;
+}
+function returnTeamDetails(entries,pairs){
+  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">Potential ins</h2><p class="se-evidence-small">${escape(entries[0].team.grade)} · ${escape(returnDate(entries[0].team.days[0].date))}</p></div><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${entries.map(entry=>`<h3>${escape(entry.person.name)}</h3><p class="se-evidence-small">Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected at No. ${entry.position}.</p>${pairs.flatMap((pair,index)=>pair.entry.key===entry.key?[`<button class="se-return-choice" type="button" data-return-compare="${index}">Compare with ${escape(pair.target.incumbent?.name||'vacant place')} · No. ${pair.target.position}${escape(returnDays(pair))}<small>${pair.target.joinedDuringAbsence?'Joined this team during the absence':'Matching recorded role and place'}</small></button>`]:[]).join('')||'<p class="se-evidence-small">No matching place identified from the saved roles and available dates. Review the playing-list attributes and team balance.</p>'}`).join('')}`;
 }
 function otherGradeRecords(item) {
   const stats=item.otherGrades?.[0];
@@ -77,7 +95,7 @@ function assessmentDetails(item,key,label,job) {
   return `<div><strong>${label} <span class="se-evidence-chip ${evidence.state}">${states[evidence.state][0]} ${states[evidence.state][1]}</span></strong><span class="se-evidence-small">${escape(job)}</span><p class="se-evidence-small">${escape(reason)}</p>${base?`<small class="se-evidence-small">Grade reference: ${escape(reference)}</small>`:''}${evidence.ready||evidence.early?`<p class="se-evidence-sample">${evidence.early?'Early sample · ':''}${escape(actual)}</p>`:''}</div>`;
 }
 export function renderEvidenceDetails(item) {
-  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}<p class="se-evidence-small">Fielding: <strong>${escape(fieldingLabel(item.person))}</strong> · selector rating</p>${otherGradeRecords(item)}${item.links.length?`<h3>Selection conversations</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No selection conversation meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
+  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.returns?.length?'<h3>Potential ins</h3>'+item.returns.map(returnDetails).join(''):''}${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}<p class="se-evidence-small">Fielding: <strong>${escape(fieldingLabel(item.person))}</strong> · selector rating</p>${otherGradeRecords(item)}${item.links.length?`<h3>Selection conversations</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No selection conversation meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
 }
 export function renderEvidenceComparison(pair) {
   const early=[pair.higher,pair.lower].some(item=>item.bat?.early||item.ball?.early);
@@ -228,6 +246,8 @@ export function createSelectionEvidence(h) {
     clearEvidenceLinks(b.host);
     b.host.querySelector('.se-evidence-dialog')?.remove();
     b.host.querySelectorAll('[data-se-evidence]').forEach(slot=>{slot.replaceChildren();slot.closest('.se-player-cell')?.classList.remove('se-has-evidence');});
+    b.host.querySelectorAll('[data-return-control]').forEach(el=>el.remove());
+    b.host.querySelectorAll('.se-return-linked').forEach(el=>el.classList.remove('se-return-linked'));
   }
   function bindVisibility(b) {
     let storage;
@@ -244,25 +264,42 @@ export function createSelectionEvidence(h) {
       if(!here(b))return;
       b.visible=toggle.checked;preferences.set(b.scope,b.visible);
       try{storage?.setItem(preferenceKey(b.scope),b.visible?'1':'0');}catch{}
-      if(b.visible)void load(b);else clear(b);
+      if(b.visible||b.returningEnabled)void load(b);else clear(b);
     };
   }
   function paint(b,data) {
-    if(!here(b)||!b.visible)return;
+    if(!here(b)||!b.visible&&!b.returningEnabled)return;
     const teams=resolveSelectionStatsTeams(b.teams,data.season,b.referenceTeams||b.teams);
-    const model=buildSelectionEvidence(buildSeasonStats(data),teams,b.roster);
+    const summary=buildSeasonStats(data),model=buildSelectionEvidence(summary,teams,b.roster);
+    const returns=b.returningEnabled?returningPlayers({teams,references:resolveSelectionStatsTeams(b.referenceTeams||[],data.season),roster:b.roster,season:data.season,today:b.today||data.today,noPlay:data.fixtures.filter(f=>f.no_play).map(f=>f.id),eligible:b.returningEligible}):[];
+    const returnPairs=returns.flatMap(entry=>entry.targets.map(target=>returningComparison(entry,target,summary)));
+    for(const item of model.players.values())item.returns=returnPairs.filter(pair=>pair.entry.team.id===item.team.id&&pair.target.incumbent?.id===item.person.id);
+    if(!b.visible){model.pairs=[];for(const item of model.players.values())item.links=[];}
     b.host.querySelector('.se-evidence-dialog')?.remove();
     b.host.querySelector('[data-evidence-styles]')?.remove();
     const styles=b.host.ownerDocument.createElement('div');styles.dataset.evidenceStyles='';styles.innerHTML=evidenceStyles;b.host.append(styles);
     b.host.querySelectorAll('[data-se-evidence]').forEach(slot=>{
       const item=model.player(slot.dataset.evidenceFixture,slot.dataset.evidencePlayer);
-      slot.innerHTML=renderEvidenceBadges(item,item?.key,{compact:true});
+      slot.innerHTML=renderEvidenceBadges(item,item?.key,{compact:true,form:b.visible});
       slot.closest('.se-player-cell')?.classList.toggle('se-has-evidence',!!slot.innerHTML);
+      slot.closest('.se-player-cell')?.classList.toggle('se-return-linked',!!item?.returns?.length);
     });
     bindEvidenceDetails(b.host,model,()=>here(b));
+    b.host.querySelectorAll('[data-return-control]').forEach(el=>el.remove());
+    for(const card of b.host.querySelectorAll('[data-se-team]')){
+      const entries=returns.filter(entry=>entry.team.id===card.dataset.seTeam),heading=card.querySelector('.se-team-state');
+      if(!entries.length||!heading)continue;
+      const control=card.ownerDocument.createElement('span');control.dataset.returnControl='';control.append(' · ');
+      const button=card.ownerDocument.createElement('button');button.type='button';button.className='se-return-team';button.textContent=entries.length+' potential in'+(entries.length===1?'':'s');button.setAttribute('aria-label','Potential ins for '+entries[0].team.grade+': '+entries.map(entry=>entry.person.name).join(', '));control.append(button);heading.append(control);
+      button.onclick=()=>{if(!here(b))return;showEvidenceDialog(b.host,returnTeamDetails(entries,returnPairs),button);
+        b.host.querySelectorAll('[data-return-compare]').forEach(choice=>choice.onclick=()=>{if(!here(b))return;const pair=returnPairs[Number(choice.dataset.returnCompare)];if(!pair)return;
+          showEvidenceDialog(b.host,`<div class="se-evidence-heading"><h2 id="seEvidenceTitle">Potential in</h2><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${returnDetails(pair)}`,button);
+        });
+      };
+    }
   }
   async function load(b) {
-    if(!here(b)||!b.visible)return;
+    if(!here(b)||!b.visible&&!b.returningEnabled)return;
     if(cache?.scope===b.scope && Date.now()-cache.time<120000){paint(b,cache.data);return;}
     const revision=generation;
     if(!pending || pending.scope!==b.scope || pending.revision!==revision) {
@@ -279,7 +316,7 @@ export function createSelectionEvidence(h) {
     finally {if(pending===task)pending=null;}
   }
   return {
-    mount(host,options){if(!host)return;if(board)clearEvidenceLinks(board.host);const b={...options,host};if(board?.scope!==b.scope){cache=null;generation++;}board=b;bindVisibility(b);if(b.visible)void load(b);else clear(b);},
+    mount(host,options){if(!host)return;if(board)clearEvidenceLinks(board.host);const b={...options,host};if(board?.scope!==b.scope){if(board)clear(board);cache=null;generation++;}board=b;bindVisibility(b);if(b.visible||b.returningEnabled)void load(b);else clear(b);},
     invalidate(){cache=null;generation++;if(board&&here(board))void load(board);},
     adopt(scope,data){if(board?.scope!==scope)return;cache={scope,data,time:Date.now()};generation++;if(here(board))paint(board,data);}
   };
