@@ -8,9 +8,9 @@ import {createPlayHQImport} from './playhq-import.js?v=0.8.62.245';
 import {createPlayCricketConnection} from './playcricket-connection.js?v=0.8.62.245';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.270';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.246';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.276';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.277';
 import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.264';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.276';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.277';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
@@ -32,7 +32,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.276';
+const APP_UI_VERSION='0.8.62.277';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
