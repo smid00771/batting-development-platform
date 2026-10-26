@@ -1,6 +1,6 @@
 import {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.275';
 import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.262';
-import {returningPlayers, returningComparison} from './selection-returning.js?v=0.8.62.276';
+import {returningPlayers, returningComparison, returningForm} from './selection-returning.js?v=0.8.62.277';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
@@ -14,7 +14,9 @@ export const evidenceStyles=`<style>
 .se-evidence-compact:has(.se-evidence-link){display:grid;grid-template-columns:repeat(2,21px);align-content:center;gap:1px 3px}.se-evidence-compact .se-evidence-link{grid-column:1/-1;text-align:center;white-space:normal;font-size:10px;line-height:12px;overflow-wrap:anywhere}
 .se-evidence-connectors .se-evidence-hit{stroke:transparent;stroke-width:24;stroke-dasharray:none;fill:none;pointer-events:stroke;cursor:pointer}.se-evidence-connectors [role=button]:focus-visible{outline:none;opacity:1;stroke-width:3}.se-evidence-connectors [role=button]:focus-visible .se-evidence-line{stroke:#17245f}
 .se-other-grades{font-size:13px;overflow-wrap:anywhere}.se-other-grades small{color:#52627a;font-size:12px}
-.se-return-linked{box-shadow:inset 0 0 0 1px #38857d;border-radius:6px}.se-return-mark{color:#21665f;font-weight:700}.se-evidence-compact .se-return-mark{white-space:nowrap}.se-return-team,#app .se-return-team{display:inline-flex;align-items:center;min-height:44px;padding:0 2px;margin:-14px 0;border:0;background:transparent;color:#21665f;font:600 11px/18px system-ui;text-decoration:underline;cursor:pointer}.se-return-choice{display:block;min-height:44px;width:100%;margin:4px 0;padding:7px;text-align:left;border:1px solid #cdd6e3;border-radius:6px;background:white;color:#24344c;font:inherit;cursor:pointer}.se-return-choice small{display:block;font-size:12px;color:#52627a}
+.se-return-linked{box-shadow:inset 0 0 0 1px #38857d;border-radius:6px}.se-return-mark{color:#21665f;font-weight:700}.se-evidence-compact .se-return-mark{white-space:nowrap}.se-return-choice{display:block;min-height:44px;width:100%;margin:4px 0;padding:7px;text-align:left;border:1px solid #cdd6e3;border-radius:6px;background:white;color:#24344c;font:inherit;cursor:pointer}.se-return-choice small{display:block;font-size:12px;color:#52627a}
+.se-returns{margin:6px 0;padding:4px 6px;border-left:3px solid #38857d;background:#f1f8f5;border-radius:5px}.se-return-heading,.se-return-row{display:grid;grid-template-columns:minmax(100px,.8fr) minmax(0,1.2fr);gap:6px;align-items:start}.se-return-heading{font-size:11px;font-weight:700;color:#21665f;line-height:18px}.se-return-row+.se-return-row{border-top:1px solid #d0e5dc}.se-return-targets{display:flex;align-items:center;flex-wrap:wrap;gap:2px 4px;min-width:0}.se-return-person,.se-return-target,#app .se-return-person,#app .se-return-target{box-sizing:border-box;display:inline-flex;align-items:center;min-height:44px;min-width:44px;max-width:100%;margin:0;padding:4px;border:0;border-radius:5px;background:transparent;color:#175b53;font:600 12px/1.3 system-ui;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer;gap:4px}.se-return-person{width:100%;justify-content:flex-start}.se-return-target,#app .se-return-target{font-size:11px;font-weight:500;text-decoration:underline;text-underline-offset:3px}.se-return-person:hover,.se-return-target:hover{background:#dceee5}.se-return-person:focus-visible,.se-return-target:focus-visible{outline:2px solid #21665f;outline-offset:-2px}.se-return-unmatched{font-size:11px;line-height:1.4;color:#52627a;align-self:center}.se-return-active{box-shadow:inset 0 0 0 2px #21665f;background:#e8f5ed}
+
 </style>`;
 
 export function renderEvidenceBadges(item,key=item?.key,{compact=false,form=true}={}) {
@@ -49,14 +51,22 @@ function record(item) {
 }
 const returnDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(value+'T12:00:00Z')):'';
 const returnDays=pair=>pair.entry.team.days.length>1?' · '+pair.target.days.map(day=>'Day '+(day+1)).join(' / '):'';
-function returnRecord(stats,person){return stats.matches?record({stats,ball:{applicable:['pace','spin'].includes(person?.bowling)||stats.bowling_balls>0}})+(stats.bowling_complete&&stats.bowling_balls?`<p class="se-evidence-small">${decimal(stats.wickets*100/stats.bowling_balls)} wickets/100 balls</p>`:''):'<p class="se-evidence-small">No saved figures for this period.</p>';}
+function returnRecord(stats,person,{bowlingFirst=false}={}) {
+  if(!stats.matches)return '<p class="se-evidence-small">No saved figures for this period.</p>';
+  const batting=`<p><strong>Batting · ${number(stats.average)} average</strong><small>${stats.batting_complete?`${stats.runs} runs · ${stats.innings} inns · ${stats.not_outs} not out`:'Figures incomplete'}</small></p>`;
+  const bowling=['pace','spin'].includes(person?.bowling)||stats.bowling_balls>0?`<p><strong>Bowling · ${stats.bowling_complete?`${stats.wickets} wickets`:'Figures incomplete'}</strong>${stats.bowling_complete?`<small>${statsOvers(stats.bowling_balls)??'—'} overs · ${stats.bowling_innings} inns · ${stats.conceded} runs</small><small>Avg ${stats.wickets?decimal(stats.conceded/stats.wickets):'—'} · Econ ${decimal(stats.economy)}</small>${stats.bowling_balls?`<small>${decimal(stats.wickets*100/stats.bowling_balls)} wickets/100 balls</small>`:''}`:''}</p>`:'';
+  return bowlingFirst?bowling+batting:batting+bowling;
+}
 function returnDetails(pair,index=0){
   const {entry,target,incoming,current,notes}=pair,other=target.incumbent;
-  return `<details class="se-evidence-pair" ${index===0?'open':''}><summary><strong>${escape(entry.person.name)} → ${escape(other?.name||'Vacant place')} · No. ${target.position}${escape(returnDays(pair))}</strong><small>Potential in · available again${pair.early?' · early samples':''}${target.joinedDuringAbsence?' · current player joined this team during the absence':''}</small></summary><p class="se-evidence-small">${escape(entry.person.name)} was unavailable for ${entry.missed.length} ${entry.missed.length===1?'game':'games'} in ${escape(entry.team.grade)}; last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><div class="se-evidence-pair-grid"><div><strong>${escape(entry.person.name)}</strong><small>Before absence · last ${incoming.matches} recorded ${incoming.matches===1?'game':'games'} (up to 3)</small><small>${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))}</small><small>Fielding: ${escape(fieldingLabel(entry.person))}</small>${returnRecord(incoming,entry.person)}</div><div><strong>${escape(other?.name||'Vacant place')}</strong>${other?`<small>While away · ${current.matches} of ${entry.missed.length} ${entry.missed.length===1?'game':'games'} recorded</small><small>${escape(battingRoleLabel(other))} · ${escape(bowlingRoleLabel(other))}</small><small>Fielding: ${escape(fieldingLabel(other))}</small>${returnRecord(current,other)}`:'<p>This place is currently vacant.</p>'}</div></div>${notes.map(note=>`<p class="se-evidence-small">${escape(note)}</p>`).join('')}<p class="se-evidence-small">Separate periods in the same grade and format. These figures support a selection discussion; returning availability does not reserve a place.</p></details>`;
+  return `<details class="se-evidence-pair" ${index===0?'open':''}><summary><strong>${escape(entry.person.name)} → ${escape(other?.name||'Vacant place')} · No. ${target.position}${escape(returnDays(pair))}</strong><small>Potential in · available again${pair.early?' · early samples':''}${target.joinedDuringAbsence?' · current player joined this team during the absence':''}</small></summary><p class="se-evidence-small">${escape(entry.person.name)} was unavailable for ${entry.missed.length} ${entry.missed.length===1?'game':'games'} in ${escape(entry.team.grade)}; last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><div class="se-evidence-pair-grid"><div><strong>${escape(entry.person.name)}</strong><small>Before absence · last ${incoming.matches} recorded ${incoming.matches===1?'game':'games'} (up to 3)</small><small>${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))}</small><small>Fielding: ${escape(fieldingLabel(entry.person))}</small>${returnRecord(incoming,entry.person,{bowlingFirst:target.focus==='bowling'||entry.person.bowling_load==='frontline'})}</div><div><strong>${escape(other?.name||'Vacant place')}</strong>${other?`<small>While away · ${current.matches} of ${entry.missed.length} ${entry.missed.length===1?'game':'games'} recorded</small><small>${escape(battingRoleLabel(other))} · ${escape(bowlingRoleLabel(other))}</small><small>Fielding: ${escape(fieldingLabel(other))}</small>${returnRecord(current,other,{bowlingFirst:target.focus==='bowling'||entry.person.bowling_load==='frontline'})}`:'<p>This place is currently vacant.</p>'}</div></div>${target.focus==='bowling'?'<p class="se-evidence-small">Bowling comparison · matching type and frontline workload. Batting and fielding remain separate considerations.</p>':''}${notes.map(note=>`<p class="se-evidence-small">${escape(note)}</p>`).join('')}<p class="se-evidence-small">Separate periods in the same grade and format. These figures support a selection discussion; returning availability does not reserve a place.</p></details>`;
 }
-function returnTeamDetails(entries,pairs){
-  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">Potential ins</h2><p class="se-evidence-small">${escape(entries[0].team.grade)} · ${escape(returnDate(entries[0].team.days[0].date))}</p></div><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${entries.map(entry=>`<h3>${escape(entry.person.name)}</h3><p class="se-evidence-small">Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected at No. ${entry.position}.</p>${pairs.flatMap((pair,index)=>pair.entry.key===entry.key?[`<button class="se-return-choice" type="button" data-return-compare="${index}">Compare with ${escape(pair.target.incumbent?.name||'vacant place')} · No. ${pair.target.position}${escape(returnDays(pair))}<small>${pair.target.joinedDuringAbsence?'Joined this team during the absence':'Matching recorded role and place'}</small></button>`]:[]).join('')||'<p class="se-evidence-small">No matching place identified from the saved roles and available dates. Review the playing-list attributes and team balance.</p>'}`).join('')}`;
+function returnTeamDetails(entry,pairs,summary){
+  const before=returningForm(entry,summary);
+  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(entry.person.name)}</h2><p class="se-evidence-small">Returning · ${escape(entry.team.grade)} · ${escape(returnDate(entry.team.days[0].date))}</p></div><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div><p class="se-evidence-small">Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected at No. ${entry.position}.</p><p class="se-evidence-small">${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))} · Fielding: ${escape(fieldingLabel(entry.person))}</p><h3>Before absence</h3><p class="se-evidence-small">Last ${before.matches} recorded ${before.matches===1?'game':'games'} (up to 3) · ${before.matches<5?'early sample':''}</p>${returnRecord(before,entry.person,{bowlingFirst:entry.person.bowling_load==='frontline'})}<h3>Compare with current XI</h3>${pairs.flatMap((pair,index)=>pair.entry.key===entry.key?[`<button class="se-return-choice" type="button" data-return-compare="${index}">${escape(pair.target.incumbent?.name||'Vacant place')} · No. ${pair.target.position}${escape(returnDays(pair))}<small>${pair.target.focus==='bowling'?'Bowling comparison':pair.target.joinedDuringAbsence?'Joined this team during the absence':'Matching recorded role and place'}</small></button>`]:[]).join('')||'<p class="se-evidence-small">No matching place identified from the saved roles and available dates. Review the playing-list attributes and team balance.</p>'}`;
 }
+function returnComparisonDetails(pair){return `<div class="se-evidence-heading"><h2 id="seEvidenceTitle">${pair.target.focus==='bowling'?'Bowling comparison':'Returning player comparison'}</h2><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${returnDetails(pair)}`;}
+
 function otherGradeRecords(item) {
   const stats=item.otherGrades?.[0];
   if (!stats) return '';
@@ -247,7 +257,7 @@ export function createSelectionEvidence(h) {
     b.host.querySelector('.se-evidence-dialog')?.remove();
     b.host.querySelectorAll('[data-se-evidence]').forEach(slot=>{slot.replaceChildren();slot.closest('.se-player-cell')?.classList.remove('se-has-evidence');});
     b.host.querySelectorAll('[data-return-control]').forEach(el=>el.remove());
-    b.host.querySelectorAll('.se-return-linked').forEach(el=>el.classList.remove('se-return-linked'));
+    b.host.querySelectorAll('.se-return-linked,.se-return-active').forEach(el=>el.classList.remove('se-return-linked','se-return-active'));
   }
   function bindVisibility(b) {
     let storage;
@@ -286,18 +296,37 @@ export function createSelectionEvidence(h) {
     });
     bindEvidenceDetails(b.host,model,()=>here(b));
     b.host.querySelectorAll('[data-return-control]').forEach(el=>el.remove());
+    const highlight=pairs=>{
+      b.host.querySelectorAll('.se-return-active').forEach(el=>el.classList.remove('se-return-active'));
+      if(!here(b))return;
+      b.host.querySelectorAll('[data-se-evidence]').forEach(slot=>{
+        if(pairs.some(pair=>slot.dataset.evidenceFixture===pair.entry.team.id&&slot.dataset.evidencePlayer===pair.target.incumbent?.id))slot.closest('.se-player-cell')?.classList.add('se-return-active');
+      });
+    };
+    highlight([]);
+    const compare=(pair,trigger)=>{if(!here(b)||!pair)return;showEvidenceDialog(b.host,returnComparisonDetails(pair),trigger);};
     for(const card of b.host.querySelectorAll('[data-se-team]')){
-      const entries=returns.filter(entry=>entry.team.id===card.dataset.seTeam),heading=card.querySelector('.se-team-state');
-      if(!entries.length||!heading)continue;
-      const control=card.ownerDocument.createElement('span');control.dataset.returnControl='';control.append(' · ');
-      const button=card.ownerDocument.createElement('button');button.type='button';button.className='se-return-team';button.textContent=entries.length+' potential in'+(entries.length===1?'':'s');button.setAttribute('aria-label','Potential ins for '+entries[0].team.grade+': '+entries.map(entry=>entry.person.name).join(', '));control.append(button);heading.append(control);
-      button.onclick=()=>{if(!here(b))return;showEvidenceDialog(b.host,returnTeamDetails(entries,returnPairs),button);
-        b.host.querySelectorAll('[data-return-compare]').forEach(choice=>choice.onclick=()=>{if(!here(b))return;const pair=returnPairs[Number(choice.dataset.returnCompare)];if(!pair)return;
-          showEvidenceDialog(b.host,`<div class="se-evidence-heading"><h2 id="seEvidenceTitle">Potential in</h2><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${returnDetails(pair)}`,button);
-        });
-      };
+      const entries=returns.filter(entry=>entry.team.id===card.dataset.seTeam);
+      if(!entries.length)continue;
+      const control=card.ownerDocument.createElement('section');control.dataset.returnControl='';control.className='se-returns';control.setAttribute('aria-label','Returning players for '+entries[0].team.grade);
+      control.innerHTML='<div class="se-return-heading"><span>Returning players</span><span>Compare with</span></div>'+entries.map((entry,index)=>`<div class="se-return-row"><button type="button" class="se-return-person" data-return-person="${index}" aria-label="${escape(entry.person.name+': available again. View pre-absence batting and bowling')}"><span aria-hidden="true">↩</span><strong>${escape(entry.person.name)}</strong></button><div class="se-return-targets">${returnPairs.flatMap((pair,i)=>pair.entry.key===entry.key?[`<button type="button" class="se-return-target" data-return-compare="${i}" aria-label="${escape('Compare '+entry.person.name+' with '+(pair.target.incumbent?.name||'vacant place'))}">${escape(pair.target.incumbent?.name||'Vacant place')}${escape(returnDays(pair))}</button>`]:[]).join('')||'<span class="se-return-unmatched">No matching place yet</span>'}</div></div>`).join('');
+      const anchor=card.querySelector(':scope > .se-actions')||card.querySelector('[data-se-order-list]')||card.querySelector(':scope > ol');
+      if(anchor)anchor.after(control);else card.append(control);
+      control.querySelectorAll('[data-return-person]').forEach(button=>{
+        const entry=entries[Number(button.dataset.returnPerson)],pairs=returnPairs.filter(pair=>pair.entry.key===entry.key);
+        button.onclick=()=>{if(!here(b))return;showEvidenceDialog(b.host,returnTeamDetails(entry,returnPairs,summary),button);
+          b.host.querySelectorAll('.se-evidence-dialog [data-return-compare]').forEach(choice=>choice.onclick=()=>compare(returnPairs[Number(choice.dataset.returnCompare)],button));
+        };
+        button.onmouseenter=button.onfocus=()=>highlight(pairs);button.onmouseleave=button.onblur=()=>highlight([]);
+      });
+      control.querySelectorAll('[data-return-compare]').forEach(button=>{
+        const pair=returnPairs[Number(button.dataset.returnCompare)];
+        button.onclick=()=>compare(pair,button);
+        button.onmouseenter=button.onfocus=()=>highlight([pair]);button.onmouseleave=button.onblur=()=>highlight([]);
+      });
     }
   }
+
   async function load(b) {
     if(!here(b)||!b.visible&&!b.returningEnabled)return;
     if(cache?.scope===b.scope && Date.now()-cache.time<120000){paint(b,cache.data);return;}

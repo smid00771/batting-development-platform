@@ -110,32 +110,59 @@ async function uiSetup(){
  let calls=0,allowed=true,reply=async()=>({data:h.f.context});
  const controller=createSelectionEvidence({here:()=>allowed,supabase:{rpc:async(name,args)=>{assert.equal(name,'club_season_stats_api');assert.equal(args.p_action,'context');calls++;return reply();}}});
  const options={scope:'user:club',clubId:'club',teams:[h.f.draft],referenceTeams:h.f.references,roster:h.f.roster,today:h.f.context.today,returningEnabled:true,returningEligible:()=>true};
- const mount=async()=>{host.innerHTML='<label><input data-evidence-toggle type="checkbox" checked>Show form indicators</label><section data-se-team="next-first"><small class="se-team-state">Draft</small>'+h.f.draft.slots.filter(s=>s.d1).map(s=>`<div class="se-player-cell"><span data-se-evidence data-evidence-fixture="next-first" data-evidence-player="${s.d1}"></span></div>`).join('')+'</section>';controller.mount(host,options);await tick();};
+ const mount=async()=>{host.innerHTML='<label><input data-evidence-toggle type="checkbox" checked>Show form indicators</label><section data-se-team="next-first"><div class="se-team-head"><small class="se-team-state">Draft</small></div>'+h.f.draft.slots.filter(s=>s.d1).map(s=>`<div class="se-player-cell"><span data-se-evidence data-evidence-fixture="next-first" data-evidence-player="${s.d1}"></span></div>`).join('')+'<div class="se-actions"><button>Copy previous team</button></div></section>';controller.mount(host,options);await tick();};
  await mount();return {...h,dom,host,mount,controller,options,calls:()=>calls,allowed:v=>allowed=v,reply:fn=>reply=fn};
 }
 test('the current team and incumbent expose returning comparisons without saving or changing any player',async()=>{
- const h=await uiSetup(),before=JSON.stringify(h.f),button=h.host.querySelector('.se-return-team');
- assert.equal(button.textContent,'1 potential in');assert.match(button.getAttribute('aria-label'),/Alex Rowan/);
+ const h=await uiSetup(),before=JSON.stringify(h.f),button=h.host.querySelector('.se-return-person');
+ assert.equal(button.textContent,'↩Alex Rowan');assert.equal(h.host.querySelector('.se-team-head [data-return-control]'),null);assert.equal(h.host.querySelector('[data-return-control]').previousElementSibling.className,'se-actions');assert.match(h.host.querySelector('[data-return-control]').textContent,/Compare with.*Alex Rowan.*Chris Vale/s);assert.match(button.getAttribute('aria-label'),/Alex Rowan/);
  const marker=h.host.querySelector('[data-evidence-player="cover"] button');assert.match(marker.getAttribute('aria-label'),/Potential in: Alex Rowan/);
  assert.ok(marker.closest('.se-return-linked'));marker.click();assert.match(h.host.querySelector('dialog').textContent,/Alex Rowan → Chris Vale/);
- assert.match(h.host.querySelector('dialog').textContent,/Before absence.*While away/s);assert.match(h.host.querySelector('dialog').textContent,/40 batting average/);assert.match(h.host.querySelector('dialog').textContent,/7.5 batting average/);
+ assert.match(h.host.querySelector('dialog').textContent,/Before absence.*While away/s);assert.match(h.host.querySelector('dialog').textContent,/Batting · 40 average/);assert.match(h.host.querySelector('dialog').textContent,/Batting · 7.5 average/);
  h.host.querySelector('[data-evidence-close]').click();button.click();h.host.querySelector('[data-return-compare]').click();assert.match(h.host.querySelector('dialog').textContent,/Chris Vale/);
  assert.equal(JSON.stringify(h.f),before);assert.equal(h.calls(),1);
 });
 test('return prompts remain available with form colours hidden, and disappear when the player is selected or no longer available',async()=>{
  const h=await uiSetup(),toggle=h.host.querySelector('[data-evidence-toggle]');toggle.checked=false;toggle.dispatchEvent(new h.dom.window.Event('change'));await tick();
- assert.ok(h.host.querySelector('.se-return-team'));assert.ok(h.host.querySelector('[data-evidence-player="cover"] .se-return-mark'));
+ assert.ok(h.host.querySelector('.se-return-person'));assert.ok(h.host.querySelector('[data-evidence-player="cover"] .se-return-mark'));
  assert.equal(h.host.querySelector('[data-evidence-kind]'),null);
- h.f.draft.slots[0].d1=h.f.person.id;await h.mount();assert.equal(h.host.querySelector('.se-return-team,.se-return-linked,.se-return-mark'),null);
- h.f.draft.slots[0].d1='cover';h.f.person.availability.unavailable_dates.push('2026-10-31');await h.mount();assert.equal(h.host.querySelector('.se-return-team'),null);
+ h.f.draft.slots[0].d1=h.f.person.id;await h.mount();assert.equal(h.host.querySelector('.se-return-person,.se-return-linked,.se-return-mark'),null);
+ h.f.draft.slots[0].d1='cover';h.f.person.availability.unavailable_dates.push('2026-10-31');await h.mount();assert.equal(h.host.querySelector('.se-return-person'),null);
 });
 test('permission errors remove return prompts and late responses cannot restore private return comparisons',async()=>{
- const h=await uiSetup();assert.ok(h.host.querySelector('.se-return-team'));
- h.reply(async()=>({error:{message:'No selection access'}}));h.controller.invalidate();await tick();assert.equal(h.host.querySelector('.se-return-team,.se-return-mark,.se-return-linked'),null);
- let finish;h.reply(()=>new Promise(resolve=>finish=resolve));h.controller.invalidate();h.allowed(false);finish({data:h.f.context});await tick();assert.equal(h.host.querySelector('.se-return-team'),null);
+ const h=await uiSetup();assert.ok(h.host.querySelector('.se-return-person'));
+ h.reply(async()=>({error:{message:'No selection access'}}));h.controller.invalidate();await tick();assert.equal(h.host.querySelector('.se-return-person,.se-return-mark,.se-return-linked'),null);
+ let finish;h.reply(()=>new Promise(resolve=>finish=resolve));h.controller.invalidate();h.allowed(false);finish({data:h.f.context});await tick();assert.equal(h.host.querySelector('.se-return-person'),null);
 });
 test('returning player text is escaped in the team list, markers and comparison',async()=>{
  const h=await uiSetup();h.f.person.name='<img src=x onerror=alert(1)>';await h.mount();
- h.host.querySelector('.se-return-team').click();assert.equal(h.host.querySelector('img'),null);assert.match(h.host.querySelector('dialog').textContent,/<img src=x/);
+ h.host.querySelector('.se-return-person').click();assert.equal(h.host.querySelector('img'),null);assert.match(h.host.querySelector('dialog').textContent,/<img src=x/);
  h.host.querySelector('[data-return-compare]').click();assert.equal(h.host.querySelector('img'),null);
+});
+
+test('returning frontline spinners can compare bowling across batting roles without losing type, workload or keeper checks',async()=>{
+ const h=await setup();Object.assign(h.f.person,{batting:'middle',bowling:'spin',bowling_load:'frontline'});Object.assign(h.f.cover,{batting:'lower',bowling:'spin',bowling_load:'frontline'});
+ let target=h.find()[0].targets.find(t=>t.incumbent?.id==='cover');assert.equal(target?.focus,'bowling');
+ h.f.cover.bowling='pace';assert.ok(!h.find()[0].targets.some(t=>t.incumbent?.id==='cover'));
+ h.f.cover.bowling='spin';h.f.person.bowling_load='part_time';assert.equal(h.find()[0].targets.length,0);
+ h.f.person.bowling_load='frontline';h.f.cover.keeper=true;assert.ok(!h.find()[0].targets.some(t=>t.incumbent?.id==='cover'));
+ h.f.cover.keeper=false;h.f.cover.bowling_load='unknown';assert.ok(!h.find()[0].targets.some(t=>t.incumbent?.id==='cover'));
+});
+test('named returns below Copy previous team open bowling first, direct opponents, and independent form when no place matches',async()=>{
+ const h=await uiSetup();Object.assign(h.f.person,{batting:'middle',bowling:'spin',bowling_load:'frontline'});Object.assign(h.f.cover,{batting:'lower',bowling:'spin',bowling_load:'frontline'});
+ for(const [i,card] of h.f.context.cards.filter(c=>c.scorecard.grade==='1st Grade').entries())card.scorecard.innings[1].bowlers.push({player_id:i<2?'source-g1p0':'source-cover',team_id:'us',wickets:i<2?2:1,runs:i<2?9:25,balls:48,importable:true});
+ h.controller.invalidate();await tick();await h.mount();
+ const button=h.host.querySelector('.se-return-person');button.click();let text=h.host.querySelector('dialog').textContent;
+ assert.match(text,/Bowling · 4 wickets/);assert.match(text,/16.0 overs · 2 inns · 18 runs/);assert.ok(text.indexOf('Bowling ·')<text.indexOf('Batting ·'));assert.match(text,/Avg 4.50 · Econ 1.13/);
+ h.host.querySelector('[data-evidence-close]').click();
+ const target=h.host.querySelector('[data-return-control] [data-return-compare]');target.focus();assert.ok(h.host.querySelector('[data-evidence-player="cover"]').closest('.se-return-active'));target.click();text=h.host.querySelector('dialog').textContent;
+ assert.match(text,/Bowling comparison/);assert.match(text,/Alex Rowan → Chris Vale/);assert.match(text,/Bowling · 4 wickets/);assert.match(text,/Bowling · 2 wickets/);assert.ok(text.indexOf('Bowling ·')<text.indexOf('Batting ·'));
+ h.host.querySelector('[data-evidence-close]').click();for(const person of h.f.roster)if(person.id!==h.f.person.id)person.bowling='pace';await h.mount();assert.equal(h.host.querySelector('[data-return-control] [data-return-compare]'),null);assert.match(h.host.querySelector('[data-return-control]').textContent,/No matching place yet/);
+ h.host.querySelector('.se-return-person').click();assert.match(h.host.querySelector('dialog').textContent,/Bowling · 4 wickets/);
+});
+test('a bowling return explicitly distinguishes a missing spell from poor bowling',async()=>{
+ const h=await setup();Object.assign(h.f.person,{bowling:'spin',bowling_load:'frontline'});Object.assign(h.f.cover,{bowling:'spin',bowling_load:'frontline'});
+ for(const card of h.f.context.cards.filter(c=>c.scorecard.grade==='1st Grade'&&c.scorecard.innings[0].batters[0].player_id==='source-g1p0'))card.scorecard.innings[1].bowlers.push({player_id:'source-g1p0',team_id:'us',wickets:2,runs:9,balls:48,importable:true});
+ const entry=h.find()[0],pair=h.engine.returningComparison(entry,entry.targets[0],h.stats.buildSeasonStats(h.f.context));
+ assert.match(pair.notes[0],/No recorded bowling for Chris Vale/);assert.doesNotMatch(pair.notes.join(' '),/more wickets per ball|lower economy/);
 });
