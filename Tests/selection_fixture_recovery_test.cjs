@@ -8,7 +8,7 @@ function harness(source){
  const target=fixture('target','2099-10-31'),s={data:{selector:true,access:{timezone:'Australia/Sydney',fixture_defaults:{rows:[]}},members:[],fixtures:[target],roster:[{id:'a',name:'Alex',active:true},{id:'b',name:'Blair',active:true},{id:'c',name:'Casey',active:false}]}};
  let confirmed=true,saved=true;const unavailable=new Set();
  const c=vm.createContext({document,FormData:dom.window.FormData,structuredClone,ensureSelections:()=>s,recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},seCanSetup:()=>true,seFixtureLocked:()=>false,seEsc:String,seGradeFields:()=>'<select name="grade"><option value="5th Grade">5th Grade</option></select>',SE_FORMATS:[['t20','T20'],['limited_overs','Limited Overs'],['long_form','Long-form']],seOpt:(opts,value)=>opts.map(([v,label])=>`<option value="${v}" ${v===value?'selected':''}>${label}</option>`).join(''),fixtureResults:{canLeave:()=>true},fixtureCorrectionDecorateEditor(){},seMountFixtureScores(){},seReadGrade:()=>({grade:'5th Grade',grade_group_id:null}),seBindGrade(){},confirmLeaveSelections:()=>true,drawSelections(){},seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Unknown',seDate:String,seNotice:message=>notices.push(message),confirm:message=>{prompts.push(message);return confirmed;},seDayStatus:(p,day)=>unavailable.has(p.id+':'+day.date)?'unknown':'available',seMutate:async(action,data,options)=>{requests.push({action,data,options});return saved;}});
- vm.runInContext(['seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seFixtureEditor','seCopyLast'].map(name=>extract(source,name)).join('\n'),c);
+ vm.runInContext(['seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seFixtureEditor','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(name=>extract(source,name)).join('\n'),c);
  return {c,s,target,document,requests,prompts,notices,unavailable,confirm:value=>confirmed=value,saved:value=>saved=value,submit:()=>document.getElementById('seFixtureForm').onsubmit({preventDefault(){}})};
 }
 for(const file of ['app.js','demo.html']){
@@ -53,7 +53,7 @@ for(const file of ['app.js','demo.html']){
   for(const start of ['14:00','16:00','22:00','']){const blocked=harness(source);Object.assign(blocked.target,oneDay('target','14:00','b'));blocked.s.data.fixtures.push(oneDay('source',start));await blocked.c.seCopyLast('target');assert.equal(blocked.requests.length,0,start);}
  });
  test(file+': copy cannot retain a one-day-only player in an unbracketed two-day team',async()=>{
-  const h=harness(source);h.target.details.brackets=false;h.s.data.fixtures.push(fixture('played','2099-10-10'));h.unavailable.add('a:2099-11-07');await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:null,d2:null});
+  const h=harness(source);h.target.details.brackets=false;h.s.data.fixtures.push(fixture('played','2099-10-10'));h.unavailable.add('a:2099-11-07');await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/No players copied/);
  });
  test(file+': an old copy button cannot overwrite a published or locked team',async()=>{
   const h=harness(source);h.s.data.fixtures.push(fixture('played','2099-10-10'));h.target.published={details:structuredClone(h.target.details),slots:structuredClone(h.target.slots)};await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.equal(h.prompts.length,0);assert.match(h.notices.at(-1),/unpublished/);
@@ -81,7 +81,7 @@ for(const brackets of [true,false])test('app: copying Dev League skips players s
  const h=harness(fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8'));h.target.details.brackets=brackets;
  const previous=fixture('previous','2099-10-10'),firsts=fixture('firsts','2099-11-07',{slots:[{d1:brackets?'b':'a',d2:null}]}),thirds=fixture('thirds','2099-10-31',{slots:[{d1:'a',d2:null}]});
  firsts.published={details:structuredClone(firsts.details),slots:structuredClone(firsts.slots)};h.s.data.fixtures.push(previous,firsts,thirds);const before=structuredClone(h.s.data.fixtures);
- await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:null,d2:null});assert.deepEqual(h.s.data.fixtures,before,'Copy does not move anyone out of another grade');assert.equal(h.requests[0].data.fixtures.length,1);
+ await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.notices.at(-1),/No players copied/);assert.deepEqual(h.s.data.fixtures,before,'Copy does not move anyone out of another grade');assert.equal(h.requests.length,0,'An empty copy never overwrites the current draft');
 });
 test('app: copy keeps unaffected dates, skips duplicate identities and ignores cancelled teams',async()=>{
  const h=harness(fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8'));

@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.273",
+  "appVersion": "0.8.62.274",
   "sources": {
     "app-design.css": "418152d2e9b3e80e76c23a65ab98559717c862300da94051a74026d382af7758",
-    "app.js": "42808abca5082cfba6e708c48319843400cea984ec429065eb206e417f1c723c",
+    "app.js": "e5fe5e8f134d6cdcd1babbdbabc66c632c349b6b226b7d4d54df4032cdb2781a",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
