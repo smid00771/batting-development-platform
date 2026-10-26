@@ -15,8 +15,12 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
   if (!incumbent || incumbent.active===false) return false;
   const keeps=incumbent.keeper || days.some(day=>team.match_roles?.['d'+(day+1)]?.keeper_id===incumbent.id);
   if (keeps && !candidate.keeper) return false;
-  const batting=battingPositionFits({person:incumbent,position},{person:candidate,position:previousPosition});
-  if (['pace','spin'].includes(incumbent.bowling)) {
+  // Top/middle-order batters can be discussed together on their batting.
+  // Keep openers/lower-order jobs separate and expose the two actual positions.
+  const batting=battingPositionFits({person:incumbent,position},{person:candidate,position:previousPosition})
+    || [incumbent,candidate].every(p=>['top','middle'].includes(p.batting))
+      && position>=3&&position<=6&&previousPosition>=3&&previousPosition<=6;
+  if (['pace','spin'].includes(incumbent.bowling)&&incumbent.bowling_load!=='part_time') {
     if (!bowlingJobFits(incumbent,candidate,team.format)) return false;
     // A returning frontline spinner needs the same bowling-led comparison as
     // a frontline quick. Keep type/workload and keeper cover; show batting and
@@ -24,7 +28,9 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
     const frontline=[incumbent,candidate].every(p=>p.bowling_load==='frontline');
     return frontline ? 'bowling' : batting ? 'all_round' : false;
   }
-  return incumbent.bowling==='none' && batting ? 'batting' : false;
+  // Occasional bowling is not a required replacement job. Saved frontline
+  // bowling and keeping cover still take priority; no player roles are changed.
+  return (incumbent.bowling==='none'||incumbent.bowling_load==='part_time') && batting ? 'batting' : false;
 }
 
 // A return is established by saved unavailability for consecutive missed
@@ -105,23 +111,38 @@ export function returningComparison(entry,target,summary) {
   const whileAway=(returnRow(entry,summary,target.incumbent?.id)?.history || []).filter(match=>entry.missed.some(team=>match.fixture_id
     ? match.fixture_id===team.id : match.date===date(team)&&entry.missed.filter(other=>date(other)===match.date).length===1));
   const incoming=returningForm(entry,summary),current=returningPeriod(whileAway),notes=[];
+  let assessment='insufficient',assessmentText='Not enough comparable figures.';
   if (target.incumbent) {
+    if(target.focus!=='bowling'){
     const batA=battingEvidence(incoming),batB=battingEvidence(current);
     if (incoming.batting_complete&&current.batting_complete&&Number.isFinite(incoming.average)&&Number.isFinite(current.average)) {
       const comparison=incoming.average>current.average?'higher':incoming.average<current.average?'lower':'the same';
       notes.push(`${entry.person.name} had ${comparison==='the same'?'the same':'a '+comparison} batting average in these samples.`);
       if (!batA.ready||!batB.ready) notes.push('Too few batting opportunities for a firm statistical preference.');
+      assessment=batA.ready&&batB.ready?(incoming.average>current.average?'returner':incoming.average<current.average?'incumbent':'level'):'early';
+      assessmentText=assessment==='early'?'Early batting samples · no statistical preference.'
+        :assessment==='level'?'Equal batting averages in these samples.'
+        :`${assessment==='returner'?entry.person.name:target.incumbent.name} has the stronger batting figures in these samples.`;
     } else notes.push('Batting averages cannot yet be compared reliably.');
+    }
+    if(target.focus==='bowling'||target.focus==='all_round'){
     const a=bowlingEvidence(incoming,entry.person,entry.team.format),b=bowlingEvidence(current,target.incumbent,entry.team.format),bowlingNotes=[];
     if (incoming.bowling_complete&&current.bowling_complete&&incoming.bowling_balls&&current.bowling_balls) {
       const wickets=a.wickets>b.wickets?'more':a.wickets<b.wickets?'fewer':'the same',economy=a.economy<b.economy?'lower':a.economy>b.economy?'higher':'the same';
       bowlingNotes.push(`${entry.person.name}: ${wickets} wickets per ball; ${economy} economy.`);
       if (!a.ready||!b.ready) bowlingNotes.push('Too little bowling for a firm statistical preference.');
+      const stronger=a.wickets>=b.wickets&&a.economy<=b.economy&&(a.wickets>b.wickets||a.economy<b.economy),weaker=b.wickets>=a.wickets&&b.economy<=a.economy&&(b.wickets>a.wickets||b.economy<a.economy);
+      assessment=!a.ready||!b.ready?'early':stronger?'returner':weaker?'incumbent':a.wickets===b.wickets&&a.economy===b.economy?'level':'tradeoff';
+      assessmentText=assessment==='early'?'Early bowling samples · no statistical preference.'
+        :assessment==='level'?'Equal bowling rates in these samples.'
+        :assessment==='tradeoff'?'Bowling trade-off · wicket-taking and economy favour different players.'
+        :`${assessment==='returner'?entry.person.name:target.incumbent.name} has the stronger bowling figures in these samples.`;
     } else if (target.focus==='bowling') {
       bowlingNotes.push(!incoming.bowling_complete||!current.bowling_complete?'Bowling figures are incomplete for these periods.':`No recorded bowling for ${!incoming.bowling_balls?entry.person.name:target.incumbent.name} in this period; bowling rates cannot be compared.`);
     }
     if(target.focus==='bowling')notes.unshift(...bowlingNotes);else notes.push(...bowlingNotes);
+    }
   }
-  const early=[incoming,...(target.incumbent?[current]:[])].some(row=>row.innings<5 || row.bowling_innings>0&&row.bowling_innings<5);
-  return {entry,target,incoming,current,notes,early};
+  const early=[incoming,...(target.incumbent?[current]:[])].some(row=>target.focus==='bowling'?row.bowling_innings<5:row.innings<5);
+  return {entry,target,incoming,current,notes,early,assessment,assessmentText};
 }
