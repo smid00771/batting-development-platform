@@ -16,7 +16,7 @@ export function renderCalendar(data){
   else{const end=new Date(e.date+'T12:00:00Z');end.setUTCDate(end.getUTCDate()+1);lines.push('DTSTART;VALUE=DATE:'+e.date.replace(/-/g,''),'DTEND;VALUE=DATE:'+end.toISOString().slice(0,10).replace(/-/g,''));}
   lines.push('SUMMARY:'+escapeText(e.title),'LOCATION:'+escapeText(e.ground),'DESCRIPTION:'+escapeText([e.instructions,'Check the app for the latest team and match arrangements.'].filter(Boolean).join('\n')),
    'STATUS:'+(e.status==='CANCELLED'?'CANCELLED':'CONFIRMED'),'TRANSP:OPAQUE');
-  try{const u=new URL(e.url);if(u.origin==='https://clubbatting.com'&&u.pathname==='/app.html')lines.push('URL:'+u.href);}catch{}
+  try{const u=new URL(e.url);if(['https://mirelionhq.com','https://clubbatting.com'].includes(u.origin)&&u.pathname==='/app.html')lines.push('URL:'+u.href);}catch{}
   lines.push('END:VEVENT');
  }
  lines.push('END:VCALENDAR');return lines.map(foldLine).join('\r\n')+'\r\n';

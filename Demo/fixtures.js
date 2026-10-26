@@ -2168,7 +2168,7 @@ const demoProductsRenderer=renderMyClubProducts;
 renderMyClubProducts=async()=>{
  await demoProductsRenderer();
  // Real signup never carries a fictional club ID.
- document.querySelectorAll('.pt-product a').forEach(link=>{const product=new URL(link.href,location.href).searchParams.get('trial_product');link.href='https://clubbatting.com/enquire.html?product='+encodeURIComponent(product);});
+ document.querySelectorAll('.pt-product a').forEach(link=>{const product=new URL(link.href,location.href).searchParams.get('trial_product');link.href='https://mirelionhq.com/enquire.html?product='+encodeURIComponent(product);});
  const heading=document.querySelector('#page h1');if(!heading||!isAdmin())return;
  const button=document.createElement('button');button.type='button';button.className='btn ghost';button.id='demoScheduledTrial';button.textContent=demoTrialSchedules?'Reset trial example':'Preview a scheduled trial';heading.after(button);
  button.onclick=async()=>{
@@ -2587,7 +2587,7 @@ function demoDecorate(){
     // replace/remove them from a MutationObserver: it must be able to finish
     // binding handlers. Insert the demo explanation alongside the live card.
     if(!document.getElementById('demoGuideNote')){
-      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><div class="btnrow"><a class="btn secondary" href="https://clubbatting.com/app.html?tab=guide">Sign in to your club</a><button type="button" class="btn ghost" id="demoAssistLink">Message us · Mirelion Assist</button></div></section>`);
+      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><div class="btnrow"><a class="btn secondary" href="https://mirelionhq.com/app.html?tab=guide">Sign in to your club</a><button type="button" class="btn ghost" id="demoAssistLink">Message us · Mirelion Assist</button></div></section>`);
     }
     const assistLink=document.getElementById('demoAssistLink');if(assistLink)assistLink.onclick=()=>document.getElementById('guideHumanHandoff')?.click();
     chat.hidden=true;

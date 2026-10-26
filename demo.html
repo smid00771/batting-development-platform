@@ -3728,11 +3728,11 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
   <label><span class="sr-only">Journey</span><select id="demoStage" aria-label="Journey"></select></label>
   <button type="button" id="demoReset" class="btn ghost">Reset demo</button>
  </div>
- <a href="https://clubbatting.com/app.html" class="demo-signin">Sign in</a>
+ <a href="https://mirelionhq.com/app.html" class="demo-signin">Sign in</a>
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.271.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.272.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -3799,6 +3799,29 @@ return {createMirelionAssistDemo};
 })();
 
 const __demoModule1=(()=>{
+// The old host remains available for account callbacks and the existing Meta callback.
+// Session credentials must be consumed on their original origin, never forwarded.
+const MIRELION_ORIGIN='https://mirelionhq.com';
+const legacyOrigins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
+const authKeys=new Set(['code','access_token','refresh_token','token','token_hash','provider_token','provider_refresh_token','id_token','expires_at','expires_in','token_type','type','error','error_code','error_description','state','client_secret']);
+function isLegacyOrigin(href){try{return legacyOrigins.has(new URL(href).origin);}catch{return false;}}
+function hasAuthenticationCallback(href){
+ try{const u=new URL(href);return u.searchParams.has('password_setup')||[u.searchParams,new URLSearchParams(u.hash.slice(1))].some(p=>[...p.keys()].some(k=>authKeys.has(k)));}catch{return false;}
+}
+function mirelionAppUrl(href){
+ const source=new URL(href),target=new URL('/app.html',MIRELION_ORIGIN);
+ for(const [key,value] of source.searchParams)if(!authKeys.has(key)&&!['password_setup','legacy'].includes(key))target.searchParams.append(key,value);
+ // App routes live in the query. Fragments can contain bearer credentials.
+ return target.href;
+}
+function legacyAppRedirect(href){
+ const u=new URL(href);
+ return isLegacyOrigin(href)&&u.searchParams.get('legacy')!=='1'&&!hasAuthenticationCallback(href)?mirelionAppUrl(href):null;
+}
+return {MIRELION_ORIGIN,isLegacyOrigin,hasAuthenticationCallback,mirelionAppUrl,legacyAppRedirect};
+})();
+
+const __demoModule2=(()=>{
 const escapeAssist=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const assistCategories={help:'Help with the platform',enquiry:'Products and subscriptions',idea:'Suggest a change'};
 const assistTime=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
@@ -4006,7 +4029,7 @@ function assistStyles(){return `<style>
 return {createMirelionAssist};
 })();
 
-const __demoModule2=(()=>{
+const __demoModule3=(()=>{
 const assistUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function assistLaunchFromSearch(search){
@@ -4019,7 +4042,7 @@ function assistLaunchFromSearch(search){
 return {assistLaunchFromSearch};
 })();
 
-const __demoModule3=(()=>{
+const __demoModule4=(()=>{
 const AWARD_SCOPE_KINDS=['team_week','player_week','results','five_wickets','century'];
 const awardScopeKey=value=>!value||value.mode==='all'?'all':value.mode+':'+[...new Set(value.ids||[])].sort().join(',');
 const scopedAwardLabel=(label,scope)=>!scope||scope.mode==='all'?label:[label,scope.label].filter(Boolean).join(' · ');
@@ -4093,7 +4116,7 @@ function createSocialAwardScopes(h){
 return {AWARD_SCOPE_KINDS,awardScopeKey,scopedAwardLabel,createSocialAwardScopes};
 })();
 
-const __demoModule4=(()=>{
+const __demoModule5=(()=>{
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const choices=(rows,value)=>rows.map(([id,name])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(name)}</option>`).join('');
 const definiteError=e=>/^(P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(e?.code||'');
@@ -4156,7 +4179,7 @@ function createSelectionGroupPermissions(h){
 return {createSelectionGroupPermissions};
 })();
 
-const __demoModule6=(()=>{
+const __demoModule7=(()=>{
 // Incremental changes to an already saved club setup.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const label=t=>[t?.grade?.name,t?.name!==t?.grade?.name?t?.name:null].filter(Boolean).join(' · ');
@@ -4215,8 +4238,8 @@ function createSelectionGroupManager(h){
 return {createSelectionGroupManager};
 })();
 
-const __demoModule5=(()=>{
-const {createSelectionGroupManager}=__demoModule6;
+const __demoModule6=(()=>{
+const {createSelectionGroupManager}=__demoModule7;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Read saved groups and the cached source names. Opening this page never imports.
 function createSelectionGroupPage(h){
@@ -4252,8 +4275,8 @@ function createSelectionGroupPage(h){
 return {createSelectionGroupPage};
 })();
 
-const __demoModule8=(()=>{
-const {createSelectionGroupManager}=__demoModule6;
+const __demoModule9=(()=>{
+const {createSelectionGroupManager}=__demoModule7;
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -4345,8 +4368,8 @@ function createSelectionGroups(h){
 return {selectionGroupDraft,createSelectionGroups};
 })();
 
-const __demoModule7=(()=>{
-const {createSelectionGroups}=__demoModule8;
+const __demoModule8=(()=>{
+const {createSelectionGroups}=__demoModule9;
 // Saved team links drive fixture loading. Source credentials stay server-side.
 function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -4430,13 +4453,13 @@ function createPlayHQImport(h){
 return {createPlayHQImport};
 })();
 
-const __demoModule9=(()=>{
+const __demoModule10=(()=>{
 const PLAYCRICKET_SUPPORT='https://playcricket-support.zendesk.com/hc/en-us/requests/new';
 const PLAYHQ_ACCESS_GUIDE='https://support.playhq.com/hc/en-us/articles/23949453276572-How-To-Use-PlayHQ-API-s';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 function accessRequestText(club,d){
- return `Subject: Club public API access request — ${club}\n\nHello PlayCricket Support,\n\nI am ${d.contact_name}, ${d.contact_role} for ${club}, and am requesting access on behalf of our club.\n\nClub: ${club}\nAssociation / competition organiser: ${d.association}${d.club_url?'\nPublic club page: '+d.club_url:''}\nContact email: ${d.contact_email}\n\nOur club uses Club Batting (Mirelion), https://clubbatting.com, to manage club selections and use our public fixtures, match results and scorecards for club statistics and awards.\n\nPlease issue our club its own organisation-scoped public API key (Client ID) and supply:\n• Our club’s full PlayHQ organisation ID (UUID).\n• The full association / competition organisation ID needed to discover our seasons.\n• Any conditions, request limits and permitted refresh frequency for this use.\n\nThis request is for public, read-only data within our club’s approved scope. Please advise if our association needs to lodge the request on our behalf. Please send the credentials to the club contact above.\n\nThank you,\n${d.contact_name}\n${d.contact_role} — ${club}`;
+ return `Subject: Club public API access request — ${club}\n\nHello PlayCricket Support,\n\nI am ${d.contact_name}, ${d.contact_role} for ${club}, and am requesting access on behalf of our club.\n\nClub: ${club}\nAssociation / competition organiser: ${d.association}${d.club_url?'\nPublic club page: '+d.club_url:''}\nContact email: ${d.contact_email}\n\nOur club uses Club Batting (Mirelion), https://mirelionhq.com, to manage club selections and use our public fixtures, match results and scorecards for club statistics and awards.\n\nPlease issue our club its own organisation-scoped public API key (Client ID) and supply:\n• Our club’s full PlayHQ organisation ID (UUID).\n• The full association / competition organisation ID needed to discover our seasons.\n• Any conditions, request limits and permitted refresh frequency for this use.\n\nThis request is for public, read-only data within our club’s approved scope. Please advise if our association needs to lodge the request on our behalf. Please send the credentials to the club contact above.\n\nThank you,\n${d.contact_name}\n${d.contact_role} — ${club}`;
 }
 function createPlayCricketConnection(h){
  let state;
@@ -4494,7 +4517,7 @@ function createPlayCricketConnection(h){
 return {PLAYCRICKET_SUPPORT,PLAYHQ_ACCESS_GUIDE,accessRequestText,createPlayCricketConnection};
 })();
 
-const __demoModule10=(()=>{
+const __demoModule11=(()=>{
 // Presentation only. Source grades, players and match figures are never rewritten.
 const normal=value=>String(value||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
 function gradeLabels(value=[],grades=null){
@@ -4587,7 +4610,7 @@ For changes to background pixels, baked-in headings, logos or sponsors, return a
 return {gradeLabels,withGradeLabels,graphicGrade,checkGraphicLabel,gradeLabelSchema,GRAPHIC_FIELDS,graphicPatch,graphicSettings,graphicLabelKinds,graphicLabelSchema,graphicLabelInstructions,graphicLabel,refinedGraphicLayout,graphicPlayerDisplays,graphicSchema,graphicInstructions};
 })();
 
-const __demoModule12=(()=>{
+const __demoModule13=(()=>{
 // Shared, side-effect-free helpers for club-week planning. Publication remains server-authorised.
 const dayKey = index => `d${index + 1}`;
 function availability(person, date) {
@@ -4667,8 +4690,8 @@ function forecast(roster,fixtures,today,days=21) {
 return {dayKey,availability,missingAvailability,selectedOn,openPlaces,roleMatch,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,shareLink,forecast};
 })();
 
-const __demoModule11=(()=>{
-const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule12;
+const __demoModule12=(()=>{
+const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule13;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLabel=date=>date?new Date(date+'T12:00:00Z').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}):'';
 const button=(text,action,extra='')=>`<button type="button" class="btn ghost" data-cw="${action}" ${extra}>${esc(text)}</button>`;
@@ -4718,7 +4741,7 @@ function createClubWeekUI(h){
 return {createClubWeekUI};
 })();
 
-const __demoModule14=(()=>{
+const __demoModule15=(()=>{
 /* Read-only current-season projection of the shared scorecards.
  * Rebuild from the latest snapshot: imports and corrections never increment totals.
  * Player identity is source-ID based; only confirmed links join two identities.
@@ -4949,7 +4972,7 @@ function buildSeasonStats(context = {}, filters = {}) {
 return {STATS_FORMATS,statsFormat,statsOvers,statsRate,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
-const __demoModule16=(()=>{
+const __demoModule17=(()=>{
 // Generated by Tools/build_ndca_benchmarks.py; aggregate data only.
 const freeze=value=>{Object.values(value).forEach(v=>{if(v&&typeof v==='object')freeze(v);});return Object.freeze(value);};
 const NDCA_BENCHMARKS=freeze({
@@ -5046,8 +5069,8 @@ const NDCA_BENCHMARKS=freeze({
 return {NDCA_BENCHMARKS};
 })();
 
-const __demoModule15=(()=>{
-const {NDCA_BENCHMARKS}=__demoModule16;
+const __demoModule16=(()=>{
+const {NDCA_BENCHMARKS}=__demoModule17;
 
 /* Rough selection guides, not forecasts or automatic team changes.
  * Historical parameters: NDCA 2021/22–2025/26, same player/club/season
@@ -5295,9 +5318,9 @@ function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}
 return {NDCA_GUIDE,evidenceGrade,gradeGuide,FIELDING_RATINGS,fieldingLabel,battingRoleLabel,bowlingRoleLabel,bowlingEconomyRules,battingEvidence,bowlingEvidence,gradeBenchmark,battingPositionFits,bowlingJobFits,buildSelectionEvidence,NDCA_BENCHMARKS};
 })();
 
-const __demoModule17=(()=>{
-const {buildSeasonStats, statsOvers, STATS_FORMATS}=__demoModule14;
-const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule15;
+const __demoModule18=(()=>{
+const {buildSeasonStats, statsOvers, STATS_FORMATS}=__demoModule15;
+const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule16;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
@@ -5583,10 +5606,10 @@ function createSelectionEvidence(h) {
 return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,renderEvidenceComparison,clearEvidenceLinks,bindEvidenceLinks,bindEvidenceDetails,createSelectionEvidence};
 })();
 
-const __demoModule13=(()=>{
-const {buildSeasonStats, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule14;
-const {buildSelectionEvidence}=__demoModule15;
-const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule17;
+const __demoModule14=(()=>{
+const {buildSeasonStats, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule15;
+const {buildSelectionEvidence}=__demoModule16;
+const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule18;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
 const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? new Intl.DateTimeFormat('en-AU', {day:'numeric', month:'short', timeZone:'UTC'}).format(new Date(value + 'T12:00:00Z')) : '';
@@ -5794,7 +5817,7 @@ function createSeasonStatsPanel(h) {
 return {renderGradeComparison,renderStatsRows,createSeasonStatsPanel};
 })();
 
-const __demoModule19=(()=>{
+const __demoModule20=(()=>{
 // Name similarity proposes a human confirmation; it never establishes identity.
 function matchReviewNameParts(value){
  let name=String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\((?:c|capt|captain|wk|wkt|keeper|c\s*\/\s*wk)\)/g,'').replace(/['’]/g,'');
@@ -5820,9 +5843,9 @@ function matchReviewShortNameMatches(a,b){
 return {matchReviewNameParts,matchReviewGivenNameMatches,matchReviewShortNameMatches};
 })();
 
-const __demoModule18=(()=>{
+const __demoModule19=(()=>{
 /* Compare the trusted scorecard automatically; ask only for missing identities and the change. */
-const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule19;
+const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule20;
 const visiblePlayers=team=>(team?.players||[]).filter(p=>p.player_id&&p.name);
 const normal=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function scorecardPlayerMatches(players,roster,links=[]){
@@ -5958,8 +5981,8 @@ function createScorecardTeams(h){
 return {scorecardPlayerMatches,scorecardFixture,scorecardPlayerCandidates,createScorecardTeams};
 })();
 
-const __demoModule21=(()=>{
-const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule10;
+const __demoModule22=(()=>{
+const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule11;
 const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
 // A measured warning offers a choice; it never guesses and saves an abbreviation.
@@ -6020,7 +6043,7 @@ function assistantCanLeave(owner,notify){const r=owner?.graphicAssistant;if(r?.c
 return {assistantCSS,labelSuggestions,proposalMessage,assistantSuggestions,assistantState,assistantHTML,assistantControls,graphicPreview,bindAssistant,assistantCanLeave};
 })();
 
-const __demoModule23=(()=>{
+const __demoModule24=(()=>{
 // Shared renderer/AI contract. This contains visual settings only, never match data.
 const AWARD_STYLE_FIELDS={
  title_y:[0,100],title_size:[20,160],week_y:[0,100],week_size:[18,44],
@@ -6089,9 +6112,9 @@ For requests needing new photographic/illustrated artwork, background alteration
 return {AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions};
 })();
 
-const __demoModule22=(()=>{
-const {graphicGrade,checkGraphicLabel}=__demoModule10;
-const {safeAwardStyle}=__demoModule23;
+const __demoModule23=(()=>{
+const {graphicGrade,checkGraphicLabel}=__demoModule11;
+const {safeAwardStyle}=__demoModule24;
 const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
  {key:'player_week',label:'Player of the Week',description:'Choose and recognise one player.'},
@@ -6209,12 +6232,12 @@ function drawResultBadge(ctx,text,{label,x,y,maxHeight,layout:d,example}){
 return {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardCaption,awardBatches,resultsShareOpponent,resultsOutcome,resultsSummary,drawAwardGraphic};
 })();
 
-const __demoModule20=(()=>{
-const {scopedAwardLabel}=__demoModule3;
-const {withGradeLabels,graphicLabel}=__demoModule10;
-const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule21;
-const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule22;
-const {visualSettings,refinedAwardLayout}=__demoModule23;
+const __demoModule21=(()=>{
+const {scopedAwardLabel}=__demoModule4;
+const {withGradeLabels,graphicLabel}=__demoModule11;
+const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule22;
+const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule23;
+const {visualSettings,refinedAwardLayout}=__demoModule24;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
 
@@ -6446,8 +6469,8 @@ async function renderSocialAwardRequests({supabase,escape:esc},host){
 return {createSocialAwards,renderSocialAwardRequests};
 })();
 
-const __demoModule24=(()=>{
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule21;
+const __demoModule25=(()=>{
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule22;
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);
@@ -6530,7 +6553,7 @@ function createTeamSocialWorkflow(h){
 return {createTeamSocialWorkflow};
 })();
 
-const __demoModule25=(()=>{
+const __demoModule26=(()=>{
 const clean=value=>String(value??'').trim();
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'TH':({1:'ST',2:'ND',3:'RD'}[n%10]||'TH'));
 function dateLabel(value){
@@ -6557,7 +6580,7 @@ function teamSelectionText(card){
 return {teamSelectionText};
 })();
 
-const __demoModule26=(()=>{
+const __demoModule27=(()=>{
 /* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143; local preview cache .225. */
 function createSocialPublishing(h){
  const {supabase}=h,esc=h.escape,demo=!!h.demo;
@@ -6897,7 +6920,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
 return {createSocialPublishing};
 })();
 
-const __demoModule27=(()=>{
+const __demoModule28=(()=>{
 // Balances are participant-seconds; show the equivalent time for four people.
 function videoTime(seconds){
  const minutes=Math.floor(Math.max(0,Number(seconds)||0)/240);
@@ -6972,8 +6995,8 @@ function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sydney',o
 return {videoTime,videoDuration,mountVideoCredits};
 })();
 
-const __demoModule28=(()=>{
-const {mountVideoCredits}=__demoModule27;
+const __demoModule29=(()=>{
+const {mountVideoCredits}=__demoModule28;
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -7290,7 +7313,7 @@ function createSelectionRoom(h){
 return {selectionCallLink,selectionRoomGeometry,selectionCallElapsed,createSelectionRoom};
 })();
 
-const __demoModule30=(()=>{
+const __demoModule31=(()=>{
 /* Local text recognition. Images are passed to a browser worker, never to a reading service.
    Pinned Tesseract engine/language files download from jsDelivr; no image is sent there. */
 function teamWeekReadWords(tsv){
@@ -7342,7 +7365,7 @@ async function readTeamWeekReference(example,background,{candidateNames=[],textC
 return {teamWeekReadWords,teamWeekReadLayout,readTeamWeekReference};
 })();
 
-const __demoModule31=(()=>{
+const __demoModule32=(()=>{
 /* A transparent award guide, not a grade-conversion or selection model.
    Keep source figures intact. Missing context supplies no invented match facts. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
@@ -7435,7 +7458,7 @@ function awardPerformance(p,cards=[]){
 return {awardBalls,awardPerformance};
 })();
 
-const __demoModule32=(()=>{
+const __demoModule33=(()=>{
 /* Basic TOTW uses recorded figures only. Keep Smart's match-context guide separate. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
 const total=(rows,key)=>rows.length&&rows.every(row=>number(row[key])!==null)?rows.reduce((n,row)=>n+number(row[key]),0):null;
@@ -7476,13 +7499,13 @@ function teamWeekBasicRecommendations(candidates){
 return {rawAwardFigures,teamWeekBasicRank,teamWeekBasicRecommendations};
 })();
 
-const __demoModule29=(()=>{
-const {scopedAwardLabel}=__demoModule3;
-const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule10;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule21;
-const {readTeamWeekReference}=__demoModule30;
-const {awardPerformance}=__demoModule31;
-const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule32;
+const __demoModule30=(()=>{
+const {scopedAwardLabel}=__demoModule4;
+const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule11;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule22;
+const {readTeamWeekReference}=__demoModule31;
+const {awardPerformance}=__demoModule32;
+const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule33;
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 function teamWeekFigures(player,display=player.display){
@@ -7762,7 +7785,7 @@ function createTeamOfWeek(h){
 return {teamWeekGrade,teamWeekFigures,teamWeekDisplay,teamWeekOrder,teamWeekWorthwhile,teamWeekDraft,teamWeekRecommendations,teamWeekRank,teamWeekMatchExample,teamWeekLayout,createTeamOfWeek};
 })();
 
-const __demoModule33=(()=>{
+const __demoModule34=(()=>{
 /* One set of club scorecards, reused by Teams awards and Club Batting. */
 const resultWeekEnd=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+(7-d.getUTCDay())%7);return d.toISOString().slice(0,10);};
 const key=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -7811,8 +7834,8 @@ function createSharedMatchResults(h){
 return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,createSharedMatchResults};
 })();
 
-const __demoModule34=(()=>{
-const {graphicLabel}=__demoModule10;
+const __demoModule35=(()=>{
+const {graphicLabel}=__demoModule11;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
  const state=s=>s.awardLabels||(s.awardLabels={weeks:{},loads:{},draft:null,pending:null,busy:false,error:''});
@@ -7854,9 +7877,9 @@ function createSocialAwardLabels(h){
 return {createSocialAwardLabels};
 })();
 
-const __demoModule35=(()=>{
+const __demoModule36=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
-const {weeklyResultCoverage,cardStatus}=__demoModule33;
+const {weeklyResultCoverage,cardStatus}=__demoModule34;
 const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
@@ -7920,9 +7943,9 @@ function createFixtureResults(h){
 return {renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule37=(()=>{
-const {awardPerformance}=__demoModule31;
-const {rawAwardFigures}=__demoModule32;
+const __demoModule38=(()=>{
+const {awardPerformance}=__demoModule32;
+const {rawAwardFigures}=__demoModule33;
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
@@ -7977,11 +8000,11 @@ function playerWeekRecommendations(candidates,profiles={},history=[],end,preferN
 return {playerWeekFigures,playerWeekRecommendations};
 })();
 
-const __demoModule36=(()=>{
-const {scopedAwardLabel}=__demoModule3;
-const {graphicGrade,checkGraphicLabel}=__demoModule10;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule21;
-const {playerWeekFigures,playerWeekRecommendations}=__demoModule37;
+const __demoModule37=(()=>{
+const {scopedAwardLabel}=__demoModule4;
+const {graphicGrade,checkGraphicLabel}=__demoModule11;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule22;
+const {playerWeekFigures,playerWeekRecommendations}=__demoModule38;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
 }
@@ -8118,7 +8141,7 @@ function createPlayerOfWeek(h){
 return {playerWeekLayout,createPlayerOfWeek};
 })();
 
-const __demoModule38=(()=>{
+const __demoModule39=(()=>{
 // Local design trials. Only the explicit Apply action can save club settings.
 function createSocialSandbox(h){
  const names=['Alex Sample','Jordan Sample','Taylor Sample','Casey Sample','Morgan Sample','Riley Sample','Cameron Sample','Sam Sample','Jamie Sample','Charlie Sample','Robin Sample'];
@@ -8221,7 +8244,7 @@ function createSocialSandbox(h){
 return {createSocialSandbox};
 })();
 
-const __demoModule39=(()=>{
+const __demoModule40=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -8260,7 +8283,7 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule40=(()=>{
+const __demoModule41=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -8318,7 +8341,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule41=(()=>{
+const __demoModule42=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -8346,8 +8369,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule42=(()=>{
-const {createTeamWeekDemo}=__demoModule41;
+const __demoModule43=(()=>{
+const {createTeamWeekDemo}=__demoModule42;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -8367,7 +8390,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule43=(()=>{
+const __demoModule44=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -8407,7 +8430,7 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule44=(()=>{
+const __demoModule45=(()=>{
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday) {
   const copy = value => structuredClone(value);
@@ -8465,7 +8488,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule45=(()=>{
+const __demoModule46=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -8572,71 +8595,74 @@ return {createSocialAwardsDemo};
 
 const {createMirelionAssistDemo}=__demoModule0;
 
-const {createMirelionAssist}=__demoModule1;
+const {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl}=__demoModule1;
 
-const {assistLaunchFromSearch}=__demoModule2;
+const {createMirelionAssist}=__demoModule2;
 
-const {createSocialAwardScopes}=__demoModule3;
+const {assistLaunchFromSearch}=__demoModule3;
 
-const {createSelectionGroupPermissions}=__demoModule4;
+const {createSocialAwardScopes}=__demoModule4;
 
-const {createSelectionGroupPage}=__demoModule5;
+const {createSelectionGroupPermissions}=__demoModule5;
 
-const {createPlayHQImport}=__demoModule7;
+const {createSelectionGroupPage}=__demoModule6;
 
-const {createPlayCricketConnection}=__demoModule9;
+const {createPlayHQImport}=__demoModule8;
 
-const {graphicGrade,checkGraphicLabel}=__demoModule10;
+const {createPlayCricketConnection}=__demoModule10;
 
-const {createClubWeekUI}=__demoModule11;
+const {graphicGrade,checkGraphicLabel}=__demoModule11;
 
-const {createSeasonStatsPanel}=__demoModule13;
+const {createClubWeekUI}=__demoModule12;
 
-const {FIELDING_RATINGS,fieldingLabel}=__demoModule15;
+const {createSeasonStatsPanel}=__demoModule14;
 
-const {createSelectionEvidence}=__demoModule17;
+const {FIELDING_RATINGS,fieldingLabel}=__demoModule16;
 
-const {createScorecardTeams}=__demoModule18;
+const {createSelectionEvidence}=__demoModule18;
 
-const {createSocialAwards,renderSocialAwardRequests}=__demoModule20;
+const {createScorecardTeams}=__demoModule19;
 
-const {createTeamSocialWorkflow}=__demoModule24;
+const {createSocialAwards,renderSocialAwardRequests}=__demoModule21;
 
-const {teamSelectionText}=__demoModule25;
+const {createTeamSocialWorkflow}=__demoModule25;
 
-const {createSocialPublishing}=__demoModule26;
+const {teamSelectionText}=__demoModule26;
 
-const {mountVideoCredits}=__demoModule27;
+const {createSocialPublishing}=__demoModule27;
 
-const {createSelectionRoom}=__demoModule28;
+const {mountVideoCredits}=__demoModule28;
 
-const {createTeamOfWeek,teamWeekLayout}=__demoModule29;
+const {createSelectionRoom}=__demoModule29;
 
-const {createSharedMatchResults}=__demoModule33;
+const {createTeamOfWeek,teamWeekLayout}=__demoModule30;
 
-const {createSocialAwardLabels}=__demoModule34;
+const {createSharedMatchResults}=__demoModule34;
 
-const {createFixtureResults}=__demoModule35;
+const {createSocialAwardLabels}=__demoModule35;
 
-const {createPlayerOfWeek}=__demoModule36;
+const {createFixtureResults}=__demoModule36;
 
-const {createSocialSandbox}=__demoModule38;
+const {createPlayerOfWeek}=__demoModule37;
 
-const {renderSocialPlatformSetup}=__demoModule39;
+const {createSocialSandbox}=__demoModule39;
 
-const {createScorecardTeamDemo}=__demoModule40;
+const {renderSocialPlatformSetup}=__demoModule40;
 
-const {createTeamWeekDemo}=__demoModule41;
+const {createScorecardTeamDemo}=__demoModule41;
 
-const {createPlayerWeekDemo}=__demoModule42;
+const {createTeamWeekDemo}=__demoModule42;
 
-const {createSharedResultsDemo}=__demoModule43;
+const {createPlayerWeekDemo}=__demoModule43;
 
-const {createSeasonStatsDemo}=__demoModule44;
+const {createSharedResultsDemo}=__demoModule44;
 
-const {createSocialAwardsDemo}=__demoModule45;
+const {createSeasonStatsDemo}=__demoModule45;
 
-const {selectionCallLink}=__demoModule28;
+const {createSocialAwardsDemo}=__demoModule46;
+
+const {selectionCallLink}=__demoModule29;
+
 
 
 
@@ -8670,7 +8696,8 @@ const {selectionCallLink}=__demoModule28;
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.271';
+const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
+const APP_UI_VERSION='0.8.62.272';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -9670,8 +9697,9 @@ function matchDraftStart(){if(matchDraftRecovery.started)return;matchDraftRecove
 // END MATCH DRAFT RECOVERY V129
 
 async function boot(){
+  const moved=legacyAppRedirect(location.href);if(moved){location.replace(moved);return;}
   void initialisePhoneApp();
-  document.title='Club Batting';
+  document.title='Mirelion';
   const {data:{session:s}}=await supabase.auth.getSession();
   session=s;
   matchDraftAuthChanged(null,s?.user?.id||null);matchDraftStart();
@@ -9828,6 +9856,9 @@ async function loadPlatformContext(){
 async function routeAuth(){
   const params=new URLSearchParams(location.search);
   if(passwordRecoveryRequired || params.has('password_setup')){renderPasswordSetup();return;}
+  if(isLegacyOrigin(location.href)&&!legacyAppSession){
+    app.innerHTML=`<div class="login"><div class="section-label">Mirelion</div><h1>Continue at our new home.</h1><p>${session?'Your account link has been completed.':'If your account link has expired, request a new one from the sign-in page.'} Sign in at Mirelion with your existing email and password. Your club and access stay with your account.</p><a class="btn secondary" href="${esc(mirelionAppUrl(location.href))}">Continue to Mirelion</a></div>`;return;
+  }
   if(params.has('trial_product')){await renderProductTrialEntry();return;}
   if(params.has('enquiry')){await renderProductEnquiryEntry();return;}
   if(params.has('close_invitation')){await renderCloseInvitationRoute(params.get('close_invitation'));return;}
@@ -9998,7 +10029,7 @@ function renderLogin(msg=''){
 function renderPasswordReset(email=''){
   app.innerHTML=`<div class="login"><div class="section-label">Your account</div><h1>Set or reset your password.</h1>
     ${clubSignupReturnHtml()}
-    <p>Already registered with Club Batting? Use your existing account email to choose a password. This does not create a new account.</p>
+    <p>Already registered with Mirelion or Club Batting? Use your existing account email to choose a password. This does not create a new account.</p>
     <form id="passwordResetForm"><div class="field"><label for="resetEmail">Email</label><input id="resetEmail" type="email" autocomplete="email" value="${esc(email)}" required></div>
     <button class="btn secondary" id="requestReset" type="submit">Send password setup link</button></form>
     <div id="resetStatus" class="help" role="status" aria-live="polite"></div>
@@ -12139,7 +12170,7 @@ const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Choose a product",
-        "body": "On clubbatting.com, explore Batting development or Teams & availability and its fictional demo. Choose Start free trial, then either product or Both. Teams & availability works independently and requires no Batting subscription or Player Plans."
+        "body": "On mirelionhq.com, explore Club Batting or Mirelion Select and its fictional demo. Choose Start free trial, then either product or Both. Teams & availability works independently and requires no Batting subscription or Player Plans."
       },
       {
         "title": "Confirm your account",
@@ -12196,7 +12227,7 @@ const CLUB_BATTING_HELP = {
         "title": "Create a new player account from the club link"
       },
       {
-        "body": "After registration, open Account → App & notifications for the steps for your phone. Add the Club Batting icon, then open it and sign in with the same account if asked. Choose Club messages and/or Coaching updates, tap Enable notifications, then Allow. Installation and notification permission are separate steps; no new account is needed.",
+        "body": "After registration, open Account → App & notifications for the steps for your phone. Add the Mirelion icon, then open it and sign in with the same account if asked. Choose Club messages and/or Coaching updates, tap Enable notifications, then Allow. Installation and notification permission are separate steps; no new account is needed.",
         "title": "Put the app on your phone after joining"
       },
       {
@@ -13626,15 +13657,15 @@ const CLUB_BATTING_HELP = {
       },
       {
         "title": "Add the app on Android",
-        "body": "In Chrome, tap Install Club Batting if offered. Otherwise use the three dots (⋮), usually at the top right → Install and create shortcut → Install. Some versions say Install app or Add to Home screen. If the link opened inside WhatsApp, use its menu to open it in Chrome first."
+        "body": "In Chrome, tap Install Mirelion if offered. Otherwise use the three dots (⋮), usually at the top right → Install and create shortcut → Install. Some versions say Install app or Add to Home screen. If the link opened inside WhatsApp, use its menu to open it in Chrome first."
       },
       {
         "title": "Use the full app",
-        "body": "Open the new Club Batting icon on your phone and sign in with your existing account if asked. It opens your full club app: plans, training, innings and messages. The icon can go on any Home Screen or in a folder; internet access is needed. On a computer, App & notifications only shows phone setup instructions. Notification choices are available from the installed phone app. No App Store download or new account is needed."
+        "body": "Open the new Mirelion icon on your phone and sign in with your existing account if asked. It opens your full club app: plans, training, innings and messages. The icon can go on any Home Screen or in a folder; internet access is needed. On a computer, App & notifications only shows phone setup instructions. Notification choices are available from the installed phone app. No App Store download or new account is needed."
       },
       {
         "title": "Enable notifications deliberately",
-        "body": "From the Club Batting icon, open Account → App & notifications. Select Club messages and/or Coaching updates, tap Enable notifications, then Allow. Saved settings show Notifications on ✓; turning off both choices shows Notifications off ✓. iPhone/iPad push needs iOS/iPadOS 16.4 or later. Each club and device is separate. There is no automatic subscription or backlog of old notes."
+        "body": "From the Mirelion icon, open Account → App & notifications. Select Club messages and/or Coaching updates, tap Enable notifications, then Allow. Saved settings show Notifications on ✓; turning off both choices shows Notifications off ✓. iPhone/iPad push needs iOS/iPadOS 16.4 or later. Each club and device is separate. There is no automatic subscription or backlog of old notes."
       },
       {
         "title": "Open an alert",
@@ -28193,7 +28224,7 @@ async function renderClubMessages(){
 }
 function clubWeekMessageLink(row){
  if(row.target!=='teams')return '';const found=String(row.body||'').match(/https:\/\/clubbatting\.com\/app\.html\?[^\s<>]+/);if(!found)return '';
- try{const u=new URL(found[0]);if(u.origin!=='https://clubbatting.com'||u.pathname!=='/app.html'||u.searchParams.get('club')!==club.id||u.searchParams.get('tab')!=='teams')return '';return u.href;}catch{return '';}
+ try{const u=new URL(found[0]);if(!['https://mirelionhq.com','https://clubbatting.com'].includes(u.origin)||u.pathname!=='/app.html'||u.searchParams.get('club')!==club.id||u.searchParams.get('tab')!=='teams')return '';return u.href;}catch{return '';}
 }
 function drawClubMessages(page,state){
  initialiseMessageStaff(state);
@@ -28320,21 +28351,21 @@ Once you’ve finished registering:
 🤖 Android: In Chrome, tap three dots (⋮) → Install and create shortcut → Install. Some versions say Install app or Add to Home screen.
 
 3. Turn on notifications
-Open the new Club Batting icon on your phone. Sign in if asked, then go to Account → App & notifications. Choose Club messages and Coaching updates, tap Enable notifications, then Allow.
+Open the new Mirelion icon on your phone. Sign in if asked, then go to Account → App & notifications. Choose Club messages and Coaching updates, tap Enable notifications, then Allow.
 
 ${plansReady?'Your Player Plan, training ideas and match preparation are now one tap away.':'Register now while the club prepares How We Bat and the Player Plan questions. We’ll notify you when your plan is ready; anyone assigned a setup role can help with preparation now.'}`;
 }
 function phoneIOSInstallSteps(){
- return `<ol><li>Tap Safari’s <strong>three dots (…)</strong> at the bottom-right of your screen.</li><li>Tap <strong>Share</strong> — the square with an arrow pointing upwards.</li><li>Tap <strong>View More</strong> if shown, then <strong>Add to Home Screen</strong>. You may need to scroll down.</li><li>Keep <strong>Open as Web App</strong> switched on if shown, then tap <strong>Add</strong>.</li><li>Go to your phone’s Home Screen and open the <strong>Club Batting icon</strong>. Sign in with your existing account if asked.</li></ol>`;
+ return `<ol><li>Tap Safari’s <strong>three dots (…)</strong> at the bottom-right of your screen.</li><li>Tap <strong>Share</strong> — the square with an arrow pointing upwards.</li><li>Tap <strong>View More</strong> if shown, then <strong>Add to Home Screen</strong>. You may need to scroll down.</li><li>Keep <strong>Open as Web App</strong> switched on if shown, then tap <strong>Add</strong>.</li><li>Go to your phone’s Home Screen and open the <strong>Mirelion icon</strong>. Sign in with your existing account if asked.</li></ol>`;
 }
 function phoneAndroidInstallSteps(){
- return `<ol><li>Tap Chrome’s <strong>three dots (⋮)</strong>, usually at the top-right.</li><li>Tap <strong>Install and create shortcut → Install</strong>. Some versions say <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li><li>Open the new <strong>Club Batting icon</strong> on your phone. Sign in with your existing account if asked.</li></ol>`;
+ return `<ol><li>Tap Chrome’s <strong>three dots (⋮)</strong>, usually at the top-right.</li><li>Tap <strong>Install and create shortcut → Install</strong>. Some versions say <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li><li>Open the new <strong>Mirelion icon</strong> on your phone. Sign in with your existing account if asked.</li></ol>`;
 }
 function phoneInstallHelp(ios,android){
  const next='<p class="phone-next"><strong>Then turn on alerts:</strong> open <strong>Account → App &amp; notifications</strong> from the new app.</p>';
- if(ios)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneIOSInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If Safari shows the <strong>Share icon</strong> directly, tap it and continue from step 3. If <strong>Add to Home Screen</strong> is missing, scroll to <strong>Edit Actions</strong> and add it. On iPad, Share may be at the top.</p><p>If you opened Club Batting inside WhatsApp or another browser, open this page in <strong>Safari</strong> first. Already added the icon? Open that icon instead of adding it again.</p></details>`;
- if(android)return `<p>Add the app icon, then open your plans straight from your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Club Batting</button><details><summary>Or use Chrome’s menu</summary>'+phoneAndroidInstallSteps()+'</details>':phoneAndroidInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If you opened Club Batting inside WhatsApp, use its menu to open this page in <strong>Chrome</strong>. Already added the icon? Open that icon instead of adding it again.</p></details>`;
- return `<details class="phone-other-devices" data-phone-device="iphone"><summary>iPhone or iPad</summary><p>On your phone, open Club Batting in <strong>Safari</strong>.</p>${phoneIOSInstallSteps()}<p class="help">If Share is visible directly, start there. If Add to Home Screen is missing, scroll down or use Edit Actions. On iPad, Share may be at the top.</p>${next}</details><details class="phone-other-devices" data-phone-device="android"><summary>Android</summary><p>On your phone, open Club Batting in <strong>Chrome</strong>.</p>${phoneAndroidInstallSteps()}${next}</details>`;
+ if(ios)return `<p>Add the app icon, then open your club straight from your phone.</p>${phoneIOSInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If Safari shows the <strong>Share icon</strong> directly, tap it and continue from step 3. If <strong>Add to Home Screen</strong> is missing, scroll to <strong>Edit Actions</strong> and add it. On iPad, Share may be at the top.</p><p>If you opened Mirelion inside WhatsApp or another browser, open this page in <strong>Safari</strong> first. Already added the icon? Open that icon instead of adding it again.</p></details>`;
+ if(android)return `<p>Add the app icon, then open your club straight from your phone.</p>${phoneInstallPrompt?'<button class="btn" id="installClubBatting">Install Mirelion</button><details><summary>Or use Chrome’s menu</summary>'+phoneAndroidInstallSteps()+'</details>':phoneAndroidInstallSteps()}${next}<details><summary>Can’t find it?</summary><p>If you opened Mirelion inside WhatsApp, use its menu to open this page in <strong>Chrome</strong>. Already added the icon? Open that icon instead of adding it again.</p></details>`;
+ return `<details class="phone-other-devices" data-phone-device="iphone"><summary>iPhone or iPad</summary><p>On your phone, open Mirelion in <strong>Safari</strong>.</p>${phoneIOSInstallSteps()}<p class="help">If Share is visible directly, start there. If Add to Home Screen is missing, scroll down or use Edit Actions. On iPad, Share may be at the top.</p>${next}</details><details class="phone-other-devices" data-phone-device="android"><summary>Android</summary><p>On your phone, open Mirelion in <strong>Chrome</strong>.</p>${phoneAndroidInstallSteps()}${next}</details>`;
 }
 async function phoneWorkerMessage(type,binding=null){
  if(phoneIsDemo()||!('serviceWorker'in navigator))return;
@@ -28392,7 +28423,7 @@ async function signOutClubBatting(){
 async function openPhoneApp(){if(!await saveClubEditsBeforeNavigation())return;currentTab='phone_app';await renderTab();}
 function phoneAppPrompt(){
  if(phoneIsInstalled()||phoneIsDemo()||fixtureLocalStorage.getItem('cb-hide-install')==='yes')return '';
- return `<div class="phone-install-prompt"><button class="btn ghost" data-phone-open>Get Club Batting on your phone ↗</button><button type="button" class="btn ghost" data-phone-dismiss aria-label="Dismiss phone installation suggestion">×</button></div>`;
+ return `<div class="phone-install-prompt"><button class="btn ghost" data-phone-open>Get Mirelion on your phone ↗</button><button type="button" class="btn ghost" data-phone-dismiss aria-label="Dismiss phone installation suggestion">×</button></div>`;
 }
 function bindPhoneAppControls(){
  void refreshPhoneSetupPrompt();
@@ -28408,12 +28439,12 @@ async function renderPhoneApp(){
  const phoneStyle=`<style>.phone-settings{max-width:640px;margin:0 auto}.phone-settings h1{font-size:24px;margin:0 0 12px}.phone-settings h2{font-size:19px;margin:16px 0 8px}.phone-settings p,.phone-settings li{font-size:15px;line-height:1.5}.phone-settings ol{padding-left:24px}.phone-settings li{padding-left:3px;margin-bottom:10px}.phone-settings label{display:flex;gap:10px;align-items:center;min-height:44px}.phone-settings input{width:18px;height:18px;margin:0}.phone-settings .help{font-size:12px}.phone-settings details{margin:12px 0}.phone-settings summary{cursor:pointer;min-height:44px;align-content:center;font-weight:700}.phone-settings .phone-next{padding:12px;border-radius:10px;background:#eef0ff}.phone-settings .phone-installed{color:#08766a}.phone-settings [hidden]{display:none!important}.phone-settings #phoneActionStatus:empty{display:none}</style>`;
  // Desktop is an instruction page only, including an installed desktop PWA.
  if(!mobile){
-  page.innerHTML=`${phoneStyle}<section class="card phone-settings"><h1>Get Club Batting on your phone</h1><p>Open your plans, training and match preparation from an icon on your phone.</p>${phoneInstallHelp(false,false)}${demo?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
+  page.innerHTML=`${phoneStyle}<section class="card phone-settings"><h1>Get Mirelion on your phone</h1><p>Open your club from an icon on your phone.</p>${phoneInstallHelp(false,false)}${demo?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
   return;
  }
  page.innerHTML=`${phoneStyle}
- <section class="card phone-settings"><h1>${installFirst?'Get the Club Batting app on your phone':'App &amp; notifications'}</h1>
- ${installed?'<p class="phone-installed">✓ You’re using the Club Batting app.</p>':phoneInstallHelp(ios,android)}
+ <section class="card phone-settings"><h1>${installFirst?'Get the Mirelion app on your phone':'App &amp; notifications'}</h1>
+ ${installed?'<p class="phone-installed">✓ You’re using the Mirelion app.</p>':phoneInstallHelp(ios,android)}
  <div id="phoneNotificationPanel" ${installFirst?'hidden':''}>
  <p id="phoneNotificationStatus" role="status">${demo?'Demo only — no installation or real notifications.':'Checking this device…'}</p>
  <p class="phone-next">Choose phone alerts below. Without them, updates arrive by email.</p>
@@ -28425,7 +28456,7 @@ async function renderPhoneApp(){
  document.getElementById('installClubBatting')?.addEventListener('click',async event=>{const button=event.currentTarget;if(button.disabled)return;const prompt=phoneInstallPrompt;phoneInstallPrompt=null;button.disabled=true;button.textContent='Opening install…';try{if(prompt){await prompt.prompt();await prompt.userChoice;}if(here())await renderPhoneApp();}catch{if(here()&&button.isConnected){const menu=button.nextElementSibling;if(menu?.tagName==='DETAILS')menu.open=true;const message=document.createElement('p');message.setAttribute('role','status');message.textContent='Installation could not open. Use Chrome’s menu below.';button.replaceWith(message);}}});
  if(demo)return;
  if(installFirst)return;
- if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive notifications. Open Club Batting in a supported, up-to-date browser.';return;}
+ if(!phonePushSupported()){document.getElementById('phoneNotificationStatus').textContent='This browser cannot receive notifications. Open Mirelion in a supported, up-to-date browser.';return;}
  try{
   const reg=await initialisePhoneApp();if(!reg)throw new Error(phoneRegistrationError||'Phone notification setup couldn’t finish. Please try again.');
   await waitForPhoneWorker(reg);if(!here())return;
@@ -30650,7 +30681,7 @@ function paintPhoneSetupPrompt(host,state,key){
  if(!host?.isConnected||key!==phoneSetupPromptKey()||currentTab==='phone_app'||phoneSetupSnoozed(key)){if(host)host.hidden=true;return;}
  if(state==='ready'||state==='chosen_off'){host.hidden=true;host.innerHTML='';return;}
  const copy=state==='blocked'
-  ?['Phone notifications are blocked','Open notification settings to see how to allow Club Batting alerts.','Review notification settings']
+  ?['Phone notifications are blocked','Open notification settings to see how to allow Mirelion alerts.','Review notification settings']
   :state==='unknown'
    ?['Check your phone notifications','We couldn’t confirm this phone’s notification setup. Open settings to check.','Check notification setup']
    :['Finish setting up notifications','Turn on phone alerts for team and club updates. Until then, updates arrive by email.','Set up notifications'];
@@ -30695,7 +30726,7 @@ async function refreshPhoneSetupPrompt(){
 /* END PHONE SETUP PROMPT */
 /* BEGIN HELP VIDEOS — maintained source: tools/help_videos_ui.js */
 // Catalogue is generated from verified recordings; media is requested only on Watch.
-const HELP_VIDEOS=[{"id":"phone-iphone","title":"iPhone: app and alerts","topics":["phone_app","notifications","navigation_account"],"tabs":[],"duration":42.5,"bytes":1905205,"captions":["Open Club Batting in Safari.\nTap the More (three dots) menu.","Tap Share.","Tap View More\nto show all actions.","Choose Add to Home Screen.","Keep Open as Web App on.\nThen tap Add.","The app is now\non your Home Screen.","Open the Club Batting icon.","Sign in if asked.","Tap Set up notifications.","Keep both update types ticked.\nTap Enable notifications.","Tap Allow\non the iPhone prompt.","Check for Notifications on ✓.\nYour phone is ready."],"description":"Real iPhone screen recording · edited for clarity · captions included.","asset_version":"124"},{"id":"phone-android","title":"Android: app and alerts","topics":["phone_app","notifications","navigation_account"],"tabs":[],"duration":42.065011,"bytes":1228680,"captions":["Account →\nApp & notifications.","On Android, open\nClub Batting in Chrome.","Chrome: ⋮ →\nInstall and create shortcut.","Choose Install.\nFollow the phone’s prompts.","Open the new app icon.\nSign in if asked.","Return to Account →\nApp & notifications.","Keep Club messages\nand Coaching updates ticked.","Tap Enable notifications.","Choose Allow when\nyour phone asks.","Check for\nNotifications on ✓.","Until alerts are enabled,\nyou’ll keep getting emails."],"description":"Illustrated Android setup guide · captions included."},{"id":"availability","title":"Mark the dates you can play","topics":["selections","selection_availability"],"tabs":[],"duration":17.98,"bytes":403601,"captions":["Teams → Availability.\nMark the dates you can play.","Tap each available day.","Green ticks mean available.\nUnmarked dates mean unavailable.","Save your availability.","Saved ✓\nSelectors can now use these dates."],"products":["teams"]},{"id":"workshop","title":"Choose the club’s How We Bat","topics":["philosophy_workshop","how_we_bat","workshop_changes"],"tabs":["workshop","howwebat"],"duration":25.777007,"bytes":1288310,"captions":["The Workshop brings\nyour club’s ideas together.","Compare a combination\nof contributors.","Open its How We Bat preview.","Check the approach\nfor each playing format.","The Philosophy Lead\nchooses the club’s version.","Review the wording next,\nthen confirm it for the season."],"products":["batting"]},{"id":"player-plan","title":"Make the plan your own","topics":["player_plan"],"tabs":["myplan"],"duration":25.791667,"bytes":1316606,"captions":["Your Player Plan:\nhow you want to bat.","Use Edit to make it your own.","Choose scoring options\nthat belong to your game.","Add a useful detail\nin your own words.","Done editing returns you\nto the plan you can use.","Take your plan into training."],"products":["batting"]},{"id":"prepare-predict","title":"Prepare and make your prediction","topics":["my_innings","make_your_call"],"tabs":["innings","make_your_call"],"duration":28.770998,"bytes":1655187,"captions":["Predict your score\nwith a plan behind it.","Choose the upcoming match.","Enter your score prediction\nbefore the match day.","Add one useful match-up.","Choose a scoring option\nfrom your own Player Plan.","Save preparation\nto enter your prediction.","Your preparation is saved.\nReturn to it before you bat."],"products":["batting"]},{"id":"training","title":"Take a focus into training","topics":["how_we_train","current_focus","training_preparation"],"tabs":["howwetrain","training_preparation"],"duration":27.625,"bytes":1352373,"captions":["How We Train turns\nyour plan into practice.","Open My Current Focus.","Bring this focus\nto your next session.","Coach view:\nprepare a session for the group.","See each player’s focus\nand spot shared training needs.","Open a player’s training plan\nfor the detail."],"products":["batting"]},{"id":"match-review-teams","title":"Review the published team","topics":["team_review","feedback_loop"],"tabs":["team_review"],"products":["both"],"staff_only":true,"duration":32.062993,"bytes":1868314,"captions":["Match Review uses\nthe published Teams selection.","Check the match. Its date\nand opposition stay together.","Choose a selected player\nto add your observation.","Choose your view of the innings.\nAssess the dismissal separately.","Record what you noticed.\nKeep it useful and specific.","Save the observation.","Back at the same match.\nChoose another player when ready."],"description":"App screen recording · fictional club · captions included.","asset_version":"129"},{"id":"match-review-manual","title":"Choose match players without Teams","topics":["team_review","feedback_loop"],"tabs":["team_review"],"products":["batting_only"],"staff_only":true,"duration":29.958005,"bytes":1705375,"captions":["Club Batting without Teams:\nchoose this match’s players.","Open Choose players\nfor this match.","Groups help you find names.\nThey do not select anyone.","Tick the players\nwho are actually playing.","Save match players\nto confirm this match’s list.","Now add your match review.","Save the review.\nThe player list and observation stay together."],"description":"App screen recording · fictional club · captions included.","asset_version":"129"},{"id":"match-observation-first","title":"Record an observation before selection","topics":["team_review","feedback_loop"],"tabs":["players","team_review"],"products":["batting"],"staff_only":true,"duration":35.608005,"bytes":2206886,"captions":["No fixture entered yet?\nStart with the player’s observation.","Choose New match\nand its grade.","Enter the match’s start date,\nformat and opposition.","Choose your assessment\nand add a useful note.","Save. This creates the match\nwithout selecting a team.","The same fixture is ready\nfor the normal Teams selection.","Team not finalised.\nYour earlier observation is still saved."],"description":"App screen recording · fictional club · captions included.","asset_version":"129"},{"id":"conversation","title":"Turn feedback into a conversation","topics":["coach_conversations","request_conversation"],"tabs":["conversations"],"duration":20.708333,"bytes":1371649,"captions":["Turn a training question\ninto a Coach Conversation.","Say what you want\nto work on.","Choose someone in your club,\nor leave it for any coach.","Request the conversation.","The request stays here\nwith your follow-up conversation."],"products":["batting"]},{"id":"messages","title":"Send a club message","topics":["club_messages","notifications"],"tabs":["messages"],"duration":36.818005,"bytes":949673,"captions":["Messages keeps club updates\nand their app links together.","Choose the people\nwho need this message.","Give the update a clear title.","Link straight to\nthe relevant app screen.","Phone alerts where enabled.\nAn email link otherwise.","Player view:\nopen the message in the app."],"staff_only":true}];
+const HELP_VIDEOS=[{"id":"phone-iphone","title":"iPhone: app and alerts","topics":["phone_app","notifications","navigation_account"],"tabs":[],"duration":42.5,"bytes":1905205,"captions":["Open Club Batting in Safari.\nTap the More (three dots) menu.","Tap Share.","Tap View More\nto show all actions.","Choose Add to Home Screen.","Keep Open as Web App on.\nThen tap Add.","The app is now\non your Home Screen.","Open the Mirelion icon.","Sign in if asked.","Tap Set up notifications.","Keep both update types ticked.\nTap Enable notifications.","Tap Allow\non the iPhone prompt.","Check for Notifications on ✓.\nYour phone is ready."],"description":"Real iPhone screen recording · edited for clarity · captions included.","asset_version":"124"},{"id":"phone-android","title":"Android: app and alerts","topics":["phone_app","notifications","navigation_account"],"tabs":[],"duration":42.065011,"bytes":1228680,"captions":["Account →\nApp & notifications.","On Android, open\nClub Batting in Chrome.","Chrome: ⋮ →\nInstall and create shortcut.","Choose Install.\nFollow the phone’s prompts.","Open the new app icon.\nSign in if asked.","Return to Account →\nApp & notifications.","Keep Club messages\nand Coaching updates ticked.","Tap Enable notifications.","Choose Allow when\nyour phone asks.","Check for\nNotifications on ✓.","Until alerts are enabled,\nyou’ll keep getting emails."],"description":"Illustrated Android setup guide · captions included."},{"id":"availability","title":"Mark the dates you can play","topics":["selections","selection_availability"],"tabs":[],"duration":17.98,"bytes":403601,"captions":["Teams → Availability.\nMark the dates you can play.","Tap each available day.","Green ticks mean available.\nUnmarked dates mean unavailable.","Save your availability.","Saved ✓\nSelectors can now use these dates."],"products":["teams"]},{"id":"workshop","title":"Choose the club’s How We Bat","topics":["philosophy_workshop","how_we_bat","workshop_changes"],"tabs":["workshop","howwebat"],"duration":25.777007,"bytes":1288310,"captions":["The Workshop brings\nyour club’s ideas together.","Compare a combination\nof contributors.","Open its How We Bat preview.","Check the approach\nfor each playing format.","The Philosophy Lead\nchooses the club’s version.","Review the wording next,\nthen confirm it for the season."],"products":["batting"]},{"id":"player-plan","title":"Make the plan your own","topics":["player_plan"],"tabs":["myplan"],"duration":25.791667,"bytes":1316606,"captions":["Your Player Plan:\nhow you want to bat.","Use Edit to make it your own.","Choose scoring options\nthat belong to your game.","Add a useful detail\nin your own words.","Done editing returns you\nto the plan you can use.","Take your plan into training."],"products":["batting"]},{"id":"prepare-predict","title":"Prepare and make your prediction","topics":["my_innings","make_your_call"],"tabs":["innings","make_your_call"],"duration":28.770998,"bytes":1655187,"captions":["Predict your score\nwith a plan behind it.","Choose the upcoming match.","Enter your score prediction\nbefore the match day.","Add one useful match-up.","Choose a scoring option\nfrom your own Player Plan.","Save preparation\nto enter your prediction.","Your preparation is saved.\nReturn to it before you bat."],"products":["batting"]},{"id":"training","title":"Take a focus into training","topics":["how_we_train","current_focus","training_preparation"],"tabs":["howwetrain","training_preparation"],"duration":27.625,"bytes":1352373,"captions":["How We Train turns\nyour plan into practice.","Open My Current Focus.","Bring this focus\nto your next session.","Coach view:\nprepare a session for the group.","See each player’s focus\nand spot shared training needs.","Open a player’s training plan\nfor the detail."],"products":["batting"]},{"id":"match-review-teams","title":"Review the published team","topics":["team_review","feedback_loop"],"tabs":["team_review"],"products":["both"],"staff_only":true,"duration":32.062993,"bytes":1868314,"captions":["Match Review uses\nthe published Teams selection.","Check the match. Its date\nand opposition stay together.","Choose a selected player\nto add your observation.","Choose your view of the innings.\nAssess the dismissal separately.","Record what you noticed.\nKeep it useful and specific.","Save the observation.","Back at the same match.\nChoose another player when ready."],"description":"App screen recording · fictional club · captions included.","asset_version":"129"},{"id":"match-review-manual","title":"Choose match players without Teams","topics":["team_review","feedback_loop"],"tabs":["team_review"],"products":["batting_only"],"staff_only":true,"duration":29.958005,"bytes":1705375,"captions":["Club Batting without Teams:\nchoose this match’s players.","Open Choose players\nfor this match.","Groups help you find names.\nThey do not select anyone.","Tick the players\nwho are actually playing.","Save match players\nto confirm this match’s list.","Now add your match review.","Save the review.\nThe player list and observation stay together."],"description":"App screen recording · fictional club · captions included.","asset_version":"129"},{"id":"match-observation-first","title":"Record an observation before selection","topics":["team_review","feedback_loop"],"tabs":["players","team_review"],"products":["batting"],"staff_only":true,"duration":35.608005,"bytes":2206886,"captions":["No fixture entered yet?\nStart with the player’s observation.","Choose New match\nand its grade.","Enter the match’s start date,\nformat and opposition.","Choose your assessment\nand add a useful note.","Save. This creates the match\nwithout selecting a team.","The same fixture is ready\nfor the normal Teams selection.","Team not finalised.\nYour earlier observation is still saved."],"description":"App screen recording · fictional club · captions included.","asset_version":"129"},{"id":"conversation","title":"Turn feedback into a conversation","topics":["coach_conversations","request_conversation"],"tabs":["conversations"],"duration":20.708333,"bytes":1371649,"captions":["Turn a training question\ninto a Coach Conversation.","Say what you want\nto work on.","Choose someone in your club,\nor leave it for any coach.","Request the conversation.","The request stays here\nwith your follow-up conversation."],"products":["batting"]},{"id":"messages","title":"Send a club message","topics":["club_messages","notifications"],"tabs":["messages"],"duration":36.818005,"bytes":949673,"captions":["Messages keeps club updates\nand their app links together.","Choose the people\nwho need this message.","Give the update a clear title.","Link straight to\nthe relevant app screen.","Phone alerts where enabled.\nAn email link otherwise.","Player view:\nopen the message in the app."],"staff_only":true}];
 // The full reference stays searchable. The first useful actions reflect the
 // user's role and the club's products, with specialist steps shown on demand.
 function guideTutorialContext(){
@@ -33991,7 +34022,7 @@ const demoProductsRenderer=renderMyClubProducts;
 renderMyClubProducts=async()=>{
  await demoProductsRenderer();
  // Real signup never carries a fictional club ID.
- document.querySelectorAll('.pt-product a').forEach(link=>{const product=new URL(link.href,location.href).searchParams.get('trial_product');link.href='https://clubbatting.com/enquire.html?product='+encodeURIComponent(product);});
+ document.querySelectorAll('.pt-product a').forEach(link=>{const product=new URL(link.href,location.href).searchParams.get('trial_product');link.href='https://mirelionhq.com/enquire.html?product='+encodeURIComponent(product);});
  const heading=document.querySelector('#page h1');if(!heading||!isAdmin())return;
  const button=document.createElement('button');button.type='button';button.className='btn ghost';button.id='demoScheduledTrial';button.textContent=demoTrialSchedules?'Reset trial example':'Preview a scheduled trial';heading.after(button);
  button.onclick=async()=>{
@@ -34410,7 +34441,7 @@ function demoDecorate(){
     // replace/remove them from a MutationObserver: it must be able to finish
     // binding handlers. Insert the demo explanation alongside the live card.
     if(!document.getElementById('demoGuideNote')){
-      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><div class="btnrow"><a class="btn secondary" href="https://clubbatting.com/app.html?tab=guide">Sign in to your club</a><button type="button" class="btn ghost" id="demoAssistLink">Message us · Mirelion Assist</button></div></section>`);
+      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><div class="btnrow"><a class="btn secondary" href="https://mirelionhq.com/app.html?tab=guide">Sign in to your club</a><button type="button" class="btn ghost" id="demoAssistLink">Message us · Mirelion Assist</button></div></section>`);
     }
     const assistLink=document.getElementById('demoAssistLink');if(assistLink)assistLink.onclick=()=>document.getElementById('guideHumanHandoff')?.click();
     chat.hidden=true;
