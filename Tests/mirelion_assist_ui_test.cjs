@@ -24,7 +24,7 @@ test('two-way replies, unread badges, resolve and reopening use the same stored 
  await h.api.unread();assert.equal(h.badges.at(-1).n,1);await h.api.refresh();assert.equal(h.host.querySelectorAll('[data-assist-message]').length,2);assert.equal(h.badges.at(-1).n,0);
  await h.click('[data-assist-resolve]');assert.equal(h.host.querySelector('[data-assist-filter]').value,'resolved');assert.match(h.host.textContent,/Resolved/);
  h.input('body','A follow-up');await h.click('[data-assist-send]');assert.equal(h.host.querySelector('[data-assist-filter]').value,'open');assert.equal(h.host.querySelectorAll('[data-assist-message]').length,3);
- assert.equal(h.host.querySelectorAll('a[href^="mailto:"]').length,0);
+ assert.equal(h.host.querySelector('a[href^="mailto:"]').getAttribute('href'),'mailto:support@mirelionhq.com');
 });
 test('refresh preserves unsent text, focus and cursor while appending a reply',async t=>{
  const h=setup();t.after(()=>h.close());await h.create();h.input('body','Still typing my request');
@@ -66,4 +66,11 @@ test('drafts survive navigation but are cleared when the signed-in identity chan
 test('platform inbox replies are explicitly sent from the platform context',async t=>{
  const h=setup();t.after(()=>h.close());await h.create();h.setContext({userId:'staff',platform:true});await h.api.mount(h.host);assert.match(h.host.textContent,/Test Club/);assert.equal(h.host.querySelector('[data-assist-new]'),null);
  await h.click('[data-assist-thread]');h.input('body','A real team reply');await h.click('[data-assist-send]');const sent=h.calls.filter(c=>c.p_action==='send').at(-1);assert.equal(sent.p_data.platform,true);assert.equal(sent.p_data.club_id,undefined);assert.match(h.host.querySelector('[data-assist-messages]').textContent,/Mirelion.*A real team reply/s);
+});
+test('an email destination opens the stored thread and survives a remount',async t=>{
+ const h=setup();t.after(()=>h.close());await h.create();const thread=h.api.navigation().threadId;assert.ok(thread);
+ await h.click('[data-assist-resolve]');h.api.home();await h.api.mount(h.host,{threadId:thread});
+ assert.match(h.host.querySelector('[data-assist-subject]').textContent,/Help for our club/);assert.match(h.host.querySelector('[data-assist-thread-meta]').textContent,/Resolved/);
+ assert.equal(h.api.navigation().threadId,thread);const saved=h.api.navigation();h.api.home();await h.api.mount(h.host,saved);assert.equal(h.host.querySelectorAll('[data-assist-message]').length,1);
+ h.setContext({userId:'staff',platform:true});await h.api.mount(h.host,{threadId:thread});assert.equal(h.api.navigation(true).threadId,thread);assert.equal(h.api.navigation().threadId,null);
 });

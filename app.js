@@ -1,4 +1,5 @@
-import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.256';
+import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.271';
+import {assistLaunchFromSearch} from './assist-routing.js?v=0.8.62.271';
 import {createSocialAwardScopes} from './social-award-scopes.js?v=0.8.62.252';
 import {createSelectionGroupPermissions} from './selection-group-permissions.js?v=0.8.62.246';
 import {createSelectionGroupPage} from './selection-group-page.js?v=0.8.62.245';
@@ -29,7 +30,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
-const APP_UI_VERSION='0.8.62.270';
+const APP_UI_VERSION='0.8.62.271';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1229,7 +1230,7 @@ async function routeAuth(){
 }
 
 function authEntryLinks(){
-  return '<p class="help"><a href="./">Mirelion home</a> · <a href="./demo.html?stage=help">Explore the tutorials</a></p>';
+  return '<p class="help"><a href="./">Mirelion home</a> · <a href="./demo.html?stage=help">Explore the tutorials</a> · <a href="./contact.html">Help and contact</a></p>';
 }
 
 // Keep only a short-lived club invitation in this tab. Never store email,
@@ -1555,6 +1556,8 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   capturePhoneLaunch(launchParams);
   const routeClub=launchParams.get('club');
   const routeTab=launchParams.get('tab');
+  const assistLaunch=assistLaunchFromSearch(location.search);
+  if(assistLaunch)pendingAssistLaunch=assistLaunch;
   if(routeClub && !allMemberships.some(m=>m.club_id===routeClub)){
     app.innerHTML=`<div class="login"><div class="section-label">Club Batting</div><h1>This club link is for a different account.</h1><p>Sign in with the email address that received the invitation. If you already use that address, ask your club to check your registration.</p><div class="btnrow"><button class="btn secondary" id="launchSignOut">Sign out</button><button class="btn ghost" id="launchMyClubs">Open my clubs</button></div></div>`;
     document.getElementById('launchSignOut').onclick=()=>signOutClubBatting();
@@ -1566,13 +1569,14 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
     return;
   }
 
-  if(!navigation && !routeClub && platformRole && (launchParams.has('platform') || localStorage.getItem('bdp-context')==='platform')){
+  if(!navigation && !routeClub && platformRole && (launchParams.has('platform') || (routeTab!=='assist'&&localStorage.getItem('bdp-context')==='platform'))){
+    if(assistLaunch)platformView='guide_requests';
     if(launchParams.has('platform')){const target=new URL(location.href);target.searchParams.delete('platform');history.replaceState({},'',target);}
     return renderPlatformConsole();
   }
 
   if(!allMemberships.length){
-    if(platformRole)return renderPlatformConsole();
+    if(platformRole){if(assistLaunch)platformView='guide_requests';return renderPlatformConsole();}
     renderNoClub();
     return;
   }
@@ -1611,8 +1615,8 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
   currentTab=productTrialWaiting()?'products':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
   if(joinedAvailabilityClub===club.id&&selectionsEnabled()){ensureSelections().view='availability';currentTab='teams';joinedAvailabilityClub=null;}
-  if(routeClub===club.id){
-    if(['products','playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app','teams'].includes(routeTab) && canOpenClubTab(routeTab)){
+  if(routeClub===club.id || (!routeClub&&routeTab==='assist')){
+    if(['products','playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app','teams','assist'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
       if(routeTab==='myplan')builderSection='core';
       if(routeTab==='teams'){const q=new URLSearchParams(location.search);ensureSelections().weekLaunch={view:q.get('team_view'),date:q.get('team_date'),fixture:q.get('fixture'),plan:q.get('replacement')};}
@@ -1632,7 +1636,7 @@ function clearClubLaunchRoute(){
   const url=new URL(location.href||`${location.origin}${location.pathname}${location.search}`);
   url.searchParams.delete('club');
   url.searchParams.delete('tab');
-  for(const key of ['message','coaching','prepare','team_view','team_date','fixture','replacement'])url.searchParams.delete(key);
+  for(const key of ['message','coaching','prepare','team_view','team_date','fixture','replacement','assist_thread'])url.searchParams.delete(key);
   history.replaceState({},'',url.pathname+url.search+url.hash);
 }
 
@@ -2944,6 +2948,7 @@ async function openClubSectionHome(nextTab){
 }
 function clubNavigationRoute(){
   const route={scope:'club',clubId:club?.id,tab:currentTab};
+  if(currentTab==='assist')route.assist=mirelionAssist.navigation();
   if(currentTab==='teams'){const s=ensureSelections();route.selections=selectionNavigationRoute(s);}
   if(currentTab==='players')Object.assign(route,{
     playerId:playersWorkspaceSelectedId,playerSection:playersWorkspaceSection,
@@ -3055,7 +3060,7 @@ function bindSelectionBackButtons(){
 }
 
 function platformNavigationRoute(){
-  return {scope:'platform',view:platformView,prospectId:platformSelectedProspectId,onboardingId:platformSelectedOnboardingId};
+  return {scope:'platform',view:platformView,prospectId:platformSelectedProspectId,onboardingId:platformSelectedOnboardingId,...(platformView==='guide_requests'?{assist:mirelionAssist.navigation(true)}:{})};
 }
 function teamReviewNavigationIdentity(saved={}){
   return JSON.stringify([saved.fixture_id||[saved.match_date||'',saved.format_key||'limited_overs',String(saved.opposition||'').trim().replace(/\s+/g,' ').toLowerCase(),saved.group||'__all__'],Number(saved.innings_number)||1]);
@@ -3064,7 +3069,7 @@ function appNavigationKey(route){
   return JSON.stringify([route.scope,route.clubId,route.tab,route.playerId,route.playerId?route.playerSection:null,
     route.playerId?[route.matchOpenId,route.developmentMode,route.developmentMatchId,route.observationEditId]:null,
     route.planSection,route.homeStage,route.tab==='guide'?route.viewState?.guideTopic:null,route.innings?.openId,route.innings?.editId,route.messages?.mode,route.messages?.openId,
-    route.previewKey,route.view,route.prospectId,route.onboardingId,
+    route.previewKey,route.view,route.prospectId,route.onboardingId,route.assist?.threadId,
     route.tab==='make_your_call'?(route.makeYourCall?.results?.view||'board'):null,route.selections,
     route.teamReview?[route.teamReview.view,teamReviewNavigationIdentity(route.teamReview),route.teamReview.observation_player_id]:null,
     route.makeYourCall?.results?.openKind,route.makeYourCall?.results?.openStart]);
@@ -3075,6 +3080,7 @@ function validAppNavigationMarker(marker){
 }
 function restorePlatformNavigationState(route){
   platformView=route.view==='selections'?'clubs':['home','add_clubs','clubs','market','outbox','guide_requests','settings'].includes(route.view)?route.view:'home';
+  if(platformView==='guide_requests')pendingAssistLaunch={threadId:route.assist?.threadId||null,platform:true};
   platformSelectedProspectId=route.prospectId||null;
   platformSelectedOnboardingId=route.onboardingId||null;
 }
@@ -3126,6 +3132,7 @@ function restoreClubNavigationState(route){
   if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
   const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
   currentTab=canOpenClubTab(tab)?tab:selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  if(currentTab==='assist')pendingAssistLaunch={threadId:route.assist?.threadId||null,platform:false};
   if(currentTab==='teams'){const s=ensureSelections(),saved=route.selections||{};s.view=saved.view||'published';s.date=saved.date||'';s.selectionGroup=saved.selectionGroup||'';s.publishedWeek=saved.publishedWeek||'';s.boardDateChosen=!!s.date;s.boardPanel=saved.boardPanel||null;s.followupOpen=saved.followupOpen===true;s.boardChatOpen=typeof saved.boardChatOpen==='string'?saved.boardChatOpen:null;s.boardCommentOpen=typeof saved.boardCommentOpen==='string'?saved.boardCommentOpen:null;s.statsOpen=saved.statsOpen===true;s.statsFilters={grade:saved.statsFilters?.grade||'',format:saved.statsFilters?.format||'',mode:saved.statsFilters?.mode==='bowling'?'bowling':'batting',compare:!!saved.statsFilters?.compare,compareDate:saved.statsFilters?.compareDate||'',firstTeam:saved.statsFilters?.firstTeam||'',secondTeam:saved.statsFilters?.secondTeam||''};s.rosterPanel=saved.rosterPanel||null;s.rosterOpen=saved.rosterOpen||null;s.rosterSearch=saved.rosterSearch||'';s.rosterGrade=saved.rosterGrade||'';s.signupOnly=!!saved.signupOnly;s.active=null;s.navigationDrawer=saved.drawer||null;s.restoreDrawer=saved.drawer||null;s.availabilityPlayerId=typeof saved.availabilityPlayerId==='string'?saved.availabilityPlayerId:null;s.availabilityMonth=/^\d{4}-\d{2}$/.test(saved.availabilityMonth||'')?saved.availabilityMonth:null;restoreSocialNavigation(saved.social);}
   if(currentTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=route.makeYourCall?.week||null;s.season=route.makeYourCall?.season||null;s.month=route.makeYourCall?.month||null;restoreCallResultsState(route.makeYourCall?.results||{});}
   if(currentTab==='players'){
@@ -17806,7 +17813,9 @@ async function renderPlatformView(){
 }
 
 async function renderPlatformGuideRequests(){
-  return mirelionAssist.mount(document.getElementById('platformPage'));
+  const launch=pendingAssistLaunch;pendingAssistLaunch=null;
+  if(launch){const url=new URL(location.href);url.searchParams.delete('assist_thread');url.searchParams.delete('tab');history.replaceState(history.state,'',url);}
+  return mirelionAssist.mount(document.getElementById('platformPage'),launch||{});
 }
 
 function marketResearchClubReady(club,now=Date.now()){
@@ -23148,10 +23157,11 @@ const clubWeek=createClubWeekUI({
  calendarBase:SUPABASE_URL+'/functions/v1/selection-calendar'
 });
 
-let assistFromGuide=false;
+let assistFromGuide=false,pendingAssistLaunch=null;
 const mirelionAssist=createMirelionAssist({
   supabase,
   getContext:()=>({userId:session?.user?.id,clubId:club?.id,platform:!!(platformRole&&document.getElementById('platformPage'))}),
+  onNavigate:()=>recordAppNavigation(document.getElementById('platformPage')?platformNavigationRoute():clubNavigationRoute()),
   onUnread:(count,context)=>{
     const targets=context?.platform?'[data-platform-view="guide_requests"]':'[data-tab="assist"],#clubMenuToggle';
     for(const button of document.querySelectorAll(targets)){
@@ -23165,7 +23175,8 @@ const mirelionAssist=createMirelionAssist({
 });
 async function renderMirelionAssist(){
   const includeGuide=assistFromGuide;assistFromGuide=false;
-  return mirelionAssist.mount(document.getElementById('page'),{newMessage:includeGuide,includeGuide});
+  const launch=pendingAssistLaunch;pendingAssistLaunch=null;
+  return mirelionAssist.mount(document.getElementById('page'),{...launch,newMessage:includeGuide,includeGuide});
 }
 
 boot();
