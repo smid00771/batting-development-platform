@@ -2708,7 +2708,7 @@ const demoSeasonStats=createSeasonStatsDemo(()=>demoSelections,()=>demoScorecard
 
 const demoBeforeSeasonStatsRpc=window.__fixtureDb.rpc;
 
-window.__fixtureDb.rpc=async function(name,args){if(name==='club_season_stats_api'){try{return {data:demoSeasonStats(args),error:null};}catch(error){return {data:null,error:{message:error.message}};}}return demoBeforeSeasonStatsRpc.call(this,name,args);};
+window.__fixtureDb.rpc=async function(name,args){if(name==='club_selection_history_api')return {data:{players:(args.p_data?.roster_ids||[]).map(id=>({roster_id:id,records:[]})),identity_status:'unconfirmed_name_and_club'},error:null};if(name==='club_season_stats_api'){try{return {data:demoSeasonStats(args),error:null};}catch(error){return {data:null,error:{message:error.message}};}}return demoBeforeSeasonStatsRpc.call(this,name,args);};
 
 const demoSocialAwards=createSocialAwardsDemo(()=>demoSelections,()=>demoSharedResults,()=>demoSocial,()=>membership,()=>session?.user.id);
 
