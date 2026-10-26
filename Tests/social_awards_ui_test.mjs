@@ -84,4 +84,25 @@ for(const kind of ['results','century','five_wickets']){
 s.view='results';const layout=s.awards.layouts.results;const examplePath='club/artwork/previous-example.png';files.set('club-social-awards'+examplePath,opponentFile);layout.example_path=examplePath;layout.example_name='Old result.png';h.draw();await settled();
 id('saPrepareBackground').click();await until(()=>!!backgroundHelp);assert.equal(backgroundHelp.options.mode,'edit');assert.deepEqual(Buffer.from(await backgroundHelp.file.arrayBuffer()),Buffer.from(await files.get('club-social-awards'+layout.background_path).arrayBuffer()));backgroundHelp=null;
 id('saPrepareExample').click();await until(()=>!!backgroundHelp);assert.equal(backgroundHelp.options.mode,'template');assert.equal(backgroundHelp.file.name,'Old result.png');assert.deepEqual(Buffer.from(await backgroundHelp.file.arrayBuffer()),Buffer.from(await opponentFile.arrayBuffer()));
-console.log('Passed: settings-only awards page, choices/dropdown, photos/sliders, save retry, milestone collection, mixed post, Results batches, visible request status/reply, owner updates and stale revision selection.');
+// Existing PlayHQ cards must use their saved snapshot, never a fabricated
+// PlayCricket URL. Exercise the real screen and canvas, including retry/override.
+const savedFetch=globalThis.fetch,logoCalls=[],autoUrl='https://res.cloudinary.com/playhq/image/upload/v1/fixture-test.png';let failLogo=true;
+context.candidates=structuredClone(resultItems.slice(0,2));context.designs={};context.editions=[];
+for(const [i,item] of context.candidates.entries()){item.snapshot_id='snapshot-'+i;item.teams[1].source_team_id='source-'+i;item.teams[1].organisation_id=null;item.teams[1].name='Visitors';}
+api.functions.invoke=async(name,{body})=>{assert.equal(name,'playhq-sync');assert.equal(body.action,'logos');assert.equal(body.url,undefined);logoCalls.push(body.snapshot_id);const i=Number(body.snapshot_id.split('-')[1]);return failLogo?{error:{message:'Temporary failure'}}:{data:{teams:[{id:'theirs-'+i,organisation_id:'verified-visitors',logo_url:autoUrl},{id:'unrelated-team',logo_url:autoUrl}]}};};
+globalThis.fetch=async(url,options)=>String(url)===autoUrl?new Response(opponentBadge.toBuffer('image/png'),{headers:{'content-type':'image/png'}}):savedFetch(url,options);
+try{
+ s.awards=null;s.urls=new Map();s.view='results';module.state(s).end='2026-10-11';h.draw();await settled();await until(()=>s.awards.logoErrors['theirs-0']);
+ assert.equal(logoCalls.length,2);assert.match(document.querySelector('.sa-artwork').textContent,/Logo unavailable/);
+ failLogo=false;await module.load(s);await settled();await until(()=>s.awards.logos['theirs-0']);
+ assert.equal(logoCalls.length,4);assert.equal(s.awards.logos['unrelated-team'],undefined);assert.equal(s.awards.logoErrors['theirs-0'],undefined);
+ assert.equal(document.querySelectorAll('[data-sa-opponent]').length,1);assert.match(document.querySelector('.sa-artwork').textContent,/From PlayHQ/);
+ for(const e of document.querySelectorAll('[data-sa-result]'))e.click();await settled();
+ const countYellow=()=>{const p=id('saCanvas').backing.getContext('2d').getImageData(0,0,id('saCanvas').width,id('saCanvas').height).data;let count=0;for(let i=0;i<p.length;i+=4)if(p[i]===255&&p[i+1]===224&&p[i+2]===0)count++;return count;};
+ assert.ok(countYellow()>1000,'Fetched opposition logo is included in the exported canvas');
+ if(process.env.AWARDS_PREVIEW_DIR)fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results-automatic-logos.png',id('saCanvas').backing.toBuffer('image/png'));
+ const overridePath='club/artwork/logo-override.png';files.set('club-social-awards'+overridePath,new Blob([sharedLogo.toBuffer('image/png')],{type:'image/png'}));
+ s.awards.layouts.results.opponent_logos={'verified-visitors':{path:overridePath,name:'Chosen club badge'}};h.draw();await settled();
+ assert.equal(countYellow(),0,'Saved manual override takes precedence');assert.match(document.querySelector('.sa-artwork').textContent,/Chosen club badge/);
+}finally{globalThis.fetch=savedFetch;}
+console.log('Passed: awards UI, save recovery, Results batches, automatic PlayHQ logos, failed-lookup retry, source isolation and uploaded logo priority.');

@@ -14,7 +14,7 @@ import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.264';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.270';
+import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.273';
 import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.270';
 import {teamSelectionText} from './social-team-layout.js?v=0.8.62.249';
 import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
@@ -32,7 +32,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.272';
+const APP_UI_VERSION='0.8.62.273';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
