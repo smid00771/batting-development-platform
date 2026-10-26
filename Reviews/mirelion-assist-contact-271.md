@@ -28,3 +28,9 @@ Deploy the migration and dispatcher before the app, then publish the app/demo an
 To pause alerts, set notification_settings.enabled=false. Sending and receiving inside Assist continues; the dispatcher cancels any notification it can no longer validate. The settings switch and private helpers are deliberately unavailable to anonymous and authenticated application users. No real-recipient test email was sent during verification; provider status and mocked provider delivery were tested.
 
 This is an authorised beta support improvement, not a declaration of broader public-launch readiness.
+
+## Completed rollout, 26 October 2026
+
+App PR #125 and website PR #2 were merged. Both GitHub Pages deployments succeeded. Live app entry, app script, Assist routing/module, demo, both contact pages, website privacy and website manifest matched the reviewed local files byte-for-byte. Unauthenticated dispatcher requests returned 401. The authenticated status check returned live provider mode, configured webhook authentication and https://clubbatting.com/app.html as the public app URL.
+
+Alerts are enabled and the minute cron is active, with no backlog queued. The migration filename uses the actual applied Supabase version, 20261026045601, so future pushes recognise the existing migration. This replaces the initially generated local timestamp without changing the SQL.
