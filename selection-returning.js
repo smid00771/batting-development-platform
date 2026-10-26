@@ -11,19 +11,20 @@ const snapshot = team => team.published?.details && Array.isArray(team.published
   ? {...team,...team.published.details,slots:team.published.slots,historyConfirmed:true} : team;
 const inSeason = (team,season) => !!season.start && date(team)>=season.start && date(team)<=season.end;
 
-function roleFits(team,incumbent,candidate,position,previousPosition,days) {
+function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
   if (!incumbent || incumbent.active===false) return false;
   const keeps=incumbent.keeper || days.some(day=>team.match_roles?.['d'+(day+1)]?.keeper_id===incumbent.id);
   if (keeps && !candidate.keeper) return false;
   const batting=battingPositionFits({person:incumbent,position},{person:candidate,position:previousPosition});
   if (['pace','spin'].includes(incumbent.bowling)) {
     if (!bowlingJobFits(incumbent,candidate,team.format)) return false;
-    // Retain the existing frontline-quick comparison. Their batting and
-    // fielding differences remain visible rather than inventing a bowling job.
-    const quicks=[incumbent,candidate].every(p=>p.bowling==='pace'&&p.bowling_load==='frontline');
-    return quicks || batting;
+    // A returning frontline spinner needs the same bowling-led comparison as
+    // a frontline quick. Keep type/workload and keeper cover; show batting and
+    // fielding differences separately rather than requiring identical batting roles.
+    const frontline=[incumbent,candidate].every(p=>p.bowling_load==='frontline');
+    return frontline ? 'bowling' : batting ? 'all_round' : false;
   }
-  return incumbent.bowling==='none' && batting;
+  return incumbent.bowling==='none' && batting ? 'batting' : false;
 }
 
 // A return is established by saved unavailability for consecutive missed
@@ -56,9 +57,10 @@ export function returningPlayers({teams=[],references=[],roster=[],season={},tod
           const days=team.days.flatMap((_,day)=>(slot['d'+(day+1)]||null)===id?[day]:[]);
           if (days.some(day=>!availableDays.includes(day)) || !team.brackets && days.length!==team.days.length) continue;
           const incumbent=people.get(id);
-          if (id ? !roleFits(team,incumbent,person,index+1,position,days) : index+1!==position) continue;
+          const focus=id?roleMatch(team,incumbent,person,index+1,position,days):'place';
+          if (id ? !focus : index+1!==position) continue;
           const joinedDuringAbsence=!!id&&firstMissed.historyConfirmed&&selected(firstMissed,id)&&!selected(previous,id);
-          targets.push({incumbent:incumbent||null,position:index+1,days,joinedDuringAbsence});
+          targets.push({incumbent:incumbent||null,position:index+1,days,joinedDuringAbsence,focus});
         }
       }
       targets.sort((a,b)=>Number(b.joinedDuringAbsence)-Number(a.joinedDuringAbsence)||Math.abs(a.position-position)-Math.abs(b.position-position)||a.position-b.position);
@@ -93,13 +95,16 @@ export function returningPeriod(history=[]) {
 // Keep the periods distinct: the returner's latest three recorded matches
 // before the absence versus the incumbent's appearances in the missed games.
 // All rates use summed runs, dismissals and balls, never averages of averages.
-export function returningComparison(entry,target,summary) {
-  const rowFor=id=>summary.rows.find(row=>row.roster_id===id&&row.grade===entry.team.grade&&row.competition===entry.team.competition&&row.format===entry.team.format);
+const returnRow=(entry,summary,id)=>summary.rows.find(row=>row.roster_id===id&&row.grade===entry.team.grade&&row.competition===entry.team.competition&&row.format===entry.team.format);
+export function returningForm(entry,summary) {
   const start=date(entry.missed.at(-1));
-  const before=(rowFor(entry.person.id)?.history || []).filter(match=>match.date<start).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
-  const whileAway=(rowFor(target.incumbent?.id)?.history || []).filter(match=>entry.missed.some(team=>match.fixture_id
+  const before=(returnRow(entry,summary,entry.person.id)?.history || []).filter(match=>match.date<start).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
+  return returningPeriod(before);
+}
+export function returningComparison(entry,target,summary) {
+  const whileAway=(returnRow(entry,summary,target.incumbent?.id)?.history || []).filter(match=>entry.missed.some(team=>match.fixture_id
     ? match.fixture_id===team.id : match.date===date(team)&&entry.missed.filter(other=>date(other)===match.date).length===1));
-  const incoming=returningPeriod(before),current=returningPeriod(whileAway),notes=[];
+  const incoming=returningForm(entry,summary),current=returningPeriod(whileAway),notes=[];
   if (target.incumbent) {
     const batA=battingEvidence(incoming),batB=battingEvidence(current);
     if (incoming.batting_complete&&current.batting_complete&&Number.isFinite(incoming.average)&&Number.isFinite(current.average)) {
@@ -107,12 +112,15 @@ export function returningComparison(entry,target,summary) {
       notes.push(`${entry.person.name} had ${comparison==='the same'?'the same':'a '+comparison} batting average in these samples.`);
       if (!batA.ready||!batB.ready) notes.push('Too few batting opportunities for a firm statistical preference.');
     } else notes.push('Batting averages cannot yet be compared reliably.');
-    const a=bowlingEvidence(incoming,entry.person,entry.team.format),b=bowlingEvidence(current,target.incumbent,entry.team.format);
+    const a=bowlingEvidence(incoming,entry.person,entry.team.format),b=bowlingEvidence(current,target.incumbent,entry.team.format),bowlingNotes=[];
     if (incoming.bowling_complete&&current.bowling_complete&&incoming.bowling_balls&&current.bowling_balls) {
       const wickets=a.wickets>b.wickets?'more':a.wickets<b.wickets?'fewer':'the same',economy=a.economy<b.economy?'lower':a.economy>b.economy?'higher':'the same';
-      notes.push(`${entry.person.name}: ${wickets} wickets per ball; ${economy} economy.`);
-      if (!a.ready||!b.ready) notes.push('Too little bowling for a firm statistical preference.');
+      bowlingNotes.push(`${entry.person.name}: ${wickets} wickets per ball; ${economy} economy.`);
+      if (!a.ready||!b.ready) bowlingNotes.push('Too little bowling for a firm statistical preference.');
+    } else if (target.focus==='bowling') {
+      bowlingNotes.push(!incoming.bowling_complete||!current.bowling_complete?'Bowling figures are incomplete for these periods.':`No recorded bowling for ${!incoming.bowling_balls?entry.person.name:target.incumbent.name} in this period; bowling rates cannot be compared.`);
     }
+    if(target.focus==='bowling')notes.unshift(...bowlingNotes);else notes.push(...bowlingNotes);
   }
   const early=[incoming,...(target.incumbent?[current]:[])].some(row=>row.innings<5 || row.bowling_innings>0&&row.bowling_innings<5);
   return {entry,target,incoming,current,notes,early};
