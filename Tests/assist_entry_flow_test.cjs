@@ -4,10 +4,10 @@ const source=fs.readFileSync('app.js','utf8');
 const fn=name=>source.match(new RegExp('(?:async )?function '+name+'\\([^]*?\\n\\}'))[0];
 const thread='11111111-1111-4111-8111-111111111111',clubId='22222222-2222-4222-8222-222222222222';
 function setup(query,{signedIn=true,platform=false,savedPlatform=false}={}){
- const dom=new JSDOM('<div id="app"></div>',{url:'https://clubbatting.com/app.html'+query});
+ const dom=new JSDOM('<div id="app"></div>',{url:'https://mirelionhq.com/app.html'+query});
  const result=[],club={id:clubId,name:'Fictional club'};
  const context=vm.createContext({URL,URLSearchParams,location:dom.window.location,history:dom.window.history,document:dom.window.document,localStorage:dom.window.localStorage,
-  app:dom.window.document.getElementById('app'),session:signedIn?{user:{id:'user'}}:null,platformRole:platform?'owner':null,passwordRecoveryRequired:false,
+  app:dom.window.document.getElementById('app'),session:signedIn?{user:{id:'user'}}:null,platformRole:platform?'owner':null,passwordRecoveryRequired:false,legacyAppSession:false,
   allMemberships:[],membership:null,club:null,userProfile:null,currentTab:'dashboard',joinedAvailabilityClub:null,appNavigationRequest:0,pendingAssistLaunch:null,
   renderLogin:()=>result.push({login:true}),loadPlatformContext:async()=>{},resumeAppNavigationOnLoad:async()=>false,
   supabase:{from:table=>({select:()=>({eq:()=>table==='club_memberships'?Promise.resolve({data:[{club_id:clubId,clubs:club,involvement:'playing'}]}):{maybeSingle:async()=>({data:{display_name:'Fictional member'}})}})})},
@@ -17,7 +17,7 @@ function setup(query,{signedIn=true,platform=false,savedPlatform=false}={}){
   renderPlatformConsole:()=>result.push({platform:context.platformView,threadId:context.pendingAssistLaunch?.threadId})
  });
  if(savedPlatform)dom.window.localStorage.setItem('bdp-context','platform');
- vm.runInContext(fs.readFileSync('assist-routing.js','utf8').replace(/^export /gm,'')+'\n'+['routeAuth','loadContext','clearClubLaunchRoute'].map(fn).join('\n'),context);
+ vm.runInContext(fs.readFileSync('domain-routing.js','utf8').replace(/^export /gm,'')+'\n'+fs.readFileSync('assist-routing.js','utf8').replace(/^export /gm,'')+'\n'+['routeAuth','loadContext','clearClubLaunchRoute'].map(fn).join('\n'),context);
  return {context,result,dom,close:()=>dom.window.close()};
 }
 test('public contact link retains Assist through sign-in and overrides a saved platform view',async t=>{

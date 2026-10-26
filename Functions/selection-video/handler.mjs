@@ -1,4 +1,4 @@
-const origins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
+const origins=new Set(['https://mirelionhq.com','https://www.mirelionhq.com','https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Keep the pilot; other clubs require a server-enabled, prepaid annual wallet.
 const pilotClub='c6022ec7-00d9-4c91-a208-710272a0b866';

@@ -1,6 +1,6 @@
 import {linkedScorecard} from './linked-scorecard.mjs';
 import {publicAPI,clubTeams,gradeFixtures,gameSummary} from './public-api.mjs';
-const origins=new Set(['https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
+const origins=new Set(['https://mirelionhq.com','https://www.mirelionhq.com','https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
  const headers={'Access-Control-Allow-Origin':origins.has(origin)?origin:'https://clubbatting.com','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin'};
