@@ -1,6 +1,6 @@
-import {buildSeasonStats, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat} from './season-stats.js?v=0.8.62.262';
+import {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat} from './season-stats.js?v=0.8.62.275';
 import {buildSelectionEvidence} from './selection-evidence.js?v=0.8.62.262';
-import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.262';
+import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.275';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
@@ -106,9 +106,10 @@ export function createSeasonStatsPanel(h) {
     const disabled = s.busy ? 'disabled' : '';
     const teamDate = team => team.days?.[0]?.date || '';
     const available = team => !team.cancelled && (!data || !teamDate(team) || teamDate(team) >= data.season.start && teamDate(team) <= data.season.end);
-    const allTeams = (s.teams || []).filter(available).map(t => ({...t,format:statsFormat(t.format)}));
+    const sourceTeams = resolveSelectionStatsTeams(s.teams || [],data?.season);
+    const allTeams = sourceTeams.filter(available).map(t => ({...t,format:statsFormat(t.format)}));
     const latestPublished = new Map();
-    for (const fixture of s.teams || []) {
+    for (const fixture of sourceTeams) {
       if (!fixture.published?.details || !Array.isArray(fixture.published.slots)) continue;
       const team = {...fixture, ...fixture.published.details, slots:fixture.published.slots, level:fixture.published.level ?? fixture.level, lineupPublished:true};
       team.format = statsFormat(team.format);

@@ -13,6 +13,35 @@ export const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'
 export const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 export const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
 
+// Imported upcoming fixtures can omit the competition label. Reuse an
+// unambiguous saved label for the exact club grade ID, season and format.
+// This is a read-only stats projection; dates, line-ups and saved fixtures stay
+// untouched. A same-named grade, another season or conflicting labels cannot
+// establish the link.
+export function resolveSelectionStatsTeams(teams = [], season = {}, references = teams) {
+  const competitions = new Map();
+  const scope = team => team.grade_group_id && inSeason(dates(team)[0], season)
+    && !team.cancelled && statsFormat(team.format) !== 'unknown'
+    ? JSON.stringify([team.grade_group_id,statsFormat(team.format)]) : null;
+  for (const fixture of references) for (const team of [fixture,fixture.published?.details].filter(Boolean)) {
+    const id = scope(team), competition = String(team.competition || '').trim();
+    if (!id || !competition) continue;
+    if (!competitions.has(id)) competitions.set(id,new Set());
+    competitions.get(id).add(competition);
+  }
+  const resolve = team => {
+    if (String(team.competition || '').trim()) return team;
+    const labels = competitions.get(scope(team));
+    return labels?.size === 1 ? {...team,competition:[...labels][0]} : team;
+  };
+  return teams.map(team => {
+    const resolved = resolve(team);
+    if (!team.published?.details) return resolved;
+    const details = resolve(team.published.details);
+    return details === team.published.details ? resolved : {...resolved,published:{...team.published,details}};
+  });
+}
+
 export function latestStatsCards(cards = []) {
   const latest = new Map();
   for (const card of cards) {
