@@ -8,9 +8,9 @@ import {createPlayHQImport} from './playhq-import.js?v=0.8.62.245';
 import {createPlayCricketConnection} from './playcricket-connection.js?v=0.8.62.245';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.270';
 import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.246';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.275';
+import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.276';
 import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.264';
-import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.275';
+import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.276';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
@@ -32,7 +32,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.275';
+const APP_UI_VERSION='0.8.62.276';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -20430,8 +20430,8 @@ function seOpenStatsPlayer(panel,id){
 }
 function seMountSelectionEvidence(){
  const s=ensureSelections(),host=document.getElementById('seContent');if(!host||currentTab!=='teams'||s.view!=='board'||!seBoardAccess(s.data))return;
- const referenceTeams=seSelectionFixtures().map(f=>({id:f.id,...f.details,slots:f.slots,published:f.published}));
- selectionEvidence.mount(host,{scope:s.key,clubId:club.id,visibilityToggle:document.getElementById('seFormIndicators'),roster:s.data.roster,referenceTeams,teams:referenceTeams.filter(f=>f.days[0]?.date===s.date)});
+ const today=seClubDate(),referenceTeams=seSelectionFixtures().map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published,historyConfirmed:!!f.scorecard_sync?.match_id&&!f.scorecard_sync.pending?.length,returningEligible:f.details.days[0]?.date>=today&&!seFixtureLocked(f)}));
+ selectionEvidence.mount(host,{scope:s.key,clubId:club.id,visibilityToggle:document.getElementById('seFormIndicators'),roster:s.data.roster,referenceTeams,teams:referenceTeams.filter(f=>f.days[0]?.date===s.date),today,returningEnabled:!s.boardPanel,returningEligible:(team,person,day)=>!seUsed(person,team.days[day],s.data.fixtures,{},team)});
 }
 function seBoardAccess(d=ensureSelections().data){return d?.can_view_board===true||d?.selector===true||d?.captain===true;}
 function seFollowupRows(date=ensureSelections().date,data=ensureSelections().data){return (data.conversations||[]).filter(m=>m.kind==='lower_grade'&&m.availability!=='unavailable'&&(date===null||m.date===date));}
