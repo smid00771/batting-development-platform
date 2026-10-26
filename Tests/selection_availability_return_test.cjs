@@ -14,7 +14,7 @@ function harness({direct=false,fail=false}={}){
   seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seEsc:esc,seAvailabilityDateSetup(){},drawSelections:draw,seSlotButton:()=>dom.window.document.getElementById('slot'),
   seGuardFixtureEdit:()=>true,seButtonWorking:()=>()=>{},seLock(){},seNotice:text=>s.notice=text,refreshClubMessageBadge(){},
   seRPC:async(action,data)=>{calls.push({action,data:structuredClone(data)});if(failures-->0)throw Error('Connection interrupted');if(action==='availability'){player.availability={revision:3,available_dates:[...data.available_dates]};return {saved:true};}return {saved:true};},seReload:async()=>true});
- vm.runInContext(['sePickerOpenAvailability','seReturnFromAvailability','seAvailability','seMutate','sePersist','seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seCopyLast'].map(extract).join('\n'),c);
+ vm.runInContext(['sePickerOpenAvailability','seReturnFromAvailability','seAvailability','seMutate','sePersist','seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(extract).join('\n'),c);
  if(direct)c.seAvailability('player');else c.sePickerOpenAvailability('player');
  const save=async()=>{dom.window.document.querySelector('[data-se-date="2026-10-24"]').click();await dom.window.document.getElementById('seAvailabilityForm').onsubmit({preventDefault(){}});};
  return {c,s,f,player,calls,scroll,dom,active,save};
@@ -44,6 +44,6 @@ test('copy previous team includes the active canonical entry only when confirmed
  const h=harness({direct:true});h.c.confirm=()=>true;h.c.seDate=String;
  h.f.details={...h.f.details,grade:'Second',competition:'Test',format:'limited_overs'};const previous=structuredClone(h.f);previous.id='previous';previous.details.days=[{date:'2026-10-17'}];previous.slots[10].d1='player';previous.published={details:previous.details,slots:previous.slots};h.s.data.fixtures.push(previous);
  h.c.seMutate=async(action,data)=>{h.calls.push({action,data:plain(data)});return true;};h.player.availability.available_dates.push('2026-10-24');await h.c.seCopyLast('second');assert.equal(h.calls.at(-1).data.fixtures[0].slots[10].d1,'player');
- h.player.active=false;await h.c.seCopyLast('second');assert.equal(h.calls.at(-1).data.fixtures[0].slots[10].d1,null);
- h.player.active=true;h.player.availability.available_dates=[];await h.c.seCopyLast('second');assert.equal(h.calls.at(-1).data.fixtures[0].slots[10].d1,null);
+ const count=h.calls.length;h.player.active=false;await h.c.seCopyLast('second');assert.equal(h.calls.length,count);assert.match(h.s.notice,/No players copied/);
+ h.player.active=true;h.player.availability.available_dates=[];await h.c.seCopyLast('second');assert.equal(h.calls.length,count);assert.match(h.s.notice,/availability not confirmed/);
 });
