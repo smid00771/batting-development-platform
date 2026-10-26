@@ -3732,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.277.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.278.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -5348,6 +5348,56 @@ return {NDCA_GUIDE,evidenceGrade,gradeGuide,FIELDING_RATINGS,fieldingLabel,batti
 })();
 
 const __demoModule19=(()=>{
+const {statsOvers}=__demoModule15;
+const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
+// The original exports have no source player IDs, format or batting positions.
+// Keep candidate records separate from confirmed current-season form and never
+// use these name matches to rank a returner, edit a role or merge an identity.
+function renderReturningHistory(data,pair,seasonStart){
+  if(data?.identity_status!=='unconfirmed_name_and_club'||!Array.isArray(data.players))return '';
+  const people=[pair.entry.person,pair.target.incumbent].filter(Boolean);
+  const columns=people.map(person=>{
+    const rows=(data.players.find(p=>p.roster_id===person.id)?.records||[]).filter(row=>row.season_end<seasonStart);
+    if(!rows.length)return `<div><strong>${escape(person.name)}</strong><p class="se-evidence-small">No matching historical reference available.</p></div>`;
+    const grades=[...new Set(rows.map(row=>row.grade_id))];
+    grades.sort((a,b)=>Number(b===pair.entry.team.grade_group_id)-Number(a===pair.entry.team.grade_group_id));
+    return `<div><strong>${escape(person.name)}</strong><p class="se-evidence-small">Possible archive match: ${escape(rows[0].source_name)}<small>${escape(rows[0].source_club)}</small></p>${grades.map(id=>{
+      const records=rows.filter(row=>row.grade_id===id).sort((a,b)=>b.season.localeCompare(a.season));
+      return `<h3>${escape(records[0].grade)}</h3>${records.map(row=>{
+        const dismissals=row.innings-row.not_outs;
+        const figures=pair.target.focus==='bowling'
+          ? `${row.wickets} wickets · ${statsOvers(row.balls)??'—'} overs · ${row.conceded} runs<small>Avg ${row.wickets?decimal(row.conceded/row.wickets):'—'} · Econ ${row.balls?decimal(row.conceded*6/row.balls):'—'}</small>`
+          : `Avg ${dismissals>0?decimal(row.runs/dismissals):'—'} · ${row.runs} runs<small>${row.innings} inns · ${row.not_outs} not out</small>`;
+        return `<p class="se-evidence-small"><strong>${escape(row.season)}</strong>${figures}</p>`;
+      }).join('')}`;
+    }).join('')}</div>`;
+  });
+  return `<p class="se-evidence-small">Source records matched by name and club; player identity is unconfirmed. Check the source names before using this reference. Season totals combine formats and have no batting-position information. These records do not affect the current form assessment.</p><div class="se-evidence-pair-grid">${columns.join('')}</div>`;
+}
+
+function bindReturningHistory(dialog,pair,{supabase,clubId,seasonStart,here}){
+  const details=dialog.querySelector('[data-return-history]');if(!details)return;
+  let loading=false,loaded=false;
+  details.addEventListener('toggle',async()=>{
+    if(!details.open||loading||loaded||!here())return;
+    loading=true;
+    const content=details.querySelector('[data-return-history-content]');content.textContent='Loading historical reference…';
+    try{
+      const result=await supabase.rpc('club_selection_history_api',{p_club_id:clubId,p_data:{fixture_id:pair.entry.team.id,roster_ids:[pair.entry.person.id,pair.target.incumbent?.id].filter(Boolean)}});
+      if(!here()||!dialog.isConnected)return;
+      if(result.error)throw Error('History unavailable');
+      const html=renderReturningHistory(result.data,pair,seasonStart);
+      if(!html)throw Error('History unavailable');
+      content.innerHTML=html;loaded=true;
+    }catch{if(here()&&dialog.isConnected)content.textContent='Historical reference unavailable. Close and reopen this section to retry.';}
+    finally{loading=false;}
+  });
+}
+return {renderReturningHistory,bindReturningHistory};
+})();
+
+const __demoModule20=(()=>{
 const {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence}=__demoModule16;
 const date = team => team.days?.[0]?.date || '';
 const end = team => (team.days || []).map(day=>day.date).sort().at(-1) || '';
@@ -5364,8 +5414,12 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
   if (!incumbent || incumbent.active===false) return false;
   const keeps=incumbent.keeper || days.some(day=>team.match_roles?.['d'+(day+1)]?.keeper_id===incumbent.id);
   if (keeps && !candidate.keeper) return false;
-  const batting=battingPositionFits({person:incumbent,position},{person:candidate,position:previousPosition});
-  if (['pace','spin'].includes(incumbent.bowling)) {
+  // Top/middle-order batters can be discussed together on their batting.
+  // Keep openers/lower-order jobs separate and expose the two actual positions.
+  const batting=battingPositionFits({person:incumbent,position},{person:candidate,position:previousPosition})
+    || [incumbent,candidate].every(p=>['top','middle'].includes(p.batting))
+      && position>=3&&position<=6&&previousPosition>=3&&previousPosition<=6;
+  if (['pace','spin'].includes(incumbent.bowling)&&incumbent.bowling_load!=='part_time') {
     if (!bowlingJobFits(incumbent,candidate,team.format)) return false;
     // A returning frontline spinner needs the same bowling-led comparison as
     // a frontline quick. Keep type/workload and keeper cover; show batting and
@@ -5373,7 +5427,9 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
     const frontline=[incumbent,candidate].every(p=>p.bowling_load==='frontline');
     return frontline ? 'bowling' : batting ? 'all_round' : false;
   }
-  return incumbent.bowling==='none' && batting ? 'batting' : false;
+  // Occasional bowling is not a required replacement job. Saved frontline
+  // bowling and keeping cover still take priority; no player roles are changed.
+  return (incumbent.bowling==='none'||incumbent.bowling_load==='part_time') && batting ? 'batting' : false;
 }
 
 // A return is established by saved unavailability for consecutive missed
@@ -5454,33 +5510,49 @@ function returningComparison(entry,target,summary) {
   const whileAway=(returnRow(entry,summary,target.incumbent?.id)?.history || []).filter(match=>entry.missed.some(team=>match.fixture_id
     ? match.fixture_id===team.id : match.date===date(team)&&entry.missed.filter(other=>date(other)===match.date).length===1));
   const incoming=returningForm(entry,summary),current=returningPeriod(whileAway),notes=[];
+  let assessment='insufficient',assessmentText='Not enough comparable figures.';
   if (target.incumbent) {
+    if(target.focus!=='bowling'){
     const batA=battingEvidence(incoming),batB=battingEvidence(current);
     if (incoming.batting_complete&&current.batting_complete&&Number.isFinite(incoming.average)&&Number.isFinite(current.average)) {
       const comparison=incoming.average>current.average?'higher':incoming.average<current.average?'lower':'the same';
       notes.push(`${entry.person.name} had ${comparison==='the same'?'the same':'a '+comparison} batting average in these samples.`);
       if (!batA.ready||!batB.ready) notes.push('Too few batting opportunities for a firm statistical preference.');
+      assessment=batA.ready&&batB.ready?(incoming.average>current.average?'returner':incoming.average<current.average?'incumbent':'level'):'early';
+      assessmentText=assessment==='early'?'Early batting samples · no statistical preference.'
+        :assessment==='level'?'Equal batting averages in these samples.'
+        :`${assessment==='returner'?entry.person.name:target.incumbent.name} has the stronger batting figures in these samples.`;
     } else notes.push('Batting averages cannot yet be compared reliably.');
+    }
+    if(target.focus==='bowling'||target.focus==='all_round'){
     const a=bowlingEvidence(incoming,entry.person,entry.team.format),b=bowlingEvidence(current,target.incumbent,entry.team.format),bowlingNotes=[];
     if (incoming.bowling_complete&&current.bowling_complete&&incoming.bowling_balls&&current.bowling_balls) {
       const wickets=a.wickets>b.wickets?'more':a.wickets<b.wickets?'fewer':'the same',economy=a.economy<b.economy?'lower':a.economy>b.economy?'higher':'the same';
       bowlingNotes.push(`${entry.person.name}: ${wickets} wickets per ball; ${economy} economy.`);
       if (!a.ready||!b.ready) bowlingNotes.push('Too little bowling for a firm statistical preference.');
+      const stronger=a.wickets>=b.wickets&&a.economy<=b.economy&&(a.wickets>b.wickets||a.economy<b.economy),weaker=b.wickets>=a.wickets&&b.economy<=a.economy&&(b.wickets>a.wickets||b.economy<a.economy);
+      assessment=!a.ready||!b.ready?'early':stronger?'returner':weaker?'incumbent':a.wickets===b.wickets&&a.economy===b.economy?'level':'tradeoff';
+      assessmentText=assessment==='early'?'Early bowling samples · no statistical preference.'
+        :assessment==='level'?'Equal bowling rates in these samples.'
+        :assessment==='tradeoff'?'Bowling trade-off · wicket-taking and economy favour different players.'
+        :`${assessment==='returner'?entry.person.name:target.incumbent.name} has the stronger bowling figures in these samples.`;
     } else if (target.focus==='bowling') {
       bowlingNotes.push(!incoming.bowling_complete||!current.bowling_complete?'Bowling figures are incomplete for these periods.':`No recorded bowling for ${!incoming.bowling_balls?entry.person.name:target.incumbent.name} in this period; bowling rates cannot be compared.`);
     }
     if(target.focus==='bowling')notes.unshift(...bowlingNotes);else notes.push(...bowlingNotes);
+    }
   }
-  const early=[incoming,...(target.incumbent?[current]:[])].some(row=>row.innings<5 || row.bowling_innings>0&&row.bowling_innings<5);
-  return {entry,target,incoming,current,notes,early};
+  const early=[incoming,...(target.incumbent?[current]:[])].some(row=>target.focus==='bowling'?row.bowling_innings<5:row.innings<5);
+  return {entry,target,incoming,current,notes,early,assessment,assessmentText};
 }
 return {returningPlayers,returningPeriod,returningForm,returningComparison};
 })();
 
 const __demoModule18=(()=>{
+const {bindReturningHistory}=__demoModule19;
 const {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS}=__demoModule15;
 const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule16;
-const {returningPlayers, returningComparison, returningForm}=__demoModule19;
+const {returningPlayers, returningComparison, returningForm}=__demoModule20;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
@@ -5494,7 +5566,7 @@ const evidenceStyles=`<style>
 .se-evidence-connectors .se-evidence-hit{stroke:transparent;stroke-width:24;stroke-dasharray:none;fill:none;pointer-events:stroke;cursor:pointer}.se-evidence-connectors [role=button]:focus-visible{outline:none;opacity:1;stroke-width:3}.se-evidence-connectors [role=button]:focus-visible .se-evidence-line{stroke:#17245f}
 .se-other-grades{font-size:13px;overflow-wrap:anywhere}.se-other-grades small{color:#52627a;font-size:12px}
 .se-return-linked{box-shadow:inset 0 0 0 1px #38857d;border-radius:6px}.se-return-mark{color:#21665f;font-weight:700}.se-evidence-compact .se-return-mark{white-space:nowrap}.se-return-choice{display:block;min-height:44px;width:100%;margin:4px 0;padding:7px;text-align:left;border:1px solid #cdd6e3;border-radius:6px;background:white;color:#24344c;font:inherit;cursor:pointer}.se-return-choice small{display:block;font-size:12px;color:#52627a}
-.se-returns{margin:6px 0;padding:4px 6px;border-left:3px solid #38857d;background:#f1f8f5;border-radius:5px}.se-return-heading,.se-return-row{display:grid;grid-template-columns:minmax(100px,.8fr) minmax(0,1.2fr);gap:6px;align-items:start}.se-return-heading{font-size:11px;font-weight:700;color:#21665f;line-height:18px}.se-return-row+.se-return-row{border-top:1px solid #d0e5dc}.se-return-targets{display:flex;align-items:center;flex-wrap:wrap;gap:2px 4px;min-width:0}.se-return-person,.se-return-target,#app .se-return-person,#app .se-return-target{box-sizing:border-box;display:inline-flex;align-items:center;min-height:44px;min-width:44px;max-width:100%;margin:0;padding:4px;border:0;border-radius:5px;background:transparent;color:#175b53;font:600 12px/1.3 system-ui;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer;gap:4px}.se-return-person{width:100%;justify-content:flex-start}.se-return-target,#app .se-return-target{font-size:11px;font-weight:500;text-decoration:underline;text-underline-offset:3px}.se-return-person:hover,.se-return-target:hover{background:#dceee5}.se-return-person:focus-visible,.se-return-target:focus-visible{outline:2px solid #21665f;outline-offset:-2px}.se-return-unmatched{font-size:11px;line-height:1.4;color:#52627a;align-self:center}.se-return-active{box-shadow:inset 0 0 0 2px #21665f;background:#e8f5ed}
+.se-returns{margin:4px 0;padding:2px 6px;border-left:3px solid #38857d;background:#f1f8f5;border-radius:5px}.se-return-heading{font-size:11px;font-weight:700;color:#21665f;line-height:18px}.se-return-row+.se-return-row{border-top:1px solid #d0e5dc}.se-return-person,#app .se-return-person{box-sizing:border-box;display:flex;align-items:center;min-height:44px;width:100%;max-width:100%;margin:0;padding:2px 4px;border:0;border-radius:5px;background:transparent;color:#175b53;font:600 12px/1.3 system-ui;text-align:left;white-space:nowrap;cursor:pointer;gap:5px;list-style:none}.se-return-person::-webkit-details-marker{display:none}.se-return-person strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.se-return-person::after{content:'⌄';margin-left:auto;flex-shrink:0}.se-return-row[open]>.se-return-person::after{content:'⌃'}.se-return-count{font-size:10px;font-weight:400;flex-shrink:0;color:#52627a}.se-return-person:hover{background:#dceee5}.se-return-person:focus-visible{outline:2px solid #21665f;outline-offset:-2px}.se-return-info{padding:0 4px 6px;font-size:12px;color:#24344c}.se-return-info p{margin:5px 0}.se-return-info small{display:block;color:#52627a}.se-return-info h3{font-size:12px;margin:8px 0 4px}.se-return-info .se-return-choice{font-size:12px}.se-return-active{box-shadow:inset 0 0 0 2px #21665f;background:#e8f5ed}
 
 </style>`;
 
@@ -5515,9 +5587,9 @@ function renderEvidenceBadges(item,key=item?.key,{compact=false,form=true}={}) {
   }
   if(item.returns?.length){
     const names=[...new Set(item.returns.map(pair=>pair.entry.person.name))];
-    labels.push('Potential in: '+names.join(', '));
+    labels.push('Returning player comparison: '+names.join(', '));
     const mark=`<span class="se-return-mark" aria-hidden="true">↩${names.length}</span>`;
-    link=link?link.replace('</span>',' · '+mark+'</span>'):`<span class="se-evidence-link">${compact?mark:'Potential in '+mark}</span>`;
+    link=link?link.replace('</span>',' · '+mark+'</span>'):`<span class="se-evidence-link">${compact?mark:'Returning '+mark}</span>`;
   }
   return parts.length||link?`<button type="button" class="se-evidence-button${compact?' se-evidence-compact':''}" data-evidence-open="${escape(key)}" aria-label="${escape(item.person.name+': Form guide. '+labels.join('; ')+'. View performance details')}" title="${escape(labels.join(' · '))}">${compact?parts.join('')+link:`<span class="se-evidence-title">Form guide${item.bat?.early||item.ball?.early?' · early':''}${link}</span>${parts.join('')}`}</button>`:'';
 }
@@ -5530,21 +5602,21 @@ function record(item) {
 }
 const returnDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(value+'T12:00:00Z')):'';
 const returnDays=pair=>pair.entry.team.days.length>1?' · '+pair.target.days.map(day=>'Day '+(day+1)).join(' / '):'';
-function returnRecord(stats,person,{bowlingFirst=false}={}) {
+function returnRecord(stats,person,{bowlingFirst=false,focus='all'}={}) {
   if(!stats.matches)return '<p class="se-evidence-small">No saved figures for this period.</p>';
   const batting=`<p><strong>Batting · ${number(stats.average)} average</strong><small>${stats.batting_complete?`${stats.runs} runs · ${stats.innings} inns · ${stats.not_outs} not out`:'Figures incomplete'}</small></p>`;
   const bowling=['pace','spin'].includes(person?.bowling)||stats.bowling_balls>0?`<p><strong>Bowling · ${stats.bowling_complete?`${stats.wickets} wickets`:'Figures incomplete'}</strong>${stats.bowling_complete?`<small>${statsOvers(stats.bowling_balls)??'—'} overs · ${stats.bowling_innings} inns · ${stats.conceded} runs</small><small>Avg ${stats.wickets?decimal(stats.conceded/stats.wickets):'—'} · Econ ${decimal(stats.economy)}</small>${stats.bowling_balls?`<small>${decimal(stats.wickets*100/stats.bowling_balls)} wickets/100 balls</small>`:''}`:''}</p>`:'';
-  return bowlingFirst?bowling+batting:batting+bowling;
+  return focus==='bowling'?bowling:focus==='batting'?batting:bowlingFirst?bowling+batting:batting+bowling;
 }
 function returnDetails(pair,index=0){
   const {entry,target,incoming,current,notes}=pair,other=target.incumbent;
-  return `<details class="se-evidence-pair" ${index===0?'open':''}><summary><strong>${escape(entry.person.name)} → ${escape(other?.name||'Vacant place')} · No. ${target.position}${escape(returnDays(pair))}</strong><small>Potential in · available again${pair.early?' · early samples':''}${target.joinedDuringAbsence?' · current player joined this team during the absence':''}</small></summary><p class="se-evidence-small">${escape(entry.person.name)} was unavailable for ${entry.missed.length} ${entry.missed.length===1?'game':'games'} in ${escape(entry.team.grade)}; last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><div class="se-evidence-pair-grid"><div><strong>${escape(entry.person.name)}</strong><small>Before absence · last ${incoming.matches} recorded ${incoming.matches===1?'game':'games'} (up to 3)</small><small>${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))}</small><small>Fielding: ${escape(fieldingLabel(entry.person))}</small>${returnRecord(incoming,entry.person,{bowlingFirst:target.focus==='bowling'||entry.person.bowling_load==='frontline'})}</div><div><strong>${escape(other?.name||'Vacant place')}</strong>${other?`<small>While away · ${current.matches} of ${entry.missed.length} ${entry.missed.length===1?'game':'games'} recorded</small><small>${escape(battingRoleLabel(other))} · ${escape(bowlingRoleLabel(other))}</small><small>Fielding: ${escape(fieldingLabel(other))}</small>${returnRecord(current,other,{bowlingFirst:target.focus==='bowling'||entry.person.bowling_load==='frontline'})}`:'<p>This place is currently vacant.</p>'}</div></div>${target.focus==='bowling'?'<p class="se-evidence-small">Bowling comparison · matching type and frontline workload. Batting and fielding remain separate considerations.</p>':''}${notes.map(note=>`<p class="se-evidence-small">${escape(note)}</p>`).join('')}<p class="se-evidence-small">Separate periods in the same grade and format. These figures support a selection discussion; returning availability does not reserve a place.</p></details>`;
+  return `<details class="se-evidence-pair" ${index===0?'open':''}><summary><strong>${escape(entry.person.name)} / ${escape(other?.name||'Vacant place')} · No. ${target.position}${escape(returnDays(pair))}</strong><small>Similar role · available again${pair.early?' · early samples':''}${target.joinedDuringAbsence?' · current player joined this team during the absence':''}</small></summary><p class="se-evidence-small">${escape(entry.person.name)} was unavailable for ${entry.missed.length} ${entry.missed.length===1?'game':'games'} in ${escape(entry.team.grade)}; last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><div class="se-evidence-pair-grid"><div><strong>${escape(entry.person.name)}</strong><small>Before absence · last ${incoming.matches} recorded ${incoming.matches===1?'game':'games'} (up to 3)</small><small>${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))}</small><small>Fielding: ${escape(fieldingLabel(entry.person))}</small>${returnRecord(incoming,entry.person,{focus:target.focus})}</div><div><strong>${escape(other?.name||'Vacant place')}</strong>${other?`<small>While away · ${current.matches} of ${entry.missed.length} ${entry.missed.length===1?'game':'games'} recorded</small><small>${escape(battingRoleLabel(other))} · ${escape(bowlingRoleLabel(other))}</small><small>Fielding: ${escape(fieldingLabel(other))}</small>${returnRecord(current,other,{focus:target.focus})}`:'<p>This place is currently vacant.</p>'}</div></div>${target.focus==='bowling'?'<p class="se-evidence-small">Bowling comparison · matching type and frontline workload. Batting averages are not used to judge this bowling place.</p>':''}${other?`<p class="se-evidence-small"><strong>${escape(pair.assessmentText)}</strong></p>`:''}${notes.map(note=>`<p class="se-evidence-small">${escape(note)}</p>`).join('')}<p class="se-evidence-small">Similar roles, not a recommendation to replace anyone. Separate periods in the same grade and format; selection remains your decision.</p></details>`;
 }
-function returnTeamDetails(entry,pairs,summary){
+function returnTeamDetails(entry,pairs,summary,compare){
   const before=returningForm(entry,summary);
-  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(entry.person.name)}</h2><p class="se-evidence-small">Returning · ${escape(entry.team.grade)} · ${escape(returnDate(entry.team.days[0].date))}</p></div><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div><p class="se-evidence-small">Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected at No. ${entry.position}.</p><p class="se-evidence-small">${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))} · Fielding: ${escape(fieldingLabel(entry.person))}</p><h3>Before absence</h3><p class="se-evidence-small">Last ${before.matches} recorded ${before.matches===1?'game':'games'} (up to 3) · ${before.matches<5?'early sample':''}</p>${returnRecord(before,entry.person,{bowlingFirst:entry.person.bowling_load==='frontline'})}<h3>Compare with current XI</h3>${pairs.flatMap((pair,index)=>pair.entry.key===entry.key?[`<button class="se-return-choice" type="button" data-return-compare="${index}">${escape(pair.target.incumbent?.name||'Vacant place')} · No. ${pair.target.position}${escape(returnDays(pair))}<small>${pair.target.focus==='bowling'?'Bowling comparison':pair.target.joinedDuringAbsence?'Joined this team during the absence':'Matching recorded role and place'}</small></button>`]:[]).join('')||'<p class="se-evidence-small">No matching place identified from the saved roles and available dates. Review the playing-list attributes and team balance.</p>'}`;
+  return `<p class="se-evidence-small">Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><p class="se-evidence-small">${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))} · Fielding: ${escape(fieldingLabel(entry.person))}</p><h3>Before absence</h3><p class="se-evidence-small">Last ${before.matches} recorded ${before.matches===1?'game':'games'} (up to 3) · early sample</p>${returnRecord(before,entry.person,{bowlingFirst:entry.person.bowling_load==='frontline'})}${compare?`<h3>Similar roles in the current XI</h3><p class="se-evidence-small">Role matches for discussion, not suggested replacements.</p>${pairs.flatMap((pair,index)=>pair.entry.key===entry.key?[`<button class="se-return-choice" type="button" data-return-compare="${index}">${escape(pair.target.incumbent?.name||'Vacant place')} · No. ${pair.target.position}${escape(returnDays(pair))}<small>${pair.target.focus==='bowling'?'Bowling':pair.target.focus==='batting'?'Batting':'Role'} comparison${pair.target.joinedDuringAbsence?' · joined during the absence':''}</small>${pair.target.incumbent?`<small>${escape(pair.assessmentText)}</small>`:''}</button>`]:[]).join('')||'<p class="se-evidence-small">No similar role identified from the saved roles and available dates.</p>'}`:''}`;
 }
-function returnComparisonDetails(pair){return `<div class="se-evidence-heading"><h2 id="seEvidenceTitle">${pair.target.focus==='bowling'?'Bowling comparison':'Returning player comparison'}</h2><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${returnDetails(pair)}`;}
+function returnComparisonDetails(pair){return `<div class="se-evidence-heading"><h2 id="seEvidenceTitle">${pair.target.focus==='bowling'?'Bowling comparison':'Returning player comparison'}</h2><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${returnDetails(pair)}<details class="se-evidence-help" data-return-history><summary>Historical reference</summary><div data-return-history-content></div></details>`;}
 
 function otherGradeRecords(item) {
   const stats=item.otherGrades?.[0];
@@ -5584,7 +5656,7 @@ function assessmentDetails(item,key,label,job) {
   return `<div><strong>${label} <span class="se-evidence-chip ${evidence.state}">${states[evidence.state][0]} ${states[evidence.state][1]}</span></strong><span class="se-evidence-small">${escape(job)}</span><p class="se-evidence-small">${escape(reason)}</p>${base?`<small class="se-evidence-small">Grade reference: ${escape(reference)}</small>`:''}${evidence.ready||evidence.early?`<p class="se-evidence-sample">${evidence.early?'Early sample · ':''}${escape(actual)}</p>`:''}</div>`;
 }
 function renderEvidenceDetails(item) {
-  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.returns?.length?'<h3>Potential ins</h3>'+item.returns.map(returnDetails).join(''):''}${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}<p class="se-evidence-small">Fielding: <strong>${escape(fieldingLabel(item.person))}</strong> · selector rating</p>${otherGradeRecords(item)}${item.links.length?`<h3>Selection conversations</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No selection conversation meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
+  return `<div class="se-evidence-heading"><div><h2 id="seEvidenceTitle">${escape(item.person.name)}</h2><p class="se-evidence-small">Form guide · ${escape(item.team.grade)} · ${escape(STATS_FORMATS[item.team.format]||item.team.format)} · current season</p></div><button type="button" class="se-evidence-close" data-evidence-close aria-label="Close performance details">Close</button></div>${item.returns?.length?'<h3>Returning player comparisons</h3>'+item.returns.map(returnDetails).join(''):''}${item.bat?.baseline||item.ball?.baseline?`<p class="se-evidence-source">NDCA ${NDCA_BENCHMARKS.seasons} grade benchmark · All roles and match formats</p>`:''}<div class="se-evidence-metrics">${[['bat','Batting',battingRoleLabel(item.person)],['ball','Bowling',bowlingRoleLabel(item.person)]].filter(([key])=>item[key]).map(([key,label,job])=>assessmentDetails(item,key,label,job)).join('')}</div>${record(item)}<p class="se-evidence-small">Fielding: <strong>${escape(fieldingLabel(item.person))}</strong> · selector rating</p>${otherGradeRecords(item)}${item.links.length?`<h3>Selection conversations</h3>${item.links.map(pairDetails).join('')}`:'<p class="se-evidence-small">No selection conversation meets the rough grade, role and opportunity checks in these line-ups.</p>'}${help()}`;
 }
 function renderEvidenceComparison(pair) {
   const early=[pair.higher,pair.lower].some(item=>item.bat?.early||item.ball?.early);
@@ -5598,6 +5670,7 @@ function showEvidenceDialog(host,content,trigger) {
   dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
   if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','');
   dialog.querySelector('[data-evidence-close]').focus();
+  return dialog;
 }
 // Keep the relationship on the board. Lines occupy the existing column gap;
 // stacked cards retain the same numbered markers without a misleading line.
@@ -5729,7 +5802,7 @@ function bindEvidenceDetails(host,model,here=()=>true) {
 
 function createSelectionEvidence(h) {
   let board=null,cache=null,pending=null,generation=0;
-  const preferences=new Map(),preferenceKey=scope=>'club-selections-form-indicators:'+scope;
+  const preferences=new Map(),returnPreferences=new Map();
   const here=b=>board===b && b.host.isConnected && h.here(b);
   function clear(b) {
     clearEvidenceLinks(b.host);
@@ -5741,27 +5814,32 @@ function createSelectionEvidence(h) {
   function bindVisibility(b) {
     let storage;
     try {storage=b.host.ownerDocument.defaultView.fixtureLocalStorage;}catch{}
-    if(!preferences.has(b.scope)){
-      let visible=true;try{visible=storage?.getItem(preferenceKey(b.scope))!=='0';}catch{}
-      preferences.set(b.scope,visible);
+    for(const [property,values,prefix,initial,toggle] of [
+      ['visible',preferences,'club-selections-form-indicators:',true,b.visibilityToggle||b.host.querySelector('[data-evidence-toggle]')],
+      ['compareReturns',returnPreferences,'club-selections-compare-returning:',false,b.returningToggle||b.host.querySelector('[data-returning-toggle]')]
+    ]){
+      const key=prefix+b.scope;
+      if(!values.has(b.scope)){
+        let value=initial;try{const saved=storage?.getItem(key);if(saved==='1'||saved==='0')value=saved==='1';}catch{}
+        values.set(b.scope,value);
+      }
+      b[property]=values.get(b.scope);
+      if(!toggle)continue;
+      toggle.checked=b[property];
+      toggle.onchange=()=>{
+        if(!here(b))return;
+        b[property]=toggle.checked;values.set(b.scope,b[property]);
+        try{storage?.setItem(key,b[property]?'1':'0');}catch{}
+        if(b.visible||b.returningEnabled)void load(b);else clear(b);
+      };
     }
-    b.visible=preferences.get(b.scope);
-    const toggle=b.visibilityToggle||b.host.querySelector('[data-evidence-toggle]');
-    if(!toggle)return;
-    toggle.checked=b.visible;
-    toggle.onchange=()=>{
-      if(!here(b))return;
-      b.visible=toggle.checked;preferences.set(b.scope,b.visible);
-      try{storage?.setItem(preferenceKey(b.scope),b.visible?'1':'0');}catch{}
-      if(b.visible||b.returningEnabled)void load(b);else clear(b);
-    };
   }
   function paint(b,data) {
     if(!here(b)||!b.visible&&!b.returningEnabled)return;
     const teams=resolveSelectionStatsTeams(b.teams,data.season,b.referenceTeams||b.teams);
     const summary=buildSeasonStats(data),model=buildSelectionEvidence(summary,teams,b.roster);
     const returns=b.returningEnabled?returningPlayers({teams,references:resolveSelectionStatsTeams(b.referenceTeams||[],data.season),roster:b.roster,season:data.season,today:b.today||data.today,noPlay:data.fixtures.filter(f=>f.no_play).map(f=>f.id),eligible:b.returningEligible}):[];
-    const returnPairs=returns.flatMap(entry=>entry.targets.map(target=>returningComparison(entry,target,summary)));
+    const returnPairs=b.compareReturns?returns.flatMap(entry=>entry.targets.map(target=>returningComparison(entry,target,summary))):[];
     for(const item of model.players.values())item.returns=returnPairs.filter(pair=>pair.entry.team.id===item.team.id&&pair.target.incumbent?.id===item.person.id);
     if(!b.visible){model.pairs=[];for(const item of model.players.values())item.links=[];}
     b.host.querySelector('.se-evidence-dialog')?.remove();
@@ -5774,6 +5852,7 @@ function createSelectionEvidence(h) {
       slot.closest('.se-player-cell')?.classList.toggle('se-return-linked',!!item?.returns?.length);
     });
     bindEvidenceDetails(b.host,model,()=>here(b));
+    const expanded=new Set([...b.host.querySelectorAll('.se-return-row[open]')].map(row=>row.dataset.returnKey));
     b.host.querySelectorAll('[data-return-control]').forEach(el=>el.remove());
     const highlight=pairs=>{
       b.host.querySelectorAll('.se-return-active').forEach(el=>el.classList.remove('se-return-active'));
@@ -5783,19 +5862,19 @@ function createSelectionEvidence(h) {
       });
     };
     highlight([]);
-    const compare=(pair,trigger)=>{if(!here(b)||!pair)return;showEvidenceDialog(b.host,returnComparisonDetails(pair),trigger);};
+    const compare=(pair,trigger)=>{if(!here(b)||!pair||!b.compareReturns)return;const dialog=showEvidenceDialog(b.host,returnComparisonDetails(pair),trigger);bindReturningHistory(dialog,pair,{supabase:h.supabase,clubId:b.clubId,seasonStart:data.season.start,here:()=>here(b)&&b.compareReturns&&dialog.isConnected});};
     for(const card of b.host.querySelectorAll('[data-se-team]')){
       const entries=returns.filter(entry=>entry.team.id===card.dataset.seTeam);
       if(!entries.length)continue;
       const control=card.ownerDocument.createElement('section');control.dataset.returnControl='';control.className='se-returns';control.setAttribute('aria-label','Returning players for '+entries[0].team.grade);
-      control.innerHTML='<div class="se-return-heading"><span>Returning players</span><span>Compare with</span></div>'+entries.map((entry,index)=>`<div class="se-return-row"><button type="button" class="se-return-person" data-return-person="${index}" aria-label="${escape(entry.person.name+': available again. View pre-absence batting and bowling')}"><span aria-hidden="true">↩</span><strong>${escape(entry.person.name)}</strong></button><div class="se-return-targets">${returnPairs.flatMap((pair,i)=>pair.entry.key===entry.key?[`<button type="button" class="se-return-target" data-return-compare="${i}" aria-label="${escape('Compare '+entry.person.name+' with '+(pair.target.incumbent?.name||'vacant place'))}">${escape(pair.target.incumbent?.name||'Vacant place')}${escape(returnDays(pair))}</button>`]:[]).join('')||'<span class="se-return-unmatched">No matching place yet</span>'}</div></div>`).join('');
+      control.innerHTML='<div class="se-return-heading">Returning players</div>'+entries.map((entry,index)=>{
+        const count=returnPairs.filter(pair=>pair.entry.key===entry.key).length;
+        return `<details class="se-return-row" data-return-key="${escape(entry.key)}" ${expanded.has(entry.key)?'open':''}><summary class="se-return-person" data-return-person="${index}" title="${escape(entry.person.name+': available again'+(b.compareReturns?'. '+count+' similar roles':''))}" aria-label="${escape(entry.person.name+': available again. Expand details')}"><span aria-hidden="true">↩</span><strong>${escape(entry.person.name)}</strong>${b.compareReturns?`<span class="se-return-count">${count} similar</span>`:''}</summary><div class="se-return-info">${returnTeamDetails(entry,returnPairs,summary,b.compareReturns)}</div></details>`;
+      }).join('');
       const anchor=card.querySelector(':scope > .se-actions')||card.querySelector('[data-se-order-list]')||card.querySelector(':scope > ol');
       if(anchor)anchor.after(control);else card.append(control);
       control.querySelectorAll('[data-return-person]').forEach(button=>{
         const entry=entries[Number(button.dataset.returnPerson)],pairs=returnPairs.filter(pair=>pair.entry.key===entry.key);
-        button.onclick=()=>{if(!here(b))return;showEvidenceDialog(b.host,returnTeamDetails(entry,returnPairs,summary),button);
-          b.host.querySelectorAll('.se-evidence-dialog [data-return-compare]').forEach(choice=>choice.onclick=()=>compare(returnPairs[Number(choice.dataset.returnCompare)],button));
-        };
         button.onmouseenter=button.onfocus=()=>highlight(pairs);button.onmouseleave=button.onblur=()=>highlight([]);
       });
       control.querySelectorAll('[data-return-compare]').forEach(button=>{
@@ -6044,7 +6123,7 @@ function createSeasonStatsPanel(h) {
 return {renderGradeComparison,renderStatsRows,createSeasonStatsPanel};
 })();
 
-const __demoModule21=(()=>{
+const __demoModule22=(()=>{
 // Name similarity proposes a human confirmation; it never establishes identity.
 function matchReviewNameParts(value){
  let name=String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\((?:c|capt|captain|wk|wkt|keeper|c\s*\/\s*wk)\)/g,'').replace(/['’]/g,'');
@@ -6070,9 +6149,9 @@ function matchReviewShortNameMatches(a,b){
 return {matchReviewNameParts,matchReviewGivenNameMatches,matchReviewShortNameMatches};
 })();
 
-const __demoModule20=(()=>{
+const __demoModule21=(()=>{
 /* Compare the trusted scorecard automatically; ask only for missing identities and the change. */
-const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule21;
+const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule22;
 const visiblePlayers=team=>(team?.players||[]).filter(p=>p.player_id&&p.name);
 const normal=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function scorecardPlayerMatches(players,roster,links=[]){
@@ -6208,7 +6287,7 @@ function createScorecardTeams(h){
 return {scorecardPlayerMatches,scorecardFixture,scorecardPlayerCandidates,createScorecardTeams};
 })();
 
-const __demoModule23=(()=>{
+const __demoModule24=(()=>{
 const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule11;
 const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
@@ -6270,7 +6349,7 @@ function assistantCanLeave(owner,notify){const r=owner?.graphicAssistant;if(r?.c
 return {assistantCSS,labelSuggestions,proposalMessage,assistantSuggestions,assistantState,assistantHTML,assistantControls,graphicPreview,bindAssistant,assistantCanLeave};
 })();
 
-const __demoModule25=(()=>{
+const __demoModule26=(()=>{
 // Shared renderer/AI contract. This contains visual settings only, never match data.
 const AWARD_STYLE_FIELDS={
  title_y:[0,100],title_size:[20,160],week_y:[0,100],week_size:[18,44],
@@ -6339,9 +6418,9 @@ For requests needing new photographic/illustrated artwork, background alteration
 return {AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions};
 })();
 
-const __demoModule24=(()=>{
+const __demoModule25=(()=>{
 const {graphicGrade,checkGraphicLabel}=__demoModule11;
-const {safeAwardStyle}=__demoModule25;
+const {safeAwardStyle}=__demoModule26;
 const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
  {key:'player_week',label:'Player of the Week',description:'Choose and recognise one player.'},
@@ -6459,12 +6538,12 @@ function drawResultBadge(ctx,text,{label,x,y,maxHeight,layout:d,example}){
 return {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardCaption,awardBatches,resultsShareOpponent,resultsOutcome,resultsSummary,drawAwardGraphic};
 })();
 
-const __demoModule22=(()=>{
+const __demoModule23=(()=>{
 const {scopedAwardLabel}=__demoModule4;
 const {withGradeLabels,graphicLabel}=__demoModule11;
-const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule23;
-const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule24;
-const {visualSettings,refinedAwardLayout}=__demoModule25;
+const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule24;
+const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule25;
+const {visualSettings,refinedAwardLayout}=__demoModule26;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
 
@@ -6703,8 +6782,8 @@ async function renderSocialAwardRequests({supabase,escape:esc},host){
 return {createSocialAwards,renderSocialAwardRequests};
 })();
 
-const __demoModule26=(()=>{
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule23;
+const __demoModule27=(()=>{
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule24;
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);
@@ -6787,7 +6866,7 @@ function createTeamSocialWorkflow(h){
 return {createTeamSocialWorkflow};
 })();
 
-const __demoModule27=(()=>{
+const __demoModule28=(()=>{
 const clean=value=>String(value??'').trim();
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'TH':({1:'ST',2:'ND',3:'RD'}[n%10]||'TH'));
 function dateLabel(value){
@@ -6814,7 +6893,7 @@ function teamSelectionText(card){
 return {teamSelectionText};
 })();
 
-const __demoModule28=(()=>{
+const __demoModule29=(()=>{
 /* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143; local preview cache .225. */
 function createSocialPublishing(h){
  const {supabase}=h,esc=h.escape,demo=!!h.demo;
@@ -7154,7 +7233,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
 return {createSocialPublishing};
 })();
 
-const __demoModule29=(()=>{
+const __demoModule30=(()=>{
 // Balances are participant-seconds; show the equivalent time for four people.
 function videoTime(seconds){
  const minutes=Math.floor(Math.max(0,Number(seconds)||0)/240);
@@ -7229,8 +7308,8 @@ function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sydney',o
 return {videoTime,videoDuration,mountVideoCredits};
 })();
 
-const __demoModule30=(()=>{
-const {mountVideoCredits}=__demoModule29;
+const __demoModule31=(()=>{
+const {mountVideoCredits}=__demoModule30;
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -7547,7 +7626,7 @@ function createSelectionRoom(h){
 return {selectionCallLink,selectionRoomGeometry,selectionCallElapsed,createSelectionRoom};
 })();
 
-const __demoModule32=(()=>{
+const __demoModule33=(()=>{
 /* Local text recognition. Images are passed to a browser worker, never to a reading service.
    Pinned Tesseract engine/language files download from jsDelivr; no image is sent there. */
 function teamWeekReadWords(tsv){
@@ -7599,7 +7678,7 @@ async function readTeamWeekReference(example,background,{candidateNames=[],textC
 return {teamWeekReadWords,teamWeekReadLayout,readTeamWeekReference};
 })();
 
-const __demoModule33=(()=>{
+const __demoModule34=(()=>{
 /* A transparent award guide, not a grade-conversion or selection model.
    Keep source figures intact. Missing context supplies no invented match facts. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
@@ -7692,7 +7771,7 @@ function awardPerformance(p,cards=[]){
 return {awardBalls,awardPerformance};
 })();
 
-const __demoModule34=(()=>{
+const __demoModule35=(()=>{
 /* Basic TOTW uses recorded figures only. Keep Smart's match-context guide separate. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
 const total=(rows,key)=>rows.length&&rows.every(row=>number(row[key])!==null)?rows.reduce((n,row)=>n+number(row[key]),0):null;
@@ -7733,13 +7812,13 @@ function teamWeekBasicRecommendations(candidates){
 return {rawAwardFigures,teamWeekBasicRank,teamWeekBasicRecommendations};
 })();
 
-const __demoModule31=(()=>{
+const __demoModule32=(()=>{
 const {scopedAwardLabel}=__demoModule4;
 const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule11;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule23;
-const {readTeamWeekReference}=__demoModule32;
-const {awardPerformance}=__demoModule33;
-const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule34;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule24;
+const {readTeamWeekReference}=__demoModule33;
+const {awardPerformance}=__demoModule34;
+const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule35;
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 function teamWeekFigures(player,display=player.display){
@@ -8019,7 +8098,7 @@ function createTeamOfWeek(h){
 return {teamWeekGrade,teamWeekFigures,teamWeekDisplay,teamWeekOrder,teamWeekWorthwhile,teamWeekDraft,teamWeekRecommendations,teamWeekRank,teamWeekMatchExample,teamWeekLayout,createTeamOfWeek};
 })();
 
-const __demoModule35=(()=>{
+const __demoModule36=(()=>{
 /* One set of club scorecards, reused by Teams awards and Club Batting. */
 const resultWeekEnd=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+(7-d.getUTCDay())%7);return d.toISOString().slice(0,10);};
 const key=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -8068,7 +8147,7 @@ function createSharedMatchResults(h){
 return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,createSharedMatchResults};
 })();
 
-const __demoModule36=(()=>{
+const __demoModule37=(()=>{
 const {graphicLabel}=__demoModule11;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
@@ -8111,9 +8190,9 @@ function createSocialAwardLabels(h){
 return {createSocialAwardLabels};
 })();
 
-const __demoModule37=(()=>{
+const __demoModule38=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
-const {weeklyResultCoverage,cardStatus}=__demoModule35;
+const {weeklyResultCoverage,cardStatus}=__demoModule36;
 const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
@@ -8177,9 +8256,9 @@ function createFixtureResults(h){
 return {renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule39=(()=>{
-const {awardPerformance}=__demoModule33;
-const {rawAwardFigures}=__demoModule34;
+const __demoModule40=(()=>{
+const {awardPerformance}=__demoModule34;
+const {rawAwardFigures}=__demoModule35;
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
@@ -8234,11 +8313,11 @@ function playerWeekRecommendations(candidates,profiles={},history=[],end,preferN
 return {playerWeekFigures,playerWeekRecommendations};
 })();
 
-const __demoModule38=(()=>{
+const __demoModule39=(()=>{
 const {scopedAwardLabel}=__demoModule4;
 const {graphicGrade,checkGraphicLabel}=__demoModule11;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule23;
-const {playerWeekFigures,playerWeekRecommendations}=__demoModule39;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule24;
+const {playerWeekFigures,playerWeekRecommendations}=__demoModule40;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
 }
@@ -8375,7 +8454,7 @@ function createPlayerOfWeek(h){
 return {playerWeekLayout,createPlayerOfWeek};
 })();
 
-const __demoModule40=(()=>{
+const __demoModule41=(()=>{
 // Local design trials. Only the explicit Apply action can save club settings.
 function createSocialSandbox(h){
  const names=['Alex Sample','Jordan Sample','Taylor Sample','Casey Sample','Morgan Sample','Riley Sample','Cameron Sample','Sam Sample','Jamie Sample','Charlie Sample','Robin Sample'];
@@ -8478,7 +8557,7 @@ function createSocialSandbox(h){
 return {createSocialSandbox};
 })();
 
-const __demoModule41=(()=>{
+const __demoModule42=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -8517,7 +8596,7 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule42=(()=>{
+const __demoModule43=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -8575,7 +8654,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule43=(()=>{
+const __demoModule44=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -8603,8 +8682,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule44=(()=>{
-const {createTeamWeekDemo}=__demoModule43;
+const __demoModule45=(()=>{
+const {createTeamWeekDemo}=__demoModule44;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -8624,7 +8703,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule45=(()=>{
+const __demoModule46=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -8664,7 +8743,7 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule46=(()=>{
+const __demoModule47=(()=>{
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday) {
   const copy = value => structuredClone(value);
@@ -8722,7 +8801,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule47=(()=>{
+const __demoModule48=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -8855,47 +8934,47 @@ const {FIELDING_RATINGS,fieldingLabel}=__demoModule16;
 
 const {createSelectionEvidence}=__demoModule18;
 
-const {createScorecardTeams}=__demoModule20;
+const {createScorecardTeams}=__demoModule21;
 
-const {createSocialAwards,renderSocialAwardRequests}=__demoModule22;
+const {createSocialAwards,renderSocialAwardRequests}=__demoModule23;
 
-const {createTeamSocialWorkflow}=__demoModule26;
+const {createTeamSocialWorkflow}=__demoModule27;
 
-const {teamSelectionText}=__demoModule27;
+const {teamSelectionText}=__demoModule28;
 
-const {createSocialPublishing}=__demoModule28;
+const {createSocialPublishing}=__demoModule29;
 
-const {mountVideoCredits}=__demoModule29;
+const {mountVideoCredits}=__demoModule30;
 
-const {createSelectionRoom}=__demoModule30;
+const {createSelectionRoom}=__demoModule31;
 
-const {createTeamOfWeek,teamWeekLayout}=__demoModule31;
+const {createTeamOfWeek,teamWeekLayout}=__demoModule32;
 
-const {createSharedMatchResults}=__demoModule35;
+const {createSharedMatchResults}=__demoModule36;
 
-const {createSocialAwardLabels}=__demoModule36;
+const {createSocialAwardLabels}=__demoModule37;
 
-const {createFixtureResults}=__demoModule37;
+const {createFixtureResults}=__demoModule38;
 
-const {createPlayerOfWeek}=__demoModule38;
+const {createPlayerOfWeek}=__demoModule39;
 
-const {createSocialSandbox}=__demoModule40;
+const {createSocialSandbox}=__demoModule41;
 
-const {renderSocialPlatformSetup}=__demoModule41;
+const {renderSocialPlatformSetup}=__demoModule42;
 
-const {createScorecardTeamDemo}=__demoModule42;
+const {createScorecardTeamDemo}=__demoModule43;
 
-const {createTeamWeekDemo}=__demoModule43;
+const {createTeamWeekDemo}=__demoModule44;
 
-const {createPlayerWeekDemo}=__demoModule44;
+const {createPlayerWeekDemo}=__demoModule45;
 
-const {createSharedResultsDemo}=__demoModule45;
+const {createSharedResultsDemo}=__demoModule46;
 
-const {createSeasonStatsDemo}=__demoModule46;
+const {createSeasonStatsDemo}=__demoModule47;
 
-const {createSocialAwardsDemo}=__demoModule47;
+const {createSocialAwardsDemo}=__demoModule48;
 
-const {selectionCallLink}=__demoModule30;
+const {selectionCallLink}=__demoModule31;
 
 
 
@@ -8931,7 +9010,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.277';
+const APP_UI_VERSION='0.8.62.278';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -29330,7 +29409,7 @@ function seOpenStatsPlayer(panel,id){
 function seMountSelectionEvidence(){
  const s=ensureSelections(),host=document.getElementById('seContent');if(!host||currentTab!=='teams'||s.view!=='board'||!seBoardAccess(s.data))return;
  const today=seClubDate(),referenceTeams=seSelectionFixtures().map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published,historyConfirmed:!!f.scorecard_sync?.match_id&&!f.scorecard_sync.pending?.length,returningEligible:f.details.days[0]?.date>=today&&!seFixtureLocked(f)}));
- selectionEvidence.mount(host,{scope:s.key,clubId:club.id,visibilityToggle:document.getElementById('seFormIndicators'),roster:s.data.roster,referenceTeams,teams:referenceTeams.filter(f=>f.days[0]?.date===s.date),today,returningEnabled:!s.boardPanel,returningEligible:(team,person,day)=>!seUsed(person,team.days[day],s.data.fixtures,{},team)});
+ selectionEvidence.mount(host,{scope:s.key,clubId:club.id,visibilityToggle:document.getElementById('seFormIndicators'),returningToggle:document.getElementById('seCompareReturning'),roster:s.data.roster,referenceTeams,teams:referenceTeams.filter(f=>f.days[0]?.date===s.date),today,returningEnabled:!s.boardPanel,returningEligible:(team,person,day)=>!seUsed(person,team.days[day],s.data.fixtures,{},team)});
 }
 function seBoardAccess(d=ensureSelections().data){return d?.can_view_board===true||d?.selector===true||d?.captain===true;}
 function seFollowupRows(date=ensureSelections().date,data=ensureSelections().data){return (data.conversations||[]).filter(m=>m.kind==='lower_grade'&&m.availability!=='unavailable'&&(date===null||m.date===date));}
@@ -29952,7 +30031,7 @@ function seSelectionTabs(d){
  return [...(d.admin?[['settings','Settings'],['selection_groups','Selection Groups']]:[]),...(seCanSetup(d)||!captain&&d.signup_followup?.can_view?[['roster','Playing List']]:[]),...(seHasAvailability(d)&&(!captain||seCanSetup(d))?[['availability','Availability']]:[]),...(seBoardAccess(d)||seFollowupRows(null,d).length||d.reviews?.length?[['board','Selection Board']]:[]),...(!d.selector&&d.admin?[['fixtures','Fixtures']]:[]),...(!seBoardAccess(d)?[['published','Teams']]:[]),...(d.socials?[['socials','Social Graphics']]:[])];
 }
 function drawSelections(){selectionState?.cancelOrder?.();if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const drawer=s.restoreDrawer;s.restoreDrawer=null;s.navigationDrawer=null;if(['reviews','conversations'].includes(s.view)){s.followupOpen=s.view==='conversations';s.view='board';}if(s.view==='published'&&seBoardAccess(d)){if(s.publishedWeek){const f=d.fixtures.find(f=>f.published&&sePublishedDates(f).some(date=>sePublishedWeekStart(date)===s.publishedWeek));if(f){s.selectionGroup=f.selection_group_id||'';s.date=f.details.days[0].date;s.boardDateChosen=true;}}s.view='board';}const tabs=seSelectionTabs(d);if(!tabs.some(([key])=>key===s.view)&&!(s.view==='availability'&&seIsCaptain(d)&&seHasAvailability(d)))s.view=seBoardAccess(d)?'board':'published';
- document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><header class="se-page-header"><div class="se-page-heading"><h1>Mirelion Select</h1><button type="button" class="btn ghost se-section-toggle" id="seSectionToggle" aria-expanded="false" aria-controls="seSectionLinks">${seEsc(tabs.find(([key])=>key===s.view)?.[1]||'Availability')} <span aria-hidden="true">⌄</span></button></div><div class="se-actions se-page-tools">${seStatsAllowed(d)&&['board','fixtures'].includes(s.view)?`<button class="btn ghost" id="seSeasonStats" aria-expanded="${!!s.statsOpen}" aria-controls="seStatsHost">Season stats</button>`:''}${d.selector&&s.view==='board'?'<button class="btn ghost" id="seOpenRoom">Selection Room</button>':''}<details class="se-more" id="seMore"><summary class="btn ghost">More <span aria-hidden="true">⌄</span></summary><div class="se-more-body"><button class="btn ghost" id="seRefresh">Refresh</button>${s.view==='board'&&seBoardAccess(d)?`<div id="seBoardExtras" class="se-board-extras">${d.selector?'<button class="btn ghost" id="seImportFixtures">Import season fixtures</button><button class="btn ghost" id="seNewFixture">Enter fixtures manually</button>':''}<label class="se-check se-evidence-toggle"><input type="checkbox" id="seFormIndicators" data-evidence-toggle checked>Show form indicators</label><div id="seBoardExtraTools"></div>${d.selector?'<p id="seOrderHelp" class="se-muted se-order-help">Tap a player’s handle to move them, or drag to reorder. Drafts save automatically.</p>':''}</div>`:''}</div></details></div><nav class="se-tabs" id="seSectionLinks" aria-label="Teams sections">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</nav></header>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice${s.notice&&s.quietNotice===s.notice?' se-notice-quiet':''}" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your change is kept here. Retry safely, or download it before reloading the latest teams.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${['board','settings'].includes(s.view)?sePublicationWorkflow(d,{board:s.view==='board'}):''}<div id="seStatsHost"></div><div id="seContent"></div></section>`;
+ document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><header class="se-page-header"><div class="se-page-heading"><h1>Mirelion Select</h1><button type="button" class="btn ghost se-section-toggle" id="seSectionToggle" aria-expanded="false" aria-controls="seSectionLinks">${seEsc(tabs.find(([key])=>key===s.view)?.[1]||'Availability')} <span aria-hidden="true">⌄</span></button></div><div class="se-actions se-page-tools">${seStatsAllowed(d)&&['board','fixtures'].includes(s.view)?`<button class="btn ghost" id="seSeasonStats" aria-expanded="${!!s.statsOpen}" aria-controls="seStatsHost">Season stats</button>`:''}${d.selector&&s.view==='board'?'<button class="btn ghost" id="seOpenRoom">Selection Room</button>':''}<details class="se-more" id="seMore"><summary class="btn ghost">More <span aria-hidden="true">⌄</span></summary><div class="se-more-body"><button class="btn ghost" id="seRefresh">Refresh</button>${s.view==='board'&&seBoardAccess(d)?`<div id="seBoardExtras" class="se-board-extras">${d.selector?'<button class="btn ghost" id="seImportFixtures">Import season fixtures</button><button class="btn ghost" id="seNewFixture">Enter fixtures manually</button>':''}<label class="se-check se-evidence-toggle"><input type="checkbox" id="seFormIndicators" data-evidence-toggle checked>Show form indicators</label><label class="se-check se-evidence-toggle"><input type="checkbox" id="seCompareReturning" data-returning-toggle>Compare returning players</label><div id="seBoardExtraTools"></div>${d.selector?'<p id="seOrderHelp" class="se-muted se-order-help">Tap a player’s handle to move them, or drag to reorder. Drafts save automatically.</p>':''}</div>`:''}</div></details></div><nav class="se-tabs" id="seSectionLinks" aria-label="Teams sections">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</nav></header>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice${s.notice&&s.quietNotice===s.notice?' se-notice-quiet':''}" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your change is kept here. Retry safely, or download it before reloading the latest teams.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${['board','settings'].includes(s.view)?sePublicationWorkflow(d,{board:s.view==='board'}):''}<div id="seStatsHost"></div><div id="seContent"></div></section>`;
  const sectionToggle=document.getElementById('seSectionToggle'),sectionLinks=document.getElementById('seSectionLinks'),more=document.getElementById('seMore');
  sectionToggle.onclick=()=>{const open=sectionToggle.getAttribute('aria-expanded')!=='true';sectionToggle.setAttribute('aria-expanded',String(open));sectionLinks.classList.toggle('se-sections-open',open);};
  document.getElementById('sePage').addEventListener('keydown',event=>{if(event.key!=='Escape'||event.defaultPrevented)return;if(more.open){more.open=false;more.querySelector('summary').focus();event.preventDefault();}else if(sectionToggle.getAttribute('aria-expanded')==='true'){sectionToggle.click();sectionToggle.focus();event.preventDefault();}});
@@ -34824,7 +34903,7 @@ const demoSeasonStats=createSeasonStatsDemo(()=>demoSelections,()=>demoScorecard
 
 const demoBeforeSeasonStatsRpc=window.__fixtureDb.rpc;
 
-window.__fixtureDb.rpc=async function(name,args){if(name==='club_season_stats_api'){try{return {data:demoSeasonStats(args),error:null};}catch(error){return {data:null,error:{message:error.message}};}}return demoBeforeSeasonStatsRpc.call(this,name,args);};
+window.__fixtureDb.rpc=async function(name,args){if(name==='club_selection_history_api')return {data:{players:(args.p_data?.roster_ids||[]).map(id=>({roster_id:id,records:[]})),identity_status:'unconfirmed_name_and_club'},error:null};if(name==='club_season_stats_api'){try{return {data:demoSeasonStats(args),error:null};}catch(error){return {data:null,error:{message:error.message}};}}return demoBeforeSeasonStatsRpc.call(this,name,args);};
 
 const demoSocialAwards=createSocialAwardsDemo(()=>demoSelections,()=>demoSharedResults,()=>demoSocial,()=>membership,()=>session?.user.id);
 
