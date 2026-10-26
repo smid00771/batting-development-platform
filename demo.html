@@ -3732,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.274.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.275.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -4757,6 +4757,35 @@ const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'limited
 const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
 
+// Imported upcoming fixtures can omit the competition label. Reuse an
+// unambiguous saved label for the exact club grade ID, season and format.
+// This is a read-only stats projection; dates, line-ups and saved fixtures stay
+// untouched. A same-named grade, another season or conflicting labels cannot
+// establish the link.
+function resolveSelectionStatsTeams(teams = [], season = {}, references = teams) {
+  const competitions = new Map();
+  const scope = team => team.grade_group_id && inSeason(dates(team)[0], season)
+    && !team.cancelled && statsFormat(team.format) !== 'unknown'
+    ? JSON.stringify([team.grade_group_id,statsFormat(team.format)]) : null;
+  for (const fixture of references) for (const team of [fixture,fixture.published?.details].filter(Boolean)) {
+    const id = scope(team), competition = String(team.competition || '').trim();
+    if (!id || !competition) continue;
+    if (!competitions.has(id)) competitions.set(id,new Set());
+    competitions.get(id).add(competition);
+  }
+  const resolve = team => {
+    if (String(team.competition || '').trim()) return team;
+    const labels = competitions.get(scope(team));
+    return labels?.size === 1 ? {...team,competition:[...labels][0]} : team;
+  };
+  return teams.map(team => {
+    const resolved = resolve(team);
+    if (!team.published?.details) return resolved;
+    const details = resolve(team.published.details);
+    return details === team.published.details ? resolved : {...resolved,published:{...team.published,details}};
+  });
+}
+
 function latestStatsCards(cards = []) {
   const latest = new Map();
   for (const card of cards) {
@@ -4969,7 +4998,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   }));
   return {rows:result, groups:[...groups.values()].sort((a,b) => a.grade.localeCompare(b.grade, undefined, {numeric:true}) || a.competition.localeCompare(b.competition)), formats:[...formats], issues:[...issues.values()], included, playing, season};
 }
-return {STATS_FORMATS,statsFormat,statsOvers,statsRate,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
+return {STATS_FORMATS,statsFormat,statsOvers,statsRate,resolveSelectionStatsTeams,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
 const __demoModule17=(()=>{
@@ -5319,7 +5348,7 @@ return {NDCA_GUIDE,evidenceGrade,gradeGuide,FIELDING_RATINGS,fieldingLabel,batti
 })();
 
 const __demoModule18=(()=>{
-const {buildSeasonStats, statsOvers, STATS_FORMATS}=__demoModule15;
+const {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS}=__demoModule15;
 const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule16;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
@@ -5569,7 +5598,8 @@ function createSelectionEvidence(h) {
   }
   function paint(b,data) {
     if(!here(b)||!b.visible)return;
-    const model=buildSelectionEvidence(buildSeasonStats(data),b.teams,b.roster);
+    const teams=resolveSelectionStatsTeams(b.teams,data.season,b.referenceTeams||b.teams);
+    const model=buildSelectionEvidence(buildSeasonStats(data),teams,b.roster);
     b.host.querySelector('.se-evidence-dialog')?.remove();
     b.host.querySelector('[data-evidence-styles]')?.remove();
     const styles=b.host.ownerDocument.createElement('div');styles.dataset.evidenceStyles='';styles.innerHTML=evidenceStyles;b.host.append(styles);
@@ -5607,7 +5637,7 @@ return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,renderEvidence
 })();
 
 const __demoModule14=(()=>{
-const {buildSeasonStats, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule15;
+const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule15;
 const {buildSelectionEvidence}=__demoModule16;
 const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule18;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -5714,9 +5744,10 @@ function createSeasonStatsPanel(h) {
     const disabled = s.busy ? 'disabled' : '';
     const teamDate = team => team.days?.[0]?.date || '';
     const available = team => !team.cancelled && (!data || !teamDate(team) || teamDate(team) >= data.season.start && teamDate(team) <= data.season.end);
-    const allTeams = (s.teams || []).filter(available).map(t => ({...t,format:statsFormat(t.format)}));
+    const sourceTeams = resolveSelectionStatsTeams(s.teams || [],data?.season);
+    const allTeams = sourceTeams.filter(available).map(t => ({...t,format:statsFormat(t.format)}));
     const latestPublished = new Map();
-    for (const fixture of s.teams || []) {
+    for (const fixture of sourceTeams) {
       if (!fixture.published?.details || !Array.isArray(fixture.published.slots)) continue;
       const team = {...fixture, ...fixture.published.details, slots:fixture.published.slots, level:fixture.published.level ?? fixture.level, lineupPublished:true};
       team.format = statsFormat(team.format);
@@ -8704,7 +8735,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.274';
+const APP_UI_VERSION='0.8.62.275';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -29102,7 +29133,8 @@ function seOpenStatsPlayer(panel,id){
 }
 function seMountSelectionEvidence(){
  const s=ensureSelections(),host=document.getElementById('seContent');if(!host||currentTab!=='teams'||s.view!=='board'||!seBoardAccess(s.data))return;
- selectionEvidence.mount(host,{scope:s.key,clubId:club.id,visibilityToggle:document.getElementById('seFormIndicators'),roster:s.data.roster,teams:seSelectionFixtures().filter(f=>f.details.days[0]?.date===s.date).map(f=>({id:f.id,...f.details,slots:f.slots}))});
+ const referenceTeams=seSelectionFixtures().map(f=>({id:f.id,...f.details,slots:f.slots,published:f.published}));
+ selectionEvidence.mount(host,{scope:s.key,clubId:club.id,visibilityToggle:document.getElementById('seFormIndicators'),roster:s.data.roster,referenceTeams,teams:referenceTeams.filter(f=>f.days[0]?.date===s.date)});
 }
 function seBoardAccess(d=ensureSelections().data){return d?.can_view_board===true||d?.selector===true||d?.captain===true;}
 function seFollowupRows(date=ensureSelections().date,data=ensureSelections().data){return (data.conversations||[]).filter(m=>m.kind==='lower_grade'&&m.availability!=='unavailable'&&(date===null||m.date===date));}

@@ -1,4 +1,4 @@
-import {buildSeasonStats, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.262';
+import {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS} from './season-stats.js?v=0.8.62.275';
 import {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS} from './selection-evidence.js?v=0.8.62.262';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -249,7 +249,8 @@ export function createSelectionEvidence(h) {
   }
   function paint(b,data) {
     if(!here(b)||!b.visible)return;
-    const model=buildSelectionEvidence(buildSeasonStats(data),b.teams,b.roster);
+    const teams=resolveSelectionStatsTeams(b.teams,data.season,b.referenceTeams||b.teams);
+    const model=buildSelectionEvidence(buildSeasonStats(data),teams,b.roster);
     b.host.querySelector('.se-evidence-dialog')?.remove();
     b.host.querySelector('[data-evidence-styles]')?.remove();
     const styles=b.host.ownerDocument.createElement('div');styles.dataset.evidenceStyles='';styles.innerHTML=evidenceStyles;b.host.append(styles);

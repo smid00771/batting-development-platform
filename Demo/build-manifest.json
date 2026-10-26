@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.274",
+  "appVersion": "0.8.62.275",
   "sources": {
     "app-design.css": "418152d2e9b3e80e76c23a65ab98559717c862300da94051a74026d382af7758",
-    "app.js": "e5fe5e8f134d6cdcd1babbdbabc66c632c349b6b226b7d4d54df4032cdb2781a",
+    "app.js": "3970df7c411b776c21974ecff95e583cef60849c1930c54239d04b8e8ffdca62",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
@@ -27,9 +27,9 @@
     "player-week-ranking.js": "b09668230b3a9560dbdb1486693cb887bc912248cadabcf501f3e9f4f4f994a3",
     "playhq-import.js": "1b43756a5c33f1d6d591cec560b8345cff01c308902e0b1eb541651c5747d8dd",
     "season-stats-demo.js": "5e14bc429b80cf91a8758aa362b89ba3cde59dc69a5f68b4e74ce55ba0209746",
-    "season-stats-panel.js": "27a2264035efc9622cdc472b583fef0b7fb769e4676c484c14347e01c3cd1986",
-    "season-stats.js": "cea255078ed6069433da86ead4a3a2f638b533d9e4a49ba032a88adceff6c48e",
-    "selection-evidence-ui.js": "913b896d103a31c9049931545914a60cc922768a08bb644585cba193a8f8c0b2",
+    "season-stats-panel.js": "4671dbc42835547021c2ef92dda6a6c79d07ea3a2ec6b72a9878c63f01e5d347",
+    "season-stats.js": "98b51de011015fa3b134ed13a49d57c8044f98416cf2762d9de4829f2d1776f8",
+    "selection-evidence-ui.js": "e663403b7b839e060db95c1e0978931cccb4f95d58935183c55538e638b1cfc2",
     "selection-evidence.js": "bda739913d1d9491eb61c4c445d44768770cd30e673059a5ba23e64461f1e0e6",
     "selection-group-manager.js": "24f3322e3c88fd9846267d1c212db2c82336d2445a2919a2dee3c7aa169a28bc",
     "selection-group-page.js": "4122c3df57fb3a456f5923abd4cdbdcde1958aa05c762d5021010ea392465619",
