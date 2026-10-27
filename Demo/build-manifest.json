@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.279",
+  "appVersion": "0.8.62.280",
   "sources": {
     "app-design.css": "418152d2e9b3e80e76c23a65ab98559717c862300da94051a74026d382af7758",
-    "app.js": "59dd245f4b1c905961ec5733a42ae2940e53b4a4e679725c2312cc5ccbfdf3d9",
+    "app.js": "2ef83da6f5da76d6a17fd7d3f216962096a58ce740950a67493b81f66ed792df",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
@@ -18,6 +18,7 @@
     "mirelion-assist-demo.js": "a452d66740108f5181b7cd1abd43706743369cf4fb7a06509647392be1f1fb82",
     "mirelion-assist.js": "2d2c577f95daf5c68e76f14fa000488e94cc4daa59a6b2bf2f8658264a8b7b23",
     "ndca-grade-benchmarks.js": "4bd78c88d337b611795d8eacc60cc3953f44da4e8c84f8bf1276bddd99f88942",
+    "password-flow.js": "e9c07b1a462cbc563a933ae21e7f30690745e2d323584fd12ef8f1fbe6929610",
     "playcricket-connection.js": "911e904cfef5bc110d5635aaacf6f949cfd9de4fca472f2a05a4762ade48c50c",
     "playcricket-team-demo.js": "9ca3e9395b7737e912db3c6f0ecf01dfa0a6ec3a342fd43212502d9476db360f",
     "playcricket-team.js": "912f8e427a0f84674e9dfba466a0aca23f9109ee8bec2dfb6f0ecb384744ec0a",

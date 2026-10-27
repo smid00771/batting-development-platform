@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {stripTypeScriptTypes} from 'node:module';
 import {renderCalendar} from '../Functions/selection-calendar/calendar.mjs';
 import {createSelectionVideoHandler} from '../Functions/selection-video/handler.mjs';
+import {seasonLogoCache} from '../Functions/playhq-sync/team-logos.mjs';
 const root='https://mirelionhq.com';
 test('new phone installs accept existing notification links without leaving their origin',()=>{
  const source=fs.readFileSync('sw.js','utf8'),fn=source.slice(source.indexOf('function appUrl('),source.indexOf("self.addEventListener('message'"));
@@ -23,7 +24,7 @@ test('scorecard and PlayHQ preflight accept Mirelion without expanding to foreig
  for(const name of ['playhq-sync','playcricket-scorecard']){
   let handler;
   const source=stripTypeScriptTypes(fs.readFileSync('Functions/'+name+'/index.ts','utf8').replace(/^import .*$/gm,''));
-  vm.runInNewContext(source,{Deno:{serve:fn=>handler=fn,env:{get:()=>undefined}},Request,Response,URL,Set});
+  vm.runInNewContext(source,{Deno:{serve:fn=>handler=fn,env:{get:()=>undefined}},Request,Response,URL,Set,seasonLogoCache});
   for(const origin of [root,'https://www.mirelionhq.com','https://clubbatting.com']){
    const response=await handler(new Request('https://example.invalid',{method:'OPTIONS',headers:{origin}}));assert.equal(response.headers.get('access-control-allow-origin'),origin);
   }

@@ -3732,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.279.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.280.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -3799,6 +3799,46 @@ return {createMirelionAssistDemo};
 })();
 
 const __demoModule1=(()=>{
+// Password entry is a one-page action, never an account/session requirement.
+// Capture the callback before the auth SDK consumes its URL. Auth events are
+// broadcast across tabs, so PASSWORD_RECOVERY alone must not open this screen.
+function createPasswordFlow(href){
+  const url=new URL(href),hash=new URLSearchParams(url.hash.slice(1));
+  const param=key=>hash.get(key)||url.searchParams.get(key);
+  const setup=url.searchParams.has('password_setup');
+  const recovery=param('type')==='recovery';
+  const callback=(recovery&&!!param('access_token')&&!!param('refresh_token'))
+    ||(setup&&!!url.searchParams.get('code'));
+  const failedLink=(setup||recovery)&&!!(param('error')||param('error_code'));
+  let accountId=null,notice='';
+  return {
+    isPasswordEntry:setup||recovery,
+    initialise(session,error){
+      if(callback&&!error&&session?.user?.id)accountId=session.user.id;
+      else if(callback||failedLink)notice='This password link has expired or could not be opened. Sign in with your existing password, or choose “Forgot password?” if you need a new link.';
+    },
+    activeFor(session){return !!accountId&&accountId===session?.user?.id;},
+    begin(session){accountId=session?.user?.id||null;notice='';},
+    finish(){accountId=null;notice='';},
+    authChanged(session){if(accountId!==session?.user?.id){accountId=null;}},
+    takeNotice(){const message=notice;notice='';return message;}
+  };
+}
+
+function cleanPasswordUrl(href){
+  const url=new URL(href);
+  const keys=['password_setup','code','access_token','refresh_token','token','token_hash',
+    'provider_token','provider_refresh_token','id_token','expires_at','expires_in',
+    'token_type','type','error','error_code','error_description','state','client_secret'];
+  for(const key of keys)url.searchParams.delete(key);
+  const hash=new URLSearchParams(url.hash.slice(1));
+  if(!url.hash||keys.some(key=>hash.has(key)))url.hash='';
+  return url;
+}
+return {createPasswordFlow,cleanPasswordUrl};
+})();
+
+const __demoModule2=(()=>{
 const SPIN_STYLES=Object.freeze([
   ['unknown','Not set'],['off_spin','Off-spin'],['left_arm_orthodox','LH orthodox'],
   ['leg_spin','Leg-spin'],['left_arm_wrist','LH wrist-spin']
@@ -3876,7 +3916,7 @@ function bindSpinBreakdowns(root){
 return {SPIN_STYLES,spinStyle,spinLabel,isBatter,spinProfile,spinTypeCounts,spinProfileText,spinBalanceChange,bindSpinBreakdowns};
 })();
 
-const __demoModule2=(()=>{
+const __demoModule3=(()=>{
 // The old host remains available for account callbacks and the existing Meta callback.
 // Session credentials must be consumed on their original origin, never forwarded.
 const MIRELION_ORIGIN='https://mirelionhq.com';
@@ -3899,7 +3939,7 @@ function legacyAppRedirect(href){
 return {MIRELION_ORIGIN,isLegacyOrigin,hasAuthenticationCallback,mirelionAppUrl,legacyAppRedirect};
 })();
 
-const __demoModule3=(()=>{
+const __demoModule4=(()=>{
 const escapeAssist=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const assistCategories={help:'Help with the platform',enquiry:'Products and subscriptions',idea:'Suggest a change'};
 const assistTime=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
@@ -4107,7 +4147,7 @@ function assistStyles(){return `<style>
 return {createMirelionAssist};
 })();
 
-const __demoModule4=(()=>{
+const __demoModule5=(()=>{
 const assistUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function assistLaunchFromSearch(search){
@@ -4120,7 +4160,7 @@ function assistLaunchFromSearch(search){
 return {assistLaunchFromSearch};
 })();
 
-const __demoModule5=(()=>{
+const __demoModule6=(()=>{
 const AWARD_SCOPE_KINDS=['team_week','player_week','results','five_wickets','century'];
 const awardScopeKey=value=>!value||value.mode==='all'?'all':value.mode+':'+[...new Set(value.ids||[])].sort().join(',');
 const scopedAwardLabel=(label,scope)=>!scope||scope.mode==='all'?label:[label,scope.label].filter(Boolean).join(' · ');
@@ -4194,7 +4234,7 @@ function createSocialAwardScopes(h){
 return {AWARD_SCOPE_KINDS,awardScopeKey,scopedAwardLabel,createSocialAwardScopes};
 })();
 
-const __demoModule6=(()=>{
+const __demoModule7=(()=>{
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const choices=(rows,value)=>rows.map(([id,name])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(name)}</option>`).join('');
 const definiteError=e=>/^(P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(e?.code||'');
@@ -4257,7 +4297,7 @@ function createSelectionGroupPermissions(h){
 return {createSelectionGroupPermissions};
 })();
 
-const __demoModule8=(()=>{
+const __demoModule9=(()=>{
 // Incremental changes to an already saved club setup.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const label=t=>[t?.grade?.name,t?.name!==t?.grade?.name?t?.name:null].filter(Boolean).join(' · ');
@@ -4316,8 +4356,8 @@ function createSelectionGroupManager(h){
 return {createSelectionGroupManager};
 })();
 
-const __demoModule7=(()=>{
-const {createSelectionGroupManager}=__demoModule8;
+const __demoModule8=(()=>{
+const {createSelectionGroupManager}=__demoModule9;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Read saved groups and the cached source names. Opening this page never imports.
 function createSelectionGroupPage(h){
@@ -4353,8 +4393,8 @@ function createSelectionGroupPage(h){
 return {createSelectionGroupPage};
 })();
 
-const __demoModule10=(()=>{
-const {createSelectionGroupManager}=__demoModule8;
+const __demoModule11=(()=>{
+const {createSelectionGroupManager}=__demoModule9;
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -4446,8 +4486,8 @@ function createSelectionGroups(h){
 return {selectionGroupDraft,createSelectionGroups};
 })();
 
-const __demoModule9=(()=>{
-const {createSelectionGroups}=__demoModule10;
+const __demoModule10=(()=>{
+const {createSelectionGroups}=__demoModule11;
 // Saved team links drive fixture loading. Source credentials stay server-side.
 function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -4531,7 +4571,7 @@ function createPlayHQImport(h){
 return {createPlayHQImport};
 })();
 
-const __demoModule11=(()=>{
+const __demoModule12=(()=>{
 const PLAYCRICKET_SUPPORT='https://playcricket-support.zendesk.com/hc/en-us/requests/new';
 const PLAYHQ_ACCESS_GUIDE='https://support.playhq.com/hc/en-us/articles/23949453276572-How-To-Use-PlayHQ-API-s';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4595,7 +4635,7 @@ function createPlayCricketConnection(h){
 return {PLAYCRICKET_SUPPORT,PLAYHQ_ACCESS_GUIDE,accessRequestText,createPlayCricketConnection};
 })();
 
-const __demoModule12=(()=>{
+const __demoModule13=(()=>{
 // Presentation only. Source grades, players and match figures are never rewritten.
 const normal=value=>String(value||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
 function gradeLabels(value=[],grades=null){
@@ -4688,7 +4728,7 @@ For changes to background pixels, baked-in headings, logos or sponsors, return a
 return {gradeLabels,withGradeLabels,graphicGrade,checkGraphicLabel,gradeLabelSchema,GRAPHIC_FIELDS,graphicPatch,graphicSettings,graphicLabelKinds,graphicLabelSchema,graphicLabelInstructions,graphicLabel,refinedGraphicLayout,graphicPlayerDisplays,graphicSchema,graphicInstructions};
 })();
 
-const __demoModule14=(()=>{
+const __demoModule15=(()=>{
 // Shared, side-effect-free helpers for club-week planning. Publication remains server-authorised.
 const dayKey = index => `d${index + 1}`;
 function availability(person, date) {
@@ -4768,8 +4808,8 @@ function forecast(roster,fixtures,today,days=21) {
 return {dayKey,availability,missingAvailability,selectedOn,openPlaces,roleMatch,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,shareLink,forecast};
 })();
 
-const __demoModule13=(()=>{
-const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule14;
+const __demoModule14=(()=>{
+const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule15;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLabel=date=>date?new Date(date+'T12:00:00Z').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}):'';
 const button=(text,action,extra='')=>`<button type="button" class="btn ghost" data-cw="${action}" ${extra}>${esc(text)}</button>`;
@@ -4819,7 +4859,7 @@ function createClubWeekUI(h){
 return {createClubWeekUI};
 })();
 
-const __demoModule16=(()=>{
+const __demoModule17=(()=>{
 /* Read-only current-season projection of the shared scorecards.
  * Rebuild from the latest snapshot: imports and corrections never increment totals.
  * Player identity is source-ID based; only confirmed links join two identities.
@@ -5079,7 +5119,7 @@ function buildSeasonStats(context = {}, filters = {}) {
 return {STATS_FORMATS,statsFormat,statsOvers,statsRate,resolveSelectionStatsTeams,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
-const __demoModule18=(()=>{
+const __demoModule19=(()=>{
 // Generated by Tools/build_ndca_benchmarks.py; aggregate data only.
 const freeze=value=>{Object.values(value).forEach(v=>{if(v&&typeof v==='object')freeze(v);});return Object.freeze(value);};
 const NDCA_BENCHMARKS=freeze({
@@ -5176,9 +5216,9 @@ const NDCA_BENCHMARKS=freeze({
 return {NDCA_BENCHMARKS};
 })();
 
-const __demoModule17=(()=>{
-const {spinLabel,spinBalanceChange}=__demoModule1;
-const {NDCA_BENCHMARKS}=__demoModule18;
+const __demoModule18=(()=>{
+const {spinLabel,spinBalanceChange}=__demoModule2;
+const {NDCA_BENCHMARKS}=__demoModule19;
 
 /* Rough selection guides, not forecasts or automatic team changes.
  * Historical parameters: NDCA 2021/22–2025/26, same player/club/season
@@ -5440,8 +5480,8 @@ function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}
 return {NDCA_GUIDE,evidenceGrade,gradeGuide,FIELDING_RATINGS,fieldingLabel,battingRoleLabel,bowlingRoleLabel,bowlingEconomyRules,battingEvidence,bowlingEvidence,gradeBenchmark,battingPositionFits,bowlingJobFits,buildSelectionEvidence,NDCA_BENCHMARKS};
 })();
 
-const __demoModule20=(()=>{
-const {statsOvers}=__demoModule16;
+const __demoModule21=(()=>{
+const {statsOvers}=__demoModule17;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
 // The original exports have no source player IDs, format or batting positions.
@@ -5490,9 +5530,9 @@ function bindReturningHistory(dialog,pair,{supabase,clubId,seasonStart,here}){
 return {renderReturningHistory,bindReturningHistory};
 })();
 
-const __demoModule21=(()=>{
-const {spinBalanceChange}=__demoModule1;
-const {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence}=__demoModule17;
+const __demoModule22=(()=>{
+const {spinBalanceChange}=__demoModule2;
+const {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence}=__demoModule18;
 const date = team => team.days?.[0]?.date || '';
 const end = team => (team.days || []).map(day=>day.date).sort().at(-1) || '';
 const selected = (team,id) => (team.slots || []).some(slot=>slot.d1===id || slot.d2===id);
@@ -5643,11 +5683,11 @@ function returningComparison(entry,target,summary,roster=[]) {
 return {returningPlayers,returningPeriod,returningForm,returningComparison};
 })();
 
-const __demoModule19=(()=>{
-const {bindReturningHistory}=__demoModule20;
-const {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS}=__demoModule16;
-const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule17;
-const {returningPlayers, returningComparison, returningForm}=__demoModule21;
+const __demoModule20=(()=>{
+const {bindReturningHistory}=__demoModule21;
+const {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS}=__demoModule17;
+const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule18;
+const {returningPlayers, returningComparison, returningForm}=__demoModule22;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
@@ -6007,10 +6047,10 @@ function createSelectionEvidence(h) {
 return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,renderEvidenceComparison,clearEvidenceLinks,bindEvidenceLinks,bindEvidenceDetails,createSelectionEvidence};
 })();
 
-const __demoModule15=(()=>{
-const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule16;
-const {buildSelectionEvidence}=__demoModule17;
-const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule19;
+const __demoModule16=(()=>{
+const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule17;
+const {buildSelectionEvidence}=__demoModule18;
+const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule20;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
 const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? new Intl.DateTimeFormat('en-AU', {day:'numeric', month:'short', timeZone:'UTC'}).format(new Date(value + 'T12:00:00Z')) : '';
@@ -6219,7 +6259,7 @@ function createSeasonStatsPanel(h) {
 return {renderGradeComparison,renderStatsRows,createSeasonStatsPanel};
 })();
 
-const __demoModule23=(()=>{
+const __demoModule24=(()=>{
 // Name similarity proposes a human confirmation; it never establishes identity.
 function matchReviewNameParts(value){
  let name=String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\((?:c|capt|captain|wk|wkt|keeper|c\s*\/\s*wk)\)/g,'').replace(/['’]/g,'');
@@ -6245,9 +6285,9 @@ function matchReviewShortNameMatches(a,b){
 return {matchReviewNameParts,matchReviewGivenNameMatches,matchReviewShortNameMatches};
 })();
 
-const __demoModule22=(()=>{
+const __demoModule23=(()=>{
 /* Compare the trusted scorecard automatically; ask only for missing identities and the change. */
-const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule23;
+const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule24;
 const visiblePlayers=team=>(team?.players||[]).filter(p=>p.player_id&&p.name);
 const normal=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function scorecardPlayerMatches(players,roster,links=[]){
@@ -6383,8 +6423,8 @@ function createScorecardTeams(h){
 return {scorecardPlayerMatches,scorecardFixture,scorecardPlayerCandidates,createScorecardTeams};
 })();
 
-const __demoModule25=(()=>{
-const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule12;
+const __demoModule26=(()=>{
+const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule13;
 const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
 // A measured warning offers a choice; it never guesses and saves an abbreviation.
@@ -6445,7 +6485,7 @@ function assistantCanLeave(owner,notify){const r=owner?.graphicAssistant;if(r?.c
 return {assistantCSS,labelSuggestions,proposalMessage,assistantSuggestions,assistantState,assistantHTML,assistantControls,graphicPreview,bindAssistant,assistantCanLeave};
 })();
 
-const __demoModule27=(()=>{
+const __demoModule28=(()=>{
 // Shared renderer/AI contract. This contains visual settings only, never match data.
 const AWARD_STYLE_FIELDS={
  title_y:[0,100],title_size:[20,160],week_y:[0,100],week_size:[18,44],
@@ -6514,9 +6554,9 @@ For requests needing new photographic/illustrated artwork, background alteration
 return {AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions};
 })();
 
-const __demoModule26=(()=>{
-const {graphicGrade,checkGraphicLabel}=__demoModule12;
-const {safeAwardStyle}=__demoModule27;
+const __demoModule27=(()=>{
+const {graphicGrade,checkGraphicLabel}=__demoModule13;
+const {safeAwardStyle}=__demoModule28;
 const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
  {key:'player_week',label:'Player of the Week',description:'Choose and recognise one player.'},
@@ -6634,12 +6674,12 @@ function drawResultBadge(ctx,text,{label,x,y,maxHeight,layout:d,example}){
 return {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardCaption,awardBatches,resultsShareOpponent,resultsOutcome,resultsSummary,drawAwardGraphic};
 })();
 
-const __demoModule24=(()=>{
-const {scopedAwardLabel}=__demoModule5;
-const {withGradeLabels,graphicLabel}=__demoModule12;
-const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule25;
-const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule26;
-const {visualSettings,refinedAwardLayout}=__demoModule27;
+const __demoModule25=(()=>{
+const {scopedAwardLabel}=__demoModule6;
+const {withGradeLabels,graphicLabel}=__demoModule13;
+const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule26;
+const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule27;
+const {visualSettings,refinedAwardLayout}=__demoModule28;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
 
@@ -6878,8 +6918,8 @@ async function renderSocialAwardRequests({supabase,escape:esc},host){
 return {createSocialAwards,renderSocialAwardRequests};
 })();
 
-const __demoModule28=(()=>{
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule25;
+const __demoModule29=(()=>{
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule26;
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);
@@ -6962,7 +7002,7 @@ function createTeamSocialWorkflow(h){
 return {createTeamSocialWorkflow};
 })();
 
-const __demoModule29=(()=>{
+const __demoModule30=(()=>{
 const clean=value=>String(value??'').trim();
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'TH':({1:'ST',2:'ND',3:'RD'}[n%10]||'TH'));
 function dateLabel(value){
@@ -6989,7 +7029,7 @@ function teamSelectionText(card){
 return {teamSelectionText};
 })();
 
-const __demoModule30=(()=>{
+const __demoModule31=(()=>{
 /* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143; local preview cache .225. */
 function createSocialPublishing(h){
  const {supabase}=h,esc=h.escape,demo=!!h.demo;
@@ -7329,7 +7369,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
 return {createSocialPublishing};
 })();
 
-const __demoModule31=(()=>{
+const __demoModule32=(()=>{
 // Balances are participant-seconds; show the equivalent time for four people.
 function videoTime(seconds){
  const minutes=Math.floor(Math.max(0,Number(seconds)||0)/240);
@@ -7404,8 +7444,8 @@ function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sydney',o
 return {videoTime,videoDuration,mountVideoCredits};
 })();
 
-const __demoModule32=(()=>{
-const {mountVideoCredits}=__demoModule31;
+const __demoModule33=(()=>{
+const {mountVideoCredits}=__demoModule32;
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -7722,7 +7762,7 @@ function createSelectionRoom(h){
 return {selectionCallLink,selectionRoomGeometry,selectionCallElapsed,createSelectionRoom};
 })();
 
-const __demoModule34=(()=>{
+const __demoModule35=(()=>{
 /* Local text recognition. Images are passed to a browser worker, never to a reading service.
    Pinned Tesseract engine/language files download from jsDelivr; no image is sent there. */
 function teamWeekReadWords(tsv){
@@ -7774,7 +7814,7 @@ async function readTeamWeekReference(example,background,{candidateNames=[],textC
 return {teamWeekReadWords,teamWeekReadLayout,readTeamWeekReference};
 })();
 
-const __demoModule35=(()=>{
+const __demoModule36=(()=>{
 /* A transparent award guide, not a grade-conversion or selection model.
    Keep source figures intact. Missing context supplies no invented match facts. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
@@ -7867,7 +7907,7 @@ function awardPerformance(p,cards=[]){
 return {awardBalls,awardPerformance};
 })();
 
-const __demoModule36=(()=>{
+const __demoModule37=(()=>{
 /* Basic TOTW uses recorded figures only. Keep Smart's match-context guide separate. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
 const total=(rows,key)=>rows.length&&rows.every(row=>number(row[key])!==null)?rows.reduce((n,row)=>n+number(row[key]),0):null;
@@ -7908,13 +7948,13 @@ function teamWeekBasicRecommendations(candidates){
 return {rawAwardFigures,teamWeekBasicRank,teamWeekBasicRecommendations};
 })();
 
-const __demoModule33=(()=>{
-const {scopedAwardLabel}=__demoModule5;
-const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule12;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule25;
-const {readTeamWeekReference}=__demoModule34;
-const {awardPerformance}=__demoModule35;
-const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule36;
+const __demoModule34=(()=>{
+const {scopedAwardLabel}=__demoModule6;
+const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule13;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule26;
+const {readTeamWeekReference}=__demoModule35;
+const {awardPerformance}=__demoModule36;
+const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule37;
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 function teamWeekFigures(player,display=player.display){
@@ -8194,7 +8234,7 @@ function createTeamOfWeek(h){
 return {teamWeekGrade,teamWeekFigures,teamWeekDisplay,teamWeekOrder,teamWeekWorthwhile,teamWeekDraft,teamWeekRecommendations,teamWeekRank,teamWeekMatchExample,teamWeekLayout,createTeamOfWeek};
 })();
 
-const __demoModule37=(()=>{
+const __demoModule38=(()=>{
 /* One set of club scorecards, reused by Teams awards and Club Batting. */
 const resultWeekEnd=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+(7-d.getUTCDay())%7);return d.toISOString().slice(0,10);};
 const key=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -8243,8 +8283,8 @@ function createSharedMatchResults(h){
 return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,createSharedMatchResults};
 })();
 
-const __demoModule38=(()=>{
-const {graphicLabel}=__demoModule12;
+const __demoModule39=(()=>{
+const {graphicLabel}=__demoModule13;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
  const state=s=>s.awardLabels||(s.awardLabels={weeks:{},loads:{},draft:null,pending:null,busy:false,error:''});
@@ -8286,9 +8326,9 @@ function createSocialAwardLabels(h){
 return {createSocialAwardLabels};
 })();
 
-const __demoModule39=(()=>{
+const __demoModule40=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
-const {weeklyResultCoverage,cardStatus}=__demoModule37;
+const {weeklyResultCoverage,cardStatus}=__demoModule38;
 const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
@@ -8352,9 +8392,9 @@ function createFixtureResults(h){
 return {renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule41=(()=>{
-const {awardPerformance}=__demoModule35;
-const {rawAwardFigures}=__demoModule36;
+const __demoModule42=(()=>{
+const {awardPerformance}=__demoModule36;
+const {rawAwardFigures}=__demoModule37;
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
@@ -8409,11 +8449,11 @@ function playerWeekRecommendations(candidates,profiles={},history=[],end,preferN
 return {playerWeekFigures,playerWeekRecommendations};
 })();
 
-const __demoModule40=(()=>{
-const {scopedAwardLabel}=__demoModule5;
-const {graphicGrade,checkGraphicLabel}=__demoModule12;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule25;
-const {playerWeekFigures,playerWeekRecommendations}=__demoModule41;
+const __demoModule41=(()=>{
+const {scopedAwardLabel}=__demoModule6;
+const {graphicGrade,checkGraphicLabel}=__demoModule13;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule26;
+const {playerWeekFigures,playerWeekRecommendations}=__demoModule42;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
 }
@@ -8550,7 +8590,7 @@ function createPlayerOfWeek(h){
 return {playerWeekLayout,createPlayerOfWeek};
 })();
 
-const __demoModule42=(()=>{
+const __demoModule43=(()=>{
 // Local design trials. Only the explicit Apply action can save club settings.
 function createSocialSandbox(h){
  const names=['Alex Sample','Jordan Sample','Taylor Sample','Casey Sample','Morgan Sample','Riley Sample','Cameron Sample','Sam Sample','Jamie Sample','Charlie Sample','Robin Sample'];
@@ -8653,7 +8693,7 @@ function createSocialSandbox(h){
 return {createSocialSandbox};
 })();
 
-const __demoModule43=(()=>{
+const __demoModule44=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -8692,7 +8732,7 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule44=(()=>{
+const __demoModule45=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -8750,7 +8790,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule45=(()=>{
+const __demoModule46=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -8778,8 +8818,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule46=(()=>{
-const {createTeamWeekDemo}=__demoModule45;
+const __demoModule47=(()=>{
+const {createTeamWeekDemo}=__demoModule46;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -8799,7 +8839,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule47=(()=>{
+const __demoModule48=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -8839,7 +8879,7 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule48=(()=>{
+const __demoModule49=(()=>{
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday) {
   const copy = value => structuredClone(value);
@@ -8897,7 +8937,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule49=(()=>{
+const __demoModule50=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -9004,75 +9044,78 @@ return {createSocialAwardsDemo};
 
 const {createMirelionAssistDemo}=__demoModule0;
 
-const {SPIN_STYLES,spinLabel,spinProfile,spinProfileText,bindSpinBreakdowns}=__demoModule1;
+const {createPasswordFlow,cleanPasswordUrl}=__demoModule1;
 
-const {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl}=__demoModule2;
+const {SPIN_STYLES,spinLabel,spinProfile,spinProfileText,bindSpinBreakdowns}=__demoModule2;
 
-const {createMirelionAssist}=__demoModule3;
+const {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl}=__demoModule3;
 
-const {assistLaunchFromSearch}=__demoModule4;
+const {createMirelionAssist}=__demoModule4;
 
-const {createSocialAwardScopes}=__demoModule5;
+const {assistLaunchFromSearch}=__demoModule5;
 
-const {createSelectionGroupPermissions}=__demoModule6;
+const {createSocialAwardScopes}=__demoModule6;
 
-const {createSelectionGroupPage}=__demoModule7;
+const {createSelectionGroupPermissions}=__demoModule7;
 
-const {createPlayHQImport}=__demoModule9;
+const {createSelectionGroupPage}=__demoModule8;
 
-const {createPlayCricketConnection}=__demoModule11;
+const {createPlayHQImport}=__demoModule10;
 
-const {graphicGrade,checkGraphicLabel}=__demoModule12;
+const {createPlayCricketConnection}=__demoModule12;
 
-const {createClubWeekUI}=__demoModule13;
+const {graphicGrade,checkGraphicLabel}=__demoModule13;
 
-const {createSeasonStatsPanel}=__demoModule15;
+const {createClubWeekUI}=__demoModule14;
 
-const {FIELDING_RATINGS,fieldingLabel}=__demoModule17;
+const {createSeasonStatsPanel}=__demoModule16;
 
-const {createSelectionEvidence}=__demoModule19;
+const {FIELDING_RATINGS,fieldingLabel}=__demoModule18;
 
-const {createScorecardTeams}=__demoModule22;
+const {createSelectionEvidence}=__demoModule20;
 
-const {createSocialAwards,renderSocialAwardRequests}=__demoModule24;
+const {createScorecardTeams}=__demoModule23;
 
-const {createTeamSocialWorkflow}=__demoModule28;
+const {createSocialAwards,renderSocialAwardRequests}=__demoModule25;
 
-const {teamSelectionText}=__demoModule29;
+const {createTeamSocialWorkflow}=__demoModule29;
 
-const {createSocialPublishing}=__demoModule30;
+const {teamSelectionText}=__demoModule30;
 
-const {mountVideoCredits}=__demoModule31;
+const {createSocialPublishing}=__demoModule31;
 
-const {createSelectionRoom}=__demoModule32;
+const {mountVideoCredits}=__demoModule32;
 
-const {createTeamOfWeek,teamWeekLayout}=__demoModule33;
+const {createSelectionRoom}=__demoModule33;
 
-const {createSharedMatchResults}=__demoModule37;
+const {createTeamOfWeek,teamWeekLayout}=__demoModule34;
 
-const {createSocialAwardLabels}=__demoModule38;
+const {createSharedMatchResults}=__demoModule38;
 
-const {createFixtureResults}=__demoModule39;
+const {createSocialAwardLabels}=__demoModule39;
 
-const {createPlayerOfWeek}=__demoModule40;
+const {createFixtureResults}=__demoModule40;
 
-const {createSocialSandbox}=__demoModule42;
+const {createPlayerOfWeek}=__demoModule41;
 
-const {renderSocialPlatformSetup}=__demoModule43;
+const {createSocialSandbox}=__demoModule43;
 
-const {createScorecardTeamDemo}=__demoModule44;
+const {renderSocialPlatformSetup}=__demoModule44;
 
-const {createTeamWeekDemo}=__demoModule45;
+const {createScorecardTeamDemo}=__demoModule45;
 
-const {createPlayerWeekDemo}=__demoModule46;
+const {createTeamWeekDemo}=__demoModule46;
 
-const {createSharedResultsDemo}=__demoModule47;
+const {createPlayerWeekDemo}=__demoModule47;
 
-const {createSeasonStatsDemo}=__demoModule48;
+const {createSharedResultsDemo}=__demoModule48;
 
-const {createSocialAwardsDemo}=__demoModule49;
+const {createSeasonStatsDemo}=__demoModule49;
 
-const {selectionCallLink}=__demoModule32;
+const {createSocialAwardsDemo}=__demoModule50;
+
+const {selectionCallLink}=__demoModule33;
+
 
 
 
@@ -9105,11 +9148,12 @@ const {selectionCallLink}=__demoModule32;
 
 
 
+const passwordFlow=createPasswordFlow(location.href);
 const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.279';
+const APP_UI_VERSION='0.8.62.280';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -10059,7 +10103,6 @@ let authActionInFlight=false;
 // Only the club/contact names being entered now; never email or password.
 // Keep this in memory while switching accounts or opening password sign-in.
 let publicTrialDraft=null;
-let passwordRecoveryRequired=new URLSearchParams(location.search).has('password_setup') || new URLSearchParams(location.hash.slice(1)).get('type')==='recovery';
 
 // BEGIN MATCH DRAFT RECOVERY V129
 // Drafts stay on this browser, scoped to the authenticated account and club.
@@ -10112,14 +10155,18 @@ async function boot(){
   const moved=legacyAppRedirect(location.href);if(moved){location.replace(moved);return;}
   void initialisePhoneApp();
   document.title='Mirelion';
+  const {error:authLinkError}=await supabase.auth.initialize();
   const {data:{session:s}}=await supabase.auth.getSession();
   session=s;
+  passwordFlow.initialise(session,authLinkError);
+  if(passwordFlow.isPasswordEntry)history.replaceState(history.state,'',cleanPasswordUrl(location.href));
   matchDraftAuthChanged(null,s?.user?.id||null);matchDraftStart();
   supabase.auth.onAuthStateChange((event,s2)=>{
     const previousUserId=session?.user?.id||null;
     const nextUserId=s2?.user?.id||null;
     matchDraftAuthChanged(previousUserId,nextUserId);
     session=s2;
+    passwordFlow.authChanged(session);
     if(previousUserId!==nextUserId){mirelionAssist.reset();clubMessageState=null;clubMessageUnread=0;if(previousUserId)void phoneWorkerMessage('CB_SIGN_OUT');}
 
     // Supabase can emit SIGNED_IN again when an already-signed-in browser tab regains focus.
@@ -10127,8 +10174,7 @@ async function boot(){
     // genuine identity/session change should route the app again.
     const meaningfulAuthChange=
       previousUserId!==nextUserId ||
-      ['SIGNED_OUT','USER_UPDATED','PASSWORD_RECOVERY'].includes(event);
-    if(event==='PASSWORD_RECOVERY')passwordRecoveryRequired=true;
+      ['SIGNED_OUT','USER_UPDATED'].includes(event);
     if(meaningfulAuthChange&&!authActionInFlight)setTimeout(()=>routeAuth(),0);
   });
 
@@ -10267,7 +10313,9 @@ async function loadPlatformContext(){
 
 async function routeAuth(){
   const params=new URLSearchParams(location.search);
-  if(passwordRecoveryRequired || params.has('password_setup')){renderPasswordSetup();return;}
+  const passwordNotice=passwordFlow.takeNotice();
+  if(passwordNotice){renderLogin(passwordNotice);return;}
+  if(passwordFlow.activeFor(session)){renderPasswordSetup();return;}
   if(isLegacyOrigin(location.href)&&!legacyAppSession){
     app.innerHTML=`<div class="login"><div class="section-label">Mirelion</div><h1>Continue at our new home.</h1><p>${session?'Your account link has been completed.':'If your account link has expired, request a new one from the sign-in page.'} Sign in at Mirelion with your existing email and password. Your club and access stay with your account.</p><a class="btn secondary" href="${esc(mirelionAppUrl(location.href))}">Continue to Mirelion</a></div>`;return;
   }
@@ -10409,8 +10457,8 @@ function renderLogin(msg=''){
       <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
       <button class="btn secondary" type="submit" id="signInButton">Sign in</button>
     </form>
-    <p><button class="guide-inline-link" type="button" id="resetPassword">Set or reset your password</button></p>
-    <p class="help">Previously used an email link? Set a password once, then sign in here whenever you return.</p>
+    <p><button class="guide-inline-link" type="button" id="resetPassword">Forgot password?</button> · <button class="guide-inline-link" type="button" id="firstPassword">Set a first password</button></p>
+    <p class="help">Already chose a password? Keep using it whenever you sign in.</p>
     <div id="authStatus" class="help" role="status" aria-live="polite"></div>
     <p class="help">${trialEntry?'<a href="./app.html?trial=1" id="backToTrialEntry">Back to club details / create an account</a>':'New club? <a href="./app.html?trial_product=">Try it free with your club</a>.'}</p>
     ${!platform?'<p class="help"><a href="./app.html?platform=1">Platform Admin sign-in</a></p>':''}
@@ -10424,12 +10472,14 @@ function renderLogin(msg=''){
       const {data,error}=await supabase.auth.signInWithPassword({email:val('email'),password:document.getElementById('password').value});
       if(error)throw error;
       session=data.session;
-      const url=new URL(location.href);url.searchParams.delete('signin');history.replaceState({},'',url);
+      passwordFlow.finish();
+      const url=cleanPasswordUrl(location.href);url.searchParams.delete('signin');history.replaceState(history.state,'',url);
       authActionInFlight=false;await routeAuth();
     }catch(error){status.textContent=error.message||'Sign-in could not complete. Please try again.';}
     finally{authActionInFlight=false;button.disabled=false;}
   };
   document.getElementById('resetPassword').onclick=()=>renderPasswordReset(val('email'));
+  document.getElementById('firstPassword').onclick=()=>renderPasswordReset(val('email'),true);
   if(trialEntry)document.getElementById('backToTrialEntry').onclick=event=>{
     event.preventDefault();
     if(authActionInFlight)return;
@@ -10438,26 +10488,26 @@ function renderLogin(msg=''){
   };
 }
 
-function renderPasswordReset(email=''){
-  app.innerHTML=`<div class="login"><div class="section-label">Your account</div><h1>Set or reset your password.</h1>
+function renderPasswordReset(email='',firstPassword=false){
+  app.innerHTML=`<div class="login"><div class="section-label">Your account</div><h1>${firstPassword?'Set your first password.':'Reset your password.'}</h1>
     ${clubSignupReturnHtml()}
-    <p>Already registered with Mirelion or Club Batting? Use your existing account email to choose a password. This does not create a new account.</p>
+    <p>${firstPassword?'Use your registered email to set a password once. If you have already chosen one, sign in with it.':'Only needed if you have forgotten your password. Otherwise, sign in with your existing password.'}</p>
     <form id="passwordResetForm"><div class="field"><label for="resetEmail">Email</label><input id="resetEmail" type="email" autocomplete="email" value="${esc(email)}" required></div>
-    <button class="btn secondary" id="requestReset" type="submit">Send password setup link</button></form>
+    <button class="btn secondary" id="requestReset" type="submit">${firstPassword?'Send password setup link':'Send password reset link'}</button></form>
     <div id="resetStatus" class="help" role="status" aria-live="polite"></div>
     <p><button class="guide-inline-link" id="backToSignIn">Back to sign-in</button></p>${authEntryLinks()}</div>`;
   document.getElementById('backToSignIn').onclick=()=>{
-    passwordRecoveryRequired=false;const target=new URL(location.href);target.hash='';target.searchParams.delete('password_setup');
-    history.replaceState({},'',target);renderLogin();
+    passwordFlow.finish();
+    history.replaceState(history.state,'',cleanPasswordUrl(location.href));renderLogin();
   };
   document.getElementById('passwordResetForm').onsubmit=async event=>{
     event.preventDefault();const button=document.getElementById('requestReset'),status=document.getElementById('resetStatus');
     button.disabled=true;status.textContent='Sending…';
-    const target=new URL(location.href);target.hash='';target.searchParams.delete('code');target.searchParams.set('password_setup','1');
+    const target=cleanPasswordUrl(location.href);target.hash='';target.searchParams.set('password_setup','1');
     try{
       const {error}=await supabase.auth.resetPasswordForEmail(val('resetEmail'),{redirectTo:target.href});
       if(error)throw error;
-      status.textContent='If an account exists for that email, a password setup link is on its way. Check your inbox and junk folder. If you have not registered yet, use your club’s sign-up link first.';
+      status.textContent='If an account exists for that email, a password link is on its way. Check your inbox and junk folder. If you have not registered yet, use your club’s sign-up link first.';
     }catch(error){status.textContent=error.message||'The link could not be requested. Please try again.';}
     finally{button.disabled=false;}
   };
@@ -10465,35 +10515,41 @@ function renderPasswordReset(email=''){
 
 function renderPasswordSetup(){
   if(!session){
-    renderPasswordReset();
-    document.getElementById('resetStatus').textContent='Open the link from your email to choose a password. If it has expired, request a new one here.';
+    passwordFlow.finish();
+    renderLogin('Sign in with your existing password. Choose “Forgot password?” only if you need to reset it.');
     return;
   }
+  const passwordAccountId=session.user.id;
   app.innerHTML=`<div class="login"><div class="section-label">Your account</div><h1>Choose your password.</h1>
     <p>Set a password for ${esc(session.user.email||'your account')} so you can sign in directly next time.</p>
     <form id="savePasswordForm"><div class="field"><label for="newPassword">New password</label><input id="newPassword" type="password" autocomplete="new-password" minlength="10" required></div>
     <div class="field"><label for="confirmPassword">Confirm password</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" required></div>
-    <p class="help">Use at least 10 characters.</p><button class="btn secondary" id="savePassword" type="submit">Save password & continue</button></form>
+    <p class="help">Use at least 10 characters.</p><div class="btnrow"><button class="btn secondary" id="savePassword" type="submit">Save password & continue</button><button class="guide-inline-link" id="cancelPassword" type="button">Continue without changing</button></div></form>
     <div id="passwordStatus" class="help" role="status" aria-live="polite"></div>${authEntryLinks()}</div>`;
+  document.getElementById('cancelPassword').onclick=async()=>{
+    if(authActionInFlight)return;
+    passwordFlow.finish();history.replaceState(history.state,'',cleanPasswordUrl(location.href));await routeAuth();
+  };
   document.getElementById('savePasswordForm').onsubmit=async event=>{
+    if(authActionInFlight){event.preventDefault();return;}
     event.preventDefault();const password=document.getElementById('newPassword').value;
     const status=document.getElementById('passwordStatus'),button=document.getElementById('savePassword');
+    if(session?.user?.id!==passwordAccountId){status.textContent='Your signed-in account changed. Continue without changing, then check your account before trying again.';return;}
     if(password.length<10){status.textContent='Use at least 10 characters.';return;}
     if(password!==document.getElementById('confirmPassword').value){status.textContent='The passwords do not match.';return;}
     button.disabled=true;authActionInFlight=true;status.textContent='Saving…';
     try{
       const {error}=await supabase.auth.updateUser({password});if(error)throw error;
-      passwordRecoveryRequired=false;
-      const target=new URL(location.href);target.hash='';target.searchParams.delete('password_setup');target.searchParams.delete('code');
-      history.replaceState({},'',target);authActionInFlight=false;await routeAuth();
-    }catch(error){status.textContent=error.message||'The password could not be saved. Please try again.';}
+      passwordFlow.finish();
+      history.replaceState(history.state,'',cleanPasswordUrl(location.href));authActionInFlight=false;await routeAuth();
+    }catch(error){status.textContent=error.code==='same_password'?'That is already your current password. Choose “Continue without changing” to keep using it.':error.message||'The password could not be saved. Please try again.';}
     finally{authActionInFlight=false;button.disabled=false;}
   };
 }
 
 async function openAccountPassword(){
   if(club&&!await saveClubEditsBeforeNavigation())return;
-  const target=new URL(location.href);target.searchParams.set('password_setup','1');history.replaceState({},'',target);
+  passwordFlow.begin(session);
   renderPasswordSetup();
 }
 
@@ -30846,7 +30902,7 @@ async function submitProductEnquiry(draft){
 function renderProductEnquirySignIn(message=''){
  app.innerHTML=productEnquiryStyles()+`<section class="card pe-entry"><div class="section-label">Mirelion</div><h1>Sign in to continue.</h1><form id="peSignInForm"><div class="field"><label for="peLoginEmail">Email</label><input id="peLoginEmail" type="email" name="email" autocomplete="username" required></div><div class="field"><label for="peLoginPassword">Password</label><input id="peLoginPassword" type="password" name="password" autocomplete="current-password" required></div><button class="btn secondary" id="peLoginSubmit" type="submit">Sign in</button></form><p id="peLoginStatus" role="status">${esc(message)}</p><div class="btnrow"><button class="guide-inline-link" type="button" id="peBack">Back to request</button><button class="guide-inline-link" type="button" id="peReset">Set or reset password</button></div></section>`;
  document.getElementById('peBack').onclick=()=>renderProductEnquiryEntry();document.getElementById('peReset').onclick=()=>renderPasswordReset();
- document.getElementById('peSignInForm').onsubmit=async event=>{event.preventDefault();if(authActionInFlight)return;const button=document.getElementById('peLoginSubmit'),status=document.getElementById('peLoginStatus'),form=event.currentTarget;button.disabled=true;authActionInFlight=true;status.textContent='Signing in…';try{const {data,error}=await supabase.auth.signInWithPassword({email:form.elements.email.value.trim(),password:form.elements.password.value});if(error)throw error;session=data.session;await renderProductEnquiryEntry();}catch(error){if(status.isConnected)status.textContent=error.message;}finally{authActionInFlight=false;if(button.isConnected)button.disabled=false;}};
+ document.getElementById('peSignInForm').onsubmit=async event=>{event.preventDefault();if(authActionInFlight)return;const button=document.getElementById('peLoginSubmit'),status=document.getElementById('peLoginStatus'),form=event.currentTarget;button.disabled=true;authActionInFlight=true;status.textContent='Signing in…';try{const {data,error}=await supabase.auth.signInWithPassword({email:form.elements.email.value.trim(),password:form.elements.password.value});if(error)throw error;session=data.session;passwordFlow.finish();history.replaceState(history.state,'',cleanPasswordUrl(location.href));await renderProductEnquiryEntry();}catch(error){if(status.isConnected)status.textContent=error.message;}finally{authActionInFlight=false;if(button.isConnected)button.disabled=false;}};
 }
 async function renderProductEnquiryStatus(requestId=null){
  const requester=session?.user?.id;
@@ -31021,7 +31077,7 @@ function renderProductTrialSignIn(message=''){
  document.getElementById('ptSignInForm').onsubmit=async event=>{
   event.preventDefault();if(authActionInFlight)return;authActionInFlight=true;const form=event.currentTarget,status=document.getElementById('ptLoginStatus');
   form.querySelector('button').disabled=true;
-  try{const {data,error}=await supabase.auth.signInWithPassword({email:form.elements.email.value.trim(),password:form.elements.password.value});if(error)throw error;session=data.session;await renderProductTrialEntry('',true);}
+  try{const {data,error}=await supabase.auth.signInWithPassword({email:form.elements.email.value.trim(),password:form.elements.password.value});if(error)throw error;session=data.session;passwordFlow.finish();history.replaceState(history.state,'',cleanPasswordUrl(location.href));await renderProductTrialEntry('',true);}
   catch(error){if(status.isConnected)status.textContent=error.message;}
   finally{authActionInFlight=false;if(form.isConnected)form.querySelector('button').disabled=false;}
  };
