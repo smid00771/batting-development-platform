@@ -1,9 +1,12 @@
 // Selection analysis is a requested snapshot, never a subscription or a mode.
-import {buildSeasonStats,resolveSelectionStatsTeams} from './season-stats.js?v=0.8.62.275';
-import {buildSelectionEvidence} from './selection-evidence.js?v=0.8.62.279';
-import {returningPlayers,returningComparison} from './selection-returning.js?v=0.8.62.286';
-import {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,bindEvidenceLinks,clearEvidenceLinks,showEvidenceDialog,returnTeamDetails,returnComparisonDetails,returnDetails} from './selection-evidence-ui.js?v=0.8.62.287';
-import {bindReturningHistory} from './selection-history.js?v=0.8.62.278';
+let analysisTask=null;
+function loadAnalysis(){
+ return analysisTask||=(Promise.all([
+  import('./season-stats.js?v=0.8.62.275'),import('./selection-evidence.js?v=0.8.62.288'),
+  import('./selection-returning.js?v=0.8.62.288'),import('./selection-evidence-ui.js?v=0.8.62.288'),
+  import('./selection-history.js?v=0.8.62.278')
+ ]).then(parts=>Object.assign({},...parts)).catch(error=>{analysisTask=null;throw error;}));
+}
 
 const key=(team,id)=>JSON.stringify([team,id]);
 const personFacts=p=>['id','name','active','batting','bowling','bowling_load','spin_style','keeper','fielding'].map(k=>p?.[k]??null);
@@ -31,6 +34,7 @@ function basis(b){
 
 export function createSelectionEvidenceSnapshot(h){
  let board=null,view=null,form=null,returns=null,pending=null,generation=0;
+ let analysis=null;
  const here=b=>board===b&&b.host.isConnected&&h.here(b);
  const allowed=b=>here(b)&&(!b.canCalculate||b.canCalculate());
  function buttons(){
@@ -66,6 +70,8 @@ export function createSelectionEvidenceSnapshot(h){
  }
  function paint(b){
   if(!here(b))return;
+  if(!analysis){buttons();return;}
+  const {clearEvidenceLinks,evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,showEvidenceDialog,returnDetails,bindEvidenceLinks,returnComparisonDetails,bindReturningHistory}=analysis;
   clearEvidenceLinks(b.host);b.host.querySelector('.se-evidence-dialog')?.remove();
   const pairs=returns?returns.pairs.filter(p=>returns.entries.has(p.entry.key)):[],players=new Map();
   for(const [id,item] of form?.model.players||[])players.set(id,{...item,returns:pairs.filter(p=>p.entry.team.id===item.team.id&&p.target.incumbent?.id===item.person.id)});
@@ -112,6 +118,9 @@ export function createSelectionEvidenceSnapshot(h){
   const input={...b,teams:structuredClone(b.teams),referenceTeams:structuredClone(b.referenceTeams||[]),roster:structuredClone(b.roster),returningEntries:structuredClone(b.returningEntries||[])};
   const task={kind,controller:new AbortController(),generation:++generation};pending=task;buttons();
   try{
+   analysis=await loadAnalysis();
+   if(!here(b)||pending!==task||generation!==task.generation||!allowed(b))return;
+   const {buildSeasonStats,resolveSelectionStatsTeams,buildSelectionEvidence,returningPlayers,returningComparison,returnTeamDetails}=analysis;
    const request=h.supabase.rpc('club_season_stats_api',{p_club_id:b.clubId,p_action:'context',p_data:{on_demand:true}});
    const result=await (typeof request.abortSignal==='function'?request.abortSignal(task.controller.signal):request);
    if(!here(b)||pending!==task||generation!==task.generation||!allowed(b))return;
@@ -136,7 +145,7 @@ export function createSelectionEvidenceSnapshot(h){
  }
  return {
   mount(host,options){
-   if(!host)return;pause();if(board)clearEvidenceLinks(board.host);
+   if(!host)return;pause();if(board)analysis?.clearEvidenceLinks(board.host);
    const next=JSON.stringify([options.scope,options.viewKey]);
    if(view!==next){form=null;returns=null;view=next;}
    board={...options,host};prune(board);paint(board);

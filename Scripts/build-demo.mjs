@@ -10,6 +10,12 @@ const inputs=new Map();
 const read=file=>{const value=fs.readFileSync(path.join(root,file),'utf8');inputs.set(file,createHash('sha256').update(value).digest('hex'));return value;};
 const isolate=text=>text.replace(/\blocalStorage\b/g,'fixtureLocalStorage').replace(/\bsessionStorage\b/g,'fixtureSessionStorage');
 const modules=new Map(),definitions=[];
+function requestedImports(source,file){
+ return source.replace(/\bimport\(\s*(['"])(\.\.?\/[^'"]+)\1\s*\)/g,(_,quote,specifier)=>{
+  const dependency=path.posix.normalize(path.posix.join(path.posix.dirname(file),specifier.split('?')[0]));
+  return 'Promise.resolve('+bundle(dependency)+')';
+ });
+}
 function bundle(file){
  if(modules.has(file))return modules.get(file);
  const id='__demoModule'+modules.size;modules.set(file,id);
@@ -19,6 +25,7 @@ function bundle(file){
   const dependency=path.posix.normalize(path.posix.join(path.posix.dirname(file),specifier.split('?')[0]));
   return 'const {'+names+'}='+bundle(dependency)+';';
  });
+ source=requestedImports(source,file);
  const exports=[...source.matchAll(/^export (?:async )?(?:const|let|function|class) (\w+)/gm)].map(m=>m[1]);
  source=source.replace(/^export\s*\{([^}]+)\}\s*;?\s*$/gm,(_,names)=>{
   for(const name of names.split(',').map(n=>n.trim()).filter(Boolean)){
@@ -36,14 +43,16 @@ function bundle(file){
 let app=read('app.js');
 const bindings=[];
 bindings.push('const {createMirelionAssistDemo}='+bundle('mirelion-assist-demo.js')+';');
+bindings.push('const demoHelpCatalogue='+bundle('help-catalogue.js')+'.CLUB_BATTING_HELP;');
 app=app.replace(/^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];?\s*$/gm,(_,names,specifier)=>{
  if(specifier.startsWith('https:')||specifier==='./config.js')return '';
  bindings.push('const {'+names+'}='+bundle(specifier.replace(/^\.\//,'').split('?')[0])+';');return '';
 });
+app=requestedImports(app,'app.js');
 for(const [file,name] of Object.entries({'playcricket-team-demo.js':'createScorecardTeamDemo','team-of-week-demo.js':'createTeamWeekDemo','player-of-week-demo.js':'createPlayerWeekDemo','shared-match-results-demo.js':'createSharedResultsDemo','season-stats-demo.js':'createSeasonStatsDemo','social-awards-demo.js':'createSocialAwardsDemo','selection-room.js':'selectionCallLink'}))bindings.push('const {'+name+'}='+bundle(file)+';');
 app=app.replace('const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);',"const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';\nconst supabase=window.__fixtureDb;");
-if(!/\nboot\(\);?\s*$/.test(app))throw Error('Expected live boot() at end of app.js');
-app=app.replace(/\nboot\(\);?\s*$/,'\n');
+if(!/\nexport const appReady=boot\(\);?\s*$/.test(app))throw Error('Expected live boot() at end of app.js');
+app=app.replace(/\nexport const appReady=boot\(\);?\s*$/,'\n');
 app=app.replace('demo:false','demo:true');
 // Product naming in the public demo; service names and permission checks stay intact.
 app=app.replaceAll('Club Selections','Mirelion Select');

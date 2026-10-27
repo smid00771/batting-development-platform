@@ -70,7 +70,7 @@ async function demoNavigate(key,{reset=false,initial=false,product=demoProduct,p
   if(['match_preparation','training','training_preparation','feedback'].includes(stage.key)){demoSeedMatchPreparations();myInningsCache=null;}
   if(stage.tab==='teams'){
    const s=ensureSelections();s.view={selection_admin:'settings',selection_groups:'selection_groups',connection:'settings',season:'settings',selections:'board',availability:'availability',socials:'socials',social_awards:'socials',social_accounts:'socials'}[stage.key]||'published';
-   if(s.view==='socials'){const social=socialEnsure();social.view=stage.key==='social_awards'?'awards':stage.key==='social_accounts'?'accounts':'graphics';socialAdoptResultsWeek(social,demoAddDay(demoUpcomingSaturday(),-6));}
+   if(s.view==='socials'){await loadSocialFeatures();const social=socialEnsure();social.view=stage.key==='social_awards'?'awards':stage.key==='social_accounts'?'accounts':'graphics';socialAdoptResultsWeek(social,demoAddDay(demoUpcomingSaturday(),-6));}
   }
   demoToolbar();renderShell();await window.__demoRenderDone;
   if(stage.key==='connection')sePlayCricketConnection();if(stage.key==='season')seImportFixtures();

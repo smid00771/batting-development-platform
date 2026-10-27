@@ -226,7 +226,7 @@ function demoSeedClub(){
     philosophy_final_draft_snapshots:[{club_id:club.id,responses:voices,response_count:3,source_invited_count:3,created_at:fixtureNow()}],
     player_playing_groups:players.map((p,index)=>({player_id:p.id,playing_group_id:fixtureGroups[index].id,club_id:club.id})),
     player_plan_requirements:fixtureGroups.map((g,index)=>({id:'requirement-'+index,club_id:club.id,format_key:'limited_overs',playing_group_id:g.id,due_date:fixtureDay(14),target_type:'playing_group',active:true})),
-    club_batting_guide_capabilities:GUIDE_TOPIC_ORDER.map(capability_key=>({capability_key,active:true,audience:CLUB_BATTING_HELP[capability_key]?.audience||['admin','head_coach','coach','captain','player'],tutorial:[]})),club_batting_guide_progress:[],
+    club_batting_guide_capabilities:GUIDE_TOPIC_ORDER.map(capability_key=>({capability_key,active:true,audience:demoHelpCatalogue[capability_key]?.audience||['admin','head_coach','coach','captain','player'],tutorial:[]})),club_batting_guide_progress:[],
     player_plan_workflows:players.map((p,index)=>({id:'workflow-'+p.id,player_id:p.id,club_id:club.id,raw_answers:answersFor(index),curated_draft:{},section_status:{},updated_at:fixtureNow()})),feedback:{}
   };
   const match=(id,days,score,opposition,summary,alignment,classification,note,coachNote)=>({id,match_date:fixtureDay(days),created_at:fixtureDay(days)+'T16:00:00Z',format_key:'limited_overs',opposition,score_text:score,dismissal_summary:summary,
@@ -257,7 +257,7 @@ demoSeedClub=function(){
   demoBaseSeed();fixtureRows.match_preparations=[];fixtureRows.match_preparation_receipts={};fixtureRows.match_preparation_seeded=false;demoPreparationSnapshot=null;demoIsPreparing=false;demoArchives=[];demoMessages=[];demoReceipts.clear();demoSeen.clear();
   Object.assign(workshop,{round_number:1,how_we_bat_selected_at:fixtureNow(),updated_at:fixtureNow()});
   howWeBatDraft.updated_at=fixtureNow();
-  fixtureRows.club_batting_guide_capabilities=Object.values(CLUB_BATTING_HELP).map(t=>({...fixtureClone(t),active:true}));
+  fixtureRows.club_batting_guide_capabilities=Object.values(demoHelpCatalogue).map(t=>({...fixtureClone(t),active:true}));
   fixtureRows.players.push({id:'player-taylor',club_id:club.id,user_id:'user-taylor',display_name:'Taylor Brooks',active:true});
   fixtureRows.user_profiles.push({user_id:'user-taylor',display_name:'Taylor Brooks'});
   fixtureRows.club_memberships.push({club_id:club.id,user_id:'user-taylor',permission_role:'player',involvement:'player'});
