@@ -14,8 +14,16 @@ begin
   '10:00 and 14:00 T20 fixtures do not overlap';
  assert club_selection_private.fixture_day_conflict(
   jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','10:00'),
-  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','13:00')),
-  'A T20 starting before the inferred 13:30 finish overlaps';
+  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','12:59')),
+  'A T20 starting before the inferred 13:00 finish overlaps';
+ assert not club_selection_private.fixture_day_conflict(
+  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','09:00'),
+  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','12:00')),
+  '09:00 and 12:00 T20 fixtures do not overlap';
+ assert not club_selection_private.fixture_day_conflict(
+  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','12:00'),
+  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','15:00')),
+  '12:00 and 15:00 T20 fixtures do not overlap';
  assert club_selection_private.fixture_day_conflict(
   jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','10:00'),
   jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text)),
@@ -45,7 +53,7 @@ begin
  res:=public.club_selections_api(c,'save_board',req);
  assert res->>'saved'='true','The same player can be saved in the 10:00 and 14:00 T20s';
 
- overlap_details:=jsonb_set(base_details||jsonb_build_object('grade','Cup overlap'),'{days,0,start}',to_jsonb('13:00'::text));
+ overlap_details:=jsonb_set(base_details||jsonb_build_object('grade','Cup overlap'),'{days,0,start}',to_jsonb('12:59'::text));
  req:=jsonb_build_object('request_id',gen_random_uuid(),'fixtures',jsonb_build_array(jsonb_build_object(
   'id',overlap_id,'revision',1,'details',overlap_details,'slots',selected_slots)));
  rejected:=false;message:='';

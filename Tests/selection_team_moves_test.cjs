@@ -88,6 +88,17 @@ test('same-day T20 selections use match times instead of blocking the whole date
  assert.match(source,/d\.days\.map\(seDayTime\)/,'Selection Board fixture headings include each start time');
 });
 
+test('09:00, 12:00 and 15:00 T20s allow consecutive games and honour a recorded finish',()=>{
+ const h=harness(),details={format:'t20',overs:20},day=start=>({date:dates[0],start});
+ for(const [first,second] of [['09:00','12:00'],['12:00','15:00'],['09:00','15:00']]){
+  assert.equal(h.c.seOverlap(day(first),day(second),details,details),false,first+' / '+second);
+  assert.equal(h.c.seOverlap(day(second),day(first),details,details),false,'Reverse order');
+ }
+ assert.equal(h.c.seOverlap(day('09:00'),day('11:59'),details,details),true);
+ assert.equal(h.c.seOverlap({...day('09:00'),end:'12:30'},day('12:00'),details,details),true,'Explicit finish remains authoritative');
+ assert.equal(h.c.seOverlap({date:dates[0]},day('12:00'),details,details),true,'Unknown start remains a conflict');
+});
+
 test('one unavailable bracket partner prevents moving either partner',()=>{
  const a=team('A',11,{twoDays:true,brackets:true}),b=team('B',11,{twoDays:true,brackets:true});a.slots[0].d2='partner';const h=harness([a,b]);h.s.data.roster.find(p=>p.id==='partner').availability.available_dates=[dates[0]];
  assert.ok(h.c.seTransferProblem(a,b,0,h.s.data));assert.deepEqual(a.slots[0],{d1:'A-0',d2:'partner'});

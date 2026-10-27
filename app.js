@@ -35,7 +35,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.282';
+const APP_UI_VERSION='0.8.62.283';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19941,7 +19941,7 @@ function seClockMinutes(value){
  return match?Number(match[1])*60+Number(match[2]):null;
 }
 function seMatchDuration(details){
- if(details?.format==='t20')return 210;
+ if(details?.format==='t20')return 180;
  const overs=Number(details?.overs);
  if(details?.format==='limited_overs'&&Number.isInteger(overs)&&overs>0)return Math.max(180,Math.min(600,overs*8+45));
  return 480;
