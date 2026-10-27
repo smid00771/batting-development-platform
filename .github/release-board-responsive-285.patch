@@ -1,0 +1,257 @@
+diff --git a/Database/selection_board_context.sql b/Database/selection_board_context.sql
+new file mode 100644
+index 0000000..3a3103e
+--- /dev/null
++++ b/Database/selection_board_context.sql
+@@ -0,0 +1,13 @@
++-- The board no longer displays the old captain-review snapshot collection.
++-- Keep the default API response for other clients; omit only on an explicit
++-- board request from a selector/captain. Fixture permissions and writes are unchanged.
++do $patch$
++declare definition text;first text:=$old$'reviews',coalesce((select jsonb_agg($old$;
++ last text:=$old$from club_selection_private.fixtures f where f.club_id=c and club_selection_private.review_audience(f.id,me)),'[]'::jsonb),$old$;
++begin
++ definition:=pg_get_functiondef('club_selection_private.api(uuid,text,jsonb)'::regprocedure);
++ if (length(definition)-length(replace(definition,first,'')))/length(first)<>1 or (length(definition)-length(replace(definition,last,'')))/length(last)<>1 then raise exception 'Unexpected review snapshot context';end if;
++ definition:=replace(definition,first,$new$'reviews',case when p_data->>'review_snapshots'='false' and (sel or cap) then '[]'::jsonb else coalesce((select jsonb_agg($new$);
++ definition:=replace(definition,last,$new$from club_selection_private.fixtures f where f.club_id=c and club_selection_private.review_audience(f.id,me)),'[]'::jsonb) end,$new$);
++ execute definition;
++end $patch$;
+diff --git a/Reviews/2026-10-27-selection-board-responsive-285.md b/Reviews/2026-10-27-selection-board-responsive-285.md
+new file mode 100644
+index 0000000..175cf7d
+--- /dev/null
++++ b/Reviews/2026-10-27-selection-board-responsive-285.md
+@@ -0,0 +1,14 @@
++# Selection Board responsiveness — 0.8.62.285
++
++Opening, switching and closing an ordinary player picker now updates that slot without rebuilding every team card. The picker indexes overlapping games and duplicate names once, then reuses eligibility while typing. Changing the role/day/both-days choice, reopening the picker or redrawing after a data reload rebuilds the index. The actual assignment and server save still check current eligibility and revisions. Cancelling an extra player option retains the full redraw needed to remove its temporary row.
++
++Selector/captain board requests opt out of the old captain-review snapshot collection, which the current board does not display. The default API still returns it. All other response fields are identical, including fixtures, publication state, group permissions, roster and availability. Full authoritative reloads after saving remain; there is no optimistic unconfirmed team update or additional background polling.
++
++Measurements on 27 October 2026:
++
++- Read-only production context, 73 fixtures and 95 roster entries: response 421,437 → 287,050 bytes (31.9% smaller). Three alternating reads: full 1091.9/1023.0/1015.1 ms; compact 848.0/847.6/844.3 ms. Median database execution 1023.0 → 847.6 ms (17.1% lower). These exclude network and rendering time.
++- Controlled jsdom demo benchmark, 83 roster entries and 29 fixtures: median ordinary slot opening 335.86 → 240.98 ms; search keystroke 8.66 → 1.84 ms. Five measured runs after two warmups. These are local test measurements, not a prediction for each selector's device. Reproduce with `node Scripts/benchmark-selection-board.cjs /path/to/previous-release`.
++
++Validation: picker DOM identity/no-request and cache invalidation tests; explicit overlap, missing-time, duplicate-name, unavailable and two-day eligibility cases; existing team moves, overflow/Undo and emergency/meeting guards; generated demo, JavaScript syntax and whitespace checks. Database rollback test proves equality of the default and compact responses apart from `reviews`, keeps default/explicit review snapshots, and rejects anonymous access. Synthetic rows rolled back. Migration `20261027120834_skip_unused_board_review_snapshots` applied.
++
++The remaining save round trip still reloads authoritative club state. Incremental server responses are a possible later improvement, but need separate multi-selector consistency work. This release preserves that correctness boundary.
+diff --git a/Scripts/benchmark-selection-board.cjs b/Scripts/benchmark-selection-board.cjs
+new file mode 100644
+index 0000000..28c3cf1
+--- /dev/null
++++ b/Scripts/benchmark-selection-board.cjs
+@@ -0,0 +1,19 @@
++// Optional first argument: checkout of the previous release with dependencies.
++// Measures local JS/DOM work in jsdom, not network time or a user's device.
++const path=require('node:path');
++async function measure(root){
++ const {openDemo}=require(path.join(root,'Tests/helpers/demo_harness.cjs')),h=await openDemo('selections');h.window.scrollBy=()=>{};
++ try{
++  const open=[],search=[];
++  for(let i=0;i<7;i++){
++   if(h.document.getElementById('sePicker')){h.document.querySelector('[data-se-close-picker]').click();await h.settle();}
++   let start=performance.now();h.document.querySelector('[data-se-slot]').click();open.push(performance.now()-start);await h.settle();
++   const input=h.document.getElementById('seSearch');start=performance.now();
++   for(const value of ['a','al','alex','Alex Morgan','']){input.value=value;input.dispatchEvent(new h.window.Event('input'));}
++   search.push((performance.now()-start)/5);await h.settle();
++  }
++  if(h.errors.length)throw h.errors[0];const median=a=>Math.round(a.slice(2).sort((a,b)=>a-b)[2]*100)/100;
++  return {open_slot_ms:median(open),search_keystroke_ms:median(search)};
++ }finally{await h.settle();h.close();}
++}
++(async()=>{const result={};if(process.argv[2])result.before=await measure(path.resolve(process.argv[2]));result.current=await measure(path.resolve(__dirname,'..'));console.log(JSON.stringify(result,null,2));})().catch(error=>{console.error(error);process.exitCode=1;});
+diff --git a/Tests/selection_board_context_database_test.sql b/Tests/selection_board_context_database_test.sql
+new file mode 100644
+index 0000000..1a226bd
+--- /dev/null
++++ b/Tests/selection_board_context_database_test.sql
+@@ -0,0 +1,29 @@
++-- Synthetic data only. Compare the compact board response with the default API.
++begin;
++do $tests$
++declare c uuid:=gen_random_uuid();u uuid:=gen_random_uuid();fid uuid;pid uuid;full_ctx jsonb;board_ctx jsonb;started timestamptz;timings jsonb:='{}';i integer;
++begin
++ insert into auth.users(id,email) values(u,u||'@example.invalid');
++ insert into public.user_profiles(user_id,display_name) values(u,'Synthetic selector');
++ insert into public.clubs(id,name,slug,created_by) values(c,'Board context test','board-context-'||c,u);
++ insert into public.club_memberships(club_id,user_id,role,permission_role) values(c,u,'player','none');
++ insert into club_selection_private.access(club_id,mode,status,head_selector_id) values(c,'standalone','active',u);
++ insert into club_selection_private.roster(club_id,name) values(c,'Synthetic player') returning id into pid;
++ for i in 1..24 loop
++  insert into club_selection_private.fixtures(club_id,details,slots)
++   values(c,jsonb_build_object('grade','Test grade','format','t20','days',jsonb_build_array(jsonb_build_object('date',(date '2099-01-01'+i)::text,'start','12:00'))),jsonb_build_array(jsonb_build_object('d1',pid,'d2',null))) returning id into fid;
++ end loop;
++ perform set_config('request.jwt.claim.sub',u::text,true);
++ started:=clock_timestamp();full_ctx:=public.club_selections_api(c,'context');timings:=timings||jsonb_build_object('full_ms',round(extract(epoch from clock_timestamp()-started)*1000,1));
++ started:=clock_timestamp();board_ctx:=public.club_selections_api(c,'context','{"review_snapshots":false}');timings:=timings||jsonb_build_object('board_ms',round(extract(epoch from clock_timestamp()-started)*1000,1));
++ assert jsonb_array_length(full_ctx->'reviews')=24,'Legacy review API remains available';
++ assert board_ctx->'reviews'='[]','Unused snapshot construction is skipped on the board';
++ assert full_ctx-'reviews'=board_ctx-'reviews','Fixtures, publication state, permissions, availability and roster are identical';
++ assert octet_length(board_ctx::text)<octet_length(full_ctx::text),'The board response is smaller';
++ assert public.club_selections_api(c,'context','{"review_snapshots":true}')=full_ctx,'Explicit reviews are preserved';
++ perform set_config('request.jwt.claim.sub','',true);
++ begin perform public.club_selections_api(c,'context','{"review_snapshots":false}');raise exception 'Anonymous request unexpectedly succeeded';exception when raise_exception then assert sqlerrm='Sign in to use Selections';end;
++ perform set_config('test.board_context_timings',timings::text,true);
++end $tests$;
++select 'Compact board response equivalence verified; synthetic rows rolled back' as result,current_setting('test.board_context_timings')::jsonb timings;
++rollback;
+diff --git a/Tests/selection_board_responsiveness_test.cjs b/Tests/selection_board_responsiveness_test.cjs
+new file mode 100644
+index 0000000..56e6048
+--- /dev/null
++++ b/Tests/selection_board_responsiveness_test.cjs
+@@ -0,0 +1,30 @@
++const {test}=require('node:test'),assert=require('node:assert/strict'),{openDemo}=require('./helpers/demo_harness.cjs');
++test('opening, switching and closing player pickers preserves every team card and makes no request',async t=>{
++ const h=await openDemo('selections');t.after(h.close);h.window.scrollBy=()=>{};
++ const cards=[...h.document.querySelectorAll('[data-se-team]')],slots=[...h.document.querySelectorAll('[data-se-slot]')];let scans=0;
++ const original=h.window.sePickerEligibilityIndex;h.window.sePickerEligibilityIndex=(...args)=>{scans++;return original(...args);};
++ const logs=h.window.__fixtureLogs.length;
++ slots[0].click();await h.settle();assert.equal(scans,1);assert.equal(h.document.querySelectorAll('#sePicker').length,1);
++ assert.equal(h.document.querySelector('[data-se-team]'),cards[0],'Opening a slot must not rebuild the board');
++ const input=h.document.getElementById('seSearch');
++ for(const value of ['a','al','alex','Alex Morgan','']){input.value=value;input.dispatchEvent(new h.window.Event('input'));}
++ assert.equal(scans,1,'Typing filters the same eligibility result');
++ await h.choose('#seRoleFilter','pace');assert.equal(scans,2,'Changing eligibility filters rebuilds once');
++ slots[2].click();await h.settle();assert.equal(scans,3);assert.equal(h.document.querySelectorAll('#sePicker').length,1);assert.equal(slots[0].getAttribute('aria-expanded'),'false');
++ await h.click('[data-se-close-picker]');assert.equal(h.document.getElementById('sePicker'),null);assert.equal(h.document.activeElement,slots[2]);
++ assert.deepEqual([...h.document.querySelectorAll('[data-se-team]')],cards);assert.equal(h.window.__fixtureLogs.length,logs,'Picker interactions have no database work');assert.deepEqual(h.errors,[]);
++});
++test('indexed eligibility retains overlapping games, missing times, names, unavailable dates and two-day choices',async t=>{
++ const h=await openDemo('selections');t.after(h.close);const w=h.window;
++ const p=(id,name='Player '+id)=>({id,name,active:true,bowling:'pace',availability:{available_dates:['2099-01-01','2099-01-08']}});
++ const players=[p('same'),p('other'),p('duplicate','Player same'),p('later'),p('unknown'),p('away')];players[5].availability={available_dates:[]};
++ const team=(id,start,slots,extra={})=>({id,details:{grade:id,format:'t20',days:[{date:'2099-01-01',start}],...extra},slots:slots.map(id=>({d1:id,d2:null}))});
++ const f=team('target','12:00',['same',null]),data={roster:players,fixtures:[f,team('earlier','09:00',['later']),team('overlap','14:59',['other']),team('unknown','',['unknown']),team('cancelled','12:00',['away'],{cancelled:true})]},a={id:f.id,slot:1,day:0};
++ const rows=()=>{const index=w.sePickerEligibilityIndex(f,a,false,data);return new Map(players.map(p=>[p.id,w.sePickerCandidateInfo(p,f,a,false,data,'',index)]));};
++ let out=rows();assert.equal(out.get('later').eligible,true);assert.deepEqual(Array.from(out.get('other').reasons,r=>r.code),['selected']);assert.deepEqual(Array.from(out.get('unknown').reasons,r=>r.code),['selected']);assert.deepEqual(Array.from(out.get('duplicate').reasons,r=>r.code),['duplicate']);assert.deepEqual(Array.from(out.get('away').reasons,r=>r.code),['availability']);
++ data.fixtures[2].details.days[0].start='15:00';out=rows();assert.equal(out.get('other').eligible,true,'Adjacent T20 remains valid');
++ f.details.days.push({date:'2099-01-08',start:'12:00'});f.details.brackets=true;f.slots[0].d2='other';a.day=1;
++ out=rows();assert.equal(out.get('same').eligible,true);assert.equal(out.get('other').eligible,false);
++ const both=w.sePickerEligibilityIndex(f,a,true,data);assert.equal(w.sePickerCandidateInfo(players[0],f,a,true,data,'',both).eligible,false,'Both days still checks each date');
++ players[0].active=false;assert.equal(w.sePickerCandidateInfo(players[0],f,a,false,data).reasons[0].code,'inactive');
++});
+diff --git a/app.html b/app.html
+index 5f4ffee..fe2a9e1 100644
+--- a/app.html
++++ b/app.html
+@@ -18,6 +18,6 @@
+ <body>
+   <div id="app"><div class="splash">Loading Mirelion…</div></div>
+   <noscript>Mirelion needs JavaScript to sign in. <a href="./">Return to the Mirelion homepage</a>.</noscript>
+-  <script type="module" src="./app.js?v=0.8.62.284"></script>
++  <script type="module" src="./app.js?v=0.8.62.285"></script>
+ </body>
+ </html>
+diff --git a/app.js b/app.js
+index 38f6bc6..e6b44d6 100644
+--- a/app.js
++++ b/app.js
+@@ -35,7 +35,7 @@ const passwordFlow=createPasswordFlow(location.href);
+ const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+ const app=document.getElementById('app');
+ const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
+-const APP_UI_VERSION='0.8.62.284';
++const APP_UI_VERSION='0.8.62.285';
+ 
+ // BEGIN SHARED HEADING STYLES V89
+ const appHeadingStyle=document.createElement('style');
+@@ -20887,25 +20887,39 @@ function seSlotButton(a){if(!a)return null;const buttons=[...document.querySelec
+ function seVisibleTop(){return Math.max(0,...[...document.querySelectorAll('.nav,header,[data-demo-toolbar],#demoToolbar')].map(el=>{const r=el.getBoundingClientRect(),style=getComputedStyle(el);return r.height&&style.display!=='none'?(style.position==='sticky'?r.height+Math.max(0,parseFloat(style.top)||0):style.position==='fixed'&&r.top<=1?r.bottom:0):0;}))+12;}
+ function seFocusSlot(a){const target=seSlotButton(a);if(!target)return;target.focus({preventScroll:true});const r=target.getBoundingClientRect(),top=seVisibleTop();if(r.top<top||r.bottom>innerHeight)window.scrollBy({top:r.top-top,behavior:'instant'});}
+ function sePickerSaved(){seDiscardPlayerOption();const s=ensureSelections();s.search='';s.role='';s.pairs=false;s.active=null;}
+-function seClosePicker(){const s=ensureSelections();if(s.busy||s.pending)return;const a=s.active;sePickerSaved();seBoard();seFocusSlot(a);}
++function seClosePicker(){const s=ensureSelections();if(s.busy||s.pending)return;const a=s.active,extra=!!s.extraPlayerOption;sePickerSaved();if(extra)seBoard();else{document.getElementById('sePicker')?.remove();document.querySelectorAll('[data-se-slot][aria-expanded="true"]').forEach(b=>b.setAttribute('aria-expanded','false'));}seFocusSlot(a);}
++function seShowPicker(){
++ const s=ensureSelections(),a=s.active,button=seSlotButton(a),slot=button?.closest('.se-slot');if(!slot)return;
++ document.getElementById('sePicker')?.remove();document.querySelectorAll('[data-se-slot][aria-expanded="true"]').forEach(b=>b.setAttribute('aria-expanded','false'));
++ button.setAttribute('aria-expanded','true');const picker=document.createElement('section');picker.id='sePicker';picker.className='se-picker';picker.setAttribute('aria-label','Choose a player');slot.append(picker);sePicker();seFocusPicker();
++}
+ function seFocusPicker(){
+  const picker=document.getElementById('sePicker');if(!picker)return;picker.scrollTop=0;
+  const target=document.getElementById('seSearch')||document.getElementById('sePickerHeading');target?.focus({preventScroll:true});
+  const r=picker.getBoundingClientRect(),top=seVisibleTop();if(r.top<top||r.top>innerHeight-240)window.scrollBy({top:r.top-top,behavior:'instant'});
+ }
+-function sePickerCandidateInfo(p,f,a,both,data,role=''){
+- const days=sePickingDays(f,a,both),reasons=[];
++function sePickerEligibilityIndex(f,a,both,data){
++ const days=sePickingDays(f,a,both).map(x=>({...x,label:(f.details.days.length>1?'Day '+(x.index+1)+' · ':'')+seDate(x.day.date)})),used=new Map(),usedAny=new Set(),names=new Map();
++ for(const other of data.fixtures){if(!other.details||other.details.cancelled)continue;other.details.days.forEach((day,j)=>{
++  if(!days.some(x=>seOverlap(x.day,day,f.details,other.details)))return;
++  const label=other.details.grade+' · '+seDayTime(day);
++  other.slots.forEach((slot,i)=>{const id=slot['d'+(j+1)];if(!id)return;usedAny.add(id);if(other.id===f.id&&i===a.slot)return;if(!used.has(id))used.set(id,[]);used.get(id).push(label+' · slot '+(i+1));});
++ });}
++ for(const p of data.roster)if(usedAny.has(p.id)){const key=String(p.name||'').trim().toLowerCase().replace(/\s+/g,' ');if(!names.has(key))names.set(key,new Set());names.get(key).add(p.id);}
++ return {days,used,names};
++}
++function sePickerCandidateInfo(p,f,a,both,data,role='',index=sePickerEligibilityIndex(f,a,both,data)){
++ const days=index.days,reasons=[];
+  if(!p.active)reasons.push({code:'inactive',text:'Inactive on the playing list. A selector or Club Admin must reactivate this entry before selection.'});
+  const unconfirmed=days.filter(x=>seDayStatus(p,x.day)!=='available');
+- if(unconfirmed.length)reasons.push({code:'availability',text:'Availability not confirmed for '+unconfirmed.map(x=>(f.details.days.length>1?'Day '+(x.index+1)+' · ':'')+seDate(x.day.date)).join(' / ')+'.'});
++ if(unconfirmed.length)reasons.push({code:'availability',text:'Availability not confirmed for '+unconfirmed.map(x=>x.label).join(' / ')+'.'});
+  if(role&&!(p.bowling===role||role==='batters'&&['top','middle'].includes(p.batting)||role==='keeper'&&p.keeper))reasons.push({code:'role',text:'Does not match the current role filter.'});
+  if(days.every(x=>f.slots[a.slot]['d'+(x.index+1)]===p.id))reasons.push({code:'current',text:'Already in this slot for '+(both?'both days':f.details.days.length>1?'Day '+(a.day+1):'this match')+'.'});
+- const used=[];
+- for(const other of data.fixtures){if(!other.details||other.details.cancelled)continue;other.details.days.forEach((day,j)=>{if(!days.some(x=>seOverlap(x.day,day,f.details,other.details)))return;other.slots.forEach((slot,i)=>{if(!(other.id===f.id&&i===a.slot)&&slot['d'+(j+1)]===p.id)used.push(other.details.grade+' · '+seDayTime(day)+' · slot '+(i+1));});});}
++ const used=index.used.get(p.id)||[];
+  if(used.length)reasons.push({code:'selected',text:'Already selected in an overlapping game: '+[...new Set(used)].join('; ')+'. Use the handle on that team to move the player.'});
+  // Retain the existing duplicate-entry safeguard; names never link accounts.
+  const nameKey=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' ');
+- if(data.roster.some(other=>other.id!==p.id&&nameKey(other.name)===nameKey(p.name)&&days.some(x=>seUsed(other,x.day,data.fixtures,{},f.details))))reasons.push({code:'duplicate',text:'Another playing-list entry with the same name is already selected in an overlapping game. Check the entries before selecting; they have not been linked or merged.'});
++ if([...(index.names.get(nameKey(p.name))||[])].some(id=>id!==p.id))reasons.push({code:'duplicate',text:'Another playing-list entry with the same name is already selected in an overlapping game. Check the entries before selecting; they have not been linked or merged.'});
+  return {player:p,reasons,eligible:reasons.length===0};
+ }
+ function sePickerOpenAvailability(id){
+@@ -20943,8 +20957,11 @@ function sePicker(){
+  if(s.pairs){const fixed=f.slots[a.slot].d1,pairs=sePairs(s.data.roster,f,s.data.fixtures,a.slot,s.fixed?fixed:null);host.innerHTML=heading('Find a bracketed pair')+`<p class="se-muted">${seEsc(f.details.grade)} · slot ${a.slot+1}. Closest roles first. These pairs are available on their own day; declare both names before the toss.</p>${fixed?`<label class="se-check"><input type="checkbox" id="seFixedPair" ${s.fixed?'checked':''}>Keep ${seEsc(seName(fixed))} on Day 1</label>`:''}${pairs.slice(0,30).map((pair,i)=>`<div class="se-pair"><strong>${seEsc(pair.a.name)}</strong> <small>Day 1</small><span class="se-role">${seEsc(seRole(pair.a))}</span><strong>${seEsc(pair.b.name)}</strong> <small>Day 2</small><span class="se-role">${seEsc(seRole(pair.b))}</span><p>${seEsc(pair.reason)}</p><button class="btn ghost" data-se-pair="${i}">Use this pair</button></div>`).join('')||'<p>No confirmed complementary pairs. Check the calendars or keep a Day 1 player to find their partner.</p>'}<button class="btn ghost" id="seBackPicker">Back to players</button>`;
+  bindClose();document.getElementById('seFixedPair')?.addEventListener('change',e=>{s.fixed=e.target.checked;sePicker();});document.getElementById('seBackPicker').onclick=()=>{s.pairs=false;sePicker();seFocusPicker();};host.querySelectorAll('[data-se-pair]').forEach(b=>b.onclick=()=>seAssign(pairs[Number(b.dataset.sePair)].a.id,pairs[Number(b.dataset.sePair)].b.id));return;}
+  host.innerHTML=`<div class="se-picker-head"><input id="seSearch" type="search" value="${seEsc(s.search)}" placeholder="Search players" aria-label="Search players by name or usual grade">${closeButton}</div><div class="se-picker-filters"><select id="seRoleFilter" aria-label="Player role">${seOpt([['','All roles'],['pace','Quicks'],['spin','Spinners'],['batters','Batters'],['keeper','Keepers']],s.role)}</select><button class="btn ghost" id="seClearSlot">Clear slot</button></div>${f.details.days.length===2&&f.details.brackets?`<div class="se-picker-options"><label class="se-check"><input type="checkbox" id="seBothDays" ${s.both!==false?'checked':''}>Both days</label><select id="sePickDay" aria-label="Selection day" ${s.both!==false?'hidden':''}>${seOpt([[0,'Day 1'],[1,'Day 2']],a.day)}</select><button class="btn ghost" id="seFindPair">Find matching pair</button></div>`:''}<div id="seCandidates"></div>`;
++ let eligibility=null;
+  const renderCandidates=()=>{
+-  const both=f.details.days.length===2&&(s.both!==false||!f.details.brackets),days=sePickingDays(f,a,both),query=(s.search||'').trim().toLowerCase(),rows=s.data.roster.filter(p=>[p.name,p.grade].join(' ').toLowerCase().includes(query)).map(p=>sePickerCandidateInfo(p,f,a,both,s.data,s.role)),available=rows.filter(row=>row.eligible).map(row=>row.player);
++  const both=f.details.days.length===2&&(s.both!==false||!f.details.brackets),days=sePickingDays(f,a,both),query=(s.search||'').trim().toLowerCase(),key=JSON.stringify([a.day,both,s.role]);
++  if(eligibility?.key!==key){const index=sePickerEligibilityIndex(f,a,both,s.data);eligibility={key,rows:s.data.roster.map(p=>({...sePickerCandidateInfo(p,f,a,both,s.data,s.role,index),search:[p.name,p.grade].join(' ').toLowerCase()}))};}
++  const rows=eligibility.rows.filter(row=>row.search.includes(query)),available=rows.filter(row=>row.eligible).map(row=>row.player);
+   document.getElementById('seCandidates').innerHTML=(available.map(p=>`<button class="se-candidate" data-se-player="${seEsc(p.id)}"><strong>${seEsc(p.name)}</strong><span class="se-role">${seEsc(seRole(p))}</span>${f.details.days.length>1?`<span class="se-role">${f.details.days.map((d,i)=>`D${i+1}: ${seDayStatus(p,d)==='available'?'available':'not confirmed'}`).join(' · ')}</span>`:''}</button>`).join('')||'<p class="se-muted">No unselected players match these dates and filters.</p>')+sePickerExclusions(rows,query,s.data);
+   const clear=document.getElementById('seClearSlot');clear.hidden=!days.some(x=>f.slots[a.slot]['d'+(x.index+1)]);clear.textContent=both?'Clear both days':f.details.days.length===2?'Clear Day '+(a.day+1):'Clear slot';
+   host.querySelectorAll('[data-se-player]').forEach(b=>b.onclick=()=>seAssign(b.dataset.sePlayer));
+@@ -21082,7 +21099,7 @@ async function seReload(){
+   if(week.error)throw Error(week.error.message);
+   return {signup_followup:followup,week:week.data,socials:!access.error&&access.data?.allowed===true,social_handover_count:access.data?.handover_count||0};
+  })();
+- const [result,extras]=await Promise.all([seRPC('context'),extrasTask]);Object.assign(result,extras);
++ const [result,extras]=await Promise.all([seRPC('context',(s.view==='board'||previous?.selector||selectionAccess?.selector)?{review_snapshots:false}:{}),extrasTask]);Object.assign(result,extras);
+  if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence)return false;s.data=result;if(Array.isArray(result.selection_meetings))seAdoptMeetings(s,result);seApplyWeekLaunch(s);if(result.socials&&!s.socialSetupOpened&&new URLSearchParams(location.search).get('social_accounts')==='1'){s.socialSetupOpened=true;s.view='socials';socialEnsure().view='accounts';}if(!result.selector){s.undo=[];s.active=null;}selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
+ async function seMutate(action,data,{undo=null,picker=null,order=null,copyLast=null}={}){const s=ensureSelections();if(s.busy)return false;s.statsOpen=false;if(!s.pending&&!seGuardFixtureEdit(action,data))return false;if(action==='save_board'&&!s.pending)data={...data,fixtures:data.fixtures.map(f=>sePrepareMatch(f))};const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(undo?{undo}:{}),...(picker?{picker}:{}),...(order?{order}:{}),...(copyLast?{copyLast}:{}),...(['availability','availability_batch'].includes(action)&&s.availabilityReturn?{availabilityReturn:structuredClone(s.availabilityReturn)}:{})};const working=pending.copyLast?'Copying…':pending.action==='publish'?'Publishing…':pending.action==='import_roster'?'Importing…':['send_review','post','review_post'].includes(pending.action)?'Sending…':pending.action==='fixture_lock'?(pending.data.unlock?'Unlocking…':'Locking…'):'Saving…',restoreButton=seButtonWorking(s.actionButton,working);s.actionButton=null;s.pending=pending;s.busy=true;sePersist();seNotice(pending.action==='publish'?'Publishing teams…':working,{quiet:pending.action!=='publish'});seLock(true);if(pending.copyLast)seUpdateCopyStatus(pending.copyLast.id);let requestConfirmed=false;
+  try{const result=await seRPC(pending.action,pending.data);requestConfirmed=true;if(s!==selectionState)return false;if(pending.action==='publish'&&result?.published!==true)throw Error('Publication was not confirmed. Retry the same request.');s.formDirty=false;const loaded=await seReload();if(!loaded||s!==selectionState||s.key!==selectionsScopeKey())return false;s.pending=null;s.teamChange=pending.order?.feedback?{id:pending.order.id,revision:result.revisions?.[pending.order.id],text:pending.order.feedback}:null;if(pending.action==='review_post'&&s.boardCommentDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardCommentDrafts[pending.data.id];if(pending.action==='post'&&s.boardChatDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardChatDrafts[pending.data.id];s.formDirty=[...Object.values(s.boardCommentDrafts||{}),...Object.values(s.boardChatDrafts||{})].some(x=>x.trim());sePersist();if(pending.undo)s.undo.push({before:pending.undo,expected:result.revisions});if(action==='save_roster')s.rosterSaved=true;if(pending.action==='publish'){s.view='published';s.date=s.data.fixtures.find(f=>pending.data.ids.includes(f.id))?.details?.days?.[0]?.date||s.date;s.boardDateChosen=true;s.active=null;s.publicationResult={ids:pending.data.ids,recipients:Number(result.recipients)||0};}s.notice=action==='publication_delegate'?(data.operation==='hand_back'?'Publishing handed back to the Head of Selections ✓':'Delegation saved ✓'):action==='review_post'?'Comment added ✓':action==='post'?'Message sent ✓':action==='conversation'?(data.spoken?'Marked spoken to ✓':'Conversation marked as needed'):action==='fixture_lock'?(data.unlock?'Unlocked · republish changes to notify players · locks after 30 minutes':'Team locked'):action==='send_review'?'Sent to captains ✓':action==='publish'?`${pending.data.ids.length} team${pending.data.ids.length===1?'':'s'} published ✓ · Messages created for ${Number(result.recipients)||0} club members.${Number.isInteger(result.groups?.added_memberships)?' Usual grades updated in Club Batting; existing grades kept.':''}${result.groups?.unlinked_players?.length?' Some players still need a Club Batting player link.':''}${result.groups?.unmapped_grades?.length?' Link these grades in Settings: '+result.groups.unmapped_grades.map(g=>g.grade).join(', ')+'.':''}`:pending.order?.feedback?'':pending.order?.message||'Saved ✓';s.quietNotice=pending.action==='publish'||pending.action==='fixture_lock'&&pending.data.unlock?null:s.notice;if(pending.picker||pending.order)sePickerSaved(pending.picker);if(pending.copyLast)seCopyMessage(pending.copyLast.id,pending.copyLast.message);s.busy=false;drawSelections();if(pending.availabilityReturn)seReturnFromAvailability(pending.availabilityReturn);if(pending.action==='publish')seRevealPublication('seNotice');if(pending.picker&&currentTab==='teams'&&s.view==='board')seFocusSlot(pending.picker.active);if(pending.order&&currentTab==='teams'&&s.view==='board')seFocusOrder(pending.order.id,pending.order.slot);if(['save_roster','import_roster','selectors','publication_delegate','save_board','save_fixture','publish'].includes(action)&&!(currentTab==='teams'&&s.view==='board'))void refreshClubMessageBadge();return true;}catch(error){s.quietNotice=null;if(!requestConfirmed&&pending.action==='publish'&&error.code==='57014'){s.pending=null;sePersist();s.notice='Publishing timed out. The teams were not published. Your saved selections are safe; review and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&error.message.startsWith('Draft changed. Review the latest team before publishing')){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='The team changed since this publication was prepared. Review the latest team and publish again.';}else if(!requestConfirmed&&pending.action==='save_board'&&error.code==='P0001'&&(/ is already selected (?:on \d{4}-\d{2}-\d{2}|in overlapping games on \d{4}-\d{2}-\d{2})/.test(error.message)||/^(A team changed in another session|Mark availability before selecting)/.test(error.message))){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Team was not changed. '+error.message;}else if(pending.action==='availability_batch'&&/^(A player updated their calendar|Playing list changed|A calendar changed)/.test(error.message)){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Availability changed while you were editing. Review the saved choices and try again.';}else if(pending.action==='post'&&error.message.startsWith('This match conversation is closed.')||error.message.startsWith('Completed fixture is locked.')||error.message.startsWith('Published team is locked.')||['conversation','grade_levels','review_post'].includes(action)&&/^(This selection|Conversation status|Settings changed|Club Admin|The team changed|Team comments are private)/.test(error.message)||error.message.startsWith('Only the current Head of Selections')||action==='publication_delegate'&&/^(Only |Choose |Assign |Selection responsibilities changed)/.test(error.message)){s.pending=null;sePersist();s.notice=error.message;}else s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;if(pending.copyLast)seCopyMessage(pending.copyLast.id,s.notice);s.busy=false;drawSelections();if(pending.action==='publish')seRevealPublication('seNotice');return false;}finally{s.busy=false;seLock(false);restoreButton();if(pending.copyLast&&s===selectionState)seUpdateCopyStatus(pending.copyLast.id);}}
+@@ -21212,7 +21229,7 @@ function seBoard(){const s=ensureSelections();s.statsOpen=false;selectionEvidenc
+  document.getElementById('seAssignHead')?.addEventListener('click',()=>{s.view='settings';drawSelections();});
+  document.getElementById('seBoardDate').onchange=e=>{if(!confirmLeaveSelections()){e.target.value=s.date;return;}s.date=e.target.value;s.boardDateChosen=true;s.active=null;seBoard();recordSelectionNavigation();};document.getElementById('sePublish')?.addEventListener('click',()=>seWithSavedRoles(fs.filter(f=>f.can_publish??s.data.head_selector),sePublishReview));
+  document.getElementById('seUndo')?.addEventListener('click',()=>{const previous=s.undo.at(-1);if(!previous)return;if(previous.before.some(f=>s.data.fixtures.find(x=>x.id===f.id)?.revision!==previous.expected?.[f.id])){seNotice('A team has changed since your edit. Review it before undoing anything.');return;}s.undo.pop();const fixtures=previous.before.map(f=>({...f,revision:previous.expected[f.id]}));void seMutate('save_board',{fixtures});});
+- document.querySelectorAll('[data-se-slot]').forEach(b=>b.onclick=()=>{if(!s.data.selector||s.busy||s.pending||seFixtureLocked(s.data.fixtures.find(f=>f.id===b.dataset.seFixture)))return;const a={id:b.dataset.seFixture,slot:Number(b.dataset.seSlot),day:Number(b.dataset.seDay)};if(s.active?.id===a.id&&s.active.slot===a.slot&&(b.dataset.seBoth==='1'||s.active.day===a.day))return seClosePicker();s.active=a;s.pairs=false;s.search='';s.role='';const f=s.data.fixtures.find(f=>f.id===a.id),slot=f.slots[a.slot];s.both=f.details.days.length===2&&(!f.details.brackets||slot.d1===slot.d2);seBoard();seFocusPicker();});
++ document.querySelectorAll('[data-se-slot]').forEach(b=>b.onclick=()=>{if(!s.data.selector||s.busy||s.pending||seFixtureLocked(s.data.fixtures.find(f=>f.id===b.dataset.seFixture)))return;const a={id:b.dataset.seFixture,slot:Number(b.dataset.seSlot),day:Number(b.dataset.seDay)};if(s.active?.id===a.id&&s.active.slot===a.slot&&(b.dataset.seBoth==='1'||s.active.day===a.day))return seClosePicker();s.active=a;s.pairs=false;s.search='';s.role='';const f=s.data.fixtures.find(f=>f.id===a.id),slot=f.slots[a.slot];s.both=f.details.days.length===2&&(!f.details.brackets||slot.d1===slot.d2);seShowPicker();});
+  document.querySelectorAll('[data-se-edit]').forEach(b=>b.onclick=()=>seFixtureEditor(s.data.fixtures.find(f=>f.id===b.dataset.seEdit)));
+  document.querySelectorAll('[data-se-add-option]').forEach(b=>b.onclick=()=>seAddPlayerOption(b.dataset.seAddOption));
+  document.querySelectorAll('[data-se-clear-team]').forEach(b=>b.onclick=()=>seClearTeam(b.dataset.seClearTeam,Number(b.dataset.seRevision)));
+diff --git a/supabase/migrations/20261027120834_skip_unused_board_review_snapshots.sql b/supabase/migrations/20261027120834_skip_unused_board_review_snapshots.sql
+new file mode 100644
+index 0000000..3a3103e
+--- /dev/null
++++ b/supabase/migrations/20261027120834_skip_unused_board_review_snapshots.sql
+@@ -0,0 +1,13 @@
++-- The board no longer displays the old captain-review snapshot collection.
++-- Keep the default API response for other clients; omit only on an explicit
++-- board request from a selector/captain. Fixture permissions and writes are unchanged.
++do $patch$
++declare definition text;first text:=$old$'reviews',coalesce((select jsonb_agg($old$;
++ last text:=$old$from club_selection_private.fixtures f where f.club_id=c and club_selection_private.review_audience(f.id,me)),'[]'::jsonb),$old$;
++begin
++ definition:=pg_get_functiondef('club_selection_private.api(uuid,text,jsonb)'::regprocedure);
++ if (length(definition)-length(replace(definition,first,'')))/length(first)<>1 or (length(definition)-length(replace(definition,last,'')))/length(last)<>1 then raise exception 'Unexpected review snapshot context';end if;
++ definition:=replace(definition,first,$new$'reviews',case when p_data->>'review_snapshots'='false' and (sel or cap) then '[]'::jsonb else coalesce((select jsonb_agg($new$);
++ definition:=replace(definition,last,$new$from club_selection_private.fixtures f where f.club_id=c and club_selection_private.review_audience(f.id,me)),'[]'::jsonb) end,$new$);
++ execute definition;
++end $patch$;
