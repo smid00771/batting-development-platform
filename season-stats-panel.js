@@ -1,6 +1,6 @@
 import {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat} from './season-stats.js?v=0.8.62.275';
-import {buildSelectionEvidence} from './selection-evidence.js?v=0.8.62.279';
-import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.279';
+import {buildSelectionEvidence} from './selection-evidence.js?v=0.8.62.288';
+import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.288';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});

@@ -1,5 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+async function until(check){for(let i=0;i<200;i++){if(check())return;await new Promise(resolve=>setTimeout(resolve,5));}assert.ok(check(),'Requested analysis did not settle');}
 async function setup(returning=false){
  const {createSelectionEvidenceSnapshot}=await import('../selection-evidence-snapshot.js'),{returningPlayers}=await import('../selection-returning.js'),{resolveSelectionStatsTeams}=await import('../season-stats.js');
  const f=returning?(await import('./fixtures/selection_returning_fixture.mjs')).selectionReturningFixture():(await import('./fixtures/selection_evidence_fixture.mjs')).selectionEvidenceFixture();
@@ -14,7 +15,7 @@ async function setup(returning=false){
   for(const e of options.returningEntries){const row=dom.window.document.createElement('details');row.dataset.seReturnKey=e.key;row.innerHTML='<summary>'+e.person.name+'</summary><p data-return-facts>Available again</p><div data-return-analysis></div>';host.querySelector(`[data-se-team="${e.team.id}"]`).append(row);}
   controller.mount(host,options);
  }
- mount();return {f,dom,host,controller,options,mount,calls:()=>calls,reply:fn=>reply=fn,allowed:v=>allowed=v,notices,async calculate(kind='form'){options[kind==='form'?'formButton':'returningButton'].click();await tick();}};
+ mount();return {f,dom,host,controller,options,mount,calls:()=>calls,reply:fn=>reply=fn,allowed:v=>allowed=v,notices,async calculate(kind='form'){const button=options[kind==='form'?'formButton':'returningButton'];button.click();await until(()=>button.getAttribute('aria-busy')!=='true');}};
 }
 test('analysis runs only once per click and remains a frozen result across redraws, pauses and refreshes',async t=>{
  const h=await setup();t.after(()=>h.dom.window.close());assert.equal(h.calls(),0);assert.equal(h.host.querySelector('[data-evidence-open]'),null);
@@ -65,12 +66,16 @@ test('returning comparisons are independent, reused, and removed when the return
 });
 test('requests deduplicate, fail visibly without retry loops, and ignore late responses after edits or account changes',async t=>{
  const h=await setup();t.after(()=>h.dom.window.close());let finish;h.reply(()=>new Promise(resolve=>finish=resolve));
- h.options.formButton.click();h.options.formButton.click();h.options.returningButton.click();assert.equal(h.calls(),1);assert.equal(h.options.formButton.disabled,true);
+ h.options.formButton.click();h.options.formButton.click();h.options.returningButton.click();assert.equal(h.options.formButton.disabled,true);await until(()=>h.calls()===1);assert.equal(h.calls(),1);
  h.controller.pause();h.mount();finish({data:h.f.context});await tick();assert.equal(h.host.querySelector('[data-evidence-open]'),null);assert.equal(h.options.formButton.disabled,false);
  h.reply(async()=>({error:{message:'Temporary network failure'}}));await h.calculate();assert.match(h.notices.at(-1),/Could not calculate/);assert.equal(h.calls(),2);assert.equal(h.options.formButton.disabled,false);
  h.reply(async()=>({data:h.f.context}));await h.calculate();assert.ok(h.host.querySelector('[data-evidence-open]'));
  h.options.scope='another-user:another-club';h.mount();assert.equal(h.host.querySelector('[data-evidence-open]'),null);assert.equal(h.calls(),3);
- h.reply(()=>new Promise(resolve=>finish=resolve));h.options.formButton.click();h.allowed(false);finish({data:h.f.context});await tick();assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ h.reply(()=>new Promise(resolve=>finish=resolve));h.options.formButton.click();await until(()=>h.calls()===4);h.allowed(false);finish({data:h.f.context});await tick();assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+});
+test('leaving during analysis module loading starts no scorecard request',async t=>{
+ const h=await setup();t.after(()=>h.dom.window.close());h.options.formButton.click();h.controller.pause();h.allowed(false);await tick();
+ assert.equal(h.calls(),0);assert.equal(h.host.querySelector('[data-evidence-open]'),null);
 });
 test('authorisation failures clear private results and busy selections do not start analysis',async t=>{
  const h=await setup();t.after(()=>h.dom.window.close());await h.calculate();h.reply(async()=>({error:{code:'42501',message:'Selection access is required'}}));await h.calculate();assert.equal(h.host.querySelector('[data-evidence-open]'),null);

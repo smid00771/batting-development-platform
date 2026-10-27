@@ -1,16 +1,9 @@
+import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.288';
 import {spinBalanceChange} from './player-bowling.js?v=0.8.62.279';
-import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.279';
+import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.288';
 
 const date = team => team.days?.[0]?.date || '';
-const end = team => (team.days || []).map(day=>day.date).sort().at(-1) || '';
 const selected = (team,id) => (team.slots || []).some(slot=>slot.d1===id || slot.d2===id);
-const status = (person,day) => person.availability?.unavailable_dates?.includes(day.date) ? 'unavailable'
-  : person.availability?.available_dates?.includes(day.date) ? 'available' : 'unknown';
-const sameGrade = (a,b) => a.grade_group_id && b.grade_group_id ? a.grade_group_id===b.grade_group_id
-  : !!a.competition && a.competition===b.competition && a.grade===b.grade;
-const snapshot = team => team.published?.details && Array.isArray(team.published.slots)
-  ? {...team,...team.published.details,slots:team.published.slots,historyConfirmed:true} : team;
-const inSeason = (team,season) => !!season.start && date(team)>=season.start && date(team)<=season.end;
 
 function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
   if (!incumbent || incumbent.active===false) return false;
@@ -37,32 +30,13 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
 // A return is established by saved unavailability for consecutive missed
 // fixtures, following a confirmed selection in this grade and format. Never
 // infer injury, poor form or absence from an unanswered availability date.
-export function returningPlayers({teams=[],references=[],roster=[],season={},today='',noPlay=[],eligible=()=>false,compare=true}={}) {
-  const history=references.filter(team=>!team.cancelled&&!team.published?.details?.cancelled&&!noPlay.includes(team.id)).map(snapshot).filter(team=>inSeason(team,season));
-  const people=new Map(roster.map(p=>[p.id,p])), returns=[];
-  for (const team of teams) {
-    if (!team.returningEligible || team.cancelled || !inSeason(team,season) || date(team)<today) continue;
-    const past=history.filter(old=>old.id!==team.id&&sameGrade(old,team)&&old.format===team.format&&end(old)<date(team)&&end(old)<today)
-      .sort((a,b)=>date(b).localeCompare(date(a)) || String(b.days?.[0]?.start||'').localeCompare(String(a.days?.[0]?.start||'')));
-    for (const person of roster) {
-      if (!person.active || selected(team,person.id)) continue;
-      let availableDays=(team.days || []).flatMap((day,i)=>status(person,day)==='available'?[i]:[]);
-      if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
-      const missed=[];let previous=null;
-      for (const old of past) {
-        if (old.historyConfirmed && selected(old,person.id)) {previous=old;break;}
-        if ((old.days || []).some(day=>status(person,day)==='unavailable')) missed.push(old);
-        else break;
-      }
-      if (!missed.length || !previous) continue;
-      // A confirmed intervening grade move is not a return from an absence.
-      if (history.some(old=>old.historyConfirmed&&!sameGrade(old,team)&&date(old)>date(previous)&&end(old)<date(team)&&selected(old,person.id))) continue;
-      // Check clashes only for established returns, not every player on every draw.
-      availableDays=availableDays.filter(day=>eligible(team,person,day));
-      if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
-      const position=previous.slots.findIndex(slot=>slot.d1===person.id||slot.d2===person.id)+1;
-      const firstMissed=missed.at(-1), targets=[];
-      for (const [index,slot] of (compare?team.slots || []:[]).slice(0,11).entries()) {
+export function returningPlayers(options={}) {
+  const entries=findReturningPlayers(options);
+  if(options.compare===false)return entries;
+  const people=new Map((options.roster||[]).map(p=>[p.id,p]));
+  for(const entry of entries){
+    const {team,person,previous,position,missed,availableDays,targets}=entry,firstMissed=missed.at(-1);
+      for (const [index,slot] of (team.slots || []).slice(0,11).entries()) {
         for (const id of new Set((team.days || []).map((_,day)=>slot['d'+(day+1)] || null))) {
           const days=team.days.flatMap((_,day)=>(slot['d'+(day+1)]||null)===id?[day]:[]);
           if (days.some(day=>!availableDays.includes(day)) || !team.brackets && days.length!==team.days.length) continue;
@@ -74,10 +48,8 @@ export function returningPlayers({teams=[],references=[],roster=[],season={},tod
         }
       }
       targets.sort((a,b)=>Number(b.joinedDuringAbsence)-Number(a.joinedDuringAbsence)||Math.abs(a.position-position)-Math.abs(b.position-position)||a.position-b.position);
-      returns.push({key:JSON.stringify([team.id,person.id]),team,person,previous,position,missed,availableDays,targets});
-    }
   }
-  return returns.sort((a,b)=>a.team.grade.localeCompare(b.team.grade,undefined,{numeric:true})||a.person.name.localeCompare(b.person.name));
+  return entries;
 }
 
 const valid = value => Number.isInteger(value)&&value>=0;

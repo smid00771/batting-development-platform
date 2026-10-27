@@ -119,34 +119,28 @@ test('legacy demo links still open the correct product and a specific role', asy
   }
 });
 
-test('browser Back restores the stats comparison format and bowling view after opening player attributes',async t=>{
+test('browser Back restores the board date after opening player attributes',async t=>{
  const h=await openDemo('selections');t.after(h.close);
- await h.click('#seSeasonStats');await h.click('[data-stats-compare]');
- await h.choose('[data-stats-filter=format]','long_form');await h.click('[data-stats-compare-mode=bowling]');
- const before=h.window.history.state.clubBattingNavigation.route.selections;
- const player=h.document.querySelector('[data-stats-open-player]');assert.ok(player);player.click();await h.settle();
+ const dates=[...h.document.getElementById('seBoardDate').options].map(o=>o.value),date=dates.at(-1);
+ await h.choose('#seBoardDate',date);await h.click('[data-se-view=roster]');
  assert.ok(h.document.querySelector('[data-se-view=roster][aria-pressed=true]'));
  const pop=new Promise(resolve=>h.window.addEventListener('popstate',resolve,{once:true}));
  h.window.history.back();await pop;await h.settle();
- assert.equal(h.document.getElementById('seSeasonStats').getAttribute('aria-expanded'),'true');
- assert.equal(h.document.querySelector('[data-stats-filter=format]').value,'long_form');
- assert.equal(h.document.querySelector('[data-stats-compare-mode=bowling]').getAttribute('aria-pressed'),'true');
- assert.equal(h.document.querySelector('[data-stats-team=firstTeam]').value,before.statsFilters.firstTeam);
- noErrors(h);
+ assert.equal(h.document.getElementById('seBoardDate').value,date);noErrors(h);
 });
 
 test('fielding saves in player attributes and remains visible in the complete demo Form guide',async t=>{
  const h=await openDemo('selections');t.after(h.close);
- await h.click('#seSeasonStats');await h.click('[data-stats-compare]');
- const player=h.document.querySelector('[data-stats-open-player]'),id=player.dataset.statsOpenPlayer;
- player.click();await h.settle();
+ await h.click('#seFormIndicators');
+ const id=h.document.querySelector('[data-evidence-player]').dataset.evidencePlayer;
+ await h.click('[data-se-view=roster]');
  const input='[data-se-roster-id="'+id+'"] [name=fielding]';
  assert.equal(h.document.querySelector(input).value,'unknown');
  await h.choose(input,'strong');await h.click('#seSaveRosterRoles');
  assert.equal(h.document.querySelector('#seSaveRosterRoles').textContent,'Saved');
  await h.click('[data-se-view=board]');await h.click('[data-se-view=roster]');
  assert.equal(h.document.querySelector(input).value,'strong');
- await h.click('[data-se-view=board]');await h.click('#seSeasonStats');await h.click('[data-stats-compare]');
+ await h.click('[data-se-view=board]');await h.click('#seFormIndicators');
  const button=[...h.document.querySelectorAll('[data-evidence-open]')].find(b=>b.dataset.evidenceOpen.includes(id));
  assert.ok(button);button.click();await h.settle();
  assert.match(h.document.querySelector('.se-evidence-dialog').textContent,/Fielding: Strong · selector rating/);

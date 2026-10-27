@@ -1,42 +1,26 @@
+import {createDeferredController} from './deferred-feature.js?v=0.8.62.288';
 import {createPasswordFlow,cleanPasswordUrl} from './password-flow.js?v=0.8.62.280';
 import {SPIN_STYLES,spinLabel,spinProfile,spinProfileText,bindSpinBreakdowns} from './player-bowling.js?v=0.8.62.279';
 import {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl} from './domain-routing.js?v=0.8.62.272';
 import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.271';
 import {assistLaunchFromSearch} from './assist-routing.js?v=0.8.62.271';
-import {createSocialAwardScopes} from './social-award-scopes.js?v=0.8.62.252';
-import {createSelectionGroupPermissions} from './selection-group-permissions.js?v=0.8.62.246';
-import {createSelectionGroupPage} from './selection-group-page.js?v=0.8.62.245';
-import {createPlayHQImport} from './playhq-import.js?v=0.8.62.245';
-import {createPlayCricketConnection} from './playcricket-connection.js?v=0.8.62.245';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.270';
-import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.246';
-import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.287';
-import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.279';
-import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.287';
-import {returningPlayers} from './selection-returning.js?v=0.8.62.286';
+import {FIELDING_RATINGS,fieldingLabel} from './player-fielding.js?v=0.8.62.288';
+import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.288';
+import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.288';
+const returningPlayers=findReturningPlayers;
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import {createSocialAwards,renderSocialAwardRequests} from './social-awards.js?v=0.8.62.273';
-import {createTeamSocialWorkflow} from './social-team-workflow.js?v=0.8.62.270';
-import {teamSelectionText} from './social-team-layout.js?v=0.8.62.249';
-import {createSocialPublishing} from './social-publishing.js?v=0.8.62.225';
-import {mountVideoCredits} from './video-credits.js?v=0.8.62.232';
-import {createSelectionRoom} from './selection-room.js?v=0.8.62.284';
-import {createTeamOfWeek,teamWeekLayout} from './team-of-week.js?v=0.8.62.270';
-import {createSharedMatchResults} from './shared-match-results.js?v=0.8.62.250';
-import {createSocialAwardLabels} from './social-award-labels.js?v=0.8.62.248';
-import {createFixtureResults} from './fixture-results.js?v=0.8.62.268';
-import {createPlayerOfWeek} from './player-of-week.js?v=0.8.62.270';
-import {createSocialSandbox} from './social-sandbox.js?v=0.8.62.208';
-import {renderSocialPlatformSetup} from './social-platform-setup.js?v=0.8.62.224';
+let createSelectionRoom;
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+
+function requestedFeatureScope(){return JSON.stringify([session?.user?.id,club?.id,currentTab,selectionState?.view,selectionState?.navigationDrawer?.kind,platformView]);}
 
 const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.287';
+const APP_UI_VERSION='0.8.62.288';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1551,10 +1535,16 @@ function renderPublicTrialForm(saved={},message=''){
   };
 }
 
+function renderAppOpening(message){
+ let status=document.getElementById('appStartStatus');
+ if(!status){app.innerHTML='<section class="app-start" aria-label="Mirelion"><header><span class="app-start-mark" aria-hidden="true">M</span><span class="app-start-brand">Mirelion</span></header><main><p id="appStartStatus" role="status" aria-live="polite"></p><div class="app-start-placeholder" aria-hidden="true"></div><button id="appStartRetry" type="button" hidden>Try again</button></main></section>';status=document.getElementById('appStartStatus');}
+ status.textContent=message;
+}
+
 async function loadContext({navigation=null,navigationRequest=null}={}){
   const requestingUser=session?.user?.id;
   const stillCurrent=()=>session?.user?.id===requestingUser&&(navigationRequest===null||navigationRequest===appNavigationRequest);
-  app.innerHTML='<div class="splash">Loading…</div>';
+  renderAppOpening('Opening your club…');
 
   const {data:memberships,error}=await supabase
     .from('club_memberships')
@@ -1612,22 +1602,21 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   const savedTab=localStorage.getItem(`bdp-tab-${club.id}`);
   if(savedTab)currentTab=savedTab;
 
-  const {data:profileData}=await supabase
+  renderAppOpening('Loading '+club.name+'…');
+  const [{data:profileData}]=await Promise.all([supabase
     .from('user_profiles')
     .select('*')
     .eq('user_id',session.user.id)
-    .maybeSingle();
+    .maybeSingle(),loadSelectionsAccess(),loadScheduledTrialContext()]);
 
   if(!stillCurrent())return;
   userProfile=profileData||null;
-
-  await loadSelectionsAccess();
   if(!userProfile || !hasPlayingChoice(membership.involvement)){
     renderFirstIdentitySetup();
     return;
   }
 
-  try{await loadData();}
+  try{await loadData({accessReady:true,trialsReady:true});}
   catch(error){
     app.innerHTML=`<div class="login"><h1>Your club’s plans could not be loaded.</h1><p>${esc(error.message||'Check your connection and try again.')}</p><button class="btn secondary" id="retryClubLoad">Try again</button></div>`;
     document.getElementById('retryClubLoad').onclick=()=>loadContext({navigation,navigationRequest});
@@ -1768,9 +1757,8 @@ function renderFirstIdentitySetup(){
 }
 
 
-async function loadData(){
-  await loadSelectionsAccess();
-  await loadScheduledTrialContext();
+async function loadData({accessReady=false,trialsReady=false}={}){
+  await Promise.all([accessReady?null:loadSelectionsAccess(),trialsReady?null:loadScheduledTrialContext()]);
   if(selectionsStandalone()){
     myPlayer=null;workflow=null;workshop=null;myContributor=null;myContribution=null;
     philosophyVersions=[];howWeBatVersions=[];playerPlanStructureVersions=[];
@@ -2622,9 +2610,6 @@ function renderShell(){
   </div>`;
 
   bindClubMobileMenu();
-  mirelionAssist.start();
-  if(!selectionsStandalone())void refreshMyCoachingUpdates();
-  void refreshClubMessageBadge();void syncPhoneDeviceSession();
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await signOutClubBatting();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('accountCoaching')?.addEventListener('click',openCoachConversations);
@@ -2661,7 +2646,21 @@ function renderShell(){
   }
 
   document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>openClubSectionHome(b.dataset.tab));
-  return renderTab();
+  const firstPage=document.getElementById('page'),userId=session?.user?.id,clubId=club?.id;
+  const rendered=renderTab();
+  // Badges and device upkeep follow the first usable screen, without competing
+  // with its requests or applying an old club's startup work after navigation.
+  Promise.resolve(rendered).then(()=>window.requestAnimationFrame(()=>{
+    const background=()=>{
+      if(!firstPage.isConnected||userId!==session?.user?.id||clubId!==club?.id)return;
+      mirelionAssist.start();
+      if(!selectionsStandalone())void refreshMyCoachingUpdates();
+      void refreshClubMessageBadge();void syncPhoneDeviceSession();
+    };
+    if(window.requestIdleCallback)window.requestIdleCallback(background,{timeout:1000});
+    else window.setTimeout(background,0);
+  }));
+  return rendered;
 }
 
 
@@ -3008,7 +3007,7 @@ function selectionNavigationRoute(s){
 }
 function socialNavigationRoute(s){
  const route={view:s.view,creationView:s.creationView,date:s.date,resultsWeek:s.resultsWeek};
- if(s.view==='graphics')route.team={...socialTeamWorkflow.state(s)};
+ if(s.view==='graphics'&&socialTeamWorkflow)route.team={...socialTeamWorkflow.state(s)};
  if(['awards','award_collection','results','five_wickets','century'].includes(s.view)&&s.awards)route.awards={end:s.awards.end,focus:s.awards.focus||null};
  if(s.view==='team_week'&&s.week)route.week={end:s.week.end};
  if(s.view==='player_week'&&s.playerWeek)route.playerWeek={end:s.playerWeek.end,contextPlayer:s.playerWeek.contextPlayer||null};
@@ -3022,7 +3021,7 @@ function socialNavigationRoute(s){
  return route;
 }
 function restoreSocialNavigation(route){
- if(!route)return;const s=socialEnsure();s.view=route.view||'graphics';s.creationView=route.creationView||'graphics';s.date=route.date||'';if(route.resultsWeek)s.resultsWeek=route.resultsWeek;
+ if(!route)return;const s=socialEnsure();if(!socialPublishing){s.deferredNavigation=route;return;}s.view=route.view||'graphics';s.creationView=route.creationView||'graphics';s.date=route.date||'';if(route.resultsWeek)s.resultsWeek=route.resultsWeek;
  if(route.team)Object.assign(socialTeamWorkflow.state(s),route.team);
  for(const [key,api] of [['awards',socialAwards],['week',socialWeek],['playerWeek',socialPlayerWeek]]){
   const saved=route[key];if(!saved)continue;const w=api.state(s);
@@ -3443,1967 +3442,8 @@ function guideHelpStyles(){
 }
 
 // BEGIN GENERATED HELP CATALOGUE — tools/build_help.py
-const CLUB_BATTING_HELP = {
-  "whole_process": {
-    "capability_key": "whole_process",
-    "title": "The whole Club Batting process",
-    "purpose": "Help your club turn its batting philosophy into what players prepare, practise, do and learn each week.",
-    "short_explanation": "Agree How We Bat, build Player Plans, prepare early for a match, practise useful priorities and review the next step together.",
-    "target_tab": "guide",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Start the club and register people",
-        "body": "Choose Batting development, Teams & availability, or both through Start free trial on the website. Choose Start now or a future date and confirm your email. Access starts automatically on the chosen date, with no Platform Admin approval. A start alert links to your product-specific starter guide. The remaining steps describe batting development; playing involvement is separate from coaching or administration roles."
-      },
-      {
-        "title": "Complete the five preparation steps",
-        "body": "Club Home guides the responsible people through Batting Philosophy Workshop, How We Bat, Player Plan questions, Club look, then Publish & notify players. Submitting contributions alone does not complete the Workshop.",
-        "target_tab": "dashboard"
-      },
-      {
-        "title": "Choose the club approach",
-        "body": "Contributors answer independently, then compare and discuss How We Bat options together. Only the Philosophy Lead chooses the working version and confirms How We Bat.",
-        "target_tab": "workshop"
-      },
-      {
-        "title": "Build and train individual plans",
-        "body": "Player Home links to My Player Plan, How We Train, Prepare for a Match and My Innings. Its plan tile says Complete your Player Plan until required work is finished, then Edit your Player Plan. Each batter completes Core and the priority formats for their Playing Groups. Core plus a completed format unlocks personalised training for that format. Manage current focuses in How We Train.",
-        "target_tab": "$player_plan"
-      },
-      {
-        "title": "Keep learning together",
-        "body": "Use My Innings early enough for match preparation to guide the week’s practice. Optional preparation becomes the same season entry, then record the innings and reflect. Recognise decisions and execution as well as results. Choose Keep working on this, Adjust the focus or Discuss it when useful. Coach-proposed focuses need player acceptance; discussion stays in Coach Conversations.",
-        "target_tab": "$feedback",
-        "focus": "coach_conversations"
-      }
-    ],
-    "sort_order": 10,
-    "active": true,
-    "video_ids": [
-      "phone-iphone",
-      "phone-android",
-      "availability",
-      "select-publish",
-      "workshop",
-      "player-plan",
-      "prepare-predict",
-      "training",
-      "match-review-teams",
-      "match-review-manual",
-      "match-observation-first",
-      "conversation",
-      "messages"
-    ],
-    "quick_start_count": 5
-  },
-  "trial_sign_up": {
-    "capability_key": "trial_sign_up",
-    "title": "Start your club’s free trial",
-    "purpose": "Choose batting development, Teams & availability, or both.",
-    "short_explanation": "Choose either product or both, then start now or choose a date that suits your club’s season.",
-    "target_tab": "guide",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Choose a product",
-        "body": "On mirelionhq.com, explore Club Batting or Mirelion Select and its fictional demo. Choose Start free trial, then either product or Both. Teams & availability works independently and requires no Batting subscription or Player Plans."
-      },
-      {
-        "title": "Confirm your account",
-        "body": "Enter your club and contact name, choose Start now or a future start date, and check the club time zone. Create an account and confirm your email, or sign in with a verified account. If the selected date passes before confirmation, choose a new date; no trial days are backdated."
-      },
-      {
-        "title": "Start when your club is ready",
-        "body": "New trials run for 60 days for Club Batting and 21 days for Teams & availability from the chosen start date, without Platform Admin approval. When choosing both, each product keeps its own duration. Existing arranged trial dates are honoured. Until then, Account → Products & trials shows Trial scheduled, the start and end dates, and Change start date. You can bring the date forward or postpone it before it begins. A running or used trial cannot restart. No card is required and nothing is automatically charged."
-      },
-      {
-        "title": "Use your own branding and add the other product",
-        "body": "A new club starts with you as its non-playing Club Admin. Your logo, colours and accounts are shared. Account → Products & trials lets Club Admin add an unused product and choose its start date. Existing access and permanent free terms are preserved."
-      },
-      {
-        "title": "Use the starter guide",
-        "body": "When a trial starts, current Club Admins receive a club message linked to Getting started. Registered phones receive the normal app alert; otherwise an email points to the message. Both products starting together use one combined notice. The primer has shared setup steps plus the relevant Teams & availability and/or Batting development sequence. It is also available before the trial begins in Account → Products & trials."
-      },
-      {
-        "title": "At the end of a trial",
-        "body": "A trial does not convert to paid access automatically. Online payments are not enabled during this pilot. The intended paid continuation is self-service after payment setup; do not claim checkout or automatic billing is live. The club’s trial dates stay visible in Account → Products & trials."
-      },
-      {
-        "title": "Continue an older invitation or enquiry",
-        "body": "Existing batting trial invitations and saved trial links retain their original activation process and do not activate Teams & availability. Old enquiry confirmation links only record the enquiry; they do not start a trial without the new Start free trial choice."
-      }
-    ],
-    "sort_order": 20,
-    "active": true,
-    "video_ids": [],
-    "quick_start_count": 5
-  },
-  "people_sign_up": {
-    "capability_key": "people_sign_up",
-    "title": "Register players and non-playing staff",
-    "purpose": "Get people in, then assign responsibilities.",
-    "short_explanation": "Use the correct club sign-up link. Playing involvement, club roles and Workshop invitations are separate.",
-    "target_tab": "permissions",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "body": "Club Admin opens People & sign-up and uses Copy WhatsApp message, Copy player sign-up link or the QR code. The Playing list also offers Players’ WhatsApp message to Club Admin, the Head of Selections and assigned captains. Share the message in the general players’ WhatsApp chat, then use the outstanding sign-up flags to chase individuals. The app does not send messages to unsigned players. Players use one club account for the subscribed products; playing coaches and captains use the player route.",
-        "title": "Share the player link",
-        "target_tab": "permissions"
-      },
-      {
-        "body": "The player link and QR open Join [club name]. Enter your email and choose Email my sign-up link; open the email and enter your name to finish joining. Existing members sign in to their existing account. Teams & availability players go to their availability calendar without a batting subscription or Player Plan. Verified name and personal-email matches link an imported playing-list entry automatically; uncertain matches need club checking.",
-        "title": "Create a new player account from the club link"
-      },
-      {
-        "body": "After registration, open Account → App & notifications for the steps for your phone. Add the Mirelion icon, then open it and sign in with the same account if asked. Choose Club messages and/or Coaching updates, tap Enable notifications, then Allow. Installation and notification permission are separate steps; no new account is needed.",
-        "title": "Put the app on your phone after joining"
-      },
-      {
-        "body": "Copy non-playing staff sign-up link is for someone who does not play and should not receive a Player Plan. New staff can create an account from that route; they do not need an existing account. The legacy coach_captain text in the URL does not assign a Captain role.",
-        "title": "Use the staff route for non-players"
-      },
-      {
-        "body": "Follow sign-in/email confirmation and enter your name. Registration does not grant coaching access to other players. Club Admin assigns the role and player access after registration.",
-        "title": "Confirm membership before expecting player access"
-      },
-      {
-        "body": "Someone joining through a Workshop invitation must say whether they play. A playing contributor gets their own Player Plan; a non-playing contributor does not. Contributing alone gives no Coach, Captain or Admin role.",
-        "title": "Workshop invitees also choose involvement"
-      },
-      {
-        "body": "Club Admin can open or close player sign-up, or regenerate the link and QR. Regeneration invalidates the old link. Members choose playing or non-playing involvement when they join. Adding the other product reuses existing player accounts without another sign-up. Imported players who have never joined remain flagged for an invitation. Batting plans follow the club’s readiness; availability does not wait for them.",
-        "title": "Manage club sign-up"
-      }
-    ],
-    "sort_order": 30,
-    "active": true,
-    "video_ids": [],
-    "quick_start_count": 5
-  },
-  "roles_and_access": {
-    "capability_key": "roles_and_access",
-    "title": "Coaching staff, club roles and player access",
-    "purpose": "Give each person the access they need.",
-    "short_explanation": "Name your coaching staff separately from playing involvement and access permissions.",
-    "target_tab": "permissions",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Set your club’s coaching titles",
-        "body": "Club Admin opens Club coaching titles below the invitations in People & Sign-up. View coaching titles expands the saved list; Rename opens a text box and Remove removes a title. + Add coaching title separately opens suggested or custom titles. Save changes stores your edits; Cancel discards them. Suggestions become available for assignment only after adding and saving. Assign duties separately on each person’s row.",
-        "target_tab": "permissions"
-      },
-      {
-        "title": "Find someone to assign a role",
-        "body": "Edit coaching duties shows the person’s name and a checklist of the titles your club has saved. Tick their duties, then Save coaching duties. Their saved titles appear on their person row. Manage club coaching titles returns to the checklist after saving and retains pending selections. One person can hold several duties; player access is set separately on the main page.",
-        "target_tab": "permissions"
-      },
-      {
-        "title": "Choose the role and scope",
-        "body": "Assign Captain, Coach, Head Coach or Admin. For coaching roles, choose no assigned player access, whole-club view/edit, or selected Playing Groups with view/edit. Admin has full club access. Being a Head Coach or Captain does not itself make someone a registered player. A Captain permission role alone is not a season appointment. Use Account → Grades & season captains to appoint the captain for each grade. Existing explicitly assigned coaching access remains separate."
-      },
-      {
-        "title": "Save one or several changes",
-        "body": "Adjust access for one or several people, then use Save changes. The button changes to Changes saved after successful saves. Saving one row retains unsaved edits on other rows. An error leaves the affected changes available to retry."
-      },
-      {
-        "title": "Keep Workshop responsibilities separate",
-        "body": "Choose the Philosophy Lead and contributors in the Workshop. A contributor needs a separate coaching role and player access before they can view or edit other players. Philosophy Lead and Lead Admin are different responsibilities."
-      }
-    ],
-    "sort_order": 40,
-    "active": true,
-    "video_ids": [],
-    "quick_start_count": 5
-  },
-  "admin_handover": {
-    "capability_key": "admin_handover",
-    "title": "Hand over Lead Admin",
-    "purpose": "Pass the club on without starting again.",
-    "short_explanation": "The Lead Admin uses a formal invitation and acceptance process; ordinary role changes do not transfer that responsibility.",
-    "target_tab": "permissions",
-    "audience": [
-      "admin"
-    ],
-    "tutorial": [
-      {
-        "title": "Open Admin continuity",
-        "body": "The current Lead Admin opens People & Sign-up → Lead Admin. Clubs may have several Admins, but one Lead Admin is responsible for formal handover.",
-        "target_tab": "permissions"
-      },
-      {
-        "title": "Nominate the successor",
-        "body": "Choose an existing registered person or enter the incoming person’s name and email, then send the handover. It remains pending until accepted; the outgoing person keeps responsibility meanwhile."
-      },
-      {
-        "title": "Accept with the correct account",
-        "body": "The invited person opens the secure handover link and signs in with the intended email. They accept the Lead Admin role and choose what role/player access the outgoing Admin retains."
-      },
-      {
-        "title": "Cancel a pending handover if needed",
-        "body": "The current Lead Admin can cancel while it is pending. An expired or cancelled invitation needs a new handover invitation. Changing a person’s ordinary Admin dropdown is not the formal transfer."
-      }
-    ],
-    "sort_order": 50,
-    "active": true,
-    "video_ids": [],
-    "quick_start_count": 5
-  },
-  "philosophy_workshop": {
-    "capability_key": "philosophy_workshop",
-    "title": "Run the Batting Philosophy Workshop",
-    "purpose": "Hear independent views, then choose together.",
-    "short_explanation": "Contributors submit their own responses before comparing options. The Philosophy Lead owns the final choice.",
-    "target_tab": "workshop",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Choose the Lead and contributors",
-        "body": "Club Admin appoints the Philosophy Lead and selects registered contributors or invites them by email. Invitees also choose playing/non-playing involvement when joining; Workshop access does not grant coaching access.",
-        "target_tab": "workshop"
-      },
-      {
-        "title": "Receive your Workshop invitation",
-        "body": "Already a club member? Your invitation is in Account → Messages, with a Batting Philosophy Workshop button. Enabled Club messages phone alerts are used first; otherwise a brief email links to the message. Someone not yet in the club still receives a secure joining invitation by email.",
-        "target_tab": "messages"
-      },
-      {
-        "title": "Complete your own contribution",
-        "body": "Work through Club identity, Batting ideas, Format priorities and Review & submit. Save and continue moves to the top of the next screen. Back to Workshop saves answers without submitting them."
-      },
-      {
-        "title": "Compare after submitting",
-        "body": "Submitted contributors can explore How We Bat combinations that include the Lead’s response. Choose a combination, then Preview this version. Use Back to Workshop to return; previews stay within the app."
-      },
-      {
-        "title": "Use the shared conversation",
-        "body": "There is one Workshop conversation about all the options. It is shared by the people permitted to review that round; it is not a separate chat for each combination."
-      },
-      {
-        "title": "Let the Lead choose",
-        "body": "Only the Philosophy Lead selects the working How We Bat version. All contributors submitted means responses are ready, not Workshop complete. The selected version then goes through How We Bat review and confirmation; other contributors cannot make the final choice."
-      },
-      {
-        "title": "Notice a late contribution",
-        "body": "If a contributor submits after the working How We Bat draft has been chosen, the Philosophy Lead receives a Club Batting message to review it. It uses the same phone-first delivery and email-link fallback. The contribution does not automatically change the chosen draft.",
-        "target_tab": "messages"
-      }
-    ],
-    "sort_order": 60,
-    "active": true,
-    "video_ids": [
-      "workshop"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "workshop_changes": {
-    "capability_key": "workshop_changes",
-    "title": "Change a choice or start a new round",
-    "purpose": "Keep useful contributions when the club changes direction.",
-    "short_explanation": "Reopen an early choice without redoing responses, or start a new round and reuse saved responses.",
-    "target_tab": "workshop",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Reopen an early choice",
-        "body": "Before any Player Plan has been completed, the Philosophy Lead can use Change our How We Bat choice in the Workshop. The existing submitted responses and shared conversation remain. Select another combination and reconfirm the later preparation steps.",
-        "target_tab": "workshop"
-      },
-      {
-        "title": "Use a new round when required",
-        "body": "Once a Player Plan has been completed, change direction through Start a new philosophy round in Workshop settings. Read the confirmation: the current round is archived, contributor choices are reviewed, and a replacement is prepared."
-      },
-      {
-        "title": "Reuse your own earlier response",
-        "body": "When selected again, a returning contributor can choose Use my saved responses from previous Workshop. This loads their own earlier answers into the new round for review and editing. They still submit for the new round; nobody’s answer is silently resubmitted."
-      },
-      {
-        "title": "Keep the existing published system available",
-        "body": "Starting a replacement round keeps published How We Bat and Player Plans available while the club prepares the replacement. Publishing the replacement is a separate explicit action."
-      },
-      {
-        "title": "Distinguish regenerating from reopening",
-        "body": "Reset How We Bat draft replaces manual edits in an unconfirmed draft with generated wording from the current working philosophy. It is not the same as selecting a different combination or starting a new round."
-      }
-    ],
-    "sort_order": 70,
-    "active": true,
-    "video_ids": [
-      "workshop"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "how_we_bat": {
-    "capability_key": "how_we_bat",
-    "title": "Review and confirm How We Bat",
-    "purpose": "Make the chosen club approach clear.",
-    "short_explanation": "The Philosophy Lead reviews the chosen combination and confirms the messages players will use.",
-    "target_tab": "howwebat",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Choose the combination first",
-        "body": "Use Compare How We Bat options in the Workshop, preview and discuss the options, then let the Philosophy Lead choose. A generated preview alone is not the club’s confirmed How We Bat.",
-        "target_tab": "workshop"
-      },
-      {
-        "title": "Review the format messages",
-        "body": "The Lead checks the editable How We Bat draft and its format messages. Refine the wording so players can use it in matches and training. Preserve room for each batter’s strengths.",
-        "target_tab": "howwebat"
-      },
-      {
-        "title": "Confirm before preparing questions",
-        "body": "Confirm How We Bat to enable the Player Plan questions step. Confirmation is distinct from publishing the whole system; ordinary players receive the published version after publication."
-      },
-      {
-        "title": "Read the published approach",
-        "body": "Players can open How We Bat once published. Changing the club approach follows the reopen/new-round rules; it should not silently rewrite the player’s personal plan."
-      }
-    ],
-    "sort_order": 80,
-    "active": true,
-    "video_ids": [
-      "workshop"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "player_plan_structure": {
-    "capability_key": "player_plan_structure",
-    "title": "Set the Player Plan questions",
-    "purpose": "Turn the club approach into useful personal choices.",
-    "short_explanation": "How We Bat generates Core and format prompts. The Philosophy Lead checks and confirms them before publication.",
-    "target_tab": "plan",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Start after How We Bat confirmation",
-        "body": "Club Home opens this step after the Lead has confirmed How We Bat. The questions are generated from the chosen approach.",
-        "target_tab": "plan"
-      },
-      {
-        "title": "Review Core and all formats",
-        "body": "Core covers strengths, Danger and Reset; format questions help players describe how they build an innings. Every player has Core, T20, Limited Overs and Long Form."
-      },
-      {
-        "title": "Refine exact questions if needed",
-        "body": "The Philosophy Lead can open the exact-question editor, make changes and Save exact edits. Reset to generated questions discards manual edits in the working draft. Keep the prompts focused and manageable."
-      },
-      {
-        "title": "Confirm, then publish separately",
-        "body": "Confirming the questions completes this preparation step. Club Admin checks the club look, then the Philosophy Lead chooses Publish & notify players. Confirmation alone does not release Player Plans."
-      }
-    ],
-    "sort_order": 90,
-    "active": true,
-    "video_ids": [],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "club_look_publication": {
-    "capability_key": "club_look_publication",
-    "title": "Check the club look and publish",
-    "purpose": "Open the agreed system to players.",
-    "short_explanation": "Club branding is shared by both products. Batting publication remains a separate preparation step.",
-    "target_tab": "dashboard",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "body": "Club Admin can add the club logo and colours at any time through Account → Club settings. New clubs also see Add club logo & colours during setup; Teams & availability → Settings has the same link. This works with either subscription, with no batting preparation required. Choose Save or Keep current look. Save changes to Saved; later edits make Save available again. Colour suggestions are under Find colours. The saved look is shared across the club’s subscribed products.",
-        "title": "Check the club look",
-        "target_tab": "club_settings"
-      },
-      {
-        "body": "The Philosophy Lead selects Publish & notify players after all preparation steps are ready. This publishes the club approach and questions together.",
-        "title": "Publish when ready"
-      },
-      {
-        "body": "Publication puts a ready-to-start notice in playing members’ Messages with a My Player Plan button. Enabled Club messages phone notifications are used first; otherwise a short email links to the message. A newly joining playing member is notified when the club is ready. Queueing an alert does not prove it was delivered or read.",
-        "title": "Tell registered players they can begin"
-      },
-      {
-        "body": "Before publication, ordinary players see a waiting message. People with assigned Workshop/setup responsibilities can work during preparation. Club Home’s completed preparation stages stay available for review.",
-        "title": "Keep the next step clear"
-      }
-    ],
-    "sort_order": 100,
-    "active": true,
-    "video_ids": [],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "playing_groups": {
-    "capability_key": "playing_groups",
-    "title": "Organise Playing Groups",
-    "purpose": "Find the players you need and assign newcomers efficiently.",
-    "short_explanation": "Playing Groups help find players, set plan priorities and assign coaching access. They do not select a team for a match.",
-    "target_tab": "groups",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain"
-    ],
-    "tutorial": [
-      {
-        "title": "Keep a group separate from a match team",
-        "body": "A Playing Group is a saved way to organise players. A grade is the team named on a fixture. Choosing a grade or filtering by a Playing Group never selects everyone in that group. With Teams, the published selection supplies the match players; without Teams, the captain or coach chooses them for that match."
-      },
-      {
-        "title": "Appoint a season captain in shared setup",
-        "body": "Club Admin opens Account → Grades & season captains (also in Teams Settings). Existing grade edits and captain choices save automatically and show Saved. Choose a registered club member or an existing name awaiting signup. To add someone new, choose Add a captain who hasn’t signed up, enter their full name and optional email, then Add captain. Signup needed stays visible until their verified account is linked. Either club product uses the same appointment. A name alone grants no account access. The appointment lasts until changed or removed; it does not grant selector powers or select anyone for a match.",
-        "target_tab": "club_teams",
-        "quick_start": true
-      },
-      {
-        "title": "Find unassigned players",
-        "body": "In Players, choose Currently unassigned from Show players. This is a filter for people with no active Playing Group, not a real group. Search by name can narrow it further.",
-        "target_tab": "players"
-      },
-      {
-        "title": "Assign several groups at once",
-        "body": "Club Admin ticks the desired Playing Groups on an unassigned player’s card, then chooses Assign selected groups. Save once after choosing all groups. The saved player leaves the unassigned list while other players’ draft selections stay in place."
-      },
-      {
-        "title": "Manage the wider roster",
-        "body": "Manage Playing Groups lets Club Admin create, rename, reorder and activate/deactivate groups, and add or remove members. Add shown players acts on the displayed filtered/search results; check the target group before saving. Save name saves that group and shows Saved. Other unsaved group names stay in place.",
-        "target_tab": "groups"
-      },
-      {
-        "title": "Understand what groups change",
-        "body": "A player can belong to more than one group. The player inherits the applicable format due dates; where the same format has several dates, the earliest active date is the priority. Group membership also determines coaching access that Admin assigned by group."
-      },
-      {
-        "title": "Keep unassigned players neutral",
-        "body": "Unassigned players have no group-derived format priority. Core still comes first. All three format tabs stay available; assigning a group never adds or removes a tab."
-      }
-    ],
-    "sort_order": 110,
-    "active": true,
-    "video_ids": [],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "plan_dates": {
-    "capability_key": "plan_dates",
-    "title": "Set Player Plan dates",
-    "purpose": "Show players which format needs attention next.",
-    "short_explanation": "Club Admin sets due dates per Playing Group and format; undated formats remain optional.",
-    "target_tab": "players",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain"
-    ],
-    "tutorial": [
-      {
-        "title": "Open Plan dates",
-        "body": "After publication, Club Admin opens Players → Plan dates. Choose one or more Playing Groups and the format, then save the date.",
-        "target_tab": "players",
-        "focus": "plan_dates"
-      },
-      {
-        "title": "Prioritise the formats the group plays",
-        "body": "Set dates for the formats that group should complete. A group that does not play T20 can leave T20 undated. Every player still has T20, Limited Overs and Long Form, and can complete optional formats."
-      },
-      {
-        "title": "Let membership set the priority",
-        "body": "Players first complete Core, then see the required incomplete format with the earliest date as their next step. Unassigned players have no group-derived format priority. A later group assignment updates the priority."
-      },
-      {
-        "title": "Read progress accurately",
-        "body": "Core and format completion are separate. Core complete does not mean every format is complete. Red overdue indicators mean an incomplete required section is past its date; they do not label every incomplete Core or player as overdue."
-      },
-      {
-        "title": "Review or remind when necessary",
-        "body": "In Players → Show players, choose Overdue Player Plans. Only unfinished required sections whose due date has passed are included. Club Admin can tick individuals or Select all shown, then Remind selected. Review the message and send; it links directly to My Player Plan. Completed players and anyone reminded within 48 hours are skipped at send time. Remove an active due-date requirement when it is no longer needed."
-      },
-      {
-        "title": "Choose reminder delivery",
-        "body": "Every reminder appears in the player’s Messages inbox. Enabled Club messages devices receive a phone alert; otherwise an email links to the message. Email also for everyone selected adds email for all recipients. Expand Email also for selected people to choose particular recipients. A player need not tick an installation declaration: the system checks enabled subscriptions. An installed icon alone is not an enabled notification."
-      }
-    ],
-    "sort_order": 120,
-    "active": true,
-    "video_ids": [],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "player_plan": {
-    "capability_key": "player_plan",
-    "title": "Build and update your Player Plan",
-    "purpose": "Choose your shots. Know when to commit.",
-    "short_explanation": "Build Core and the formats your club needs. Your completed plan opens as four expandable tiles: Core, T20, Limited Overs and Long Form. Use Edit Player Plan to change answers.",
-    "target_tab": "$player_plan",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Start with Core",
-        "body": "Open My Player Plan. Describe your strengths and trusted shots, your Danger signs and your Reset. Completing Core builds the foundation; it does not complete all three format plans. A trusted shot deliberately added from a match-up appears as a checked option in Core and can be deselected later. This does not confirm that you have practised it or complete other unanswered questions.",
-        "target_tab": "$player_plan"
-      },
-      {
-        "title": "Follow your next step",
-        "body": "Choose Complete your Player Plan on Player Home to continue the required section, or open My Player Plan. Required or overdue formats come from your Playing Groups. If unassigned, there is no group format priority. Ask Club Admin if your group membership is missing."
-      },
-      {
-        "title": "Complete formats in your own words",
-        "body": "Work through the formats you play, following your club priority. In the editor, open Formats & progress to switch sections or check due dates. Answers save automatically; a section is complete when its required questions are answered. Check the saved indicator before leaving. Core complete does not mean every format is complete."
-      },
-      {
-        "title": "Review and keep improving",
-        "body": "Once Core and required formats are complete, My Player Plan shows collapsed Core, T20, Limited Overs and Long Form tiles. Staff opening a player’s Player Plan see the same tiles and completion status. Tap View to read one; Close folds it away. Edit Player Plan appears only with edit access; Done editing returns. Edit your Player Plan on Player Home opens the editor directly. Focus changes do not rewrite your plan. Save match preparation separately."
-      },
-      {
-        "title": "Train once the foundation is ready",
-        "body": "Core plus a completed format unlocks personalised training for that format. You can still read shared coaching notes/actions in How We Train while plan sections are unfinished.",
-        "target_tab": "howwetrain"
-      }
-    ],
-    "sort_order": 130,
-    "active": true,
-    "video_ids": [
-      "player-plan"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "current_focus": {
-    "capability_key": "current_focus",
-    "title": "Choose and review your current focus",
-    "purpose": "Keep the next useful practice priority in view.",
-    "short_explanation": "Choose up to two priorities from saved plan answers, coaching conversations or innings reflections. Manage them in How We Train and use the same focuses during innings review.",
-    "target_tab": "$training",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 135,
-    "active": true,
-    "tutorial": [
-      {
-        "title": "Start with an existing record",
-        "body": "In How We Train, open the My Current Focus tile, then choose Choose a focus or Add a second focus. Select a saved Player Plan answer, coaching conversation or your own innings reflection. The source fills in the wording for you to refine. You can have up to two current focuses in total, across all formats. Player Home links to How We Train rather than repeating these controls.",
-        "target_tab": "$training"
-      },
-      {
-        "title": "Choose a useful focus",
-        "body": "Keep the wording specific enough to practise, such as “Commit to my scoring options against spin.” The source label identifies where it came from, including the format when relevant. An optional category helps coaches find shared training themes. Choosing or changing a focus does not alter the original record."
-      },
-      {
-        "title": "Agree a coach’s proposal",
-        "body": "A coach with edit access uses Suggest a focus or Suggest a change. Choose Accept suggestion to make it active, or Decline to leave your current focus unchanged. Pending suggestions do not replace active focuses. Your own choice is marked Chosen by you; an accepted coach suggestion is marked Agreed with that coach."
-      },
-      {
-        "title": "Use the same focus through the week",
-        "body": "Your accepted focuses appear inside My Current Focus in How We Train and in innings review. Coaches with existing access can include them in Training preparation. Match preparation starts with bowler match-ups, without a separate focus field. A match-up marked for training appears in For my next match in How We Train and is shared with coaches who can access you. It does not replace either of your ongoing current focuses."
-      },
-      {
-        "title": "Keep working on this",
-        "body": "After practice or an innings, choose Keep working on this, then Save next step when the focus is still useful. Add what you learned about the decision, execution or preparation. A good decision can remain worth practising even after a low score or dismissal."
-      },
-      {
-        "title": "Adjust the focus deliberately",
-        "body": "Choose Adjust the focus to refine the next practice priority, then Save next step. Coach-proposed changes wait for Accept suggestion. To change a current focus directly, players use Change focus; coaches use Suggest a change. The Player Plan and original coaching note remain unchanged."
-      },
-      {
-        "title": "Discuss it in the existing conversation",
-        "body": "Choose Discuss it, then Save next step when you need help deciding what comes next. This uses Coach Conversations and its existing alerts. An open linked conversation is reused. Plan-related coach feedback still waits for the player’s independent reflection. A preferred conversation participant gains no wider focus access."
-      },
-      {
-        "title": "Finish a focus without closing its conversation",
-        "body": "Choose Finish this focus when it is no longer a current practice priority. Its history remains available. This does not mark a linked conversation Discussed / Actioned or clear its review date; complete that conversation separately when it has been dealt with."
-      }
-    ],
-    "video_ids": [
-      "training"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "how_we_train": {
-    "capability_key": "how_we_train",
-    "title": "Use How We Train",
-    "purpose": "Practise the shot and the decision.",
-    "short_explanation": "Start with Training ideas from my plan. Open the coloured My Current Focus, For my next match or Training Check-in tile when needed. Coaching notes and supporting details are expandable below.",
-    "target_tab": "$training",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Open the training view",
-        "body": "Training ideas from the Player Plan come first. Open a completed format for personalised ideas. Players then have My Current Focus, For my next match and Training Check-in tiles. Staff opening Training Plan from Players see the same order, with Current focus and For their next match tiles; they cannot submit a player’s check-in. Select a tile to expand it or close it. Switching tiles keeps unsaved entries. Coach notes & actions and club principles sit below.",
-        "target_tab": "$training"
-      },
-      {
-        "title": "Choose useful work",
-        "body": "Prepare early enough to guide practice. Tick Make this a training focus for this week, then Save preparation. Open For my next match for those cues through the match date on your device. Recording the innings, Did not bat or Match cancelled removes them. View preparation keeps the history. The tick alone does not request a conversation, change your plan or ongoing focuses, or record completed practice. No tick does not prove a shot is unpractised."
-      },
-      {
-        "title": "Keep agreed coaching work visible",
-        "body": "Open Coach notes & actions to see observations, training actions and notes. Its heading shows current notes and any reviews due. A coaching alert opens the relevant note. Ask a coach is beside the page heading. Open My Current Focus to see your priorities and coach suggestions; Manage focus opens change/finish controls. A coach’s suggestion requires your acceptance. Shared work remains available before a plan is complete."
-      },
-      {
-        "title": "Reflect and review",
-        "body": "Use My Innings in the top menu to reflect independently before reading plan-related coach feedback. Review a focus with Keep working on this, Adjust the focus or Discuss it, then Save next step. Discuss it uses Coach Conversations and its alerts. Finish this focus does not mark a conversation Discussed / Actioned."
-      },
-      {
-        "title": "Back preparation and commitment",
-        "body": "A well-chosen shot can still end in a wicket. Discuss decision and execution separately. A shot deliberately added to your Player Plan from a match-up becomes part of the saved plan used by personalised How We Train; this does not prove readiness or automatically create an ongoing focus. Support confidence and enjoyment, and agree useful practice."
-      }
-    ],
-    "sort_order": 140,
-    "active": true,
-    "video_ids": [
-      "training"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "training_preparation": {
-    "capability_key": "training_preparation",
-    "title": "Prepare for training with your Playing Group",
-    "purpose": "See useful priorities before the next session.",
-    "short_explanation": "Choose a Playing Group and bring current focuses, selected match-up training cues, conversations and review dates together for players you already have permission to view.",
-    "target_tab": "training_preparation",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain"
-    ],
-    "sort_order": 142,
-    "active": true,
-    "tutorial": [
-      {
-        "title": "Open Training preparation",
-        "body": "Open Training preparation from Players. This is a preparation view of existing player work; it does not assign players to groups or create a separate training plan.",
-        "target_tab": "training_preparation"
-      },
-      {
-        "title": "Choose the Playing Group",
-        "body": "Choose All accessible players, Currently unassigned or an active Playing Group. A player appears once in the selected view. Only players within your existing access are included; a group may contain other players you cannot see. Refresh and browser Back keep your selected group."
-      },
-      {
-        "title": "Read current priorities and reviews",
-        "body": "See accepted focuses, selected match-up cues, open conversations and reviews due. Outside-plan conversations show the number of shots and whether training focus is unselected. Several shots carry the strongest caution. Open conversation shows each bowler, shot and the player’s reason. Read it before judging readiness: no tick does not mean no practice. Match-up training cues leave this view after their match date or once played, cancelled or marked Did not bat."
-      },
-      {
-        "title": "Look for work players can share",
-        "body": "Shared training themes shows a category when at least two visible players have chosen that category for an active focus. It uses selected categories, not an AI judgement or matching words; Other is excluded. Read each focus before planning: a shared theme does not mean an identical technique or Player Plan."
-      },
-      {
-        "title": "Propose and agree a useful change",
-        "body": "Use Open training & focus to see plan-derived training ideas, then Current focus and For their next match. Staff with edit access can Suggest a focus or Suggest a change; view-only access stays read-only. The player uses Accept suggestion before it becomes active. Keep up to two current focuses across all formats and follow up in the existing Coach Conversation."
-      },
-      {
-        "title": "Keep the loop connected",
-        "body": "After practice or an innings, use Keep working on this, Adjust the focus or Discuss it. Completing a conversation and retiring a focus are separate actions. Refresh for the latest saved information; this view does not promise instant cross-device updates."
-      }
-    ],
-    "video_ids": [
-      "training"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "my_innings": {
-    "capability_key": "my_innings",
-    "title": "Track your season in My Innings",
-    "purpose": "Prepare early enough to guide practice, then keep the innings and what you learned together.",
-    "short_explanation": "My Innings shows one compact row per innings, shared with authorised match observations and Match review. Prepare early, record your innings and choose View for its preparation, reflection and available coaching contributions.",
-    "target_tab": "$innings",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 145,
-    "active": true,
-    "tutorial": [
-      {
-        "title": "See the season together",
-        "body": "My Innings starts with entries collapsed into compact rows: date, opposition, format, score or status, and View. Choose View to expand one entry in place; Close collapses it. Only one entry is expanded at a time. Empty optional sections stay out of the way. Filter by season or format; seasons run July–June. Open Who can see my preparation? for sharing details; Show me how opens guidance.",
-        "target_tab": "$innings"
-      },
-      {
-        "title": "Prepare before a match",
-        "body": "Choose Prepare for a match early enough to guide training. Enter date, format, opposition and status. Match-ups is open directly below these details: start with Add a bowler. The copy option below Match-ups can reuse a previous entry. Fielders to watch and Personal contest remain optional. Tick Make this a training focus for this week on a useful match-up, then Save preparation to share its cues with permitted coaches. A training tick alone does not create a coaching alert."
-      },
-      {
-        "title": "Choose scoring options deliberately",
-        "body": "Tap saved-plan shot buttons. Under Add another scoring shot, type a name to reveal Add shot to preparation. It adds the shot to the draft and brings its selection and any warning into view without opening the keyboard. Every selected extra still outside your saved plan needs a reason; training selection does not waive it. Deselecting it or successfully adding it to your saved Player Plan removes that requirement. Outside-plan shots flag a conversation when you Save preparation."
-      },
-      {
-        "title": "Note fielders and an optional personal contest",
-        "body": "Fielders to watch accepts names or positions, tags and notes. Personal contest optionally names someone you would hate to get out to. These and match-up reviews remain private. Selected training match-ups are shared with permitted coaches. An outside-plan conversation shares only the flagged bowler and shot names, each reason, training-focus choices, and date, format and opposition. Other preparation notes stay private."
-      },
-      {
-        "title": "Copy previous match preparation",
-        "body": "Below Match-ups, open Playing the same team again? Copy the bowlers into this match preparation. Choose an earlier entry, then Copy into this preparation. This brings across bowlers, scoring shots, shot explanations, fielders and personal contest. Review them for this match. Date, result, reflections and the earlier focus note are not copied. Choose training focuses again. Existing typed work is not silently replaced."
-      },
-      {
-        "title": "Turn preparation into your innings",
-        "body": "Choose View, then Add my innings. One preparation and one recorded innings for you on the same date, format and innings number appear together despite different opposition spelling. If several matches are possible, use Choose recorded innings, then Link existing innings. This saves the link before reflection; saving a uniquely matched innings also retains it. Original preparation stays unchanged. Use innings number for separate innings. Did not bat needs no invented reflection."
-      },
-      {
-        "title": "Add an innings without preparing first",
-        "body": "Add an innings still works on its own. Date and format are required. Capitalisation and extra spaces in the opposition name do not create another innings. If a possible existing innings has different wording, choose that innings rather than creating it again. You can fill a blank score and correct a score you entered; staff-recorded or official scores stay protected. Your note, video and reflection stay editable, while plan-related feedback waits for your independent reflection."
-      },
-      {
-        "title": "Review only the bowlers you faced",
-        "body": "In the innings reflection, each saved match-up offers Used my approach, Adapted to the situation, Went away from it or Didn’t face this bowler. A short note is optional. Didn’t face removes that bowler’s follow-up prompt but keeps the preparation; you can undo it. The optional personal contest has Yes, No or Didn’t face. These are reflections, not points or pass/fail results."
-      },
-      {
-        "title": "Keep your independent reflection",
-        "body": "Save innings works without a reflection. Reflect on this innings records your own view when both Player Plan questions are answered. Scores, video, match-up reviews and personal-contest answers do not unlock plan-related coach assessments or video. General notes stay available. Saving an innings does not itself request a conversation. Outside-plan shot flags apply when saving upcoming preparation, without changing the independent-reflection rule."
-      },
-      {
-        "title": "Keep useful video with the innings",
-        "body": "Add an optional YouTube Share link for a shot, decision or dismissal. Use Start at, or note start and finish times in What should we look at? Sharing only one ball requires a separately trimmed clip on YouTube. Club Batting stores links and notes, never video files. Recorded innings keep their usual staff access. Selected training cues and the disclosed outside-plan shot context are shared with permitted coaches; other preparation and match-up reviews remain private."
-      },
-      {
-        "title": "View what happened and choose the next step",
-        "body": "View also preserves earlier saved match-focus notes. Added here marks a shot entered for that match-up, even if later added to your plan. Each preparation uses one outside-plan conversation. Changed shots, reasons or training choices update and alert the same thread; a changed outside-plan intention reopens it if completed. Unchanged saves do neither. Removing all outside-plan shots does not close the conversation. Use Discussed / Actioned when dealt with."
-      },
-      {
-        "title": "Keep your place without extra work",
-        "body": "Save preparation saves the bowler details, shots, reasons and training choices together. Adding a shot to the form does not save it. Add to My Player Plan is a separate action that saves directly to your plan. Refresh reloads saved data; save before leaving. Navigation warns about unsaved work. My Innings opens with rows collapsed. Use the app before or after cricket—no training-time phone use or essay is required."
-      },
-      {
-        "title": "Read contributions on one shared innings",
-        "body": "Choose View on a compact row for your saved preparation, score, reflection and available coaching notes. Several staff members can contribute; each keeps their own authorship. Once the preparation is linked, later contributions use that innings rather than its opposition spelling. Playing Groups help find players. The fixture’s published team or explicitly chosen match players supplies the Match Review list. A quick match review can be completed later. A Has no plan entry points you to your Player Plan. General notes remain immediately visible."
-      },
-      {
-        "title": "See the imported score with the innings",
-        "body": "When authorised staff confirm a PlayCricket score in Match Review, it appears on your shared innings. View expands the scorecard details and source link alongside your preparation, reflection and available coaching contributions. Unknown statistics remain blank. Imported and official scores are protected; ask authorised staff for a correction. Scores do not replace your independent reflection or unlock plan-related coaching feedback."
-      }
-    ],
-    "video_ids": [
-      "prepare-predict"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 4
-  },
-  "make_your_call": {
-    "capability_key": "make_your_call",
-    "title": "Make your prediction",
-    "purpose": "Share a prediction and enjoy a club game around the cricket.",
-    "short_explanation": "An optional club game with blind predictions and the awards your club chooses. Club Conversation is off until Club Admin enables it. Staff release predictions and results for completed periods; your match preparation stays private.",
-    "target_tab": "make_your_call",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 146,
-    "active": true,
-    "tutorial": [
-      {
-        "body": "Club Admin chooses Set up your club’s awards at the top right. After the first setup is saved, this becomes Edit your club’s awards setup. Tick the awards to include, set prizes and claim conditions, then save once. Choose Weekly or Every 4 weeks for recurring awards. First award week anchors fixed four-week blocks. Unticking an award keeps its settings but removes it from the current page and future announcements.",
-        "title": "Set up the club game once"
-      },
-      {
-        "body": "Choose Predict Your Score to open Prepare for a match in My Innings. Enter the match start date and your score beside Status, then Save preparation. A score enters the club predictions automatically; leave it blank to prepare without entering. Members see your name and match details; scores stay hidden until awards are released. Entries close at the start of the match date in club time. Entered predictions and match details are fixed; tactics remain editable and off the club board.",
-        "title": "Predict your score from My Innings"
-      },
-      {
-        "body": "Predictions close automatically at midnight as each match date begins, in the club timezone: Tuesday night for Wednesday, Friday night for Saturday. This blocks late entries and changes to peer predictions without staff action. Published player predictions and match details freeze on entry. Two-day games keep the original start-date deadline, even when batting happens later. Awards use the recorded result date; the award week never extends prediction time.",
-        "title": "Understand when predictions lock"
-      },
-      {
-        "body": "All signed-up club members, including coaches and non-playing members, can predict teammates’ scores. Your own entry stays out of this list. Choose Predict or Change prediction before the deadline, type runs in the row and Save. Closed entries show Closed with no action button. Needs my prediction shows open entries you have not predicted for.",
-        "title": "Find a player and make your prediction"
-      },
-      {
-        "body": "Player predictions, club estimates and results stay hidden until staff release the weekly or four-week awards. The released table then shows those figures; Results history holds announced winners and scores. Three peer predictions are needed for the club estimate: their median, rounded up. The player’s own prediction is separate. Fewer than three means no club-estimate awards, but settled predictions can count towards Best Judge.",
-        "title": "Read the club estimate"
-      },
-      {
-        "body": "Authorised Admin or granted staff choose Record results at the top of Make your prediction, separate from the prediction rows. Open a player’s score, set the date it occurred, enter runs and not-out status, Did not bat or Cancelled, then Save official result. Corrections need a reason. Scores appear in My Innings; awards stay hidden until released. Recording permission does not stop a member making predictions.",
-        "title": "Confirm the result"
-      },
-      {
-        "body": "Score above the club’s prediction to earn batting points. Shorter games carry more weight to allow for different scoring opportunities. The weekly or four-week award uses your best innings in that period; the season award adds your innings points together. Ties share. These points recognise the game’s results, not batting ability or whether you followed your Player Plan.",
-        "title": "Earn batting points"
-      },
-      {
-        "body": "This optional season award is off by default. Club Admin ticks The Grinch in Edit your club’s awards setup and can change its name. It recognises the regular doubter whose low predictions keep being proved wrong across several weeks, rather than one unlucky prediction. Unticking it keeps the underlying predictions.",
-        "title": "Choose the Grinch award"
-      },
-      {
-        "body": "Back a teammate more highly than the other voters, then have the batter reach or pass your prediction. The biggest vote of confidence that the batter lives up to wins. Ties share.",
-        "title": "Find You believed in them"
-      },
-      {
-        "body": "Every available award has a checkbox in Edit your club’s awards setup. Existing main awards start selected; Grinch starts unselected. Wildest prediction is no longer offered. Disabled awards stay out of current award groups and future releases. Previous announcements remain in Results history. With all awards off, staff can still release completed predictions and results.",
-        "title": "Choose the awards your club wants"
-      },
-      {
-        "body": "Club Conversation is off until Club Admin ticks Include Club Conversation in Edit your club’s awards setup and saves. If enabled, members can post named weekly comments. Authors can remove their messages and members can report them to Admin. Unticking the option hides the conversation and stops new posts; previous messages are retained for re-enabling. Chat earns no engagement credit and adds no private player access.",
-        "title": "Choose whether to include Club Conversation"
-      },
-      {
-        "body": "Predict much lower than everyone else, then have the batter prove you wrong by reaching the other voters’ estimate. The biggest qualifying underestimate wins. This is light-hearted recognition: no minus points, debts or enforced punishment.",
-        "title": "Find That’s just nasty"
-      },
-      {
-        "body": "Get closest to your teammates’ actual scores overall. Too high and too low count the same. Make several predictions to qualify; an isolated lucky guess is not enough. Only confirmed played innings count. Did not bat, cancellations and your own prediction do not count. Ties share.",
-        "title": "Find Best Judge for the award period"
-      },
-      {
-        "body": "Each enabled season award has its tally inside How it works. Season Best Judge rewards being consistently close over several weeks. Every eligible prediction counts. Live standings change with corrections; held standings need staff release. There is no separate season standings section.",
-        "title": "Follow the Season Best Judge tally"
-      },
-      {
-        "body": "Club Admin chooses Edit your club’s awards setup at the top right, then finds Result permissions inside the editor. Tick the captains and coaches who may enter official results and choose Save permissions once. Saved ✓ confirms the complete selection. A stale or failed save keeps your selections to review. Admin access stays automatic. These grants do not widen existing player access; authorised staff may enter their own score.",
-        "title": "Save result permissions together"
-      },
-      {
-        "body": "Only the awards selected by your club appear. Weekly Awards, Four-week awards and Season awards appear when relevant. Open How it works for a short explanation; enabled season awards include their tally. Prize and collection details are visible only to staff who can release awards. A fully unreleased section shows Not announced once. Tap, click or use the keyboard; desktop hover previews details.",
-        "title": "Read the awards"
-      },
-      {
-        "body": "Make your prediction opens on the current club week. The Predictions heading includes its week range; choose Change week to open its date controls. Four-week periods and the current season follow automatically on the main page. To browse announced results, use Results history and its Season and Awards filters. Staff choose release dates separately in Review & release awards. Four-week periods remain fixed 28-day blocks from the First award week.",
-        "title": "Choose another week or find past results"
-      },
-      {
-        "body": "Choose Results history for released awards and match results. It starts with All seasons and All awards; filter by Season or Weekly, Four-week and Season awards. Each period is one compact row. View shows announced winners and scores; Hide collapses it. Prize and collection details are staff-only. Unreleased results never appear, even for staff. Later corrections appear only after an explicit updated announcement. Engagement honours include all qualifying current players automatically.",
-        "title": "Browse announced results"
-      },
-      {
-        "body": "Club Admin, Head Coach, Coach or Captain chooses Review & release awards. It starts with the previous completed week or four-week period, independently of the board. Choose an older completed period if needed. Check its exact date range, then Release awards for that range. Current and future periods cannot be released, even with voting closed. Included predictions, club estimates and results appear with the announcement. The first four-week award waits until all four weeks finish.",
-        "title": "Release the club’s award results"
-      },
-      {
-        "body": "Released predictions and honours keep the details staff reviewed. Later results and corrections require Review updated awards, then Update awards for the selected date range. An entry added later stays blind until an update includes it. A weekly release does not announce four-week honours or a held season. Season releases never reveal individual predictions. This publishes inside Club Batting, not by email or social media.",
-        "title": "Update a released announcement deliberately"
-      },
-      {
-        "body": "Live season standings is the default: members follow provisional points, Best Judge and other season leaders from settled results. Club Admin may choose Hold until released. Held standings need a separate season release and deliberate updates. Neither live season totals nor a season release reveal individual predictions. Weekly and four-week announcements still need release, and only those announcements reveal their included entry details.",
-        "title": "Choose how the season standings appear"
-      }
-    ],
-    "video_ids": [
-      "prepare-predict"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 4
-  },
-  "weekly_engagement": {
-    "capability_key": "weekly_engagement",
-    "title": "Engagement award",
-    "purpose": "Recognise players preparing, checking in on their own training and choosing a next step after review.",
-    "short_explanation": "Players qualify through their own preparation, training check-in and innings review. Staff duties earn no credit. Playing coaches, captains and admins can qualify through their personal player activity. Club Admin may turn the award off; Training Check-in remains available.",
-    "target_tab": "make_your_call",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 147,
-    "active": true,
-    "tutorial": [
-      {
-        "title": "Everyone’s player engagement counts",
-        "body": "Qualifying personal player activity counts automatically: there is no sharing opt-in. Every qualifying current player appears in the club’s engagement honours after staff release the completed period. This is separate from entering the prediction game. Your progress stays visible to you; award confirmation waits for release. The club sets the period. Prize and collection details are for staff who can release awards. Private answers and coaching notes retain their existing access."
-      },
-      {
-        "title": "Complete two different categories",
-        "body": "A qualifying club week needs two of Prepare, Training check-in, and Review and continue. Credit belongs to the club week you saved the activity, not the innings date. Each category counts once per week. Four-week awards group qualifying weeks within the displayed fixed period. Page opens, repeated saves, time spent, votes, reactions and comments do not count. This recognises recorded engagement, not improved batting."
-      },
-      {
-        "title": "Playing staff qualify as players",
-        "body": "Only activity you save for yourself as a registered player counts. Playing coaches, captains and admins can qualify through their own preparation, training check-in and innings review. Managing roles or groups, recording results, Match review, and coaching another player earn no credit. Non-playing staff cannot earn this award. The same player rules apply whatever your club role; it is not an award for whoever spends the most time in the app."
-      },
-      {
-        "title": "Prepare with a useful cricket intention",
-        "body": "Save preparation for a match within the next 14 days, before midnight starts its nominated date in the club timezone, with a bowler and real scoring choices. An empty entry or prediction alone does not qualify. Use the plan you trust; no invented edit is needed. The same preparation cannot earn fresh credit in a later week. Credit is for the week of saving."
-      },
-      {
-        "title": "Make a short training check-in",
-        "body": "In How We Train, open the Training Check-in tile below Training ideas from my plan. Choose a current focus or saved plan answer. Pick Worked on it, Changed my approach or Couldn’t this week, then Keep working on this, Revisit my focus or Speak with someone. Save check-in records that intention only; use your focus or Coach Conversations to make the change or request. It is private and self-reported. Couldn’t this week can count as reconsideration, never proof of practice. Notes are optional."
-      },
-      {
-        "title": "Review and choose what happens next",
-        "body": "Save your independent innings reflection, then deliberately choose Keep working on this, Adjust the focus or Discuss it in the existing innings focus review. Save the next step within 14 days of the innings. The system checks both records; automatic coaching flags do not count as your decision. Credit belongs to the week of that saved next step. Each innings can qualify once. Completing a focus does not close a conversation."
-      },
-      {
-        "title": "Return without catching up on missed weeks",
-        "body": "If injured, not selected or the match is cancelled, do not invent an innings reflection. Useful preparation and a training check-in can supply the two categories. A missed week removes no previous progress and creates no streak penalty. Historical records are not backfilled into awards. Choose the next useful action when you return."
-      },
-      {
-        "title": "Earn weekly or four-week engagement recognition",
-        "body": "A weekly award needs one qualifying week. A four-week award needs two different qualifying club weeks within that fixed 28-day period, with two different activity categories in each. Periods run from the club’s First award week: weeks 1–4, then 5–8, with no rolling overlap. All qualifying current players appear with other honours after staff release the completed period. Private weekly progress stays available; no extra form is needed."
-      }
-    ],
-    "video_ids": [],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "feedback_loop": {
-    "title": "Player and coach feedback",
-    "purpose": "Learn from the innings, not just the dismissal.",
-    "short_explanation": "Match review and individual Match Observations contribute to one innings. Training Observations stay separate. Use Coach Conversations for discussion, notes and the agreed next step.",
-    "tutorial": [
-      {
-        "title": "Add an observation",
-        "body": "In Players, open Coach Conversations and choose Add match observation or Add training observation. Match review beside Players offers a faster team table. Match entries use player, date, format, opposition and innings number. Opposition capitalisation and extra spaces are ignored; select an existing candidate if other wording differs. A unique matching preparation joins regardless of opposition spelling. Staff need edit access; each author edits only their contribution.",
-        "target_tab": "$feedback",
-        "focus": "coach_conversations"
-      },
-      {
-        "title": "Choose whether it concerns the Player Plan",
-        "body": "For a general note, select This isn’t about their Player Plan. The player reads it immediately. For plan-related match feedback, the player records their own view before seeing staff answers or video. Has no plan points to completing the Player Plan without demanding a fictional reflection. Did not bat records participation without a reflection request. Training observations remain immediately visible."
-      },
-      {
-        "title": "Record before signup",
-        "body": "Selected players do not need an account before a captain or coach records scores and observations. The person-and-clock icon means signup is pending. Choose Has no plan when appropriate, or use a general observation. Signup through Club Batting or Teams uses the same verified club account and keeps the earlier history. A name alone never claims a record.",
-        "quick_start": true
-      },
-      {
-        "title": "Compare decisions and execution",
-        "body": "For plan-related feedback, consider the whole innings and the dismissal ball separately. Recognise preparation and commitment, even when execution falls short. Use different perspectives to start a useful conversation."
-      },
-      {
-        "title": "Attach a video when useful",
-        "body": "Both Match and Training Observation forms have an optional YouTube video link and What should we look at? note. Use a Share link, with Start at if useful. Plan-related match video waits for the player’s independent reflection; general notes and training videos are visible immediately."
-      },
-      {
-        "title": "Flag a conversation when needed",
-        "body": "Select Needs a coaching conversation, add a training focus, or set an optional review date. These feed the same Coach Conversations filter and player alerts. A plain note stays Current without automatically requesting a conversation."
-      },
-      {
-        "title": "Record what happens next",
-        "body": "Use Keep working on this, Adjust the focus or Discuss it to connect the review to practice. Discuss it continues or opens a Coach Conversation. A coach’s focus proposal needs player acceptance. Record discussion progress and use Discussed / Actioned only when that conversation has been dealt with."
-      },
-      {
-        "title": "Scan observations and filter formats",
-        "body": "Open a Coach Conversation to read the observation immediately. All innings underneath keeps match records as one-line rows: choose View for all attributed contributions, comments and available video. All formats or one format filters this history. Several observers contribute to the same innings without replacing each other’s assessment."
-      }
-    ],
-    "capability_key": "feedback_loop",
-    "target_tab": "$feedback",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 150,
-    "active": true,
-    "video_ids": [
-      "match-review-teams",
-      "match-review-manual",
-      "match-observation-first"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "coach_conversations": {
-    "title": "Coach Conversations",
-    "purpose": "Discuss the evidence and agree the next step.",
-    "short_explanation": "One shared conversation for observations, player requests, discussion notes and optional review dates. Use Account > Coach Conversations at any time; authorised staff can also use the Players filter. Coaching beside Account appears only for unread updates or an open request.",
-    "tutorial": [
-      {
-        "title": "Find conversations needing attention",
-        "body": "In Players, choose Coach Conversations from Show players to see requests and follow-ups. Typing a name clears this conversation-only filter so a player with no open conversation can still be found. Grade and Currently unassigned selections still narrow name searches. Outside-plan preparation choices join this same list and Coaching alert; the card shows the shots, reasons and training choices.",
-        "target_tab": "$feedback",
-        "focus": "coach_conversations"
-      },
-      {
-        "title": "Open one shared conversation",
-        "body": "Select Open on the player’s highlighted card. The observation comment, author and innings or training details appear immediately. Player Plan and Training Plan links remain at the top; All innings underneath opens the wider one-line history. Only the original author can edit an observation. Plan-related coaching feedback still waits for the player’s independent reflection."
-      },
-      {
-        "title": "Add notes or agree an action",
-        "body": "Choose Add note, write the update and press Save note. Saved ✓ confirms success and the note appears in Notes and updates. Review a current focus separately with Keep working on this, Adjust the focus or Discuss it. A coach proposal still needs player acceptance; access to one request does not grant wider player access."
-      },
-      {
-        "title": "Use a review date only when useful",
-        "body": "In Add note, tick Add review date to reveal a blank date field. Save note stores the date with your note. Without a new date, an existing date stays unchanged; Remove current review date clears it on saving. A review date flags coach and player, and is highlighted when due. Removing it clears that reminder but leaves other active conversation reasons."
-      },
-      {
-        "title": "Complete it and keep the history",
-        "body": "Press Mark Discussed/Actioned to complete the conversation immediately; no note or date is required. The button changes to Discussed/Actioned ✓ after a confirmed save. Alerts clear and the conversation stays in Past. Reading only clears unread status. Changed outside-plan intentions may reopen the same conversation; unchanged saves do not. Removing shots or completing a current focus does not complete a conversation."
-      }
-    ],
-    "capability_key": "coach_conversations",
-    "target_tab": "$feedback",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 160,
-    "active": true,
-    "video_ids": [
-      "conversation"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "request_conversation": {
-    "capability_key": "request_conversation",
-    "title": "Request a Coach Conversation",
-    "purpose": "Ask for help from someone in your club.",
-    "short_explanation": "Players can start a conversation, choose a preferred club member and optionally attach a YouTube clip. The request joins the existing coaching workflow.",
-    "target_tab": "conversations",
-    "tutorial": [
-      {
-        "title": "Start with your question",
-        "body": "Use Request a Coach Conversation on Player Home, Ask a coach in How We Train, or Account > Coach Conversations. You do not need the Coaching alert button to make your first request. You can request help before completing your Player Plan and before the club publishes its setup. Say what you would like to discuss.",
-        "target_tab": "conversations"
-      },
-      {
-        "title": "Choose Any coach or a named person",
-        "body": "Any coach goes to staff who already have coaching access to you. Named coaching staff appear first, with their club-defined titles; other club members follow. Search by name or coaching title. You can select a Club Admin, non-playing coach, playing captain or teammate. Searching keeps your selection."
-      },
-      {
-        "title": "Add a clip if it helps",
-        "body": "Paste an optional YouTube video link and a short note about what to look at. YouTube Share > Start at can include the exact moment. A link is optional; your message is enough."
-      },
-      {
-        "title": "Know who can see it",
-        "body": "Your preferred person and club staff who already have access to your coaching records can read the request. A selected teammate gets only that conversation and its attached video, not your full Player Plan or other notes. It is not a private message hidden from authorised club staff."
-      },
-      {
-        "title": "Pick up a request or say you are unavailable",
-        "body": "The preferred person receives a Coaching alert. Open Coaching > Open Coach Conversations and choose I can help, or add a progress note. The button stays available while the request is open, even after it has been read. I’m unavailable leaves the same request open for the authorised coaching team and records the response for the player. A person without wider access loses access to the thread after declining."
-      },
-      {
-        "title": "Follow through in the same conversation",
-        "body": "Use Add note and Save note for progress, with Add review date only if useful. Press Mark Discussed/Actioned to finish without needing a note. A player can separately Withdraw my request if no longer needed. Past conversations retain the history; open requests also appear in the staff Coach Conversations filter."
-      }
-    ],
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 165,
-    "active": true,
-    "video_ids": [
-      "conversation"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "youtube_video": {
-    "capability_key": "youtube_video",
-    "title": "Use YouTube video links",
-    "purpose": "Share a link to footage hosted on YouTube.",
-    "short_explanation": "Attach a YouTube link to a coach’s Match or Training Observation, a player’s conversation request, or a My Innings entry. Video stays on YouTube; notes and discussion stay in Club Batting.",
-    "target_tab": "conversations",
-    "tutorial": [
-      {
-        "title": "Put the video on YouTube first",
-        "body": "Videos are uploaded to YouTube, not Club Batting. Club Batting stores only a YouTube link and optional note; it does not upload, host, analyse or edit video files. Use footage you have permission to share. YouTube controls whether the viewer can watch it."
-      },
-      {
-        "title": "Copy a link to the useful moment",
-        "body": "For a longer video, pause just before the ball. Select YouTube Share, turn on Start at (or the displayed time on a phone), then Copy link and paste it into Club Batting. In What should we look at?, write e.g. “Watch 2:14–2:24 — my footwork against the short ball.” If the time option is unavailable, use the normal link and include both times in your note."
-      },
-      {
-        "title": "Share only one ball or shot",
-        "body": "Trim a copy of your own footage in your phone/computer video editor, from a few seconds before the delivery to just after the shot. Keep the original. Upload the short copy to YouTube as Unlisted, copy its Share link, and paste it into the observation, request or My Innings entry. Only use footage you have permission to share."
-      },
-      {
-        "title": "A start time is not an end time",
-        "body": "A timestamp link starts at the chosen moment; it does not automatically stop after the shot or restrict access to the rest of the video. If you want to share only that ball, upload a separately trimmed copy or ask the footage owner for one. Club Batting does not trim the original YouTube video."
-      },
-      {
-        "title": "Attach it to the right record",
-        "body": "Coaches with edit access add video to a Match or Training Observation and can edit their own observation. Players add video to a conversation request, or add/edit/remove a link through My Innings → View → Edit innings. A prepared match can receive its video when you choose Add my innings. Adding a video does not automatically request a conversation."
-      },
-      {
-        "title": "Keep the independent reflection",
-        "body": "For plan-related Match Observations, the player adds their own reflection before seeing the coach’s assessment or video. General notes and training videos are immediately visible. A player’s own innings video is available to staff with existing player access; a preferred conversation partner gains no extra player-record access."
-      },
-      {
-        "title": "Open YouTube and return to the discussion",
-        "body": "Open video on YouTube opens a separate tab. Watch there, then return to Club Batting to add discussion/progress notes or mark Discussed / Actioned. No automatic video assessment or YouTube comment import occurs."
-      },
-      {
-        "title": "Understand unlisted links",
-        "body": "An unlisted YouTube video can be viewed and shared by anyone with its link. Club Batting’s permissions cannot stop someone forwarding that link. A private video requires the viewer to have YouTube access. If a video is private, deleted or unavailable, its owner must resolve access on YouTube."
-      }
-    ],
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 166,
-    "active": true,
-    "video_ids": [],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 5
-  },
-  "notifications": {
-    "capability_key": "notifications",
-    "title": "Read coaching updates and reviews",
-    "purpose": "Notice what is new and what still needs attention.",
-    "short_explanation": "Unread notes and open conversations are different: reading clears the badge; completion clears the work.",
-    "target_tab": "conversations",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Look beside Account",
-        "body": "The Coaching bell beside Account appears when you have an unread coaching update or an open conversation request. Its number counts unread updates. Reading clears the unread badge; completing the conversation clears the work. It checks when the app opens, when you return and periodically while visible. Optional phone alerts are enabled separately under Account → App & notifications."
-      },
-      {
-        "title": "Open the note",
-        "body": "A general note or training observation can be read immediately. For genuine Player Plan match feedback, first add your independent innings reflection. A Has no plan assessment gives a Player Plan completion prompt; Did not bat does not request reflection. Seeing the menu alone does not mark a note read."
-      },
-      {
-        "title": "Keep the conversation open until dealt with",
-        "body": "Reading clears the unread number; an open request keeps Coaching visible until completed, withdrawn or no longer assigned to you. The button disappears when there are no unread updates or open requests. Account > Coach Conversations remains available for current and past conversations. Players also see their own notes in How We Train.",
-        "target_tab": "conversations"
-      },
-      {
-        "title": "Complete it together",
-        "body": "The player, staff with edit access or a selected request participant can add progress to the shared thread. Discussed / Actioned or Close clears that thread’s alerts and keeps its history in Past conversations. Reading or accepting a request does not complete it."
-      },
-      {
-        "title": "Check the latest state",
-        "body": "New eligible coaching updates use enabled Coaching updates phone notifications first. Without a usable subscription, a brief email says an update needs attention and opens the relevant coaching area. It contains no assessment, comment or video. Read, closed or superseded updates are skipped; failed phone delivery can fall back once. Device settings affect delivery. Existing notes are not emailed as a backlog."
-      },
-      {
-        "title": "Know when a response is required",
-        "body": "Plan-related Match Observations ask for an independent innings reflection before showing staff feedback. General notes and Training Observations are immediately readable and have no separate compulsory response form. There is no fixed response deadline or observation-specific Send reminder button. A review date is a conversation follow-up date, not a reflection deadline."
-      }
-    ],
-    "sort_order": 170,
-    "active": true,
-    "video_ids": [
-      "phone-iphone",
-      "phone-android",
-      "messages"
-    ],
-    "quick_start_count": 5
-  },
-  "navigation_account": {
-    "capability_key": "navigation_account",
-    "title": "Find your club, account and saved screen",
-    "purpose": "Get back to the right place.",
-    "short_explanation": "Use the club/context selector, Account and in-app return buttons. Refresh keeps the current screen.",
-    "target_tab": "guide",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Switch club or Platform Admin",
-        "body": "Use the current club/Platform Admin selector and its dropdown arrow. It is separate from Account. Platform Admin appears only for authorised accounts; switching context does not sign you out."
-      },
-      {
-        "title": "Use Account",
-        "body": "Account contains Join another club, Coach Conversations, Messages, App & notifications, Set / change password and Sign out. New members choose whether they play during sign-up. Club Admin manages coaching duties and player access in People & Sign-up."
-      },
-      {
-        "title": "Use Back and refresh",
-        "body": "Browser Back/Forward follows app screens visited in this session; refresh reloads the current screen and data. My Innings keeps its season, format and expanded entry on refresh; choosing its navigation tab starts with rows collapsed. Back at the start of app history can still leave the site. Workshop previews also have Back to Workshop."
-      },
-      {
-        "title": "Protect work when moving",
-        "body": "Use Save and continue or the screen’s save action and check the saved state. The app may stop navigation if a save fails or ask before abandoning unsaved work. It should not treat a failed save as completed."
-      },
-      {
-        "title": "Get help in context",
-        "body": "Open Help & Tutorials in the navigation. Choose a topic or ask the Club Batting Guide. Your question remains visible above the answer. The Guide explains the product; it does not carry out edits or book a prediction merely by saying so."
-      }
-    ],
-    "sort_order": 180,
-    "active": true,
-    "video_ids": [
-      "phone-iphone",
-      "phone-android"
-    ],
-    "quick_start_count": 5
-  },
-  "guide_support": {
-    "capability_key": "guide_support",
-    "title": "Use the Guide and ask for help",
-    "purpose": "Get a practical next step without guessing.",
-    "short_explanation": "Tutorials explain the process; the Guide answers questions using the maintained product knowledge.",
-    "target_tab": "guide",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Find the relevant tutorial",
-        "body": "Open Help & Tutorials and choose a topic. A tutorial completion mark means you have read the help, not that the club’s corresponding setup task is complete."
-      },
-      {
-        "title": "Ask a focused question",
-        "body": "Use Ask Guide for help with the current club process, a feature or where to go next. Your question and answer stay in the conversation. The Guide should name the real screen/control and respect your role."
-      },
-      {
-        "title": "Message the Mirelion team",
-        "body": "Choose Message us to open Mirelion Assist. Send a message, read replies and suggest changes in the platform. You can choose to share your recent Guide conversation. We aim for a live exchange when time zones overlap."
-      },
-      {
-        "title": "Know the limits",
-        "body": "The public demo has tutorials and local fictional data but no live AI chat, real accounts or message delivery. Stripe, Market Discovery and corporate/network tiers are not released features. The Guide must not invent controls, hidden format settings or completed actions."
-      },
-      {
-        "title": "Use gentle prompts only when relevant",
-        "body": "The app may offer guidance when it detects a meaningful unfinished part of the process. Those prompts can be deferred or dismissed. Proactive Guide email escalation remains disabled."
-      }
-    ],
-    "sort_order": 190,
-    "active": true,
-    "video_ids": [],
-    "quick_start_count": 5
-  },
-  "platform_pipeline": {
-    "capability_key": "platform_pipeline",
-    "title": "Manage the Club Pipeline",
-    "purpose": "Review product enquiries, invitations and onboarding.",
-    "short_explanation": "Clubs choose when trials begin. Automatic trials are separate from older enquiries needing review.",
-    "target_tab": "guide",
-    "audience": [
-      "admin"
-    ],
-    "tutorial": [
-      {
-        "title": "Use Club Pipeline",
-        "body": "New website signups appear under Automatic trials in Club Pipeline, labelled scheduled or started. They need no Platform Admin approval. Older enquiries still appear as requests to review. Existing leads, invitations and onboarding remain available. Market Discovery is deferred."
-      },
-      {
-        "title": "Handle older enquiries",
-        "body": "For an older enquiry, review the request before preparing a new club. The verified contact becomes its non-playing Club Admin. Link an existing club only where that contact already has Admin permission. Preparing an old enquiry alone activates neither product. New Start free trial signups create the club and selected trials automatically."
-      },
-      {
-        "title": "Close unwanted onboarding",
-        "body": "On an unactivated onboarding record, use the available close/cancel onboarding action to remove it from the active queue. This records the closed attempt rather than permanently banning the club or contact email. A future interested response can start a new attempt."
-      },
-      {
-        "title": "Keep access decisions separate",
-        "body": "Closing unactivated onboarding is different from ending/removing an active club. Active clubs have their own access and rate controls. Saved settings should show their saved state until edited; review any destructive confirmation carefully."
-      },
-      {
-        "title": "Check delivery and commercial status",
-        "body": "Email Delivery shows delivery status; queued is not the same as received. Access/rate settings can support complimentary arrangements. Payment collection and corporate tiers are deferred, and no automatic charge should be promised."
-      }
-    ],
-    "sort_order": 200,
-    "active": true,
-    "video_ids": [],
-    "quick_start_count": 5
-  },
-  "team_review": {
-    "capability_key": "team_review",
-    "title": "Match Review: review the team and confirm scores",
-    "purpose": "Choose the right match, then record what you observed.",
-    "short_explanation": "With Teams, use the published selection. Without Teams, choose this match’s players. Individual observations stay with the same match.",
-    "target_tab": "team_review",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain"
-    ],
-    "tutorial": [
-      {
-        "body": "Choose a saved fixture. Its grade, start date, format and opposition stay together. The date belongs to the fixture wherever you open it. Grade identifies which team is playing; a Playing Group helps find people and does not decide who played.",
-        "title": "Choose the match and players",
-        "target_tab": "team_review",
-        "quick_start": true
-      },
-      {
-        "title": "Use the published team",
-        "body": "A published Teams selection supplies the current Match Review team. Before publication the team is empty unless authorised staff deliberately save a match team in Club Batting. Draft selections do not populate Match Review. Once Teams publishes this fixture, that selection becomes the current team, while saved observations stay on the same innings.",
-        "products": [
-          "teams"
-        ],
-        "quick_start": true
-      },
-      {
-        "title": "Record before signup",
-        "body": "Selected players do not need an account before a captain or coach records scores and observations. The person-and-clock icon means signup is pending. Choose Has no plan when appropriate, or use a general observation. Signup through Club Batting or Teams uses the same verified club account and keeps the earlier history. A name alone never claims a record.",
-        "quick_start": true
-      },
-      {
-        "title": "Set a team without waiting for Teams",
-        "body": "Choose the fixture or enter its grade, date, format and opposition. Open Set match team in Club Batting. Use Add players from the Playing Group for a starting list, then tick or untick players and search for additional names. A selected season captain is assigned automatically; otherwise choose a stand-in captain. Allocate the wicketkeeper and final playing date, including a second day when needed. Save match team. This works for Batting-only clubs and while Teams is enabled but not yet publishing teams. Only the saved list selects players. A later Teams publication takes over for that same fixture and retains observations.",
-        "products": [
-          "batting"
-        ],
-        "quick_start": true
-      },
-      {
-        "title": "Keep both captains involved",
-        "body": "The appointed season captain can observe their grade’s players even when injured or not selected. A stand-in has access to the selected match players until the club’s deadline after the final playing date. Each person’s observations keep their own authorship; appointing another captain never overwrites existing assessments. Admin can change the expiry allowance and club time zone in Grades & season captains.",
-        "quick_start": false
-      },
-      {
-        "title": "Record an individual observation first",
-        "body": "If the fixture has not been entered, open Players, choose the player and add a Match Observation. Choose the existing match, or enter its grade, start date, format and opposition. Saving creates or reuses that match; it does not select the player. The ordinary Teams selection or Club Batting match-player list can be completed later on the same fixture. The earlier observation stays with that player’s innings.",
-        "quick_start": false
-      },
-      {
-        "body": "Choose Yes, Mostly, Not really, Has no plan or DNB for each relevant player. Optionally choose the dismissal assessment: one of their shots but poor execution, outside their plan, or not applicable. Leave unobserved answers blank. Save saves all changed rows together. Initial blank rows do not claim to be Saved. A confirmed save shows a clear saved state. The button shows Saved when a saved review has no changes, Save after an edit, and Saving while the request is running. Reverting all edits restores Saved. Retry save means confirmation is still pending.",
-        "title": "Record a quick view",
-        "quick_start": true
-      },
-      {
-        "body": "Open Add PlayCricket scorecard and paste an Australian match link. Load scorecard creates a preview only. Your club is identified automatically; check player matches. Names are suggestions; unmatched players stay skipped until chosen. Confirmed player matches are remembered. PlayCricket totals discrepancies are notes; individual figures import as shown. Use scorecard match details can fill an unsaved match form. For multi-day matches, use the original match-start date even if the team bats the following weekend.",
-        "title": "Import a PlayCricket scorecard",
-        "quick_start": false
-      },
-      {
-        "body": "Selected scores appear in the final column. Check the Confirm score boxes, then Save to save scores and review choices together. Result-entry permission and player edit access are required. Authorised captains may confirm their own score. A score-only import creates no coaching judgement. Existing prediction entries receive the official score; awards remain unreleased. Loading, mapping and switching innings do not save scores.",
-        "title": "Confirm scores with the review",
-        "quick_start": false
-      },
-      {
-        "body": "Use the Innings selector to open the first or second innings of this match. Save or discard draft changes before switching. Saved match reviews groups the same author’s matching fixture and grade, with an innings selector. Each player still has one shared record for each innings. Different observers retain separate reviews. For a scorecard with only one team innings, no second-innings scores are invented.",
-        "title": "Switch between innings",
-        "quick_start": false
-      },
-      {
-        "body": "Only closed batting innings with matching totals can import, including during a live match. Missing balls faced stay blank; absent batters are not assumed to be DNB. Unsupported dismissals need manual entry. Choose Refresh scores for corrections, check the rows and give a reason before saving. Admin can correct an official prediction score in Record results. A stale save stops for rechecking. Importing or correcting a score does not release awards.",
-        "title": "Check unusual results and corrections",
-        "quick_start": false
-      },
-      {
-        "body": "Matching My Innings entries and Match Observations are reused. Opposition capitalisation and extra spaces are ignored; select an existing innings if other wording differs. A unique player preparation joins by player, date, format and innings number despite different opposition spelling. The fixture supplies the match identity. Its published selection or explicitly saved match player list supplies the team. Saved reviews reopen the same attributed assessments, keeping comments, video and follow-up details.",
-        "title": "Continue the same innings",
-        "quick_start": false
-      },
-      {
-        "body": "Yes, Mostly and Not really are staff assessments, not the player’s answers. The player is asked to reflect independently before seeing plan-related staff assessments or video. Several observers remain on the same innings; no one’s perspective silently replaces another’s.",
-        "title": "Keep the player’s reflection independent",
-        "quick_start": false
-      },
-      {
-        "body": "Has no plan creates a visible prompt to complete the Player Plan. DNB records Did not bat on the shared innings without creating a batting assessment or requesting a reflection. Neither choice means the player has completed their plan, practised or improved.",
-        "title": "Handle no plan and Did not bat honestly",
-        "quick_start": false
-      },
-      {
-        "body": "Click a listed player or Add observation to open their full Match Observation with the match already filled in. Saving returns to that same fixture and updates the same player innings and attributed observation. Saved match reviews remains within Match Review. Other authors’ assessments and the player’s reflection stay separate.",
-        "title": "Return for the details",
-        "quick_start": true
-      },
-      {
-        "body": "Choose New match review after saving, or open Saved match reviews and choose New match review there. Confirm before discarding unsaved answers. Starting a new entry does not delete a saved review or a player’s innings. Loading a match saves nothing. Save match team confirms an explicitly chosen player list before any Teams publication; Save confirms observations and selected scores.",
-        "title": "Start a new team entry",
-        "quick_start": false
-      },
-      {
-        "body": "Open Saved match reviews and filter by grade, date, format or player. Saved observations remain with their original match even if the team is later changed. Players no longer in the current team are labelled; the current team is shown separately. Only records within your permissions appear. Use the innings selector for a two-innings match.",
-        "title": "Find a saved review",
-        "quick_start": false
-      },
-      {
-        "body": "Change the relevant player answers, then Save. Saving keeps the review open for further changes. The review and innings keep their stable identities. Existing comments, videos and follow-up notes are retained. Another author’s assessment and the player’s reflection are separate. If someone else has changed the relevant record, refresh and review it rather than overwriting it silently.",
-        "title": "Edit the same saved match review",
-        "quick_start": false
-      },
-      {
-        "body": "Club Admin can preview deletion of a saved match review before confirming it. The preview explains what can be removed and which shared data stays. Other authors’ observations, player-entered information and official/imported scores are preserved. Starting a new entry only resets the form; deleting a saved review is a separate action. No player account, membership or Player Plan is removed.",
-        "title": "Delete a match review carefully",
-        "quick_start": false
-      },
-      {
-        "body": "Reopen the same saved Match Review and choose Refresh scores. It reuses the saved PlayCricket link; no paste or new match is needed. Select the innings. New or changed scores are selected; unchanged scores stay unticked. Set Result date for new scores, check the rows and Save. Previously confirmed scores retain their dates. Closed innings can import mid-match; unfinished innings stay preview only. Awards wait for release.",
-        "title": "Continue a two-day game next weekend",
-        "quick_start": false
-      }
-    ],
-    "sort_order": 149,
-    "active": true,
-    "video_ids": [
-      "match-review-teams",
-      "match-review-manual",
-      "match-observation-first"
-    ],
-    "products": [
-      "batting"
-    ],
-    "quick_start_count": 4
-  },
-  "phone_app": {
-    "capability_key": "phone_app",
-    "title": "Get the phone app and notifications",
-    "purpose": "Reach the full app from your phone and choose useful alerts.",
-    "short_explanation": "Add the app icon, open it, then choose club messages and coaching alerts. Account → App & notifications shows the next steps for your device.",
-    "target_tab": "phone_app",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 172,
-    "active": true,
-    "tutorial": [
-      {
-        "title": "Add the app on iPhone or iPad",
-        "body": "In Safari, tap the three dots (…) at the bottom right, then Share (square with an upwards arrow). Tap View More if shown, then Add to Home Screen; you may need to scroll down. Keep Open as Web App on if shown, then Add. If you see Share directly, start there; on iPad it may be at the top. If Add to Home Screen is missing, use Edit Actions. Links opened inside WhatsApp should be opened in Safari first."
-      },
-      {
-        "title": "Add the app on Android",
-        "body": "In Chrome, tap Install Mirelion if offered. Otherwise use the three dots (⋮), usually at the top right → Install and create shortcut → Install. Some versions say Install app or Add to Home screen. If the link opened inside WhatsApp, use its menu to open it in Chrome first."
-      },
-      {
-        "title": "Use the full app",
-        "body": "Open the new Mirelion icon on your phone and sign in with your existing account if asked. It opens your full club app: plans, training, innings and messages. The icon can go on any Home Screen or in a folder; internet access is needed. On a computer, App & notifications only shows phone setup instructions. Notification choices are available from the installed phone app. No App Store download or new account is needed."
-      },
-      {
-        "title": "Enable notifications deliberately",
-        "body": "From the Mirelion icon, open Account → App & notifications. Select Club messages and/or Coaching updates, tap Enable notifications, then Allow. Saved settings show Notifications on ✓; turning off both choices shows Notifications off ✓. iPhone/iPad push needs iOS/iPadOS 16.4 or later. Each club and device is separate. There is no automatic subscription or backlog of old notes."
-      },
-      {
-        "title": "Open an alert",
-        "body": "Tap a phone notification to open its club message or coaching area. Notification previews omit message and coaching details. Plan-related feedback stays hidden until the player’s independent reflection. Opening a message records Opened; it does not prove the player understood it or complete a coaching conversation."
-      },
-      {
-        "title": "Control or turn off notifications",
-        "body": "Account → App & notifications changes this club’s choices or turns alerts off on this device. Signing out clears this device’s subscription. If blocked, allow notifications in phone/browser settings. Focus / Do Not Disturb and connectivity can delay alerts. Messages and coaching updates remain in Club Batting."
-      },
-      {
-        "title": "When an email is used instead",
-        "body": "Club messages, Player Plan and Workshop notices, and new unread coaching updates use enabled phone notifications first. Without a usable subscription for that type of alert, a short email links into Club Batting; it contains no message or observation details. Failed phone delivery can use the same fallback. Installing an icon alone is not enough: enable Club messages and Coaching updates. The system checks all enabled devices for your account and club."
-      }
-    ],
-    "video_ids": [
-      "phone-iphone",
-      "phone-android"
-    ],
-    "quick_start_count": 5
-  },
-  "club_messages": {
-    "capability_key": "club_messages",
-    "title": "Send and read club messages",
-    "purpose": "Keep players and staff informed with a clear message and a direct next step.",
-    "short_explanation": "Message permitted players and keep coaching staff informed by default. Untick Include coaching staff or choose names for a particular message.",
-    "target_tab": "messages",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 174,
-    "active": true,
-    "tutorial": [
-      {
-        "title": "Choose the right players",
-        "body": "Admin, Head Coach, Coach and Captain roles can open Players → Message players & staff, or Account → Messages → Message players & staff. Choose individuals, a Playing Group, Currently unassigned, or all players in your access. Only current playing members whose records you can edit are offered. Selecting a group adds its permitted players; Clear removes all player and staff selections."
-      },
-      {
-        "title": "Keep staff informed",
-        "body": "Include coaching staff is checked for each new message. Other club Admins, Head Coaches, Coaches and Captains are selected, including non-playing staff. Open choose staff to adjust names or add other registered staff. Untick Include coaching staff to omit staff copies. A playing coach selected as a player still receives that copy; anyone included both ways receives one copy. The sender sees it in Sent. Receiving a message grants no player-record or other-message access."
-      },
-      {
-        "title": "Write and send once",
-        "body": "Add a short title and message. Optionally link to My Player Plan, How We Train, Prepare for a Match, My Innings or Make your prediction. Check the recipients, then Send. Everyone gets an inbox message. Phone alerts go to enabled Club messages subscriptions; an email link is used if there is none. Email also for everyone selected or Email also for selected people adds email for recipients who already have phone alerts. Reminder messages do not automatically copy staff."
-      },
-      {
-        "title": "Send players to the useful screen",
-        "body": "Player links open each player’s own information. Prepare for a Match opens My Innings with the preparation form expanded. Non-playing staff see the message without unusable personal Player Plan, training or innings buttons. Personal coaching feedback still belongs in Coach Conversations, where player access, independent reflection, notes, review dates and completion are preserved."
-      },
-      {
-        "title": "Read and track messages",
-        "body": "Open Account → Messages or the unread Messages button, then View. Staff see recent Sent messages, recipients, opened counts and phone/email delivery totals. If all phone delivery fails or expires, an unread message can fall back to an email link. Provider acceptance does not prove it was read. In Prototype email mode, email copies and fallbacks are queued but not delivered."
-      },
-      {
-        "title": "Copy for WhatsApp",
-        "body": "Copy for WhatsApp copies the title, message and any app link so you can paste it into your club chat. It does not post automatically. Demo messages use fictional people and do not send email or phone notifications."
-      },
-      {
-        "title": "Player Plan ready notices",
-        "body": "When How We Bat and Player Plan questions are published, playing members receive a Club Batting message linking to My Player Plan. New playing members receive the same notice if the club is ready. Enabled Club messages notifications are used first; otherwise the email only links to the message. Repeated publication of the same version does not send another notice."
-      },
-      {
-        "title": "Workshop invitations and late contributions",
-        "body": "Registered contributors receive Workshop invitations in Messages. The Philosophy Lead receives late-contribution notices there too. Open the message, then Batting Philosophy Workshop. These notices use Club messages phone alerts first and a generic email link when needed. First-time club joining invitations still arrive by email.",
-        "target_tab": "messages"
-      },
-      {
-        "title": "Follow up the playing list",
-        "body": "With Selections active, Club Admin, the Head of Selections and captains assigned in permissions see Players to follow up in Inbox. Verified personal-email and name matches link automatically. The remaining entries keep a Link button for Admin and selectors to verify. This is one current task, not repeated messages or emails.",
-        "target_tab": "messages"
-      }
-    ],
-    "video_ids": [
-      "messages"
-    ],
-    "quick_start_count": 5
-  },
-  "selections": {
-    "capability_key": "selections",
-    "title": "Teams, selections and brackets",
-    "purpose": "Build and publish balanced teams using your registered playing list.",
-    "short_explanation": "Confirm availability, make a draft, check it with captains if useful, then publish the team.",
-    "target_tab": "teams",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "As a player: mark availability, then check your team",
-        "body": "Open Availability, tick the dates you can play and save. Unmarked dates are unavailable. Open Published teams to see the team and match details once the Head of Selections publishes. A draft is not your team announcement. If your availability changes, update it and let your selectors resolve the selection.",
-        "roles": [
-          "player",
-          "member"
-        ],
-        "quick_start": true
-      },
-      {
-        "body": "Your club can use Club Batting, Teams & availability or both. Platform Admin → Clubs → Manage adds either product. Adding Teams & availability creates linked playing-list entries for existing verified playing members. Adding Club Batting gives existing player accounts access without a second sign-up. Imported players without an account still need to join. Neither switch marks anyone available or completes their Player Plan. Club Admin can set the shared logo and colours from Settings → Club logo & colours, including for Teams-only clubs. Teams & availability is the last item in the main menu.",
-        "title": "Choose your club products",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "body": "Club Admin manages players, fixture setup, calendars and Settings without automatically becoming a selector. Settings → Selection permissions assigns the Head of Selections and other selectors. Assigned names stay visible when the list is collapsed. Only assigned selectors and the Head can use the Selection Board. A Club Admin can be explicitly assigned too.",
-        "title": "Assign selection roles",
-        "target_tab": "teams",
-        "quick_start": false,
-        "staff_only": true
-      },
-      {
-        "body": "Existing player accounts appear automatically. Playing list → Import / refresh registration CSV adds registered players and refreshes existing entries. Map a stable registration ID, name, optional grade and personal email. Matching IDs update the same player. A unique matching name with compatible email can attach the registration ID to an automatically created entry. Conflicting details stop for checking. Roles, availability and account links stay attached; omitted players and omitted grades/emails are retained. This is a manual refresh, not live PlayHQ sync. Inactive players are found separately and still prevent duplicates.",
-        "title": "Refresh the registered playing list",
-        "target_tab": "teams",
-        "quick_start": false,
-        "staff_only": true
-      },
-      {
-        "body": "Use the Playing list bulk editor for top, middle or lower order; quick, spinner or does not bowl; spin type; frontline or part time; and keeper. Top/middle-order batters may also be frontline bowlers (all-rounders). Save player roles. Not coded is distinct from does not bowl. Attributes stay separate from batting plans. Any active registered player with the relevant dates marked available is selectable across grades, including players without an app account.",
-        "title": "Code player roles once",
-        "target_tab": "teams",
-        "quick_start": false,
-        "staff_only": true
-      },
-      {
-        "body": "Imported players link automatically when their name and unique personal email match a verified playing member, including after that member signs up later. Existing linked accounts carry across products. Shared emails, different names and missing details need checking with Link. Existing links and deliberate unlinks are respected. The same club account handles availability and messages; a batting subscription or completed Player Plan is not required.",
-        "title": "Link verified accounts",
-        "target_tab": "teams",
-        "quick_start": false,
-        "staff_only": true
-      },
-      {
-        "body": "Club Admin, the Head of Selections and assigned captains see Sign-up needed or Check account link beside relevant players; Inbox keeps one Players to follow up item. Players’ WhatsApp message opens one club sign-up message to share in the general players’ WhatsApp chat. Choose Open WhatsApp or Copy message, then share it yourself. Club officials use the outstanding sign-up flags to chase individuals outside the app. Existing members use their existing account; Admin or selectors check remaining account links. Every player should join and mark their own available dates.",
-        "title": "Follow up player sign-up",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "body": "Club Admin without a selection role uses Fixtures → Add fixture. Selectors use Selection board → Add fixture. Choose grade, format, overs, opposition and actual Day 1 / optional Day 2 dates. Shared active grades supply the list for every club, including Teams-only clubs. Add the start time when players may play in another game that date; without it, same-date games are treated as overlapping. Selectors appoint the match captain and keeper on the board. Admin fixture edits preserve selections and appointments. If a coach already created this match through an individual observation, open that existing fixture and complete the ordinary selection there.",
-        "title": "Select against real fixture dates",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "body": "Club Admin opens Settings → Grade & format defaults. Add a grade, format and overs per innings, then Save defaults. Fixtures auto-fill overs when grade or format changes; Admin and selectors can override overs for a particular fixture. Leave overs blank when there is no fixed limit. T20 starts at 20 unless a saved default says otherwise. Opening an existing fixture preserves its saved overs.",
-        "title": "Set grade and format defaults",
-        "target_tab": "teams",
-        "quick_start": false,
-        "staff_only": true
-      },
-      {
-        "body": "Click a slot, search and click a player. The choice saves automatically and the picker closes. Click the slot again to change it. Drag the handle beside a player to reorder or move them to another team. Tap the handle to choose a team and position, or clear the slot. Arrow keys on a handle move one place; Home and End move to the top or bottom. Other players shift along, and bracketed pairs move together. Moves save to the draft and can be undone; publish when ready. A full team can temporarily exceed 11: its colour alert clears when extra players are moved or cleared. Resolve extras before sending to captains or publishing. Both days requires availability on both dates; Copy previous team includes only confirmed players. Each day shows its player and role counts. Moves require matching playing dates; bracketed pairs need a team that allows bracketing. Undo works unless a team has changed. The board refreshes every 20 seconds while the picker is closed; concurrent edits require review.",
-        "title": "Use the meeting board",
-        "target_tab": "teams",
-        "quick_start": true,
-        "staff_only": true
-      },
-      {
-        "body": "Season captains can be appointed before signup and still default as captain when selected. Their account messaging and observation access starts only after verified linking. Club Admin first appoints each grade’s season captain in Account → Grades & season captains, also linked from Teams Settings. If that person is selected on a playing day, they are automatically Captain. If absent, use the Stand-in captain dropdown for a selected player. Keeper uses its own selected-player choice. Appointments can differ by day. Both captains have the appropriate messaging and, when Club Batting is used, observation access. The season captain keeps their grade access even while injured or not selected. Stand-in captain privileges end after the final playing date plus the club’s configured allowance; ordinary player access remains. Default: midnight after one additional day. Saturday → Sunday midnight; Wednesday → Thursday midnight; two-day matches use their last scheduled date.",
-        "title": "Choose the match captain and keeper",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "body": "Selection board → Available, not selected. Choose the date to see active players marked available who are not in any current draft on that date, across all grades. Day 1 and Day 2 are checked separately. Cancelled drafts do not use a player.",
-        "title": "See who remains available",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "body": "Enable bracketing only where competition rules permit it. Find matching pair suggests confirmed complementary Day 1 / Day 2 availability, ranking similar batting roles, bowling type/workload and keeping cover first. Keep a chosen Day 1 player to find a partner. Less similar options explain the differences. Both players fill one slot; declare the names before the toss. The software does not predict the toss or decide competition eligibility.",
-        "title": "Find a bracketed pair",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "body": "Captains can view current drafts on the Selection Board. Selection comments stay private to assigned captains and selectors. Once published, open Match conversation beneath the team to message its players and match staff. Players moved to a lower grade are highlighted directly in their team on the Selection Board. Use Mark spoken to beside the player to change their shared highlight from purple to green. Selectors can separately open Available, not selected to see all available players outside the current teams.",
-        "title": "Invite captain input",
-        "target_tab": "teams",
-        "quick_start": true,
-        "staff_only": true
-      },
-      {
-        "body": "The Head of Selections, or the Acting Head during an agreed delegation, publishes to players. Selectors can save late changes as drafts before completion; the responsible Head receives an alert to review and republish. Captain disagreement, no reply or later edits do not block publication or require resending. Each day needs 11 available players, an appointed captain and keeper, no duplicates or conflicts, and balance warnings acknowledged. Players retain the last published team until replacement. Published teams and the Selection Board show (c) and the keeper icon; copied team lists use (c) and (wk), including distinct Day 1 and Day 2 appointments. Check the changes shown before confirming a republication. Match Review uses this published selection; Unpublished drafts never populate it. Before a Teams publication, authorised staff may explicitly save a match team in Club Batting while Teams is being trialled.",
-        "title": "Publish to players",
-        "target_tab": "teams",
-        "quick_start": true,
-        "staff_only": true
-      },
-      {
-        "body": "Each publication action sends one in-app notice per affected person, with the relevant grades, formats, opposition and actual playing dates, including midweek and two-day fixtures. First publication says Teams published; later changes say Teams updated. Selectors receive one combined notice from the Head of Selection, with a reminder about their own selection if they are also players. Linked current and removed players and current match staff remain informed. Phone-first delivery keeps its generic email-link fallback. Match conversations permit current published players, both bracket partners, selectors, nominated staff and the appointed season captain even when not selected. Removed players lose conversation access. Stand-in privileges expire automatically; selected players retain ordinary match conversation access. Unlinked players receive no app alert. This does not change WhatsApp membership.",
-        "title": "Use the changing match group",
-        "target_tab": "teams",
-        "quick_start": true
-      },
-      {
-        "title": "Create social team graphics",
-        "body": "Open Social graphics → Create posts → Team selections. Add a previous example, background and optional logo in Team-list artwork. In Player photos, choose a grade, select its featured player and upload or reuse a photo. Review all brings the team graphics together for one post.",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "title": "Manage the artwork allowance",
-        "body": "One successful AI image preparation uses one credit, including a revision later discarded. Failed preparations release the reservation. A running job shows elapsed time and can be revisited after a refresh. Saved artwork and weekly team graphics do not use new image-preparation credits. For an Initial setup only allowance, Finish setup pauses further AI use; saved images, ordinary uploads and team graphics remain available. Contact the platform owner for further allowance. The owner or commercial admin manages limits and usage under Platform settings → AI artwork allowances. Prepaid top-up purchasing is not connected and pricing is not yet agreed.",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "title": "Download the published graphics",
-        "body": "Open Create posts → Team selections. Choose the fixture date, add each grade’s player photo, then open Review all. Select the team graphics, add one blurb and choose Review post. Download selected pack is also available. Different two-day line-ups produce separate images. Past team graphics show the original saved images.",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "title": "Assign the socials manager",
-        "body": "Club Admin and permanent Socials Managers appoint managers in Who handles socials. The last manager must request a handover before leaving. Arrange temporary cover on that same page. Connect the club Facebook Page and Instagram account in Social accounts. In Review all, select graphics and write one blurb, then review the saved post before posting or scheduling it.",
-        "target_tab": "teams",
-        "quick_start": false
-      },
-      {
-        "title": "Use grade overs defaults",
-        "body": "Set overs in Settings → Grade & format defaults. New fixtures use that value automatically. Saving a changed default updates current and upcoming fixtures that inherit it, including published graphics. Past matches retain their recorded overs. Use a different overs limit for this fixture only for a deliberate exception. Social graphics points out differences from the grade default so you can check them.",
-        "target_tab": "teams",
-        "quick_start": false
-      }
-    ],
-    "sort_order": 310,
-    "active": true,
-    "video_ids": [
-      "availability",
-      "select-publish"
-    ],
-    "products": [
-      "teams"
-    ],
-    "quick_start_count": 4
-  },
-  "selection_availability": {
-    "capability_key": "selection_availability",
-    "title": "Availability calendar",
-    "purpose": "Mark the dates you can play. Only marked dates can be selected.",
-    "short_explanation": "Mark the dates you can play. Only marked dates can be selected.",
-    "target_tab": "teams",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "body": "Teams & availability → Availability. Tap a date to cycle through green tick (available), red cross (unavailable), and blank (not set), then Save. Only available dates can be selected. Click Availability again to return to its home screen. Dates apply across competitions in the club time zone; mark Day 1 and Day 2 separately.",
-        "title": "Mark available dates",
-        "target_tab": "teams"
-      },
-      {
-        "body": "Every player should join their club account and mark their own dates. Club Admin and selectors can use Individual player for rollout or exceptional cases, including unlinked players. Assigned captains can view club calendars and edit their own linked calendar unless also Admin or selectors. Other players see their own entry; non-playing staff need no personal calendar. Verified matches link automatically. Admin or a selector checks remaining links. No batting subscription or Player Plan is required.",
-        "title": "View or record a player’s calendar",
-        "target_tab": "teams"
-      },
-      {
-        "body": "During rollout or an exceptional week, Club Admin and selectors use Set all players for a date. Choose the date, tick Make all players available for this date, then tick unavailable players and Save date. No individual player needs to be chosen first. Only this date changes; players can still change their own dates. Normal use remains players marking themselves available.",
-        "title": "Set a temporary date exception",
-        "target_tab": "teams"
-      },
-      {
-        "body": "Changing a date used in a future draft or published team alerts selectors, Club Admin and the Head of Selections, excluding the person saving the change. Teams are not automatically changed or republished. Selectors resolve the issue before the Head publishes.",
-        "title": "Change availability after selection",
-        "target_tab": "teams"
-      }
-    ],
-    "sort_order": 320,
-    "active": true,
-    "video_ids": [
-      "availability"
-    ],
-    "products": [
-      "teams"
-    ],
-    "quick_start_count": 5
-  },
-  "selection_playing_groups": {
-    "capability_key": "selection_playing_groups",
-    "title": "Shared grades and season captains",
-    "purpose": "Define each grade and its season captain once, for either product.",
-    "short_explanation": "Both products use the same grade IDs and season captain appointments. Group membership helps organise players; each match has a separately saved selection.",
-    "target_tab": "club_teams",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "tutorial": [
-      {
-        "title": "Use one shared setup",
-        "body": "For either product, Club Admin opens Account → Grades & season captains or the link in Teams Settings. Existing grade edits and captain choices save automatically and show Saved. Existing Club Batting Playing Groups are already here. You can choose a registered member, choose an existing player awaiting signup, or add a captain’s name with an optional email. Signup needed means the appointment is saved and account access awaits a verified link. The selected season captain automatically captains their match; otherwise selectors choose a stand-in. General Captain permissions do not appoint a season captain.",
-        "target_tab": "club_teams"
-      },
-      {
-        "title": "Set the stand-in access period",
-        "body": "Choose 1–7 days after the final playing date and the club time zone. With the default 1 day, Saturday ends Sunday midnight and Wednesday ends Thursday midnight. For a two-day game, the last scheduled date determines the end for both match captains. Season appointments continue until changed or removed. Changes apply to current appointments.",
-        "target_tab": "club_teams"
-      },
-      {
-        "title": "Add memberships on publication",
-        "body": "When both products are used, the optional Teams Settings → Club Batting connection maps a competition/grade to the shared Playing Group. Publication adds missing memberships for linked active players; it does not remove other memberships. This mapping is about player organisation and plan priorities. It is separate from the shared grade/captain setup and from the actual match selection.",
-        "target_tab": "teams"
-      },
-      {
-        "title": "Understand due dates and access",
-        "body": "New membership brings applicable Player Plan due dates and any coaching access already granted by group. The earliest active date for the same format applies across groups. Previous groups still apply until Club Admin removes them deliberately. Missing batting-account links are reported. No plan answers or due-date rules are rewritten.",
-        "target_tab": "teams"
-      }
-    ],
-    "sort_order": 330,
-    "active": true,
-    "video_ids": [
-      "select-publish"
-    ],
-    "products": [
-      "batting",
-      "teams"
-    ],
-    "quick_start_count": 5
-  },
-  "selections_subscription": {
-    "capability_key": "selections_subscription",
-    "title": "Manage club subscriptions",
-    "purpose": "Manage Club Batting and Selections for one club.",
-    "short_explanation": "Clubs start trials themselves. Platform Admin retains support controls for product terms and permanent free access.",
-    "target_tab": "guide",
-    "audience": [
-      "admin",
-      "head_coach",
-      "coach",
-      "captain",
-      "player",
-      "member"
-    ],
-    "sort_order": 340,
-    "tutorial": [
-      {
-        "title": "Open the club",
-        "body": "Platform Admin → Clubs → Manage beside the club. Choose Add or Change under Club Batting or Selections. Each product keeps its own terms; both use the same club workspace."
-      },
-      {
-        "title": "Start a free trial",
-        "body": "Clubs use Start free trial on the website, or Account → Products & trials to add an unused product. The verified Club Admin chooses Start now or a future date. Each full trial begins on that date, with no Platform Admin approval. Scheduled dates can change before commencement; running and used trials cannot reset. Existing active access is preserved. Platform Admin retains its Free trial support control."
-      },
-      {
-        "title": "Give free access",
-        "body": "For Club Batting, choose Complimentary and save. For Selections, choose Subscription, then Term details: Rate reduction 100%, Special rate ends Never. Save. Both give $0 access with no expiry."
-      },
-      {
-        "title": "Set Selections terms",
-        "body": "Choose Subscription and confirm the club agreement for paid access. Annual prices are set in Platform Settings → Product pricing & trials; the club screen shows the applicable price. Existing agreed prices stay unchanged. Term details contains discounts, access dates, payment recorded and renewal settings. Preview amount uses the club-year calendar. Recording payment does not collect it."
-      },
-      {
-        "title": "Renew or end Selections",
-        "body": "Term details → Prepare renewal fills proposed dates for review. Confirm the club agreement and save. Choose Ended to stop access. Earlier terms remain in History."
-      },
-      {
-        "title": "Change product defaults",
-        "body": "Platform Settings → Product pricing & trials. Set Club Batting, Teams & availability and an optional Both products annual price. Set each product’s Free trial (days) separately: currently 60 for Club Batting and 21 for Teams. Changes apply to new trials; existing trial dates and agreed prices stay unchanged. Ongoing free terms remain editable by an authorised Platform Admin."
-      },
-      {
-        "title": "Know the current scope",
-        "body": "Club Admin can add either unused product through Account → Products & trials without creating another club. Both products share club identity and branding. Permanent free access remains free. Online payment collection and self-service paid continuation are not enabled during this pilot; these support controls do not collect payment."
-      }
-    ],
-    "video_ids": [],
-    "quick_start_count": 5
-  }
-};
+let CLUB_BATTING_HELP=null;
+async function loadHelpCatalogue(){if(!CLUB_BATTING_HELP)CLUB_BATTING_HELP=(await import('./help-catalogue.js?v=0.8.62.288')).CLUB_BATTING_HELP;}
 function guideCapabilityForCurrentProduct(capability){
   const source=CLUB_BATTING_HELP[capability.capability_key];
   if(!source)return {...capability,tutorial:(capability.tutorial||[]).map(step=>({...step}))};
@@ -5491,14 +3531,21 @@ async function renderGuideInterventionInto(slot){
 }
 
 async function renderClubBattingGuide({revealTutorial=false}={}){
-  const page=document.getElementById('page');
+  const page=document.getElementById('page'),scope=requestedFeatureScope();
+  const here=()=>scope===requestedFeatureScope()&&page.isConnected;
   page.innerHTML='<div class="splash">Loading Club Batting Guide…</div>';
+  try{await loadHelpCatalogue();}catch{
+    if(here()){page.innerHTML='<section class="card"><h2>Help & Tutorials</h2><p>Help could not load. Check your connection and try again.</p><button class="btn ghost" id="retryHelp">Try again</button></section>';page.querySelector('#retryHelp').onclick=()=>void renderClubBattingGuide({revealTutorial});}
+    return;
+  }
+  if(!here())return;
   const role=guideAudienceKey();
   const [{data:capabilities,error:capErr},{data:progress,error:progErr},messages]=await Promise.all([
     supabase.from('club_batting_guide_capabilities').select('*').eq('active',true).order('sort_order'),
     supabase.from('club_batting_guide_progress').select('*').eq('club_id',club.id).eq('user_id',session.user.id),
     loadClubGuideHistory()
   ]);
+  if(!here())return;
   if(capErr||progErr){page.innerHTML=`<section class="card"><div class="notice">${esc((capErr||progErr).message)}</div></section>`;return;}
 
   const topicOrder=key=>{const index=GUIDE_TOPIC_ORDER.indexOf(key);return index<0?GUIDE_TOPIC_ORDER.length:index;};
@@ -5513,6 +3560,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   const progressMap=new Map((progress||[]).map(x=>[x.capability_key,x]));
 
   await supabase.rpc('set_guide_progress',{p_club_id:club.id,p_capability_key:selected.capability_key,p_action:'seen'});
+  if(!here())return;
 
   page.innerHTML=`${guideHelpStyles()}<header class="guide-page-heading"><h1 id="guidePageTitle">Help & Tutorials</h1></header>
   <div id="guideInterventionSlot"></div>
@@ -21008,6 +19056,13 @@ async function seAssign(id,pairDay2=undefined){const s=ensureSelections();if(s.b
 /* BEGIN TEAMS SELECTION — maintained source: tools/teams_selection_ui.js */
 let selectionAccess=null,selectionState=null,selectionRefreshTimer=null,selectionAccessSequence=0;
 let selectionRoomController=null;
+async function seOpenSelectionRoom(){
+ const button=document.getElementById('seOpenRoom'),scope=requestedFeatureScope();if(!button||button.disabled)return;
+ button.disabled=true;button.textContent='Opening…';
+ try{if(!createSelectionRoom)({createSelectionRoom}=await import('./selection-room.js?v=0.8.62.284'));if(scope===requestedFeatureScope()&&button.isConnected)await seSelectionRoom().open();}
+ catch(error){if(scope===requestedFeatureScope())seNotice('Selection Room could not open. '+error.message);}
+ finally{if(button.isConnected){button.disabled=false;button.textContent='Selection Room';}}
+}
 function seSelectionRoom(){
  if(!selectionRoomController)selectionRoomController=createSelectionRoom({
   scope(){const key=selectionsScopeKey();if(!key||!selectionsEnabled()||selectionState?.key!==key||!selectionState?.data?.selector||!selectionState.data.access)return null;
@@ -21116,7 +19171,7 @@ function seChangeView(view){
  s.followupOpen=false;s.boardChatOpen=null;s.boardCommentOpen=null;s.teamChange=null;s.availabilityReturn=null;s.availabilityPlayerId=null;
  if(view==='published')s.publishedWeek='';if(view==='socials')socialLanding();drawSelections();
 }
-function socialLanding(){const s=socialEnsure();s.view='graphics';s.creationView='graphics';socialTeamWorkflow.state(s).step='artwork';s.notice='';}
+function socialLanding(){const s=socialEnsure();s.view='graphics';s.creationView='graphics';if(socialTeamWorkflow)socialTeamWorkflow.state(s).step='artwork';else s.startAtArtwork=true;s.notice='';}
 function seIsCaptain(d){return d.captain===true||membership?.permission_role==='captain'||hasMatchCaptainAccess();}
 function seSelectionTabs(d){
  const captain=seIsCaptain(d);
@@ -21138,7 +19193,7 @@ function drawSelections(){selectionState?.cancelOrder?.();if(currentTab!=='teams
  document.getElementById('seSeasonStats')?.addEventListener('click',seToggleStats);
  document.getElementById('seImportFixtures')?.addEventListener('click',()=>{if(confirmLeaveSelections())seImportFixtures();});
  document.getElementById('seNewFixture')?.addEventListener('click',()=>{if(confirmLeaveSelections())seFixtureEditor();});
- selectionRoomController?.sync();document.getElementById('seOpenRoom')?.addEventListener('click',()=>void seSelectionRoom().open());
+ selectionRoomController?.sync();document.getElementById('seOpenRoom')?.addEventListener('click',()=>void seOpenSelectionRoom());
  document.getElementById('seRefresh').onclick=async()=>{if(!confirmLeaveSelections())return;s.notice='';await renderSelections();};
  document.getElementById('seRetrySave')?.addEventListener('click',()=>seMutate(s.pending.action,s.pending.data));
  document.getElementById('seRecovery')?.addEventListener('click',async()=>{seDownload('Selection-save-recovery.json',JSON.stringify(s.pending,null,2),'application/json');s.pending=null;sePersist();s.notice='Proposal downloaded. Review it against the latest saved teams before making changes.';await seReload();drawSelections();});
@@ -22191,11 +20246,11 @@ function guideContextAllows(item,context=guideTutorialContext()){
  return item.products.some(product=>product==='batting'&&context.batting||product==='teams'&&context.teams||product==='batting_only'&&context.batting&&!context.teams||product==='both'&&context.batting&&context.teams);
 }
 function guideTopicRelevant(topic,context=guideTutorialContext()){
- const source=typeof CLUB_BATTING_HELP!=='undefined'?CLUB_BATTING_HELP[topic.capability_key]:null;
+ const source=CLUB_BATTING_HELP?.[topic.capability_key]||null;
  return guideContextAllows(source||topic,context);
 }
 function guideTutorialSections(topic,context=guideTutorialContext()){
- const source=typeof CLUB_BATTING_HELP!=='undefined'?CLUB_BATTING_HELP[topic.capability_key]:null;
+ const source=CLUB_BATTING_HELP?.[topic.capability_key]||null;
  const steps=(topic.tutorial||[]).filter(step=>guideContextAllows(step,context));
  const explicit=steps.some(step=>typeof step.quick_start==='boolean');
  const count=source?.quick_start_count??topic.quick_start_count??5;
@@ -22322,10 +20377,10 @@ async function saveSharedTeams(action,values,gid){
 /* BEGIN TEAMS SOCIAL GRAPHICS — tools/social_graphics_v142.js */
 let socialState=null;
 function socialEnsure(){
- const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState){socialSandbox.release(socialState);for(const u of socialState.urls.values())URL.revokeObjectURL(u);}socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
+ const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState){socialSandbox?.release(socialState);for(const u of socialState.urls.values())URL.revokeObjectURL(u);}socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
 }
 function socialHere(s){return s===socialState&&s.scope===selectionsScopeKey()&&currentTab==='teams'&&ensureSelections().view==='socials';}
-function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.results?.busy||s.awards?.loading){alert(s.busy||s.week?.busy||s.playerWeek?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(!socialAwardScopes.canLeave(s)||!socialAwardLabels.canLeave(s)||!socialAwards.canLeave(s)||!socialWeek.canLeave(s)||!socialPlayerWeek.canLeave(s)||!socialTeamWorkflow.canLeave(s))return false;if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
+function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.results?.busy||s.awards?.loading){alert(s.busy||s.week?.busy||s.playerWeek?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(!socialPublishing)return true;if(!socialAwardScopes.canLeave(s)||!socialAwardLabels.canLeave(s)||!socialAwards.canLeave(s)||!socialWeek.canLeave(s)||!socialPlayerWeek.canLeave(s)||!socialTeamWorkflow.canLeave(s))return false;if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
 function socialFixtureCompleted(s,f,now=new Date()){
  const dates=(f.published?.details?.days||f.details?.days||[]).map(d=>d.date).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')).sort();
  return f.completed===true||!!dates.length&&dates.at(-1)<now.toLocaleDateString('en-CA',{timeZone:s.data?.timezone||'Australia/Sydney'});
@@ -22350,7 +20405,7 @@ async function socialRefresh(s){
  s.photoPositions=Object.fromEntries(data.fixtures.flatMap(socialCards).filter(card=>!socialFixtureCompleted(s,card.f)&&drafts[card.key]&&previous.get(card.key)===socialPhotoPositionContext(s,card)).map(card=>[card.key,drafts[card.key]]));
  return true;
 }
-async function socialOpen(){const s=socialEnsure();if(!s.awardScopes?.pending&&!s.awardScopes?.draft)delete s.awardScopes;if(s.results){s.results.context=null;s.results.attempted=false;}for(const key of ['week','playerWeek','awards'])if(s[key]?.context)s[key].sharedStale=true;const host=document.getElementById('seContent');host.innerHTML='<div class="se-card">Loading social graphics…</div>';try{if(await socialRefresh(s)){if(s.guide){s.guide.context=null;s.guide.available=null;s.guide.error='';}s.styleStatus=null;socialDraw(s);}}catch(e){if(!socialHere(s))return;host.innerHTML=`<section class="se-card"><h2>Social graphics</h2><p>${seEsc(e.message)}</p><button class="btn" id="socialRetry">Try again</button></section>`;document.getElementById('socialRetry').onclick=socialOpen;}}
+async function socialOpen(){const s=socialEnsure();if(!s.awardScopes?.pending&&!s.awardScopes?.draft)delete s.awardScopes;if(s.results){s.results.context=null;s.results.attempted=false;}for(const key of ['week','playerWeek','awards'])if(s[key]?.context)s[key].sharedStale=true;const host=document.getElementById('seContent');host.innerHTML='<div class="se-card">Loading social graphics…</div>';try{await loadSocialFeatures();if(!socialHere(s)||!host.isConnected)return;if(s.deferredNavigation){const route=s.deferredNavigation;delete s.deferredNavigation;restoreSocialNavigation(route);}if(s.startAtArtwork){delete s.startAtArtwork;socialTeamWorkflow.state(s).step='artwork';}if(await socialRefresh(s)){if(s.guide){s.guide.context=null;s.guide.available=null;s.guide.error='';}s.styleStatus=null;socialDraw(s);}}catch(e){if(!socialHere(s)||!host.isConnected)return;host.innerHTML=`<section class="se-card"><h2>Social graphics</h2><p>${seEsc(e.message)}</p><button class="btn" id="socialRetry">Try again</button></section>`;document.getElementById('socialRetry').onclick=socialOpen;}}
 function socialMessage(s,message){s.notice=message;if(socialHere(s)){const e=document.getElementById('socialNotice');if(e)e.textContent=message;}}
 async function socialSave(s,action,data,photoPositionKey=null){
  if(s.busy)return false;const command=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(photoPositionKey?{photoPositionKey}:{})};s.pending=command;s.busy=true;const button=s.actionButton;s.actionButton=null;if(button){button.textContent='Saving…';button.setAttribute('aria-busy','true');}socialMessage(s,'Saving…');socialLock(true);
@@ -22720,7 +20775,7 @@ async function socialFontReady(){
    const loaded=await Promise.race([font.load().then(()=>true),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),4000);})]);
    if(loaded)document.fonts.add(font);return loaded;
   }catch{return false;}finally{clearTimeout(timer);}};
-  return await load(new URL('assets/fonts/BarlowCondensed-Bold.ttf',document.baseURI).href)||await load('data:font/ttf;base64,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GFwRwBGuGFwYXBhcEagR/BhcGFwYXBGoEgIYXBhcGFwRqBGuGFwYXBhcEagRrhhcGFwYXBGoEa4YXBhcGFwRqBIIGFwYXBhcEg4SFBhcGFwYXBIOEhoYXBhcGFwSDhIUGFwYXBhcEg4YXBhcGFwYXBIOEiAYXBhcGFwSDhIUGFwYXBhcGFwSJhhcGFwYXBhcEiwYXBhcGFwYXBImGFwYXBhcGFwSLBhcGFwYXBIyEjgYXBhcGFwSMhI+GFwYXBhcEjISOBhcGFwYXBIyGFwYXBhcGFwSMhJEGFwYXBhcEjISShhcGFwYXBJQEkQYXBhcGFwSMhJWGFwYXBhcEjISXBhcGFwYXBIyEmIYXBhcGFwSMhI4GFwYXBhcEjISOBhcGFwYXBJQEjgYXBhcGFwSMhJoGFwYXBhcEjISbhhcGFwYXBIyEjgYXBhcGFwSMhhcGFwYXBhcEjISdBhcGFwYXBJ6EhQYXBhcGFwSehIUGFwYXBhcEnoSIBhcGFwYXBJ6EhQYXBhcGFwYXBKGEoAYXBhcGFwShhKAGFwYXBhcEowSgBhcGFwSkhKYGFwYXBhcEpISnhhcGFwYXBKSEqQYXBhcGFwSkhKYGFwYXBhcEpISmBhcGFwYXBKqEpgYXBhcGFwSkhKwGFwYXBhcEpISthhcGFwYXBKSEpgYXBhcGFwSvBLCGFwYXBhcEpISyBhcGFwYXBhcEs4YXBhcGFwYXBLUGFwYXBhcEtoYXBhcGFwYXBLgEuYYXBhcGFwS4BLsGFwYXBhcEuAS8hhcGFwYXBLgEuYYXBhcGFwS+BL+GFwYXBhcEwQTChhcGFwYXBMEExAYXBhcGFwTBBMKGFwYXBhcEwQTChhcGFwYXBMEExYYXBhcGFwTHBMiGFwTKBhcExwTLhhcEygYXBMcEzQYXBMoGFwTHBM6GFwTKBhcE0ATNBhcEygYXBMcE0YYXBMoGFwTHBNMGFwTKBhcExwTUhhcEygYXBMcEyIYXBMoGFwTQBMiGFwTKBhcExwTWBhcEygYXBMcE14YXBMoGFwTHBMiGFwTKBhcExwTLhhcEygYXBNAEyIYXBMoGFwTHBNYGFwTKBhcExwTXhhcEygYXBMcE2QYXBMoGFwTHBMiGFwTKBhcExwTIhhcEygYXBNqE3AYXBN2GFwTHBNkGFwTKBhcGFwTfBhcGFwYXBOCE4gYXBhcGFwTghOOGFwYXBhcE4ITiBhcGFwYXBOUE5oYXBhcGFwTlBOgGFwYXBhcE5QTmhhcGFwYXBOUGFwYXBhcGFwTlBOmGFwYXBhcGFwTrBhcGFwYXBOyE3AYXBhcGFwTshNwGFwYXBhcE7ITcBhcGFwYXBO4E74YXBPEGFwTuBPKGFwTxBhcE7gT0BhcE8QYXBO4E9YYXBPEGFwTuBO+GFwTxBhcE9wTvhhcE8QYXBO4E+IYXBPEGFwTuBPoGFwTxBhcE7gTvhhcE8QYXBO4E8oYXBPEGFwT3BO+GFwTxBhcE7gT4hhcE8QYXBO4E+gYXBPEGFwTuBPuGFwTxBhcE7gTvhhcE8QYXBO4E74YXBPEGFwTuBhcGFwTxBhcE7gTvhhcE8QYXBO4E+4YXBPEGFwYXBP0GFwYXBhcGFwT+hhcGFwYXBhcFAAYXBhcGFwYXBP0GFwYXBhcGFwUBhhcGFwYXBQMFBIYXBhcGFwUDBQYGFwYXBhcFAwUHhhcGFwYXBQMFBIYXBhcGFwUJBQSGFwYXBhcFAwUKhhcGFwYXBQMFDAYXBhcGFwUDBQ2GFwYXBhcGFwUPBhcGFwYXBhcFEIYXBhcGFwUSBQ8GFwYXBhcGFwUPBhcGFwYXBJ6EhQYXBhcGFwS2hhcGFwYXBhcEwQTChhcGFwYXBOCE4gYXBhcGFwTshNwGFwYXBhcE5QTmhhcGFwYXBOyE3AYXBhcGFwUThRUGFwYXBhcFE4UWhhcGFwYXBROFFQYXBhcGFwUThRgGFwYXBhcFGYUbBhcGFwYXBROFHIYXBhcGFwUThR4GFwYXBhcFE4UfhhcGFwYXBROFFQYXBhcGFwUThSEGFwYXBhcFE4UihhcGFwYXBRmFIQYXBhcGFwUThSQGFwYXBhcFE4UlhhcGFwYXBROFJwYXBhcGFwUThRUGFwYXBhcFGYUVBhcGFwYXBROFKIYXBhcGFwUThSoGFwYXBhcFE4UVBhcGFwYXBROGFwYXBhcGFwUThRUGFwYXBhcFE4UrhhcGFwYXBS0FLoYXBhcGFwUtBTAGFwYXBhcFLQUuhhcGFwYXBS0GFwYXBhcGFwUtBTGGFwYXBhcFLQUuhhcGFwYXBhcFMwYXBhcGFwU0hTYGFwYXBhcFNIU3hhcGFwYXBTSFNgYXBhcGFwU0hhcGFwYXBhcFNIU5BhcGFwYXBTSFOoYXBhcGFwU8BTkGFwYXBhcFNIU9hhcGFwYXBTSFPwYXBhcGFwU0hUCGFwYXBhcFNIU2BhcGFwYXBTSFNgYXBhcGFwU8BTYGFwYXBhcFNIVCBhcGFwYXBTSFQ4YXBhcGFwU0hTYGFwYXBhcFNIYXBhcGFwYXBTSFRQYXBhcGFwVGhUgGFwYXBhcGFwVJhhcGFwYXBhcFSYYXBhcGFwYXBUsGFwYXBhcGFwVLBhcGFwYXBhcFSwYXBhcGFwYXBSEGFwYXBhcGFwVLBhcGFwYXBhcFSwYXBhcGFwYXBhcGFwYXBUyGFwYXBhcGFwVMhhcEjgYXBhcFTIYXBU4GFwYXBUyFT4VRBhcGFwYXBhcFUoYXBhcGFwYXBVQGFwYXBhcGFwVVhhcGFwYXBhcFVwYXBhcGFwYXBVKGFwYXBhcGFwVShhcGFwYXBViFUQYXBhcGFwYXBVoGFwYXBhcGFwVbhhcGFwYXBhcFXQYXBhcGFwYXBVKGFwYXBhcGFwVehhcGFwYXBhcFYAYXBhcGFwYXBWGGFwYXBhcGFwVhhhcGFwYXBhcFYwYXBhcGFwVkhhcGFwYXBhcFZIYXBhcGFwYXBhcFZgYXBhcGFwYXBWeGFwYXBhcGFwVpBhcGFwYXBhcFZgYXBhcGFwYXBWqGFwYXBhcGFwVsBhcGFwYXBW2FbwYXBhcGFwVthXCGFwYXBhcFbYVvBhcGFwYXBW2FbwYXBhcGFwYXBXIGFwYXBhcEjIVzhhcFdQYXBIyFdoYXBXUGFwSMhXgGFwV1BhcEjITmhhcFdQYXBIyFeYYXBXUGFwV7BOaGFwV1BhcEjIV8hhcFdQYXBIyFfgYXBXUGFwSMhX+GFwV1BhcEjIVzhhcFdQYXBXsFc4YXBXUGFwSMhYEGFwV1BhcEjIWChhcFdQYXBIyFc4YXBYQGFwSMhXaGFwWEBhcFewVzhhcFhAYXBIyFgQYXBYQGFwSMhYKGFwWEBhcEjIWFhhcFhAYXBIyFc4YXBXUGFwSMhXOGFwV1BhcFhwU2BhcFiIYXBYcFdoYXBYiGFwSMhYoGFwV1BhcFi4WNBhcGFwYXBYuFjoYXBhcGFwWLhY0GFwYXBhcFkAWRhhcGFwYXBZAFkwYXBhcGFwWQBZGGFwYXBhcFkAYXBhcGFwYXBZAFlIYXBhcGFwWWBZeGFwYXBhcFlgWXhhcGFwYXBZYFmQYXBhcGFwWahXOGFwWcBhcFmoWdhhcFnAYXBZqFeAYXBZwGFwWahXOGFwWcBhcFmoUxhhcFnAYXBZqFc4YXBZwGFwU8BXOGFwWcBhcFmoWfBhcFnAYXBZqFgoYXBZwGFwWahXOGFwWghhcFmoWdhhcFoIYXBTwFc4YXBaCGFwWahZ8GFwWghhcFmoWChhcFoIYXBZqFigYXBaCGFwWahXOGFwWcBhcFmoVzhhcFnAYXBhcFSwYXBhcGFwVkhhcGFwYXBhcFbYVvBhcGFwYXBYuFjQYXBhcGFwWWBhcGFwYXBhcFkAWRhhcGFwYXBZYFl4YXBhcGFwWahhcGFwWcBhcFmoVzhhcFnAYXBZqFigYXBZwGFwYXBaIGFwYXBhcGFwWjhhcGFwYXBhcFpQYXBhcGFwYXBaIGFwYXBhcGFwWmhhcGFwYXBagFqYYXBhcGFwWoBMiGFwYXBhcFqAWrBhcGFwYXBagFqYYXBhcGFwWshamGFwYXBhcFqAWuBhcGFwYXBagFr4YXBhcGFwWoBbEGFwYXBhcGFwWyhhcGFwYXBhcFtAYXBhcGFwW1hbKGFwYXBhcGFwWyhhcGFwYXBTSFRQYXBhcGFwYXBhcGFwYXBUyGFwW3BhcGFwYXBhcFuIYXBhcGFwYXBboGFwYXBhcGFwW7hhcGFwYXBhcFuIYXBhcGFwYXBb0GFwYXBhcGFwW4hhcGFwYXBhcFvoYXBhcGFwYXBbiGFwYXBhcGFwW4hhcGFwYXBhcFuIYXBhcGFwYXBcAGFwYXBhcFwYXDBhcGFwYXBcGFxIYXBhcGFwXBhcMGFwYXBhcFwYYXBhcGFwYXBcGFwwYXBhcGFwYXBcYGFwYXBhcGFwXHhhcGFwYXBhcFxgYXBhcGFwYXBceGFwYXBhcFyQXKhhcGFwYXBckFzAYXBhcGFwXJBcqGFwYXBhcFyQYXBhcGFwYXBckFzYYXBhcGFwXJBcqGFwYXBhcFyQXKhhcGFwYXBckFzwYXBhcGFwXJBcqGFwYXBhcFyQYXBhcGFwYXBdCFwwYXBhcGFwXQhdIGFwYXBhcF0IXDBhcGFwYXBdCFwwYXBhcGFwYXBhcF04YXBhcGFwYXBdOGFwYXBhcF1QYXBhcGFwYXBdaGFwYXBhcGFwXYBhcGFwYXBhcF1QYXBhcGFwYXBdUGFwYXBhcGFwXZhhcGFwYXBhcF1QYXBhcGFwYXBdUGFwYXBhcGFwXVBhcGFwYXBdsGFwYXBhcGFwXbBhcGFwYXBhcF3IXeBhcGFwYXBdyF34YXBhcGFwYXBeEGFwYXBhcF3IXeBhcGFwYXBeKF5AYXBhcGFwXlhecGFwYXBhcF5YXohhcGFwYXBeWF5wYXBhcGFwXlhecGFwYXBhcF5YXnBhcGFwYXBeWF6gYXBhcGFwYXBeuGFwYXBhcGFwXtBhcGFwYXBhcF7oYXBhcGFwYXBeuGFwYXBhcGFwXwBhcGFwYXBhcF64YXBhcGFwYXBeuGFwYXBhcGFwXrhhcGFwYXBhcF8YYXBhcGFwYXBfMGFwYXBhcF9IX2BhcGFwYXBfSF94YXBhcGFwX0hfYGFwYXBhcF9IX2BhcGFwYXBfkF+oYXBhcGFwX5BfwGFwYXBhcF+QX6hhcGFwYXBfkGFwYXBhcGFwX5BfqGFwYXBhcF/YX/BhcGFwYXBf2F/wYXBhcGFwX9hf8GFwYXBhcF/YYXBhcGFwYXBf2F/wYXBhcGFwYAhgIGFwYXBhcGAIYDhhcGFwYXBgCGBQYXBhcGFwYAhgIGFwYXBhcGAIYGhhcGFwYXBgCGAgYXBhcGFwYAhgIGFwYXBhcGAIYXBhcGFwYXBgCGAgYXBhcGFwYXBggGFwYXBhcGFwYJhhcGFwYXBhcGCwYXBhcGFwYXBggGFwYXBhcGFwYMhhcGFwYXBhcGDgYXBhcGFwYXBg+GFwYXBhcGFwYRBhcGFwYXBhcGDgYXBhcGFwYXBhKGFwYXBhcGFwYUBhcGFwYXBhcGFYYXBhcGFwYXBhQGFwYXBhcGFwYUBhcGFwYXAAB/6kAAAAB/4QAAAAB/6r/8gAB/7//9wAB/53/+gAB/1YCAgAB/6kCAgAB/8UCAgAB/38CAgAB/yMCAgAB/1wCAgAB/1kCAwAB/3oCAgAB/5YCAgAB/1oCAgAB/skCAgAB/2sCAgAB/i4CAgAB/mcCAgAB/k8CAgAB/wwB/QAB/74CAgAB/2sCKwABAPIAAAABAPECvAABAQsDdgABAQsEFgABAPL/EAABAPEDXAABAMUEFgABAPIEJwABAP4EEQABAPADdgABAdIDxwABAWoD7QABAYgEEAABAPAEFgABAMUDdgABAPEDowABAQIDgAABAOn/+AABAOkCvAABAQMDdgABAOgDdgABAOgCvAABAQcCvAABAN0AAAABAOQCvAABAP4DdgABAOMDdgABAcUDxwABAN3/EAABAV0D7QABAXsEEAABAOMEFgABALgDdgABAOQDowABAPUDgAABAOb/+AABAPAB+wABAO8CvQABAO4DdwABAHMAAAABAHMCvAABAIwDdgABAHEDdgABAHP/EAABAEYDdgABAHMDowABAG4AAAABAG4CvAABAIQDgAABAU4CvQABAU0DdwABAQkAAAABAMwAAAABAHUCvAABAI8DdgABATICvAABAQ4AAAABALcCvAABAQcAAAABAQACvwABARkDeAABAREDgwABAOwAAAABAOwCvAABAWwCvAABAQUDdQABAOsDdQABAc0DxwABAOz/EAABAWUD7QABAYMEEAABAOsEFgABAL8DdQABAOwDowABAP0DgAABAOsAAAABAOsCvAABAWsCvAABAWwCvAABAPEAAAABAOUCvAABAP8DdgABAOD/+AABANwCvAABAPUDdgABANoDdgABAQwCyQABAOX//wABAPAAAAABAPACvAABAcICvAABAQkDdgABAPADXAABAO4DdgABAPD/EAABAMMDdgABAPADowABAQADgAABAVICvAABAWoDdgABAVADdgABASUDdgABAO0AAAABAO0CvAABAQcDdgABAOwDdgABAO3/EAABAMEDdgABAO0DowABAP4DgAABAM0CvAABAOYDdgABANAC9wABAN8AAAABAOECBgABAPgCvAABAPgDXAABAN//EAABAN8CogABALIDXAABAN8DbQABAOwDVwABAN0CvAABAb8DDQABAVcDNAABAXUDVgABAN4DXQABALICvAABAN8C6gABAPACxwABANz/+AABANwCAgABAPUCvAABANsCvAABAhoCvAABANv//AABANsCAgABAPQCvAABANkCvAABAbsDDQABANr/EAABAVMDNAABAXEDVgABANkDXQABAK4CvAABANoC6gABAOsCxwABANkAAAABANkCBwABAMYCAgABAN4CAgABAIgCIgABAOwDbAABAG0AAAABAG4CAgABAF8CAgABAHgCvAABAF8CogABAF0CvAABAG3/EAABADICvAABAF8C6gABAUICAgABAHMCAgABAHACxwABAGwCAgABAGsCvAABAOcAAAABAGoCvAABAIMDdgABASECvQABAHICvAABALwCvAABAOMAAAABAOICAgABAPwCvAABAPECxwABAN0CAgABAU0CAgABAPcCvAABAN0CogABAb4DDQABAN7/EAABAVYDNAABAXQDVgABANwDXQABALECvAABAN0C6gABAV8CAgABANMC0AABANsAAAABAUsCAgABAO4CxwABAHYAAAABALQCAgABAM4CvAABANL/+QABAM0CAgABAOcCvAABAMwCvAABAK4ABgABAIcCggABATUCvQABAKgAAAABAasCAgABAPYCvAABALACvAABAaMCAgABATICAwABAUsCvAABATACvAABAQUCvAABAYMAAAABANMCAwABANECvAABAW7/EAABAKYCvAABANMC6gABAOQCxwABALsCAgABANQCvAABAL8CPgABAN8CCAABAOsCQQABAQQC+wABAOsC4gABAOoC+wABAL4C+wABAPwDBgABANr/+QABANoCSAABAPMDAgABANYCRQABAO8CRQABAMsAAAABANECTAABAOsDBgABANADBgABAKUDBgABANf/+QABANoC6QABAN4BowABAGsCSgABAIQDAwABAGoDAwABAD4DAwABAPYAAAABALwAAAABAG0CQQABAIcC+wABASUCQQABAPoAAAABAKsCQQABAPUAAAABAO0CTAABAQcDBgABAP4DEQABANwCRwABAPYDAQABANsDAQABALADAQABAO0DCwABAVACQQABAOAAAAABANQCQQABAO4C+wABANT/+QABANACSAABAOkDAgABANEAAAABANcCQQABAN4AAAABAN0CTAABAPYDBgABANwDBgABALADBgABAT4CQQABAVcC+wABATwC+wABAREC+wABAN8CQQABAPkC+gABAN4C+gABALMC+gABAL8CTAABANgDBgABAAAAAAABBaYFtAABAAwAIgAFAAAAHgAAACQAAAAqAAAAMAAAADYAAwAmACwAMgAB/6kAAAAB/4QAAAAB/6r/8gAB/7//9wAB/53/+gAB/5ICQAAB/6n/EAABAKYCPgABBWQFdAABAAwAZgAWAAAAdAAAAHoAAACAAAAAhgAAAIwAAACSAAAAmAAAAJ4AAACkAAAAqgAAAKQAAACwAAAAtgAAAIYAAAC8AAAAvAAAALwAAAC8AAAAwgAAAMgAAADIAAAAyAAMAHQAdAB6AIAAhgCMAHQAkgCYAJIAngCk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AcsBzAHNAc4BzwHQAdEB0gHTAdQB1QHWAdcB2AHZAdoB2wHcAd0B3gHfAeAB4QHiAckAAgVQAGwBcAFxAXIBcwF0AXUBdgF3AXgBeQF6AXsBfAF9AX4BfwGAAYEBggGDAYQBhQGGAYcBiAGJAYoBiwGMAY0BjgGPAZABkQGSAZQBlQGWAZcBmAGZAZoBmwGcAZ0BngGfAaABoQGjAaQBpQGmAacBqAGpAaoBqwGtAa4BrwGwAbEBsgGzAbQBtQG2AbcBuAG5AboBuwG8Ab0BvgHAAcEBwgHDAcUBxgHHAcoBywHMAc0BzgHPAdAB0QHSAdMB1AHVAdYB1wHYAdkB2gHbAdwB3QHeAd8B4AHhAeIAAQVCAAUAEAAaAEAASgBUAAEABAFrAAIATAAEAAoAEgAaACABbAADAOUA8AFtAAMA5QEDAWkAAgDwAWoAAgEDAAEABAFuAAIA/gABAAQBbwACAP4AAQAEAkkAAgI3AAIE8gDdAXEBcgFzAXQBdQF2AXcBeAF5AXoBewF8AX0BfgF/AYABgQGCAYMBhAGFAYYBhwGIAYkBigGLAYwBjQGOAY8BkAGRAZIBlAGVAZYBlwGYAZkBmgGbAZwBngGfAaABoQGjAaQBpQGmAacBqAGpAaoBqwGtAa4BsAGxAbIBswG0AbUBtgG3AbgBuQG6AbsBvAG9Ab4BwAHBAcIBwwHFAcYBxwHKAcsBzAHNAc4BzwHQAdEB0gHTAdQB1QHWAdcB2AHZAdoB2wHcAd0B3gHfAeAB4QHiAckBcQFyAXMBdAF1AXYBdwF4AXkBegF7AXwBfQF+AX8BgAGBAYIBgwGEAYUBhgGHAYgBiQGKAYsBjAGNAY4BjwGQAZEBkgGUAZUBlgGYAZkBmgGbAZwBnQGeAZ8BoQGjAaQBpQGmAacBqAGpAaoBqwGtAa4BsAGxAbIBswG0AbUBtgG3AbgBuQG6AbsBvAG9Ab4BwAHBAcIBwwHFAcYBxwHKAcsBzAHNAc4BzwHQAdEB0gHTAdQB1QHWAdcB2AHZAdoB2wHcAd0B3gHfAeAB4QHiAf0B/gH/AgACAQICAgMCBAIFAgYCGgABBLAAGgA6AEAARgBMAFQAWgBgAGgAcgB8AIYAkACaAKQArgC4AMIAxgDKAM4A0gDWANoA3gDiAOYAAgHjAXAAAgHkAa8AAgHjAXAAAwDxAPYBlwAC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BiM2NjURNCYjIgYVERQWM5Bublxcb29cHCIiHBwhIRwIbFoBQFpsbFr+wFpseScgAUwgJycg/rQgJwAA//8AIv/4AbcDdQAiAFoAAAEHAooBbQC5AAixAgGwubA1KwAA//8AIv/4AbcDdQAiAFoAAAEHAowBkAC5AAixAgGwubA1KwAA//8AIv/4AiUDxgAiAFoAAAEHArEChQC5AAixAgKwubA1KwAA//8AIv8QAbcDdQAiAFoAAAAjApYBRAAAAQcCjAGQALkACLEDAbC5sDUrAAD//wAi//gBvwPtACIAWgAAAQcCsgKdALkACLECArC5sDUrAAD//wAi//gB5AQXACIAWgAAAQcCswKdALkACLECArC5sDUrAAD//wAi//gBtwQWACIAWgAAAQcCtAKdALkACLECArC5sDUrAAD//wAi//gBtwOTACIAWgAAAQcChwGWALkACLECArC5sDUrAAD//wAi/xABtwLEACIAWgAAAAMClgFEAAD//wAi//gBtwN1ACIAWgAAAQcCiQEnALkACLECAbC5sDUrAAD//wAi//gBtwOrACIAWgAAAQcCkgIjALkACLECAbC5sDUrAAAAAgAi//gBtwMRAB0AKwAwQC0bFQIBAhABAwECTAACAQKFAAMDAWEAAQFCTQAEBABhAAAAQwBOJSgnJSYFChsrABcWFREUBiMiJjURNDYzMhcWMzY2NzQzMzIWBwYHBzQmIyIGFREUFjMyNjUBeQM7b1xcbm5cHCECBBUeAwwyBgYBBC5SIhwcISEcHCIClAQ1Xf7AWmxsWgFAWmwHAQMhJQwJCUYikyAnJyD+tCAnJyAAAAD//wAi//gBtwN1ACIAZgAAAQcCigFtALkACLECAbC5sDUrAAD//wAi/xABtwMRACIAZgAAAAMClgFEAAD//wAi//gBtwN1ACIAZgAAAQcCiQEnALkACLECAbC5sDUrAAD//wAi//gBtwOrACIAZgAAAQcCkgIjALkACLECAbC5sDUrAAD//wAi//gBtwOAACIAZgAAAQcCkAGSALkACLECAbC5sDUrAAD//wAi//gBuAN1ACIAWgAAAQcCiwHJALkACLECArC5sDUrAAD//wAi//gBtwNeACIAWgAAAQcCpwBBALkACLECAbC5sDUrAAAAAgAS/80BxQLxACcANQAuQCshAgICARcMAgAD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Ad8AKQHfACkB3wApAegAFgKxABQCqAAUAqgAFAKoABQCqAAUAdsAGAHaABgB2gAYAdoAGAHaABgB2gAYAdoAGAHaABgB2gAYAZwAFAGcABQBnAAUAZwAFAHTACIB6wAsAgIALAHXACwB1AAYAbwAGwHUABgBvgAXAb0AFwG9ABcBvQAXAb0AFwG9ABcBvQAXAb0AFwG9ABcBvQAXAb0AFwG9ABcBvQAXAb0AFwG9ABcBvQAXAb0AFwG9ABcBvQAXAb0AFwG9ABcBvQAXAb0AFwKuABcBvQAmAbIAHwGyAB8BsgAfAbIAHwGyAB8BsgAfAb0AHwHBAB8BvQAfAb0AHwG0AB8BtAAfAbQAHwG0AB8BtAAfAbQAHwG0AB8BtAAfAbQAHwG0AB8BtAAfAbQAHwG0AB8BtAAfAbQAHwG0AB8BtAAfAbQAHwG0ABsBnwAfAZ8AHwEqABIBuQAfAbkAHwG5AB8BuQAfAbkAHwHFAB8BvwAmAb//9wG/ACYBvwAmANsAHgC+ABgAvgAYAL7/6AC+/8sAvv+zAL4AEADbAB4Avv/aAL7/+gGvAB4Avv/tAOEAJQC+/9sA2f/IANv/yADb/8gBwQAmAcEAJgDRACIA0QAiAZYAIgDR/90A4wAkAYMADgKjACUBvwAmAb8AJgG/ACYBvwAmAb8AJgG6AB8BugAfAboAHwG6AB8BugAfAboAHwG6AB8BugAfAboAHwG6AB8BugAfAboAHwG6AB8BugAfAboAHwG6AB8BugAfAboAHwG6AB8BugAfAboAHwHJABYBugAWAboAHwKzAB8BwAApAboAIgHAAB8BRAAmAUQAJgFEACYBnAAYAZ0AGAGdABgBnQAYAZ0AGAHNACYBIwANASMADQEjAA0BvwAiAb8AIgG/ACIBvwAiAb8AIgG/ACIBvwAiAb8AIgG/ACIBvwAiAb8AIgG/ACIBvwAiAb8AIgG/ACIBvwAiAb8AIgG5AB8BwQAmAb8AJgFE/94BIwANAZ0AGAEjAA0BvwAiAb8AIgG/ACIBtAAQAmUAEAJlABACZQAQAmUAEAJlABABtwAOAacADQGmAA0BpgANAaYADQGmAA0BpgANAaYADQGmAA0BdQASAXUAEgF1ABIBdQASAbQAHwG/ACYBvQAfAcQAJgIEABIB+gASAqoALAMQABIDCAASApIAHwGtAB4B1wARAdcAEQHXABEB1wARAdcAEQHXABEB1wARAdcAEQHXABEB1wARAdcAEQLJABUBtQAlAbEAHQGxAB0BsQAdAbEAHQGxAB0BuAAlAdIAJQG4ACUB0gAlAZYAJQGWACUBlgAlAZYAJQGWACUBlgAlAZYAJQGWACUBlgAlAZYAJQGHACUBsQAdAbEAHQGxAB0BsQAdAb0AJQG9/+sA1gAlANYAJQDW/9cA1v+/ANYAHADW/+YCfAAlANb/+QDWABwBpQALAcsAJQHLACUBjgAlAY4AJQGgACUBjgAlAcIAAQHwACQB3gAkAd4AJAHeACQB3gAkAd4AJAHeACQBuAAdAbgAHQG4AB0BuAAdAbgAHQG4AB0BuAAdAbgADAG4AB0CfwAdAbAAIQGwACEBrwAdAbgAJQG4ACUBuAAlAbgAJQGlABoBpQAaAaUAGgGlABoBpQAaAawADwGsAA8BrAAPAawADwGsAA8BuQAhAbkAIQG5ACEBuQAhAbkAIQG5ACEBuQAhAbkAIQG5ACEBywAUAoEAFAKBABQCgQAUAoEAFAKBABQBvgAUAb8AFQG/ABUBvwAVAb8AFQG/ABUBgAARAYAAEQGAABEBgAARASQADAEnABACHAALAfAAIgHCACYCGgAYAcUAHgEcAAkBtgAYAbQAFwHkAA4BtwAfAbgAHwGXAA0BuAAeAbMAEgHyAC0B8gBDAfIALgHyACwB8gATAfIANQHyADQB8gAtAfIAMgHyACcBEAAQAJ0ADgEKAA0BGgAcASYABwEFAAwBCwAQAPcABgEKABABCwAMARAAEACdAA4BCgANARoAHAEmAAcBBQAMAQsAEAD3AAYBCgAQAQsADACdAA4BCgANARoAHAEmAAcBBQAMAQsAEAD3AAYBCgAQAQsADADc/24CswAOAswADgMZABwCtgAOAwMAHALlAAwCxwAGAN8AIQDTAB0BEwA8AOgAHwLFACEBFwA9ARcAPQG1ABEBtQASAOEAIgEyABgBaQAOAmgAIgGfABABnwAlATcAAQE3ADoBWAAcAVgAHAFZABwBWQBYAUsAGAFLABgBfAAYAlEAGAFLABgBpQAOAlgAHQFdAAABYAADAWAAAAC8AAMAvAAAAcsAKwHLADEBJAAlASwAMQFaAA8AqgAPAlEAGAEpACwAyAAAAbIAHwI3AA8BvAAbAfQAIgHeABIB3AAs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AGEAcgBsAG8AdwAgAEMAbwBuAGQAZQBuAHMAZQBkAEIAbwBsAGQAMQAuADQAMAA4ADsAVABSAEIAWQA7AEIAYQByAGwAbwB3AEMAbwBuAGQAZQBuAHMAZQBkAC0AQgBvAGwAZABCAGEAcgBsAG8AdwAgAEMAbwBuAGQAZQBuAHMAZQBkACAAQgBvAGwAZABWAGUAcgBzAGkAbwBuACAAMQAuADQAMAA4AEIAYQByAGwAbwB3AEMAbwBuAGQAZQBuAHMAZQBkAC0AQgBvAGwAZABUAHIAaQBiAGIAeQAgAFQAeQBwAGUASgBlAHIAZQBtAHkAIABUAHIAaQBiAGIAeQBoAHQAdABwAHMAOgAvAC8AdAByAGkAYgBiAHkALgBjAG8AbQAvAGgAdAB0AHAAcwA6AC8ALwB0AHIAaQBiAGIAeQAuAGMAbwBtAC8AVABoAGkAcwAgAEYAbwBuAHQAIABTAG8AZgB0AHcAYQByAGUAIABpAHMAIABsAGkAYwBlAG4AcwBlAGQAIAB1AG4AZABlAHIAIAB0AGgAZQAgAFMASQBMACAATwBwAGUAbgAgAEYAbwBuAHQAIABMAGkAYwBlAG4AcwBlACwAIABWAGUAcgBzAGkAbwBuACAAMQAuADEALgAgAFQAaABpAHMAIABsAGkAYwBlAG4AcwBlACAAaQBzACAAYQB2AGEAaQBsAGEAYgBsAGUAIAB3AGkAdABoACAAYQAgAEYAQQBRACAAYQB0ADoAIABoAHQAdABwADoALwAvAHMAYwByAGkAcAB0AHMALgBzAGkAbAAuAG8AcgBnAC8ATwBGAEwAaAB0AHQAcAA6AC8ALwBzAGMAcgBpAHAAdABzAC4AcwBpAGwALgBvAHIAZwAvAE8ARgBMAAIAAAAAAAD/tQAyAAAAAAAAAAAAAAAAAAAAAAAAAAACtgAAAQIAAgADACQAyQEDAQQBBQEGAQcBCAEJAMcBCgELAQwBDQEOAGIBDwCtARABEQESAGMArgCQACUAJgD9AP8AZAETARQAJwDpARUBFgAoAGUBFwEYAMgBGQEaARsBHAEdAMoBHgEfAMsBIAEhASIBIwApACoA+AEkASUAKwEmAScALADMAM0AzgD6ASgAzwEpASoBKwEsAC0BLQAuAC8BLgEvATAA4gAwADEBMQEyATMAZgAyANAA0QE0ATUBNgE3ATgAZwE5ANMBOgE7ATwBPQE+AT8BQAFBAUIAkQCvALAAMwDtADQANQFDAUQANgFFAOQA+wFGAUcANwFIAUkAOADUAUoA1QBoAUsA1gFMAU0BTgFPAVABUQFSAVMBVAFVAVYBVwA5ADoBWAFZAVoBWwA7ADwA6wFcALsBXQFeAV8BYAA9AWEA5gFiAWMBZAFlAWYBZwFoAWkARABpAWoBawFsAW0BbgFvAXAAawFxAXIBcwF0AXUAbAF2AGoBdwF4AXkAbgBtAKAARQBGAP4BAABvAXoBewBHAOoBfAEBAEgAcAF9AX4AcgF/AYABgQGCAYMAcwGEAYUAcQGGAYcBiAGJAYoBiwGMAEkASgD5AY0BjgGPAZAASwGRAZIBkwBMANcAdAGUAHYAdwGVAZYAdQGXAZgBmQGaAZsATQGcAZ0ATgGeAE8BnwGgAaEBogDjAFAAUQGjAaQBpQB4AFIAeQGmAHsBpwGoAakBqgGrAHwBrAB6Aa0BrgGvAbABsQGyAbMBtAG1AKEBtgB9ALEAUwDuAFQAVQG3AbgAVgG5AOUA/AG6AIkAVwG7AbwAWAB+Ab0BvgCAAIEBvwB/AcABwQHCAcMBxAHFAcYBxwHIAckBygHLAcwBzQHOAc8B0AHRAdIAWQBaAdMB1AHVAdYAWwBcAOwB1wC6AdgB2QHaAdsAXQHcAOcB3QHeAd8B4AHhAMAAwQHiAeMB5AHlAeYB5wHoAekB6gHrAewB7QHuAe8B8AHxAfIB8wH0AfUB9gH3AfgB+QH6AfsB/AH9Af4B/wIAAgECAgIDAgQCBQIGAgcCCAIJAgoCCwIMAg0CDgIPAhACEQISAhMCFAIVAhYCFwIYAhkCGgIbAhwCHQIeAh8CIAIhAiICIwIkAiUCJgInAigCKQIqAisCLAItAi4CLwIwAjECMgIzAjQCNQI2AjcCOAI5AjoCOwI8Aj0CPgI/AkACQQJCAkMCRAJFAkYCRwJIAkkCSgJLAkwCTQJOAk8CUAJRAlICUwJUAlUCVgJXAlgCWQCdAJ4CWgJbAlwAmwATABQAFQAWABcAGAAZABoAGwAcAl0CXgJfAmACYQJiAmMCZAJlAmYCZwJoAmkCagJrAmwCbQJuAm8CcAJxAnICcwJ0AnUCdgJ3AngCeQJ6AnsCfAJ9An4CfwKAAoECggKDALwA9AD1APYChAKFAoYChwARAA8AHQAeAKsABACjACIAogDDAIcADQAGABIAPwALAAwAXgBgAD4AQAAQAogAsgCzAokAQgDEAMUAtAC1ALYAtwCpAKoAvgC/AAUACgKKAosCjACEAL0ABwKNAKYA9wCFAo4CjwCWApACkQAOAO8A8AC4ACAAjwAhAB8AlQCUAJMApwCkAGEAQQCSAJwCkgKTAJoAmQClApQAmAAIAMYAuQAjAAkAiACGAIsAigCMAIMClQKWAF8A6ACCApcAwgKYApkCmgKbApwCnQKeAp8CoAKhAqICowKkAqUCpgKnAqgCqQKqAqsCrAKtAq4CrwKwArECsgKzAI0A2wDhAN4A2ACOANwAQwDfANoA4ADdANkCtAK1ArYCtwK4ArkCugK7ArwCvQK+BE5VTEwGQWJyZXZlB3VuaTFFQUUHdW5pMUVCNgd1bmkxRUIwB3VuaTFFQjIHdW5pMUVCNAd1bmkwMUNEB3VuaTFFQTQHdW5pMUVBQwd1bmkxRUE2B3VuaTFFQTgHdW5pMUVBQQd1bmkxRUEwB3VuaTFFQTIHQW1hY3JvbgdBb2dvbmVrC0NjaXJjdW1mbGV4CkNkb3RhY2NlbnQGRGNhcm9uBkRjcm9hdAZFY2Fyb24HdW5pMDIyOAd1bmkxRUJFB3VuaTFFQzYHdW5pMUVDMAd1bmkxRUMyB3VuaTFFQzQKRWRvdGFjY2VudAd1bmkxRUI4B3VuaTFFQkEHRW1hY3JvbgdFb2dvbmVrB3VuaTFFQkMLR2NpcmN1bWZsZXgKR2RvdGFjY2VudARIYmFyC0hjaXJjdW1mbGV4B3VuaTFFQ0EHdW5pMUVDOAdJbWFjcm9uB0lvZ29uZWsGSXRpbGRlC0pjaXJjdW1mbGV4BkxhY3V0ZQZMY2Fyb24HdW5pMDEzQgZOYWN1dGUGTmNhcm9uA0VuZwd1bmkxRUQwB3VuaTFFRDgHdW5pMUVEMgd1bmkxRUQ0B3VuaTFFRDYHdW5pMUVDQwd1bmkxRUNFBU9ob3JuB3VuaTFFREEHdW5pMUVFMgd1bmkxRURDB3VuaTFFREUHdW5pMUVFMA1PaHVuZ2FydW1sYXV0B09tYWNyb24GUmFjdXRlBlJjYXJvbgZTYWN1dGULU2NpcmN1bWZsZXgHdW5pMDE4RgRUYmFyBlRjYXJvbgZVYnJldmUHdW5pMUVFNAd1bmkxRUU2BVVob3JuB3VuaTFFRTgHdW5pMUVGMAd1bmkxRUVBB3VuaTFFRUMHdW5pMUVFRQ1VaHVuZ2FydW1sYXV0B1VtYWNyb24HVW9nb25lawVVcmluZwZVdGlsZGUGV2FjdXRlC1djaXJjdW1mbGV4CVdkaWVyZXNpcwZXZ3JhdmULWWNpcmN1bWZsZXgHdW5pMUVGNAZZZ3JhdmUHdW5pMUVGNgd1bmkxRUY4BlphY3V0ZQpaZG90YWNjZW50B3VuaTAxMjIHdW5pMDEzNgd1bmkwMTQ1B3VuaTAxNTYHdW5pMDE2Mgd1bmkwMjE4B3VuaTAyMUEGYWJyZXZlB3VuaTFFQUYHdW5pMUVCNwd1bmkxRUIxB3VuaTFFQjMHdW5pMUVCNQd1bmkwMUNFB3VuaTFFQTUHdW5pMUVBRAd1bmkxRUE3B3VuaTFFQTkHdW5pMUVBQgd1bmkxRUExB3VuaTFFQTMHYW1hY3Jvbgdhb2dvbmVrC2NjaXJjdW1mbGV4CmNkb3RhY2NlbnQGZGNhcm9uBmVjYXJvbgd1bmkwMjI5B3VuaTFFQkYHdW5pMUVDNwd1bmkxRUMxB3VuaTFFQzMHdW5pMUVDNQplZG90YWNjZW50B3VuaTFFQjkHdW5pMUVCQgdlbWFjcm9uB2VvZ29uZWsHdW5pMUVCRAd1bmkwMjU5B3VuaTAyOTIHdW5pMDFFRgZnY2Fyb24LZ2NpcmN1bWZsZXgKZ2RvdGFjY2VudAd1bmkwMUU1BGhiYXIHdW5pMDIxRgtoY2lyY3VtZmxleAZpYnJldmUJaS5sb2NsVFJLB3VuaTFFQ0IHdW5pMUVDOQJpagdpbWFjcm9uB2lvZ29uZWsGaXRpbGRlB3VuaTAyMzcLamNpcmN1bWZsZXgHdW5pMDFFOQZsYWN1dGUGbGNhcm9uB3VuaTAxM0MEbGRvdAZuYWN1dGUGbmNhcm9uA2VuZwZvYnJldmUHdW5pMUVEMQd1bmkxRUQ5B3VuaTFFRDMHdW5pMUVENQd1bmkxRUQ3B3VuaTFFQ0QHdW5pMUVDRgVvaG9ybgd1bmkxRURCB3VuaTFFRTMHdW5pMUVERAd1bmkxRURGB3VuaTFFRTENb2h1bmdhcnVtbGF1dAdvbWFjcm9uC29zbGFzaGFjdXRlBnJhY3V0ZQZyY2Fyb24Gc2FjdXRlC3NjaXJjdW1mbGV4BHRiYXIGdGNhcm9uBnVicmV2ZQd1bmkwMUQ0B3VuaTFFRTUHdW5pMUVFNwV1aG9ybgd1bmkxRUU5B3VuaTFFRjEHdW5pMUVFQgd1bmkxRUVEB3VuaTFFRUYNdWh1bmdhcnVtbGF1dAd1bWFjcm9uB3VuaTAxMjMHdW5pMDEzNwd1bmkwMTQ2B3VuaTAxNTcHdW5pMDE2Mwd1bmkwMjE5B3VuaTAyMUIHdW9nb25lawV1cmluZwZ1dGlsZGUGd2FjdXRlC3djaXJjdW1mbGV4CXdkaWVyZXNpcwZ3Z3JhdmULeWNpcmN1bWZsZXgHdW5pMUVGNQZ5Z3JhdmUHdW5pMUVGNwd1bmkxRUY5BnphY3V0ZQp6ZG90YWNjZW50C3VuaTFFQkQuMDAxC3VuaTAyMUYuMDAxBWEuYWx0C2FvZ29uZWsuYWx0CElfSi5saWdhCmZfZl9pLmxpZ2EKZl9mX2wubGlnYQhnX2oubGlnYQhpX2oubGlnYQRhLnNjCWFhY3V0ZS5zYwlhYnJldmUuc2MKdW5pMDFDRS5zYw5hY2lyY3VtZmxleC5zYwxhZGllcmVzaXMuc2MJYWdyYXZlLnNjCmFtYWNyb24uc2MKYW9nb25lay5zYwhhcmluZy5zYwlhdGlsZGUuc2MFYWUuc2MEYi5zYwRjLnNjCWNhY3V0ZS5zYwljY2Fyb24uc2MLY2NlZGlsbGEuc2MNY2RvdGFjY2VudC5zYwRkLnNjBmV0aC5zYwlkY2Fyb24uc2MJZGNyb2F0LnNjBGUuc2MJZWFjdXRlLnNjCWVjYXJvbi5zYwp1bmkwMjI5LnNjDmVjaXJjdW1mbGV4LnNjDGVkaWVyZXNpcy5zYw1lZG90YWNjZW50LnNjCWVncmF2ZS5zYwplbWFjcm9uLnNjCmVvZ29uZWsuc2MEZi5zYwRnLnNjCWdicmV2ZS5zYwp1bmkwMTIzLnNjDWdkb3RhY2NlbnQuc2MEaC5zYwdoYmFyLnNjBGkuc2MJaWFjdXRlLnNjDmljaXJjdW1mbGV4LnNjDGlkaWVyZXNpcy5zYwxpLnNjLmxvY2xUUksJaWdyYXZlLnNjBWlqLnNjCmltYWNyb24uc2MKaW9nb25lay5zYwRqLnNjBGsuc2MKdW5pMDEzNy5zYwRsLnNjCWxhY3V0ZS5zYwlsY2Fyb24uc2MKdW5pMDEzQy5zYwlsc2xhc2guc2MEbS5zYwRuLnNjCW5hY3V0ZS5zYwluY2Fyb24uc2MKdW5pMDE0Ni5zYwZlbmcuc2MJbnRpbGRlLnNjBG8uc2MJb2FjdXRlLnNjDm9jaXJjdW1mbGV4LnNjDG9kaWVyZXNpcy5zYwlvZ3JhdmUuc2MQb2h1bmdhcnVtbGF1dC5zYwpvbWFjcm9uLnNjCW9zbGFzaC5zYwlvdGlsZGUuc2MFb2Uuc2MEcC5zYwh0aG9ybi5zYwRxLnNjBHIuc2MJcmFjdXRlLnNjCXJjYXJvbi5zYwp1bmkwMTU3LnNjBHMuc2MJc2FjdXRlLnNjCXNjYXJvbi5zYwtzY2VkaWxsYS5zYwp1bmkwMjE5LnNjBHQuc2MHdGJhci5zYwl0Y2Fyb24uc2MKdW5pMDE2My5zYwp1bmkwMjFCLnNjBHUuc2MJdWFjdXRlLnNjDnVjaXJjdW1mbGV4LnNjDHVkaWVyZXNpcy5zYwl1Z3JhdmUuc2MQdWh1bmdhcnVtbGF1dC5zYwp1bWFjcm9uLnNjCnVvZ29uZWsuc2MIdXJpbmcuc2MEdi5zYwR3LnNjCXdhY3V0ZS5zYw53Y2lyY3VtZmxleC5zYwx3ZGllcmVzaXMuc2MJd2dyYXZlLnNjBHguc2MEeS5zYwl5YWN1dGUuc2MOeWNpcmN1bWZsZXguc2MMeWRpZXJlc2lzLnNjCXlncmF2ZS5zYwR6LnNjCXphY3V0ZS5zYwl6Y2Fyb24uc2MNemRvdGFjY2VudC5zYwd1bmkwMzk0B3VuaTAzQTkHdW5pMDNCQwd6ZXJvLnRmBm9uZS50ZgZ0d28udGYIdGhyZWUudGYHZm91ci50ZgdmaXZlLnRmBnNpeC50ZghzZXZlbi50ZghlaWdodC50ZgduaW5lLnRmCXplcm8uZG5vbQhvbmUuZG5vbQh0d28uZG5vbQp0aHJlZS5kbm9tCWZvdXIuZG5vbQlmaXZlLmRub20Ic2l4LmRub20Kc2V2ZW4uZG5vbQplaWdodC5kbm9tCW5pbmUuZG5vbQl6ZXJvLm51bXIIb25lLm51bXIIdHdvLm51bXIKdGhyZWUubnVtcglmb3VyLm51bXIJZml2ZS5udW1yCHNpeC5udW1yCnNldmVuLm51bXIKZWlnaHQubnVtcgluaW5lLm51bXIHdW5pMDBCOQd1bmkwMEIyB3VuaTAwQjMHdW5pMjA3NAd1bmkyMDc1B3VuaTIwNzYHdW5pMjA3Nwd1bmkyMDc4B3VuaTIwNzkJb25lZWlnaHRoDHRocmVlZWlnaHRocwtmaXZlZWlnaHRocwxzZXZlbmVpZ2h0aHMHdW5pMDBBRAd1bmkyMDEwEmh5cGhlbl9oeXBoZW4ubGlnYQd1bmkyN0U5B3VuaTAwQTAERXVybwd1bmkyMEJBB3VuaTIwQkQHdW5pMjIxOQd1bmkyMjE1B3VuaTIxMjYHdW5pMjIwNgd1bmkwMEI1Bm1pbnV0ZQZzZWNvbmQHdW5pMjExMwllc3RpbWF0ZWQGYXQuYWx0B3VuaTAyQkMHdW5pMDJCQgd1bmkwMkM5B3VuaTAzMDgHdW5pMDMwNwlncmF2ZWNvbWIJYWN1dGVjb21iB3VuaTAzMEIHdW5pMDMwMgd1bmkwMzBDB3VuaTAzMDYHdW5pMDMwQQl0aWxkZWNvbWIHdW5pMDMwNA1ob29rYWJvdmVjb21iB3VuaTAzMTIHdW5pMDMxMwd1bmkwMzFCDGRvdGJlbG93Y29tYgd1bmkwMzI2B3VuaTAzMjcHdW5pMDMyOAd1bmkwMzM1B3VuaTAzMzYHdW5pMDMzNwd1bmkwMzM4C3VuaTAzMjcuYWx0C2NlZGlsbGEuYWx0C3VuaTAzMDYwMzAxC3VuaTAzMDYwMzAwC3VuaTAzMDYwMzA5C3VuaTAzMDYwMzAzC3VuaTAzMDIwMzAxC3VuaTAzMDIwMzAwC3VuaTAzMDIwMzA5C3VuaTAzMDIwMzAzB3VuaTAyMWIAAAEAAf//AA8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYABgAGAAYAsQAAAIC//7/OALEAAACAv/+/zgAjQCNAHkAeQJBAAACSP/5AI0AjQB5AHkCQQJBAAAAAAJBAkj/+f/5AI0AjQB5AHkCvAAAArwCAgAA/0YCxP/4AtoCCv/4/zMAGAAYABgAGANEAaADRAGgsAAsILAAVVhFWSAgS7gADlFLsAZTWliwNBuwKFlgZiCKVViwAiVhuQgACABjYyNiGyEhsABZsABDI0SyAAEAQ2BCLbABLLAgYGYtsAIsIyEjIS2wAywgZLMDFBUAQkOwE0MgYGBCsQIUQ0KxJQNDsAJDVHggsAwj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');
+  return await load(new URL('assets/fonts/BarlowCondensed-Bold.ttf',document.baseURI).href)||await load((await import('./social-font-fallback.js?v=0.8.62.288')).SOCIAL_FONT_DATA);
  })();
  return socialFontReady.promise;
 }
@@ -23178,6 +21233,45 @@ async function socialAwardScopeChanged(s,kind){
  if(api===socialAwards)await api.load(s,false);else await api.load(s,{preserve:false});
 }
 
+
+let socialAwardScopes,socialAwardLabels,socialAwardLabelHooks,socialResults,socialAwards,socialPlayerWeek,socialWeek,socialSandbox,socialTeamWorkflow,socialPublishing,graphicGrade,checkGraphicLabel,teamSelectionText;
+let socialFeaturesTask=null;
+async function loadSocialFeatures(){
+ if(socialPublishing)return;
+ if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.288'),import('./social-team-workflow.js?v=0.8.62.288'),import('./social-publishing.js?v=0.8.62.288'),import('./team-of-week.js?v=0.8.62.288'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
+  const {createSocialAwardScopes}=modules[0];
+  const {createSocialAwards}=modules[1];
+  const {createTeamSocialWorkflow}=modules[2];
+  const {createSocialPublishing}=modules[3];
+  const {createTeamOfWeek,teamWeekLayout}=modules[4];
+  const {createSharedMatchResults}=modules[5];
+  const {createSocialAwardLabels}=modules[6];
+  const {createPlayerOfWeek}=modules[7];
+  const {createSocialSandbox}=modules[8];
+  ({graphicGrade,checkGraphicLabel}=modules[9]);
+  ({teamSelectionText}=modules[10]);
+socialAwardScopes=createSocialAwardScopes({supabase,here:socialHere,draw:socialDraw,canEdit:s=>{if(s.view==='team_week'&&s.week?.designDirty||s.view==='player_week'&&s.playerWeek?.layoutDirty){socialMessage(s,'Save the award layout before changing selection groups.');return false;}return socialCanLeave();},message:socialMessage,changed:socialAwardScopeChanged,locked:s=>!!(s.busy||s.results?.busy||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.awards?.busy||s.awards?.pending||s.awards?.loading)});
+socialAwardLabels=createSocialAwardLabels({supabase,here:socialHere,draw:socialDraw,canEdit:socialCanLeave,message:socialMessage});
+socialAwardLabelHooks={scopeRequest:socialAwardScopes.request,adoptScope:socialAwardScopes.adopt,loadLabel:socialLoadAwardLabel,reloadLabel:(s,end)=>socialAwardLabels.load(s,end,{reload:true}),saveLabel:(s,end,label)=>socialAwardLabels.save(s,end,label),labelReady:(s,end)=>socialAwardLabels.ready(s,end)&&!(s.awardScopes?.draft||s.awardScopes?.pending||s.awardScopes?.busy)};
+socialResults=createSharedMatchResults({scopeControls:socialAwardScopes.controls,bindScope:socialAwardScopes.bind,scopeIdentity:socialAwardScopes.identity,scopeRequest:socialAwardScopes.resultsRequest,labelControls:socialAwardLabels.controls,bindLabels:socialAwardLabels.bind,locked:s=>!!(s.busy||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.awards?.busy||s.awards?.pending),supabase,openFixture:socialOpenFixture,escape:seEsc,here:socialHere,canLeave:socialCanLeave,setWeek:socialSetResultsWeek,adoptWeek:socialAdoptResultsWeek,changed:socialResultsChanged,extractUrl:matchReviewExtractUrl,teamCheck:mountScorecardTeam,message:socialMessage,confirm:message=>confirm(message)});
+socialAwards=createSocialAwards({...socialAwardLabelHooks,sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),reviewUpdatedAward:socialReviewUpdatedAward,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,draw:socialDraw,message:socialMessage,canLeave:socialCanLeave,image:socialImage,fontReady:socialFontReady,text:socialText,download:socialBlobDownload,
+ openScores:(s)=>socialResults.open(s),
+ savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),
+ savedPhoto:async(s,id)=>{const a=s.data.assets.find(a=>a.id===id);if(!a)throw Error('Photo not found');const r=await supabase.storage.from('club-socials').download(a.path);if(r.error)throw Error(r.error.message);return {blob:r.data,name:a.label||'Saved player photo.png'};},
+ openCutout:async(s,item,file,apply)=>{const view=s.view,matches=s.data.players.filter(p=>p.active!==false&&(p.external_id===item.player_id||p.name.trim().toLowerCase()===item.name.trim().toLowerCase())),person=matches.length===1?matches[0].id:'';s.deferNavigation=true;socialGuideEnter(s,2,person);s.deferNavigation=false;const g=socialGuideState(s);g.awardReturn={view,apply,savedAsset:null};if(file){socialGuideResetImage(g);g.file=file;g.fileURL=URL.createObjectURL(file);g.needsHelp=true;socialGuideRemember(g);}s.notice=person?'Create and save the cut-out, then return to the award.':'Select '+item.name+' from your players before creating the cut-out.';socialDraw(s);},
+ reviewAwards:async(s,items,caption)=>{const w=s.awards;if(w.busy)return;w.busy=true;const button=document.getElementById('saReviewPost'),label=button?.textContent;if(button){button.disabled=true;button.textContent='Checking results…';}try{if(await socialResults.check(s,w.end,{award_edition_ids:items.map(e=>e.id)}))return await socialPublishing.startAwards(s,items,caption);}finally{w.busy=false;if(socialHere(s)&&['awards','award_collection','results','five_wickets','century'].includes(s.view))socialAwards.render(s);else if(button?.isConnected){button.disabled=false;button.textContent=label;}}},postingHistory:(s,host)=>socialPublishing.awardsHistory(s,host)});
+socialPlayerWeek=createPlayerOfWeek({...socialAwardLabelHooks,sharedResults:true,postPreview:(s,host,locked)=>socialAwards.mountPost(s,host,locked),savedAward:(s,id)=>socialAwards.addToPost(s,id),checkResults:(s,end)=>socialResults.check(s,end),navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,text:socialText,openScores:(s)=>socialResults.open(s),savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),savedPhoto:async(s,id)=>{const asset=s.data.assets.find(a=>a.id===id);if(!asset)throw Error('Photo not found');return await (await fetch(await socialAssetURL(s,asset))).blob();}});
+socialWeek=createTeamOfWeek({...socialAwardLabelHooks,sharedResults:true,postPreview:(s,host,locked)=>socialAwards.mountPost(s,host,locked),savedAward:(s,id)=>socialAwards.addToPost(s,id),checkResults:(s,end)=>socialResults.check(s,end),teamCheck:mountScorecardTeam,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,extractUrl:matchReviewExtractUrl,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,fitImage:socialFitImage,text:socialText});
+socialSandbox=createSocialSandbox({here:socialHere,escape:seEsc,defaults:socialDefaults,groups:()=>ensureSelections().data?.groups||[],cards:socialCards,featured:socialFeatured,renderImage:socialRender,normalize:socialNormaliseUpload,message:socialMessage,download:socialBlobDownload,applyDesign:async(s,design)=>{if(s.busy||s.pending)return;if(await socialSave(s,'settings',{revision:s.data.revision,design}))socialMessage(s,'Club layout saved for upcoming teams.');}});
+socialTeamWorkflow=createTeamSocialWorkflow({supabase,refresh:socialRefresh,editBackground:socialTeamEditBackground,navigation:recordSelectionNavigation,escape:seEsc,date:socialDate,calendar:socialFixtureCalendar,calendarCompleted:socialCalendarCompleted,completed:socialFixtureCompleted,here:socialHere,canLeave:socialCanLeave,draw:socialDraw,save:socialSave,defaults:socialDefaults,asset:socialAsset,uploadCard:socialUploadCard,galleryCard:socialGalleryCard,bindUploads:socialBindUploads,bindGallery:socialBindGallery,cards:socialCards,sample:socialPrepCard,renderImage:socialRender,photoControls:socialPhotoControls,bindPhotos:socialBindTeamPhotos,oversNotice:socialOversNotice,prepare:socialGuideEnter,prepareExample:(s,id)=>socialGuideEnter(s,1,'','',id),selection:socialSelection,caption:socialCaption,download:socialDownload,history:socialShowHistory,rpc:socialRPC,message:socialMessage,posting:s=>socialPublishing.mount(s)});
+socialPublishing=createSocialPublishing({canSetupPlatform:()=>platformRole==='owner',renderPlatformSetup:host=>renderSocialPlatformSetup({supabase,host,escape:seEsc}),back:appNavigationBack,supabase,escape:seEsc,date:socialDate,here:socialHere,draw:socialDraw,message:socialMessage,lock:socialLock,selection:socialSelection,cards:socialCards,renderImage:socialRender,artwork:socialRPC,refresh:socialRefresh,current:()=>socialState,returnToTeams:()=>{ensureSelections().view='published';drawSelections();void seReload().then(()=>drawSelections()).catch(()=>seNotice('Refresh Teams to check your current access.'));},demo:false});
+ })().catch(error=>{socialFeaturesTask=null;throw error;});
+ return socialFeaturesTask;
+}
+const socialAwardRequestsPanel=createDeferredController({load:()=>import('./social-awards.js?v=0.8.62.288'),create:module=>({mount:module.renderSocialAwardRequests}),host:args=>args[1],scope:requestedFeatureScope,name:'award requests'});
+function renderSocialAwardRequests(...args){return socialAwardRequestsPanel.mount(...args);}
+
 function socialAdoptResultsWeek(s,end){
  s.resultsWeek=end;
  for(const api of [socialAwards,socialWeek,socialPlayerWeek]){
@@ -23192,42 +21286,38 @@ async function socialResultsChanged(s){
  for(const other of [socialWeek,socialPlayerWeek])if(other!==api)other.state(s).sharedStale=true;
 }
 function socialSetResultsWeek(s,end){socialAdoptResultsWeek(s,end);socialDraw(s);}
-const socialAwardScopes=createSocialAwardScopes({supabase,here:socialHere,draw:socialDraw,canEdit:s=>{if(s.view==='team_week'&&s.week?.designDirty||s.view==='player_week'&&s.playerWeek?.layoutDirty){socialMessage(s,'Save the award layout before changing selection groups.');return false;}return socialCanLeave();},message:socialMessage,changed:socialAwardScopeChanged,locked:s=>!!(s.busy||s.results?.busy||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.awards?.busy||s.awards?.pending||s.awards?.loading)});
-const socialAwardLabels=createSocialAwardLabels({supabase,here:socialHere,draw:socialDraw,canEdit:socialCanLeave,message:socialMessage});
 async function socialLoadAwardLabel(s,end){const label=await socialAwardLabels.load(s,end);if(socialHere(s)&&s.resultsWeek===end)socialResults.mount(s,end);return label;}
-const socialAwardLabelHooks={scopeRequest:socialAwardScopes.request,adoptScope:socialAwardScopes.adopt,loadLabel:socialLoadAwardLabel,reloadLabel:(s,end)=>socialAwardLabels.load(s,end,{reload:true}),saveLabel:(s,end,label)=>socialAwardLabels.save(s,end,label),labelReady:(s,end)=>socialAwardLabels.ready(s,end)&&!(s.awardScopes?.draft||s.awardScopes?.pending||s.awardScopes?.busy)};
-const socialResults=createSharedMatchResults({scopeControls:socialAwardScopes.controls,bindScope:socialAwardScopes.bind,scopeIdentity:socialAwardScopes.identity,scopeRequest:socialAwardScopes.resultsRequest,labelControls:socialAwardLabels.controls,bindLabels:socialAwardLabels.bind,locked:s=>!!(s.busy||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.awards?.busy||s.awards?.pending),supabase,openFixture:socialOpenFixture,escape:seEsc,here:socialHere,canLeave:socialCanLeave,setWeek:socialSetResultsWeek,adoptWeek:socialAdoptResultsWeek,changed:socialResultsChanged,extractUrl:matchReviewExtractUrl,teamCheck:mountScorecardTeam,message:socialMessage,confirm:message=>confirm(message)});
 const selectionEvidence=createSelectionEvidenceSnapshot({supabase,notice:message=>seNotice(message),here:b=>currentTab==='teams'&&selectionState?.key===b.scope&&selectionState?.view==='board'&&seBoardAccess(selectionState?.data)});
-const seasonStatsPanel=createSeasonStatsPanel({supabase,updated:(scope,data)=>selectionEvidence.adopt(scope,data),invalidateBoard:()=>selectionEvidence.invalidate(),alert:message=>alert(message),confirm:message=>confirm(message),
+const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.288'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,updated:(scope,data)=>selectionEvidence.adopt(scope,data),invalidateBoard:()=>selectionEvidence.invalidate(),alert:message=>alert(message),confirm:message=>confirm(message),
  here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.statsOpen===true,
  close:()=>{const s=ensureSelections();s.statsOpen=false;drawSelections();document.getElementById('seSeasonStats')?.focus();},
  navigate:recordSelectionNavigation,
  canOpenPlayer:()=>seCanSetup(ensureSelections().data),openPlayer:seOpenStatsPlayer,
  openFixture:(panel,id)=>{const s=ensureSelections();if(!confirmLeaveSelections())return;const f=s.data.fixtures.find(f=>f.id===id),known=panel.context?.fixtures.find(f=>f.id===id);if(!f&&!known)return;s.statsOpen=false;document.getElementById('seStatsHost')?.replaceChildren();document.getElementById('seSeasonStats')?.setAttribute('aria-expanded','false');seFixtureEditor(f||{id,details:known,result_only:true});}
-});
-const selectionGroupPermissions=createSelectionGroupPermissions({
+}),scope:requestedFeatureScope,name:'season stats',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
+const selectionGroupPermissions=createDeferredController({load:()=>import('./selection-group-permissions.js?v=0.8.62.288'),create:({createSelectionGroupPermissions})=>createSelectionGroupPermissions({
  here:()=>currentTab==='teams'&&selectionState?.view==='settings',alert,confirm,group:()=>selectionState?.selectionGroup,
  rpc:async(action,data)=>{const r=await supabase.rpc('selection_group_permissions',{p_club_id:club.id,p_action:action,p_data:data});if(r.error)throw r.error;return r.data;},
  saved:()=>seReload(),inviteURL:()=>location.origin+location.pathname,copy:text=>navigator.clipboard.writeText(text)
-});
-const selectionGroupSetup=createSelectionGroupPage({
+}),scope:requestedFeatureScope,name:'Selection Group permissions',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
+const selectionGroupSetup=createDeferredController({load:()=>import('./selection-group-page.js?v=0.8.62.288'),create:({createSelectionGroupPage})=>createSelectionGroupPage({
  supabase,clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.view==='selection_groups',alert,confirm,
  saved:async()=>{teamReviewCache=null;sharedTeamsState=null;await loadSelectionsAccess();await loadMatchCaptainAccess();await seReload();},loadSeason:groupId=>{if(confirmLeaveSelections())seImportFixtures(groupId);},
  captains:()=>{if(confirmLeaveSelections())void openSharedTeams();},manual:()=>{if(confirmLeaveSelections())void openSharedTeams(true);}
-});
+}),scope:requestedFeatureScope,name:'Selection Groups',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 function seEditSelectionGroups(groupId=null){
  const s=ensureSelections();if(!s.data?.admin)return;if(groupId)s.groupAddTeam=groupId;
  if(s.view!=='selection_groups'){seChangeView('selection_groups');return;}
  const host=document.getElementById('seContent');host.innerHTML='<section class="se-card se-drawer"><h2>Selection Groups</h2><div id="seGroupsSetup"></div></section>';
  void selectionGroupSetup.mount(document.getElementById('seGroupsSetup'),{selectionGroupId:s.groupAddTeam||null});s.groupAddTeam=null;
 }
-const playCricketConnection=createPlayCricketConnection({supabase,clubId:()=>club?.id,
+const playCricketConnection=createDeferredController({load:()=>import('./playcricket-connection.js?v=0.8.62.288'),create:({createPlayCricketConnection})=>createPlayCricketConnection({supabase,clubId:()=>club?.id,
  here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_connection',
  copy:text=>navigator.clipboard.writeText(text),back:()=>seChangeView('settings'),
- season:()=>{if(confirmLeaveSelections())seImportFixtures();},alert,confirm});
+ season:()=>{if(confirmLeaveSelections())seImportFixtures();},alert,confirm}),scope:requestedFeatureScope,name:'Connect PlayCricket',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 function sePlayCricketConnection(){const s=ensureSelections();if(!s.data?.admin)return;recordSelectionDrawer('playhq_connection');void playCricketConnection.mount(document.getElementById('seContent'));}
-const playhqImport=createPlayHQImport({supabase,connect:()=>{if(confirmLeaveSelections())sePlayCricketConnection();},clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),
- manualGrades:()=>openSharedTeams(true),captains:()=>openSharedTeams(),back:()=>{ensureSelections().navigationDrawer=null;drawSelections();},openFixture:id=>{const f=ensureSelections().data.fixtures.find(x=>x.id===id);if(f)seFixtureEditor(f);},refresh:()=>seReload(),alert:message=>alert(message),confirm:message=>confirm(message)});
+const playhqImport=createDeferredController({load:()=>import('./playhq-import.js?v=0.8.62.288'),create:({createPlayHQImport})=>createPlayHQImport({supabase,connect:()=>{if(confirmLeaveSelections())sePlayCricketConnection();},clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),
+ manualGrades:()=>openSharedTeams(true),captains:()=>openSharedTeams(),back:()=>{ensureSelections().navigationDrawer=null;drawSelections();},openFixture:id=>{const f=ensureSelections().data.fixtures.find(x=>x.id===id);if(f)seFixtureEditor(f);},refresh:()=>seReload(),alert:message=>alert(message),confirm:message=>confirm(message)}),scope:requestedFeatureScope,name:'season fixtures',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 function seImportFixtures(selectionGroupId=null){const s=ensureSelections();if(!seCanSetup())return;recordSelectionDrawer('playhq_import');playhqImport.mount(document.getElementById('seContent'),{groups:s.data.groups||[],existing:s.data.fixtures||[],selectionGroupId});}
 async function openFixtureMatchReview(fixture){
  if(!canUseTeamReview()||!await saveClubEditsBeforeNavigation())return;
@@ -23238,17 +21328,7 @@ async function openFixtureMatchReview(fixture){
  resetTeamReviewState();const s=ensureTeamReviewState();s.group=f.group_id;s.fixtures=data.fixtures;s.teamsEnabled=data.teams_enabled;teamReviewUseFixture(f,s);
  currentTab='team_review';await renderTab();
 }
-const fixtureResults=createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}});
-
-const socialAwards=createSocialAwards({...socialAwardLabelHooks,sharedResults:true,checkResults:(s,end)=>socialResults.check(s,end),reviewUpdatedAward:socialReviewUpdatedAward,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,draw:socialDraw,message:socialMessage,canLeave:socialCanLeave,image:socialImage,fontReady:socialFontReady,text:socialText,download:socialBlobDownload,
- openScores:(s)=>socialResults.open(s),
- savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),
- savedPhoto:async(s,id)=>{const a=s.data.assets.find(a=>a.id===id);if(!a)throw Error('Photo not found');const r=await supabase.storage.from('club-socials').download(a.path);if(r.error)throw Error(r.error.message);return {blob:r.data,name:a.label||'Saved player photo.png'};},
- openCutout:async(s,item,file,apply)=>{const view=s.view,matches=s.data.players.filter(p=>p.active!==false&&(p.external_id===item.player_id||p.name.trim().toLowerCase()===item.name.trim().toLowerCase())),person=matches.length===1?matches[0].id:'';s.deferNavigation=true;socialGuideEnter(s,2,person);s.deferNavigation=false;const g=socialGuideState(s);g.awardReturn={view,apply,savedAsset:null};if(file){socialGuideResetImage(g);g.file=file;g.fileURL=URL.createObjectURL(file);g.needsHelp=true;socialGuideRemember(g);}s.notice=person?'Create and save the cut-out, then return to the award.':'Select '+item.name+' from your players before creating the cut-out.';socialDraw(s);},
- reviewAwards:async(s,items,caption)=>{const w=s.awards;if(w.busy)return;w.busy=true;const button=document.getElementById('saReviewPost'),label=button?.textContent;if(button){button.disabled=true;button.textContent='Checking results…';}try{if(await socialResults.check(s,w.end,{award_edition_ids:items.map(e=>e.id)}))return await socialPublishing.startAwards(s,items,caption);}finally{w.busy=false;if(socialHere(s)&&['awards','award_collection','results','five_wickets','century'].includes(s.view))socialAwards.render(s);else if(button?.isConnected){button.disabled=false;button.textContent=label;}}},postingHistory:(s,host)=>socialPublishing.awardsHistory(s,host)});
-const socialPlayerWeek=createPlayerOfWeek({...socialAwardLabelHooks,sharedResults:true,postPreview:(s,host,locked)=>socialAwards.mountPost(s,host,locked),savedAward:(s,id)=>socialAwards.addToPost(s,id),checkResults:(s,end)=>socialResults.check(s,end),navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,text:socialText,openScores:(s)=>socialResults.open(s),savedPhotos:s=>s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)).map(a=>({id:a.id,name:(s.data.players.find(p=>p.id===a.roster_id)?.name||'Player')+' · '+(a.label||'Photo')})),savedPhoto:async(s,id)=>{const asset=s.data.assets.find(a=>a.id===id);if(!asset)throw Error('Photo not found');return await (await fetch(await socialAssetURL(s,asset))).blob();}});
-const socialWeek=createTeamOfWeek({...socialAwardLabelHooks,sharedResults:true,postPreview:(s,host,locked)=>socialAwards.mountPost(s,host,locked),savedAward:(s,id)=>socialAwards.addToPost(s,id),checkResults:(s,end)=>socialResults.check(s,end),teamCheck:mountScorecardTeam,navigation:recordSelectionNavigation,supabase,openBackground:socialAwardBackground,escape:seEsc,here:socialHere,extractUrl:matchReviewExtractUrl,normalize:socialNormaliseUpload,download:socialBlobDownload,image:socialImage,fontReady:socialFontReady,fitImage:socialFitImage,text:socialText});
-const socialSandbox=createSocialSandbox({here:socialHere,escape:seEsc,defaults:socialDefaults,groups:()=>ensureSelections().data?.groups||[],cards:socialCards,featured:socialFeatured,renderImage:socialRender,normalize:socialNormaliseUpload,message:socialMessage,download:socialBlobDownload,applyDesign:async(s,design)=>{if(s.busy||s.pending)return;if(await socialSave(s,'settings',{revision:s.data.revision,design}))socialMessage(s,'Club layout saved for upcoming teams.');}});
+const fixtureResults=createDeferredController({load:()=>import('./fixture-results.js?v=0.8.62.288'),create:({createFixtureResults})=>createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}}),scope:requestedFeatureScope,name:'fixture results',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 async function socialTeamEditBackground(s,brief,options={}){
  if(!options.proposal&&!socialCanLeave())return;const asset=socialAsset(s,'background')||socialAsset(s,'reference');
  try{const saved=asset?await supabase.storage.from('club-socials').download(asset.path):null;if(saved?.error)throw Error(saved.error.message);if(!socialHere(s))return;
@@ -23258,9 +21338,6 @@ async function socialTeamEditBackground(s,brief,options={}){
  },{mode:asset?.kind==='background'?'edit':'template',brief,...options});
  }catch(e){if(options.proposal)throw e;socialMessage(s,e.message);}
 }
-const socialTeamWorkflow=createTeamSocialWorkflow({supabase,refresh:socialRefresh,editBackground:socialTeamEditBackground,navigation:recordSelectionNavigation,escape:seEsc,date:socialDate,calendar:socialFixtureCalendar,calendarCompleted:socialCalendarCompleted,completed:socialFixtureCompleted,here:socialHere,canLeave:socialCanLeave,draw:socialDraw,save:socialSave,defaults:socialDefaults,asset:socialAsset,uploadCard:socialUploadCard,galleryCard:socialGalleryCard,bindUploads:socialBindUploads,bindGallery:socialBindGallery,cards:socialCards,sample:socialPrepCard,renderImage:socialRender,photoControls:socialPhotoControls,bindPhotos:socialBindTeamPhotos,oversNotice:socialOversNotice,prepare:socialGuideEnter,prepareExample:(s,id)=>socialGuideEnter(s,1,'','',id),selection:socialSelection,caption:socialCaption,download:socialDownload,history:socialShowHistory,rpc:socialRPC,message:socialMessage,posting:s=>socialPublishing.mount(s)});
-const socialPublishing=createSocialPublishing({canSetupPlatform:()=>platformRole==='owner',renderPlatformSetup:host=>renderSocialPlatformSetup({supabase,host,escape:seEsc}),back:appNavigationBack,supabase,escape:seEsc,date:socialDate,here:socialHere,draw:socialDraw,message:socialMessage,lock:socialLock,selection:socialSelection,cards:socialCards,renderImage:socialRender,artwork:socialRPC,refresh:socialRefresh,current:()=>socialState,returnToTeams:()=>{ensureSelections().view='published';drawSelections();void seReload().then(()=>drawSelections()).catch(()=>seNotice('Refresh Teams to check your current access.'));},demo:false});
-
 function seApplyWeekLaunch(s){
  const launch=s.weekLaunch;if(!launch)return;delete s.weekLaunch;
  const fixture=s.data.fixtures.find(f=>f.id===launch.fixture),date=fixture?.published?.details?.days?.[0]?.date||fixture?.details?.days?.[0]?.date||(/^\d{4}-\d{2}-\d{2}$/.test(launch.date||'')?launch.date:'');
@@ -23268,7 +21345,7 @@ function seApplyWeekLaunch(s){
  else if(launch.view==='published'||launch.view==='board'){s.view=seBoardAccess(s.data)?'board':'published';if(date){s.date=date;s.boardDateChosen=true;s.publishedWeek=sePublishedWeekStart(date);}}
  if(launch.plan&&s.data.selector){s.view='board';s.weekLaunchPlan=launch.plan;}
 }
-const clubWeek=createClubWeekUI({
+const clubWeek=createDeferredController({load:()=>import('./club-week-panel.js?v=0.8.62.288'),create:({createClubWeekUI})=>createClubWeekUI({
  read:()=>{const s=ensureSelections();return {data:s.data,drawer:s.navigationDrawer,view:currentTab==='teams'?s.view:'',date:s.date,clubId:club?.id,userId:session?.user?.id,clubName:club?.name,today:seClubDate(),launchPlan:s.weekLaunchPlan};},
  consumePlan:()=>{delete ensureSelections().weekLaunchPlan;},
  rpc:async(action,data)=>{const r=await supabase.rpc('club_week_api',{p_club_id:club.id,p_action:action,p_data:data});if(r.error){const e=Error(r.error.message);e.definite=!!r.error.code;throw e;}return r.data;},
@@ -23276,8 +21353,7 @@ const clubWeek=createClubWeekUI({
  publish:ids=>sePublishReview(ensureSelections().data.fixtures.filter(f=>ids.includes(f.id))),
  availability:(id,date)=>{const s=ensureSelections();s.view='availability';s.availabilityMonth=date.slice(0,7);s.availabilityPlayerId=id;drawSelections();recordSelectionNavigation();},
  calendarBase:SUPABASE_URL+'/functions/v1/selection-calendar'
-});
-
+}),scope:requestedFeatureScope,name:'club tools',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}},host:()=>null,onError:()=>seNotice('Club tools could not load. Reopen this section to try again.')});
 let assistFromGuide=false,pendingAssistLaunch=null;
 const mirelionAssist=createMirelionAssist({
   supabase,
@@ -23300,4 +21376,10 @@ async function renderMirelionAssist(){
   return mirelionAssist.mount(document.getElementById('page'),{...launch,newMessage:includeGuide,includeGuide});
 }
 
-boot();
+
+async function mountVideoCredits(host,options){const identity=requestedFeatureScope();try{const module=await import('./video-credits.js?v=0.8.62.232');if(identity===requestedFeatureScope()&&host?.isConnected)return module.mountVideoCredits(host,options);}catch{if(host?.isConnected&&identity===requestedFeatureScope())host.textContent='Call credits could not load. Reopen Settings to try again.';}}
+
+const socialPlatformSetupPanel=createDeferredController({load:()=>import('./social-platform-setup.js?v=0.8.62.224'),create:module=>({mount:module.renderSocialPlatformSetup}),host:args=>args[0].host,scope:requestedFeatureScope,name:'social accounts setup'});
+function renderSocialPlatformSetup(options){return socialPlatformSetupPanel.mount(options);}
+
+export const appReady=boot();
