@@ -1,0 +1,105 @@
+diff --git a/Tests/selection_same_day_games_database_test.sql b/Tests/selection_same_day_games_database_test.sql
+index 0fafa24..4b53f68 100644
+--- a/Tests/selection_same_day_games_database_test.sql
++++ b/Tests/selection_same_day_games_database_test.sql
+@@ -14,8 +14,16 @@ begin
+   '10:00 and 14:00 T20 fixtures do not overlap';
+  assert club_selection_private.fixture_day_conflict(
+   jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','10:00'),
+-  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','13:00')),
+-  'A T20 starting before the inferred 13:30 finish overlaps';
++  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','12:59')),
++  'A T20 starting before the inferred 13:00 finish overlaps';
++ assert not club_selection_private.fixture_day_conflict(
++  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','09:00'),
++  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','12:00')),
++  '09:00 and 12:00 T20 fixtures do not overlap';
++ assert not club_selection_private.fixture_day_conflict(
++  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','12:00'),
++  jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','15:00')),
++  '12:00 and 15:00 T20 fixtures do not overlap';
+  assert club_selection_private.fixture_day_conflict(
+   jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text,'start','10:00'),
+   jsonb_build_object('format','t20'),jsonb_build_object('date',match_day::text)),
+@@ -45,7 +53,7 @@ begin
+  res:=public.club_selections_api(c,'save_board',req);
+  assert res->>'saved'='true','The same player can be saved in the 10:00 and 14:00 T20s';
+ 
+- overlap_details:=jsonb_set(base_details||jsonb_build_object('grade','Cup overlap'),'{days,0,start}',to_jsonb('13:00'::text));
++ overlap_details:=jsonb_set(base_details||jsonb_build_object('grade','Cup overlap'),'{days,0,start}',to_jsonb('12:59'::text));
+  req:=jsonb_build_object('request_id',gen_random_uuid(),'fixtures',jsonb_build_array(jsonb_build_object(
+   'id',overlap_id,'revision',1,'details',overlap_details,'slots',selected_slots)));
+  rejected:=false;message:='';
+diff --git a/Tests/selection_team_moves_test.cjs b/Tests/selection_team_moves_test.cjs
+index 0644d44..e7d76c6 100644
+--- a/Tests/selection_team_moves_test.cjs
++++ b/Tests/selection_team_moves_test.cjs
+@@ -88,6 +88,17 @@ test('same-day T20 selections use match times instead of blocking the whole date
+  assert.match(source,/d\.days\.map\(seDayTime\)/,'Selection Board fixture headings include each start time');
+ });
+ 
++test('09:00, 12:00 and 15:00 T20s allow consecutive games and honour a recorded finish',()=>{
++ const h=harness(),details={format:'t20',overs:20},day=start=>({date:dates[0],start});
++ for(const [first,second] of [['09:00','12:00'],['12:00','15:00'],['09:00','15:00']]){
++  assert.equal(h.c.seOverlap(day(first),day(second),details,details),false,first+' / '+second);
++  assert.equal(h.c.seOverlap(day(second),day(first),details,details),false,'Reverse order');
++ }
++ assert.equal(h.c.seOverlap(day('09:00'),day('11:59'),details,details),true);
++ assert.equal(h.c.seOverlap({...day('09:00'),end:'12:30'},day('12:00'),details,details),true,'Explicit finish remains authoritative');
++ assert.equal(h.c.seOverlap({date:dates[0]},day('12:00'),details,details),true,'Unknown start remains a conflict');
++});
++
+ test('one unavailable bracket partner prevents moving either partner',()=>{
+  const a=team('A',11,{twoDays:true,brackets:true}),b=team('B',11,{twoDays:true,brackets:true});a.slots[0].d2='partner';const h=harness([a,b]);h.s.data.roster.find(p=>p.id==='partner').availability.available_dates=[dates[0]];
+  assert.ok(h.c.seTransferProblem(a,b,0,h.s.data));assert.deepEqual(a.slots[0],{d1:'A-0',d2:'partner'});
+diff --git a/app.html b/app.html
+index f31bc41..052347a 100644
+--- a/app.html
++++ b/app.html
+@@ -18,6 +18,6 @@
+ <body>
+   <div id="app"><div class="splash">Loading Mirelion…</div></div>
+   <noscript>Mirelion needs JavaScript to sign in. <a href="./">Return to the Mirelion homepage</a>.</noscript>
+-  <script type="module" src="./app.js?v=0.8.62.282"></script>
++  <script type="module" src="./app.js?v=0.8.62.283"></script>
+ </body>
+ </html>
+diff --git a/app.js b/app.js
+index f82a586..017d158 100644
+--- a/app.js
++++ b/app.js
+@@ -35,7 +35,7 @@ const passwordFlow=createPasswordFlow(location.href);
+ const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+ const app=document.getElementById('app');
+ const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
+-const APP_UI_VERSION='0.8.62.282';
++const APP_UI_VERSION='0.8.62.283';
+ 
+ // BEGIN SHARED HEADING STYLES V89
+ const appHeadingStyle=document.createElement('style');
+@@ -19941,7 +19941,7 @@ function seClockMinutes(value){
+  return match?Number(match[1])*60+Number(match[2]):null;
+ }
+ function seMatchDuration(details){
+- if(details?.format==='t20')return 210;
++ if(details?.format==='t20')return 180;
+  const overs=Number(details?.overs);
+  if(details?.format==='limited_overs'&&Number.isInteger(overs)&&overs>0)return Math.max(180,Math.min(600,overs*8+45));
+  return 480;
+diff --git a/supabase/migrations/20261027110512_three_hour_t20_selection_windows.sql b/supabase/migrations/20261027110512_three_hour_t20_selection_windows.sql
+new file mode 100644
+index 0000000..bdf4d0c
+--- /dev/null
++++ b/supabase/migrations/20261027110512_three_hour_t20_selection_windows.sql
+@@ -0,0 +1,11 @@
++-- T20 selection slots are three hours unless a recorded finish says otherwise.
++-- Keep missing-time handling, explicit end times and all selection write guards.
++do $fix$
++declare definition text;
++begin
++ definition:=pg_get_functiondef('club_selection_private.fixture_day_conflict(jsonb,jsonb,jsonb,jsonb)'::regprocedure);
++ if (length(definition)-length(replace(definition,'then 210 when','')))/length('then 210 when')<>2 then
++  raise exception 'Unexpected T20 conflict function shape';
++ end if;
++ execute replace(definition,'then 210 when','then 180 when');
++end $fix$;
