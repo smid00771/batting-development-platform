@@ -1,0 +1,34 @@
+name: Verify Selection Board on-demand release
+on:
+  push:
+    branches: [codex/selection-on-demand-287]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Apply and verify tested release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check .github/release-on-demand-287.patch
+          git apply .github/release-on-demand-287.patch
+          node --check app.js
+          node --check selection-evidence-snapshot.js
+          node --check selection-evidence-ui.js
+          node Scripts/build-demo.mjs
+          node Scripts/build-demo.mjs --check
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --test Tests/selection_evidence_snapshot_test.cjs Tests/selection_analysis_on_demand_test.cjs Tests/selection_returning_quiet_test.cjs Tests/selection_emergency_ui_test.cjs Tests/selection_board_responsiveness_test.cjs Tests/selection_team_moves_test.cjs Tests/selection_evidence_ui_test.cjs Tests/selection_evidence_test.mjs Tests/selection_returning_test.cjs
+          node --test --test-name-pattern='the complete demo opens on the selector board' Tests/demo_navigation_integration_test.cjs
+          git add -- 'AGENTS.md' 'Database/selection_analysis_on_demand.sql' 'Demo/build-manifest.json' 'Demo/current-fixtures.js' 'Demo/fixtures.js' 'Reviews/2026-10-28-selection-on-demand-287.md' 'Tests/demo_navigation_integration_test.cjs' 'Tests/selection_analysis_on_demand_test.cjs' 'Tests/selection_emergency_ui_test.cjs' 'Tests/selection_evidence_snapshot_test.cjs' 'Tests/selection_evidence_ui_test.cjs' 'Tests/selection_meeting_database_test.sql' 'Tests/selection_meeting_ui_test.cjs' 'Tests/selection_only_scorecard_identity_test.sql' 'Tests/selection_returning_context_database_test.sql' 'Tests/selection_returning_quiet_test.cjs' 'app.html' 'app.js' 'demo.html' 'season-stats-demo.js' 'season-stats-panel.js' 'selection-evidence-snapshot.js' 'selection-evidence-ui.js' 'supabase/migrations/20261027201338_selection_analysis_on_demand.sql'
+          git rm .github/release-on-demand-287.patch .github/workflows/release-on-demand-287.yml
+          git diff --cached --check
+          test "$(git write-tree)" = "8fae23f281e7b38d2c2d32784a6df42015d5e833"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Build verified Selection Board on-demand release 0.8.62.287"
+          git push origin HEAD:refs/heads/codex/selection-on-demand-287
