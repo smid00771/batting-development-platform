@@ -41,8 +41,9 @@ export function renderEvidenceBadges(item,key=item?.key,{compact=false,form=true
     const mark=`<span class="se-return-mark" aria-hidden="true">↩${names.length}</span>`;
     link=link?link.replace('</span>',' · '+mark+'</span>'):`<span class="se-evidence-link">${compact?mark:'Returning '+mark}</span>`;
   }
-  return parts.length||link?`<button type="button" class="se-evidence-button${compact?' se-evidence-compact':''}" data-evidence-open="${escape(key)}" aria-label="${escape(item.person.name+': Form guide. '+labels.join('; ')+'. View performance details')}" title="${escape(labels.join(' · '))}">${compact?parts.join('')+link:`<span class="se-evidence-title">Form guide${item.bat?.early||item.ball?.early?' · early':''}${link}</span>${parts.join('')}`}</button>`:'';
+  return parts.length||link?`<button type="button" class="se-evidence-button${compact?' se-evidence-compact':''}" data-evidence-open="${escape(key)}" aria-label="${escape(item.person.name+': '+(form?'Form guide':'Returning player comparisons')+'. '+labels.join('; ')+'. View performance details')}" title="${escape(labels.join(' · '))}">${compact?parts.join('')+link:`<span class="se-evidence-title">Form guide${item.bat?.early||item.ball?.early?' · early':''}${link}</span>${parts.join('')}`}</button>`:'';
 }
+export {showEvidenceDialog,returnTeamDetails,returnComparisonDetails,returnDetails};
 function record(item) {
   const s=item.stats;
   if (!s) return '';

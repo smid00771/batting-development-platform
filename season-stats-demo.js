@@ -29,6 +29,7 @@ export function createSeasonStatsDemo(getState, getCards, getLinks, getMember, g
     const admin = member.permission_role === 'admin';
     if (state.access.status === 'disabled' || !(admin || member.permission_role === 'captain' || state.selectors.includes(member.user_id) || state.access.head_selector_id === member.user_id)) throw Error('Current Teams selection or captain access is required');
     if (!['context','set_season'].includes(args.p_action || 'context')) throw Error('Unknown season stats action');
+    if ((args.p_action||'context')==='context'&&args.p_data?.on_demand!==true) throw Error('Analysis runs on request. Use Show form indicators or Compare returning players to calculate once.');
     let year = Number(today.slice(0,4)); if (today.slice(5,7) < '07') year--;
     state.stats_season ||= {start:year + '-07-01', end:(year+1) + '-06-30', revision:0};
     if (args.p_action === 'set_season') {

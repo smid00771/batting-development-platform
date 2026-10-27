@@ -51,7 +51,7 @@ begin
   assert (select count(*)=1 from club_selection_private.audit where club_id=c and action='scorecard_match_player_identity'),'Retry cannot duplicate the audit';
   result:=public.confirm_scorecard_player(c,gen_random_uuid(),values||jsonb_build_object('source_player_id',masters_source,'roster_id',masters_roster,'expected_name','Bailey Example'));
   assert result->>'confirmed'='true' and result->>'player_id' is null,'A Masters-only player links without creating a batting profile';
-  ctx:=public.club_season_stats_api(c,'context');
+  ctx:=public.club_season_stats_api(c,'context','{"on_demand":true}');
   assert exists(select 1 from jsonb_array_elements(ctx->'identities') i where i->>'source_id'=shared_source::text and i->>'roster_id'=shared_roster::text),'Season stats use the shared identity';
   assert exists(select 1 from club_selection_private.scorecard_roster_links where club_id=c and source_player_id=grade_source and roster_id=shared_roster),'Existing grade identity is preserved';
   assert before_fixtures=(select jsonb_agg(to_jsonb(f) order by f.id) from club_selection_private.fixtures f where f.club_id=c),'Withheld lineup does not replace either team';
