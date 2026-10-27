@@ -1,0 +1,33 @@
+name: Build tested spin roles
+on:
+  push:
+    branches: [codex/spin-types-balance-279]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build and verify tested release tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check .github/release-spin-279.patch
+          git apply .github/release-spin-279.patch
+          node --check app.js
+          node --check player-bowling.js
+          node --check selection-evidence.js
+          node --check selection-evidence-ui.js
+          node --check selection-returning.js
+          node Scripts/build-demo.mjs
+          node Scripts/build-demo.mjs --check
+          git add app.js Demo/fixtures.js demo.html Demo/build-manifest.json
+          git rm .github/workflows/release-spin-279.yml .github/release-spin-279.patch
+          git diff --cached --check
+          test "$(git write-tree)" = "e0bec174677d859243faa3f4cb5af3c18a17184d"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Build verified app and demo for release 279"
+          git push origin HEAD:refs/heads/codex/spin-types-balance-279

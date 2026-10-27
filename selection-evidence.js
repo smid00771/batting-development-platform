@@ -1,3 +1,4 @@
+import {spinLabel,spinBalanceChange} from './player-bowling.js?v=0.8.62.279';
 import {NDCA_BENCHMARKS} from './ndca-grade-benchmarks.js?v=0.8.62.215';
 export {NDCA_BENCHMARKS};
 /* Rough selection guides, not forecasts or automatic team changes.
@@ -32,7 +33,7 @@ const bowlingRole = person => bowler(person) && ['frontline','part_time'].includ
 export const FIELDING_RATINGS = [['unknown','Not assessed'],['needs_work','Needs work'],['reliable','Reliable'],['strong','Strong']];
 export const fieldingLabel = person => FIELDING_RATINGS.find(([key])=>key===person?.fielding)?.[1] || 'Not assessed';
 export const battingRoleLabel = person => ({top:'Top order',middle:'Middle order',lower:'Lower order'})[person?.batting] || 'Batting role not set';
-export const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : 'Spinner') + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
+export const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : spinLabel(person)) + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
 const integer = value => Number.isInteger(value) && value >= 0;
 // User-approved rough trial, not a measured format-specific benchmark. The
 // historical exports pool formats; allow more runs in limited-overs cricket
@@ -185,10 +186,19 @@ function possiblePair(higher,lower,guide) {
   // batting label. Batting and fielding remain separate selection context; the
   // roster does not record opening/first-change bowling roles.
   const frontlineQuicks=[higher,lower].every(item=>item.person.bowling==='pace' && item.person.bowling_load==='frontline');
+  const exceptionalSpin=[higher,lower].every(item=>item.person.bowling==='spin'&&item.person.bowling_load==='frontline')
+    && lower.ball?.state==='strong' && workloadFit
+    && (equivalentWickets>hw.wickets&&equivalentWickets>=hw.wickets*1.5&&closeEnough(equivalentEconomy,hw.economy)
+      || equivalentEconomy<hw.economy&&equivalentEconomy<=hw.economy*.75&&equivalentWickets>hw.wickets&&equivalentWickets>=hw.wickets*1.15);
+  const weakBattingSpinCase=[higher,lower].every(item=>item.person.bowling==='spin'&&item.person.bowling_load==='frontline')
+    && higher.bat?.state==='low'&&hb.ready&&lower.ball?.state==='strong'&&(bowlGain||economyCase);
   let kind='',reason='',focus='';
   if (frontlineQuicks && (bowlGain || economyCase || bowlComparable)) {
     kind=bowlGain?'fit':economyCase?'tradeoff':'close';focus='bowling';
     reason=bowlGain?'Bowling case · frontline quicks':economyCase?'Economy gain · wicket-taking trade-off':'Close bowling figures · frontline quicks';
+  }
+  else if ((exceptionalSpin||weakBattingSpinCase) && (!batFit||!hb.ready||!lb.ready||equivalentBat<hb.average*.85)) {
+    kind='tradeoff';focus='bowling';reason=exceptionalSpin?'Strong bowling case · batting/balance trade-off':'Bowling gain · current batting below guide';
   }
   else if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
   else if (needBowling && (bowlGain || economyCase)) {
@@ -206,7 +216,7 @@ function possiblePair(higher,lower,guide) {
     else if (lowerOrderBowling && bowlComparable) {kind='close';reason='Close bowling figures';}
   }
   if (!kind) return null;
-  return {higher,lower,kind,reason,focus,guide,equivalentBat,equivalentWickets,equivalentEconomy,
+  return {higher,lower,kind,reason,focus,exceptionalSpin,weakBattingSpinCase,guide,equivalentBat,equivalentWickets,equivalentEconomy,
     targetAverage:hb.average === null || hb.average === undefined ? null : hb.average/guide.batting};
 }
 export function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}={}) {
@@ -232,7 +242,12 @@ export function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers
     const high=[...players.values()].filter(p=>p.team.id===guide.higher.id), low=[...players.values()].filter(p=>p.team.id===guide.lower.id);
     for (const higher of high) for (const lower of low) {
       if (high.some(p=>p.person.id===lower.person.id && !p.seasonRecord)) continue;
-      const pair=possiblePair(higher,lower,guide); if (pair) pairs.push(pair);
+      const pair=possiblePair(higher,lower,guide); if (pair) {
+        const days=(higher.team.days||[]).flatMap((day,i)=>higher.selectedDays.includes(day.date)?[i]:[]);
+        pair.balance=spinBalanceChange(higher.team,people,higher.person,lower.person,days);
+        if(pair.balance?.status==='tradeoff'||pair.balance?.status==='unknown'){pair.kind='tradeoff';if(pair.balance.status==='unknown')pair.reason+=' · spin balance to check';else if(!pair.reason.includes('balance trade-off'))pair.reason+=' · team-balance trade-off';}
+        pairs.push(pair);
+      }
     }
   }
   pairs.sort((a,b)=>a.higher.position-b.higher.position || (a.kind==='fit'?0:1)-(b.kind==='fit'?0:1) || (b.equivalentBat || 0)-(a.equivalentBat || 0) || a.lower.person.name.localeCompare(b.lower.person.name));
