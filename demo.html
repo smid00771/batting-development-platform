@@ -3732,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.283.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.284.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -7598,19 +7598,24 @@ function createSelectionRoom(h){
   if(!cfg.can_manage)el(s,'backupForm').hidden=true;
   el(s,'backup').hidden=!url&&!cfg.can_manage;
  }
- async function refresh(s){
-  if(!same(s))return;if(s.loading){s.refreshAgain=true;return;}s.loading=true;
+ async function refresh(s,force=false){
+  // Never queue another read behind a slow request. Back off after failures;
+  // the reconnect button can still retry immediately.
+  if(!same(s))return;
+  if(s.loading){if(force)s.refreshRequired=true;return;}
+  if(!force&&Date.now()<(s.retryAt||0))return;s.loading=true;
   el(s,'retry').disabled=true;text(s,'retry','Reconnecting…');
   const ids=[...s.messages.keys()].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1),data=ids.length?{after:ids.at(-1)}:{};
   try{
-   const result=await h.rpc(s.scope,'context',data);if(!same(s))return;
-   s.config=result;activeCall(s,result.active_call);chatSession(s,result.chat_session);messageRows(s,result.messages);backup(s);compose(s);
+   const result=await h.rpc(s.scope,'context',data);if(!same(s)||s.refreshRequired)return;
+   s.failures=0;s.retryAt=0;s.config=result;activeCall(s,result.active_call);chatSession(s,result.chat_session);messageRows(s,result.messages);backup(s);compose(s);
    text(s,'connection','');el(s,'retry').hidden=true;
   }catch(error){
    if(!same(s))return;
    if(error.code==='42501'||error.status===403){close(true);h.notice?.('Selection Room is available to assigned selectors only.');return;}
+   s.failures=(s.failures||0)+1;s.retryAt=Date.now()+Math.min(30000,3000*2**s.failures);
    text(s,'connection','Connection lost. Your draft is kept.');el(s,'retry').hidden=false;if(!s.messages.size)text(s,'empty','Messages unavailable.');
-  }finally{s.loading=false;if(same(s)){el(s,'retry').disabled=false;text(s,'retry','Reconnect chat');if(s.refreshAgain){s.refreshAgain=false;void refresh(s);}}}
+  }finally{s.loading=false;if(same(s)){el(s,'retry').disabled=false;text(s,'retry','Reconnect chat');if(s.refreshRequired){s.refreshRequired=false;void refresh(s,true);}}}
  }
  function compose(s){
   const area=el(s,'message'),button=el(s,'send');area.disabled=!!s.pending||s.config?.can_post===false;button.disabled=s.sending||!s.draft.trim()||s.config?.can_post===false;button.textContent=s.sending?'Sending…':s.pending?'Retry send':'Send';
@@ -7621,7 +7626,7 @@ function createSelectionRoom(h){
   try{
    const result=await h.rpc(s.scope,'post',pending);if(!same(s)||s.pending!==pending)return;
    messageRows(s,[result.message]);s.pending=null;s.draft='';el(s,'message').value='';persist(s);text(s,'sendStatus','Sent');
-  }catch(error){if(same(s)&&s.pending===pending){if(error.code==='P0230'){s.pending=null;s.draft='';el(s,'message').value='';persist(s);void refresh(s);text(s,'sendStatus','That chat has ended.');}else text(s,'sendStatus',error.code==='42501'?'Selector access is required.':'Send not confirmed. Retry sends this message once.');}}
+  }catch(error){if(same(s)&&s.pending===pending){if(error.code==='P0230'){s.pending=null;s.draft='';el(s,'message').value='';persist(s);void refresh(s,true);text(s,'sendStatus','That chat has ended.');}else text(s,'sendStatus',error.code==='42501'?'Selector access is required.':'Send not confirmed. Retry sends this message once.');}}
   finally{s.sending=false;if(same(s))compose(s);}
  }
  async function saveBackup(s){
@@ -7734,7 +7739,7 @@ function createSelectionRoom(h){
    const frame=provider.createFrame(el(s,'video'),{iframeStyle:{width:'100%',height:'100%',border:'0'},showLeaveButton:true,activeSpeakerMode:false});s.frame=frame;videoControls(s);text(s,'videoStatus','Check your camera and microphone below.');
    frame.on('joined-meeting',()=>{if(same(s)&&s.frame===frame){s.joining=false;s.inCall=true;s.connectedAt=Date.now();s.expiresAt=data.expires_at;
     try{frame.setLocalVideo(s.useVideo);}catch{s.mediaError=true;text(s,'videoStatus','Camera could not start. Audio is still connected.');}
-    videoControls(s);setMinimized(s,!s.useVideo);callClock(s);participants(s,frame);void refresh(s);void s.credits?.reload();}});
+    videoControls(s);setMinimized(s,!s.useVideo);callClock(s);participants(s,frame);void refresh(s,true);void s.credits?.reload();}});
    for(const event of ['participant-joined','participant-updated','participant-left'])frame.on(event,()=>participants(s,frame));
    frame.on('left-meeting',()=>{if(same(s)&&s.frame===frame&&!s.videoError)leave(s);});
    frame.on('error',error=>{if(same(s)&&s.frame===frame)videoFailure(s,error);});
@@ -7767,7 +7772,7 @@ function createSelectionRoom(h){
   el(s,'close').onclick=()=>s.frame||s.joining?setMinimized(s,true):close();el(s,'toggle').onclick=()=>setMinimized(s,!s.minimized);
   el(s,'message').oninput=e=>{s.draft=e.target.value;persist(s);compose(s);text(s,'sendStatus','');};
   el(s,'message').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();void send(s);}};
-  el(s,'compose').onsubmit=e=>{e.preventDefault();void send(s);};el(s,'retry').onclick=()=>void refresh(s);
+  el(s,'compose').onsubmit=e=>{e.preventDefault();void send(s);};el(s,'retry').onclick=()=>void refresh(s,true);
   el(s,'editBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=false;el(s,'editBackup').hidden=true;el(s,'backupUrl').value=s.config.backup_url||'';s.editRevision=s.config.revision;text(s,'backupStatus','');el(s,'backupUrl').focus();};
   el(s,'cancelBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=true;text(s,'backupStatus','');backup(s);};el(s,'backupUrl').oninput=()=>text(s,'backupStatus','');el(s,'backupForm').onsubmit=e=>{e.preventDefault();void saveBackup(s);};
   el(s,'join').onclick=()=>void join(s);el(s,'leave').onclick=()=>leave(s);el(s,'checkVideo').onclick=()=>void videoStatus(s);
@@ -7778,7 +7783,7 @@ function createSelectionRoom(h){
   s.foreground=()=>{sync();if(same(s)){callClock(s);checkAudio(s);void s.credits?.reload();}};s.visibility=()=>{if(document.visibilityState!=='hidden')s.foreground();};
   document.addEventListener('visibilitychange',s.visibility);window.addEventListener('focus',s.foreground);
   s.clock=setInterval(()=>{if(document.visibilityState!=='hidden'){callClock(s);checkAudio(s);}},1000);
-  s.timer=setInterval(()=>{sync();if(!same(s))return;if(document.visibilityState==='hidden'&&!s.frame)return;void refresh(s);if(Date.now()-(s.statusChecked||0)>30000)void videoStatus(s);},3000);
+  s.timer=setInterval(()=>{sync();if(!same(s))return;if(document.visibilityState==='hidden'&&!s.frame)return;void refresh(s);},3000);
   await Promise.allSettled([refresh(s),videoStatus(s)]);
  }
  return {open,close,sync,isOpen:()=>!!room,activeScope:()=>room&&(room.frame||room.joining)?room.scope:null};
@@ -9177,7 +9182,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.283';
+const APP_UI_VERSION='0.8.62.284';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -28876,8 +28881,8 @@ async function initialisePhoneApp(){
   window.addEventListener('appinstalled',()=>{phoneInstallPrompt=null;if(currentTab==='phone_app')void renderPhoneApp();});
   navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='CB_OPEN')void openPhoneNotification(event.data.url);});
   // Setup never asks for notification permission; only the explicit Enable click does.
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&club&&!(currentTab==='teams'&&selectionState?.view==='board')){void refreshClubMessageBadge();void refreshMyCoachingUpdates();if(phoneSetupPromptState)phoneSetupPromptState.checkedAt=0;void refreshPhoneSetupPrompt();}});
-  setInterval(()=>{if(document.visibilityState==='visible'&&session&&club&&!(currentTab==='teams'&&selectionState?.view==='board')){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}},60000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&club&&!(currentTab==='teams'&&selectionState?.view==='board')&&!seMeetingActive()){void refreshClubMessageBadge();void refreshMyCoachingUpdates();if(phoneSetupPromptState)phoneSetupPromptState.checkedAt=0;void refreshPhoneSetupPrompt();}});
+  setInterval(()=>{if(document.visibilityState==='visible'&&session&&club&&!(currentTab==='teams'&&selectionState?.view==='board')&&!seMeetingActive()){void refreshClubMessageBadge();void refreshMyCoachingUpdates();}},60000);
  }
  if(phoneRegistrationTask)return phoneRegistrationTask;
  if([phoneRegistration?.active,phoneRegistration?.installing,phoneRegistration?.waiting].some(worker=>worker&&worker.state!=='redundant'))return phoneRegistration;
@@ -30136,6 +30141,62 @@ async function loadSelectionsAccess(){
  return selectionAccess?.key===selectionsScopeKey()?selectionAccess:null;
 }
 function ensureSelections(){const key=`${session?.user?.id}:${club?.id}`;if(selectionState?.key!==key){let pending=null;try{pending=JSON.parse(fixtureSessionStorage.getItem('selections-pending-'+key)||'null');}catch{}selectionState={key,view:'published',data:null,notice:'',busy:false,pending,undo:[],date:'',search:'',role:'',active:null,pairs:false,formDirty:false};}return selectionState;}
+function seMeetingScope(){
+ const s=selectionState,d=s?.data;if(currentTab!=='teams'||s?.view!=='board'||s.key!==selectionsScopeKey()||!selectionsEnabled()||!d?.selector)return null;
+ const group=d.group_permissions_enabled?s.selectionGroup:undefined;
+ if(d.group_permissions_enabled&&!d.selection_group_access?.some(g=>g.id===group&&g.level>0))return null;
+ return {key:s.key+':'+(group||'club'),club_id:club.id,selection_group_id:group};
+}
+function seMeetingActive(){return Object.values(selectionState?.meetings||{}).some(r=>r.state?.active===true);}
+function seAdoptMeetings(s,data){
+ const records={};for(const state of data.selection_meetings){const group=state.scope_id==='00000000-0000-0000-0000-000000000000'?'club':state.scope_id;records[s.key+':'+group]={state};}
+ // A board save may finish while a meeting change is in flight. Its earlier
+ // snapshot must not unlock the meeting button or discard the pending result.
+ for(const [key,r] of Object.entries(s.meetings||{}))if(r.changing||r.loading)records[key]=r;
+ s.meetings=records;
+}
+function seMeetingRecord(scope){
+ if(!scope)return null;const s=selectionState;s.meetings||={};
+ return s.meetings[scope.key]||={state:{active:false,id:null,can_manage:scope.selection_group_id?s.data.selection_group_access?.some(g=>g.id===scope.selection_group_id&&g.level===2):true}};
+}
+function seMeetingButton(){
+ const button=document.getElementById('seMeeting');if(!button)return;
+ const scope=seMeetingScope(),s=selectionState,r=seMeetingRecord(scope),state=r?.state;
+ button.hidden=!scope;button.disabled=!scope||!!r?.loading||!!r?.changing||!!s.busy||!!s.pending||(!r?.error&&(!state||!state.can_manage));
+ button.textContent=r?.changing?(state?.active?'Ending meeting…':'Starting meeting…'):r?.error?'Retry meeting status':state?.active?(state.can_manage?'End selection meeting':'Meeting active'):state?'Start selection meeting':'Checking meeting…';
+ button.setAttribute('aria-pressed',String(state?.active===true));
+ button.title=r?.error?'Meeting status unavailable. The board stays lightweight.':state?.active?'Meeting active for this Selection Group. Optional analysis is paused.':'Start a meeting with optional analysis paused. Chat and calls are separate.';
+ button.onclick=()=>void seMeetingToggle();
+}
+async function seMeetingRefresh(){
+ const scope=seMeetingScope(),s=selectionState;if(!scope||s.busy||s.pending)return;
+ const r=seMeetingRecord(scope);if(r.loading||r.changing)return;
+ r.loading=true;seMeetingButton();
+ try{
+  const {data,error}=await supabase.rpc('selection_room_api',{p_club_id:scope.club_id,p_action:'meeting',p_data:{selection_group_id:scope.selection_group_id}});if(error)throw error;
+  if(s!==selectionState)return;r.state=data;r.error=false;
+  if(data.active){s.statsOpen=false;selectionEvidence.pause();}
+ }catch{if(s===selectionState)r.error=true;}
+ finally{r.loading=false;if(s===selectionState)seMeetingButton();}
+}
+function seMountMeeting(){
+ // The ordinary board context contains meeting status. No background timer,
+ // extra status request, Selection Room, microphone or video is started here.
+ seMeetingButton();
+}
+async function seMeetingToggle(){
+ const scope=seMeetingScope(),s=selectionState,r=seMeetingRecord(scope);
+ if(!scope||!r||r.loading||r.changing||s.busy||s.pending)return;
+ if(r.error||!r.state){await seMeetingRefresh();return;}
+ if(!r.state.can_manage)return;
+ const ending=r.state.active;r.changing=true;s.statsOpen=false;selectionEvidence.pause();seStartLiveRefresh();seMeetingButton();
+ try{
+  const {data,error}=await supabase.rpc('selection_room_api',{p_club_id:scope.club_id,p_action:ending?'end_meeting':'start_meeting',p_data:{selection_group_id:scope.selection_group_id,...(ending?{meeting_id:r.state.id}:{request_id:crypto.randomUUID()})}});if(error)throw error;
+  if(s!==selectionState)return;r.state=data;r.error=false;
+  if(scope.key===seMeetingScope()?.key)seNotice(data.active?'Selection meeting started · analysis paused. Select teams as usual.':'Selection meeting ended · analysis stays paused.');
+ }catch{if(s===selectionState){r.error=true;if(scope.key===seMeetingScope()?.key)seNotice('Meeting change not confirmed. Check its status before trying again. The board stays lightweight.');}}
+ finally{r.changing=false;if(s===selectionState)seMeetingButton();}
+}
 function seEsc(v){return esc(String(v??''));}
 function seOpt(opts,value){return opts.map(([v,label])=>`<option value="${seEsc(v)}" ${v===value?'selected':''}>${seEsc(label)}</option>`).join('');}
 function seName(id){return ensureSelections().data?.roster.find(p=>p.id===id)?.name||'Choose player';}
@@ -30159,7 +30220,7 @@ async function seRPC(action,data={}){const {data:result,error}=await supabase.rp
 async function seReload(){
  const s=ensureSelections(),sequence=(s.loadSequence||0)+1,previous=s.data,clubId=s.key.split(':').slice(1).join(':');s.loadSequence=sequence;
  const extrasTask=(async()=>{
-  if(s.view==='board'){
+  if(s.view==='board'||Object.values(s.meetings||{}).some(r=>r.state?.active)){
    // No weekly forecasts or signup/follow-up scans after each team change.
    const access=previous?null:await Promise.resolve(supabase.rpc('club_socials_api',{p_club_id:clubId,p_action:'access'})).catch(()=>({error:true}));
    return {signup_followup:previous?.signup_followup||null,week:previous?.week||null,socials:previous?previous.socials===true:!access?.error&&access?.data?.allowed===true,social_handover_count:previous?.social_handover_count||access?.data?.handover_count||0};
@@ -30169,7 +30230,7 @@ async function seReload(){
   return {signup_followup:followup,week:week.data,socials:!access.error&&access.data?.allowed===true,social_handover_count:access.data?.handover_count||0};
  })();
  const [result,extras]=await Promise.all([seRPC('context'),extrasTask]);Object.assign(result,extras);
- if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence)return false;s.data=result;seApplyWeekLaunch(s);if(result.socials&&!s.socialSetupOpened&&new URLSearchParams(location.search).get('social_accounts')==='1'){s.socialSetupOpened=true;s.view='socials';socialEnsure().view='accounts';}if(!result.selector){s.undo=[];s.active=null;}selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
+ if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence)return false;s.data=result;if(Array.isArray(result.selection_meetings))seAdoptMeetings(s,result);seApplyWeekLaunch(s);if(result.socials&&!s.socialSetupOpened&&new URLSearchParams(location.search).get('social_accounts')==='1'){s.socialSetupOpened=true;s.view='socials';socialEnsure().view='accounts';}if(!result.selector){s.undo=[];s.active=null;}selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
 async function seMutate(action,data,{undo=null,picker=null,order=null,copyLast=null}={}){const s=ensureSelections();if(s.busy)return false;s.statsOpen=false;if(!s.pending&&!seGuardFixtureEdit(action,data))return false;if(action==='save_board'&&!s.pending)data={...data,fixtures:data.fixtures.map(f=>sePrepareMatch(f))};const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(undo?{undo}:{}),...(picker?{picker}:{}),...(order?{order}:{}),...(copyLast?{copyLast}:{}),...(['availability','availability_batch'].includes(action)&&s.availabilityReturn?{availabilityReturn:structuredClone(s.availabilityReturn)}:{})};const working=pending.copyLast?'Copying…':pending.action==='publish'?'Publishing…':pending.action==='import_roster'?'Importing…':['send_review','post','review_post'].includes(pending.action)?'Sending…':pending.action==='fixture_lock'?(pending.data.unlock?'Unlocking…':'Locking…'):'Saving…',restoreButton=seButtonWorking(s.actionButton,working);s.actionButton=null;s.pending=pending;s.busy=true;sePersist();seNotice(pending.action==='publish'?'Publishing teams…':working,{quiet:pending.action!=='publish'});seLock(true);if(pending.copyLast)seUpdateCopyStatus(pending.copyLast.id);let requestConfirmed=false;
  try{const result=await seRPC(pending.action,pending.data);requestConfirmed=true;if(s!==selectionState)return false;if(pending.action==='publish'&&result?.published!==true)throw Error('Publication was not confirmed. Retry the same request.');s.formDirty=false;const loaded=await seReload();if(!loaded||s!==selectionState||s.key!==selectionsScopeKey())return false;s.pending=null;s.teamChange=pending.order?.feedback?{id:pending.order.id,revision:result.revisions?.[pending.order.id],text:pending.order.feedback}:null;if(pending.action==='review_post'&&s.boardCommentDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardCommentDrafts[pending.data.id];if(pending.action==='post'&&s.boardChatDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardChatDrafts[pending.data.id];s.formDirty=[...Object.values(s.boardCommentDrafts||{}),...Object.values(s.boardChatDrafts||{})].some(x=>x.trim());sePersist();if(pending.undo)s.undo.push({before:pending.undo,expected:result.revisions});if(action==='save_roster')s.rosterSaved=true;if(pending.action==='publish'){s.view='published';s.date=s.data.fixtures.find(f=>pending.data.ids.includes(f.id))?.details?.days?.[0]?.date||s.date;s.boardDateChosen=true;s.active=null;s.publicationResult={ids:pending.data.ids,recipients:Number(result.recipients)||0};}s.notice=action==='publication_delegate'?(data.operation==='hand_back'?'Publishing handed back to the Head of Selections ✓':'Delegation saved ✓'):action==='review_post'?'Comment added ✓':action==='post'?'Message sent ✓':action==='conversation'?(data.spoken?'Marked spoken to ✓':'Conversation marked as needed'):action==='fixture_lock'?(data.unlock?'Unlocked · republish changes to notify players · locks after 30 minutes':'Team locked'):action==='send_review'?'Sent to captains ✓':action==='publish'?`${pending.data.ids.length} team${pending.data.ids.length===1?'':'s'} published ✓ · Messages created for ${Number(result.recipients)||0} club members.${Number.isInteger(result.groups?.added_memberships)?' Usual grades updated in Club Batting; existing grades kept.':''}${result.groups?.unlinked_players?.length?' Some players still need a Club Batting player link.':''}${result.groups?.unmapped_grades?.length?' Link these grades in Settings: '+result.groups.unmapped_grades.map(g=>g.grade).join(', ')+'.':''}`:pending.order?.feedback?'':pending.order?.message||'Saved ✓';s.quietNotice=pending.action==='publish'||pending.action==='fixture_lock'&&pending.data.unlock?null:s.notice;if(pending.picker||pending.order)sePickerSaved(pending.picker);if(pending.copyLast)seCopyMessage(pending.copyLast.id,pending.copyLast.message);s.busy=false;drawSelections();if(pending.availabilityReturn)seReturnFromAvailability(pending.availabilityReturn);if(pending.action==='publish')seRevealPublication('seNotice');if(pending.picker&&currentTab==='teams'&&s.view==='board')seFocusSlot(pending.picker.active);if(pending.order&&currentTab==='teams'&&s.view==='board')seFocusOrder(pending.order.id,pending.order.slot);if(['save_roster','import_roster','selectors','publication_delegate','save_board','save_fixture','publish'].includes(action)&&!(currentTab==='teams'&&s.view==='board'))void refreshClubMessageBadge();return true;}catch(error){s.quietNotice=null;if(!requestConfirmed&&pending.action==='publish'&&error.code==='57014'){s.pending=null;sePersist();s.notice='Publishing timed out. The teams were not published. Your saved selections are safe; review and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&error.message.startsWith('Draft changed. Review the latest team before publishing')){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='The team changed since this publication was prepared. Review the latest team and publish again.';}else if(!requestConfirmed&&pending.action==='save_board'&&error.code==='P0001'&&(/ is already selected (?:on \d{4}-\d{2}-\d{2}|in overlapping games on \d{4}-\d{2}-\d{2})/.test(error.message)||/^(A team changed in another session|Mark availability before selecting)/.test(error.message))){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Team was not changed. '+error.message;}else if(pending.action==='availability_batch'&&/^(A player updated their calendar|Playing list changed|A calendar changed)/.test(error.message)){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Availability changed while you were editing. Review the saved choices and try again.';}else if(pending.action==='post'&&error.message.startsWith('This match conversation is closed.')||error.message.startsWith('Completed fixture is locked.')||error.message.startsWith('Published team is locked.')||['conversation','grade_levels','review_post'].includes(action)&&/^(This selection|Conversation status|Settings changed|Club Admin|The team changed|Team comments are private)/.test(error.message)||error.message.startsWith('Only the current Head of Selections')||action==='publication_delegate'&&/^(Only |Choose |Assign |Selection responsibilities changed)/.test(error.message)){s.pending=null;sePersist();s.notice=error.message;}else s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;if(pending.copyLast)seCopyMessage(pending.copyLast.id,s.notice);s.busy=false;drawSelections();if(pending.action==='publish')seRevealPublication('seNotice');return false;}finally{s.busy=false;seLock(false);restoreButton();if(pending.copyLast&&s===selectionState)seUpdateCopyStatus(pending.copyLast.id);}}
 function seLock(disabled){document.querySelectorAll('#sePage button,#sePage input,#sePage select,#sePage textarea').forEach(x=>{if(disabled){x.dataset.seWasDisabled=x.disabled?'1':'0';x.disabled=true;}else if(x.dataset.seWasDisabled!==undefined){x.disabled=x.dataset.seWasDisabled==='1';delete x.dataset.seWasDisabled;}});}
@@ -30218,7 +30279,7 @@ function seSelectionTabs(d){
  return [...(d.admin?[['settings','Settings'],['selection_groups','Selection Groups']]:[]),...(seCanSetup(d)||!captain&&d.signup_followup?.can_view?[['roster','Playing List']]:[]),...(seHasAvailability(d)&&(!captain||seCanSetup(d))?[['availability','Availability']]:[]),...(seBoardAccess(d)||seFollowupRows(null,d).length||d.reviews?.length?[['board','Selection Board']]:[]),...(!d.selector&&d.admin?[['fixtures','Fixtures']]:[]),...(!seBoardAccess(d)?[['published','Teams']]:[]),...(d.socials?[['socials','Social Graphics']]:[])];
 }
 function drawSelections(){selectionState?.cancelOrder?.();if(currentTab!=='teams'||!document.getElementById('page'))return;const s=ensureSelections(),d=s.data;if(!d)return;const drawer=s.restoreDrawer;s.restoreDrawer=null;s.navigationDrawer=null;if(['reviews','conversations'].includes(s.view)){s.followupOpen=s.view==='conversations';s.view='board';}if(s.view==='published'&&seBoardAccess(d)){if(s.publishedWeek){const f=d.fixtures.find(f=>f.published&&sePublishedDates(f).some(date=>sePublishedWeekStart(date)===s.publishedWeek));if(f){s.selectionGroup=f.selection_group_id||'';s.date=f.details.days[0].date;s.boardDateChosen=true;}}s.view='board';}const tabs=seSelectionTabs(d);if(!tabs.some(([key])=>key===s.view)&&!(s.view==='availability'&&seIsCaptain(d)&&seHasAvailability(d)))s.view=seBoardAccess(d)?'board':'published';
- document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><header class="se-page-header"><div class="se-page-heading"><h1>Mirelion Select</h1><button type="button" class="btn ghost se-section-toggle" id="seSectionToggle" aria-expanded="false" aria-controls="seSectionLinks">${seEsc(tabs.find(([key])=>key===s.view)?.[1]||'Availability')} <span aria-hidden="true">⌄</span></button></div><div class="se-actions se-page-tools">${seStatsAllowed(d)&&['board','fixtures'].includes(s.view)?`<button class="btn ghost" id="seSeasonStats" disabled title="Analysis is temporarily paused" aria-expanded="${!!s.statsOpen}" aria-controls="seStatsHost">Season stats</button>`:''}${d.selector&&s.view==='board'?'<button class="btn ghost" id="seOpenRoom">Selection Room</button>':''}<details class="se-more" id="seMore"><summary class="btn ghost">More <span aria-hidden="true">⌄</span></summary><div class="se-more-body"><button class="btn ghost" id="seRefresh">Refresh</button>${s.view==='board'&&seBoardAccess(d)?`<div id="seBoardExtras" class="se-board-extras">${d.selector?'<button class="btn ghost" id="seImportFixtures">Import season fixtures</button><button class="btn ghost" id="seNewFixture">Enter fixtures manually</button>':''}<label class="se-check se-evidence-toggle"><input type="checkbox" id="seFormIndicators" data-evidence-toggle disabled checked>Show form indicators</label><label class="se-check se-evidence-toggle"><input type="checkbox" id="seCompareReturning" data-returning-toggle disabled>Compare returning players</label><button class="btn ghost" type="button" id="seCalculateEvidence" disabled title="All optional selection analysis is temporarily stopped.">Analysis paused</button><div id="seBoardExtraTools"></div>${d.selector?'<p id="seOrderHelp" class="se-muted se-order-help">Tap a player’s handle to move them, or drag to reorder. Drafts save automatically.</p>':''}</div>`:''}</div></details></div><nav class="se-tabs" id="seSectionLinks" aria-label="Teams sections">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</nav></header>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice${s.notice&&s.quietNotice===s.notice?' se-notice-quiet':''}" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your change is kept here. Retry safely, or download it before reloading the latest teams.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${['board','settings'].includes(s.view)?sePublicationWorkflow(d,{board:s.view==='board'}):''}<div id="seStatsHost"></div><div id="seContent"></div></section>`;
+ document.getElementById('page').innerHTML=seStyles()+`<section class="se-page" id="sePage"><header class="se-page-header"><div class="se-page-heading"><h1>Mirelion Select</h1><button type="button" class="btn ghost se-section-toggle" id="seSectionToggle" aria-expanded="false" aria-controls="seSectionLinks">${seEsc(tabs.find(([key])=>key===s.view)?.[1]||'Availability')} <span aria-hidden="true">⌄</span></button></div><div class="se-actions se-page-tools">${seStatsAllowed(d)&&s.view==='fixtures'?`<button class="btn ghost" id="seSeasonStats" disabled title="Analysis is temporarily paused" aria-expanded="${!!s.statsOpen}" aria-controls="seStatsHost">Season stats</button>`:''}${d.selector&&s.view==='board'?'<button class="btn ghost" id="seMeeting" disabled>Start selection meeting</button><button class="btn ghost" id="seOpenRoom">Selection Room</button>':''}<details class="se-more" id="seMore"><summary class="btn ghost">More <span aria-hidden="true">⌄</span></summary><div class="se-more-body"><button class="btn ghost" id="seRefresh">Refresh</button>${s.view==='board'&&seBoardAccess(d)?`<div id="seBoardExtras" class="se-board-extras">${d.selector?'<button class="btn ghost" id="seImportFixtures">Import season fixtures</button><button class="btn ghost" id="seNewFixture">Enter fixtures manually</button>':''}<label class="se-check se-evidence-toggle"><input type="checkbox" id="seFormIndicators" data-evidence-toggle disabled checked>Show form indicators</label><label class="se-check se-evidence-toggle"><input type="checkbox" id="seCompareReturning" data-returning-toggle disabled>Compare returning players</label><button class="btn ghost" type="button" id="seCalculateEvidence" disabled title="All optional selection analysis is temporarily stopped.">Analysis paused</button><div id="seBoardExtraTools"></div>${d.selector?'<p id="seOrderHelp" class="se-muted se-order-help">Tap a player’s handle to move them, or drag to reorder. Drafts save automatically.</p>':''}</div>`:''}</div></details></div><nav class="se-tabs" id="seSectionLinks" aria-label="Teams sections">${tabs.map(([key,label])=>`<button class="btn ghost" data-se-view="${key}" aria-pressed="${s.view===key}">${label}</button>`).join('')}</nav></header>${s.view==='settings'?'':clubBrandingSetupPrompt()}<p id="seNotice" tabindex="-1" class="se-notice${s.notice&&s.quietNotice===s.notice?' se-notice-quiet':''}" role="status" aria-live="polite">${seEsc(s.notice)}</p>${s.pending?`<div class="se-recovery"><strong>Unconfirmed save</strong><p>Your change is kept here. Retry safely, or download it before reloading the latest teams.</p><div class="se-actions"><button class="btn" id="seRetrySave">Retry save</button><button class="btn ghost" id="seRecovery">Download &amp; reload</button></div></div>`:''}${d.socials&&d.social_handover_count&&s.view!=='socials'?'<div class="notice"><strong>Socials handover needs attention.</strong> <button class="btn ghost" id="seSocialHandover">Review handover</button></div>':''}${['board','settings'].includes(s.view)?sePublicationWorkflow(d,{board:s.view==='board'}):''}<div id="seStatsHost"></div><div id="seContent"></div></section>`;
  const sectionToggle=document.getElementById('seSectionToggle'),sectionLinks=document.getElementById('seSectionLinks'),more=document.getElementById('seMore');
  sectionToggle.onclick=()=>{const open=sectionToggle.getAttribute('aria-expanded')!=='true';sectionToggle.setAttribute('aria-expanded',String(open));sectionLinks.classList.toggle('se-sections-open',open);};
  document.getElementById('sePage').addEventListener('keydown',event=>{if(event.key!=='Escape'||event.defaultPrevented)return;if(more.open){more.open=false;more.querySelector('summary').focus();event.preventDefault();}else if(sectionToggle.getAttribute('aria-expanded')==='true'){sectionToggle.click();sectionToggle.focus();event.preventDefault();}});
@@ -30291,7 +30352,7 @@ function seBoardFixtures(){
  s.boardDateInitialised=true;
  return fixtures.filter(f=>f.details.days[0].date===s.date);
 }
-function seBoard(){const s=ensureSelections();s.statsOpen=false;selectionEvidence.pause();queueMicrotask(()=>bindSpinBreakdowns(document.getElementById('seContent')));s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
+function seBoard(){const s=ensureSelections();s.statsOpen=false;selectionEvidence.pause();queueMicrotask(()=>{bindSpinBreakdowns(document.getElementById('seContent'));seMountMeeting();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
  if(!dates.length&&!(s.data.group_permissions_enabled?s.data.selection_group_access?.some(a=>a.id===s.selectionGroup&&a.level===2):s.data.selector)){document.getElementById('seContent').innerHTML=seBoardGroupControl()+seCaptainAvailability()+'<p>No fixtures in this group yet.</p>';seBindGroupControl();seBindPublishedActions();return;}if(!dates.length){document.getElementById('seContent').innerHTML=seBoardGroupControl()+'<section class="se-card se-drawer"><p>No fixtures in this group yet.</p><button class="btn" id="seFirstFixture">Import season fixtures</button><details><summary>Manual entry</summary><button class="btn ghost" id="seManualFirst">Enter a fixture manually</button></details><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';seBindGroupControl();document.getElementById('seFirstFixture').onclick=()=>seImportFixtures();document.getElementById('seManualFirst').onclick=()=>seFixtureEditor();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);return;}
  document.getElementById('seContent').innerHTML=`<div class="se-toolbar se-board-toolbar">${seBoardGroupControl()}<label class="se-board-date">Fixtures <select id="seBoardDate" aria-label="Fixtures starting">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label>${seCaptainAvailability()}${s.data.selector?`<button class="btn ghost" id="seUnselected">Available, not selected</button>${s.undo.length&&s.undo.at(-1).before.every(f=>fs.some(x=>x.id===f.id))?'<button class="btn ghost" id="seUndo">Undo last change</button>':''}`:''}${fs.some(f=>!seFixtureLocked(f)&&(f.can_publish??s.data.head_selector))?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${s.data.selector&&!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}${fs.some(f=>f.can_edit??s.data.selector)?'':'<span class="sr-only">Teams are read-only. Drafts may change until published.</span>'}${seFollowupPanel()}<div class="se-board-layout"><div class="se-grid">${fs.map(f=>(f.can_edit??s.data.selector)?seTeamCard(f):seReadOnlyTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
  seBindGroupControl();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);
@@ -30865,8 +30926,8 @@ function syncMatchCaptainNavigation(){
   if(button)button.hidden=!permitted;
  }
 }
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id)void loadMatchCaptainAccess();});
-setInterval(()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id&&!(currentTab==='teams'&&selectionState?.view==='board')){syncMatchCaptainNavigation();void loadMatchCaptainAccess();}},60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id&&!(currentTab==='teams'&&selectionState?.view==='board')&&!seMeetingActive())void loadMatchCaptainAccess();});
+setInterval(()=>{if(document.visibilityState==='visible'&&session?.user?.id&&club?.id&&!(currentTab==='teams'&&selectionState?.view==='board')&&!seMeetingActive()){syncMatchCaptainNavigation();void loadMatchCaptainAccess();}},60000);
 /* END TEMPORARY MATCH CAPTAIN */
 
 
@@ -35062,11 +35123,29 @@ const demoSelectionRooms=new Map();
 const beforeRoomDemoRpc=supabase.rpc;
 
 supabase.rpc=async function(name,args){
- if(name!=='selection_room_api')return beforeRoomDemoRpc(name,args);
+ if(name!=='selection_room_api'){
+  const result=await beforeRoomDemoRpc(name,args);
+  if(name==='club_selections_api'&&args.p_action==='context'&&result.data?.selector){
+   const d=result.data,prefix=args.p_club_id+':';
+   d.selection_meetings=[...demoSelectionRooms].filter(([key])=>key.startsWith(prefix)).flatMap(([key,r])=>{
+    const group=key.slice(prefix.length),level=d.group_permissions_enabled?d.selection_group_access?.find(g=>g.id===group)?.level:2;
+    return level?[{scope_id:group==='club'?'00000000-0000-0000-0000-000000000000':group,id:null,active:false,...r.meeting,can_manage:level===2}]:[];
+   });
+  }
+  return result;
+ }
  if(!selectionsEnabled()||!selectionState?.data?.selector)return {error:{code:'42501',message:'Assigned selectors only'}};
- const key=args.p_club_id,d=args.p_data||{},action=args.p_action;
+ const d=args.p_data||{},key=args.p_club_id+':'+(d.selection_group_id||'club'),action=args.p_action;
+ const level=selectionState.data.group_permissions_enabled?selectionState.data.selection_group_access?.find(g=>g.id===d.selection_group_id)?.level:2;
+ if(!level)return {error:{code:'42501',message:'Choose a Selection Group you can view'}};
  if(!demoSelectionRooms.has(key))demoSelectionRooms.set(key,{messages:[],backup_url:'',revision:0,requests:new Map()});
  const r=demoSelectionRooms.get(key),can_manage=!!selectionState.data.head_selector;
+ if(['meeting','start_meeting','end_meeting'].includes(action)){
+  if(action!=='meeting'&&level<2)return {error:{code:'42501',message:'Only selectors who can edit this group can start or end its meeting'}};
+  if(action==='start_meeting'&&!r.meeting?.active&&r.meeting?.id!==d.request_id)r.meeting={id:d.request_id,active:true,started_at:new Date().toISOString()};
+  if(action==='end_meeting'){if(r.meeting?.id!==d.meeting_id)return {error:{message:'The meeting changed. Refresh its status.'}};r.meeting.active=false;}
+  return {data:{id:null,active:false,...r.meeting,can_manage:level===2}};
+ }
  if(action==='context')return {data:{messages:r.messages.filter(m=>d.after?BigInt(m.id)>BigInt(d.after):d.before?BigInt(m.id)<BigInt(d.before):true).slice(d.after?0:-100,d.after?100:undefined),has_older:false,backup_url:r.backup_url,revision:r.revision,can_manage}};
  if(action==='post'){
   const request=session.user.id+':'+d.request_id;
