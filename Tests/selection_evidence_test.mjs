@@ -302,7 +302,7 @@ test('bowling colours retain zero wickets and recognise economical containment',
 });
 test('spin all-rounder comparisons retain their batting trade-off and keeper cover',()=>{
  const s=allrounders();s.roster.forEach(p=>p.bowling='spin');Object.assign(s.summary.rows[0],{runs:160,average:40});Object.assign(s.summary.rows[2],{runs:40,average:10,wickets:30,conceded:90});
- let pair=s.build().pairs.find(p=>p.higher.person.id==='incumbent');assert.equal(pair.kind,'tradeoff');assert.equal(pair.reason,'Bowling gain · batting trade-off');
+ let pair=s.build().pairs.find(p=>p.higher.person.id==='incumbent');assert.equal(pair.kind,'tradeoff');assert.match(pair.reason,/Strong bowling case · batting\/balance trade-off/);
  s.roster[0].keeper=true;assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));
 });
 test('a player selected in both grades is not offered as their own or another incumbent replacement',()=>{
@@ -338,4 +338,34 @@ test('bracketed players must cover the incumbent’s selected days in the same r
  const s=scenario();s.high.days=s.low.days=[{date:'2026-10-17'},{date:'2026-10-24'}];s.high.slots[0].d2='incumbent';
  assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));
  s.low.slots[0].d2='candidate';assert.ok(s.build().pairs.some(p=>p.higher.person.id==='incumbent'));
+});
+
+function spinUpgrade(){
+ const s=allrounders();s.roster.forEach(p=>Object.assign(p,{bowling:'spin',spin_style:'leg_spin'}));
+ s.roster[0].batting='middle';s.roster[2].batting='lower';
+ s.summary.rows[0].runs=160;s.summary.rows[0].average=40;
+ Object.assign(s.summary.rows[2],{runs:0,innings:0,not_outs:0,dismissals:0,average:null});
+ return s;
+}
+test('an exceptional specialist spinner can cross batting roles while retaining the batting trade-off',()=>{
+ const s=spinUpgrade();Object.assign(s.summary.rows[2],{wickets:25,conceded:120,economy:2.4});const pair=s.build().pairs.find(p=>p.higher.person.id==='incumbent');
+ assert.equal(pair.exceptionalSpin,true);assert.equal(pair.focus,'bowling');assert.equal(pair.kind,'tradeoff');assert.equal(pair.balance.status,'tradeoff');assert.match(pair.balance.notes.join(' '),/recorded batting cover/);
+});
+test('a modest bowling gain does not silently remove an in-form batter/all-rounder',()=>{
+ const s=spinUpgrade();assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));
+});
+test('established below-guide batting makes a strong bowling upgrade discussable across batting roles',()=>{
+ const s=spinUpgrade();Object.assign(s.summary.rows[0],{runs:16,average:4});const pair=s.build().pairs.find(p=>p.higher.person.id==='incumbent');
+ assert.equal(pair.exceptionalSpin,false);assert.equal(pair.weakBattingSpinCase,true);assert.equal(pair.kind,'tradeoff');assert.match(pair.reason,/current batting below guide/);
+ for(const patch of [{innings:2,not_outs:0,dismissals:2},{batting_complete:false},{innings:5,not_outs:4,dismissals:1}]){const t=spinUpgrade();Object.assign(t.summary.rows[0],{runs:16,average:4,...patch});assert.ok(!t.build().pairs.some(p=>p.higher.person.id==='incumbent'));}
+});
+test('exceptional spin still needs genuine bowling opportunity, workload, complete figures and keeper cover',()=>{
+ for(const patch of [{bowling_innings:1},{bowling_balls:30},{bowling_complete:false}]){const s=spinUpgrade();Object.assign(s.summary.rows[2],{wickets:25,...patch});assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));}
+ for(const patch of [{keeper:true},{bowling_load:'part_time'},{bowling:'pace'}]){const s=spinUpgrade();Object.assign(s.summary.rows[2],{wickets:25});Object.assign(s.roster[0],patch);assert.ok(!s.build().pairs.some(p=>p.higher.person.id==='incumbent'));}
+});
+test('spin mix flags change comparison context without changing performance colours or suppressing the candidate',()=>{
+ const s=spinUpgrade();Object.assign(s.summary.rows[2],{wickets:25});s.roster[0].spin_style='off_spin';s.roster.push(person('leg2',{bowling:'spin',bowling_load:'frontline',spin_style:'leg_spin'}));s.high.slots.push({d1:'leg2'});
+ const before=s.build(),pair=before.pairs.find(p=>p.higher.person.id==='incumbent');assert.match(pair.balance.notes.join(' '),/only frontline Off-spin/);
+ s.roster[2].spin_style='off_spin';const after=s.build();assert.ok(after.pairs.some(p=>p.higher.person.id==='incumbent'));
+ for(const [key,item] of before.players){assert.deepEqual(after.players.get(key).bat,item.bat);assert.deepEqual(after.players.get(key).ball,item.ball);}
 });

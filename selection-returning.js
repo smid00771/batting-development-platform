@@ -1,4 +1,5 @@
-import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.262';
+import {spinBalanceChange} from './player-bowling.js?v=0.8.62.279';
+import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.279';
 
 const date = team => team.days?.[0]?.date || '';
 const end = team => (team.days || []).map(day=>day.date).sort().at(-1) || '';
@@ -107,7 +108,7 @@ export function returningForm(entry,summary) {
   const before=(returnRow(entry,summary,entry.person.id)?.history || []).filter(match=>match.date<start).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
   return returningPeriod(before);
 }
-export function returningComparison(entry,target,summary) {
+export function returningComparison(entry,target,summary,roster=[]) {
   const whileAway=(returnRow(entry,summary,target.incumbent?.id)?.history || []).filter(match=>entry.missed.some(team=>match.fixture_id
     ? match.fixture_id===team.id : match.date===date(team)&&entry.missed.filter(other=>date(other)===match.date).length===1));
   const incoming=returningForm(entry,summary),current=returningPeriod(whileAway),notes=[];
@@ -144,5 +145,6 @@ export function returningComparison(entry,target,summary) {
     }
   }
   const early=[incoming,...(target.incumbent?[current]:[])].some(row=>target.focus==='bowling'?row.bowling_innings<5:row.innings<5);
-  return {entry,target,incoming,current,notes,early,assessment,assessmentText};
+  const balance=spinBalanceChange(entry.team,roster,target.incumbent,entry.person,target.days);
+  return {entry,target,incoming,current,notes,early,assessment,assessmentText,balance};
 }

@@ -2,9 +2,9 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),{JSDOM}=r
 const source=fs.readFileSync('app.js','utf8');
 function fn(name){const start=source.indexOf('function '+name+'('),end=source.indexOf('\nfunction ',start+1);return source.slice(start,end);}
 async function setup(){
- const engine=await import('../selection-evidence.js'),ui=await import('../selection-evidence-ui.js');
+ const engine=await import('../selection-evidence.js'),ui=await import('../selection-evidence-ui.js'),spin=await import('../player-bowling.js');
  const dom=new JSDOM('<form id="seRosterForm"></form>'),p={id:'example',name:'Example player',active:true,grade:'1st Grade',batting:'lower',bowling:'spin',bowling_load:'frontline',keeper:false},state={data:{roster:[p]},rosterOpen:p.id};
- const context=vm.createContext({document:dom.window.document,ensureSelections:()=>state,SE_FIELDING:engine.FIELDING_RATINGS,fieldingLabel:engine.fieldingLabel,
+ const context=vm.createContext({...spin,document:dom.window.document,ensureSelections:()=>state,SE_FIELDING:engine.FIELDING_RATINGS,fieldingLabel:engine.fieldingLabel,
   SE_BATTING:[['unknown','Not coded'],['lower','Lower order']],SE_BOWLING:[['unknown','Not coded'],['spin','Spinner']],SE_LOAD:[['unknown','Not coded'],['frontline','Frontline']],
   seEsc:value=>String(value??''),seOpt:(choices,value)=>choices.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${label}</option>`).join(''),
   seGradeChoices:()=>[{grade:'1st Grade'}],seRosterGradeKey:x=>x,memberPhoneStatusIcon:()=>'',seSignupFlag:()=>'',seNeedsAccountLink:()=>false});

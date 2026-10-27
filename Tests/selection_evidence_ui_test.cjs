@@ -220,3 +220,14 @@ test('live board adapter passes only its visible date and permits captains/selec
  s.data.captain=false;c.seMountSelectionEvidence();assert.equal(calls.length,1);s.data.selector=true;c.seMountSelectionEvidence();assert.equal(calls.length,2);
  c.currentTab='plan';c.seMountSelectionEvidence();assert.equal(calls.length,2);
 });
+
+test('spin comparison shows lost variety, actual batting and a human trade-off without changing selections',async()=>{
+ const h=await setup();for(const p of h.fixture.roster)if(p.bowling==='spin')p.spin_style='leg_spin';
+ const incumbent=h.fixture.roster.find(p=>p.id==='g1p5');incumbent.spin_style='off_spin';
+ Object.assign(h.fixture.roster.find(p=>p.id==='g1p4'),{bowling:'spin',spin_style:'leg_spin'});
+ const before=JSON.stringify(h.fixture),summary=h.stats.buildSeasonStats(h.fixture.context),model=h.engine.buildSelectionEvidence(summary,h.fixture.teams,h.fixture.roster);
+ const pair=model.pairs.find(p=>p.higher.person.id==='g1p5'&&p.lower.person.id==='g2p9');assert.ok(pair);assert.equal(pair.kind,'tradeoff');assert.equal(pair.weakBattingSpinCase,true);
+ h.host.innerHTML=h.ui.renderEvidenceComparison(pair);const text=h.host.textContent;
+ assert.match(text,/current batting below guide/);assert.match(text,/13 batting average/);assert.match(text,/Off-spin · frontline/);assert.match(text,/only frontline Off-spin/);assert.match(text,/recorded batting cover/);assert.match(text,/Bowling comparison in 1st Grade/);assert.match(text,/Discussion only/);
+ assert.equal(JSON.stringify(h.fixture),before);h.dom.window.close();
+});

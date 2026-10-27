@@ -10,6 +10,7 @@ function harness(fixtures=[team('A'),team('B'),team('C')]){
  const roster=[...new Set(fixtures.flatMap(f=>f.slots.flatMap(slot=>[slot.d1,slot.d2])).filter(Boolean))].map(id=>({id,name:id,active:true,availability:{available_dates:[...dates]}}));
  const s={key:'selector:club',view:'board',busy:false,pending:null,undo:[],data:{selector:true,fixtures,roster,access:{timezone:'UTC'}}},calls=[],notices=[],orders=[];let saveResult=true;
  const c=vm.createContext({Date,Intl,structuredClone,ensureSelections:()=>s,selectionState:s,currentTab:'teams',selectionsScopeKey:()=>s.key,seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Vacant',seNotice:text=>notices.push(text),seDate:String,sePickerSaved(){s.active=null;},seBoard(){},seFocusOrder(){},seMoveOrder:async(...args)=>{orders.push(args);return true;},seMutate:async(action,data,options)=>{calls.push({action,data,options});return saveResult;}});
+ vm.runInContext(fs.readFileSync('player-bowling.js','utf8').replace(/^export /gm,''),c);
  vm.runInContext(['seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seDayTime','seUsed','seFixtureCompleted','seFixtureLocked','seOrderName','seTeamNumbers','seBlankSlots','seClearTeam','seTrimSlots','seOverflow','seOverflowText','seTransferProblem','seMovePlan','seMovePlayer','seClearOrder'].map(extract).join('\n'),c);
  return {c,s,calls,notices,orders,saved:value=>saveResult=value};
 }
