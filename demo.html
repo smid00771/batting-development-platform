@@ -3694,6 +3694,17 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 @media print {
   #app .se-card[data-se-team]>.se-team-head,#app .player-home-tile {background:#fff}
 }
+/* Availability reminders have no dependency on form-analysis rendering. */
+#app .se-available-again {margin:4px 0;padding:2px 6px;border-left:3px solid #38857d;background:#f1f8f5;border-radius:5px}
+#app .se-available-heading {font-size:11px;font-weight:700;color:#21665f;line-height:18px}
+#app .se-available-again summary {box-sizing:border-box;display:flex;align-items:center;gap:5px;min-height:44px;padding:2px 4px;list-style:none;cursor:pointer;color:#175b53;font:600 12px/1.3 system-ui}
+#app .se-available-again summary::-webkit-details-marker {display:none}
+#app .se-available-again summary strong {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#app .se-available-again summary::after {content:'⌄';margin-left:auto}
+#app .se-available-again details[open]>summary::after {content:'⌃'}
+#app .se-available-again summary:focus-visible {outline:2px solid #21665f;outline-offset:-2px}
+#app .se-available-again details+details {border-top:1px solid #d0e5dc}
+#app .se-available-again p {font-size:12px;margin:0;padding:0 4px 6px}
 
 .mirelion-demo{background:var(--mirelion-paper);color:var(--ink)}
 .demo-bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--mirelion-surface);border-bottom:1px solid var(--line);padding:10px 24px;position:relative;z-index:30}
@@ -3732,7 +3743,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.285.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.286.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -5569,7 +5580,7 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
 // A return is established by saved unavailability for consecutive missed
 // fixtures, following a confirmed selection in this grade and format. Never
 // infer injury, poor form or absence from an unanswered availability date.
-function returningPlayers({teams=[],references=[],roster=[],season={},today='',noPlay=[],eligible=()=>false}={}) {
+function returningPlayers({teams=[],references=[],roster=[],season={},today='',noPlay=[],eligible=()=>false,compare=true}={}) {
   const history=references.filter(team=>!team.cancelled&&!team.published?.details?.cancelled&&!noPlay.includes(team.id)).map(snapshot).filter(team=>inSeason(team,season));
   const people=new Map(roster.map(p=>[p.id,p])), returns=[];
   for (const team of teams) {
@@ -5578,7 +5589,7 @@ function returningPlayers({teams=[],references=[],roster=[],season={},today='',n
       .sort((a,b)=>date(b).localeCompare(date(a)) || String(b.days?.[0]?.start||'').localeCompare(String(a.days?.[0]?.start||'')));
     for (const person of roster) {
       if (!person.active || selected(team,person.id)) continue;
-      const availableDays=(team.days || []).flatMap((day,i)=>status(person,day)==='available'&&eligible(team,person,i)?[i]:[]);
+      let availableDays=(team.days || []).flatMap((day,i)=>status(person,day)==='available'?[i]:[]);
       if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
       const missed=[];let previous=null;
       for (const old of past) {
@@ -5589,9 +5600,12 @@ function returningPlayers({teams=[],references=[],roster=[],season={},today='',n
       if (!missed.length || !previous) continue;
       // A confirmed intervening grade move is not a return from an absence.
       if (history.some(old=>old.historyConfirmed&&!sameGrade(old,team)&&date(old)>date(previous)&&end(old)<date(team)&&selected(old,person.id))) continue;
+      // Check clashes only for established returns, not every player on every draw.
+      availableDays=availableDays.filter(day=>eligible(team,person,day));
+      if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
       const position=previous.slots.findIndex(slot=>slot.d1===person.id||slot.d2===person.id)+1;
       const firstMissed=missed.at(-1), targets=[];
-      for (const [index,slot] of (team.slots || []).slice(0,11).entries()) {
+      for (const [index,slot] of (compare?team.slots || []:[]).slice(0,11).entries()) {
         for (const id of new Set((team.days || []).map((_,day)=>slot['d'+(day+1)] || null))) {
           const days=team.days.flatMap((_,day)=>(slot['d'+(day+1)]||null)===id?[day]:[]);
           if (days.some(day=>!availableDays.includes(day)) || !team.brackets && days.length!==team.days.length) continue;
@@ -9103,6 +9117,8 @@ const {FIELDING_RATINGS,fieldingLabel}=__demoModule18;
 
 const {createSelectionEvidence}=__demoModule20;
 
+const {returningPlayers}=__demoModule22;
+
 const {createScorecardTeams}=__demoModule23;
 
 const {createSocialAwards,renderSocialAwardRequests}=__demoModule25;
@@ -9161,6 +9177,7 @@ const {selectionCallLink}=__demoModule33;
 
 
 
+
 // Club Batting 0.8.62.246 — Selection Group permissions
 
 
@@ -9182,7 +9199,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.285';
+const APP_UI_VERSION='0.8.62.286';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -29586,6 +29603,31 @@ function seOpenStatsPlayer(panel,id){
  if(row){row.tabIndex=-1;row.focus({preventScroll:true});row.scrollIntoView({block:'center',behavior:'smooth'});}
 }
 function seMountSelectionEvidence(){selectionEvidence.pause();}
+function seReturningEntries(){
+ const s=ensureSelections(),data=s.data,meta=data?.returning_context;
+ if(!meta?.season?.start||!meta.season.end||!seBoardAccess(data)||s.boardPanel)return [];
+ const today=seClubDate();
+ // The authoritative context changes after a save or an explicit refresh.
+ // Picker/search/meeting/board redraws reuse the same availability reminders.
+ if(s.returningCache?.data!==data||s.returningCache.today!==today)s.returningCache={data,today,views:new Map()};
+ const fixtures=seSelectionFixtures(),key=JSON.stringify([s.selectionGroup,s.date]);
+ if(s.returningCache.views.has(key))return s.returningCache.views.get(key);
+ const references=fixtures.map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published,historyConfirmed:!!f.scorecard_sync?.match_id&&!f.scorecard_sync.pending?.length,returningEligible:f.details.days[0]?.date>=today&&!seFixtureLocked(f)}));
+ const entries=returningPlayers({teams:references.filter(f=>f.days[0]?.date===s.date),references,roster:data.roster,season:meta.season,today,noPlay:meta.no_play||[],compare:false,eligible:(team,person,day)=>!seUsed(person,team.days[day],data.fixtures,{},team)});
+ s.returningCache.views.set(key,entries);return entries;
+}
+function seMountReturningPlayers(){
+ const s=ensureSelections(),host=document.getElementById('seContent');
+ if(!host||currentTab!=='teams'||s.view!=='board'||s.boardPanel||!seBoardAccess(s.data))return;
+ const entries=seReturningEntries();
+ for(const card of host.querySelectorAll('[data-se-team]')){
+  const rows=entries.filter(entry=>entry.team.id===card.dataset.seTeam);
+  card.querySelector('[data-se-returning]')?.remove();if(!rows.length)continue;
+  const control=card.ownerDocument.createElement('section');control.dataset.seReturning='';control.className='se-available-again';control.setAttribute('aria-label','Available again for '+rows[0].team.grade);
+  control.innerHTML='<span class="se-available-heading">Available again</span>'+rows.map(entry=>`<details><summary title="${seEsc(entry.person.name+': available again')}" aria-label="${seEsc(entry.person.name+': available again. Expand availability details')}"><span aria-hidden="true">↩</span><strong>${seEsc(entry.person.name)}</strong></summary><p>Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected ${seEsc(seDate(entry.previous.days[0].date))} at No. ${entry.position}.${entry.team.days.length>1?' Available: '+entry.availableDays.map(day=>'Day '+(day+1)).join(' / ')+'.':''}</p></details>`).join('');
+  const anchor=card.querySelector(':scope > .se-actions')||card.querySelector('[data-se-order-list]')||card.querySelector(':scope > ol');if(anchor)anchor.after(control);else card.append(control);
+ }
+}
 function seBoardAccess(d=ensureSelections().data){return d?.can_view_board===true||d?.selector===true||d?.captain===true;}
 function seFollowupRows(date=ensureSelections().date,data=ensureSelections().data){return (data.conversations||[]).filter(m=>m.kind==='lower_grade'&&m.availability!=='unavailable'&&(date===null||m.date===date));}
 function seFollowupPanel(){
@@ -30369,7 +30411,7 @@ function seBoardFixtures(){
  s.boardDateInitialised=true;
  return fixtures.filter(f=>f.details.days[0].date===s.date);
 }
-function seBoard(){const s=ensureSelections();s.statsOpen=false;selectionEvidence.pause();queueMicrotask(()=>{bindSpinBreakdowns(document.getElementById('seContent'));seMountMeeting();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
+function seBoard(){const s=ensureSelections();s.statsOpen=false;selectionEvidence.pause();queueMicrotask(()=>{bindSpinBreakdowns(document.getElementById('seContent'));seMountMeeting();seMountReturningPlayers();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
  if(!dates.length&&!(s.data.group_permissions_enabled?s.data.selection_group_access?.some(a=>a.id===s.selectionGroup&&a.level===2):s.data.selector)){document.getElementById('seContent').innerHTML=seBoardGroupControl()+seCaptainAvailability()+'<p>No fixtures in this group yet.</p>';seBindGroupControl();seBindPublishedActions();return;}if(!dates.length){document.getElementById('seContent').innerHTML=seBoardGroupControl()+'<section class="se-card se-drawer"><p>No fixtures in this group yet.</p><button class="btn" id="seFirstFixture">Import season fixtures</button><details><summary>Manual entry</summary><button class="btn ghost" id="seManualFirst">Enter a fixture manually</button></details><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';seBindGroupControl();document.getElementById('seFirstFixture').onclick=()=>seImportFixtures();document.getElementById('seManualFirst').onclick=()=>seFixtureEditor();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);return;}
  document.getElementById('seContent').innerHTML=`<div class="se-toolbar se-board-toolbar">${seBoardGroupControl()}<label class="se-board-date">Fixtures <select id="seBoardDate" aria-label="Fixtures starting">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label>${seCaptainAvailability()}${s.data.selector?`<button class="btn ghost" id="seUnselected">Available, not selected</button>${s.undo.length&&s.undo.at(-1).before.every(f=>fs.some(x=>x.id===f.id))?'<button class="btn ghost" id="seUndo">Undo last change</button>':''}`:''}${fs.some(f=>!seFixtureLocked(f)&&(f.can_publish??s.data.head_selector))?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${s.data.selector&&!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}${fs.some(f=>f.can_edit??s.data.selector)?'':'<span class="sr-only">Teams are read-only. Drafts may change until published.</span>'}${seFollowupPanel()}<div class="se-board-layout"><div class="se-grid">${fs.map(f=>(f.can_edit??s.data.selector)?seTeamCard(f):seReadOnlyTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
  seBindGroupControl();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);
@@ -35296,6 +35338,15 @@ function demoSeedCurrent({empty=false}={}){
    card.result=club.name+' won by '+(batting.runs-bowling.runs)+' runs';
   }
   for(const f of upcoming.filter(f=>f.id==='selection-first'||f.id==='selection-second')){f.details.round='4';f.published.details.round='4';}
+  // Fictional return from two missed games, visible without opening stats.
+  const prior=demoSelections.fixtures.filter(f=>f.id.startsWith('history-')&&f.details.grade==='1st Grade').sort((a,b)=>a.details.days[0].date.localeCompare(b.details.days[0].date));
+  if(prior.length>=3){
+   const player={...fixtureClone(demoSelections.roster[0]),id:'demo-returner',name:'Sam Ellison',user_id:null,external_id:'EXAMPLE-RETURNER',availability:{revision:1,available_dates:[first,second],unavailable_dates:prior.slice(1).map(f=>f.details.days[0].date)}};
+   demoSelections.roster.push(player);const previous=prior[0],old=previous.slots[0].d1;
+   previous.slots[0]={d1:player.id,d2:null};previous.published.slots=fixtureClone(previous.slots);previous.published.players=previous.published.players.filter(p=>p.id!==old).concat(fixtureClone(player));
+   const card=Object.values(demoScorecards).find(card=>card.match_id===demoSelections.result_sources[previous.id]?.match_id);
+   if(card)for(const row of [card.teams[0].players[0],card.innings[0].batters[0]])Object.assign(row,{player_id:'demo-'+player.id,name:player.name});
+  }
   const abandoned={id:'masters-abandoned',club_id:club.id,revision:1,publication:0,published:null,details:{grade:'Masters',grade_group_id:'group-masters',format:'limited_overs',round:'1',competition:'Example District',opposition:'Hill Example CC',ground:'Masters Oval',days:[{date:demoAddDay(first,-7),start:'12:00'}],cancelled:true,staff:[],match_roles:{d1:{captain_id:null,keeper_id:null}}},slots:Array.from({length:11},()=>({d1:null,d2:null}))};
   demoSelections.fixtures.push(abandoned);demoSelections.result_sources||={};demoSelections.result_sources[abandoned.id]={no_play:'abandoned'};
  }
@@ -35398,7 +35449,9 @@ supabase.rpc=async function(name,args={}){
      const group=demoGroupFor(f),view=demoGrant(group)>0||demoCaptainUsers(f.details).includes(uid),head=demoGroupHead(group),base=view?fixtureClone(f):{id:f.id,publication:f.publication,published:fixtureClone(f.published),...(f.published?{details:fixtureClone(f.published.details),slots:fixtureClone(f.published.slots)}:isAdmin()?{details:fixtureClone(f.details),revision:f.revision}:{})};
      const source=demoSelections.result_sources?.[f.id],completed=!!source?.match_id&&!source.no_play&&Object.values(demoScorecards).some(card=>card.match_id===source.match_id&&card.status==='completed');
      return {...base,result_complete:completed,selection_group_id:group,draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:view?demoSelectionIssues(f):[]};
-    });c.can_view_board=selector||c.captain;return demoOK(c);
+    });c.can_view_board=selector||c.captain;
+    if(c.can_view_board)c.returning_context={season:fixtureClone(demoSelections.stats_season),no_play:c.fixtures.filter(f=>demoSelections.result_sources?.[f.id]?.no_play).map(f=>f.id)};
+    return demoOK(c);
    }
   }
   const result=await demoPreviousCurrentRpc(name,args);

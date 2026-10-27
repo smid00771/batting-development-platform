@@ -81,6 +81,15 @@ function demoSeedCurrent({empty=false}={}){
    card.result=club.name+' won by '+(batting.runs-bowling.runs)+' runs';
   }
   for(const f of upcoming.filter(f=>f.id==='selection-first'||f.id==='selection-second')){f.details.round='4';f.published.details.round='4';}
+  // Fictional return from two missed games, visible without opening stats.
+  const prior=demoSelections.fixtures.filter(f=>f.id.startsWith('history-')&&f.details.grade==='1st Grade').sort((a,b)=>a.details.days[0].date.localeCompare(b.details.days[0].date));
+  if(prior.length>=3){
+   const player={...fixtureClone(demoSelections.roster[0]),id:'demo-returner',name:'Sam Ellison',user_id:null,external_id:'EXAMPLE-RETURNER',availability:{revision:1,available_dates:[first,second],unavailable_dates:prior.slice(1).map(f=>f.details.days[0].date)}};
+   demoSelections.roster.push(player);const previous=prior[0],old=previous.slots[0].d1;
+   previous.slots[0]={d1:player.id,d2:null};previous.published.slots=fixtureClone(previous.slots);previous.published.players=previous.published.players.filter(p=>p.id!==old).concat(fixtureClone(player));
+   const card=Object.values(demoScorecards).find(card=>card.match_id===demoSelections.result_sources[previous.id]?.match_id);
+   if(card)for(const row of [card.teams[0].players[0],card.innings[0].batters[0]])Object.assign(row,{player_id:'demo-'+player.id,name:player.name});
+  }
   const abandoned={id:'masters-abandoned',club_id:club.id,revision:1,publication:0,published:null,details:{grade:'Masters',grade_group_id:'group-masters',format:'limited_overs',round:'1',competition:'Example District',opposition:'Hill Example CC',ground:'Masters Oval',days:[{date:demoAddDay(first,-7),start:'12:00'}],cancelled:true,staff:[],match_roles:{d1:{captain_id:null,keeper_id:null}}},slots:Array.from({length:11},()=>({d1:null,d2:null}))};
   demoSelections.fixtures.push(abandoned);demoSelections.result_sources||={};demoSelections.result_sources[abandoned.id]={no_play:'abandoned'};
  }
@@ -183,7 +192,9 @@ supabase.rpc=async function(name,args={}){
      const group=demoGroupFor(f),view=demoGrant(group)>0||demoCaptainUsers(f.details).includes(uid),head=demoGroupHead(group),base=view?fixtureClone(f):{id:f.id,publication:f.publication,published:fixtureClone(f.published),...(f.published?{details:fixtureClone(f.published.details),slots:fixtureClone(f.published.slots)}:isAdmin()?{details:fixtureClone(f.details),revision:f.revision}:{})};
      const source=demoSelections.result_sources?.[f.id],completed=!!source?.match_id&&!source.no_play&&Object.values(demoScorecards).some(card=>card.match_id===source.match_id&&card.status==='completed');
      return {...base,result_complete:completed,selection_group_id:group,draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:view?demoSelectionIssues(f):[]};
-    });c.can_view_board=selector||c.captain;return demoOK(c);
+    });c.can_view_board=selector||c.captain;
+    if(c.can_view_board)c.returning_context={season:fixtureClone(demoSelections.stats_season),no_play:c.fixtures.filter(f=>demoSelections.result_sources?.[f.id]?.no_play).map(f=>f.id)};
+    return demoOK(c);
    }
   }
   const result=await demoPreviousCurrentRpc(name,args);
