@@ -13,6 +13,7 @@ import {createClubWeekUI} from './club-week-panel.js?v=0.8.62.246';
 import {createSeasonStatsPanel} from './season-stats-panel.js?v=0.8.62.279';
 import {FIELDING_RATINGS,fieldingLabel} from './selection-evidence.js?v=0.8.62.279';
 import {createSelectionEvidence} from './selection-evidence-ui.js?v=0.8.62.281';
+import {returningPlayers} from './selection-returning.js?v=0.8.62.286';
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
@@ -35,7 +36,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.285';
+const APP_UI_VERSION='0.8.62.286';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -20439,6 +20440,31 @@ function seOpenStatsPlayer(panel,id){
  if(row){row.tabIndex=-1;row.focus({preventScroll:true});row.scrollIntoView({block:'center',behavior:'smooth'});}
 }
 function seMountSelectionEvidence(){selectionEvidence.pause();}
+function seReturningEntries(){
+ const s=ensureSelections(),data=s.data,meta=data?.returning_context;
+ if(!meta?.season?.start||!meta.season.end||!seBoardAccess(data)||s.boardPanel)return [];
+ const today=seClubDate();
+ // The authoritative context changes after a save or an explicit refresh.
+ // Picker/search/meeting/board redraws reuse the same availability reminders.
+ if(s.returningCache?.data!==data||s.returningCache.today!==today)s.returningCache={data,today,views:new Map()};
+ const fixtures=seSelectionFixtures(),key=JSON.stringify([s.selectionGroup,s.date]);
+ if(s.returningCache.views.has(key))return s.returningCache.views.get(key);
+ const references=fixtures.map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published,historyConfirmed:!!f.scorecard_sync?.match_id&&!f.scorecard_sync.pending?.length,returningEligible:f.details.days[0]?.date>=today&&!seFixtureLocked(f)}));
+ const entries=returningPlayers({teams:references.filter(f=>f.days[0]?.date===s.date),references,roster:data.roster,season:meta.season,today,noPlay:meta.no_play||[],compare:false,eligible:(team,person,day)=>!seUsed(person,team.days[day],data.fixtures,{},team)});
+ s.returningCache.views.set(key,entries);return entries;
+}
+function seMountReturningPlayers(){
+ const s=ensureSelections(),host=document.getElementById('seContent');
+ if(!host||currentTab!=='teams'||s.view!=='board'||s.boardPanel||!seBoardAccess(s.data))return;
+ const entries=seReturningEntries();
+ for(const card of host.querySelectorAll('[data-se-team]')){
+  const rows=entries.filter(entry=>entry.team.id===card.dataset.seTeam);
+  card.querySelector('[data-se-returning]')?.remove();if(!rows.length)continue;
+  const control=card.ownerDocument.createElement('section');control.dataset.seReturning='';control.className='se-available-again';control.setAttribute('aria-label','Available again for '+rows[0].team.grade);
+  control.innerHTML='<span class="se-available-heading">Available again</span>'+rows.map(entry=>`<details><summary title="${seEsc(entry.person.name+': available again')}" aria-label="${seEsc(entry.person.name+': available again. Expand availability details')}"><span aria-hidden="true">↩</span><strong>${seEsc(entry.person.name)}</strong></summary><p>Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected ${seEsc(seDate(entry.previous.days[0].date))} at No. ${entry.position}.${entry.team.days.length>1?' Available: '+entry.availableDays.map(day=>'Day '+(day+1)).join(' / ')+'.':''}</p></details>`).join('');
+  const anchor=card.querySelector(':scope > .se-actions')||card.querySelector('[data-se-order-list]')||card.querySelector(':scope > ol');if(anchor)anchor.after(control);else card.append(control);
+ }
+}
 function seBoardAccess(d=ensureSelections().data){return d?.can_view_board===true||d?.selector===true||d?.captain===true;}
 function seFollowupRows(date=ensureSelections().date,data=ensureSelections().data){return (data.conversations||[]).filter(m=>m.kind==='lower_grade'&&m.availability!=='unavailable'&&(date===null||m.date===date));}
 function seFollowupPanel(){
@@ -21222,7 +21248,7 @@ function seBoardFixtures(){
  s.boardDateInitialised=true;
  return fixtures.filter(f=>f.details.days[0].date===s.date);
 }
-function seBoard(){const s=ensureSelections();s.statsOpen=false;selectionEvidence.pause();queueMicrotask(()=>{bindSpinBreakdowns(document.getElementById('seContent'));seMountMeeting();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
+function seBoard(){const s=ensureSelections();s.statsOpen=false;selectionEvidence.pause();queueMicrotask(()=>{bindSpinBreakdowns(document.getElementById('seContent'));seMountMeeting();seMountReturningPlayers();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
  if(!dates.length&&!(s.data.group_permissions_enabled?s.data.selection_group_access?.some(a=>a.id===s.selectionGroup&&a.level===2):s.data.selector)){document.getElementById('seContent').innerHTML=seBoardGroupControl()+seCaptainAvailability()+'<p>No fixtures in this group yet.</p>';seBindGroupControl();seBindPublishedActions();return;}if(!dates.length){document.getElementById('seContent').innerHTML=seBoardGroupControl()+'<section class="se-card se-drawer"><p>No fixtures in this group yet.</p><button class="btn" id="seFirstFixture">Import season fixtures</button><details><summary>Manual entry</summary><button class="btn ghost" id="seManualFirst">Enter a fixture manually</button></details><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';seBindGroupControl();document.getElementById('seFirstFixture').onclick=()=>seImportFixtures();document.getElementById('seManualFirst').onclick=()=>seFixtureEditor();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);return;}
  document.getElementById('seContent').innerHTML=`<div class="se-toolbar se-board-toolbar">${seBoardGroupControl()}<label class="se-board-date">Fixtures <select id="seBoardDate" aria-label="Fixtures starting">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label>${seCaptainAvailability()}${s.data.selector?`<button class="btn ghost" id="seUnselected">Available, not selected</button>${s.undo.length&&s.undo.at(-1).before.every(f=>fs.some(x=>x.id===f.id))?'<button class="btn ghost" id="seUndo">Undo last change</button>':''}`:''}${fs.some(f=>!seFixtureLocked(f)&&(f.can_publish??s.data.head_selector))?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${s.data.selector&&!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}${fs.some(f=>f.can_edit??s.data.selector)?'':'<span class="sr-only">Teams are read-only. Drafts may change until published.</span>'}${seFollowupPanel()}<div class="se-board-layout"><div class="se-grid">${fs.map(f=>(f.can_edit??s.data.selector)?seTeamCard(f):seReadOnlyTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
  seBindGroupControl();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);

@@ -37,7 +37,7 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
 // A return is established by saved unavailability for consecutive missed
 // fixtures, following a confirmed selection in this grade and format. Never
 // infer injury, poor form or absence from an unanswered availability date.
-export function returningPlayers({teams=[],references=[],roster=[],season={},today='',noPlay=[],eligible=()=>false}={}) {
+export function returningPlayers({teams=[],references=[],roster=[],season={},today='',noPlay=[],eligible=()=>false,compare=true}={}) {
   const history=references.filter(team=>!team.cancelled&&!team.published?.details?.cancelled&&!noPlay.includes(team.id)).map(snapshot).filter(team=>inSeason(team,season));
   const people=new Map(roster.map(p=>[p.id,p])), returns=[];
   for (const team of teams) {
@@ -46,7 +46,7 @@ export function returningPlayers({teams=[],references=[],roster=[],season={},tod
       .sort((a,b)=>date(b).localeCompare(date(a)) || String(b.days?.[0]?.start||'').localeCompare(String(a.days?.[0]?.start||'')));
     for (const person of roster) {
       if (!person.active || selected(team,person.id)) continue;
-      const availableDays=(team.days || []).flatMap((day,i)=>status(person,day)==='available'&&eligible(team,person,i)?[i]:[]);
+      let availableDays=(team.days || []).flatMap((day,i)=>status(person,day)==='available'?[i]:[]);
       if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
       const missed=[];let previous=null;
       for (const old of past) {
@@ -57,9 +57,12 @@ export function returningPlayers({teams=[],references=[],roster=[],season={},tod
       if (!missed.length || !previous) continue;
       // A confirmed intervening grade move is not a return from an absence.
       if (history.some(old=>old.historyConfirmed&&!sameGrade(old,team)&&date(old)>date(previous)&&end(old)<date(team)&&selected(old,person.id))) continue;
+      // Check clashes only for established returns, not every player on every draw.
+      availableDays=availableDays.filter(day=>eligible(team,person,day));
+      if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
       const position=previous.slots.findIndex(slot=>slot.d1===person.id||slot.d2===person.id)+1;
       const firstMissed=missed.at(-1), targets=[];
-      for (const [index,slot] of (team.slots || []).slice(0,11).entries()) {
+      for (const [index,slot] of (compare?team.slots || []:[]).slice(0,11).entries()) {
         for (const id of new Set((team.days || []).map((_,day)=>slot['d'+(day+1)] || null))) {
           const days=team.days.flatMap((_,day)=>(slot['d'+(day+1)]||null)===id?[day]:[]);
           if (days.some(day=>!availableDays.includes(day)) || !team.brackets && days.length!==team.days.length) continue;
