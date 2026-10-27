@@ -3732,7 +3732,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.278.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.279.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -3799,6 +3799,84 @@ return {createMirelionAssistDemo};
 })();
 
 const __demoModule1=(()=>{
+const SPIN_STYLES=Object.freeze([
+  ['unknown','Not set'],['off_spin','Off-spin'],['left_arm_orthodox','LH orthodox'],
+  ['leg_spin','Leg-spin'],['left_arm_wrist','LH wrist-spin']
+]);
+const spinStyle=person=>person?.bowling==='spin'&&SPIN_STYLES.some(([key])=>key===person.spin_style)?person.spin_style:'unknown';
+const spinLabel=person=>spinStyle(person)==='unknown'?'Spinner':SPIN_STYLES.find(([key])=>key===spinStyle(person))[1];
+const isBatter=person=>['top','middle'].includes(person?.batting);
+const types=players=>Object.fromEntries(SPIN_STYLES.map(([key])=>[key,players.filter(p=>spinStyle(p)===key).length]));
+function spinProfile(players=[]){
+  const spin=players.filter(p=>p?.bowling==='spin');
+  const group=load=>{const people=spin.filter(p=>load==='unknown'?!['frontline','part_time'].includes(p.bowling_load):p.bowling_load===load);return {count:people.length,batters:people.filter(isBatter).length,types:types(people)};};
+  return {frontline:group('frontline'),partTime:group('part_time'),unset:group('unknown')};
+}
+function spinTypeCounts(group){
+  return SPIN_STYLES.filter(([key])=>group.types[key]).map(([key,label])=>`${group.types[key]} ${key==='unknown'?'type not set':label.startsWith('LH')?label:label.toLowerCase()}`).join(', ')||'none';
+}
+function spinProfileText(profile){
+  const lines=[`Frontline: ${spinTypeCounts(profile.frontline)}.`];
+  if(profile.frontline.batters)lines.push(`${profile.frontline.batters} also ${profile.frontline.batters===1?'has a':'have'} top/middle-order batting role (all-rounders).`);
+  if(profile.partTime.count)lines.push(`Part-time options: ${spinTypeCounts(profile.partTime)}.`);
+  if(profile.unset.count)lines.push(`Workload not set: ${spinTypeCounts(profile.unset)}.`);
+  return lines;
+}
+// Evaluate the actual selected days. Batting and bowling are independent:
+// top/middle-order frontline spinners count as both batters and frontline bowlers.
+// There is no maximum-spinner rule, and part-time options never stand in for
+// frontline cover. Unknown styles cannot establish a like-for-like bowling job.
+function spinBalanceChange(team,people,outgoing,incoming,days){
+  if(!outgoing||!incoming)return null;
+  if(outgoing.bowling!=='spin'&&incoming.bowling!=='spin')return null;
+  const roster=new Map(people.map(p=>[p.id,p])),reports=[];
+  const indexes=days||((team.days||[]).map((_,i)=>i));
+  for(const day of indexes){
+    const ids=[...new Set((team.slots||[]).map(slot=>slot['d'+(day+1)]).filter(Boolean))];
+    if(!ids.includes(outgoing.id)||ids.includes(incoming.id))continue;
+    const before=spinProfile(ids.map(id=>roster.get(id)).filter(Boolean));
+    const after=spinProfile(ids.map(id=>id===outgoing.id?incoming:roster.get(id)).filter(Boolean));
+    const lost=SPIN_STYLES.filter(([key])=>key!=='unknown'&&before.frontline.types[key]&&!after.frontline.types[key]).map(([,label])=>label);
+    const beforeKinds=SPIN_STYLES.filter(([key])=>key!=='unknown'&&before.frontline.types[key]).length;
+    const afterKinds=SPIN_STYLES.filter(([key])=>key!=='unknown'&&after.frontline.types[key]).length;
+    const changed=JSON.stringify(before.frontline.types)!==JSON.stringify(after.frontline.types);
+    const uncertain=before.frontline.types.unknown>0||after.frontline.types.unknown>0||before.unset.count>0||after.unset.count>0||ids.some(id=>!roster.has(id));
+    const battingLost=isBatter(outgoing)&&!isBatter(incoming);
+    const frontlineLost=after.frontline.count<before.frontline.count;
+    const reduced=changed&&lost.length>0&&afterKinds<beforeKinds;
+    const status=battingLost||frontlineLost||reduced?'tradeoff':uncertain?'unknown':changed?'change':'retained';
+    const notes=[];
+    if(changed)notes.push(`Frontline spin: ${spinTypeCounts(before.frontline)} → ${spinTypeCounts(after.frontline)}.`);
+    if(lost.length)notes.push(`Removes the only frontline ${lost.join(' / ')} option${reduced?'; fewer different spin types':''}.`);
+    if(frontlineLost)notes.push('Fewer frontline spin options; part-time bowling is separate cover.');
+    if(battingLost)notes.push('The current player also has a top/middle-order batting role; this change loses that recorded batting cover.');
+    if(uncertain)notes.push('Some spin types or workloads are not set; check team balance.');
+    if(!changed&&!uncertain&&!battingLost)notes.push('Frontline spin variety retained.');
+    if(!changed&&JSON.stringify(before.partTime.types)!==JSON.stringify(after.partTime.types))notes.push(`Part-time spin options: ${spinTypeCounts(before.partTime)} → ${spinTypeCounts(after.partTime)}.`);
+    reports.push({day,status,before,after,notes});
+  }
+  if(!reports.length)return {status:'unknown',reports:[],notes:['No selected line-up is available to assess spin balance.']};
+  const priority=['tradeoff','unknown','change','retained'],status=priority.find(s=>reports.some(r=>r.status===s));
+  const same=reports.every(r=>JSON.stringify(r.notes)===JSON.stringify(reports[0].notes));
+  return {status,reports,notes:same?reports[0].notes:reports.flatMap(r=>r.notes.map(note=>`Day ${r.day+1}: ${note}`))};
+}
+
+function bindSpinBreakdowns(root){
+  for(const wrap of root?.querySelectorAll('[data-spin-breakdown]')||[]){
+    const button=wrap.querySelector('button'),tip=wrap.querySelector('[role=tooltip]');let pinned=false,suppressed=false;
+    const show=value=>{tip.hidden=!value;button.setAttribute('aria-expanded',String(value));};
+    button.onclick=event=>{event.preventDefault();event.stopPropagation();pinned=!pinned;suppressed=!pinned;show(pinned);};
+    wrap.onpointerenter=()=>{if(!suppressed)show(true);};
+    wrap.onpointerleave=()=>{suppressed=false;if(!pinned&&!wrap.contains(wrap.ownerDocument.activeElement))show(false);};
+    button.onfocus=()=>{suppressed=false;show(true);};
+    button.onblur=()=>{pinned=false;show(false);};
+    button.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();pinned=false;suppressed=true;show(false);}};
+  }
+}
+return {SPIN_STYLES,spinStyle,spinLabel,isBatter,spinProfile,spinTypeCounts,spinProfileText,spinBalanceChange,bindSpinBreakdowns};
+})();
+
+const __demoModule2=(()=>{
 // The old host remains available for account callbacks and the existing Meta callback.
 // Session credentials must be consumed on their original origin, never forwarded.
 const MIRELION_ORIGIN='https://mirelionhq.com';
@@ -3821,7 +3899,7 @@ function legacyAppRedirect(href){
 return {MIRELION_ORIGIN,isLegacyOrigin,hasAuthenticationCallback,mirelionAppUrl,legacyAppRedirect};
 })();
 
-const __demoModule2=(()=>{
+const __demoModule3=(()=>{
 const escapeAssist=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const assistCategories={help:'Help with the platform',enquiry:'Products and subscriptions',idea:'Suggest a change'};
 const assistTime=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
@@ -4029,7 +4107,7 @@ function assistStyles(){return `<style>
 return {createMirelionAssist};
 })();
 
-const __demoModule3=(()=>{
+const __demoModule4=(()=>{
 const assistUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function assistLaunchFromSearch(search){
@@ -4042,7 +4120,7 @@ function assistLaunchFromSearch(search){
 return {assistLaunchFromSearch};
 })();
 
-const __demoModule4=(()=>{
+const __demoModule5=(()=>{
 const AWARD_SCOPE_KINDS=['team_week','player_week','results','five_wickets','century'];
 const awardScopeKey=value=>!value||value.mode==='all'?'all':value.mode+':'+[...new Set(value.ids||[])].sort().join(',');
 const scopedAwardLabel=(label,scope)=>!scope||scope.mode==='all'?label:[label,scope.label].filter(Boolean).join(' · ');
@@ -4116,7 +4194,7 @@ function createSocialAwardScopes(h){
 return {AWARD_SCOPE_KINDS,awardScopeKey,scopedAwardLabel,createSocialAwardScopes};
 })();
 
-const __demoModule5=(()=>{
+const __demoModule6=(()=>{
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const choices=(rows,value)=>rows.map(([id,name])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(name)}</option>`).join('');
 const definiteError=e=>/^(P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(e?.code||'');
@@ -4179,7 +4257,7 @@ function createSelectionGroupPermissions(h){
 return {createSelectionGroupPermissions};
 })();
 
-const __demoModule7=(()=>{
+const __demoModule8=(()=>{
 // Incremental changes to an already saved club setup.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const label=t=>[t?.grade?.name,t?.name!==t?.grade?.name?t?.name:null].filter(Boolean).join(' · ');
@@ -4238,8 +4316,8 @@ function createSelectionGroupManager(h){
 return {createSelectionGroupManager};
 })();
 
-const __demoModule6=(()=>{
-const {createSelectionGroupManager}=__demoModule7;
+const __demoModule7=(()=>{
+const {createSelectionGroupManager}=__demoModule8;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Read saved groups and the cached source names. Opening this page never imports.
 function createSelectionGroupPage(h){
@@ -4275,8 +4353,8 @@ function createSelectionGroupPage(h){
 return {createSelectionGroupPage};
 })();
 
-const __demoModule9=(()=>{
-const {createSelectionGroupManager}=__demoModule7;
+const __demoModule10=(()=>{
+const {createSelectionGroupManager}=__demoModule8;
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -4368,8 +4446,8 @@ function createSelectionGroups(h){
 return {selectionGroupDraft,createSelectionGroups};
 })();
 
-const __demoModule8=(()=>{
-const {createSelectionGroups}=__demoModule9;
+const __demoModule9=(()=>{
+const {createSelectionGroups}=__demoModule10;
 // Saved team links drive fixture loading. Source credentials stay server-side.
 function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -4453,7 +4531,7 @@ function createPlayHQImport(h){
 return {createPlayHQImport};
 })();
 
-const __demoModule10=(()=>{
+const __demoModule11=(()=>{
 const PLAYCRICKET_SUPPORT='https://playcricket-support.zendesk.com/hc/en-us/requests/new';
 const PLAYHQ_ACCESS_GUIDE='https://support.playhq.com/hc/en-us/articles/23949453276572-How-To-Use-PlayHQ-API-s';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4517,7 +4595,7 @@ function createPlayCricketConnection(h){
 return {PLAYCRICKET_SUPPORT,PLAYHQ_ACCESS_GUIDE,accessRequestText,createPlayCricketConnection};
 })();
 
-const __demoModule11=(()=>{
+const __demoModule12=(()=>{
 // Presentation only. Source grades, players and match figures are never rewritten.
 const normal=value=>String(value||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
 function gradeLabels(value=[],grades=null){
@@ -4610,7 +4688,7 @@ For changes to background pixels, baked-in headings, logos or sponsors, return a
 return {gradeLabels,withGradeLabels,graphicGrade,checkGraphicLabel,gradeLabelSchema,GRAPHIC_FIELDS,graphicPatch,graphicSettings,graphicLabelKinds,graphicLabelSchema,graphicLabelInstructions,graphicLabel,refinedGraphicLayout,graphicPlayerDisplays,graphicSchema,graphicInstructions};
 })();
 
-const __demoModule13=(()=>{
+const __demoModule14=(()=>{
 // Shared, side-effect-free helpers for club-week planning. Publication remains server-authorised.
 const dayKey = index => `d${index + 1}`;
 function availability(person, date) {
@@ -4690,8 +4768,8 @@ function forecast(roster,fixtures,today,days=21) {
 return {dayKey,availability,missingAvailability,selectedOn,openPlaces,roleMatch,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,shareLink,forecast};
 })();
 
-const __demoModule12=(()=>{
-const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule13;
+const __demoModule13=(()=>{
+const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule14;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLabel=date=>date?new Date(date+'T12:00:00Z').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}):'';
 const button=(text,action,extra='')=>`<button type="button" class="btn ghost" data-cw="${action}" ${extra}>${esc(text)}</button>`;
@@ -4741,7 +4819,7 @@ function createClubWeekUI(h){
 return {createClubWeekUI};
 })();
 
-const __demoModule15=(()=>{
+const __demoModule16=(()=>{
 /* Read-only current-season projection of the shared scorecards.
  * Rebuild from the latest snapshot: imports and corrections never increment totals.
  * Player identity is source-ID based; only confirmed links join two identities.
@@ -5001,7 +5079,7 @@ function buildSeasonStats(context = {}, filters = {}) {
 return {STATS_FORMATS,statsFormat,statsOvers,statsRate,resolveSelectionStatsTeams,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
-const __demoModule17=(()=>{
+const __demoModule18=(()=>{
 // Generated by Tools/build_ndca_benchmarks.py; aggregate data only.
 const freeze=value=>{Object.values(value).forEach(v=>{if(v&&typeof v==='object')freeze(v);});return Object.freeze(value);};
 const NDCA_BENCHMARKS=freeze({
@@ -5098,8 +5176,9 @@ const NDCA_BENCHMARKS=freeze({
 return {NDCA_BENCHMARKS};
 })();
 
-const __demoModule16=(()=>{
-const {NDCA_BENCHMARKS}=__demoModule17;
+const __demoModule17=(()=>{
+const {spinLabel,spinBalanceChange}=__demoModule1;
+const {NDCA_BENCHMARKS}=__demoModule18;
 
 /* Rough selection guides, not forecasts or automatic team changes.
  * Historical parameters: NDCA 2021/22–2025/26, same player/club/season
@@ -5133,7 +5212,7 @@ const bowlingRole = person => bowler(person) && ['frontline','part_time'].includ
 const FIELDING_RATINGS = [['unknown','Not assessed'],['needs_work','Needs work'],['reliable','Reliable'],['strong','Strong']];
 const fieldingLabel = person => FIELDING_RATINGS.find(([key])=>key===person?.fielding)?.[1] || 'Not assessed';
 const battingRoleLabel = person => ({top:'Top order',middle:'Middle order',lower:'Lower order'})[person?.batting] || 'Batting role not set';
-const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : 'Spinner') + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
+const bowlingRoleLabel = person => bowler(person) ? (person.bowling === 'pace' ? 'Quick' : spinLabel(person)) + (person.bowling_load === 'frontline' ? ' · frontline' : person.bowling_load === 'part_time' ? ' · part time' : ' · workload not set') : person?.bowling === 'none' ? 'Does not bowl' : 'Bowling role not set';
 const integer = value => Number.isInteger(value) && value >= 0;
 // User-approved rough trial, not a measured format-specific benchmark. The
 // historical exports pool formats; allow more runs in limited-overs cricket
@@ -5286,10 +5365,19 @@ function possiblePair(higher,lower,guide) {
   // batting label. Batting and fielding remain separate selection context; the
   // roster does not record opening/first-change bowling roles.
   const frontlineQuicks=[higher,lower].every(item=>item.person.bowling==='pace' && item.person.bowling_load==='frontline');
+  const exceptionalSpin=[higher,lower].every(item=>item.person.bowling==='spin'&&item.person.bowling_load==='frontline')
+    && lower.ball?.state==='strong' && workloadFit
+    && (equivalentWickets>hw.wickets&&equivalentWickets>=hw.wickets*1.5&&closeEnough(equivalentEconomy,hw.economy)
+      || equivalentEconomy<hw.economy&&equivalentEconomy<=hw.economy*.75&&equivalentWickets>hw.wickets&&equivalentWickets>=hw.wickets*1.15);
+  const weakBattingSpinCase=[higher,lower].every(item=>item.person.bowling==='spin'&&item.person.bowling_load==='frontline')
+    && higher.bat?.state==='low'&&hb.ready&&lower.ball?.state==='strong'&&(bowlGain||economyCase);
   let kind='',reason='',focus='';
   if (frontlineQuicks && (bowlGain || economyCase || bowlComparable)) {
     kind=bowlGain?'fit':economyCase?'tradeoff':'close';focus='bowling';
     reason=bowlGain?'Bowling case · frontline quicks':economyCase?'Economy gain · wicket-taking trade-off':'Close bowling figures · frontline quicks';
+  }
+  else if ((exceptionalSpin||weakBattingSpinCase) && (!batFit||!hb.ready||!lb.ready||equivalentBat<hb.average*.85)) {
+    kind='tradeoff';focus='bowling';reason=exceptionalSpin?'Strong bowling case · batting/balance trade-off':'Bowling gain · current batting below guide';
   }
   else if (batGain) {kind=!needBowling || bowlComparable ? 'fit' : 'tradeoff';reason=kind === 'fit' ? needBowling ? 'Batting case · bowling cover retained' : 'Batting case' : 'Batting gain · bowling trade-off';}
   else if (needBowling && (bowlGain || economyCase)) {
@@ -5307,7 +5395,7 @@ function possiblePair(higher,lower,guide) {
     else if (lowerOrderBowling && bowlComparable) {kind='close';reason='Close bowling figures';}
   }
   if (!kind) return null;
-  return {higher,lower,kind,reason,focus,guide,equivalentBat,equivalentWickets,equivalentEconomy,
+  return {higher,lower,kind,reason,focus,exceptionalSpin,weakBattingSpinCase,guide,equivalentBat,equivalentWickets,equivalentEconomy,
     targetAverage:hb.average === null || hb.average === undefined ? null : hb.average/guide.batting};
 }
 function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}={}) {
@@ -5333,7 +5421,12 @@ function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}
     const high=[...players.values()].filter(p=>p.team.id===guide.higher.id), low=[...players.values()].filter(p=>p.team.id===guide.lower.id);
     for (const higher of high) for (const lower of low) {
       if (high.some(p=>p.person.id===lower.person.id && !p.seasonRecord)) continue;
-      const pair=possiblePair(higher,lower,guide); if (pair) pairs.push(pair);
+      const pair=possiblePair(higher,lower,guide); if (pair) {
+        const days=(higher.team.days||[]).flatMap((day,i)=>higher.selectedDays.includes(day.date)?[i]:[]);
+        pair.balance=spinBalanceChange(higher.team,people,higher.person,lower.person,days);
+        if(pair.balance?.status==='tradeoff'||pair.balance?.status==='unknown'){pair.kind='tradeoff';if(pair.balance.status==='unknown')pair.reason+=' · spin balance to check';else if(!pair.reason.includes('balance trade-off'))pair.reason+=' · team-balance trade-off';}
+        pairs.push(pair);
+      }
     }
   }
   pairs.sort((a,b)=>a.higher.position-b.higher.position || (a.kind==='fit'?0:1)-(b.kind==='fit'?0:1) || (b.equivalentBat || 0)-(a.equivalentBat || 0) || a.lower.person.name.localeCompare(b.lower.person.name));
@@ -5347,8 +5440,8 @@ function buildSelectionEvidence(summary,teams=[],people=[],{seasonPlayers=false}
 return {NDCA_GUIDE,evidenceGrade,gradeGuide,FIELDING_RATINGS,fieldingLabel,battingRoleLabel,bowlingRoleLabel,bowlingEconomyRules,battingEvidence,bowlingEvidence,gradeBenchmark,battingPositionFits,bowlingJobFits,buildSelectionEvidence,NDCA_BENCHMARKS};
 })();
 
-const __demoModule19=(()=>{
-const {statsOvers}=__demoModule15;
+const __demoModule20=(()=>{
+const {statsOvers}=__demoModule16;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
 // The original exports have no source player IDs, format or batting positions.
@@ -5397,8 +5490,9 @@ function bindReturningHistory(dialog,pair,{supabase,clubId,seasonStart,here}){
 return {renderReturningHistory,bindReturningHistory};
 })();
 
-const __demoModule20=(()=>{
-const {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence}=__demoModule16;
+const __demoModule21=(()=>{
+const {spinBalanceChange}=__demoModule1;
+const {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence}=__demoModule17;
 const date = team => team.days?.[0]?.date || '';
 const end = team => (team.days || []).map(day=>day.date).sort().at(-1) || '';
 const selected = (team,id) => (team.slots || []).some(slot=>slot.d1===id || slot.d2===id);
@@ -5506,7 +5600,7 @@ function returningForm(entry,summary) {
   const before=(returnRow(entry,summary,entry.person.id)?.history || []).filter(match=>match.date<start).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
   return returningPeriod(before);
 }
-function returningComparison(entry,target,summary) {
+function returningComparison(entry,target,summary,roster=[]) {
   const whileAway=(returnRow(entry,summary,target.incumbent?.id)?.history || []).filter(match=>entry.missed.some(team=>match.fixture_id
     ? match.fixture_id===team.id : match.date===date(team)&&entry.missed.filter(other=>date(other)===match.date).length===1));
   const incoming=returningForm(entry,summary),current=returningPeriod(whileAway),notes=[];
@@ -5543,16 +5637,17 @@ function returningComparison(entry,target,summary) {
     }
   }
   const early=[incoming,...(target.incumbent?[current]:[])].some(row=>target.focus==='bowling'?row.bowling_innings<5:row.innings<5);
-  return {entry,target,incoming,current,notes,early,assessment,assessmentText};
+  const balance=spinBalanceChange(entry.team,roster,target.incumbent,entry.person,target.days);
+  return {entry,target,incoming,current,notes,early,assessment,assessmentText,balance};
 }
 return {returningPlayers,returningPeriod,returningForm,returningComparison};
 })();
 
-const __demoModule18=(()=>{
-const {bindReturningHistory}=__demoModule19;
-const {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS}=__demoModule15;
-const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule16;
-const {returningPlayers, returningComparison, returningForm}=__demoModule20;
+const __demoModule19=(()=>{
+const {bindReturningHistory}=__demoModule20;
+const {buildSeasonStats, resolveSelectionStatsTeams, statsOvers, STATS_FORMATS}=__demoModule16;
+const {buildSelectionEvidence, battingRoleLabel, bowlingRoleLabel, fieldingLabel, bowlingEconomyRules, NDCA_GUIDE, NDCA_BENCHMARKS}=__demoModule17;
+const {returningPlayers, returningComparison, returningForm}=__demoModule21;
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const number=value=>Number.isFinite(value)?value.toLocaleString('en-AU',{maximumFractionDigits:1}):'—';
 const decimal=value=>Number.isFinite(value)?value.toFixed(2):'—';
@@ -5608,13 +5703,14 @@ function returnRecord(stats,person,{bowlingFirst=false,focus='all'}={}) {
   const bowling=['pace','spin'].includes(person?.bowling)||stats.bowling_balls>0?`<p><strong>Bowling · ${stats.bowling_complete?`${stats.wickets} wickets`:'Figures incomplete'}</strong>${stats.bowling_complete?`<small>${statsOvers(stats.bowling_balls)??'—'} overs · ${stats.bowling_innings} inns · ${stats.conceded} runs</small><small>Avg ${stats.wickets?decimal(stats.conceded/stats.wickets):'—'} · Econ ${decimal(stats.economy)}</small>${stats.bowling_balls?`<small>${decimal(stats.wickets*100/stats.bowling_balls)} wickets/100 balls</small>`:''}`:''}</p>`:'';
   return focus==='bowling'?bowling:focus==='batting'?batting:bowlingFirst?bowling+batting:batting+bowling;
 }
+function balanceDetails(balance){return balance?`<p class="se-evidence-small"><strong>${balance.status==='tradeoff'?'Team-balance trade-off':balance.status==='unknown'?'Spin balance to check':'Spin balance'}</strong>${balance.notes.map(note=>`<small>${escape(note)}</small>`).join('')}</p>`:'';}
 function returnDetails(pair,index=0){
   const {entry,target,incoming,current,notes}=pair,other=target.incumbent;
-  return `<details class="se-evidence-pair" ${index===0?'open':''}><summary><strong>${escape(entry.person.name)} / ${escape(other?.name||'Vacant place')} · No. ${target.position}${escape(returnDays(pair))}</strong><small>Similar role · available again${pair.early?' · early samples':''}${target.joinedDuringAbsence?' · current player joined this team during the absence':''}</small></summary><p class="se-evidence-small">${escape(entry.person.name)} was unavailable for ${entry.missed.length} ${entry.missed.length===1?'game':'games'} in ${escape(entry.team.grade)}; last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><div class="se-evidence-pair-grid"><div><strong>${escape(entry.person.name)}</strong><small>Before absence · last ${incoming.matches} recorded ${incoming.matches===1?'game':'games'} (up to 3)</small><small>${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))}</small><small>Fielding: ${escape(fieldingLabel(entry.person))}</small>${returnRecord(incoming,entry.person,{focus:target.focus})}</div><div><strong>${escape(other?.name||'Vacant place')}</strong>${other?`<small>While away · ${current.matches} of ${entry.missed.length} ${entry.missed.length===1?'game':'games'} recorded</small><small>${escape(battingRoleLabel(other))} · ${escape(bowlingRoleLabel(other))}</small><small>Fielding: ${escape(fieldingLabel(other))}</small>${returnRecord(current,other,{focus:target.focus})}`:'<p>This place is currently vacant.</p>'}</div></div>${target.focus==='bowling'?'<p class="se-evidence-small">Bowling comparison · matching type and frontline workload. Batting averages are not used to judge this bowling place.</p>':''}${other?`<p class="se-evidence-small"><strong>${escape(pair.assessmentText)}</strong></p>`:''}${notes.map(note=>`<p class="se-evidence-small">${escape(note)}</p>`).join('')}<p class="se-evidence-small">Similar roles, not a recommendation to replace anyone. Separate periods in the same grade and format; selection remains your decision.</p></details>`;
+  return `<details class="se-evidence-pair" ${index===0?'open':''}><summary><strong>${escape(entry.person.name)} / ${escape(other?.name||'Vacant place')} · No. ${target.position}${escape(returnDays(pair))}</strong><small>Similar role · available again${pair.early?' · early samples':''}${target.joinedDuringAbsence?' · current player joined this team during the absence':''}</small></summary><p class="se-evidence-small">${escape(entry.person.name)} was unavailable for ${entry.missed.length} ${entry.missed.length===1?'game':'games'} in ${escape(entry.team.grade)}; last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><div class="se-evidence-pair-grid"><div><strong>${escape(entry.person.name)}</strong><small>Before absence · last ${incoming.matches} recorded ${incoming.matches===1?'game':'games'} (up to 3)</small><small>${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))}</small><small>Fielding: ${escape(fieldingLabel(entry.person))}</small>${returnRecord(incoming,entry.person,{focus:target.focus})}</div><div><strong>${escape(other?.name||'Vacant place')}</strong>${other?`<small>While away · ${current.matches} of ${entry.missed.length} ${entry.missed.length===1?'game':'games'} recorded</small><small>${escape(battingRoleLabel(other))} · ${escape(bowlingRoleLabel(other))}</small><small>Fielding: ${escape(fieldingLabel(other))}</small>${returnRecord(current,other,{focus:target.focus})}`:'<p>This place is currently vacant.</p>'}</div></div>${target.focus==='bowling'?'<p class="se-evidence-small">Bowling comparison · spin/quick role and frontline workload matched. See the recorded spin types and team balance below. Batting averages are not used to judge this bowling place.</p>':''}${other?`<p class="se-evidence-small"><strong>${escape(pair.assessmentText)}</strong></p>`:''}${balanceDetails(pair.balance)}${notes.map(note=>`<p class="se-evidence-small">${escape(note)}</p>`).join('')}<p class="se-evidence-small">Similar roles, not a recommendation to replace anyone. Separate periods in the same grade and format; selection remains your decision.</p></details>`;
 }
 function returnTeamDetails(entry,pairs,summary,compare){
   const before=returningForm(entry,summary);
-  return `<p class="se-evidence-small">Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><p class="se-evidence-small">${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))} · Fielding: ${escape(fieldingLabel(entry.person))}</p><h3>Before absence</h3><p class="se-evidence-small">Last ${before.matches} recorded ${before.matches===1?'game':'games'} (up to 3) · early sample</p>${returnRecord(before,entry.person,{bowlingFirst:entry.person.bowling_load==='frontline'})}${compare?`<h3>Similar roles in the current XI</h3><p class="se-evidence-small">Role matches for discussion, not suggested replacements.</p>${pairs.flatMap((pair,index)=>pair.entry.key===entry.key?[`<button class="se-return-choice" type="button" data-return-compare="${index}">${escape(pair.target.incumbent?.name||'Vacant place')} · No. ${pair.target.position}${escape(returnDays(pair))}<small>${pair.target.focus==='bowling'?'Bowling':pair.target.focus==='batting'?'Batting':'Role'} comparison${pair.target.joinedDuringAbsence?' · joined during the absence':''}</small>${pair.target.incumbent?`<small>${escape(pair.assessmentText)}</small>`:''}</button>`]:[]).join('')||'<p class="se-evidence-small">No similar role identified from the saved roles and available dates.</p>'}`:''}`;
+  return `<p class="se-evidence-small">Available again after ${entry.missed.length} ${entry.missed.length===1?'game':'games'} unavailable. Last selected ${escape(returnDate(entry.previous.days[0].date))} at No. ${entry.position}.</p><p class="se-evidence-small">${escape(battingRoleLabel(entry.person))} · ${escape(bowlingRoleLabel(entry.person))} · Fielding: ${escape(fieldingLabel(entry.person))}</p><h3>Before absence</h3><p class="se-evidence-small">Last ${before.matches} recorded ${before.matches===1?'game':'games'} (up to 3) · early sample</p>${returnRecord(before,entry.person,{bowlingFirst:entry.person.bowling_load==='frontline'})}${compare?`<h3>Similar roles in the current XI</h3><p class="se-evidence-small">Role matches for discussion, not suggested replacements.</p>${pairs.flatMap((pair,index)=>pair.entry.key===entry.key?[`<button class="se-return-choice" type="button" data-return-compare="${index}">${escape(pair.target.incumbent?.name||'Vacant place')} · No. ${pair.target.position}${escape(returnDays(pair))}<small>${pair.target.focus==='bowling'?'Bowling':pair.target.focus==='batting'?'Batting':'Role'} comparison${pair.target.joinedDuringAbsence?' · joined during the absence':''}</small>${pair.target.incumbent?`<small>${escape(pair.assessmentText)}</small>`:''}${pair.balance?.status==='tradeoff'?'<small>Team-balance trade-off</small>':pair.balance?.status==='unknown'?'<small>Spin balance to check</small>':''}</button>`]:[]).join('')||'<p class="se-evidence-small">No similar role identified from the saved roles and available dates.</p>'}`:''}`;
 }
 function returnComparisonDetails(pair){return `<div class="se-evidence-heading"><h2 id="seEvidenceTitle">${pair.target.focus==='bowling'?'Bowling comparison':'Returning player comparison'}</h2><button type="button" class="se-evidence-close" data-evidence-close>Close</button></div>${returnDetails(pair)}<details class="se-evidence-help" data-return-history><summary>Historical reference</summary><div data-return-history-content></div></details>`;}
 
@@ -5641,10 +5737,10 @@ function otherGradeRecords(item) {
 }
 function pairDetails(pair,index=0) {
   const {higher,lower}=pair, symbol=pair.kind==='tradeoff'?'≈':'↔';
-  return `<details class="se-evidence-pair" ${pair.number&&index===0?'open':''}><summary><strong>${pair.number?symbol+pair.number+' ':''}${escape(higher.person.name)} / ${escape(lower.person.name)}</strong><small>${escape(pair.reason)}</small></summary><p class="se-evidence-small">Discussion only · this link does not recommend dropping ${escape(higher.person.name)}. A player can have a case to move up while another presses for their place.</p><div class="se-evidence-pair-grid">${[higher,lower].map(item=>`<div><strong>${escape(item.person.name)}</strong><small>${escape(item.team.grade)} · ${item.position ? 'selected at '+item.position : 'season record'}</small><small>${escape(battingRoleLabel(item.person))}${item.ball?.applicable?' · '+escape(bowlingRoleLabel(item.person)):''}</small><small>Fielding: ${escape(fieldingLabel(item.person))} · selector rating</small>${record(item)}</div>`).join('')}</div>${pair.focus!=='bowling'&&pair.targetAverage!==null?`<p class="se-evidence-target">Rough batting target in ${escape(lower.team.grade)}: <strong>${number(pair.targetAverage)} average</strong>.<br>${escape(lower.person.name)}: roughly <strong>${number(pair.equivalentBat)}</strong> in ${escape(higher.team.grade)}.</p>`:''}${higher.ball?.applicable?`<p class="se-evidence-small"><strong>Bowling comparison in ${escape(higher.team.grade)}</strong><br>${escape(higher.person.name)} (actual): ${decimal(higher.stats?.bowling_balls ? higher.stats.wickets*100/higher.stats.bowling_balls : null)} wickets per 100 balls · ${decimal(higher.stats?.bowling_balls ? higher.stats.conceded*6/higher.stats.bowling_balls : null)} economy.<br>${escape(lower.person.name)} (rough equivalent): ${decimal(pair.equivalentWickets)} wickets per 100 balls · ${decimal(pair.equivalentEconomy)} economy.${pair.focus==='bowling'?' Batting and fielding are separate considerations for this bowling comparison.':' Compare actual overs and the bowling job as well.'}</p>`:''}<p class="se-evidence-small">Check availability, actual batting opportunities, recorded fielding observations and team balance. Fielding is a selector rating, considered alongside the figures and especially relevant in shorter formats. Selected positions show the proposed order, not historical batting positions.</p></details>`;
+  return `<details class="se-evidence-pair" ${pair.number&&index===0?'open':''}><summary><strong>${pair.number?symbol+pair.number+' ':''}${escape(higher.person.name)} / ${escape(lower.person.name)}</strong><small>${escape(pair.reason)}</small></summary><p class="se-evidence-small">Discussion only · this link does not recommend dropping ${escape(higher.person.name)}. A player can have a case to move up while another presses for their place.</p><div class="se-evidence-pair-grid">${[higher,lower].map(item=>`<div><strong>${escape(item.person.name)}</strong><small>${escape(item.team.grade)} · ${item.position ? 'selected at '+item.position : 'season record'}</small><small>${escape(battingRoleLabel(item.person))}${item.ball?.applicable?' · '+escape(bowlingRoleLabel(item.person)):''}</small><small>Fielding: ${escape(fieldingLabel(item.person))} · selector rating</small>${record(item)}</div>`).join('')}</div>${balanceDetails(pair.balance)}${pair.focus!=='bowling'&&pair.targetAverage!==null?`<p class="se-evidence-target">Rough batting target in ${escape(lower.team.grade)}: <strong>${number(pair.targetAverage)} average</strong>.<br>${escape(lower.person.name)}: roughly <strong>${number(pair.equivalentBat)}</strong> in ${escape(higher.team.grade)}.</p>`:''}${higher.ball?.applicable?`<p class="se-evidence-small"><strong>Bowling comparison in ${escape(higher.team.grade)}</strong><br>${escape(higher.person.name)} (actual): ${decimal(higher.stats?.bowling_balls ? higher.stats.wickets*100/higher.stats.bowling_balls : null)} wickets per 100 balls · ${decimal(higher.stats?.bowling_balls ? higher.stats.conceded*6/higher.stats.bowling_balls : null)} economy.<br>${escape(lower.person.name)} (rough equivalent): ${decimal(pair.equivalentWickets)} wickets per 100 balls · ${decimal(pair.equivalentEconomy)} economy.${pair.focus==='bowling'?' Batting and fielding are separate considerations for this bowling comparison.':' Compare actual overs and the bowling job as well.'}</p>`:''}<p class="se-evidence-small">Check availability, actual batting opportunities, recorded fielding observations and team balance. Fielding is a selector rating, considered alongside the figures and especially relevant in shorter formats. Selected positions show the proposed order, not historical batting positions.</p></details>`;
 }
 function help() {
-  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy. In the limited-overs trial, strong wicket-taking allows economy up to 35% above the pooled reference; the expensive-bowling check starts at 50% above it. Long form and T20 retain the 10% allowance and 25% expensive-bowling threshold. A limited-overs comparison can also flag at least 15% better economy with wicket-taking within 15% of the incumbent after the rough grade adjustment; it is labelled a trade-off. These are trial allowances, not measured format-specific benchmarks. Economical containment can offset fewer wickets. These are rough starting rules, not selection decisions.</li><li>Matching ↔ numbers link a selection conversation, including close calls within the rough 15% comparison range; ≈ flags a performance trade-off. A line joins the linked players when their grades are side by side. Click or tap the line to compare those players. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Batting-led comparisons preserve batting roles. Frontline quicks can be compared on bowling alone regardless of batting-order labels; batting and fielding remain separate considerations. Quick/spin type is preserved. Long-form comparisons preserve frontline/part-time roles and check observed workload. Opening/first-change and off-spin/leg-spin jobs are not yet recorded.</li></ul></details>`;
+  return `<details class="se-evidence-help"><summary>How to read the guide</summary><ul><li>The small bat and ball markers show batting and bowling form. Tap them for the assessment and sample size.</li><li><span class="se-evidence-chip strong">↑ Strong</span>, <span class="se-evidence-chip low">↓ Below guide</span> and Within guide compare this season's figures with fixed NDCA ${NDCA_BENCHMARKS.seasons} grade benchmarks. These are performance assessments, not player roles.</li><li>The benchmarks pool runs per dismissal, wickets per 100 balls and runs per six balls across the grade. Ducks, not-outs and wicketless records are retained. All batting positions, bowling types and match formats are combined; current player figures stay in the chosen format.</li><li><span class="se-evidence-chip building">· Not yet rated</span> means the player's figures, role or grade benchmark are insufficient. Positive batting flags can start after 2 innings, even when the batting role is unset. With fewer than 2 dismissals, the early check uses runs per innings; the displayed average stays unchanged. A faint <span class="se-evidence-chip slow">· Slow start</span> appears only after 2 innings and 2 dismissals when the average is below half the grade reference. Below-guide batting flags and batting-led swaps need 3 innings and 2 dismissals. Players marked lower order keep positive highlights but receive no Slow start or Below guide batting warnings: there is no separate lower-order benchmark. Bowling needs 2 innings bowled and a workload suited to the format and role. Strong bowling can be highlighted with an unset type or workload; an unset workload uses the frontline minimum. Other bowling ratings and swap comparisons still need the playing-list role. Fewer than 5 innings, or an early batting flag with fewer than 2 dismissals, is labelled an early sample.</li><li>Full batting flags use roughly 25% above or below the grade average. Bowling balances wicket-taking and economy. In the limited-overs trial, strong wicket-taking allows economy up to 35% above the pooled reference; the expensive-bowling check starts at 50% above it. Long form and T20 retain the 10% allowance and 25% expensive-bowling threshold. A limited-overs comparison can also flag at least 15% better economy with wicket-taking within 15% of the incumbent after the rough grade adjustment; it is labelled a trade-off. These are trial allowances, not measured format-specific benchmarks. Economical containment can offset fewer wickets. An exceptional frontline-spin discussion may cross batting roles after the same opportunity checks: at least 50% better adjusted wicket-taking with economy within 15%, or at least 25% better economy with 15% better wicket-taking, and a Strong bowling flag. A Strong bowling gain may also cross batting roles when the incumbent’s batting is Below guide after the full batting opportunity check. Both remain batting/balance trade-offs for selectors to judge. These are rough starting rules, not selection decisions.</li><li>Matching ↔ numbers link a selection conversation, including close calls within the rough 15% comparison range; ≈ flags a performance trade-off. A line joins the linked players when their grades are side by side. Click or tap the line to compare those players. No team changes are made.</li><li>Separate grade-conversion guides use the same players within each historical season. Batting averages below need roughly 2×, 1½× and 2× the average above for first/second, second/third and third/fourth comparisons. Opposition is unadjusted.</li><li>Batting-led comparisons preserve batting roles. Frontline quicks can be compared on bowling alone regardless of batting-order labels; batting and fielding remain separate considerations. Quick/spin type is preserved. Long-form comparisons preserve frontline/part-time roles and check observed workload. Spin types and the receiving team’s frontline variety are shown separately. Top/middle-order batters may also be frontline bowlers; both roles count. Opening/first-change jobs are not yet recorded.</li></ul></details>`;
 }
 function assessmentDetails(item,key,label,job) {
   const evidence=item[key],base=evidence.baseline;
@@ -5839,7 +5935,7 @@ function createSelectionEvidence(h) {
     const teams=resolveSelectionStatsTeams(b.teams,data.season,b.referenceTeams||b.teams);
     const summary=buildSeasonStats(data),model=buildSelectionEvidence(summary,teams,b.roster);
     const returns=b.returningEnabled?returningPlayers({teams,references:resolveSelectionStatsTeams(b.referenceTeams||[],data.season),roster:b.roster,season:data.season,today:b.today||data.today,noPlay:data.fixtures.filter(f=>f.no_play).map(f=>f.id),eligible:b.returningEligible}):[];
-    const returnPairs=b.compareReturns?returns.flatMap(entry=>entry.targets.map(target=>returningComparison(entry,target,summary))):[];
+    const returnPairs=b.compareReturns?returns.flatMap(entry=>entry.targets.map(target=>returningComparison(entry,target,summary,b.roster))):[];
     for(const item of model.players.values())item.returns=returnPairs.filter(pair=>pair.entry.team.id===item.team.id&&pair.target.incumbent?.id===item.person.id);
     if(!b.visible){model.pairs=[];for(const item of model.players.values())item.links=[];}
     b.host.querySelector('.se-evidence-dialog')?.remove();
@@ -5911,10 +6007,10 @@ function createSelectionEvidence(h) {
 return {evidenceStyles,renderEvidenceBadges,renderEvidenceDetails,renderEvidenceComparison,clearEvidenceLinks,bindEvidenceLinks,bindEvidenceDetails,createSelectionEvidence};
 })();
 
-const __demoModule14=(()=>{
-const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule15;
-const {buildSelectionEvidence}=__demoModule16;
-const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule18;
+const __demoModule15=(()=>{
+const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule16;
+const {buildSelectionEvidence}=__demoModule17;
+const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule19;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
 const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? new Intl.DateTimeFormat('en-AU', {day:'numeric', month:'short', timeZone:'UTC'}).format(new Date(value + 'T12:00:00Z')) : '';
@@ -6123,7 +6219,7 @@ function createSeasonStatsPanel(h) {
 return {renderGradeComparison,renderStatsRows,createSeasonStatsPanel};
 })();
 
-const __demoModule22=(()=>{
+const __demoModule23=(()=>{
 // Name similarity proposes a human confirmation; it never establishes identity.
 function matchReviewNameParts(value){
  let name=String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\((?:c|capt|captain|wk|wkt|keeper|c\s*\/\s*wk)\)/g,'').replace(/['’]/g,'');
@@ -6149,9 +6245,9 @@ function matchReviewShortNameMatches(a,b){
 return {matchReviewNameParts,matchReviewGivenNameMatches,matchReviewShortNameMatches};
 })();
 
-const __demoModule21=(()=>{
+const __demoModule22=(()=>{
 /* Compare the trusted scorecard automatically; ask only for missing identities and the change. */
-const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule22;
+const {matchReviewNameParts,matchReviewShortNameMatches}=__demoModule23;
 const visiblePlayers=team=>(team?.players||[]).filter(p=>p.player_id&&p.name);
 const normal=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function scorecardPlayerMatches(players,roster,links=[]){
@@ -6287,8 +6383,8 @@ function createScorecardTeams(h){
 return {scorecardPlayerMatches,scorecardFixture,scorecardPlayerCandidates,createScorecardTeams};
 })();
 
-const __demoModule24=(()=>{
-const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule11;
+const __demoModule25=(()=>{
+const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule12;
 const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
 // A measured warning offers a choice; it never guesses and saves an abbreviation.
@@ -6349,7 +6445,7 @@ function assistantCanLeave(owner,notify){const r=owner?.graphicAssistant;if(r?.c
 return {assistantCSS,labelSuggestions,proposalMessage,assistantSuggestions,assistantState,assistantHTML,assistantControls,graphicPreview,bindAssistant,assistantCanLeave};
 })();
 
-const __demoModule26=(()=>{
+const __demoModule27=(()=>{
 // Shared renderer/AI contract. This contains visual settings only, never match data.
 const AWARD_STYLE_FIELDS={
  title_y:[0,100],title_size:[20,160],week_y:[0,100],week_size:[18,44],
@@ -6418,9 +6514,9 @@ For requests needing new photographic/illustrated artwork, background alteration
 return {AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions};
 })();
 
-const __demoModule25=(()=>{
-const {graphicGrade,checkGraphicLabel}=__demoModule11;
-const {safeAwardStyle}=__demoModule26;
+const __demoModule26=(()=>{
+const {graphicGrade,checkGraphicLabel}=__demoModule12;
+const {safeAwardStyle}=__demoModule27;
 const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
  {key:'player_week',label:'Player of the Week',description:'Choose and recognise one player.'},
@@ -6538,12 +6634,12 @@ function drawResultBadge(ctx,text,{label,x,y,maxHeight,layout:d,example}){
 return {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardCaption,awardBatches,resultsShareOpponent,resultsOutcome,resultsSummary,drawAwardGraphic};
 })();
 
-const __demoModule23=(()=>{
-const {scopedAwardLabel}=__demoModule4;
-const {withGradeLabels,graphicLabel}=__demoModule11;
-const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule24;
-const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule25;
-const {visualSettings,refinedAwardLayout}=__demoModule26;
+const __demoModule24=(()=>{
+const {scopedAwardLabel}=__demoModule5;
+const {withGradeLabels,graphicLabel}=__demoModule12;
+const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule25;
+const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule26;
+const {visualSettings,refinedAwardLayout}=__demoModule27;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
 
@@ -6782,8 +6878,8 @@ async function renderSocialAwardRequests({supabase,escape:esc},host){
 return {createSocialAwards,renderSocialAwardRequests};
 })();
 
-const __demoModule27=(()=>{
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule24;
+const __demoModule28=(()=>{
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule25;
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);
@@ -6866,7 +6962,7 @@ function createTeamSocialWorkflow(h){
 return {createTeamSocialWorkflow};
 })();
 
-const __demoModule28=(()=>{
+const __demoModule29=(()=>{
 const clean=value=>String(value??'').trim();
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'TH':({1:'ST',2:'ND',3:'RD'}[n%10]||'TH'));
 function dateLabel(value){
@@ -6893,7 +6989,7 @@ function teamSelectionText(card){
 return {teamSelectionText};
 })();
 
-const __demoModule29=(()=>{
+const __demoModule30=(()=>{
 /* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143; local preview cache .225. */
 function createSocialPublishing(h){
  const {supabase}=h,esc=h.escape,demo=!!h.demo;
@@ -7233,7 +7329,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
 return {createSocialPublishing};
 })();
 
-const __demoModule30=(()=>{
+const __demoModule31=(()=>{
 // Balances are participant-seconds; show the equivalent time for four people.
 function videoTime(seconds){
  const minutes=Math.floor(Math.max(0,Number(seconds)||0)/240);
@@ -7308,8 +7404,8 @@ function mountVideoCredits(host,{rpc,compact=false,timezone='Australia/Sydney',o
 return {videoTime,videoDuration,mountVideoCredits};
 })();
 
-const __demoModule31=(()=>{
-const {mountVideoCredits}=__demoModule30;
+const __demoModule32=(()=>{
+const {mountVideoCredits}=__demoModule31;
 // Selection Room: stable DOM keeps video and drafts intact while the board redraws.
 function selectionCallLink(value){
  const text=String(value||'').trim();if(!text)return '';
@@ -7626,7 +7722,7 @@ function createSelectionRoom(h){
 return {selectionCallLink,selectionRoomGeometry,selectionCallElapsed,createSelectionRoom};
 })();
 
-const __demoModule33=(()=>{
+const __demoModule34=(()=>{
 /* Local text recognition. Images are passed to a browser worker, never to a reading service.
    Pinned Tesseract engine/language files download from jsDelivr; no image is sent there. */
 function teamWeekReadWords(tsv){
@@ -7678,7 +7774,7 @@ async function readTeamWeekReference(example,background,{candidateNames=[],textC
 return {teamWeekReadWords,teamWeekReadLayout,readTeamWeekReference};
 })();
 
-const __demoModule34=(()=>{
+const __demoModule35=(()=>{
 /* A transparent award guide, not a grade-conversion or selection model.
    Keep source figures intact. Missing context supplies no invented match facts. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
@@ -7771,7 +7867,7 @@ function awardPerformance(p,cards=[]){
 return {awardBalls,awardPerformance};
 })();
 
-const __demoModule35=(()=>{
+const __demoModule36=(()=>{
 /* Basic TOTW uses recorded figures only. Keep Smart's match-context guide separate. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
 const total=(rows,key)=>rows.length&&rows.every(row=>number(row[key])!==null)?rows.reduce((n,row)=>n+number(row[key]),0):null;
@@ -7812,13 +7908,13 @@ function teamWeekBasicRecommendations(candidates){
 return {rawAwardFigures,teamWeekBasicRank,teamWeekBasicRecommendations};
 })();
 
-const __demoModule32=(()=>{
-const {scopedAwardLabel}=__demoModule4;
-const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule11;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule24;
-const {readTeamWeekReference}=__demoModule33;
-const {awardPerformance}=__demoModule34;
-const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule35;
+const __demoModule33=(()=>{
+const {scopedAwardLabel}=__demoModule5;
+const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule12;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule25;
+const {readTeamWeekReference}=__demoModule34;
+const {awardPerformance}=__demoModule35;
+const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule36;
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 function teamWeekFigures(player,display=player.display){
@@ -8098,7 +8194,7 @@ function createTeamOfWeek(h){
 return {teamWeekGrade,teamWeekFigures,teamWeekDisplay,teamWeekOrder,teamWeekWorthwhile,teamWeekDraft,teamWeekRecommendations,teamWeekRank,teamWeekMatchExample,teamWeekLayout,createTeamOfWeek};
 })();
 
-const __demoModule36=(()=>{
+const __demoModule37=(()=>{
 /* One set of club scorecards, reused by Teams awards and Club Batting. */
 const resultWeekEnd=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+(7-d.getUTCDay())%7);return d.toISOString().slice(0,10);};
 const key=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -8147,8 +8243,8 @@ function createSharedMatchResults(h){
 return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,createSharedMatchResults};
 })();
 
-const __demoModule37=(()=>{
-const {graphicLabel}=__demoModule11;
+const __demoModule38=(()=>{
+const {graphicLabel}=__demoModule12;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
  const state=s=>s.awardLabels||(s.awardLabels={weeks:{},loads:{},draft:null,pending:null,busy:false,error:''});
@@ -8190,9 +8286,9 @@ function createSocialAwardLabels(h){
 return {createSocialAwardLabels};
 })();
 
-const __demoModule38=(()=>{
+const __demoModule39=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
-const {weeklyResultCoverage,cardStatus}=__demoModule36;
+const {weeklyResultCoverage,cardStatus}=__demoModule37;
 const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
@@ -8256,9 +8352,9 @@ function createFixtureResults(h){
 return {renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule40=(()=>{
-const {awardPerformance}=__demoModule34;
-const {rawAwardFigures}=__demoModule35;
+const __demoModule41=(()=>{
+const {awardPerformance}=__demoModule35;
+const {rawAwardFigures}=__demoModule36;
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
@@ -8313,11 +8409,11 @@ function playerWeekRecommendations(candidates,profiles={},history=[],end,preferN
 return {playerWeekFigures,playerWeekRecommendations};
 })();
 
-const __demoModule39=(()=>{
-const {scopedAwardLabel}=__demoModule4;
-const {graphicGrade,checkGraphicLabel}=__demoModule11;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule24;
-const {playerWeekFigures,playerWeekRecommendations}=__demoModule40;
+const __demoModule40=(()=>{
+const {scopedAwardLabel}=__demoModule5;
+const {graphicGrade,checkGraphicLabel}=__demoModule12;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule25;
+const {playerWeekFigures,playerWeekRecommendations}=__demoModule41;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
 }
@@ -8454,7 +8550,7 @@ function createPlayerOfWeek(h){
 return {playerWeekLayout,createPlayerOfWeek};
 })();
 
-const __demoModule41=(()=>{
+const __demoModule42=(()=>{
 // Local design trials. Only the explicit Apply action can save club settings.
 function createSocialSandbox(h){
  const names=['Alex Sample','Jordan Sample','Taylor Sample','Casey Sample','Morgan Sample','Riley Sample','Cameron Sample','Sam Sample','Jamie Sample','Charlie Sample','Robin Sample'];
@@ -8557,7 +8653,7 @@ function createSocialSandbox(h){
 return {createSocialSandbox};
 })();
 
-const __demoModule42=(()=>{
+const __demoModule43=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -8596,7 +8692,7 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule43=(()=>{
+const __demoModule44=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -8654,7 +8750,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule44=(()=>{
+const __demoModule45=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -8682,8 +8778,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule45=(()=>{
-const {createTeamWeekDemo}=__demoModule44;
+const __demoModule46=(()=>{
+const {createTeamWeekDemo}=__demoModule45;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -8703,7 +8799,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule46=(()=>{
+const __demoModule47=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -8743,7 +8839,7 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule47=(()=>{
+const __demoModule48=(()=>{
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday) {
   const copy = value => structuredClone(value);
@@ -8801,7 +8897,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule48=(()=>{
+const __demoModule49=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -8908,73 +9004,76 @@ return {createSocialAwardsDemo};
 
 const {createMirelionAssistDemo}=__demoModule0;
 
-const {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl}=__demoModule1;
+const {SPIN_STYLES,spinLabel,spinProfile,spinProfileText,bindSpinBreakdowns}=__demoModule1;
 
-const {createMirelionAssist}=__demoModule2;
+const {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl}=__demoModule2;
 
-const {assistLaunchFromSearch}=__demoModule3;
+const {createMirelionAssist}=__demoModule3;
 
-const {createSocialAwardScopes}=__demoModule4;
+const {assistLaunchFromSearch}=__demoModule4;
 
-const {createSelectionGroupPermissions}=__demoModule5;
+const {createSocialAwardScopes}=__demoModule5;
 
-const {createSelectionGroupPage}=__demoModule6;
+const {createSelectionGroupPermissions}=__demoModule6;
 
-const {createPlayHQImport}=__demoModule8;
+const {createSelectionGroupPage}=__demoModule7;
 
-const {createPlayCricketConnection}=__demoModule10;
+const {createPlayHQImport}=__demoModule9;
 
-const {graphicGrade,checkGraphicLabel}=__demoModule11;
+const {createPlayCricketConnection}=__demoModule11;
 
-const {createClubWeekUI}=__demoModule12;
+const {graphicGrade,checkGraphicLabel}=__demoModule12;
 
-const {createSeasonStatsPanel}=__demoModule14;
+const {createClubWeekUI}=__demoModule13;
 
-const {FIELDING_RATINGS,fieldingLabel}=__demoModule16;
+const {createSeasonStatsPanel}=__demoModule15;
 
-const {createSelectionEvidence}=__demoModule18;
+const {FIELDING_RATINGS,fieldingLabel}=__demoModule17;
 
-const {createScorecardTeams}=__demoModule21;
+const {createSelectionEvidence}=__demoModule19;
 
-const {createSocialAwards,renderSocialAwardRequests}=__demoModule23;
+const {createScorecardTeams}=__demoModule22;
 
-const {createTeamSocialWorkflow}=__demoModule27;
+const {createSocialAwards,renderSocialAwardRequests}=__demoModule24;
 
-const {teamSelectionText}=__demoModule28;
+const {createTeamSocialWorkflow}=__demoModule28;
 
-const {createSocialPublishing}=__demoModule29;
+const {teamSelectionText}=__demoModule29;
 
-const {mountVideoCredits}=__demoModule30;
+const {createSocialPublishing}=__demoModule30;
 
-const {createSelectionRoom}=__demoModule31;
+const {mountVideoCredits}=__demoModule31;
 
-const {createTeamOfWeek,teamWeekLayout}=__demoModule32;
+const {createSelectionRoom}=__demoModule32;
 
-const {createSharedMatchResults}=__demoModule36;
+const {createTeamOfWeek,teamWeekLayout}=__demoModule33;
 
-const {createSocialAwardLabels}=__demoModule37;
+const {createSharedMatchResults}=__demoModule37;
 
-const {createFixtureResults}=__demoModule38;
+const {createSocialAwardLabels}=__demoModule38;
 
-const {createPlayerOfWeek}=__demoModule39;
+const {createFixtureResults}=__demoModule39;
 
-const {createSocialSandbox}=__demoModule41;
+const {createPlayerOfWeek}=__demoModule40;
 
-const {renderSocialPlatformSetup}=__demoModule42;
+const {createSocialSandbox}=__demoModule42;
 
-const {createScorecardTeamDemo}=__demoModule43;
+const {renderSocialPlatformSetup}=__demoModule43;
 
-const {createTeamWeekDemo}=__demoModule44;
+const {createScorecardTeamDemo}=__demoModule44;
 
-const {createPlayerWeekDemo}=__demoModule45;
+const {createTeamWeekDemo}=__demoModule45;
 
-const {createSharedResultsDemo}=__demoModule46;
+const {createPlayerWeekDemo}=__demoModule46;
 
-const {createSeasonStatsDemo}=__demoModule47;
+const {createSharedResultsDemo}=__demoModule47;
 
-const {createSocialAwardsDemo}=__demoModule48;
+const {createSeasonStatsDemo}=__demoModule48;
 
-const {selectionCallLink}=__demoModule31;
+const {createSocialAwardsDemo}=__demoModule49;
+
+const {selectionCallLink}=__demoModule32;
+
 
 
 
@@ -9010,7 +9109,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.278';
+const APP_UI_VERSION='0.8.62.279';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -14105,7 +14204,7 @@ const CLUB_BATTING_HELP = {
         "staff_only": true
       },
       {
-        "body": "Use the Playing list bulk editor for top, middle or lower order; quick, spinner or does not bowl; frontline or part time; and keeper. Save player roles. Not coded is distinct from does not bowl. Attributes stay separate from batting plans. Any active registered player with the relevant dates marked available is selectable across grades, including players without an app account.",
+        "body": "Use the Playing list bulk editor for top, middle or lower order; quick, spinner or does not bowl; spin type; frontline or part time; and keeper. Top/middle-order batters may also be frontline bowlers (all-rounders). Save player roles. Not coded is distinct from does not bowl. Attributes stay separate from batting plans. Any active registered player with the relevant dates marked available is selectable across grades, including players without an app account.",
         "title": "Code player roles once",
         "target_tab": "teams",
         "quick_start": false,
@@ -28898,7 +28997,7 @@ function seCSVAccountEmail(row,headers,column){
 }
 function seDayStatus(p,d){return (p?.availability?.unavailable_dates||[]).includes(d.date)?'unavailable':(p?.availability?.available_dates||[]).includes(d.date)?'available':'unknown';}
 function seCanPick(p,f,index,both=false){return !!p?.active&&f.details.days.filter((_,i)=>both||i===index).every(d=>seDayStatus(p,d)==='available');}
-function seRole(p){if(!p)return '';return [SE_BATTING.find(([v])=>v===p.batting)?.[1],p.bowling==='pace'?'Quick':p.bowling==='spin'?'Spinner':p.bowling==='unknown'?'Bowling not coded':'',p.bowling_load==='part_time'?'Part time':'',p.keeper?'Keeper':''].filter(Boolean).join(' · ');}
+function seRole(p){if(!p)return '';return [SE_BATTING.find(([v])=>v===p.batting)?.[1],p.bowling==='pace'?'Quick':p.bowling==='spin'?spinLabel(p):p.bowling==='unknown'?'Bowling not coded':'',p.bowling_load==='part_time'?'Part time':'',p.keeper?'Keeper':''].filter(Boolean).join(' · ');}
 function seClockMinutes(value){
  const match=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(value||'').trim());
  return match?Number(match[1])*60+Number(match[2]):null;
@@ -28922,7 +29021,7 @@ function seOverlap(a,b,detailsA,detailsB){
 }
 function seDayTime(day){return seDate(day.date)+(day.start?' · '+day.start:' · time not set');}
 function seUnselectedAvailable(roster,fixtures,date){const used=new Set();for(const f of fixtures){if(!f.details||f.details.cancelled)continue;f.details.days.forEach((day,j)=>{if(day.date===date)for(const slot of f.slots)if(slot['d'+(j+1)])used.add(slot['d'+(j+1)]);});}return roster.filter(p=>p.active&&seDayStatus(p,{date})==='available'&&!used.has(p.id)).sort((a,b)=>a.name.localeCompare(b.name));}
-function seCounts(f,roster,index){const ps=f.slots.map(s=>roster.find(p=>p.id===s['d'+(index+1)])).filter(Boolean);return {players:ps.length,batters:ps.filter(p=>['top','middle'].includes(p.batting)).length,quicks:ps.filter(p=>p.bowling==='pace'&&p.bowling_load==='frontline').length,spinners:ps.filter(p=>p.bowling==='spin'&&p.bowling_load==='frontline').length,keepers:ps.filter(p=>p.keeper).length};}
+function seCounts(f,roster,index){const ps=f.slots.map(s=>roster.find(p=>p.id===s['d'+(index+1)])).filter(Boolean);return {players:ps.length,batters:ps.filter(p=>['top','middle'].includes(p.batting)).length,quicks:ps.filter(p=>p.bowling==='pace'&&p.bowling_load==='frontline').length,spinners:ps.filter(p=>p.bowling==='spin'&&p.bowling_load==='frontline').length,spinProfile:spinProfile(ps),keepers:ps.filter(p=>p.keeper).length};}
 function seUsed(p,day,fixtures,exclude={},details={}){return fixtures.some(f=>!f.details.cancelled&&f.details.days.some((d,j)=>seOverlap(d,day,f.details,details)&&f.slots.some((s,i)=>!(f.id===exclude.id&&i===exclude.slot)&&s['d'+(j+1)]===p.id)));}
 function sePairs(roster,fixture,fixtures,slot,fixed=null){if(fixture.details.days.length!==2)return [];const [d1,d2]=fixture.details.days,exclude={id:fixture.id,slot};
  const first=roster.filter(p=>p.active&&(!fixed||p.id===fixed)&&seDayStatus(p,d1)==='available'&&!seUsed(p,d1,fixtures,exclude,fixture.details)&&(fixed||seDayStatus(p,d2)!=='available'));
@@ -29244,6 +29343,7 @@ function seInboxFollowup(f){
 
 /* Compact playing-list editing. Grades and attributes remain Selections-owned. */
 function seRosterStyles(){return `<style>
+.se-spin-style-field{display:block;margin-top:5px}.se-spin-style-field[hidden]{display:none}.se-spin-style-field>span{display:block;font-size:11px;color:#52627a;margin-bottom:3px}
 .se-roster-filters{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px}.se-roster-filter-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0}.se-roster-filter-footer .se-check{margin:0}.se-roster-count{font-size:12px;color:#64748b}.se-inactive-link{display:inline-block;margin:0;border:0;background:transparent;color:#52647b;text-decoration:underline;font:inherit;font-size:13px;min-height:44px;cursor:pointer}.se-inactive-person{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:12px 0;border:0;border-bottom:1px solid #e6ebf1;background:transparent;color:#24344c;text-align:left;cursor:pointer;font:inherit}.se-inactive-person strong{font-size:14px}.se-inactive-person small{display:block;color:#64748b;font-size:12px;margin-top:3px}.se-inactive-person:hover{background:#f4f6fb}
 #seRosterForm .se-roster-row,.se-roster-head{display:grid;grid-template-columns:minmax(155px,1.3fr) minmax(628px,4fr) 166px;gap:12px;align-items:center}#seRosterForm .se-roster-row{padding:7px 0;border-bottom:1px solid #e6ebf1}#seRosterForm .se-roster-row>div{min-width:0;grid-column:auto}.se-roster-head{padding:8px 0;font-size:12px;color:#56657b;border-bottom:1px solid #dce2ee}.se-roster-controls{display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(100px,1fr) minmax(132px,1.1fr) minmax(102px,1fr) minmax(102px,1fr) 32px;gap:8px;align-items:center}#seRosterForm .se-roster-controls label{min-width:0;margin:0}#seRosterForm .se-roster-controls select{margin:0;min-height:36px;padding:7px 5px;font-size:14px;width:100%}#seRosterForm .se-roster-controls .se-check{justify-content:center;min-height:36px}.se-roster-control-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.se-roster-person{position:relative;overflow-wrap:anywhere}.se-roster-person strong{font-size:14px;line-height:1.4}.se-roster-meta{font-size:12px;color:#64748b;display:flex;flex-wrap:wrap;gap:3px 6px;align-items:center;line-height:1.5}.se-roster-person .se-signup-flag{font-size:12px;padding:1px 4px;margin:0}.se-roster-actions{display:flex;gap:3px;flex-wrap:nowrap}.se-page .se-roster-actions .btn{min-height:30px;padding:5px 7px;font-size:12px;white-space:nowrap}.se-roster-summary,.se-roster-expand{display:none}.se-roster-save{position:sticky;bottom:0;z-index:2;display:flex;justify-content:flex-end;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #dce2ee;margin-top:8px}.se-roster-empty{color:#64748b;font-size:13px;padding:16px 0;margin:0}.se-roster-readonly .se-unselected-row{padding:8px 0;overflow-wrap:anywhere}
 @media(max-width:1100px){.se-roster-head{display:none}#seRosterForm .se-roster-row{display:block;padding:0}.se-roster-person{padding:11px 56px 11px 0;min-height:44px}.se-roster-person strong{font-size:15px}.se-roster-summary{display:block;font-size:12px;color:#56657b;line-height:1.5;margin-top:2px}.se-roster-expand{display:flex;align-items:center;justify-content:center;gap:5px;position:absolute;right:0;top:9px;min-width:48px;min-height:44px;border:0;border-radius:7px;color:#17345c;background:#eef2f8;font:inherit;font-size:12px;cursor:pointer}.se-roster-expand:focus-visible{outline:2px solid #315dad;outline-offset:2px}.se-roster-expand[aria-expanded=true] span{transform:rotate(180deg)}#seRosterForm .se-roster-controls,#seRosterForm .se-roster-actions{display:none}#seRosterForm .se-roster-row.is-open>.se-roster-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 10px}#seRosterForm .se-roster-row.is-open>.se-roster-actions{display:flex;padding-bottom:12px;gap:8px}.se-roster-control-label{position:static;display:block;width:auto;height:auto;clip-path:none;white-space:normal;margin:0 0 5px}#seRosterForm .se-roster-controls select{font-size:16px;min-height:44px;padding:9px 7px}#seRosterForm .se-roster-controls .se-check{justify-content:flex-start;align-self:end;min-height:44px}.se-roster-controls .se-check .se-roster-control-label{margin:0}.se-page .se-roster-actions .btn{font-size:13px;min-height:44px;padding:8px 12px}.se-roster-save .btn{width:100%}}
@@ -29267,7 +29367,7 @@ function seBindRosterSearch(){
  document.getElementById('seRosterSearch').oninput=filter;document.getElementById('seRosterGrade').onchange=filter;document.getElementById('seSignupOnly')?.addEventListener('change',e=>{s.signupOnly=e.target.checked;filter();});filter();
 }
 function seRosterSummary(p){
- const labels=[p.batting!=='unknown'?SE_BATTING.find(([key])=>key===p.batting)?.[1]:'',p.bowling==='pace'?'Quick':p.bowling==='spin'?'Spinner':'',['pace','spin'].includes(p.bowling)&&p.bowling_load==='part_time'?'Part time':'',p.keeper?'WK':'',p.fielding&&p.fielding!=='unknown'?'Fielding: '+fieldingLabel(p):''].filter(Boolean);
+ const labels=[p.batting!=='unknown'?SE_BATTING.find(([key])=>key===p.batting)?.[1]:'',p.bowling==='pace'?'Quick':p.bowling==='spin'?spinLabel(p):'',['pace','spin'].includes(p.bowling)&&p.bowling_load==='part_time'?'Part time':'',p.keeper?'WK':'',p.fielding&&p.fielding!=='unknown'?'Fielding: '+fieldingLabel(p):''].filter(Boolean);
  return labels.join(' · ')||(p.bowling==='none'?'Does not bowl':'Roles not set');
 }
 function seRosterGradeEditor(p){
@@ -29276,10 +29376,10 @@ function seRosterGradeEditor(p){
 }
 function seRosterRow(p){
  const open=ensureSelections().rosterOpen===p.id,id=seEsc(p.id);
- return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}${memberPhoneStatusIcon(p.user_id)}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD],['fielding','Fielding',SE_FIELDING]].map(([key,label,options])=>`<label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key]||'unknown')}</select></label>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions"><button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
+ return `<div class="se-roster-row${open?' is-open':''}" data-se-roster-id="${id}" data-se-roster-name="${seEsc((p.name+' '+p.grade).toLowerCase())}" data-se-roster-grade="${seEsc(seRosterGradeKey(p.grade))}"><div class="se-roster-person"><strong>${seEsc(p.name)}${p.active?'':' · inactive'}${memberPhoneStatusIcon(p.user_id)}</strong><div class="se-roster-meta"><span class="se-roster-grade-label">${seEsc(p.grade||'No usual grade')}</span>${seSignupFlag(p)}</div><span class="se-roster-summary">${seEsc(seRosterSummary(p))}</span><button class="se-roster-expand" type="button" data-se-expand-player="${id}" aria-expanded="${open}" aria-controls="seRosterFields-${id}" aria-label="${open?'Close':'Edit'} roles for ${seEsc(p.name)}">${open?'Close':'Edit'} <span aria-hidden="true">⌄</span></button></div><div class="se-roster-controls" id="seRosterFields-${id}">${seRosterGradeEditor(p)}${[['batting','Batting role',SE_BATTING],['bowling','Bowling role',SE_BOWLING],['bowling_load','Bowling workload',SE_LOAD],['fielding','Fielding',SE_FIELDING]].map(([key,label,options])=>`<div class="se-roster-role"><label><span class="se-roster-control-label">${label}</span><select name="${key}" aria-label="${label} for ${seEsc(p.name)}">${seOpt(options,p[key]||'unknown')}</select></label>${key==='bowling'?`<label class="se-spin-style-field" data-spin-style-field ${p.bowling==='spin'?'':'hidden'}><span>Spin type</span><select name="spin_style" aria-label="Spin type for ${seEsc(p.name)}">${seOpt(SPIN_STYLES,p.spin_style||'unknown')}</select></label>`:''}</div>`).join('')}<label class="se-check"><input name="keeper" type="checkbox" aria-label="Wicketkeeper: ${seEsc(p.name)}" ${p.keeper?'checked':''}><span class="se-roster-control-label">WK</span></label></div><div class="se-roster-actions"><button class="btn ghost" type="button" data-se-edit-player="${id}">${!p.user_id||seNeedsAccountLink(p)?'Link':'Details'}</button><button class="btn ghost" type="button" data-se-player-calendar="${id}">Calendar</button></div></div>`;
 }
 function seRosterEdits(){
- const s=ensureSelections();return [...document.querySelectorAll('#seRosterForm [data-se-roster-id]')].map(row=>{const p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);return {...p,grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked,fielding:row.querySelector('[name=fielding]').value};}).filter(p=>{const old=s.data.roster.find(x=>x.id===p.id);return ['grade','batting','bowling','bowling_load','keeper','fielding'].some(key=>(key==='fielding'?(old[key]||'unknown'):old[key])!==p[key]);});
+ const s=ensureSelections();return [...document.querySelectorAll('#seRosterForm [data-se-roster-id]')].map(row=>{const p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);return {...p,grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,spin_style:row.querySelector('[name=bowling]').value==='spin'?row.querySelector('[name=spin_style]').value:'unknown',bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked,fielding:row.querySelector('[name=fielding]').value};}).filter(p=>{const old=s.data.roster.find(x=>x.id===p.id);return ['grade','batting','bowling','spin_style','bowling_load','keeper','fielding'].some(key=>(['fielding','spin_style'].includes(key)?(old[key]||'unknown'):old[key])!==p[key]);});
 }
 function seRosterSaveState(){
  const s=ensureSelections(),button=document.getElementById('seSaveRosterRoles');if(!button)return;
@@ -29294,7 +29394,7 @@ function seRoster(){
  seBindInvites();seBindRosterSearch();document.getElementById('seImportRoster').onclick=()=>{if(confirmLeaveSelections())seImport();};document.getElementById('seAddPlayer').onclick=()=>{if(confirmLeaveSelections())sePlayerEditor();};document.getElementById('seRosterTemplate').onclick=event=>{seDownload('Playing-list-template.csv','Registration ID,Player name,Usual grade,Player email\r\n','text/csv');event.currentTarget.textContent='Download started';};
  document.querySelectorAll('[data-se-expand-player]').forEach(button=>button.onclick=()=>{s.rosterOpen=s.rosterOpen===button.dataset.seExpandPlayer?null:button.dataset.seExpandPlayer;document.querySelectorAll('#seRosterForm [data-se-roster-id]').forEach(row=>{const open=row.dataset.seRosterId===s.rosterOpen,toggle=row.querySelector('[data-se-expand-player]'),p=s.data.roster.find(p=>p.id===row.dataset.seRosterId);row.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',(open?'Close':'Edit')+' roles for '+p.name);toggle.innerHTML=(open?'Close':'Edit')+' <span aria-hidden="true">⌄</span>';});});
  document.querySelectorAll('[data-se-edit-player]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){const p=s.data.roster.find(p=>p.id===button.dataset.seEditPlayer);sePlayerEditor(p);if(!p.user_id||seNeedsAccountLink(p))document.getElementById('seAccountLink').open=true;}});document.querySelectorAll('[data-se-player-calendar]').forEach(button=>button.onclick=()=>{if(confirmLeaveSelections()){s.view='availability';drawSelections();seAvailability(button.dataset.sePlayerCalendar);}});
- const form=document.getElementById('seRosterForm');form.addEventListener('change',event=>{const row=event.target.closest('[data-se-roster-id]');if(!row)return;const p={...s.data.roster.find(p=>p.id===row.dataset.seRosterId),grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked,fielding:row.querySelector('[name=fielding]').value};row.querySelector('.se-roster-summary').textContent=seRosterSummary(p);row.querySelector('.se-roster-grade-label').textContent=p.grade||'No usual grade';seRosterSaveState();});
+ const form=document.getElementById('seRosterForm');form.addEventListener('change',event=>{const row=event.target.closest('[data-se-roster-id]');if(!row)return;const p={...s.data.roster.find(p=>p.id===row.dataset.seRosterId),grade:row.querySelector('[name=grade]').value.slice(6),batting:row.querySelector('[name=batting]').value,bowling:row.querySelector('[name=bowling]').value,spin_style:row.querySelector('[name=bowling]').value==='spin'?row.querySelector('[name=spin_style]').value:'unknown',bowling_load:row.querySelector('[name=bowling_load]').value,keeper:row.querySelector('[name=keeper]').checked,fielding:row.querySelector('[name=fielding]').value};row.querySelector('[data-spin-style-field]').hidden=p.bowling!=='spin';row.querySelector('.se-roster-summary').textContent=seRosterSummary(p);row.querySelector('.se-roster-grade-label').textContent=p.grade||'No usual grade';seRosterSaveState();});
  form.onsubmit=async event=>{event.preventDefault();const rows=seRosterEdits();if(!rows.length||s.pending||s.busy)return;const ok=await seMutate('save_roster',{revision:s.data.roster_revision,rows});if(ok&&s===selectionState){s.rosterSaved=true;if(s.view==='roster')seRosterSaveState();}};seRosterSaveState();void mountMemberPhoneStatuses(document.getElementById('seContent'));
 }
 function seInactivePlayers(){
@@ -29992,6 +30092,7 @@ function seStyles(){return `<style>
 .se-board-comments{margin-top:10px;border-top:1px solid #e2e8f0}.se-board-chat>summary.btn{display:inline-flex;list-style:none;min-height:44px;align-items:center;margin:0}.se-board-chat>summary.btn::-webkit-details-marker{display:none}.se-board-chat[open]>summary.btn{margin-bottom:10px}.se-board-chat{padding-top:12px}.se-board-comments>summary{min-height:44px;align-content:center;cursor:pointer;font-size:13px;font-weight:600}.se-board-comments .se-actions{margin-top:8px}.se-board-chat-posts{max-height:320px;overflow:auto;overscroll-behavior:contain}
 .se-publication-workflow{margin:0 0 12px}.se-publication-responsibility{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.se-publication-responsibility .se-actions{margin:0}.se-publication-workflow .btn{font-size:12px;min-height:36px;padding:6px 10px}.se-republication{margin-top:8px;border:1px solid #ead09b;background:#fff8e9;border-radius:7px;padding:10px 12px;font-size:13px}.se-republication p{margin:5px 0;line-height:1.45}.se-republication .se-actions{gap:6px;margin:6px 0 0}
 .se-player-cell{min-width:0;border-radius:7px}.se-player-cell>.se-pick{width:100%}.se-dropped{background:#f0eafa;color:#453268}.se-spoken{background:#e5f3eb;color:#285941}.se-conversation-status{padding:0 6px 6px;font-size:12px}.se-conversation-status small{display:block;overflow-wrap:anywhere}.se-conversation-toggle{display:block;min-height:44px;border:1px solid #b8abc9;border-radius:5px;padding:4px 7px;margin:4px 0;background:white;color:inherit;font:600 11px system-ui;cursor:pointer}.se-conversation-toggle[aria-pressed=true]{border-color:#7eac90}.se-conversation-row{padding:12px;margin:10px 0;border-radius:8px}.se-fixture-fields{border:0;padding:0;margin:0;min-width:0}.se-fixture-lock{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0;padding:8px 10px;background:#eef2f7;border-radius:7px}.se-fixture-lock p{font-size:12px;margin:0;line-height:1.4}.se-fixture-lock .btn{flex-shrink:0;font-size:12px;min-height:36px}.se-fixture-fields:disabled .se-pick{cursor:default;color:#46546a;opacity:1}.se-fixture-fields:disabled .se-pick:hover{background:transparent}
+.se-spin-breakdown{position:relative;display:inline-flex;align-items:center}#app .se-counts .se-spin-chip{position:relative;min-height:0;min-width:0;margin:0;border:0;padding:4px 6px;font:inherit;font-size:12px;line-height:1.4;cursor:pointer}.se-spin-chip::after{content:"";position:absolute;inset:-8px 0}.se-spin-chip:focus-visible{outline:2px solid #21665f;outline-offset:2px}.se-spin-tip{position:absolute;z-index:12;top:calc(100% + 5px);left:50%;transform:translateX(-50%);width:min(270px,calc(100vw - 32px));padding:8px 10px;border:1px solid #bccac5;border-radius:7px;background:#fff;box-shadow:0 4px 14px #17245f20;color:#24344c;font:12px/1.4 system-ui;white-space:normal;overflow-wrap:anywhere}.se-spin-tip[hidden]{display:none}.se-spin-tip>span{display:block}.se-spin-tip>span+span{margin-top:4px}
 .se-page{max-width:1400px;margin:auto;overflow-anchor:none}.se-page h1{font-size:26px;margin:0}.se-page h2{font-size:19px;margin:0 0 12px}.se-page p{line-height:1.5}.se-page .btn{min-height:44px;padding:8px 12px}.se-top,.se-toolbar,.se-tabs,.se-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.se-top{justify-content:space-between}.se-top small{display:block;color:#64748b;margin:6px 0}.se-tabs{margin:14px 0;border-bottom:1px solid #dce2ee;padding-bottom:10px}.se-tabs [aria-pressed=true]{background:var(--navy,#17245f);color:white}.se-notice{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.se-toolbar .se-evidence-toggle{display:inline-flex;align-items:center;gap:6px;min-height:44px;white-space:nowrap}.se-notice:empty{display:none}.se-notice-quiet{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}.se-page input,.se-page select,.se-page textarea{font-size:16px;min-width:0;max-width:100%;box-sizing:border-box}.se-page label{font-size:13px;display:block}.se-page input:not([type=checkbox]),.se-page select,.se-page textarea{border:1px solid #cbd5e1;border-radius:7px;padding:9px 10px;background:white;color:#24344c;min-height:42px}.se-page textarea{width:100%}.se-month-tools{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:end;max-width:560px}.se-pick>.se-day-caption{display:block;margin-bottom:2px}.se-page label input:not([type=checkbox]),.se-page label select{margin-top:5px;width:100%}.se-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px;margin:14px 0}.se-card{background:white;border:1px solid #dce2ee;border-radius:12px;padding:16px;min-width:0}.se-team-head{padding-bottom:10px;border-bottom:1px solid #e7eaf1}.se-team-head p{font-size:13px;color:#64748b;margin:4px 0}.se-team-compact-head>div{display:flex;align-items:baseline;justify-content:space-between;gap:6px}.se-team-compact-head h2{margin:0}.se-team-state{font-size:12px;color:#64748b;text-align:right}.se-team-compact-head p{margin:4px 0 0}.se-counts{display:flex;flex-wrap:wrap;gap:5px;font-size:12px;margin:8px 0}.se-chip{padding:4px 7px;border-radius:5px;background:#edf3f1;color:#285749}.se-warn{background:#fff2d9;color:#7a5319}.se-role{font-size:12px;color:#64748b;display:block;line-height:1.5}.se-slot{display:grid;grid-template-columns:22px 1fr;gap:6px;align-items:center;border-bottom:1px solid #eef0f7;padding:2px 0}.se-slot-number{font-size:12px;color:#64748b}.se-slot-names{display:grid;grid-template-columns:repeat(var(--se-days,1),minmax(0,1fr));gap:3px}.se-pick{border:1px solid transparent;border-radius:6px;background:transparent;text-align:left;font:inherit;font-size:13px;padding:5px;min-height:36px;cursor:pointer;color:#24344c;overflow-wrap:anywhere}.se-pick:hover{background:#f4f6fb}.se-pick[aria-expanded=true]{border-color:#25458e;background:#e7eefa;box-shadow:inset 0 0 0 1px #25458e}.se-match-roles{display:flex;gap:8px;margin:8px 0}.se-match-roles>div{flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:5px;align-content:start}.se-role-cancel{justify-self:start;min-height:44px;padding:0 6px;border:0;background:transparent;color:#25458e;font:inherit;font-size:12px;cursor:pointer}.se-match-roles small{grid-column:1/-1}.se-match-roles label{min-width:0}.se-match-roles select{font-size:12px;padding:5px!important;min-height:36px!important}.se-match-roles .se-role-needed{border-color:#ae781d;background:#fff8e9}.se-keeper{display:inline-flex;width:22px;height:20px;vertical-align:middle;color:#4d648e}.se-keeper svg{width:100%;height:100%}.se-day-caption{font-size:12px;color:#64748b}.se-status{font-size:12px;display:block;color:#997027}.se-status.available{color:#33785b}.se-status.unavailable{color:#b03b35}.se-board-layout .se-grid{align-items:start}.se-picker{grid-column:1/-1;border:1px solid #bccae5;border-radius:8px;padding:8px;margin:4px 0 8px;max-height:min(560px,65vh);overflow:auto;overscroll-behavior:contain;background:#f8faff}.se-picker-head{display:flex;align-items:start;justify-content:space-between;gap:6px}.se-picker-head input{flex:1;min-width:0}.se-picker-filters{display:flex;gap:6px;align-items:center;margin:6px 0}.se-picker-filters select{flex:1;min-width:0}.se-picker-filters .btn{flex-shrink:0}.se-picker-options{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.se-picker-options .se-check{margin:0}.se-picker-head h2{font-size:16px;margin:10px 0}.se-picker-head .btn{flex:0 0 44px;font-size:24px;padding:0}.se-picker .se-candidate{background:transparent}.se-picker input{width:100%}.se-candidate{width:100%;display:block;border:0;border-bottom:1px solid #e5eaf0;background:white;padding:10px 0;text-align:left;cursor:pointer;color:#24344c;min-height:52px;font-size:14px}.se-candidate:hover{background:#f5f8fe}.se-picker h2{overflow-wrap:anywhere}.se-pair{border:1px solid #dce2ee;border-radius:8px;padding:10px;margin-top:8px}.se-pair p{font-size:12px;margin:5px 0}.se-empty{padding:28px 18px;text-align:center;color:#62738d}.se-issues{font-size:12px;margin:8px 0}.se-issues summary{cursor:pointer;min-height:36px;align-content:center}.se-issues p{margin:4px 0}.se-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px}.se-check{display:flex!important;gap:9px;align-items:center;min-height:44px}.se-check input{width:18px;height:18px;flex:0 0 18px}.se-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;max-width:560px;margin:12px 0}.se-calendar button{border:1px solid #dce2ee;background:#fff;min-height:44px;border-radius:6px;font:inherit;cursor:pointer}.se-calendar button[aria-pressed=true]{background:#d8efe1;border-color:#27754b;color:#154e32;font-weight:700}.se-calendar button{position:relative}.se-calendar button:disabled{opacity:1;cursor:default}.se-calendar-tick{position:absolute;right:3px;bottom:1px;font-size:12px}.se-calendar small{text-align:center;font-size:12px}.se-date-entry{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.se-date-entry label{flex:1;min-width:130px}.se-blackout{display:flex;align-items:center;gap:8px;border-bottom:1px solid #e6ebf1;padding:6px 0;font-size:13px}.se-blackout span{flex:1}.se-roster-row{display:grid;grid-template-columns:minmax(160px,1.4fr) repeat(3,minmax(120px,1fr)) 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #e6ebf1}.se-roster-row select{width:100%}.se-roster-row strong{font-size:14px;display:block}.se-published-name{font-size:14px;line-height:1.7}.se-date-tag{font-size:12px;background:#edf2fa;padding:2px 4px;border-radius:4px}.se-drawer{max-width:860px}.se-post{border-bottom:1px solid #e2e8f0;padding:12px 0}.se-post p{white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0}.se-post small{font-size:12px;color:#64748b}.se-preview-scroll{overflow:auto}.se-preview-scroll table{width:100%;font-size:13px}.se-recovery{border:1px solid #b88432;background:#fff7e8;border-radius:8px;padding:14px;margin:10px 0}.se-editor-actions{margin-top:16px}.se-link-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin:8px 0;align-items:end}.se-muted{color:#64748b;font-size:13px}.se-form-note{font-size:13px;color:#56657b;margin:10px 0}.se-default-row{display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:8px;align-items:end;margin:12px 0}.se-bulk-players{max-height:320px;overflow:auto;margin-top:8px;border:1px solid #dce2ee;border-radius:7px;padding:8px}.se-unselected-row{padding:10px 0;border-bottom:1px solid #e6ebf1}.se-signup-flag{display:inline-block;border-radius:5px;padding:3px 6px;margin:4px 0 4px 5px;background:#fff2d9;color:#704b11;font-size:12px;font-weight:600}.se-page [hidden]{display:none!important}
 .se-slot{grid-template-columns:22px minmax(0,1fr) 44px}.se-team-gap{border:2px solid #b86a00!important}.se-scorecard-gap{padding:10px;background:#fff3d6;border-radius:6px;color:#734300}.se-team-overfull{border:2px solid #bc453b;background:#fffaf8}.se-overflow{background:#fce8e5;color:#8e241d;border-radius:6px;padding:8px 10px;font-size:13px;font-weight:600;margin:6px 0}.se-overflow-count{background:#fce0db;color:#8e241d;font-weight:700}.se-team-drop{outline:3px solid #315cb3;outline-offset:2px}.se-order-marker{height:0;border-top:3px solid #315cb3;pointer-events:none;position:relative;z-index:1}.se-order-handle{display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;padding:4px;border:1px solid transparent;border-radius:6px;background:transparent;color:#67768e;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.se-order-handle:hover{background:#edf2fa;color:#25458e}.se-order-handle:focus-visible{outline:2px solid #25458e;outline-offset:1px}.se-order-handle:active{cursor:grabbing}.se-order-handle:disabled{cursor:default;opacity:.45}.se-order-source{background:#e7eefa;box-shadow:inset 0 0 0 2px #6b87b8;border-radius:6px}.se-order-source .se-slot-names{opacity:.5}.se-order-active{user-select:none;-webkit-user-select:none}.se-order-ghost{position:fixed;z-index:10000;pointer-events:none;box-sizing:border-box;max-width:min(300px,calc(100vw - 16px));padding:10px 14px;border-radius:8px;background:#17245f;color:white;box-shadow:0 6px 22px #10204740;font:600 14px/1.4 system-ui;overflow-wrap:anywhere}.se-order-outside{background:#52647b}.se-order-dialog{width:min(360px,calc(100vw - 48px));box-sizing:border-box;border:1px solid #bccae5;border-radius:12px;padding:20px;color:#24344c}.se-order-dialog::backdrop{background:#10204766}.se-order-dialog select{width:100%}.se-order-dialog h2{margin:0}.se-order-help{margin:10px 0 0}.se-order-pair-note{font-size:12px;color:#64748b;margin:4px 0}
 @media(pointer:coarse){.se-slot{grid-template-columns:22px minmax(0,1fr) 44px}.se-order-handle{width:44px;min-height:44px}}
@@ -30104,7 +30205,7 @@ function seBoardFixtures(){
  s.boardDateInitialised=true;
  return fixtures.filter(f=>f.details.days[0].date===s.date);
 }
-function seBoard(){const s=ensureSelections();queueMicrotask(()=>{if(typeof seClearUnavailableDrafts==='function')void seClearUnavailableDrafts();if(typeof clubWeek!=='undefined')clubWeek.mount();seMountStats();if(typeof seMountSelectionEvidence==='function')seMountSelectionEvidence();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
+function seBoard(){const s=ensureSelections();queueMicrotask(()=>{bindSpinBreakdowns(document.getElementById('seContent'));if(typeof seClearUnavailableDrafts==='function')void seClearUnavailableDrafts();if(typeof clubWeek!=='undefined')clubWeek.mount();seMountStats();if(typeof seMountSelectionEvidence==='function')seMountSelectionEvidence();});s.cancelOrder?.();if(!seBoardAccess(s.data)){const dates=[...new Set(seFollowupRows(null,s.data).map(m=>m.date))].sort();if(!dates.includes(s.date))s.date=dates.at(-1)||'';document.getElementById('seContent').innerHTML=(dates.length?`<label>Fixtures starting<select id="seBoardDate">${seOpt(dates.map(d=>[d,seDate(d)]),s.date)}</select></label>`:'')+seFollowupPanel();document.getElementById('seBoardDate')?.addEventListener('change',e=>{s.date=e.target.value;seBoard();});seBindConversations();seBindBoardComments();seBindBoardChats();seBindPublishedActions();return;}if(s.data.selector&&s.boardPanel==='unselected')return seAvailableUnselected();const fs=seBoardFixtures(),dates=[...new Set(seSelectionFixtures().map(f=>f.details.days[0].date))].sort();
  if(!dates.length&&!(s.data.group_permissions_enabled?s.data.selection_group_access?.some(a=>a.id===s.selectionGroup&&a.level===2):s.data.selector)){document.getElementById('seContent').innerHTML=seBoardGroupControl()+seCaptainAvailability()+'<p>No fixtures in this group yet.</p>';seBindGroupControl();seBindPublishedActions();return;}if(!dates.length){document.getElementById('seContent').innerHTML=seBoardGroupControl()+'<section class="se-card se-drawer"><p>No fixtures in this group yet.</p><button class="btn" id="seFirstFixture">Import season fixtures</button><details><summary>Manual entry</summary><button class="btn ghost" id="seManualFirst">Enter a fixture manually</button></details><button class="btn ghost" id="seUnselected">Available, not selected</button></section>';seBindGroupControl();document.getElementById('seFirstFixture').onclick=()=>seImportFixtures();document.getElementById('seManualFirst').onclick=()=>seFixtureEditor();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);return;}
  document.getElementById('seContent').innerHTML=`<div class="se-toolbar se-board-toolbar">${seBoardGroupControl()}<label class="se-board-date">Fixtures <select id="seBoardDate" aria-label="Fixtures starting">${dates.map(x=>`<option value="${x}" ${x===s.date?'selected':''}>${seDate(x)}</option>`).join('')}</select></label>${seCaptainAvailability()}${s.data.selector?`<button class="btn ghost" id="seUnselected">Available, not selected</button>${s.undo.length&&s.undo.at(-1).before.every(f=>fs.some(x=>x.id===f.id))?'<button class="btn ghost" id="seUndo">Undo last change</button>':''}`:''}${fs.some(f=>!seFixtureLocked(f)&&(f.can_publish??s.data.head_selector))?`<button class="btn" id="sePublish">Review &amp; ${sePublishLabel(fs.filter(f=>!seFixtureLocked(f))).toLowerCase()}</button>`:''}</div>${s.data.selector&&!s.data.access.head_selector_id?(s.data.admin?'<button class="btn ghost" id="seAssignHead">Assign Head of Selections</button>':'<p class="se-muted">Ask Club Admin to assign the Head of Selections.</p>'):''}${fs.some(f=>f.can_edit??s.data.selector)?'':'<span class="sr-only">Teams are read-only. Drafts may change until published.</span>'}${seFollowupPanel()}<div class="se-board-layout"><div class="se-grid">${fs.map(f=>(f.can_edit??s.data.selector)?seTeamCard(f):seReadOnlyTeamCard(f)).join('')||'<div class="se-empty">Add a fixture with its actual playing date or dates to start selecting.</div>'}</div></div>`;
  seBindGroupControl();document.getElementById('seUnselected')?.addEventListener('click',seAvailableUnselected);
@@ -30279,7 +30380,7 @@ function seBindOrder(){
 
 function seBoardCounts(f,roles){
  const rows=f.details.days.map((_,i)=>({...seCounts(f,ensureSelections().data.roster,i),keepers:roles['d'+(i+1)].keeper_id?1:0})),shared=rows.length===2&&JSON.stringify(rows[0])===JSON.stringify(rows[1]);
- return (shared?rows.slice(0,1):rows).map((c,i)=>`<div class="se-counts">${rows.length>1&&!shared?`<span>Day ${i+1}</span>`:''}<span class="se-chip ${c.players>11?'se-overflow-count':c.players<11?'se-warn':''}">${c.players}/11</span><span class="se-chip ${c.quicks<f.details.min_quicks?'se-warn':''}">${c.quicks} quicks</span><span class="se-chip">${c.spinners} spin</span><span class="se-chip ${c.batters<f.details.min_batters?'se-warn':''}">${c.batters} batters</span><span class="se-chip ${c.keepers?'':'se-warn'}">${c.keepers} WK</span></div>`).join('');
+ return (shared?rows.slice(0,1):rows).map((c,i)=>`<div class="se-counts">${rows.length>1&&!shared?`<span>Day ${i+1}</span>`:''}<span class="se-chip ${c.players>11?'se-overflow-count':c.players<11?'se-warn':''}">${c.players}/11</span><span class="se-chip ${c.quicks<f.details.min_quicks?'se-warn':''}">${c.quicks} quicks</span><span class="se-spin-breakdown" data-spin-breakdown><button type="button" class="se-chip se-spin-chip" aria-expanded="false" aria-describedby="seSpin-${seEsc(f.id)}-${i}">${c.spinners} spin</button><span class="se-spin-tip" role="tooltip" id="seSpin-${seEsc(f.id)}-${i}" hidden>${spinProfileText(c.spinProfile).map(line=>`<span>${seEsc(line)}</span>`).join('')}</span></span><span class="se-chip ${c.batters<f.details.min_batters?'se-warn':''}">${c.batters} batters</span><span class="se-chip ${c.keepers?'':'se-warn'}">${c.keepers} WK</span></div>`).join('');
 }
 function seBoardRoleMarks(id,roles,days,text=false){
  if(!id)return '';
@@ -34048,8 +34149,9 @@ function demoDuplicateSelection(fixtures,ids){
 
 function seedDemoSelections(){
  const names=['Alex Morgan','Jordan Lee','Taylor Quinn','Riley Cooper','Sam Patel','Chris Bell','Jamie Ford','Blake Hall','Drew Mason','Noah Reed','Will Scott','Evan Brooks','Charlie Gray','Luca Hayes','Mitch Lane','Oliver King','Max Taylor','Isaac Wood','Leo James','Ben Parker','Jack Smith','Finn West','Oscar Hill','Harry Cole','Tom Green','Nathan Ross','Eli Ward','Kane Adams'];
- const roster=names.map((name,i)=>({id:'selection-player-'+i,name,grade:i<13?'1st Grade':'2nd Grade',external_id:'EXAMPLE-'+(100+i),active:true,user_id:i===0?'user-alex':i===1?'user-jordan':i===2?'user-taylor':null,batting:i%13<6?'top':'lower',bowling:i%13>=7?'pace':i%13===6?'spin':'none',bowling_load:'frontline',keeper:i%13===5,availability:{revision:1,usual_available:false,blocks:[],available_dates:['2026-10-10','2026-10-17'].filter(date=>!(i===13&&date==='2026-10-17')&&!(i===24&&date==='2026-10-10')),checked_at:'2026-10-06T08:00:00Z'}}));
- for(const role of ['batting','bowling','bowling_load','keeper'])roster[24][role]=roster[13][role];
+ const roster=names.map((name,i)=>({id:'selection-player-'+i,name,grade:i<13?'1st Grade':'2nd Grade',external_id:'EXAMPLE-'+(100+i),active:true,user_id:i===0?'user-alex':i===1?'user-jordan':i===2?'user-taylor':null,batting:i%13<6?'top':'lower',bowling:i%13>=7?'pace':i%13===6?'spin':'none',bowling_load:'frontline',spin_style:i%13===6?(i<13?'off_spin':'leg_spin'):'unknown',keeper:i%13===5,availability:{revision:1,usual_available:false,blocks:[],available_dates:['2026-10-10','2026-10-17'].filter(date=>!(i===13&&date==='2026-10-17')&&!(i===24&&date==='2026-10-10')),checked_at:'2026-10-06T08:00:00Z'}}));
+ roster[6].batting='middle';
+ for(const role of ['batting','bowling','bowling_load','spin_style','keeper'])roster[24][role]=roster[13][role];
  const days=[{date:'2026-10-10',start:'12:00'},{date:'2026-10-17',start:'12:00'}];
  const f=(id,grade,n)=>({id,club_id:club.id,revision:1,publication:0,published:null,details:{grade,format:'long_form',overs:null,captain_id:null,match_roles:Object.fromEntries(['d1','d2'].map(day=>[day,{captain_id:roster[n+1].id,captain_manual:true,keeper_id:roster[n+5].id,keeper_manual:false}])),competition:'Example District',opposition:'Harbour Visitors',ground:'Example Oval',meeting:'Meet at 11:15 am.',days:structuredClone(days),brackets:n===13,min_quicks:3,min_batters:5,staff:['user-coach']},slots:Array.from({length:11},(_,i)=>({d1:roster[n+i].id,d2:roster[n===13&&i===0?24:n+i].id}))});
  demoSelections={access:{mode:'bundle',status:'pilot',timezone:'Australia/Sydney',revision:1,head_selector_id:'user-coach',fixture_defaults:{revision:0,rows:[]}},roster_revision:1,roster,fixtures:[f('selection-first','1st Grade',0),f('selection-second','2nd Grade',13)],group_links:[],selectors:['user-coach'],review_posts:{},posts:{},history:{},receipts:{},billing:{pricing:{annual_price_cents:null,currency:'AUD',trial_days:21,revision:1},subscription:null,history:[]}};
@@ -34121,7 +34223,7 @@ window.__fixtureRpc=async(name,args={})=>{
  if(name==='club_messages_api'&&demoSelections)demoSyncRepublicationAlerts();
  if(name!=='club_selections_api')return previousSelectionFixtureRpc(name,args);
  if(!demoSelections)seedDemoSelections();const state=demoSelections,action=args.p_action,d=args.p_data||{},uid=session.user.id,selector=state.selectors.includes(uid)||state.access.head_selector_id===uid,admin=membership.permission_role==='admin',manager=admin||selector;
- const snapshot=f=>({details:structuredClone(f.details),slots:structuredClone(f.details.cancelled?[]:f.slots),players:state.roster.filter(p=>f.slots.some(s=>s.d1===p.id||s.d2===p.id)).map(p=>({id:p.id,name:p.name,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,keeper:p.keeper}))});
+ const snapshot=f=>({details:structuredClone(f.details),slots:structuredClone(f.details.cancelled?[]:f.slots),players:state.roster.filter(p=>f.slots.some(s=>s.d1===p.id||s.d2===p.id)).map(p=>({id:p.id,name:p.name,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,spin_style:p.spin_style||'unknown',keeper:p.keeper}))});
  const current=f=>f.review?.draft_revision===f.revision&&JSON.stringify({...f.review,draft_revision:undefined})===JSON.stringify(snapshot(f));
  const reviewAudience=f=>!!f&&(selector||demoSeasonGroups(uid).some(g=>g.id===demoSharedFixtureGroup(f)?.id)||demoTemporaryCaptainDays(uid).length>0&&demoCaptainUsers(f.details).includes(uid));
  const captain=membership.permission_role==='captain'||demoSeasonGroups(uid).length>0||demoTemporaryCaptainDays(uid).length>0;
@@ -34134,7 +34236,7 @@ window.__fixtureRpc=async(name,args={})=>{
  if(['access','context'].includes(action))demoMatchSelectionAccounts(manager?null:uid);
  if(action==='access')return ok({...state.access,enabled:state.access.status!=='disabled',selector,admin});
  if(action==='context')demoSyncRepublicationAlerts();
- if(action==='context')return ok({...state,receipts:undefined,posts:undefined,review_posts:undefined,history:undefined,selector,admin,captain,can_view_board:selector||captain,can_view_club_availability:manager||captain,availability_mode:'opt_in',head_selector:demoPublicationHead()===uid,publication_head_id:demoPublicationHead(),conversations:demoConversations(uid),conversation_status:undefined,can_delegate:admin||state.access.head_selector_id===uid,can_hand_back:admin||state.access.head_selector_id===uid||state.access.publication_delegate_id===uid,reviews:state.fixtures.filter(reviewAudience).map(f=>({id:f.id,snapshot:{...snapshot(f),draft_revision:f.revision},sent_at:f.review_requested_at||fixtureNow(),draft_changed:false,captain_name:f.details.match_roles?[...new Set(Object.values(f.details.match_roles).map(r=>state.roster.find(p=>p.id===r.captain_id)?.name).filter(Boolean))].join(' / '):fixtureRows.user_profiles.find(p=>p.user_id===f.details.captain_id)?.display_name||'Captain'})),members:manager?fixtureRows.club_memberships.map(m=>({user_id:m.user_id,name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name||'Example member',email:demoSelectionAccountEmail(fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)||{user_id:m.user_id}),is_admin:m.permission_role==='admin',explicit_selector:state.selectors.includes(m.user_id),selector:state.selectors.includes(m.user_id)||state.access.head_selector_id===m.user_id})):[],roster:state.roster.filter(p=>manager||captain||p.user_id===uid).map(p=>manager?p:p.user_id===uid?{...p,account_email:undefined,auto_link_disabled:undefined}:{id:p.id,name:p.name,grade:p.grade,active:p.active,user_id:null,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,keeper:p.keeper,availability:p.availability}),groups:manager?demoMatchGroups():[],batting_users:['user-alex','user-jordan','user-taylor'],fixtures:state.fixtures.filter(f=>manager||captain||f.published).map(f=>selector?{...f,can_comment:reviewAudience(f),comment_count:(state.review_posts[f.id]||[]).length,issues:demoSelectionIssues(f),can_chat:!!f.published&&audience(f)}:{id:f.id,published:f.published,publication:f.publication,can_comment:reviewAudience(f),comment_count:reviewAudience(f)?(state.review_posts[f.id]||[]).length:0,can_chat:audience(f),...(admin||captain?{details:f.details,revision:f.revision,selection_unlocked_until:f.selection_unlocked_until}:{}),...(captain?{slots:f.slots,scorecard_sync:f.scorecard_sync}:{})})});
+ if(action==='context')return ok({...state,receipts:undefined,posts:undefined,review_posts:undefined,history:undefined,selector,admin,captain,can_view_board:selector||captain,can_view_club_availability:manager||captain,availability_mode:'opt_in',head_selector:demoPublicationHead()===uid,publication_head_id:demoPublicationHead(),conversations:demoConversations(uid),conversation_status:undefined,can_delegate:admin||state.access.head_selector_id===uid,can_hand_back:admin||state.access.head_selector_id===uid||state.access.publication_delegate_id===uid,reviews:state.fixtures.filter(reviewAudience).map(f=>({id:f.id,snapshot:{...snapshot(f),draft_revision:f.revision},sent_at:f.review_requested_at||fixtureNow(),draft_changed:false,captain_name:f.details.match_roles?[...new Set(Object.values(f.details.match_roles).map(r=>state.roster.find(p=>p.id===r.captain_id)?.name).filter(Boolean))].join(' / '):fixtureRows.user_profiles.find(p=>p.user_id===f.details.captain_id)?.display_name||'Captain'})),members:manager?fixtureRows.club_memberships.map(m=>({user_id:m.user_id,name:fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)?.display_name||'Example member',email:demoSelectionAccountEmail(fixtureRows.user_profiles.find(p=>p.user_id===m.user_id)||{user_id:m.user_id}),is_admin:m.permission_role==='admin',explicit_selector:state.selectors.includes(m.user_id),selector:state.selectors.includes(m.user_id)||state.access.head_selector_id===m.user_id})):[],roster:state.roster.filter(p=>manager||captain||p.user_id===uid).map(p=>manager?p:p.user_id===uid?{...p,account_email:undefined,auto_link_disabled:undefined}:{id:p.id,name:p.name,grade:p.grade,active:p.active,user_id:null,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,spin_style:p.spin_style||'unknown',keeper:p.keeper,availability:p.availability}),groups:manager?demoMatchGroups():[],batting_users:['user-alex','user-jordan','user-taylor'],fixtures:state.fixtures.filter(f=>manager||captain||f.published).map(f=>selector?{...f,can_comment:reviewAudience(f),comment_count:(state.review_posts[f.id]||[]).length,issues:demoSelectionIssues(f),can_chat:!!f.published&&audience(f)}:{id:f.id,published:f.published,publication:f.publication,can_comment:reviewAudience(f),comment_count:reviewAudience(f)?(state.review_posts[f.id]||[]).length:0,can_chat:audience(f),...(admin||captain?{details:f.details,revision:f.revision,selection_unlocked_until:f.selection_unlocked_until}:{}),...(captain?{slots:f.slots,scorecard_sync:f.scorecard_sync}:{})})});
  if(action==='review_posts')return reviewAudience(state.fixtures.find(f=>f.id===d.id))?ok(state.review_posts[d.id]||[]):bad('Team comments are private');
  if(action==='posts')return audience(state.fixtures.find(f=>f.id===d.id))?ok(state.posts[d.id]||[]):bad('Current selected team only');
  if(action==='history')return ok(state.history[d.id]||[]);
@@ -34222,7 +34324,7 @@ window.__fixtureRpc=async(name,args={})=>{
   if(state.access.mode==='bundle')for(const link of state.group_links){const latest=state.fixtures.filter(f=>f.published&&f.published.details.grade===link.grade&&f.published.details.competition===link.competition).sort((a,b)=>b.published.details.days[0].date.localeCompare(a.published.details.days[0].date))[0];if(!latest)continue;for(const r of state.roster.filter(r=>latest.published.slots.some(s=>s.d1===r.id||s.d2===r.id))){const p=fixtureRows.players.find(p=>p.user_id===r.user_id);if(p&&!fixtureRows.player_playing_groups.some(g=>g.player_id===p.id&&g.playing_group_id===link.group_id))fixtureRows.player_playing_groups.push({club_id:club.id,player_id:p.id,playing_group_id:link.group_id});}}
   result={published:true,recipients:0,groups:{unlinked_players:[]}};
  }else if(action==='availability'){const p=state.roster.find(p=>p.id===d.id);if(!p||!manager&&p.user_id!==uid)return bad('Edit only your own availability');if(d.calendar_mode!=='opt_in')return bad('Reload the updated app to mark available dates');if(p.availability.revision!==d.revision)return bad('Availability changed. Reload before saving');const previous=p.availability,unavailable=[...new Set([...(previous.unavailable_dates||[]),...(previous.available_dates||[]).filter(date=>!d.available_dates.includes(date))])].filter(date=>!d.available_dates.includes(date));p.availability={...structuredClone(d),usual_available:false,blocks:[],unavailable_dates:unavailable,revision:d.revision+1,checked_at:fixtureNow()};for(const setup of state.availability_dates||[])if((previous.available_dates||[]).includes(setup.date)!==d.available_dates.includes(setup.date))setup.updated_at=fixtureNow();
- }else if(action==='save_roster'||action==='import_roster'){if(d.revision!==state.roster_revision)return bad('Playing list changed');try{seValidateRosterNames(d.rows,state.roster,action==='import_roster');if(action==='save_roster'&&d.rows.some(r=>Object.hasOwn(r,'fielding')&&!FIELDING_RATINGS.some(([key])=>key===r.fielding)))throw Error('Choose a valid fielding rating');}catch(error){return bad(error.message);}for(const r of d.rows){const old=action==='import_roster'?seImportMatch(r,state.roster):state.roster.find(p=>p.id===r.id);if(old){const blocked=action==='save_roster'?(old.user_id&&!r.user_id?true:r.user_id?false:old.auto_link_disabled):old.auto_link_disabled;const email=old.account_email;Object.assign(old,action==='import_roster'?{external_id:r.external_id,name:r.name,grade:r.grade??old.grade}:r);old.auto_link_disabled=!!blocked;old.account_email=Object.hasOwn(r,'account_email')&&(action==='save_roster'||r.account_email)?String(r.account_email||'').trim().toLowerCase()||null:email||null;}else state.roster.push({id:crypto.randomUUID(),batting:'unknown',bowling:'unknown',bowling_load:'unknown',fielding:'unknown',keeper:false,active:true,user_id:null,auto_link_disabled:false,availability:{revision:0,usual_available:false,blocks:[],available_dates:[]},...r,account_email:String(r.account_email||'').trim().toLowerCase()||null});}state.roster_revision++;
+ }else if(action==='save_roster'||action==='import_roster'){if(d.revision!==state.roster_revision)return bad('Playing list changed');try{seValidateRosterNames(d.rows,state.roster,action==='import_roster');if(action==='save_roster'&&d.rows.some(r=>Object.hasOwn(r,'fielding')&&!FIELDING_RATINGS.some(([key])=>key===r.fielding)))throw Error('Choose a valid fielding rating');if(action==='save_roster'&&d.rows.some(r=>Object.hasOwn(r,'spin_style')&&!SPIN_STYLES.some(([key])=>key===r.spin_style)))throw Error('Choose a valid spin type');}catch(error){return bad(error.message);}for(const r of d.rows){const old=action==='import_roster'?seImportMatch(r,state.roster):state.roster.find(p=>p.id===r.id);if(old){const blocked=action==='save_roster'?(old.user_id&&!r.user_id?true:r.user_id?false:old.auto_link_disabled):old.auto_link_disabled;const email=old.account_email;Object.assign(old,action==='import_roster'?{external_id:r.external_id,name:r.name,grade:r.grade??old.grade}:r);if(action==='save_roster'&&old.bowling!=='spin')old.spin_style='unknown';old.auto_link_disabled=!!blocked;old.account_email=Object.hasOwn(r,'account_email')&&(action==='save_roster'||r.account_email)?String(r.account_email||'').trim().toLowerCase()||null:email||null;}else state.roster.push({id:crypto.randomUUID(),batting:'unknown',bowling:'unknown',bowling_load:'unknown',spin_style:'unknown',fielding:'unknown',keeper:false,active:true,user_id:null,auto_link_disabled:false,availability:{revision:0,usual_available:false,blocks:[],available_dates:[]},...r,account_email:String(r.account_email||'').trim().toLowerCase()||null});}state.roster_revision++;
  }else if(action==='post'){(state.posts[d.id]??=[]).push({id:crypto.randomUUID(),author_name:userProfile.display_name,body:d.body,created_at:fixtureNow()});
  }else if(action==='group_links'){state.group_links=d.links;state.access.revision++;
  }else if(action==='selectors'){if(!admin)return bad('Club Admin permission required');state.selectors=structuredClone(d.users);if(state.access.head_selector_id!==(d.head_selector_id||null)||!state.selectors.includes(state.access.publication_delegate_id))Object.assign(state.access,{publication_delegate_id:null,publication_delegate_from:null,publication_delegate_until:null});state.access.head_selector_id=d.head_selector_id||null;state.access.revision++;
@@ -34841,7 +34943,7 @@ function demoPrepareMatchTutorial(stage){
  if(stage.key==='team_review'){
   const selected=demoSelections.roster.filter(p=>slots.some(slot=>slot.d1===p.id));
   for(const player of selected)player.availability.available_dates=[...new Set([...(player.availability.available_dates||[]),'2026-10-08'])];
-  match.published={details:fixtureClone(details),slots:fixtureClone(slots),players:selected.map(p=>({id:p.id,name:p.name,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,keeper:p.keeper}))};
+  match.published={details:fixtureClone(details),slots:fixtureClone(slots),players:selected.map(p=>({id:p.id,name:p.name,batting:p.batting,bowling:p.bowling,bowling_load:p.bowling_load,spin_style:p.spin_style||'unknown',keeper:p.keeper}))};
  }else match.details.match_roles={d1:{captain_id:null,captain_manual:false,keeper_id:null,keeper_manual:false}};
  demoSelections.fixtures.push(match);return match;
 }
