@@ -127,19 +127,24 @@ export function createSelectionRoom(h){
   if(!cfg.can_manage)el(s,'backupForm').hidden=true;
   el(s,'backup').hidden=!url&&!cfg.can_manage;
  }
- async function refresh(s){
-  if(!same(s))return;if(s.loading){s.refreshAgain=true;return;}s.loading=true;
+ async function refresh(s,force=false){
+  // Never queue another read behind a slow request. Back off after failures;
+  // the reconnect button can still retry immediately.
+  if(!same(s))return;
+  if(s.loading){if(force)s.refreshRequired=true;return;}
+  if(!force&&Date.now()<(s.retryAt||0))return;s.loading=true;
   el(s,'retry').disabled=true;text(s,'retry','Reconnecting…');
   const ids=[...s.messages.keys()].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1),data=ids.length?{after:ids.at(-1)}:{};
   try{
-   const result=await h.rpc(s.scope,'context',data);if(!same(s))return;
-   s.config=result;activeCall(s,result.active_call);chatSession(s,result.chat_session);messageRows(s,result.messages);backup(s);compose(s);
+   const result=await h.rpc(s.scope,'context',data);if(!same(s)||s.refreshRequired)return;
+   s.failures=0;s.retryAt=0;s.config=result;activeCall(s,result.active_call);chatSession(s,result.chat_session);messageRows(s,result.messages);backup(s);compose(s);
    text(s,'connection','');el(s,'retry').hidden=true;
   }catch(error){
    if(!same(s))return;
    if(error.code==='42501'||error.status===403){close(true);h.notice?.('Selection Room is available to assigned selectors only.');return;}
+   s.failures=(s.failures||0)+1;s.retryAt=Date.now()+Math.min(30000,3000*2**s.failures);
    text(s,'connection','Connection lost. Your draft is kept.');el(s,'retry').hidden=false;if(!s.messages.size)text(s,'empty','Messages unavailable.');
-  }finally{s.loading=false;if(same(s)){el(s,'retry').disabled=false;text(s,'retry','Reconnect chat');if(s.refreshAgain){s.refreshAgain=false;void refresh(s);}}}
+  }finally{s.loading=false;if(same(s)){el(s,'retry').disabled=false;text(s,'retry','Reconnect chat');if(s.refreshRequired){s.refreshRequired=false;void refresh(s,true);}}}
  }
  function compose(s){
   const area=el(s,'message'),button=el(s,'send');area.disabled=!!s.pending||s.config?.can_post===false;button.disabled=s.sending||!s.draft.trim()||s.config?.can_post===false;button.textContent=s.sending?'Sending…':s.pending?'Retry send':'Send';
@@ -150,7 +155,7 @@ export function createSelectionRoom(h){
   try{
    const result=await h.rpc(s.scope,'post',pending);if(!same(s)||s.pending!==pending)return;
    messageRows(s,[result.message]);s.pending=null;s.draft='';el(s,'message').value='';persist(s);text(s,'sendStatus','Sent');
-  }catch(error){if(same(s)&&s.pending===pending){if(error.code==='P0230'){s.pending=null;s.draft='';el(s,'message').value='';persist(s);void refresh(s);text(s,'sendStatus','That chat has ended.');}else text(s,'sendStatus',error.code==='42501'?'Selector access is required.':'Send not confirmed. Retry sends this message once.');}}
+  }catch(error){if(same(s)&&s.pending===pending){if(error.code==='P0230'){s.pending=null;s.draft='';el(s,'message').value='';persist(s);void refresh(s,true);text(s,'sendStatus','That chat has ended.');}else text(s,'sendStatus',error.code==='42501'?'Selector access is required.':'Send not confirmed. Retry sends this message once.');}}
   finally{s.sending=false;if(same(s))compose(s);}
  }
  async function saveBackup(s){
@@ -263,7 +268,7 @@ export function createSelectionRoom(h){
    const frame=provider.createFrame(el(s,'video'),{iframeStyle:{width:'100%',height:'100%',border:'0'},showLeaveButton:true,activeSpeakerMode:false});s.frame=frame;videoControls(s);text(s,'videoStatus','Check your camera and microphone below.');
    frame.on('joined-meeting',()=>{if(same(s)&&s.frame===frame){s.joining=false;s.inCall=true;s.connectedAt=Date.now();s.expiresAt=data.expires_at;
     try{frame.setLocalVideo(s.useVideo);}catch{s.mediaError=true;text(s,'videoStatus','Camera could not start. Audio is still connected.');}
-    videoControls(s);setMinimized(s,!s.useVideo);callClock(s);participants(s,frame);void refresh(s);void s.credits?.reload();}});
+    videoControls(s);setMinimized(s,!s.useVideo);callClock(s);participants(s,frame);void refresh(s,true);void s.credits?.reload();}});
    for(const event of ['participant-joined','participant-updated','participant-left'])frame.on(event,()=>participants(s,frame));
    frame.on('left-meeting',()=>{if(same(s)&&s.frame===frame&&!s.videoError)leave(s);});
    frame.on('error',error=>{if(same(s)&&s.frame===frame)videoFailure(s,error);});
@@ -296,7 +301,7 @@ export function createSelectionRoom(h){
   el(s,'close').onclick=()=>s.frame||s.joining?setMinimized(s,true):close();el(s,'toggle').onclick=()=>setMinimized(s,!s.minimized);
   el(s,'message').oninput=e=>{s.draft=e.target.value;persist(s);compose(s);text(s,'sendStatus','');};
   el(s,'message').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();void send(s);}};
-  el(s,'compose').onsubmit=e=>{e.preventDefault();void send(s);};el(s,'retry').onclick=()=>void refresh(s);
+  el(s,'compose').onsubmit=e=>{e.preventDefault();void send(s);};el(s,'retry').onclick=()=>void refresh(s,true);
   el(s,'editBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=false;el(s,'editBackup').hidden=true;el(s,'backupUrl').value=s.config.backup_url||'';s.editRevision=s.config.revision;text(s,'backupStatus','');el(s,'backupUrl').focus();};
   el(s,'cancelBackup').onclick=()=>{if(s.savingBackup)return;el(s,'backupForm').hidden=true;text(s,'backupStatus','');backup(s);};el(s,'backupUrl').oninput=()=>text(s,'backupStatus','');el(s,'backupForm').onsubmit=e=>{e.preventDefault();void saveBackup(s);};
   el(s,'join').onclick=()=>void join(s);el(s,'leave').onclick=()=>leave(s);el(s,'checkVideo').onclick=()=>void videoStatus(s);
@@ -307,7 +312,7 @@ export function createSelectionRoom(h){
   s.foreground=()=>{sync();if(same(s)){callClock(s);checkAudio(s);void s.credits?.reload();}};s.visibility=()=>{if(document.visibilityState!=='hidden')s.foreground();};
   document.addEventListener('visibilitychange',s.visibility);window.addEventListener('focus',s.foreground);
   s.clock=setInterval(()=>{if(document.visibilityState!=='hidden'){callClock(s);checkAudio(s);}},1000);
-  s.timer=setInterval(()=>{sync();if(!same(s))return;if(document.visibilityState==='hidden'&&!s.frame)return;void refresh(s);if(Date.now()-(s.statusChecked||0)>30000)void videoStatus(s);},3000);
+  s.timer=setInterval(()=>{sync();if(!same(s))return;if(document.visibilityState==='hidden'&&!s.frame)return;void refresh(s);},3000);
   await Promise.allSettled([refresh(s),videoStatus(s)]);
  }
  return {open,close,sync,isOpen:()=>!!room,activeScope:()=>room&&(room.frame||room.joining)?room.scope:null};

@@ -27,7 +27,7 @@ test('the complete demo opens on the selector board and retains it through app n
   assert.equal(h.document.getElementById('demoStage').value, 'selections');
   assert.ok(h.document.querySelector('[data-se-view="board"][aria-pressed="true"]'));
   assert.equal(h.document.querySelector('[data-se-view="published"]'), null);
-  assert.ok(h.document.getElementById('seSeasonStats'));
+  assert.ok(h.document.getElementById('seMeeting'));
   assert.ok(h.document.getElementById('seOpenRoom'));
   assert.equal(h.document.querySelector('[data-se-view="socials"]'), null);
   await h.click('[data-se-view="availability"]');

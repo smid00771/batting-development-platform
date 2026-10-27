@@ -2663,11 +2663,29 @@ const demoSelectionRooms=new Map();
 const beforeRoomDemoRpc=supabase.rpc;
 
 supabase.rpc=async function(name,args){
- if(name!=='selection_room_api')return beforeRoomDemoRpc(name,args);
+ if(name!=='selection_room_api'){
+  const result=await beforeRoomDemoRpc(name,args);
+  if(name==='club_selections_api'&&args.p_action==='context'&&result.data?.selector){
+   const d=result.data,prefix=args.p_club_id+':';
+   d.selection_meetings=[...demoSelectionRooms].filter(([key])=>key.startsWith(prefix)).flatMap(([key,r])=>{
+    const group=key.slice(prefix.length),level=d.group_permissions_enabled?d.selection_group_access?.find(g=>g.id===group)?.level:2;
+    return level?[{scope_id:group==='club'?'00000000-0000-0000-0000-000000000000':group,id:null,active:false,...r.meeting,can_manage:level===2}]:[];
+   });
+  }
+  return result;
+ }
  if(!selectionsEnabled()||!selectionState?.data?.selector)return {error:{code:'42501',message:'Assigned selectors only'}};
- const key=args.p_club_id,d=args.p_data||{},action=args.p_action;
+ const d=args.p_data||{},key=args.p_club_id+':'+(d.selection_group_id||'club'),action=args.p_action;
+ const level=selectionState.data.group_permissions_enabled?selectionState.data.selection_group_access?.find(g=>g.id===d.selection_group_id)?.level:2;
+ if(!level)return {error:{code:'42501',message:'Choose a Selection Group you can view'}};
  if(!demoSelectionRooms.has(key))demoSelectionRooms.set(key,{messages:[],backup_url:'',revision:0,requests:new Map()});
  const r=demoSelectionRooms.get(key),can_manage=!!selectionState.data.head_selector;
+ if(['meeting','start_meeting','end_meeting'].includes(action)){
+  if(action!=='meeting'&&level<2)return {error:{code:'42501',message:'Only selectors who can edit this group can start or end its meeting'}};
+  if(action==='start_meeting'&&!r.meeting?.active&&r.meeting?.id!==d.request_id)r.meeting={id:d.request_id,active:true,started_at:new Date().toISOString()};
+  if(action==='end_meeting'){if(r.meeting?.id!==d.meeting_id)return {error:{message:'The meeting changed. Refresh its status.'}};r.meeting.active=false;}
+  return {data:{id:null,active:false,...r.meeting,can_manage:level===2}};
+ }
  if(action==='context')return {data:{messages:r.messages.filter(m=>d.after?BigInt(m.id)>BigInt(d.after):d.before?BigInt(m.id)<BigInt(d.before):true).slice(d.after?0:-100,d.after?100:undefined),has_older:false,backup_url:r.backup_url,revision:r.revision,can_manage}};
  if(action==='post'){
   const request=session.user.id+':'+d.request_id;

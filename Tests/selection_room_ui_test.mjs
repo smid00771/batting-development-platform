@@ -131,7 +131,8 @@ try{
  q('join').click();await until(()=>q('subtitle').textContent.includes(' in call'));assert.equal(videoChanges.at(-1),true);assert.equal(q('video').inert,false);assert.equal(q('toggle').textContent,'Hide room');assert.equal(q('videoChoice').hidden,true,'Video rooms also fix their room mode');scope=null;document.getElementById('app').innerHTML='Signed out';await until(()=>!room.isOpen());assert.equal(document.querySelector('.sr-room'),null);assert.equal(document.querySelector('.sr-call-return'),null);assert.equal(document.querySelector('iframe'),null);assert.equal(document.body.classList.contains('sr-docked'),false);
  // Parse both entry points, including the embedded demo module and adapter.
  const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
- assert.ok(app.includes("document.activeElement?.closest('#sePage')"),'Typing in chat must not pause the board refresh');
+ // Full-board polling is deliberately disabled; chat keeps its independent read timer.
+ assert.match(app,/function seStartLiveRefresh\(\)\{if\(selectionRefreshTimer\)clearInterval\(selectionRefreshTimer\);selectionRefreshTimer=null;\}/);
  const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
  for(const script of demo.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
  console.log('Selection Room UI: call presence, board/video layout switching, access cleanup, retry, XSS, draft retention, board redraw, video cancellation and demo syntax passed.');
