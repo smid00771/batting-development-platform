@@ -255,6 +255,18 @@ export function createSelectionEvidence(h) {
   let board=null,cache=null,pending=null,generation=0;
   const preferences=new Map(),returnPreferences=new Map();
   const here=b=>board===b && b.host.isConnected && h.here(b);
+  const canCalculate=b=>!b.manual || b.requested&&(!b.canCalculate||b.canCalculate());
+  function pause(){
+    if(!board?.manual)return;
+    board.requested=false;generation++;pending?.controller?.abort();pending=null;clear(board);
+    if(board.calculateButton){board.calculateButton.disabled=false;board.calculateButton.textContent='Calculate form & comparisons';}
+  }
+  async function refresh(){
+    const b=board;if(!b||!here(b)||b.canCalculate&&!b.canCalculate())return;
+    b.requested=true;
+    if(b.calculateButton){b.calculateButton.disabled=true;b.calculateButton.textContent='Calculating…';}
+    try{await load(b);}finally{if(here(b)&&b.calculateButton){b.calculateButton.disabled=false;b.calculateButton.textContent='Calculate form & comparisons';}}
+  }
   function clear(b) {
     clearEvidenceLinks(b.host);
     b.host.querySelector('.se-evidence-dialog')?.remove();
@@ -281,12 +293,13 @@ export function createSelectionEvidence(h) {
         if(!here(b))return;
         b[property]=toggle.checked;values.set(b.scope,b[property]);
         try{storage?.setItem(key,b[property]?'1':'0');}catch{}
+        if(b.manual){pause();return;}
         if(b.visible||b.returningEnabled)void load(b);else clear(b);
       };
     }
   }
   function paint(b,data) {
-    if(!here(b)||!b.visible&&!b.returningEnabled)return;
+    if(!here(b)||!canCalculate(b)||!b.visible&&!b.returningEnabled)return;
     const teams=resolveSelectionStatsTeams(b.teams,data.season,b.referenceTeams||b.teams);
     const summary=buildSeasonStats(data),model=buildSelectionEvidence(summary,teams,b.roster);
     const returns=b.returningEnabled?returningPlayers({teams,references:resolveSelectionStatsTeams(b.referenceTeams||[],data.season),roster:b.roster,season:data.season,today:b.today||data.today,noPlay:data.fixtures.filter(f=>f.no_play).map(f=>f.id),eligible:b.returningEligible}):[];
@@ -337,25 +350,36 @@ export function createSelectionEvidence(h) {
   }
 
   async function load(b) {
-    if(!here(b)||!b.visible&&!b.returningEnabled)return;
+    if(!here(b)||!canCalculate(b)||!b.visible&&!b.returningEnabled)return;
     if(cache?.scope===b.scope && Date.now()-cache.time<120000){paint(b,cache.data);return;}
     const revision=generation;
     if(!pending || pending.scope!==b.scope || pending.revision!==revision) {
-      const task={scope:b.scope,revision};pending=task;
-      task.promise=h.supabase.rpc('club_season_stats_api',{p_club_id:b.clubId,p_action:'context',p_data:{}}).then(result=>{
+      const task={scope:b.scope,revision,controller:new AbortController()};pending=task;
+      const request=h.supabase.rpc('club_season_stats_api',{p_club_id:b.clubId,p_action:'context',p_data:{}});
+      task.promise=(typeof request.abortSignal==='function'?request.abortSignal(task.controller.signal):request).then(result=>{
         if(result.error)throw Error(result.error.message);
         if(!Array.isArray(result.data?.cards)||!Array.isArray(result.data?.fixtures)||!result.data?.season?.start)throw Error('Season figures unavailable');
         return result.data;
       });
     }
     const task=pending;
-    try {const data=await task.promise;if(!here(b)||generation!==revision)return;cache={scope:b.scope,data,time:Date.now()};paint(b,data);}
+    try {const data=await task.promise;if(!here(b)||!canCalculate(b)||generation!==revision)return;cache={scope:b.scope,data,time:Date.now()};paint(b,data);}
     catch {if(here(b))clear(b);}
     finally {if(pending===task)pending=null;}
   }
   return {
-    mount(host,options){if(!host)return;if(board)clearEvidenceLinks(board.host);const b={...options,host};if(board?.scope!==b.scope){if(board)clear(board);cache=null;generation++;}board=b;bindVisibility(b);if(b.visible||b.returningEnabled)void load(b);else clear(b);},
-    invalidate(){cache=null;generation++;if(board&&here(board))void load(board);},
-    adopt(scope,data){if(board?.scope!==scope)return;cache={scope,data,time:Date.now()};generation++;if(here(board))paint(board,data);}
+    mount(host,options){
+      if(!host)return;
+      if(board){clearEvidenceLinks(board.host);if(board.manual)pause();}
+      const b={...options,host,requested:false};
+      if(board?.scope!==b.scope){if(board)clear(board);cache=null;generation++;}
+      board=b;bindVisibility(b);
+      if(b.calculateButton)b.calculateButton.onclick=refresh;
+      if(b.manual){clear(b);return;}
+      if(b.visible||b.returningEnabled)void load(b);else clear(b);
+    },
+    pause,refresh,
+    invalidate(){cache=null;generation++;if(board?.manual){pause();return;}if(board&&here(board))void load(board);},
+    adopt(scope,data){if(board?.scope!==scope)return;cache={scope,data,time:Date.now()};generation++;if(board.manual){pause();return;}if(here(board))paint(board,data);}
   };
 }

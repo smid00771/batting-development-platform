@@ -231,3 +231,19 @@ test('spin comparison shows lost variety, actual batting and a human trade-off w
  assert.match(text,/current batting below guide/);assert.match(text,/13 batting average/);assert.match(text,/Off-spin · frontline/);assert.match(text,/only frontline Off-spin/);assert.match(text,/recorded batting cover/);assert.match(text,/Bowling comparison in 1st Grade/);assert.match(text,/Discussion only/);
  assert.equal(JSON.stringify(h.fixture),before);h.dom.window.close();
 });
+
+test('manual board performs no stats request or comparison work on mount, redraw, preferences or invalidation',async()=>{
+ const h=await setup(),options={...h.options,manual:true,returningEnabled:true};
+ h.controller.mount(h.host,options);await tick();assert.equal(h.calls(),0);assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ h.controller.invalidate();h.controller.adopt(options.scope,h.fixture.context);await tick();assert.equal(h.calls(),0);assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ const toggle=h.host.querySelector('[data-evidence-toggle]');toggle.checked=false;toggle.dispatchEvent(new h.dom.window.Event('change'));toggle.checked=true;toggle.dispatchEvent(new h.dom.window.Event('change'));await tick();assert.equal(h.calls(),0);
+ await h.controller.refresh();assert.ok(h.host.querySelector('[data-evidence-open]'));
+ h.host.innerHTML=h.markup();h.controller.mount(h.host,options);await tick();assert.equal(h.calls(),0);assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+});
+test('starting a selection edit blocks pending analysis and never restarts it after saving',async()=>{
+ const h=await setup();let finish,editing=false;h.reply(()=>new Promise(resolve=>finish=resolve));
+ h.controller.mount(h.host,{...h.options,manual:true,canCalculate:()=>!editing});const request=h.controller.refresh();assert.equal(h.calls(),1);
+ editing=true;h.controller.pause();finish({data:h.fixture.context});await request;assert.equal(h.host.querySelector('[data-evidence-open]'),null);
+ await h.controller.refresh();assert.equal(h.calls(),1);editing=false;h.controller.invalidate();await tick();assert.equal(h.calls(),1);
+ h.reply(async()=>({data:h.fixture.context}));await h.controller.refresh();assert.equal(h.calls(),2);assert.ok(h.host.querySelector('[data-evidence-open]'));
+});
