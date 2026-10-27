@@ -93,7 +93,7 @@ export function createSeasonStatsPanel(h) {
     return true;
   }
   async function request(s, action = 'context', data = {}) {
-    const result = await h.supabase.rpc('club_season_stats_api', {p_club_id:s.clubId, p_action:action, p_data:data});
+    const result = await h.supabase.rpc('club_season_stats_api', {p_club_id:s.clubId, p_action:action, p_data:{...data,on_demand:true}});
     if (result.error) throw Error(result.error.message);
     if (!Array.isArray(result.data?.cards) || !Array.isArray(result.data?.fixtures) || !result.data?.season?.start) throw Error('Season stats could not be loaded.');
     return result.data;

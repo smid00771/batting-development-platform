@@ -2663,17 +2663,7 @@ const demoSelectionRooms=new Map();
 const beforeRoomDemoRpc=supabase.rpc;
 
 supabase.rpc=async function(name,args){
- if(name!=='selection_room_api'){
-  const result=await beforeRoomDemoRpc(name,args);
-  if(name==='club_selections_api'&&args.p_action==='context'&&result.data?.selector){
-   const d=result.data,prefix=args.p_club_id+':';
-   d.selection_meetings=[...demoSelectionRooms].filter(([key])=>key.startsWith(prefix)).flatMap(([key,r])=>{
-    const group=key.slice(prefix.length),level=d.group_permissions_enabled?d.selection_group_access?.find(g=>g.id===group)?.level:2;
-    return level?[{scope_id:group==='club'?'00000000-0000-0000-0000-000000000000':group,id:null,active:false,...r.meeting,can_manage:level===2}]:[];
-   });
-  }
-  return result;
- }
+ if(name!=='selection_room_api')return beforeRoomDemoRpc(name,args);
  if(!selectionsEnabled()||!selectionState?.data?.selector)return {error:{code:'42501',message:'Assigned selectors only'}};
  const d=args.p_data||{},key=args.p_club_id+':'+(d.selection_group_id||'club'),action=args.p_action;
  const level=selectionState.data.group_permissions_enabled?selectionState.data.selection_group_access?.find(g=>g.id===d.selection_group_id)?.level:2;

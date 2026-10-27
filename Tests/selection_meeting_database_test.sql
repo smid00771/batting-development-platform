@@ -37,8 +37,16 @@ begin
   assert (result->>'active')::boolean;meeting_id:=(result->>'id')::uuid;
   again:=public.selection_room_api(c,'start_meeting',jsonb_build_object('selection_group_id',g1,'request_id',gen_random_uuid()));assert again=result,'Concurrent starts share one active meeting';
   assert not exists(select 1 from club_selection_private.selection_video_calls where club_id=c),'Starting a meeting cannot reserve a paid call';
-  ctx:=public.club_selections_api(c,'context');assert exists(select 1 from jsonb_array_elements(ctx->'selection_meetings') m where m->>'scope_id'=g1::text and (m->>'active')::boolean),'Board includes shared meeting status without a chat request';
+  ctx:=public.club_selections_api(c,'context');assert not ctx ? 'selection_meetings','Board no longer carries the retired meeting mode';
   rejected:=false;begin perform public.club_season_stats_api(c,'context');exception when sqlstate 'P0285' then rejected:=true;end;assert rejected,'Older clients cannot recalculate season evidence during a meeting';
+  result:=public.club_season_stats_api(c,'context','{"on_demand":true}');assert jsonb_typeof(result->'cards')='array','An old active meeting cannot block an explicit analysis request';
+  rejected:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":"true"}');exception when sqlstate 'P0285' then rejected:=true;end;assert rejected,'The request flag must be a JSON boolean';
+  perform set_config('request.jwt.claim.sub',outsider::text,true);
+  rejected:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then rejected:=sqlerrm='Current club membership is required';end;assert rejected,'The request flag never grants club access';
+  insert into public.club_memberships(club_id,user_id,role,permission_role) values(c,outsider,'player','none');
+  rejected:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then rejected:=sqlerrm='Current Teams selection or captain access is required';end;assert rejected,'Ordinary club membership does not grant analysis access';
+  perform set_config('request.jwt.claim.sub','',true);
+  rejected:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then rejected:=sqlerrm='Current club membership is required';end;assert rejected,'Anonymous on-demand requests remain denied';
   perform set_config('request.jwt.claim.sub',viewer::text,true);
   result:=public.selection_room_api(c,'meeting',jsonb_build_object('selection_group_id',g1));assert (result->>'active')::boolean and not (result->>'can_manage')::boolean,'Viewers see shared status without edit rights';
   result:=public.selection_room_api(c,'context',jsonb_build_object('selection_group_id',g1));assert not (result->>'can_post')::boolean,'View-only chat remains read-only';
@@ -47,7 +55,8 @@ begin
   perform set_config('request.jwt.claim.sub',head_id::text,true);
   result:=public.selection_room_api(c,'meeting',jsonb_build_object('selection_group_id',g2));assert not (result->>'active')::boolean,'Starting one group leaves another group unchanged';
   result:=public.selection_room_api(c,'end_meeting',jsonb_build_object('selection_group_id',g1,'meeting_id',meeting_id));assert not (result->>'active')::boolean;
-  result:=public.club_season_stats_api(c,'context');assert jsonb_typeof(result->'cards')='array','Ending the meeting permits an explicit analysis request';
+  result:=public.club_season_stats_api(c,'context','{"on_demand":true}');assert jsonb_typeof(result->'cards')='array','Explicit analysis does not depend on the legacy meeting state';
+  rejected:=false;begin perform public.club_season_stats_api(c,'context');exception when sqlstate 'P0285' then rejected:=true;end;assert rejected,'Background requests remain blocked after an old meeting ends';
   result:=public.selection_room_api(c,'start_meeting',jsonb_build_object('selection_group_id',g1,'request_id',request_id));assert not (result->>'active')::boolean,'A late retry cannot resurrect an ended meeting';
   result:=public.selection_room_api(c,'start_meeting',jsonb_build_object('selection_group_id',g1,'request_id',gen_random_uuid()));assert (result->>'active')::boolean;
   rejected:=false;begin perform public.selection_room_api(c,'end_meeting',jsonb_build_object('selection_group_id',g1,'meeting_id',meeting_id));exception when raise_exception then rejected:=true;end;assert rejected,'Stale end cannot end a newer meeting';

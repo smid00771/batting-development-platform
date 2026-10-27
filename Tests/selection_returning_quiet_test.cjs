@@ -37,11 +37,11 @@ test('returning names remain escaped and expandable without statistical work',as
  const h=await setup();t.after(()=>h.dom.window.close());h.f.person.name='<img src=x onerror=alert(1)>';h.c.seMountReturningPlayers();
  assert.equal(h.dom.window.document.querySelector('img'),null);assert.match(h.dom.window.document.querySelector('summary').textContent,/<img src=x/);assert.match(h.dom.window.document.querySelector('summary').getAttribute('aria-label'),/available again/);
 });
-test('delivered demo keeps reminders during a meeting and updates only after selecting or undoing',async t=>{
+test('delivered demo keeps reminders without a meeting button and updates only after selecting or undoing',async t=>{
  const {openDemo}=require('./helpers/demo_harness.cjs'),h=await openDemo('selections');t.after(h.close);h.window.scrollBy=()=>{};
  const calls=[],db=h.window.__fixtureDb,original=db.rpc;db.rpc=async function(name,args){calls.push({name,action:args?.p_action});return original.call(this,name,args);};
  const reminder=()=>h.document.querySelector('[data-se-returning]');assert.match(reminder().textContent,/Sam Ellison/);
- const entries=h.window.seReturningEntries();await h.click('#seMeeting');assert.match(h.document.getElementById('seMeeting').textContent,/End selection meeting/);assert.equal(h.window.seReturningEntries(),entries);
+ const entries=h.window.seReturningEntries();assert.equal(h.document.getElementById('seMeeting'),null);assert.equal(h.window.seReturningEntries(),entries);
  const card=h.document.querySelector('[data-se-team="selection-first"]');await h.click('[data-se-team="selection-first"] [data-se-slot="0"]');
  const input=h.document.getElementById('seSearch');input.value='Sam Ellison';input.dispatchEvent(new h.window.Event('input'));await h.settle();assert.equal(h.window.seReturningEntries(),entries);assert.equal(h.document.querySelector('[data-se-team="selection-first"]'),card);
  await h.click('[data-se-player="demo-returner"]');assert.equal(reminder(),null);assert.ok(calls.some(c=>c.name==='club_selections_api'&&c.action==='save_board'));

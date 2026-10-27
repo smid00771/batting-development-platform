@@ -64,7 +64,7 @@ function demoSeedCurrent({empty=false}={}){
  if(!empty){
   // Seed a useful previous week before a Socials Manager opens awards or stats.
   const upcoming=[...demoSelections.fixtures];
-  demoSeasonStats({p_club_id:club.id,p_action:'context',p_data:{}});demoSelections.fixtures=upcoming;
+  demoSeasonStats({p_club_id:club.id,p_action:'context',p_data:{on_demand:true}});demoSelections.fixtures=upcoming;
   demoSelections.result_sources||={};
   for(const card of Object.values(demoScorecards)){
    const original=upcoming.find(f=>f.details.grade===card.grade);if(!original)continue;

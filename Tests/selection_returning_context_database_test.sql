@@ -15,11 +15,11 @@ begin
  perform set_config('request.jwt.claim.sub',u::text,true);
  meta:=club_selection_private.selection_returning_context(c,jsonb_build_array(jsonb_build_object('id',f1)));
  assert meta->'no_play'=jsonb_build_array(f1),'No-play IDs stay within the already-authorised context';
- stats:=public.club_season_stats_api(c,'context');
+ stats:=public.club_season_stats_api(c,'context','{"on_demand":true}');
  assert meta#>>'{season,start}'=stats#>>'{season,start}' and meta#>>'{season,end}'=stats#>>'{season,end}','Default season matches the existing analysis window';
  insert into club_selection_private.season_stats_settings(club_id,starts,ends,updated_by) values(c,make_date(y-2,1,1),make_date(y-2,12,31),u);
  context:=public.club_selections_api(c,'context','{"review_snapshots":false}');
- stats:=public.club_season_stats_api(c,'context');meta:=context->'returning_context';
+ stats:=public.club_season_stats_api(c,'context','{"on_demand":true}');meta:=context->'returning_context';
  assert meta#>>'{season,start}'=stats#>>'{season,start}' and meta#>>'{season,end}'=stats#>>'{season,end}','Custom season rollover matches';
  assert meta#>>'{season,start}'=make_date(y,1,1)::text,'The saved season repeats annually';
  assert not meta ? 'cards' and not meta ? 'roster','Reminder metadata contains no scorecard analysis';

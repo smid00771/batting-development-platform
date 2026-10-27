@@ -9,11 +9,11 @@ for(const file of ['app.js','demo.html']){
   c.selectionAccess={key:'other:c',enabled:true,error:'Timed out'};assert.equal(c.selectionsEntryVisible(),false);
   c.selectionAccess={key:'u:c',enabled:true,error:''};assert.equal(c.selectionsEntryVisible(),true);
  });
- test(`${file}: all board analysis entry points and automatic polling are stopped`,()=>{
+ test(`${file}: automatic board analysis and polling remain stopped`,()=>{
   const s={statsOpen:true};let paused=0,cleared=0;const c=vm.createContext({ensureSelections:()=>s,selectionEvidence:{pause:()=>paused++},seNotice:()=>{},selectionRefreshTimer:7,clearInterval:id=>{assert.equal(id,7);cleared++;},setInterval:()=>assert.fail('Background timer must not start')});
-  vm.runInContext(['seToggleStats','seMountStats','seMountSelectionEvidence','seStartLiveRefresh'].map(n=>fn(source,n)).join('\n'),c);
-  c.seToggleStats();c.seMountStats();c.seMountSelectionEvidence();c.seStartLiveRefresh();assert.equal(s.statsOpen,false);assert.equal(paused,1);assert.equal(cleared,1);assert.equal(c.selectionRefreshTimer,null);
-  assert.match(source,/id="seSeasonStats" disabled/);assert.match(source,/id="seCalculateEvidence" disabled/);assert.doesNotMatch(fn(source,'seBoard'),/seClearUnavailableDrafts\(|seMountStats\(|seMountSelectionEvidence\(|clubWeek\.mount\(/);
+  vm.runInContext(['seToggleStats','seMountStats','seStartLiveRefresh'].map(n=>fn(source,n)).join('\n'),c);
+  c.seToggleStats();c.seMountStats();c.seStartLiveRefresh();assert.equal(s.statsOpen,false);assert.equal(paused,0);assert.equal(cleared,1);assert.equal(c.selectionRefreshTimer,null);
+  assert.match(source,/id="seSeasonStats" disabled/);assert.doesNotMatch(source,/id="seCalculateEvidence"/);assert.doesNotMatch(fn(source,'seBoard'),/seClearUnavailableDrafts\(|seMountStats\(|clubWeek\.mount\(/);
  });
  test(`${file}: reloading edited teams only requests authoritative board context`,async()=>{
   const previous={week:{plans:[]},signup_followup:{can_view:true,players:[]},socials:true,social_handover_count:2},s={key:'u:c',view:'board',data:previous,undo:[]};let contexts=0;
