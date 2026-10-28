@@ -182,3 +182,20 @@ test('older award clients receive no unsupported typography or glow fields',asyn
  const fields=good.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties;assert.equal(fields.title_font,undefined);assert.equal(fields.show_margin,undefined);assert.ok(!fields.badge_style.enum.includes('glow'));assert.equal(fields.row_gap.maximum,55);
  for(const changes of [{title_font:'condensed'},{badge_style:'glow'},{row_gap:80}]){const bad=setup({output:{changes,badges:[]}});assert.equal((await refineAward(body,bad.options)).status,502);}
 });
+
+test('reference matching reselects every type role and retains a complete lettering pair through initial setup',async()=>{
+ const changes={result_labels:'won_lost',title_font:'condensed',week_font:'sans',grade_font:'condensed',score_font:'condensed',player_font:'sans',badge_font:'script',margin_font:'condensed'};
+ const badges=[{label:'WON',x:.4,y:.3,width:.17,height:.06},{label:'LOST',x:.4,y:.8,width:.17,height:.06}];
+ for(const example_setup of [undefined,true]){
+  const body={...request(),match_reference:true,...(example_setup?{example_setup}:{}),current:visualSettings(awardLayout('results',{font:'classic'}))};
+  const good=setup({output:{changes,badges,artwork_brief:null}}),result=await refineAward(body,good.options);
+  assert.equal(result.status,200);assert.deepEqual(result.body.badges,badges);assert.equal(result.body.reference_lettering,true);
+  const fields=good.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties;
+  for(const role of ['title','week','grade','score','player','badge','margin']){assert.equal(fields[role+'_font'].type,'string');assert.ok(!fields[role+'_font'].enum.includes('inherit'));}
+  const next=refinedAwardLayout(awardLayout('results',{example_path:example}),result.body,'results');assert.equal(next.badge_cutout,true);assert.deepEqual(next.badge_crops,badges);
+  for(const value of [null,'inherit',undefined]){const bad=setup({output:{changes:{...changes,player_font:value},badges}});assert.equal((await refineAward(body,bad.options)).status,502);}
+ }
+ const partial=setup({output:{changes,badges:badges.slice(0,1)}}),result=await refineAward({...request(),match_reference:true},partial.options);
+ assert.equal(result.status,200);assert.deepEqual(result.body.badges,[]);assert.equal(result.body.reference_lettering,undefined);
+ const legacy=request();delete legacy.current.title_font;const denied=setup();assert.equal((await refineAward({...legacy,match_reference:true},denied.options)).status,400);assert.equal(denied.calls.length,0,'Unsupported clients are rejected before spending an allowance');
+});

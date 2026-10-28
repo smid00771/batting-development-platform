@@ -3743,7 +3743,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.290.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.291.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -8399,6 +8399,68 @@ return {assistantCSS,labelSuggestions,proposalMessage,assistantSuggestions,assis
 })();
 
 const __demoModule29=(()=>{
+// Shared geometry for preview and export. No model call or saved-style mutation.
+const clamp=(v,min,max)=>Math.max(min,Math.min(v,max));
+function resultsLayoutPlan(d,height,count,shared,headerBottom){
+ count=Math.max(1,count);
+ const bottom=height*d.rows_bottom/100,minRow=180,headerEnd=headerBottom+(shared?60:36);
+ const maxTop=bottom-count*minRow-12*(count-1);
+ const requested=shared?height*d.rows_top/100:Number.isFinite(d.mixed_rows_top)?height*d.mixed_rows_top/100:headerEnd;
+ const top=clamp(requested,headerEnd,Math.max(headerEnd,maxTop));
+ const gap=count===1?0:clamp(d.row_gap,12,Math.max(12,(bottom-top-count*minRow)/(count-1)));
+ const rowHeight=(bottom-top-gap*(count-1))/count;
+ if(rowHeight<174)throw Error('This background is too short for these results. Use a taller background or fewer grades.');
+ let header=null;
+ if(shared){
+  const room=top-20-(headerBottom+8),size=Math.min(1080*d.logo_size/100,height*.11,Math.max(24,room)),gap=Math.max(50,size*.6),width=size*2+gap;
+  const y=clamp((height-size)*d.logo_y/100+size/2,headerBottom+8+size/2,top-20-size/2);
+  header={size,gap,x:(1080-width)*d.logo_x/100+width/2,y};
+ }
+ return {top,bottom,gap,rowHeight,header,columns:{left:d.row_inset+28,leftFigures:434,centre:540,centreWidth:180,rightNames:650,right:1080-d.row_inset-28}};
+}
+function resultsRowPlan(d,rowHeight,shared,marginHeight,badgeHeight){
+ const gradeBottom=34,pad=6,bottom=rowHeight-12;
+ const marginTop=marginHeight?Math.min(Math.max(gradeBottom+48,rowHeight*d.margin_y/100-marginHeight/2),bottom-marginHeight):bottom;
+ const room=marginTop-gradeBottom-pad*(shared?2:3);
+ const logoSize=shared?0:Math.min(d.layout_mode==='template'?d.row_logo_size:44,rowHeight*.20,Math.max(18,room-Math.min(badgeHeight,room*.65)));
+ const height=Math.min(badgeHeight,Math.max(20,room-logoSize));
+ const logoY=shared?0:clamp(rowHeight*(d.layout_mode==='template'?d.row_logo_y:30)/100,gradeBottom+pad+logoSize/2,marginTop-height-pad*2-logoSize/2);
+ const contentTop=shared?gradeBottom+pad:logoY+logoSize/2+pad;
+ const badgeY=clamp(rowHeight*d.badge_y/100,contentTop+height/2,marginTop-pad-height/2);
+ const scoreY=Math.max(gradeBottom+d.score_size*.6+8,Math.min(rowHeight*(d.layout_mode==='template'?d.score_y:25)/100,72));
+ const playerTop=Math.max(scoreY+d.score_size*.6+18,Math.min(rowHeight*d.player_top/100,rowHeight-76));
+ const line=Math.min(42,Math.max(24,(rowHeight-playerTop-20)/2));
+ return {logoSize,logoY,badgeY,badgeHeight:height,marginTop,scoreY,playerTop,line};
+}
+return {resultsLayoutPlan,resultsRowPlan};
+})();
+
+const __demoModule30=(()=>{
+// Reuse the supplied lettering, removing its local panel colour. Never OCR or
+// regenerate words here: both labelled crops must already pass the shared contract.
+const cache=new WeakMap(),median=values=>values.sort((a,b)=>a-b)[Math.floor(values.length/2)];
+function referenceBadge(image,crop,makeCanvas){
+ let saved=cache.get(image);if(!saved){saved=new Map();cache.set(image,saved);}
+ const key=JSON.stringify(crop);if(saved.has(key))return saved.get(key);
+ const iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height,sw=iw*crop.width,sh=ih*crop.height,scale=Math.min(1,1024/sw,512/sh);
+ const canvas=makeCanvas();canvas.width=Math.max(1,Math.round(sw*scale));canvas.height=Math.max(1,Math.round(sh*scale));
+ const ctx=canvas.getContext('2d');ctx.drawImage(image,iw*crop.x,ih*crop.y,sw,sh,0,0,canvas.width,canvas.height);
+ const pixels=ctx.getImageData(0,0,canvas.width,canvas.height),{data,width,height}=pixels,n=Math.max(1,Math.min(4,Math.floor(Math.min(width,height)/6)));
+ const corner=(right,bottom)=>[0,1,2].map(channel=>{const values=[];for(let y=0;y<n;y++)for(let x=0;x<n;x++)values.push(data[((bottom?height-1-y:y)*width+(right?width-1-x:x))*4+channel]);return median(values);});
+ const tl=corner(false,false),tr=corner(true,false),bl=corner(false,true),br=corner(true,true);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  const i=(y*width+x)*4,fx=x/Math.max(1,width-1),fy=y/Math.max(1,height-1),bg=tl.map((v,c)=>(v*(1-fx)+tr[c]*fx)*(1-fy)+(bl[c]*(1-fx)+br[c]*fx)*fy);
+  let alpha=0;for(let c=0;c<3;c++){const delta=data[i+c]-bg[c];alpha=Math.max(alpha,delta>=0?delta/Math.max(1,255-bg[c]):-delta/Math.max(1,bg[c]));}
+  if(alpha<.12){data[i+3]=0;continue;}
+  for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,(data[i+c]-bg[c]*(1-alpha))/alpha));
+  data[i+3]=Math.round(data[i+3]*alpha);
+ }
+ ctx.putImageData(pixels,0,0);saved.set(key,canvas);return canvas;
+}
+return {referenceBadge};
+})();
+
+const __demoModule31=(()=>{
 // Shared renderer/AI contract. This contains visual settings only, never match data.
 const AWARD_TEMPLATE_FIELDS={
  ...Object.fromEntries(['title','week','grade','score','player','badge','margin'].map(role=>[role+'_font',['inherit','sporting','modern','classic','condensed','sans','script']])),
@@ -8467,13 +8529,14 @@ function safeAwardStyle(saved={}){
 function refinedAwardLayout(current,result,kind){
  const patch=visualPatch(result?.changes),crops=badgeCrops(result?.badges||[]),next={...structuredClone(current),...patch};
  if(kind==='results'&&next.rows_bottom-next.rows_top<40)throw Error('The suggested layout leaves too little room for the results. Ask for a smaller change.');
- if(patch.badge_style||patch.result_labels||patch.font||patch.badge_font){delete next.badge_crops;delete next.badge_source;}
+ if(patch.badge_style||patch.result_labels||patch.font||patch.badge_font){delete next.badge_crops;delete next.badge_source;delete next.badge_cutout;}
  if(crops.length){
   if(kind!=='results'||!current.example_path||result.example_path!==current.example_path)throw Error('The previous example changed. Try the edit again.');
   next.badge_crops=crops;next.badge_source=current.example_path;
   // Never combine a cropped word with generated lettering, reuse old words,
   // or override an explicitly requested font with text baked into an image.
-  if(patch.font||patch.badge_font||!matchingResultBadgeCrops(next).length){delete next.badge_crops;delete next.badge_source;}
+  if((patch.font||patch.badge_font)&&result.reference_lettering!==true||!matchingResultBadgeCrops(next).length){delete next.badge_crops;delete next.badge_source;delete next.badge_cutout;}
+  else if(result.reference_lettering===true)next.badge_cutout=true;
  }
  return next;
 }
@@ -8486,23 +8549,25 @@ const awardStyleInstructions=`You are the design assistant inside a club's socia
 The canvas uses a 1080px-wide design coordinate system. *_y values are percentages from the top; logo_x is percentage across. rows_top/rows_bottom bound the grade panels. Font sporting is condensed sports lettering; modern is Arial; classic is Georgia. row_gap and row_inset are pixels. row_opacity is 40–100%. grade_colour colours the grade heading. score_colour and player_colour control the factual text. badge_style has plain lettering, irregular brush background, angled ribbon, outline stamp or circle. badge_angle is degrees, badge_width pixels, badge_size text size and badge_y percentage down each grade panel. Keep badges in the central gap, clear of names and figures. Do not choose pale text on pale panels; maintain readable contrast. Keep four grade panels readable on a phone. Do not push names off-canvas or cover scores. Do not change includes_title: a heading embedded in the background requires an artwork edit.
 For Results, result_labels is a SINGLE PAIRED DISPLAY SETTING for every row: won_lost = WON for wins and LOST for defeats; win_loss = WIN / LOSS; win_def = WIN / DEF. Changing DEF to LOST and WIN to WON means result_labels: "won_lost". This does not change which team won. Always apply a requested pair together, using the same result font, weight, size and badge treatment. Never send editable result wording to the image editor or paint these variable words into a background. A wording-only request must leave positions, spacing, sizes, colours, grade labels, week label and background unchanged, and return artwork_brief: null. To make both result words use the current graphic font, return font equal to current_settings.font; that removes cropped lettering for BOTH outcomes.
 When asked to match the previous example, match its legible result wording using result_labels, and its supported font/style, without copying its match outcomes. Do not alter the user's slider positions unless the request asks for spacing or layout changes.
-Exact reusable badge crops are allowed only when explicitly requested and a COMPLETE MATCHING PAIR is clearly readable in the previous example. Return tight normalized rectangles (x,y,width,height,0–1) around the two result words and decoration, excluding every name, score, logo and grade. Use the exact printed word as label: WIN or WON for a win, DEF, LOSS or LOST for a defeat. Both labels must match the selected result_labels pair. Never crop the current preview. Return an empty badges array when either member is missing, lettering is unclear, the user asks for different words or a consistent generated font, or no extraction was requested. Then generate BOTH words in the same graphic font; never mix one crop with one generated word. Explain any limitation honestly. Draw, tie and no-result labels always come from imported facts.
+Exact reusable badge crops are allowed when explicitly requested (including REFERENCE MATCH mode) and a COMPLETE MATCHING PAIR is clearly readable in the previous example. Return tight normalized rectangles (x,y,width,height,0–1) around the two result words and decoration, excluding every name, score, logo and grade. Use the exact printed word as label: WIN or WON for a win, DEF, LOSS or LOST for a defeat. Both labels must match the selected result_labels pair. Never crop the current preview. Return an empty badges array when either member is missing, lettering is unclear, the user asks for different words or a consistent generated font, or no extraction was requested. Then generate BOTH words in the same graphic font; never mix one crop with one generated word. Explain any limitation honestly. Draw, tie and no-result labels always come from imported facts.
 For requests needing new photographic/illustrated artwork, background alterations, a baked-in title move or sponsor art changes, return a precise artwork_brief for our existing in-app image editor. It should preserve unrequested artwork and remove variable scores, player figures and result labels from reusable background art. Do not pretend those pixels have changed through layout settings. The user stays inside this product to prepare and review that artwork. Keep explanation short, practical and truthful about the proposed changes and any limitation. Return only the schema. Use Australian English.`;
 
-const awardExampleInstructions=`This request is INITIAL EXAMPLE SETUP, as part of preparing the club's reusable background. Match the PREVIOUS EXAMPLE's legible result wording, closest supported font, colours, panel treatment, text sizes and positions in changes. This initial setup explicitly permits layout changes. Fit the CURRENT PREVIEW's number of rows and actual content safely; do not copy an old example's number of grades, scores, names, dates or opponents. The app automatically chooses shared header logos only when all current opponents are the same; never imitate an obsolete shared opponent header. The background is being prepared separately. Return artwork_brief:null, graphic_label:null, grade_labels:[] and badges:[]; render all variable text consistently in the closest supported font. If the exact typeface or another detail is unsupported, say so briefly instead of claiming an exact copy. Preserve settings whose visual treatment is unclear in the example.`;
+const awardExampleInstructions=`This request is INITIAL EXAMPLE SETUP, as part of preparing the club's reusable background. Match the PREVIOUS EXAMPLE's legible result wording, closest supported font, colours, panel treatment, text sizes and positions in changes. This initial setup explicitly permits layout changes. Fit the CURRENT PREVIEW's number of rows and actual content safely; do not copy an old example's number of grades, scores, names, dates or opponents. The app automatically chooses shared header logos only when all current opponents are the same; never imitate an obsolete shared opponent header. The background is being prepared separately. Return artwork_brief:null, graphic_label:null and grade_labels:[]. Unless REFERENCE MATCH mode is enabled, return badges:[]; render variable text consistently in the closest supported font. If the exact typeface or another detail is unsupported, say so briefly instead of claiming an exact copy. Preserve settings whose visual treatment is unclear in the example.`;
 
 const awardTemplateInstructions=`The client supports SEPARATE TYPOGRAPHY FOR EACH ELEMENT. Inspect FONT SAMPLES when provided and choose the closest demonstrated face independently for title_font, grade_font, score_font, player_font, badge_font and margin_font. condensed = Anton, a heavy narrow sans suitable for large sports headings; sporting = Barlow Condensed Bold; sans = Barlow SemiBold, a clean readable player face; script = Kaushan Script, brush lettering; classic = Georgia with visible serifs. Never use classic for condensed sans or brush lettering. A reference can have condensed headings, sans player names and script outcome words simultaneously. inherit follows the legacy font. Changing font alone changes the overall default; for a request to change all lettering, explicitly update each role font too.
 For script WON/LOST with a coloured halo, use badge_font:script, badge_style:glow, badge_text_colour for the letter fill, win_colour/loss_colour for the halo. Brush STYLE alone is a painted shape, not a script font. Keep both outcome words consistent. Use title_case:title for Results, upper for RESULTS; grade_case:preserve retains the source grade's casing. grade_width adjusts its banner. row_opacity is the panel fill opacity. The rows may have generous row_gap up to 90 px.
 show_margin renders the true BY … RUNS/WICKETS line below the outcome from imported match data. margin_font, margin_size, margin_colour and margin_y style it; never put a number, sample result, margin text or opponent name in changes. For 'add what is below WON/LOST', 'how much we won/lost by', or 'by 20 runs or whatever', set show_margin:true and match the reference's margin styling, preserving all other geometry unless requested. The application's parser supplies each match's actual margin. A missing margin is not permission to copy the example's number or infer a winner. Return artwork_brief:null for margin, font and wording edits.
 score_y, player_top, row_logo_y, badge_y and margin_y are percentages down each grade panel. Keep central result and margin separate, with compact current-opponent logos above them when opponents differ. Header logos are automatic only when all opponents match. Logo size is row_logo_size px. Keep names in the side columns with clear space below scores. Use layout_mode:template when matching a reference composition; legacy preserves earlier fixed row positions. Match visual hierarchy, case, contrast and proportions instead of flattening all text into one typeface. Preserve a background title when title_in_background:true; a new generated title requires the existing artwork editor.
-Before returning, check that every requested element has a supported setting and that the proposed margin, badge and logos fit without overlap. For a reference-matching request, explicitly consider all font roles, not just font. For four rows with different opponents, reserve about 38 px for the grade bar, then place small row logos below it (often 30–40 px wide at row_logo_y around 30), the outcome below those (badge_y around 62), and its margin near 88. Judge actual available room from the rendered preview; never overlap logos and the grade bar. Do not claim a perfect replica; name any unsupported detail concisely.`;
+Before returning, check that every requested element has a supported setting and that the proposed margin, badge and logos fit without overlap. For a reference-matching request, explicitly consider all font roles, not just font. Reference lettering takes priority over the script font approximation when a complete matching crop pair is available. For four rows with different opponents, reserve about 38 px for the grade bar, then place small row logos below it (often 30–40 px wide at row_logo_y around 30), the outcome below those (badge_y around 62), and its margin near 88. Judge actual available room from the rendered preview; never overlap logos and the grade bar. Do not claim a perfect replica; name any unsupported detail concisely.`;
 return {AWARD_TEMPLATE_FIELDS,AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,RESULT_LABELS,resultLabel,matchingResultBadgeCrops,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions,awardExampleInstructions,awardTemplateInstructions};
 })();
 
 const __demoModule28=(()=>{
+const {resultsLayoutPlan,resultsRowPlan}=__demoModule29;
+const {referenceBadge}=__demoModule30;
 const {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady}=__demoModule24;
 const {graphicGrade,checkGraphicLabel}=__demoModule26;
-const {safeAwardStyle,resultLabel,matchingResultBadgeCrops}=__demoModule29;
+const {safeAwardStyle,resultLabel,matchingResultBadgeCrops}=__demoModule31;
 const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
  {key:'player_week',label:'Player of the Week',description:'Choose and recognise one player.'},
@@ -8567,7 +8632,13 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  await h.fontReady();await awardFontsReady(layout);canvas.width=bg?(bg.naturalWidth||bg.width):1080;canvas.height=bg?(bg.naturalHeight||bg.height):1350;
  const ctx=canvas.getContext('2d');canvas.graphicLabelWarnings=[];if(bg)ctx.drawImage(bg,0,0);else{const g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);g.addColorStop(0,s.design?.primary||'#073554');g.addColorStop(1,s.design?.accent||'#128fd2');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);}
  const scale=canvas.width/1080,height=canvas.height/scale;ctx.scale(scale,scale);ctx.socialFont=AWARD_FONTS[layout.font];ctx.textAlign='center';ctx.textBaseline='middle';
- const text=(value,x,y,width,size,colour=layout.text_colour,role='player')=>{const font=awardFont(layout,role);ctx.socialFont=AWARD_FONTS[font];ctx.fillStyle=colour;h.text(ctx,String(value),x,y,width,size,AWARD_FONT_WEIGHTS[font]||'700');};
+ const text=(value,x,y,width,size,colour=layout.text_colour,role='player')=>{
+  value=String(value);const font=awardFont(layout,role),weight=AWARD_FONT_WEIGHTS[font]||'700';ctx.socialFont=AWARD_FONTS[font];ctx.fillStyle=colour;
+  // Include italic/script overhang, not just the advance width. This protects
+  // neighbouring columns without cutting the final letter off at the clip edge.
+  while(size>18){ctx.font=`${weight} ${size}px ${ctx.socialFont}`;const m=ctx.measureText(value),ink=ctx.textAlign==='center'?2*Math.max(m.actualBoundingBoxLeft,m.actualBoundingBoxRight,m.width/2):Math.max(m.width,m.actualBoundingBoxLeft+m.actualBoundingBoxRight);if(ink<=width-4)break;size--;}
+  h.text(ctx,value,x,y,width-4,size,weight);
+ };
  const title=value=>layout.title_case==='title'?value.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()):value.toUpperCase();
  const image=(img,x,y,size,maxHeight=.7)=>{if(!img)return;const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(1080*size/100/iw,height*maxHeight/ih),w=iw*fit,ht=ih*fit;ctx.drawImage(img,(1080-w)*x/100,(height-ht)*y/100,w,ht);};
  if(kind!=='results'){
@@ -8587,16 +8658,23 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
   const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/iw,size/ih);ctx.drawImage(img,cx-iw*fit/2,y-ih*fit/2,iw*fit,ih*fit);};
   badge(logo,summary.ourName,x-(size+gap)/2);text('VS',x,y,gap-8,Math.min(60,size*.5),colour);badge(opponent,summary.opposition,x+(size+gap)/2);
  };
- if(sharedOpponent){
-  let size=Math.min(1080*layout.logo_size/100,height*.11),y=(height-size)*layout.logo_y/100+size/2;
-  if(layout.layout_mode==='template'){
-   const top=Math.max(height*layout.week_y/100+layout.week_size*.65,!layout.includes_title?height*layout.title_y/100+layout.title_size*.6:0)+8,bottom=height*layout.rows_top/100-20;
-   size=Math.min(size,Math.max(24,bottom-top));y=Math.max(top+size/2,Math.min(y,bottom-size/2));
-  }
-  const gap=Math.max(50,size*.6),width=size*2+gap;
-  logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),(1080-width)*layout.logo_x/100+width/2,y,size,gap,layout.text_colour);
- }
- const top=height*layout.rows_top/100,bottom=height*layout.rows_bottom/100,gap=layout.row_gap,rowHeight=(bottom-top-gap*(Math.max(items.length,1)-1))/Math.max(items.length,1),inset=layout.row_inset;
+ const headerBottom=Math.max(height*layout.week_y/100+layout.week_size*.7,height*layout.title_y/100+layout.title_size*.6);
+ const plan=resultsLayoutPlan(layout,height,items.length,sharedOpponent,headerBottom),{top,bottom,gap,rowHeight,columns}=plan,inset=layout.row_inset;
+ canvas.resultsLayout={...plan,sharedOpponent};
+ if(plan.header){const {x,y,size,gap}=plan.header;logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),x,y,size,gap,layout.text_colour);}
+ const measure=(value,role,size)=>{const font=awardFont(layout,role);ctx.save();ctx.textAlign='left';ctx.font=`${AWARD_FONT_WEIGHTS[font]||'700'} ${size}px ${AWARD_FONTS[font]}`;const m=ctx.measureText(value);ctx.restore();return m;};
+ const marginLines=value=>{
+  let size=Math.min(layout.margin_size,34),lines=[];
+  if(!value)return {lines,size};
+  do{
+   lines=[];let line='';
+   for(const word of value.split(' ')){const next=line?line+' '+word:word;if(line&&measure(next,'margin',size).width>columns.centreWidth-4){lines.push(line);line=word;}else line=next;}
+   if(line)lines.push(line);if(lines.length<=2)break;
+  }while(--size>=18);
+  return {lines:lines.length<=2?lines:[value],size:Math.max(18,size)};
+ };
+ const band=(x,width,y,fn)=>{ctx.save();ctx.beginPath();ctx.rect(x,y,width,rowHeight);ctx.clip();fn();ctx.restore();};
+
  for(let n=0;n<items.length;n++){
   const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap),outcome=r.outcome;
   ctx.fillStyle=layout.panel_colour;ctx.globalAlpha=layout.row_opacity/100;
@@ -8605,27 +8683,40 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
   if(layout.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12);ctx.lineTo(790,y-12);ctx.lineTo(774,y+11);ctx.lineTo(790,y+33);ctx.lineTo(290,y+33);ctx.lineTo(306,y+11);ctx.closePath();ctx.fill();}
   else if(layout.grade_style==='bar')ctx.fillRect(540-layout.grade_width/2,y-12,layout.grade_width,45);
   const sourceGrade=graphicGrade(item.grade,layout),grade=layout.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${layout.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:layout.grade_width-25,size:layout.grade_size,grade:true});text(grade,540,y+10,layout.grade_width-25,layout.grade_size,layout.grade_style==='text'?(layout.grade_colour||layout.score_colour):layout.grade_text_colour,'grade');
-  const template=layout.layout_mode==='template',scoreY=template?rowHeight*layout.score_y/100:56;
-  text(r.ourScore,225,y+scoreY,360,layout.score_size,layout.score_colour,'score');text(r.theirScore,855,y+scoreY,360,layout.score_size,layout.score_colour,'score');
-  const playerTop=template?rowHeight*layout.player_top/100:95,line=template?Math.min(42,(rowHeight-playerTop-18)/2):Math.min(42,(rowHeight-92)/3),font=Math.min(layout.player_size,Math.max(19,line*.8)),left=inset+28,right=1080-inset-27;
-  for(let j=0;j<3;j++){
-   const bat=r.batting[j],bowl=r.bowling[j];ctx.textAlign='left';
-   if(bat)text(bat.name,left,y+playerTop+j*line,402-left,font,layout.player_colour);if(bowl)text(bowl.name,678,y+playerTop+j*line,right-749,font,layout.player_colour);
-   ctx.textAlign='right';if(bat)text(`${bat.runs}${bat.not_out?'*':''}`,458,y+playerTop+j*line,70,font,layout.player_colour);if(bowl)text(`${bowl.wickets}/${bowl.runs}`,right,y+playerTop+j*line,100,font,layout.player_colour);ctx.textAlign='center';
-  }
-  if(!sharedOpponent){const size=Math.max(12,Math.min(template?layout.row_logo_size:72,rowHeight*.3));logoPair(images.opponents?.[item.key],r,552,template?y+rowHeight*layout.row_logo_y/100:y+38+size/2,size,30,layout.player_colour);}
-  drawResultBadge(ctx,text,{outcome,label:resultLabel(outcome,layout),x:552,y:y+rowHeight*layout.badge_y/100,maxHeight:Math.min(100,rowHeight*.4),layout,example:images.example});
-  if(layout.show_margin&&r.margin)text(r.margin,552,y+rowHeight*layout.margin_y/100,220,layout.margin_size,layout.margin_colour,'margin');
-  else if(!sharedOpponent)text(r.opposition,552,y+rowHeight*.87,195,18,layout.player_colour);
+  const margin=layout.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin),marginHeight=lines.length*marginSize*1.15;
+  const badgeLabel=resultLabel(outcome,layout),crop=images.example&&matchingResultBadgeCrops(layout).find(c=>c.label===badgeLabel);
+  let badgeImage;
+  if(crop&&layout.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
+  const m=measure(badgeLabel,'badge',layout.badge_size),badgeHeight=crop?Math.min(100,180*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(layout.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,layout.badge_size*1.45);
+  const row=resultsRowPlan(layout,rowHeight,sharedOpponent,marginHeight,badgeHeight),font=Math.min(layout.player_size,row.line*.8),left=columns.left,right=columns.right;
+  band(left,columns.leftFigures-left,y,()=>{
+   text(r.ourScore,(left+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,layout.score_size,layout.score_colour,'score');
+   const figureWidth=Math.max(54,...r.batting.map(p=>Math.min(96,measure(`${p.runs}${p.not_out?'*':''}`,'player',font).width+8)));
+   for(let j=0;j<r.batting.length;j++){const bat=r.batting[j];ctx.textAlign='left';text(bat.name,left,y+row.playerTop+j*row.line,columns.leftFigures-figureWidth-16-left,font,layout.player_colour);ctx.textAlign='right';text(`${bat.runs}${bat.not_out?'*':''}`,columns.leftFigures,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+  });
+  band(columns.rightNames,right-columns.rightNames,y,()=>{
+   ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right)/2,y+row.scoreY,right-columns.rightNames,layout.score_size,layout.score_colour,'score');
+   const figureWidth=Math.max(70,...r.bowling.map(p=>Math.min(112,measure(`${p.wickets}/${p.runs}`,'player',font).width+8)));
+   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];ctx.textAlign='left';text(bowl.name,columns.rightNames,y+row.playerTop+j*row.line,right-figureWidth-16-columns.rightNames,font,layout.player_colour);ctx.textAlign='right';text(`${bowl.wickets}/${bowl.runs}`,right,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+  });
+  ctx.textAlign='center';
+  band(columns.centre-100,200,y,()=>{
+   if(!sharedOpponent)logoPair(images.opponents?.[item.key],r,columns.centre,y+row.logoY,row.logoSize,30,layout.player_colour);
+   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout,example:images.example,badgeImage});
+   if(lines.length)lines.forEach((line,i)=>text(line,columns.centre,y+row.marginTop+marginSize*.6+i*marginSize*1.15,columns.centreWidth,marginSize,layout.margin_colour,'margin'));
+   else if(!sharedOpponent&&!layout.show_margin)text(r.opposition,columns.centre,y+rowHeight*.91,columns.centreWidth,18,layout.player_colour);
+  });
+
  }
 }
 
 // The label is always computed from the imported outcome, never from a design request.
-function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,example}){
+function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,example,badgeImage}){
  const crop=example&&d.badge_source===d.example_path&&matchingResultBadgeCrops(d).find(c=>c.label===label),colour=outcome==='WIN'?d.win_colour:outcome==='LOSS'?d.loss_colour:d.score_colour;
+ if(badgeImage){const fit=Math.min(d.badge_width/badgeImage.width,maxHeight/badgeImage.height);ctx.drawImage(badgeImage,x-badgeImage.width*fit/2,y-badgeImage.height*fit/2,badgeImage.width*fit,badgeImage.height*fit);return;}
  if(crop){const iw=example.naturalWidth||example.width,ih=example.naturalHeight||example.height,sw=iw*crop.width,sh=ih*crop.height,fit=Math.min(d.badge_width/sw,maxHeight/sh);ctx.drawImage(example,iw*crop.x,ih*crop.y,sw,sh,x-sw*fit/2,y-sh*fit/2,sw*fit,sh*fit);return;}
  const badgeText=(value,tx,ty,width,size,colour)=>text(value,tx,ty,width,size,colour,'badge');
- const size=label.length>4?Math.min(26,d.badge_size):d.badge_size;
+ const size=label.length>4?Math.min(26,d.badge_size):Math.min(d.badge_size,maxHeight*1.1);
  if(d.badge_style==='glow'&&['WIN','LOSS'].includes(outcome)){ctx.save();ctx.shadowColor=colour;ctx.shadowBlur=Math.min(28,size*.45);ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;badgeText(label,x,y,d.badge_width,size,d.badge_text_colour);badgeText(label,x,y,d.badge_width,size,d.badge_text_colour);ctx.restore();return;}
  if(!['WIN','LOSS'].includes(outcome)||(d.badge_style==='plain'&&!d.badge_angle)){badgeText(label,x,y,d.badge_width,size,colour);return;}
  ctx.save();ctx.translate(x,y);const angle=d.badge_angle*Math.PI/180,w=d.badge_width,ht=Math.min(maxHeight,Math.max(54,size*1.45)),fit=Math.min(1,178/(Math.abs(Math.cos(angle))*w+Math.abs(Math.sin(angle))*ht));ctx.rotate(angle);ctx.scale(fit,fit);ctx.fillStyle=colour;ctx.strokeStyle=colour;ctx.lineWidth=4;
@@ -8644,7 +8735,7 @@ const {scopedAwardLabel}=__demoModule22;
 const {withGradeLabels,graphicLabel}=__demoModule26;
 const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule27;
 const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule28;
-const {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops}=__demoModule29;
+const {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops}=__demoModule31;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
 
@@ -8750,7 +8841,8 @@ function createSocialAwards(h){
   throw Error('This preview is too detailed to send. Try a smaller background.');
  }
  async function requestStyle(body){
-  body={...body,font_samples:await previewData(await awardFontSpecimen())};
+  const samples=await previewData(await awardFontSpecimen());
+  if(JSON.stringify({...body,font_samples:samples}).length<=2880000)body={...body,font_samples:samples};
   const response=await h.supabase.functions.invoke('club-social-style',{body});
   if(response.error||response.data?.error){let detail=response.data?.error;try{detail||=(await response.error?.context?.json())?.error;}catch{}throw Error(detail||'The change could not be prepared. Try again later.');}
   return response.data;
@@ -8760,7 +8852,7 @@ function createSocialAwards(h){
   const next=refinedAwardLayout(before,result,kind),canvas=document.createElement('canvas');
   await draw(s,canvas,kind,previewItems(state(s),kind).slice(0,4),next);
   if(!current())return result;
-  const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,brief:'Compare this rendered proposal with our previous example and correct remaining supported design mismatches. Original request: '+body.brief};
+  const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,using_reference_lettering:next.badge_cutout===true,brief:'Compare this rendered proposal with our previous example. Correct only the elements requested; preserve everything else. Original request: '+body.brief};
   delete reviewBody.example_setup;
   reviewBody.brief=reviewBody.brief.slice(0,1500);
   let review;
@@ -8768,19 +8860,23 @@ function createSocialAwards(h){
    return {...result,explanation:String(result.explanation||'Template prepared.')+' The comparison check could not finish. Please compare the preview with your example before applying.'};
   }
   if(!current())return result;
-  return {...result,changes:{...visualPatch(result.changes),...visualPatch(review.changes)},badges:[],explanation:review.explanation||result.explanation};
+  return {...result,changes:{...visualPatch(result.changes),...visualPatch(review.changes)},badges:result.badges||[],explanation:review.explanation||result.explanation};
  }
  async function tryRefinement(s,kind,prepareBackground,matchExample=false){
   const w=state(s),r=refinement(w,kind),canvas=el('saCanvas');if(w.busy||w.pending||r.saveUncertain||!w.previewReady||!canvas||!r.brief.trim()||!previewItems(w,kind).length)return;
+  matchExample||=!!layout(w,kind).example_path&&/font|lettering|typograph/i.test(r.brief)&&/example|reference/i.test(r.brief)&&/same|match|copy|use|like/i.test(r.brief);
   const before=structuredClone(layout(w,kind)),beforeLabel=w.title,end=w.end,revision=w.context.designs[kind]?.revision||0,dirty=!!w.designDirty[kind],candidate=r.candidate,signature=()=>JSON.stringify(previewItems(w,kind).map(x=>[x.key,x.signature])),sources=signature();
+  const mixed=kind==='results'&&canvas.resultsLayout?.sharedOpponent===false,currentVisual=visualSettings(before);
+  if(mixed)currentVisual.rows_top=Math.max(15,Math.min(65,Math.round(canvas.resultsLayout.top/(canvas.height/canvas.width*1080)*100)));
   let artwork='';r.message='Preparing proposed changes…';
   await run(s,async()=>{try{
-   const preview=await previewData(canvas),scope=h.scopeRequest?await h.scopeRequest(s,kind):{},body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],preview_grades:[...new Set(previewItems(w,kind).map(x=>x.grade))],grade_labels:before.grade_labels||[],graphic_label:beforeLabel||null,brief:r.brief.trim(),current:visualSettings(before),title_in_background:!!before.includes_title,preview};
+   const preview=await previewData(canvas),scope=h.scopeRequest?await h.scopeRequest(s,kind):{},body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,...(matchExample?{match_reference:true}:{}),include_provisional:!!w.includeDay1?.[kind],preview_grades:[...new Set(previewItems(w,kind).map(x=>x.grade))],grade_labels:before.grade_labels||[],graphic_label:beforeLabel||null,brief:r.brief.trim(),current:currentVisual,title_in_background:!!before.includes_title,preview};
    let result=await requestStyle(body);
    if(matchExample)result=await compareTemplate(s,kind,before,body,result,()=>here(s,w)&&s.view===kind&&w.end===end&&revision===(w.context.designs[kind]?.revision||0)&&sources===signature()&&sameLayout(before,layout(w,kind)));
    if(!here(s,w)||s.view!==kind||w.end!==end)return;
    if(revision!==(w.context.designs[kind]?.revision||0)||sources!==signature()||!sameLayout(before,layout(w,kind)))throw Error('The preview changed while the edit was prepared. Try the change again.');
    const next=withGradeLabels(refinedAwardLayout(before,result,kind),result.grade_labels||[],previewItems(w,kind).map(x=>x.grade));artwork=String(result.artwork_brief||'').trim().slice(0,1500);
+   if(mixed&&!matchExample&&result.changes?.rows_top!=null){next.mixed_rows_top=next.rows_top;next.rows_top=before.rows_top;}
    const label=graphicLabel(result.graphic_label)??beforeLabel;const changed=!sameLayout(before,next)||label!==beforeLabel;if(changed||artwork){r.history.push({layout:before,label:beforeLabel,dirty,candidate,revision});w.title=label;r.history=r.history.slice(-8);w.layouts[kind]=next;w.designDirty[kind]=dirty||!sameLayout(before,next);r.candidate=true;}
    r.message=artwork?'Preparing proposed artwork changes…':proposalMessage(result,changed);
   }catch(e){if(here(s,w)&&s.view===kind)r.message=e.message;}});
@@ -8804,7 +8900,7 @@ function createSocialAwards(h){
   document.querySelectorAll('[data-sa-edit]').forEach(e=>e.onclick=()=>{w.focus=e.dataset.saEdit;render(s);el('saCanvas')?.scrollIntoView({block:'center',behavior:'smooth'});});
   document.querySelectorAll('[data-sa-result]').forEach(e=>e.onchange=()=>{if(e.checked)w.chosen.add(e.dataset.saResult);else w.chosen.delete(e.dataset.saResult);void paint(s,kind);});
   const dirty=()=>{w.designDirty[kind]=true;el('saSaveLayout').disabled=false;el('saSaveLayout').textContent='Save layout';};
-  document.querySelectorAll('[data-sa-layout]').forEach(e=>e.oninput=()=>{d[e.dataset.saLayout]=Number(e.value);document.querySelector('[data-sa-value="'+e.dataset.saLayout+'"]').textContent=e.value;dirty();void paint(s,kind);});
+  document.querySelectorAll('[data-sa-layout]').forEach(e=>e.oninput=()=>{d[e.dataset.saLayout==='rows_top'&&kind==='results'&&!resultsShareOpponent(previewItems(w,kind).slice(0,4),Object.fromEntries(previewItems(w,kind).map(x=>[x.key,opponentKey(w,opponent(x))])))?'mixed_rows_top':e.dataset.saLayout]=Number(e.value);document.querySelector('[data-sa-value="'+e.dataset.saLayout+'"]').textContent=e.value;dirty();void paint(s,kind);});
   document.querySelectorAll('[data-sa-check]').forEach(e=>e.onchange=()=>{d[e.dataset.saCheck]=e.checked;dirty();void paint(s,kind);});
   el('saTextColour').oninput=e=>{d.text_colour=e.target.value;dirty();void paint(s,kind);};
   const prepareBackground=async(useExample=false,brief='',options={})=>{
@@ -8824,7 +8920,7 @@ function createSocialAwards(h){
      if(button)button.textContent='Matching example…';
      const scope=h.scopeRequest?await h.scopeRequest(s,kind):{};
      if(!current())return;
-     const body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],example_setup:true,preview_grades:grades,grade_labels:before.grade_labels||[],graphic_label:w.title||null,brief:'Match the supported lettering, result wording, colours and layout from our previous example for this new background.',current:visualSettings(before),title_in_background:!!before.includes_title,preview};
+     const body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],example_setup:true,match_reference:true,preview_grades:grades,grade_labels:before.grade_labels||[],graphic_label:w.title||null,brief:'Match the supported lettering, result wording, colours and layout from our previous example for this new background.',current:visualSettings(before),title_in_background:!!before.includes_title,preview};
      styleResult=await requestStyle(body);
      styleResult=await compareTemplate(s,kind,before,body,styleResult,current);
      if(!current())return;
@@ -8913,7 +9009,7 @@ function createSocialAwards(h){
   const image=await h.image(s,await url(s,bucket,d.example_path)),iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height;
   for(const canvas of samples){if(!canvas.isConnected)continue;const c=d.badge_crops.find(x=>x.label===canvas.dataset.saBadge);if(!c)continue;canvas.width=Math.max(1,Math.round(iw*c.width));canvas.height=Math.max(1,Math.round(ih*c.height));canvas.getContext('2d').drawImage(image,iw*c.x,ih*c.y,iw*c.width,ih*c.height,0,0,canvas.width,canvas.height);}
  }
- async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[],missingMargins=kind==='results'&&layout(w,kind).show_margin?items.filter(x=>['WIN','LOSS'].includes(resultsSummary(x).outcome)&&!resultsSummary(x).margin):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:missingMargins.length?'Winning margin unavailable for '+missingMargins.map(x=>x.grade).join(', ')+'. Refresh results to check for updated source data.':items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
+ async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;canvas.resultsLayout=buffer.resultsLayout;if(buffer.resultsLayout){const range=document.querySelector('[data-sa-layout=rows_top]'),value=Math.round(buffer.resultsLayout.top/(buffer.height/buffer.width*1080)*100);if(range){range.value=value;document.querySelector('[data-sa-value=rows_top]').textContent=value;}}w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[],missingMargins=kind==='results'&&layout(w,kind).show_margin?items.filter(x=>['WIN','LOSS'].includes(resultsSummary(x).outcome)&&!resultsSummary(x).margin):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:missingMargins.length?'Winning margin unavailable for '+missingMargins.map(x=>x.grade).join(', ')+'. Refresh results to check for updated source data.':items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
  async function saveGraphics(s,kind){
   const w=state(s);if(w.busy||s.busy||refinement(w,kind).candidate)return;const items=previewItems(w,kind);if(!w.pending&&(!items.length||!w.previewReady))return;if(!w.pending&&kind==='results'&&items.some(x=>!resultsSummary(x).outcome)){notice(s,'Import the updated PlayCricket result before confirming.');return;}if(!w.pending&&items.some(x=>kind!=='results'&&portrait(w,kind,x).dirty)){notice(s,'Confirm each photo position first.');return;}
   w.busy=true;notice(s,'Saving confirmed graphics…');render(s);
@@ -8941,7 +9037,7 @@ async function renderSocialAwardRequests({supabase,escape:esc},host){
 return {createSocialAwards,renderSocialAwardRequests};
 })();
 
-const __demoModule30=(()=>{
+const __demoModule32=(()=>{
 const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule27;
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 function createTeamSocialWorkflow(h){
@@ -9025,7 +9121,7 @@ function createTeamSocialWorkflow(h){
 return {createTeamSocialWorkflow};
 })();
 
-const __demoModule31=(()=>{
+const __demoModule33=(()=>{
 /* Teams .151 — focused posting alerts, corrections and hand-back; renderer remains .143; local preview cache .225. */
 function createSocialPublishing(h){
  const {supabase}=h,esc=h.escape,demo=!!h.demo;
@@ -9365,7 +9461,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
 return {createSocialPublishing};
 })();
 
-const __demoModule33=(()=>{
+const __demoModule35=(()=>{
 /* Local text recognition. Images are passed to a browser worker, never to a reading service.
    Pinned Tesseract engine/language files download from jsDelivr; no image is sent there. */
 function teamWeekReadWords(tsv){
@@ -9417,7 +9513,7 @@ async function readTeamWeekReference(example,background,{candidateNames=[],textC
 return {teamWeekReadWords,teamWeekReadLayout,readTeamWeekReference};
 })();
 
-const __demoModule34=(()=>{
+const __demoModule36=(()=>{
 /* A transparent award guide, not a grade-conversion or selection model.
    Keep source figures intact. Missing context supplies no invented match facts. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
@@ -9510,7 +9606,7 @@ function awardPerformance(p,cards=[]){
 return {awardBalls,awardPerformance};
 })();
 
-const __demoModule35=(()=>{
+const __demoModule37=(()=>{
 /* Basic TOTW uses recorded figures only. Keep Smart's match-context guide separate. */
 const number=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
 const total=(rows,key)=>rows.length&&rows.every(row=>number(row[key])!==null)?rows.reduce((n,row)=>n+number(row[key]),0):null;
@@ -9551,13 +9647,13 @@ function teamWeekBasicRecommendations(candidates){
 return {rawAwardFigures,teamWeekBasicRank,teamWeekBasicRecommendations};
 })();
 
-const __demoModule32=(()=>{
+const __demoModule34=(()=>{
 const {scopedAwardLabel}=__demoModule22;
 const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule26;
 const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule27;
-const {readTeamWeekReference}=__demoModule33;
-const {awardPerformance}=__demoModule34;
-const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule35;
+const {readTeamWeekReference}=__demoModule35;
+const {awardPerformance}=__demoModule36;
+const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule37;
 /* Verified PlayCricket performances; independent of fixture announcement artwork. */
 function teamWeekGrade(value,layout={}){return graphicGrade(value,layout,true);}
 function teamWeekFigures(player,display=player.display){
@@ -9837,7 +9933,7 @@ function createTeamOfWeek(h){
 return {teamWeekGrade,teamWeekFigures,teamWeekDisplay,teamWeekOrder,teamWeekWorthwhile,teamWeekDraft,teamWeekRecommendations,teamWeekRank,teamWeekMatchExample,teamWeekLayout,createTeamOfWeek};
 })();
 
-const __demoModule36=(()=>{
+const __demoModule38=(()=>{
 /* One set of club scorecards, reused by Teams awards and Club Batting. */
 const resultWeekEnd=date=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+(7-d.getUTCDay())%7);return d.toISOString().slice(0,10);};
 const key=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -9886,7 +9982,7 @@ function createSharedMatchResults(h){
 return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,createSharedMatchResults};
 })();
 
-const __demoModule37=(()=>{
+const __demoModule39=(()=>{
 const {graphicLabel}=__demoModule26;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
@@ -9929,9 +10025,9 @@ function createSocialAwardLabels(h){
 return {createSocialAwardLabels};
 })();
 
-const __demoModule39=(()=>{
-const {awardPerformance}=__demoModule34;
-const {rawAwardFigures}=__demoModule35;
+const __demoModule41=(()=>{
+const {awardPerformance}=__demoModule36;
+const {rawAwardFigures}=__demoModule37;
 /* Suggestions cover different kinds of achievement; the club chooses the winner. */
 function playerWeekFigures(p){
  const batting=(p.batting||[]).map(b=>`${b.runs}${b.not_out?'*':''}`).join(' & '),bowling=(p.bowling||[]).map(b=>`${b.wickets}/${b.runs}`).join(' & ');
@@ -9986,11 +10082,11 @@ function playerWeekRecommendations(candidates,profiles={},history=[],end,preferN
 return {playerWeekFigures,playerWeekRecommendations};
 })();
 
-const __demoModule38=(()=>{
+const __demoModule40=(()=>{
 const {scopedAwardLabel}=__demoModule22;
 const {graphicGrade,checkGraphicLabel}=__demoModule26;
 const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule27;
-const {playerWeekFigures,playerWeekRecommendations}=__demoModule39;
+const {playerWeekFigures,playerWeekRecommendations}=__demoModule41;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
 }
@@ -10127,7 +10223,7 @@ function createPlayerOfWeek(h){
 return {playerWeekLayout,createPlayerOfWeek};
 })();
 
-const __demoModule40=(()=>{
+const __demoModule42=(()=>{
 // Local design trials. Only the explicit Apply action can save club settings.
 function createSocialSandbox(h){
  const names=['Alex Sample','Jordan Sample','Taylor Sample','Casey Sample','Morgan Sample','Riley Sample','Cameron Sample','Sam Sample','Jamie Sample','Charlie Sample','Robin Sample'];
@@ -10230,7 +10326,7 @@ function createSocialSandbox(h){
 return {createSocialSandbox};
 })();
 
-const __demoModule41=(()=>{
+const __demoModule43=(()=>{
 const clean=value=>String(value??'').trim();
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'TH':({1:'ST',2:'ND',3:'RD'}[n%10]||'TH'));
 function dateLabel(value){
@@ -10257,7 +10353,7 @@ function teamSelectionText(card){
 return {teamSelectionText};
 })();
 
-const __demoModule42=(()=>{
+const __demoModule44=(()=>{
 const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule10;
 const {buildSelectionEvidence}=__demoModule11;
 const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule15;
@@ -10469,7 +10565,7 @@ function createSeasonStatsPanel(h) {
 return {renderGradeComparison,renderStatsRows,createSeasonStatsPanel};
 })();
 
-const __demoModule43=(()=>{
+const __demoModule45=(()=>{
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const choices=(rows,value)=>rows.map(([id,name])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(name)}</option>`).join('');
 const definiteError=e=>/^(P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(e?.code||'');
@@ -10532,7 +10628,7 @@ function createSelectionGroupPermissions(h){
 return {createSelectionGroupPermissions};
 })();
 
-const __demoModule45=(()=>{
+const __demoModule47=(()=>{
 // Incremental changes to an already saved club setup.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const label=t=>[t?.grade?.name,t?.name!==t?.grade?.name?t?.name:null].filter(Boolean).join(' · ');
@@ -10591,8 +10687,8 @@ function createSelectionGroupManager(h){
 return {createSelectionGroupManager};
 })();
 
-const __demoModule44=(()=>{
-const {createSelectionGroupManager}=__demoModule45;
+const __demoModule46=(()=>{
+const {createSelectionGroupManager}=__demoModule47;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Read saved groups and the cached source names. Opening this page never imports.
 function createSelectionGroupPage(h){
@@ -10628,7 +10724,7 @@ function createSelectionGroupPage(h){
 return {createSelectionGroupPage};
 })();
 
-const __demoModule46=(()=>{
+const __demoModule48=(()=>{
 const PLAYCRICKET_SUPPORT='https://playcricket-support.zendesk.com/hc/en-us/requests/new';
 const PLAYHQ_ACCESS_GUIDE='https://support.playhq.com/hc/en-us/articles/23949453276572-How-To-Use-PlayHQ-API-s';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -10692,8 +10788,8 @@ function createPlayCricketConnection(h){
 return {PLAYCRICKET_SUPPORT,PLAYHQ_ACCESS_GUIDE,accessRequestText,createPlayCricketConnection};
 })();
 
-const __demoModule48=(()=>{
-const {createSelectionGroupManager}=__demoModule45;
+const __demoModule50=(()=>{
+const {createSelectionGroupManager}=__demoModule47;
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -10785,8 +10881,8 @@ function createSelectionGroups(h){
 return {selectionGroupDraft,createSelectionGroups};
 })();
 
-const __demoModule47=(()=>{
-const {createSelectionGroups}=__demoModule48;
+const __demoModule49=(()=>{
+const {createSelectionGroups}=__demoModule50;
 // Saved team links drive fixture loading. Source credentials stay server-side.
 function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -10870,9 +10966,9 @@ function createPlayHQImport(h){
 return {createPlayHQImport};
 })();
 
-const __demoModule49=(()=>{
+const __demoModule51=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
-const {weeklyResultCoverage,cardStatus}=__demoModule36;
+const {weeklyResultCoverage,cardStatus}=__demoModule38;
 const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
@@ -10936,7 +11032,7 @@ function createFixtureResults(h){
 return {renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule51=(()=>{
+const __demoModule53=(()=>{
 // Shared, side-effect-free helpers for club-week planning. Publication remains server-authorised.
 const dayKey = index => `d${index + 1}`;
 function availability(person, date) {
@@ -11016,8 +11112,8 @@ function forecast(roster,fixtures,today,days=21) {
 return {dayKey,availability,missingAvailability,selectedOn,openPlaces,roleMatch,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,shareLink,forecast};
 })();
 
-const __demoModule50=(()=>{
-const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule51;
+const __demoModule52=(()=>{
+const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule53;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLabel=date=>date?new Date(date+'T12:00:00Z').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}):'';
 const button=(text,action,extra='')=>`<button type="button" class="btn ghost" data-cw="${action}" ${extra}>${esc(text)}</button>`;
@@ -11067,7 +11163,7 @@ function createClubWeekUI(h){
 return {createClubWeekUI};
 })();
 
-const __demoModule52=(()=>{
+const __demoModule54=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -11106,7 +11202,7 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule53=(()=>{
+const __demoModule55=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -11164,7 +11260,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule54=(()=>{
+const __demoModule56=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -11192,8 +11288,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule55=(()=>{
-const {createTeamWeekDemo}=__demoModule54;
+const __demoModule57=(()=>{
+const {createTeamWeekDemo}=__demoModule56;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -11213,7 +11309,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule56=(()=>{
+const __demoModule58=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -11253,7 +11349,7 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule57=(()=>{
+const __demoModule59=(()=>{
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday) {
   const copy = value => structuredClone(value);
@@ -11312,7 +11408,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule58=(()=>{
+const __demoModule60=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -11441,17 +11537,17 @@ const {findReturningPlayers}=__demoModule14;
 
 const {createScorecardTeams}=__demoModule17;
 
-const {createScorecardTeamDemo}=__demoModule53;
+const {createScorecardTeamDemo}=__demoModule55;
 
-const {createTeamWeekDemo}=__demoModule54;
+const {createTeamWeekDemo}=__demoModule56;
 
-const {createPlayerWeekDemo}=__demoModule55;
+const {createPlayerWeekDemo}=__demoModule57;
 
-const {createSharedResultsDemo}=__demoModule56;
+const {createSharedResultsDemo}=__demoModule58;
 
-const {createSeasonStatsDemo}=__demoModule57;
+const {createSeasonStatsDemo}=__demoModule59;
 
-const {createSocialAwardsDemo}=__demoModule58;
+const {createSocialAwardsDemo}=__demoModule60;
 
 const {selectionCallLink}=__demoModule19;
 
@@ -11477,7 +11573,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.290';
+const APP_UI_VERSION='0.8.62.291';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -32696,7 +32792,7 @@ let socialFeaturesTask=null;
 async function loadSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([Promise.resolve(__demoModule22),Promise.resolve(__demoModule23),Promise.resolve(__demoModule30),Promise.resolve(__demoModule31),Promise.resolve(__demoModule32),Promise.resolve(__demoModule36),Promise.resolve(__demoModule37),Promise.resolve(__demoModule38),Promise.resolve(__demoModule40),Promise.resolve(__demoModule26),Promise.resolve(__demoModule41)]);
+  const modules=await Promise.all([Promise.resolve(__demoModule22),Promise.resolve(__demoModule23),Promise.resolve(__demoModule32),Promise.resolve(__demoModule33),Promise.resolve(__demoModule34),Promise.resolve(__demoModule38),Promise.resolve(__demoModule39),Promise.resolve(__demoModule40),Promise.resolve(__demoModule42),Promise.resolve(__demoModule26),Promise.resolve(__demoModule43)]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];
@@ -32745,19 +32841,19 @@ async function socialResultsChanged(s){
 function socialSetResultsWeek(s,end){socialAdoptResultsWeek(s,end);socialDraw(s);}
 async function socialLoadAwardLabel(s,end){const label=await socialAwardLabels.load(s,end);if(socialHere(s)&&s.resultsWeek===end)socialResults.mount(s,end);return label;}
 const selectionEvidence=createSelectionEvidenceSnapshot({supabase,notice:message=>seNotice(message),here:b=>currentTab==='teams'&&selectionState?.key===b.scope&&selectionState?.view==='board'&&seBoardAccess(selectionState?.data)});
-const seasonStatsPanel=createDeferredController({load:()=>Promise.resolve(__demoModule42),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,updated:(scope,data)=>selectionEvidence.adopt(scope,data),invalidateBoard:()=>selectionEvidence.invalidate(),alert:message=>alert(message),confirm:message=>confirm(message),
+const seasonStatsPanel=createDeferredController({load:()=>Promise.resolve(__demoModule44),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,updated:(scope,data)=>selectionEvidence.adopt(scope,data),invalidateBoard:()=>selectionEvidence.invalidate(),alert:message=>alert(message),confirm:message=>confirm(message),
  here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.statsOpen===true,
  close:()=>{const s=ensureSelections();s.statsOpen=false;drawSelections();document.getElementById('seSeasonStats')?.focus();},
  navigate:recordSelectionNavigation,
  canOpenPlayer:()=>seCanSetup(ensureSelections().data),openPlayer:seOpenStatsPlayer,
  openFixture:(panel,id)=>{const s=ensureSelections();if(!confirmLeaveSelections())return;const f=s.data.fixtures.find(f=>f.id===id),known=panel.context?.fixtures.find(f=>f.id===id);if(!f&&!known)return;s.statsOpen=false;document.getElementById('seStatsHost')?.replaceChildren();document.getElementById('seSeasonStats')?.setAttribute('aria-expanded','false');seFixtureEditor(f||{id,details:known,result_only:true});}
 }),scope:requestedFeatureScope,name:'season stats',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
-const selectionGroupPermissions=createDeferredController({load:()=>Promise.resolve(__demoModule43),create:({createSelectionGroupPermissions})=>createSelectionGroupPermissions({
+const selectionGroupPermissions=createDeferredController({load:()=>Promise.resolve(__demoModule45),create:({createSelectionGroupPermissions})=>createSelectionGroupPermissions({
  here:()=>currentTab==='teams'&&selectionState?.view==='settings',alert,confirm,group:()=>selectionState?.selectionGroup,
  rpc:async(action,data)=>{const r=await supabase.rpc('selection_group_permissions',{p_club_id:club.id,p_action:action,p_data:data});if(r.error)throw r.error;return r.data;},
  saved:()=>seReload(),inviteURL:()=>location.origin+location.pathname,copy:text=>navigator.clipboard.writeText(text)
 }),scope:requestedFeatureScope,name:'Selection Group permissions',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
-const selectionGroupSetup=createDeferredController({load:()=>Promise.resolve(__demoModule44),create:({createSelectionGroupPage})=>createSelectionGroupPage({
+const selectionGroupSetup=createDeferredController({load:()=>Promise.resolve(__demoModule46),create:({createSelectionGroupPage})=>createSelectionGroupPage({
  supabase,clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.view==='selection_groups',alert,confirm,
  saved:async()=>{teamReviewCache=null;sharedTeamsState=null;await loadSelectionsAccess();await loadMatchCaptainAccess();await seReload();},loadSeason:groupId=>{if(confirmLeaveSelections())seImportFixtures(groupId);},
  captains:()=>{if(confirmLeaveSelections())void openSharedTeams();},manual:()=>{if(confirmLeaveSelections())void openSharedTeams(true);}
@@ -32768,12 +32864,12 @@ function seEditSelectionGroups(groupId=null){
  const host=document.getElementById('seContent');host.innerHTML='<section class="se-card se-drawer"><h2>Selection Groups</h2><div id="seGroupsSetup"></div></section>';
  void selectionGroupSetup.mount(document.getElementById('seGroupsSetup'),{selectionGroupId:s.groupAddTeam||null});s.groupAddTeam=null;
 }
-const playCricketConnection=createDeferredController({load:()=>Promise.resolve(__demoModule46),create:({createPlayCricketConnection})=>createPlayCricketConnection({supabase,clubId:()=>club?.id,
+const playCricketConnection=createDeferredController({load:()=>Promise.resolve(__demoModule48),create:({createPlayCricketConnection})=>createPlayCricketConnection({supabase,clubId:()=>club?.id,
  here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_connection',
  copy:text=>navigator.clipboard.writeText(text),back:()=>seChangeView('settings'),
  season:()=>{if(confirmLeaveSelections())seImportFixtures();},alert,confirm}),scope:requestedFeatureScope,name:'Connect PlayCricket',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 function sePlayCricketConnection(){const s=ensureSelections();if(!s.data?.admin)return;recordSelectionDrawer('playhq_connection');void playCricketConnection.mount(document.getElementById('seContent'));}
-const playhqImport=createDeferredController({load:()=>Promise.resolve(__demoModule47),create:({createPlayHQImport})=>createPlayHQImport({supabase,connect:()=>{if(confirmLeaveSelections())sePlayCricketConnection();},clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),
+const playhqImport=createDeferredController({load:()=>Promise.resolve(__demoModule49),create:({createPlayHQImport})=>createPlayHQImport({supabase,connect:()=>{if(confirmLeaveSelections())sePlayCricketConnection();},clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),
  manualGrades:()=>openSharedTeams(true),captains:()=>openSharedTeams(),back:()=>{ensureSelections().navigationDrawer=null;drawSelections();},openFixture:id=>{const f=ensureSelections().data.fixtures.find(x=>x.id===id);if(f)seFixtureEditor(f);},refresh:()=>seReload(),alert:message=>alert(message),confirm:message=>confirm(message)}),scope:requestedFeatureScope,name:'season fixtures',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 function seImportFixtures(selectionGroupId=null){const s=ensureSelections();if(!seCanSetup())return;recordSelectionDrawer('playhq_import');playhqImport.mount(document.getElementById('seContent'),{groups:s.data.groups||[],existing:s.data.fixtures||[],selectionGroupId});}
 async function openFixtureMatchReview(fixture){
@@ -32785,7 +32881,7 @@ async function openFixtureMatchReview(fixture){
  resetTeamReviewState();const s=ensureTeamReviewState();s.group=f.group_id;s.fixtures=data.fixtures;s.teamsEnabled=data.teams_enabled;teamReviewUseFixture(f,s);
  currentTab='team_review';await renderTab();
 }
-const fixtureResults=createDeferredController({load:()=>Promise.resolve(__demoModule49),create:({createFixtureResults})=>createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}}),scope:requestedFeatureScope,name:'fixture results',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
+const fixtureResults=createDeferredController({load:()=>Promise.resolve(__demoModule51),create:({createFixtureResults})=>createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}}),scope:requestedFeatureScope,name:'fixture results',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 async function socialTeamEditBackground(s,brief,options={}){
  if(!options.proposal&&!socialCanLeave())return;const asset=socialAsset(s,'background')||socialAsset(s,'reference');
  try{const saved=asset?await supabase.storage.from('club-socials').download(asset.path):null;if(saved?.error)throw Error(saved.error.message);if(!socialHere(s))return;
@@ -32802,7 +32898,7 @@ function seApplyWeekLaunch(s){
  else if(launch.view==='published'||launch.view==='board'){s.view=seBoardAccess(s.data)?'board':'published';if(date){s.date=date;s.boardDateChosen=true;s.publishedWeek=sePublishedWeekStart(date);}}
  if(launch.plan&&s.data.selector){s.view='board';s.weekLaunchPlan=launch.plan;}
 }
-const clubWeek=createDeferredController({load:()=>Promise.resolve(__demoModule50),create:({createClubWeekUI})=>createClubWeekUI({
+const clubWeek=createDeferredController({load:()=>Promise.resolve(__demoModule52),create:({createClubWeekUI})=>createClubWeekUI({
  read:()=>{const s=ensureSelections();return {data:s.data,drawer:s.navigationDrawer,view:currentTab==='teams'?s.view:'',date:s.date,clubId:club?.id,userId:session?.user?.id,clubName:club?.name,today:seClubDate(),launchPlan:s.weekLaunchPlan};},
  consumePlan:()=>{delete ensureSelections().weekLaunchPlan;},
  rpc:async(action,data)=>{const r=await supabase.rpc('club_week_api',{p_club_id:club.id,p_action:action,p_data:data});if(r.error){const e=Error(r.error.message);e.definite=!!r.error.code;throw e;}return r.data;},
@@ -32836,7 +32932,7 @@ async function renderMirelionAssist(){
 
 async function mountVideoCredits(host,options){const identity=requestedFeatureScope();try{const module=await Promise.resolve(__demoModule20);if(identity===requestedFeatureScope()&&host?.isConnected)return module.mountVideoCredits(host,options);}catch{if(host?.isConnected&&identity===requestedFeatureScope())host.textContent='Call credits could not load. Reopen Settings to try again.';}}
 
-const socialPlatformSetupPanel=createDeferredController({load:()=>Promise.resolve(__demoModule52),create:module=>({mount:module.renderSocialPlatformSetup}),host:args=>args[0].host,scope:requestedFeatureScope,name:'social accounts setup'});
+const socialPlatformSetupPanel=createDeferredController({load:()=>Promise.resolve(__demoModule54),create:module=>({mount:module.renderSocialPlatformSetup}),host:args=>args[0].host,scope:requestedFeatureScope,name:'social accounts setup'});
 function renderSocialPlatformSetup(options){return socialPlatformSetupPanel.mount(options);}
 
 

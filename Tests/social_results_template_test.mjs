@@ -32,7 +32,7 @@ test('reference-like typography renders distinct roles, every margin and clear c
   assert.match(text.find(t=>t.value==='Results').font,/Club Display/);assert.match(text.find(t=>t.value==='Alex Example').font,/Club Sans/);
   const badges=text.filter(t=>['WON','LOST'].includes(t.value)),margins=text.filter(t=>t.value.startsWith('BY '));
   assert.equal(badges.length,8,'Two halo passes for each outcome');assert.equal(margins.length,4);assert.ok(badges.every(t=>t.font.includes('Club Brush')));assert.ok(margins.every(t=>t.font.includes('Club Display')));
-  for(let i=0;i<4;i++){assert.ok(badges[i*2].bottom+4<margins[i].top,'Outcome and margin must not overlap');assert.ok(margins[i].left>=458&&margins[i].right<=678,'Margin stays in the central column');}
+  for(let i=0;i<4;i++){assert.ok(badges[i*2].bottom+4<margins[i].top,'Outcome and margin must not overlap');assert.ok(margins[i].left>=440&&margins[i].right<=640,'Margin stays in the central column');}
   for(const t of text)assert.ok(t.left>=0&&t.right<=1080&&t.top>=0&&t.bottom<=1350,t.value+' stays in canvas');
   assert.equal(JSON.stringify(items),facts);
   if(process.env.AWARDS_PREVIEW_DIR){fs.mkdirSync(process.env.AWARDS_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/template-'+(shared?'shared':'mixed')+'.png',canvas.toBuffer('image/png'));}
