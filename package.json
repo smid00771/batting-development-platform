@@ -6,5 +6,8 @@
     "check:demo": "node Scripts/build-demo.mjs --check",
     "test:demo": "node --test Tests/demo_navigation_integration_test.cjs Tests/demo_roles_integration_test.cjs Tests/selection_team_moves_demo_test.cjs Tests/playcricket_connection_ui_test.mjs Tests/selection_match_roles_ui_test.cjs"
   },
-  "devDependencies": { "jsdom": "26.1.0" }
+  "devDependencies": {
+    "@napi-rs/canvas": "0.1.100",
+    "jsdom": "26.1.0"
+  }
 }

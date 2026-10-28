@@ -5,7 +5,7 @@ const require=createRequire(import.meta.url),{JSDOM}=require('jsdom'),{createCan
 const {createSocialAwards,renderSocialAwardRequests}=await import('../social-awards.js');
 const dom=new JSDOM('<main><div id="menu"></div><div id="socialContent"></div></main>',{url:'https://clubbatting.com/'});
 globalThis.window=dom.window;globalThis.document=dom.window.document;globalThis.localStorage=window.localStorage;globalThis.FormData=window.FormData;window.HTMLElement.prototype.scrollIntoView=()=>{};
-const font=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(i,...args)=>draw(i.backing||i,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 window.HTMLCanvasElement.prototype.toBlob=function(cb,type='image/png'){cb(new Blob([this.backing.toBuffer(type)],{type}));};
 const players=['Alex Hunter','Ben Senior','Chris Carter'],milestones=players.map((name,i)=>({key:'match:century:innings:'+i,signature:'signature-'+i,kind:'century',player_id:'player-'+i,name,stat:{runs:100+i*27,not_out:i===1},grade:'1st Grade',opposition:'Visitors',innings_number:1}));

@@ -11,7 +11,7 @@ import {graphicGrade,checkGraphicLabel,withGradeLabels} from '../social-graphic-
 const require=createRequire(import.meta.url),{JSDOM}=require('jsdom'),{createCanvas,GlobalFonts}=require('@napi-rs/canvas');
 const dom=new JSDOM('<main id="socialContent"></main>',{url:'https://example.invalid/'});
 Object.assign(globalThis,{window:dom.window,document:dom.window.document,CSS:{escape:x=>x}});window.scrollTo=()=>{};window.HTMLElement.prototype.scrollIntoView=()=>{};
-const font=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(img,...args)=>draw(img.backing||img,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 window.HTMLCanvasElement.prototype.toBlob=function(cb){cb(new Blob([this.backing.toBuffer('image/png')],{type:'image/png'}));};
 const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),id=x=>document.getElementById(x),tick=()=>new Promise(r=>setTimeout(r,5));
@@ -79,7 +79,7 @@ for(const [kind,create,apiCreate,prefix,canvasId] of [['team_week',createTeamOfW
 
 // The new team-background handoff uses the existing image editor and optimistic asset save.
 {
- const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),source=app.slice(app.indexOf('async function socialTeamEditBackground('),app.indexOf('const socialTeamWorkflow='));
+ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),source=app.slice(app.indexOf('async function socialTeamEditBackground('),app.indexOf('function seApplyWeekLaunch('));
  const asset={id:'background',kind:'background',path:'club/background/saved.png',revision:4},s={scope:'user:club',busy:false},requests=[];let handoff,failed=false;
  const c=vm.createContext({File,crypto,socialCanLeave:()=>true,socialHere:()=>true,socialAsset:(_,kind)=>kind==='background'?asset:null,socialMessage:(_,message)=>requests.push(message),
  supabase:{storage:{from:bucket=>({download:async path=>{assert.equal(bucket,'club-socials');assert.equal(path,asset.path);return {data:new Blob(['saved image'],{type:'image/png'})};},upload:async(path,blob,options)=>{assert.match(path,/^club\/background\/[0-9a-f-]+\.png$/);assert.equal(options.upsert,false);return {data:{path}};}})}},socialAwardBackground:(_,file,apply,options)=>{handoff={file,apply,options};},socialSave:async(state,action,data)=>{assert.equal(state.busy,false);requests.push({action,data});return !failed;}});

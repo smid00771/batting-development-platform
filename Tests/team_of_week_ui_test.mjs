@@ -5,7 +5,7 @@ const require=createRequire(import.meta.url),{JSDOM}=require('jsdom'),{createCan
 const {createTeamOfWeek}=await import('../team-of-week.js');
 const {createTeamWeekDemo}=await import('../team-of-week-demo.js');
 const dom=new JSDOM('<main id="socialContent"></main>',{url:'https://clubbatting.com/'});globalThis.window=dom.window;globalThis.document=dom.window.document;window.scrollTo=()=>{};
-const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),font=app.match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 dom.window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(i,...args)=>draw(i.backing||i,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 dom.window.HTMLCanvasElement.prototype.toBlob=function(cb){cb(new Blob([this.backing.toBuffer('image/png')],{type:'image/png'}));};
 const api=createTeamWeekDemo(()=> 'Newcastle City'),downloads=[],calls=[];const original=api.rpc.bind(api);let failFinish=true;

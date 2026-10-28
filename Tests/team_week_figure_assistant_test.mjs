@@ -10,7 +10,7 @@ const require=createRequire(import.meta.url),{JSDOM}=require('jsdom'),{createCan
 test('Dominic’s exact request previews both figures, supports undo and saves the approved display without changing facts',async t=>{
  const dom=new JSDOM('<main id="socialContent"></main>',{url:'https://example.invalid/'});t.after(()=>dom.window.close());
  Object.assign(globalThis,{window:dom.window,document:dom.window.document,CSS:{escape:x=>x}});window.scrollTo=()=>{};window.HTMLElement.prototype.scrollIntoView=()=>{};
- const font=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+ const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
  const drawn=[];
  window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx),fill=ctx.fillText.bind(ctx);ctx.drawImage=(img,...args)=>draw(img.backing||img,...args);ctx.fillText=(value,...args)=>{drawn.push(String(value));fill(value,...args);};}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
  window.HTMLCanvasElement.prototype.toBlob=function(cb){cb(new Blob([this.backing.toBuffer('image/png')],{type:'image/png'}));};

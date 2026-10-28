@@ -6,7 +6,7 @@ const {createSocialAwards}=await import('../social-awards.js');
 const dom=new JSDOM('<div id="socialContent"></div>',{url:'https://clubbatting.com/'});
 Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage});
 window.HTMLElement.prototype.scrollIntoView=()=>{};
-const font=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(img,...args)=>draw(img.backing||img,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 window.HTMLCanvasElement.prototype.toBlob=function(cb,type='image/png'){cb(new Blob([this.backing.toBuffer(type)],{type}));};
 const items=['Home won by 30 runs','Visitors won by 2 wickets','Match drawn','No result','Home won by 3 wickets'].map((result,i)=>({key:'match-'+i,match_id:'match-'+i,signature:'source-'+i,kind:'results',grade:['1st','2nd','3rd','4th','5th'][i]+' Grade',our_team:'home',teams:[{id:'home',name:'Home'},{id:'away',name:'Visitors',organisation_id:'visitors'}],result,innings:[{team_id:'home',runs:250,wickets:6,batters:[{name:'Alex Hunter',runs:127,not_out:true,status:'played',importable:true},{name:'Casey Chen',runs:63,status:'played',importable:true},{name:'Jamie Park',runs:34,status:'played',importable:true}]},{team_id:'away',runs:220,wickets:10,bowlers:[{name:'Alex Hunter',team_id:'home',wickets:6,runs:24,importable:true},{name:'Casey Chen',team_id:'home',wickets:3,runs:61,importable:true},{name:'Jamie Park',team_id:'home',wickets:1,runs:42,importable:true}]}]}));
@@ -77,3 +77,25 @@ for(const kind of ['results','century','five_wickets']){
  await edit('Use Week 3 on all awards this week',answer({}, {graphic_label:'Week 3'}));id('saUseRefinement').click();await settled();assert.equal(sharedLabelSaves.at(-1).label,'Week 3');assert.equal(saves.length,writes,'Label acceptance does not write the reusable design');
 }
 console.log('Passed: Week 2 on Results, Century and Five Wickets; label proposal pixels, undo and shared acceptance.');
+
+// Starting from an example matches its style as part of the existing background action.
+s.view='results';await module.load(s,false);w.chosen=new Set(items.slice(0,4).map(x=>x.key));module.render(s);await settled();
+const beforeExample=structuredClone(w.layouts.results),exampleFacts=JSON.stringify(context.candidates),beforeCalls=requests.length;
+nextResponse=answer({font:'sporting',result_labels:'won_lost',rows_top:24,rows_bottom:95,row_gap:18});
+backgroundHelp=null;id('saPrepareBackground').click();await until(()=>!!backgroundHelp);assert.equal(backgroundHelp.options.mode,'template');assert.equal(requests.length,beforeCalls+1,'Example styling is requested before the artwork review, never from Apply');
+failSave=true;await assert.rejects(backgroundHelp.apply({blob:files.get('club-social-awards'+examplePath),name:'Prepared.png'}),/Artwork changed/);
+assert.deepEqual(w.layouts.results,beforeExample);assert.equal(requests.length,beforeCalls+1);assert.equal(requests.at(-1).example_setup,true);
+failSave=false;await backgroundHelp.apply({blob:files.get('club-social-awards'+examplePath),name:'Prepared.png'});module.render(s);await settled();
+assert.equal(requests.length,beforeCalls+1,'A failed save reuses the successful style suggestion');assert.equal(w.layouts.results.result_labels,'won_lost');assert.equal(w.layouts.results.rows_top,24);assert.equal(w.layouts.results.row_gap,18);assert.ok(id('saUndoRefinement'));
+const savedExample={badge_crops:[],...structuredClone(w.layouts.results)};await module.load(s,false);module.render(s);await settled();assert.deepEqual(w.layouts.results,savedExample);
+// Follow-up wording alone preserves the manually chosen geometry and current background.
+labels=[];await edit('Change WON to WIN and LOST to LOSS, using the same font',answer({result_labels:'win_loss',font:'sporting'}));
+assert.ok(labels.includes('WIN')&&labels.includes('LOSS'));assert.equal(w.layouts.results.rows_top,savedExample.rows_top);assert.equal(w.layouts.results.row_gap,savedExample.row_gap);assert.equal(w.layouts.results.background_path,savedExample.background_path);
+id('saUndoRefinement').click();await settled();assert.deepEqual(w.layouts.results,savedExample);assert.equal(JSON.stringify(context.candidates),exampleFacts);
+// Editing existing artwork does not repeat example matching or replace saved slider adjustments.
+const editsBefore=requests.length;backgroundHelp=null;id('saPrepareBackground').click();await until(()=>!!backgroundHelp);assert.equal(backgroundHelp.options.mode,'edit');
+await backgroundHelp.apply({blob:files.get('club-social-awards'+examplePath),name:'Edited.png'});module.render(s);await settled();assert.equal(requests.length,editsBefore);assert.equal(w.layouts.results.rows_top,24);
+// A delayed initial analysis cannot open the editor in another week.
+backgroundHelp=null;const staleSaveCount=saves.length;
+waitResponse=new Promise(r=>release=r);id('saPrepareExample').click();await until(()=>requests.length===editsBefore+1);w.end='2026-10-25';release(answer({font:'classic'}));await until(()=>!w.openingBackground);assert.equal(backgroundHelp,null);assert.equal(saves.length,staleSaveCount);waitResponse=null;
+console.log('Passed: automatic initial example styling, cached retry, complete preview, undo, saved layout persistence, wording-only spacing preservation and stale-week rejection.');
