@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.295",
+  "appVersion": "0.8.62.296",
   "sources": {
     "app-design.css": "ff72d99dced381c050d9824837ca09a363a2850f269a35b8396521a809b2372d",
-    "app.js": "c5345af465b1b39fe762b3ac9a691fb09674fa353d6f19b08f1b8c1a0b16c3cc",
+    "app.js": "329891189390f95181529d4663dd43afc794ec75900b4af968a959122a3914a4",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
@@ -10,7 +10,7 @@
     "deferred-feature.js": "ab3d69675c974b10b5cbea9fcdecb9500306d0fc6d827ed06e35ed1c26c4780f",
     "Demo/current-fixtures.js": "2244d6c5082b1536e42bf169850fa9d8d936240d1ba35964d3d5a2566aea42b7",
     "Demo/demo.css": "e8692b88ac16b44b09c26ecfea033e1f5e66e0efeedd80efe604d6819ba00c6c",
-    "Demo/fixtures.js": "13c5398eed29626e0d970f62abf2c9dc30ad053700747cb1a1b4137f3683d534",
+    "Demo/fixtures.js": "dc8d3e14609cd7a6eb2fdd4fed7fd2ba6a46c65893f0fc4b48c5cf21c9a714d5",
     "Demo/isolation.js": "689a8f962fc599e79d573e5dc88203f4cdd775e98cfb249787e45eb5e7650c77",
     "Demo/journeys.js": "d2fe4fccdb12285b4f4ed3c223b80f683bf225d391e7c256acb176e53c86ed26",
     "Demo/template.html": "57df21c9dce29c9b12d38197a61487cf38c583ab6370ba7f4a9a03e517f76aff",
@@ -31,6 +31,8 @@
     "player-of-week.js": "0d39149b46a514543ed76c8b04725f9529856e7b4ab61b33edd86e2bcb5729ee",
     "player-week-ranking.js": "b09668230b3a9560dbdb1486693cb887bc912248cadabcf501f3e9f4f4f994a3",
     "playhq-import.js": "1b43756a5c33f1d6d591cec560b8345cff01c308902e0b1eb541651c5747d8dd",
+    "prediction-preparation.js": "a996f5b66b13f54086b7817503b25d6d07700e3e6583dd48b40ee4f80e8836ba",
+    "prediction-workspace.js": "5d2f118dd98737321ffc38cafa722d717e6ee353f57fae52e046641abc8f85da",
     "season-stats-demo.js": "4228c064032394c2081611f5798db4adad55270db8907c7768d83e662d9c8c7c",
     "season-stats-panel.js": "9314a85f4d39ee7e52a3c0a9ddde785094af2335f307571a18947cd251f103cf",
     "season-stats.js": "98b51de011015fa3b134ed13a49d57c8044f98416cf2762d9de4829f2d1776f8",
