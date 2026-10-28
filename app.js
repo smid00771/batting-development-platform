@@ -2,7 +2,7 @@ import {createDeferredController} from './deferred-feature.js?v=0.8.62.288';
 import {createPasswordFlow,cleanPasswordUrl} from './password-flow.js?v=0.8.62.280';
 import {SPIN_STYLES,spinLabel,spinProfile,spinProfileText,bindSpinBreakdowns} from './player-bowling.js?v=0.8.62.279';
 import {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl} from './domain-routing.js?v=0.8.62.272';
-import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.271';
+import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.295';
 import {assistLaunchFromSearch} from './assist-routing.js?v=0.8.62.271';
 import {FIELDING_RATINGS,fieldingLabel} from './player-fielding.js?v=0.8.62.288';
 import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.288';
@@ -20,7 +20,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.294';
+const APP_UI_VERSION='0.8.62.295';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

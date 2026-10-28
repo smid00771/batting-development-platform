@@ -1,7 +1,7 @@
 const escapeAssist=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const assistCategories={help:'Help with the platform',enquiry:'Products and subscriptions',idea:'Suggest a change'};
 const assistTime=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
-const assistStatus=(t,platform)=>t.status==='resolved'?'Resolved':t.last_side==='club'?(platform?'Needs a reply':'Waiting for Mirelion'):(platform?'Waiting for club':'Mirelion replied');
+const assistStatus=(t,platform)=>t.status==='resolved'?'Resolved':t.assistance==='auto'?(t.last_side==='club'?'Preparing an automated reply':'Automated reply sent'):t.last_side==='club'?(platform?'Needs a reply':'Waiting for Mirelion'):(platform?'Waiting for club':'Mirelion replied');
 
 export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavigate=()=>{},demo=false}){
  const states=new Map();let mounted=null,timer=null,identity=null,epoch=0;
@@ -58,7 +58,7 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavi
   if(!valid(m))return;const {s,host,context:c}=m;const d=draft(s),isNew=!s.selected;
   const pane=host.querySelector('[data-assist-conversation]');
   if(isNew&&c.platform){pane.innerHTML='<p class="help">Open a club message to read and reply.</p>';return;}
-  pane.innerHTML=`<header class="assist-conversation-heading"><h2 data-assist-subject>${isNew?'Message us':'Loading conversation…'}</h2>${isNew?'':'<button type="button" class="btn ghost" data-assist-resolve hidden>Mark resolved</button>'}</header>
+  pane.innerHTML=`<header class="assist-conversation-heading"><h2 data-assist-subject>${isNew?'Message us':'Loading conversation…'}</h2>${isNew?'':'<button type="button" class="btn ghost" data-assist-human hidden>Ask a person</button><button type="button" class="btn ghost" data-assist-resolve hidden>Mark resolved</button>'}</header>
    <p class="help" data-assist-thread-meta></p><div data-assist-guide></div>
    ${isNew?'':'<button type="button" class="btn ghost" data-assist-older hidden>Earlier messages</button><div class="assist-messages" data-assist-messages role="log" aria-label="Conversation with Mirelion" aria-live="polite" aria-relevant="additions"></div>'}
    ${demo&&!isNew?'<button type="button" class="btn ghost" data-assist-example>Show example reply</button>':''}
@@ -73,6 +73,10 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavi
   };
   pane.querySelector('form').onsubmit=e=>{e.preventDefault();void send(m);};
   pane.querySelector('[data-assist-resolve]')?.addEventListener('click',()=>void changeStatus(m));
+  pane.querySelector('[data-assist-human]')?.addEventListener('click',()=>{
+   if(!m.detail||m.s.busy)return;
+   void mutate(m,m.s.pending||{action:'handover',data:{thread_id:m.s.selected,request_id:crypto.randomUUID()}});
+  });
   pane.querySelector('[data-assist-older]')?.addEventListener('click',()=>void loadThread(m,true));
   pane.querySelector('[data-assist-example]')?.addEventListener('click',async()=>{
    if(m.s.busy)return;
@@ -83,8 +87,9 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavi
  function setBusy(m){
   if(!valid(m))return;const pending=m.s.pending,locked=m.s.busy||!!pending;
   m.host.querySelectorAll('[data-assist-compose] input,[data-assist-compose] textarea,[data-assist-compose] select').forEach(e=>e.disabled=locked);
-  const b=m.host.querySelector('[data-assist-send]');if(b){b.disabled=m.s.busy||!!(pending&&pending.action==='status');b.textContent=m.s.busy?'Sending…':pending?'Retry sending':'Send message';}
+  const b=m.host.querySelector('[data-assist-send]');if(b){b.disabled=m.s.busy||!!(pending&&!['create','send'].includes(pending.action))||m.detail?.email_reply_enabled===false;b.textContent=m.s.busy?'Sending…':pending&&['create','send'].includes(pending.action)?'Retry sending':'Send message';}
   const close=m.host.querySelector('[data-assist-resolve]');if(close){close.disabled=m.s.busy||!!(pending&&pending.action!=='status');if(pending?.action==='status')close.textContent='Retry status change';}
+  const human=m.host.querySelector('[data-assist-human]');if(human){human.disabled=m.s.busy||!!(pending&&pending.action!=='handover');human.textContent=pending?.action==='handover'?'Retry request':'Ask a person';}
  }
  async function open(m,id){
   if(!valid(m)||m.s.busy)return;
@@ -97,9 +102,10 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavi
   const nearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<80;
   const displayed=new Set([...box.querySelectorAll('[data-assist-message]')].map(e=>e.dataset.assistMessage));
   for(const msg of m.messages){
-   if(displayed.has(String(msg.id)))continue;
+   const deliveryLabel=({pending:'Email queued',running:'Email sending',sent:'Email sent',failed:'Email delivery failed — reply in the mailbox',cancelled:'Email superseded'})[msg.delivery_state]||'';
+   if(displayed.has(String(msg.id))){const el=[...box.children].find(e=>e.dataset.assistMessage===String(msg.id));const status=el?.querySelector('[data-assist-delivery]');if(status)status.textContent=deliveryLabel;continue;}
    const el=document.createElement('article');el.dataset.assistMessage=String(msg.id);el.className=`assist-message ${msg.side=== 'team'?'assist-from-team':''}`;
-   el.innerHTML=`<header><strong>${msg.side==='team'?'Mirelion':escapeAssist(m.detail.requester_name||'Club member')}</strong><time datetime="${escapeAssist(msg.created_at)}">${escapeAssist(assistTime(msg.created_at))}</time></header><p>${escapeAssist(msg.body)}</p>`;
+   el.innerHTML=`<header><strong>${msg.side==='team'?(msg.automated?'Mirelion Assist · automated':'Mirelion'):escapeAssist(m.detail.requester_name||'Club member')}</strong><time datetime="${escapeAssist(msg.created_at)}">${escapeAssist(assistTime(msg.created_at))}</time><small data-assist-delivery>${escapeAssist(deliveryLabel)}</small></header><p>${escapeAssist(msg.body)}</p>`;
    const next=[...box.children].find(e=>Number(e.dataset.assistMessage)>Number(msg.id));box.insertBefore(el,next||null);
   }
   if(nearBottom&&!m.loadingOlder)box.scrollTop=box.scrollHeight;
@@ -114,8 +120,9 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavi
    const byId=new Map((m.messages||[]).map(x=>[x.id,x]));for(const msg of r.messages||[])byId.set(msg.id,msg);
    m.messages=[...byId.values()].sort((a,b)=>a.id-b.id);
    const host=m.host;host.querySelector('[data-assist-subject]').textContent=r.thread.subject;
-   host.querySelector('[data-assist-thread-meta]').textContent=[m.context.platform?`${r.thread.club_name} · ${r.thread.requester_name||'Club member'}`:'',assistStatus(r.thread,m.context.platform)].filter(Boolean).join(' · ');
+   host.querySelector('[data-assist-thread-meta]').textContent=[m.context.platform?(r.thread.channel==='email'?`Email · ${r.thread.sender_email} · sender is not linked to a club account`:`${r.thread.club_name} · ${r.thread.requester_name||'Club member'}`):'',assistStatus(r.thread,m.context.platform),r.thread.email_reply_enabled===false?'Email connection paused; reply in the existing mailbox':''].filter(Boolean).join(' · ');
    const close=host.querySelector('[data-assist-resolve]');close.hidden=false;close.textContent=m.s.pending?.action==='status'?'Retry status change':r.thread.status==='resolved'?'Reopen':'Mark resolved';
+   host.querySelector('[data-assist-human]').hidden=m.context.platform||r.thread.assistance!=='auto'||r.thread.status!=='open';
    const guide=host.querySelector('[data-assist-guide]');if(!guide.childNodes.length&&r.thread.guide_context?.length)guide.innerHTML=`<details><summary>Shared Guide conversation</summary>${r.thread.guide_context.map(x=>`<p><strong>${x.role==='assistant'?'Guide':x.role==='system'?'System':'You'}:</strong> ${escapeAssist(x.content)}</p>`).join('')}</details>`;
    // Keep the earlier-page cursor once the reader has loaded more than the latest page.
    if(older||!m.oldestLoaded)m.hasOlder=!!r.has_older;
@@ -179,7 +186,7 @@ export function createMirelionAssist({supabase,getContext,onUnread=()=>{},onNavi
   const s=state(c);if(threadId!==undefined&&!s.pending)s.selected=threadId;if(newMessage&&!s.pending)s.selected=null;if(includeGuide)s.newDraft.include_guide=true;
   const m={host,s,context:{...c},epoch,detail:null,messages:[],loadVersion:0};mounted=m;
   host.innerHTML=`${assistStyles()}<section class="assist"><header class="assist-heading"><div><h1>Mirelion Assist</h1><p>${c.platform?'Club messages and requests':'Personal support for your club'}</p></div>${c.platform?'':'<button type="button" class="btn secondary" data-assist-new>Message us</button>'}</header>
-   ${c.platform?'<p class="help">Read and reply here. New unread club messages alert support@mirelionhq.com; email alerts open the same conversation.</p>':'<p class="help">Message us for help, problems or ideas. Your conversation stays here; we’ll email you when an unread reply is waiting.</p><details class="assist-promise"><summary>Support, email and changes for your club</summary><p>Email alerts link back to this conversation. Reply here to keep the history together. If you cannot use Assist, email <a href="mailto:support@mirelionhq.com">support@mirelionhq.com</a>. Direct emails are handled by email and are not automatically added here.</p><p>We aim for a live exchange when time zones overlap. We’ll agree what is possible, the scope and timing of requested changes. Useful improvements may become shared features; some requests may suit an option just for your club.</p></details>'}
+   ${c.platform?'<p class="help">Conversations needing a person appear first. Reply here to take over; unread requests alert support@mirelionhq.com.</p>':'<p class="help">Routine questions can receive an automated reply. Ask for a person whenever you need one.</p><details class="assist-promise"><summary>Support, email and changes for your club</summary><p>Email alerts link back to this conversation. Reply here to keep the history together. If you cannot use Assist, email <a href="mailto:support@mirelionhq.com">support@mirelionhq.com</a>. Email conversations remain separate from your signed-in club conversation.</p><p>Automated help uses your question and recent messages with OpenAI to select current Mirelion instructions. Replies are labelled automated. It cannot change your account or club records. A person handles unresolved problems and requests for changes.</p><p>We aim for a live exchange when time zones overlap. We’ll agree what is possible, the scope and timing of requested changes. Useful improvements may become shared features; some requests may suit an option just for your club.</p></details>'}
    ${demo?'<p class="help"><strong>Fictional demonstration.</strong> Messages and example replies stay in this tab.</p>':''}
    <div class="assist-layout"><aside class="assist-inbox" aria-label="Assist conversations"><div class="assist-filters"><label class="assist-sr-only" for="assistFilter">Conversation status</label><select id="assistFilter" data-assist-filter><option value="open">Open</option><option value="resolved">Resolved</option></select><label class="assist-sr-only" for="assistSearch">Search conversations</label><input id="assistSearch" data-assist-search type="search" ${s.threads.length||s.search||s.offset?'':'hidden'} placeholder="Search conversations…" value="${escapeAssist(s.search)}"></div><div data-assist-list>Loading messages…</div><div class="btnrow"><button class="btn ghost" type="button" data-assist-previous hidden>Previous</button><button class="btn ghost" type="button" data-assist-more hidden>More conversations</button></div></aside><section class="assist-conversation"><div data-assist-conversation></div><p data-assist-feedback class="help" role="status" aria-live="polite"></p></section></div></section>`;
   m.root=host.querySelector('.assist');

@@ -53,6 +53,22 @@ test('an uncertain resolve offers a working idempotent status retry',async t=>{
 test('HTML in a message is rendered as text',async t=>{
  const h=setup();t.after(()=>h.close());await h.api.mount(h.host);h.input('subject','<img src=x onerror=alert(1)>');h.input('body','<script>bad()</script>');await h.click('[data-assist-send]');assert.equal(h.host.querySelector('script,img'),null);assert.match(h.host.textContent,/<script>bad/);
 });
+test('automated replies are labelled and Ask a person hands over without losing the conversation',async t=>{
+ const h=setup();t.after(()=>h.close());await h.create();const thread=h.api.navigation().threadId;
+ await h.demo.rpc('mirelion_assist',{p_action:'example_reply',p_data:{club_id:'club',thread_id:thread}});await h.api.refresh();
+ assert.match(h.host.querySelector('[data-assist-messages]').textContent,/Mirelion Assist · automated/);
+ assert.equal(h.host.querySelector('[data-assist-human]').hidden,false);
+ await h.click('[data-assist-human]');assert.equal(h.calls.at(-1).p_action==='handover'||h.calls.some(c=>c.p_action==='handover'),true);
+ assert.equal(h.host.querySelector('[data-assist-human]').hidden,true);assert.equal(h.api.navigation().threadId,thread);
+ assert.match(h.host.querySelector('[data-assist-thread-meta]').textContent,/Waiting for Mirelion/);
+});
+test('an uncertain handover retries the same request and blocks unrelated send actions',async t=>{
+ const h=setup();t.after(()=>h.close());await h.create();const thread=h.api.navigation().threadId;
+ await h.demo.rpc('mirelion_assist',{p_action:'example_reply',p_data:{club_id:'club',thread_id:thread}});await h.api.refresh();let lose=true;
+ h.setHandler(async(name,args)=>{const result=await h.demo.rpc(name,args);if(args.p_action==='handover'&&lose){lose=false;throw Error('Connection lost');}return result;});
+ await h.click('[data-assist-human]');assert.equal(h.host.querySelector('[data-assist-human]').textContent,'Retry request');assert.equal(h.host.querySelector('[data-assist-send]').disabled,true);
+ await h.click('[data-assist-human]');const calls=h.calls.filter(c=>c.p_action==='handover');assert.equal(calls.length,2);assert.deepEqual(calls[0],calls[1]);assert.equal(h.host.querySelector('[data-assist-human]').hidden,true);
+});
 test('stale loads cannot replace another screen or a different club',async t=>{
  const h=setup();t.after(()=>h.close());await h.create();let release;
  h.setHandler((name,args)=>args.p_action==='list'?new Promise(r=>release=r):h.demo.rpc(name,args));
