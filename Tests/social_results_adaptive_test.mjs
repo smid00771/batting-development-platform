@@ -16,7 +16,7 @@ async function render(items,saved={},height=1350){
 }
 test('existing Georgia layout reclaims unused header space automatically and keeps all figures out of margins',async()=>{
  const mixed=await render(fixture()),shared=await render(fixture(true));
- assert.ok(mixed.plan.top<shared.plan.top-100,'Unused shared-logo space is reclaimed');assert.equal(shared.plan.top,1350*.29);
+ assert.ok(mixed.plan.top-mixed.plan.logoBand<shared.plan.top-100,'Mixed logos start below the title without a redundant shared header');assert.equal(shared.plan.top,1350*.29);
  assert.equal(mixed.plan.header,null);assert.ok(shared.plan.header);
  for(const result of [mixed,shared])for(const margin of result.text.filter(t=>t.value.startsWith('BY '))){
   for(const item of result.text.filter(t=>/^\d/.test(t.value)&&Math.abs(t.y-margin.y)<100))assert.ok(item.right+10<margin.left||item.left>margin.right+10,`${margin.value} must stay clear of ${item.value}`);
@@ -29,7 +29,7 @@ test('automatic geometry stays in bounds across typefaces, compact backgrounds, 
   const items=fixture(shared);items[1].result='Home won by 102 runs (DLS)';items[2].result='Home won by an innings and 25 runs';
   const r=await render(items,{font,row_gap:90,rows_top:32,margin_size:34,badge_font:'script',badge_style:'glow',badge_size:70},height);
   for(const t of r.text){assert.ok(t.top>=0&&t.bottom<=height,t.value+' fits vertically');if(t.value.startsWith('BY ')||t.value==='(DLS)'||t.value.startsWith('AND '))assert.ok(t.left>=440&&t.right<=640,t.value+' fits in its own column');}
-  for(const band of ['WON','WIN','LOST','DEF'])for(const b of r.text.filter(t=>t.value===band))for(const margin of r.text.filter(t=>t.value.startsWith('BY ')&&Math.abs(t.y-b.y)<90))assert.ok(b.bottom+2<margin.top||margin.bottom+2<b.top,'Outcome and margin do not overlap');
+  for(const band of ['WON','WIN','LOST','DEF'])for(const b of r.text.filter(t=>t.value===band))for(const margin of r.text.filter(t=>t.value.startsWith('BY ')&&Math.abs(t.y-b.y)<90))assert.ok(b.bottom+2<margin.top||margin.bottom+2<b.top,JSON.stringify({font,height,shared,b,margin,plan:r.plan}));
  }
 });
 test('an intentional mixed-opponent start adjustment does not move shared-opponent layouts',async()=>{

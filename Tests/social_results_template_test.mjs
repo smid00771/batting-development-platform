@@ -27,12 +27,12 @@ test('recorded margins are separate from outcome lettering, never invented from 
  assert.equal(resultsMargin({...item,provisional:true}),'');assert.equal(resultsMargin({...item,result:'Unknown won by 10 runs'}),'');
 });
 test('reference-like typography renders distinct roles, every margin and clear central spacing',async()=>{
- for(const shared of [false,true]){
-  const items=makeItems(shared),facts=JSON.stringify(items),layout=awardLayout('results',template),{canvas,text}=await render(items,layout);
+ for(const count of [2,3,4])for(const shared of [false,true]){
+  const items=makeItems(shared).slice(0,count),facts=JSON.stringify(items),layout=awardLayout('results',template),{canvas,text}=await render(items,layout);
   assert.match(text.find(t=>t.value==='Results').font,/Club Display/);assert.match(text.find(t=>t.value==='Alex Example').font,/Club Sans/);
   const badges=text.filter(t=>['WON','LOST'].includes(t.value)),margins=text.filter(t=>t.value.startsWith('BY '));
-  assert.equal(badges.length,8,'Two halo passes for each outcome');assert.equal(margins.length,4);assert.ok(badges.every(t=>t.font.includes('Club Brush')));assert.ok(margins.every(t=>t.font.includes('Club Display')));
-  for(let i=0;i<4;i++){assert.ok(badges[i*2].bottom+4<margins[i].top,'Outcome and margin must not overlap');assert.ok(margins[i].left>=440&&margins[i].right<=640,'Margin stays in the central column');}
+  assert.equal(badges.length,count*2,'Two halo passes for each outcome');assert.equal(margins.length,count);assert.ok(badges.every(t=>t.font.includes('Club Brush')));assert.ok(margins.every(t=>t.font.includes('Club Display')));
+  for(let i=0;i<count;i++){assert.ok(badges[i*2].bottom+4<margins[i].top,'Outcome and margin must not overlap');assert.ok(margins[i].left>=440&&margins[i].right<=640,'Margin stays in the central column');}
   for(const t of text)assert.ok(t.left>=0&&t.right<=1080&&t.top>=0&&t.bottom<=1350,t.value+' stays in canvas');
   assert.equal(JSON.stringify(items),facts);
   if(process.env.AWARDS_PREVIEW_DIR){fs.mkdirSync(process.env.AWARDS_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/template-'+(shared?'shared':'mixed')+'.png',canvas.toBuffer('image/png'));}

@@ -1,5 +1,5 @@
-import {AWARD_STYLE_FIELDS,referenceGeometry,visualPatch} from './social-awards-design.js?v=0.8.62.292';
-import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont} from './social-award-fonts.js?v=0.8.62.292';
+import {AWARD_STYLE_FIELDS,referenceGeometry,visualPatch} from './social-awards-design.js?v=0.8.62.293';
+import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont} from './social-award-fonts.js?v=0.8.62.293';
 
 // Convert observed ink proportions, not guessed point sizes, to our 1080px design.
 // The caller has loaded the selected fonts. This runs once per requested match.

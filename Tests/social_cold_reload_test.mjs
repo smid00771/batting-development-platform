@@ -1,3 +1,4 @@
+import socialSource from './helpers/social-source.cjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -5,23 +6,18 @@ import {test} from 'node:test';
 import {createTeamOfWeek,teamWeekLayout} from '../team-of-week.js';
 import {createPlayerOfWeek,playerWeekLayout} from '../player-of-week.js';
 
-function fn(source,name){
- const start=source.search(new RegExp('(?:async )?function '+name+'\\('));
- assert.ok(start>=0,name);
- const rest=source.slice(start),end=rest.slice(1).search(/\n(?:async )?function /);
- return end<0?rest:rest.slice(0,end+1);
-}
+const fn=socialSource.functionSource;
 for(const file of ['app.js','demo.html']){
- const source=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
+ const source=socialSource(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'));
  test(file+': weekly award navigation restores before social settings load',()=>{
   const social={scope:'selector:club',data:null};
-  const c=vm.createContext({console,Date,Intl,Set,Map,createTeamOfWeek,teamWeekLayout,createPlayerOfWeek,playerWeekLayout,socialEnsure:()=>social});
-  if(file==='demo.html')vm.runInContext(['teamWeekLayout','playerWeekLayout','createTeamOfWeek','createPlayerOfWeek'].map(name=>fn(source,name)).join('\n'),c);
+  const c=vm.createContext({console,Date,Intl,Set,Map,createTeamOfWeek,teamWeekLayout,createPlayerOfWeek,playerWeekLayout,socialEnsure:()=>social,socialPublishing:undefined});
   vm.runInContext("const socialWeek=createTeamOfWeek({escape:String}),socialPlayerWeek=createPlayerOfWeek({escape:String}),socialAwards={state:s=>s.awards||(s.awards={})};",c);
   vm.runInContext(fn(source,'restoreSocialNavigation'),c);
   for(const [view,key] of [['team_week','week'],['player_week','playerWeek']]){
    social.data=null;
-   c.restoreSocialNavigation({view,[key]:{end:'2026-10-11'}});
+   c.socialPublishing=undefined;c.restoreSocialNavigation({view,[key]:{end:'2026-10-11'}});
+   assert.equal(social.deferredNavigation[key].end,'2026-10-11');c.socialPublishing={};c.restoreSocialNavigation(social.deferredNavigation);delete social.deferredNavigation;
    assert.equal(social.view,view);
    assert.equal(social[key].end,'2026-10-11','The saved week survives a cold reload');
    assert.equal(social[key].context,null,'Restoration does not pretend settings have loaded');

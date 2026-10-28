@@ -214,7 +214,7 @@ test('Post preview keeps two Results combinations visible beneath one club blurb
  assert.equal(h.document.querySelectorAll('[data-sa-select]:checked').length,4);
  assert.equal(h.document.getElementById('saCaption').value,blurb);
  await h.choose('#socialCreateMenu','team_week');
- await h.window.eval("(async()=>{const card=Object.values(demoScorecards).find(c=>c.match_id==='"+first.performance_keys[0].split(':')[0]+"');card.innings[0].batters[0].runs+=1;await socialResultsChanged(socialState);})()");await h.settle();
+ await h.window.eval("(async()=>{const card=Object.values(demoScorecards).find(c=>c.match_id==='"+first.performance_keys[0].split(':')[0]+"');card.innings[0].batters[0].runs+=1;await socialEngine.socialResultsChanged(socialState);})()");await h.settle();
  assert.equal(h.document.querySelector('[data-sa-select="'+first.id+'"]').checked,false,'Refreshing weekly scores immediately removes a stale Results image from the post');
  assert.equal(h.document.querySelector('[data-sa-select="'+first.id+'"]').disabled,true);assert.equal(h.document.getElementById('saCaption').value,blurb);
  clean(h);

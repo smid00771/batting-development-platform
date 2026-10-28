@@ -20,6 +20,7 @@ function bundle(file){
  if(modules.has(file))return modules.get(file);
  const id='__demoModule'+modules.size;modules.set(file,id);
  let source=read(file);
+ if(file==='social-workspace.js')source=source.replace('demo:false','demo:true');
  source=source.replace(/^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];?\s*$/gm,(_,names,specifier)=>{
   if(!specifier.startsWith('.'))throw Error('External demo dependency: '+specifier);
   const dependency=path.posix.normalize(path.posix.join(path.posix.dirname(file),specifier.split('?')[0]));

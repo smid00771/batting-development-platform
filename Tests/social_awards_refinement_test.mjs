@@ -69,17 +69,17 @@ for(const kind of ['results','century','five_wickets']){
 }
 console.log('Passed: Results, Century and 5 Wickets display abbreviations persist without editing source grades.');
 
-// The same saved Week 2 label is drawn on every award, with AI proposals still reviewable.
+// The same Week 2 metadata is shared, while Results omits its subtitle by default.
 h.loadLabel=async()=>({label:'Week 2',mode:'week_number',revision:1,needs_label:false});
 const sharedLabelSaves=[];h.saveLabel=async(_,end,label)=>{sharedLabelSaves.push({end,label});w.awardLabel={label,mode:'week_number',revision:2};};
 for(const kind of ['results','century','five_wickets']){
- s.view=kind;await module.load(s,false);w.focus='grade-'+kind;w.chosen=new Set(['grade-'+kind]);labels=[];module.render(s);await settled();assert.equal(w.title,'Week 2');assert.ok(labels.some(x=>x.toUpperCase()==='WEEK 2'));
+ s.view=kind;await module.load(s,false);w.focus='grade-'+kind;w.chosen=new Set(['grade-'+kind]);labels=[];module.render(s);await settled();assert.equal(w.title,'Week 2');assert.equal(labels.some(x=>x.toUpperCase()==='WEEK 2'),kind!=='results');
  const before=png(),writes=saves.length;
  if(process.env.GRAPHIC_PREVIEW_DIR){fs.mkdirSync(process.env.GRAPHIC_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.GRAPHIC_PREVIEW_DIR+'/'+kind+'-week-2.png',before);}
- await edit('Use Week 3 on all awards this week',answer({}, {graphic_label:'Week 3'}));assert.equal(w.title,'Week 3');assert.notDeepEqual(png(),before);assert.equal(sharedLabelSaves.length,kind==='results'?0:kind==='century'?1:2);id('saUndoRefinement').click();await settled();assert.equal(w.title,'Week 2');assert.deepEqual(png(),before);
+ await edit('Use Week 3 on all awards this week',answer({}, {graphic_label:'Week 3'}));assert.equal(w.title,'Week 3');if(kind==='results')assert.deepEqual(png(),before);else assert.notDeepEqual(png(),before);assert.equal(sharedLabelSaves.length,kind==='results'?0:kind==='century'?1:2);id('saUndoRefinement').click();await settled();assert.equal(w.title,'Week 2');assert.deepEqual(png(),before);
  await edit('Use Week 3 on all awards this week',answer({}, {graphic_label:'Week 3'}));id('saUseRefinement').click();await settled();assert.equal(sharedLabelSaves.at(-1).label,'Week 3');assert.equal(saves.length,writes,'Label acceptance does not write the reusable design');
 }
-console.log('Passed: Week 2 on Results, Century and Five Wickets; label proposal pixels, undo and shared acceptance.');
+console.log('Passed: shared week metadata, hidden Results subtitle, visible award labels, undo and acceptance.');
 
 // Starting from an example matches its style as part of the existing background action.
 s.view='results';await module.load(s,false);w.chosen=new Set(items.slice(0,4).map(x=>x.key));module.render(s);await settled();
@@ -135,7 +135,7 @@ id('saUndoRefinement').click();await settled();assert.equal(w.layouts.results.mi
 console.log('Passed: automatic mixed-opponent placement retains slider, explicit spacing edit and undo behaviour.');
 
 const measuredBefore=structuredClone(w.layouts.results),measuredCalls=requests.length;
-responseQueue=[answer({title_font:'condensed',player_font:'sans',title_size:40},{reference_geometry:{title_top:.02,title_width:.42,title_height:.1,player_height:.018,player_align:'center'},reference_size:{width:640,height:800}}),answer({})];
-id('saMatchExample').click();await settled();assert.equal(requests.length,measuredCalls+2);assert.equal(requests.at(-2).reference_geometry,true);assert.ok(requests.at(-1).current.title_size>100,'Measured type is rendered before the comparison');assert.equal(w.layouts.results.player_align,'center');
+responseQueue=[answer({title_font:'condensed',player_font:'sans',title_size:40},{reference_geometry:{title_top:.02,title_width:.42,title_height:.1,player_height:.018,player_align:'center',badge_width:.17},reference_size:{width:640,height:800}}),answer({title_size:40,player_size:22,badge_width:130})];
+id('saMatchExample').click();await settled();assert.equal(requests.length,measuredCalls+2);assert.equal(requests.at(-2).reference_geometry,true);assert.ok(requests.at(-1).current.title_size>100,'Measured type is rendered before the comparison');assert.equal(w.layouts.results.player_align,'center');assert.ok(w.layouts.results.title_size>100,'Review cannot undo measured title scale');assert.ok(w.layouts.results.player_size>22,'Review cannot shrink measured body ink');assert.equal(w.layouts.results.badge_width,180);assert.equal(w.layouts.results.mixed_rows_top,undefined,'A complete re-match reclaims the obsolete subtitle/header band');
 id('saUseRefinement').click();await settled();assert.equal(requests.length,measuredCalls+2);assert.equal(context.designs.results.layout.player_align,'center');id('saUndoRefinement').click();await settled();assert.deepEqual(w.layouts.results,measuredBefore);
 console.log('Passed: example-panel match applies measured proportions before rendered comparison and retains reviewed save/undo.');

@@ -1,10 +1,10 @@
-import {awardFontSpecimen,awardFontsReady} from './social-award-fonts.js?v=0.8.62.292';
-import {referenceStylePatch} from './social-award-reference.js?v=0.8.62.292';
+import {awardFontSpecimen,awardFontsReady} from './social-award-fonts.js?v=0.8.62.293';
+import {referenceStylePatch} from './social-award-reference.js?v=0.8.62.293';
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
 import {withGradeLabels,graphicLabel} from './social-graphic-design.js?v=0.8.62.270';
 import {labelSuggestions,assistantCSS,proposalMessage} from './social-graphic-assistant.js?v=0.8.62.270';
-import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.292';
-import {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.292';
+import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.293';
+import {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.293';
 
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
@@ -126,6 +126,7 @@ export function createSocialAwards(h){
  async function compareTemplate(s,kind,before,body,result,current){
   if(result.artwork_brief||!current())return result;
   const next=refinedAwardLayout(before,result,kind),canvas=document.createElement('canvas');
+  if(body.reference_geometry)delete next.mixed_rows_top;
   await draw(s,canvas,kind,previewItems(state(s),kind).slice(0,4),next);
   if(!current())return result;
   const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,using_reference_lettering:next.badge_cutout===true,brief:'Compare this rendered proposal with our previous example. Correct only the elements requested; preserve everything else. Original request: '+body.brief};
@@ -136,7 +137,10 @@ export function createSocialAwards(h){
    return {...result,explanation:String(result.explanation||'Template prepared.')+' The comparison check could not finish. Please compare the preview with your example before applying.'};
   }
   if(!current())return result;
-  return {...result,changes:{...visualPatch(result.changes),...visualPatch(review.changes)},badges:result.badges||[],explanation:review.explanation||result.explanation};
+  const reviewed={...result,changes:{...visualPatch(result.changes),...visualPatch(review.changes)},badges:result.badges||[],explanation:review.explanation||result.explanation};
+  // A review may choose a better face. Re-fit its actual ink to the measured
+  // reference so that a second response cannot silently undo those proportions.
+  return body.reference_geometry?measuredTemplate(before,reviewed,kind):reviewed;
  }
  async function tryRefinement(s,kind,prepareBackground,matchExample=false){
   const w=state(s),r=refinement(w,kind),canvas=el('saCanvas');if(w.busy||w.pending||r.saveUncertain||!w.previewReady||!canvas||!r.brief.trim()||!previewItems(w,kind).length)return;
@@ -154,6 +158,7 @@ export function createSocialAwards(h){
    if(!here(s,w)||s.view!==kind||w.end!==end)return;
    if(revision!==(w.context.designs[kind]?.revision||0)||sources!==signature()||!sameLayout(before,layout(w,kind)))throw Error('The preview changed while the edit was prepared. Try the change again.');
    const next=withGradeLabels(refinedAwardLayout(before,result,kind),result.grade_labels||[],previewItems(w,kind).map(x=>x.grade));artwork=String(result.artwork_brief||'').trim().slice(0,1500);
+   if(matchComposition&&kind==='results')delete next.mixed_rows_top;
    if(mixed&&!matchExample&&result.changes?.rows_top!=null){next.mixed_rows_top=next.rows_top;next.rows_top=before.rows_top;}
    const label=graphicLabel(result.graphic_label)??beforeLabel;const changed=!sameLayout(before,next)||label!==beforeLabel;if(changed||artwork){r.history.push({layout:before,label:beforeLabel,dirty,candidate,revision});w.title=label;r.history=r.history.slice(-8);w.layouts[kind]=next;w.designDirty[kind]=dirty||!sameLayout(before,next);r.candidate=true;}
    r.message=artwork?'Preparing proposed artwork changes…':proposalMessage(result,changed);
@@ -169,7 +174,7 @@ export function createSocialAwards(h){
   const r=refinement(w,kind);
   el('saRefineBrief')?.addEventListener('input',e=>{r.brief=e.target.value;el('saTryRefinement').disabled=!r.brief.trim()||!w.previewReady||!!r.saveUncertain;});
   el('saTryRefinement')?.addEventListener('click',()=>void tryRefinement(s,kind,prepareBackground));
-  el('saMatchExample')?.addEventListener('click',async()=>{r.brief=kind==='results'?'Match our previous example’s visual hierarchy and proportions: heading, readable player names, scores, result lettering, margins, alignment, colours and panels. Measure its text and panel proportions. Include the real winning margin. Adapt logos for our current opponents and keep match facts unchanged.':'Match our previous example’s separate heading, name, figure and grade lettering, colours, sizes and composition. Keep the current player, figures, grade, week and photo unchanged.';r.matching=true;r.fromExample=true;try{await tryRefinement(s,kind,prepareBackground,true);}finally{r.matching=false;if(here(s,w)&&s.view===kind){render(s);if(r.candidate)el('saCanvas')?.scrollIntoView({block:'start',behavior:'smooth'});}}});
+  el('saMatchExample')?.addEventListener('click',async()=>{r.brief=kind==='results'?'Match our previous example’s visual hierarchy and proportions: heading, readable player names, scores, result lettering, margins, alignment, colours and panels. Measure its text and panel proportions. Hide the week/team-summary subtitle if the example has none. Include the real winning margin. Adapt logos for our current opponents and keep match facts unchanged.':'Match our previous example’s separate heading, name, figure and grade lettering, colours, sizes and composition. Keep the current player, figures, grade, week and photo unchanged.';r.matching=true;r.fromExample=true;try{await tryRefinement(s,kind,prepareBackground,true);}finally{r.matching=false;if(here(s,w)&&s.view===kind){render(s);if(r.candidate)el('saCanvas')?.scrollIntoView({block:'start',behavior:'smooth'});}}});
   el('saUseRefinement')?.addEventListener('click',()=>void run(s,async()=>{try{if(w.designDirty[kind])await saveLayout(s,kind);if(h.saveLabel&&w.title!==w.awardLabel?.label)await h.saveLabel(s,w.end,w.title);r.candidate=false;r.saveUncertain=false;r.message='Changes applied. You can add the graphic to the post.';}catch(e){r.saveUncertain=true;r.message='Save not confirmed. Retry Apply changes, or choose Reload saved layout.';throw e;}}));
   el('saUndoRefinement')?.addEventListener('click',()=>{if(w.busy||w.pending||r.saveUncertain)return;undoRefinement(s,w,kind);});
  }
@@ -303,13 +308,4 @@ export function createSocialAwards(h){
  function bindRequest(s,w){el('saRefreshRequests')?.addEventListener('click',()=>void run(s,async()=>{if(await load(s,false))notice(s,'Award request updates checked.');}));document.querySelectorAll('[data-sa-remove-request-file]').forEach(b=>b.onclick=()=>{w.request.files.splice(Number(b.dataset.saRemoveRequestFile),1);delete w.request.id;remember(s);render(s);});const form=el('saRequest');form.oninput=()=>{let changed=false;for(const k of ['name','criteria','artwork_notes'])if(w.request[k]!==form.elements[k].value){w.request[k]=form.elements[k].value;changed=true;}if(changed)delete w.request.id;remember(s);};el('saRequestFiles').onchange=e=>{const files=[...e.target.files];void run(s,async()=>{if(w.request.files.length+files.length>6)throw Error('Use up to six example images.');for(const file of files){w.request.files.push(await uploadArtwork(s,file));delete w.request.id;remember(s);}notice(s,'Request artwork uploaded. Submit the request when ready.');});};form.onsubmit=e=>{e.preventDefault();void run(s,async()=>{w.request.id||=crypto.randomUUID();remember(s);await rpc(s,'request',structuredClone(w.request));w.request={name:'',criteria:'',artwork_notes:'',files:[]};remember(s);const loaded=await load(s,false);notice(s,loaded?'Award request submitted. Its status and our reply will appear below.':'Award request submitted. Could not refresh its status. Check for updates when connected.');});};}
  function canLeave(s){const w=s.awards;if(!w)return true;if(w.busy||w.pending){h.message(s,'Finish saving the graphics before leaving.');return false;}if(w.choices){h.message(s,'Save your award choices before leaving.');return false;}if(Object.values(w.drafts).some(p=>p.dirty)){h.message(s,'Confirm the photo position before leaving.');return false;}if(Object.values(w.refinements||{}).some(r=>r.candidate)){h.message(s,'Apply changes or undo the graphic changes before leaving.');return false;}if(Object.values(w.designDirty).some(Boolean)){h.message(s,'Save the award layout before leaving.');return false;}remember(s);return true;}
  return {render,settings,menu,bindMenu,canLeave,load,state,mountPost,addToPost,uploadArtwork,hasChanges:s=>!!s.awards&&(s.awards.busy||s.awards.pending||s.awards.choices||requestDraft(s.awards)||Object.values(s.awards.drafts).some(p=>p.dirty)||Object.values(s.awards.designDirty).some(Boolean))};
-}
-
-export async function renderSocialAwardRequests({supabase,escape:esc},host){
- if(!host)return;host.innerHTML='<p>Loading award requests…</p>';
- const call=async(action,data={})=>{const r=await supabase.rpc('club_social_awards_api',{p_club_id:null,p_action:action,p_data:data});if(r.error)throw Error(r.error.message);return r.data;};
- try{const {requests}=await call('admin_context');if(!host.isConnected)return;host.innerHTML=`<h3>Socials award requests · ${requests.length}</h3><p>Choose a status and add a reply. The club sees both in Socials Awards.</p>${requests.map(r=>`<form data-award-request="${esc(r.id)}" class="se-card"><h4>${esc(r.club_name)} · ${esc(r.name)}</h4><p style="white-space:pre-wrap">${esc(r.criteria)}</p><p>${esc(r.artwork_notes)}</p><div>${r.files.map((f,i)=>`<button class="btn ghost" type="button" data-request-file="${esc(r.id)}:${i}">View ${esc(f.name)}</button>`).join('')}</div><label>Status<select name="status">${REQUEST_STATUSES.map(([key,label])=>`<option value="${key}" ${key===r.status?'selected':''}>${label}</option>`).join('')}</select></label><label>Reply to the club (optional)<textarea name="reply" rows="2" maxlength="2000" placeholder="Explain the decision or where to find the completed award.">${esc(r.reply)}</textarea></label><button class="btn" type="submit" disabled>Saved</button><p role="status"></p></form>`).join('')||'<p>No award requests yet.</p>'}`;
-  host.querySelectorAll('[data-award-request]').forEach(form=>{const r=requests.find(x=>x.id===form.dataset.awardRequest),button=form.querySelector('[type=submit]'),status=form.querySelector('[role=status]');form.oninput=()=>{button.disabled=false;button.textContent='Save update for club';};form.onsubmit=async e=>{e.preventDefault();if(button.disabled)return;button.disabled=true;button.textContent='Saving…';try{const result=await call('admin_update',{id:r.id,revision:r.revision,...Object.fromEntries(new FormData(form))});r.revision=result.revision;button.textContent='Saved';status.textContent='Update saved. The club can see it in Socials Awards.';}catch(e){status.textContent=e.message;button.disabled=false;button.textContent='Retry save';}};});
-  host.querySelectorAll('[data-request-file]').forEach(b=>b.onclick=async()=>{if(b.disabled)return;const label=b.textContent;b.disabled=true;b.textContent='Loading…';try{const [id,index]=b.dataset.requestFile.split(':'),file=requests.find(r=>r.id===id).files[Number(index)],r=await supabase.storage.from('club-social-awards').createSignedUrl(file.path,120);if(r.error)throw Error(r.error.message);const img=document.createElement('img');img.src=r.data.signedUrl;img.alt=file.name;img.style='max-width:100%;max-height:550px;display:block;margin:10px 0';b.after(img);b.textContent='Image shown';}catch(e){b.disabled=false;b.textContent=label;b.closest('form').querySelector('[role=status]').textContent=e.message;}});
- }catch(e){host.innerHTML='<p role="alert">'+esc(e.message)+'</p>';}
 }

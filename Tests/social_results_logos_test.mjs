@@ -16,7 +16,7 @@ async function render(items,{layout={},images={}}={}){
  const h={fontReady:async()=>{},text:(ctx,value,x,y,width,size)=>{ctx.font=`700 ${size}px "Club Sporting"`;while(ctx.measureText(value).width>width&&size>10)ctx.font=`700 ${--size}px "Club Sporting"`;labels.push({value,x,y,size});ctx.fillText(value,x,y);}};
  const d=awardLayout('results',layout);
  await drawAwardGraphic(h,{design:{primary:'#292d75',accent:'#a8223d'}},canvas,{kind:'results',items,layout:d,week:'WEEK ENDING 11/10/2026',images:{logo:club,opponents:Object.fromEntries(items.map(x=>[x.key,opposition])),...images}});
- return {canvas,draws,labels,layout:d};
+ return {canvas,draws,labels,layout:d,plan:canvas.resultsLayout};
 }
 function checkPair(result,left,right,vs){
  assert.ok(left&&right&&vs,'Both badges and VS are rendered');
@@ -45,7 +45,7 @@ test('Different opponents get the correct pair and VS in each result',async()=>{
  assert.equal(versus.length,2);assert.equal(ours.length,2);
  checkPair(result,ours[0],result.draws.find(d=>d.image===opposition),versus[0]);
  checkPair(result,ours[1],result.draws.find(d=>d.image===other),versus[1]);
- assert.ok(versus.every(t=>t.y>1350*result.layout.rows_top/100),'No single opposition is presented as applying to every grade');
+ assert.ok(versus[1].y>versus[0].y+100,'Each different opponent remains beside its own result row');
  preview('results-mixed-opponents',result);
 });
 
@@ -66,4 +66,26 @@ test('each grade displays its own imported result, and a later round can reverse
  const first=await render(items);assert.deepEqual(first.labels.filter(t=>['WIN','DEF'].includes(t.value)).map(t=>t.value),['DEF','WIN','DEF','WIN']);preview('results-playcricket-outcomes',first);
  for(const [i,item] of items.entries())item.result=(i%2?'Visitors':'Newcastle City')+' won by 18 runs';
  const next=await render(items);assert.deepEqual(next.labels.filter(t=>['WIN','DEF'].includes(t.value)).map(t=>t.value),['WIN','DEF','WIN','DEF']);
+});
+
+
+test('two, three and four mixed matches scale their own logo pairs above the panels and retain every margin',async()=>{
+ const sizes=[];
+ for(const count of [2,3,4]){
+  const items=Array.from({length:count},(_,i)=>({...fixture(i+1,'club-'+i),result:'Other Club won by 18 runs'})),facts=JSON.stringify(items);
+  const result=await render(items,{layout:{layout_mode:'template',row_logo_size:38,rows_bottom:94,result_labels:'won_lost',badge_style:'glow',badge_y:62}});
+  const {top,rowHeight,gap,logoBand,mixedLogos}=result.plan,ours=result.draws.filter(d=>d.image===club),versus=result.labels.filter(t=>t.value==='VS');
+  assert.equal(ours.length,count);assert.equal(versus.length,count);assert.equal(result.labels.filter(t=>t.value==='BY 18 RUNS').length,count,'Every recorded margin remains visible');
+  for(let i=0;i<count;i++){
+   const panelTop=top+i*(rowHeight+gap+logoBand),[x,y,w,h]=ours[i].box;
+   assert.ok(w>=90,`${count} matches: logos stay legible even with an old 38px setting`);
+   assert.ok(y+h<=panelTop-20,'Logos sit above the grade panel');
+   if(i)assert.ok(y>=panelTop-(gap+logoBand)+8,'Logos remain clear of the preceding panel');
+   checkPair(result,ours[i],result.draws.filter(d=>d.image===opposition)[i],versus[i]);
+  }
+  sizes.push(mixedLogos.size);assert.equal(JSON.stringify(items),facts,'Layout never changes match data');
+  preview('results-mixed-'+count,result);
+ }
+ assert.ok(sizes[0]>sizes[1]&&sizes[1]>sizes[2],'Fewer selected matches use larger logos');
+ assert.ok(sizes[2]>=sizes[1]*.65,'Four matches do not collapse to tiny inline badges');
 });
