@@ -1,3 +1,4 @@
+import socialSource from './helpers/social-source.cjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -7,7 +8,7 @@ import {createRequire} from 'node:module';
 import {teamSelectionText} from '../social-team-layout.js';
 import {graphicGrade,checkGraphicLabel} from '../social-graphic-design.js';
 const require=createRequire(import.meta.url),{createCanvas,GlobalFonts}=require('@napi-rs/canvas');
-const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const app=socialSource(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'));
 const part=(a,b)=>app.slice(app.indexOf(a),app.indexOf(b,app.indexOf(a)));
 const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 function card({round='Round 2',split=false,day=0,days=[{date:'2026-10-24',start:'10:00'}],ground='Example Oval'}={}){

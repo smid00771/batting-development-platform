@@ -1,5 +1,6 @@
+const socialSource=require('./helpers/social-source.cjs');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{JSDOM}=require('jsdom');
-function source(file){return fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8');}
+function source(file){return socialSource(fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8'));}
 function fn(src,name){const m=new RegExp('(?:async )?function '+name+'\\(').exec(src);assert.ok(m,name);const rest=src.slice(m.index),end=rest.slice(1).search(/\n(?:async )?function /);return rest.slice(0,end+1);}
 for(const file of ['app.js','demo.html']){
  test(file+': captain, player, selector and socials navigation combine without losing prior roles',()=>{
@@ -60,7 +61,7 @@ for(const file of ['app.js','demo.html'])test(file+': self-removal returns to re
  vm.runInContext(fn(source(file),'socialSave'),c);assert.equal(await c.socialSave(s,'manager',{enabled:false}),true);assert.equal(s.pending,null);assert.equal(s.busy,false);assert.equal(selections.view,'published');assert.deepEqual(calls,['reload','teams']);
 });
 test('Demo uses the same publishing permission and account UI as the live module',()=>{
- const live=source('social-publishing.js').split('export function createSocialPublishing')[1].trim(),demo=source('demo.html').split('function createSocialPublishing')[1];assert.ok(demo.startsWith(live));
+ const live=source('social-publishing.js').split('export function createSocialPublishing')[1].trim().replaceAll('localStorage','fixtureLocalStorage').replaceAll('sessionStorage','fixtureSessionStorage'),demo=source('demo.html').split('function createSocialPublishing')[1];assert.ok(demo.startsWith(live));
 });
 test('Platform owner can open actual Meta setup controls from Social accounts',async()=>{
  const dom=new JSDOM('<main id="socialContent"></main>',{url:'https://clubbatting.com/'});global.window=dom.window;global.document=window.document;global.location=window.location;

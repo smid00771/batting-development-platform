@@ -1,12 +1,10 @@
+const socialSource=require('./helpers/social-source.cjs');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../app.js'),'utf8');
-const start=source.indexOf('async function socialReviewUpdatedAward(s,edition){');
-const end=source.indexOf('\nfunction socialAdoptResultsWeek(',start);
-assert.ok(start>=0&&end>start);
-const helper=source.slice(start,end);
+const source=socialSource(fs.readFileSync(require('node:path').join(__dirname,'../app.js'),'utf8'));
+const helper=['socialReviewUpdatedAward','socialAwardScopeChanged'].map(name=>socialSource.functionSource(source,name)).join('\n');
 function setup(kind='team_week',existing={}){
  const key=kind==='team_week'?'week':'playerWeek',loads=[],prompts=[],s={view:'award_collection',[key]:{end:'2026-10-04',context:{design:{revision:3}},rows:[],...existing}};
  const moduleFor=name=>({state:x=>x[name]||=({end:'2026-10-18',context:null,rows:[],layout:{},title:'',blurb:''}),load:(x,options)=>{loads.push({kind:name,end:x[name].end,options});x[name].context={};}});

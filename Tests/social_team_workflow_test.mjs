@@ -1,3 +1,4 @@
+import socialSource from './helpers/social-source.cjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -48,7 +49,7 @@ s.view='accounts';draw();assert.equal(document.getElementById('spArrangeCover'),
 s.view='managers';draw();document.getElementById('spArrangeCover').click();assert.ok(document.getElementById('spCoverForm'));assert.equal(s.view,'managers','Cover opens in responsibility page');assert.equal(document.getElementById('spManageSocials'),null);
 document.querySelector('[name="user_id"]').value='cover';document.querySelector('[name="until"]').value='2099-10-18';document.getElementById('spCoverForm').dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();assert.equal(s.view,'managers');assert.equal(calls.filter(x=>x==='delegate').length,1);assert.match(document.body.textContent,/Replacement/);
 // Exercise the production section shell: setup and responsibility have no creation selector.
-const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const source=socialSource(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'));
 function part(name){const start=source.search(new RegExp('(?:async )?function '+name+'\\(')),next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
 const selections={view:'socials'},landing=vm.createContext({selectionRoomController:null,recordSelectionNavigation(){},confirmLeaveSelections:()=>leave,ensureSelections:()=>selections,socialEnsure:()=>s,socialTeamWorkflow:workflow,drawSelections:()=>{}});
 vm.runInContext(['seChangeView','socialLanding'].map(part).join('\n'),landing);

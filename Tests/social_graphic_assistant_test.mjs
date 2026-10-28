@@ -1,3 +1,4 @@
+import socialSource from './helpers/social-source.cjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -79,7 +80,7 @@ for(const [kind,create,apiCreate,prefix,canvasId] of [['team_week',createTeamOfW
 
 // The new team-background handoff uses the existing image editor and optimistic asset save.
 {
- const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),source=app.slice(app.indexOf('async function socialTeamEditBackground('),app.indexOf('function seApplyWeekLaunch('));
+ const app=socialSource(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8')),source=socialSource.functionSource(app,'socialTeamEditBackground');
  const asset={id:'background',kind:'background',path:'club/background/saved.png',revision:4},s={scope:'user:club',busy:false},requests=[];let handoff,failed=false;
  const c=vm.createContext({File,crypto,socialCanLeave:()=>true,socialHere:()=>true,socialAsset:(_,kind)=>kind==='background'?asset:null,socialMessage:(_,message)=>requests.push(message),
  supabase:{storage:{from:bucket=>({download:async path=>{assert.equal(bucket,'club-socials');assert.equal(path,asset.path);return {data:new Blob(['saved image'],{type:'image/png'})};},upload:async(path,blob,options)=>{assert.match(path,/^club\/background\/[0-9a-f-]+\.png$/);assert.equal(options.upsert,false);return {data:{path}};}})}},socialAwardBackground:(_,file,apply,options)=>{handoff={file,apply,options};},socialSave:async(state,action,data)=>{assert.equal(state.busy,false);requests.push({action,data});return !failed;}});

@@ -1,6 +1,7 @@
+const socialSource=require('./helpers/social-source.cjs');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {JSDOM}=require('jsdom'),{webcrypto}=require('node:crypto');
-const app=fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8');
+const app=socialSource(fs.readFileSync(new URL('../app.js','file://'+__filename),'utf8'));
 function fn(name){const m=new RegExp('(?:async )?function '+name+'\\(').exec(app);assert.ok(m,name);const rest=app.slice(m.index),end=rest.slice(1).search(/\n(?:(?:async )?function |window\.addEventListener|const )/);return end<0?rest.split("\n")[0]:rest.slice(0,end+1);}
 const functions=['socialGuidePrepare','socialGuidePreparation','socialGuidePreparationFeedback','socialGuideReviewVersion','socialGuideRefineVersion','socialGuideRevertVersion','socialPrepStart','socialGuideReload','socialGuideResetImage','socialGuideRemember','socialGuideDraftKey','socialGuideNextState','socialGuideSaveAndContinue','socialSaveAwardBackground','socialGuideReturnToAward','socialAwardBackground','socialGuideEnter'];
 function setup(){

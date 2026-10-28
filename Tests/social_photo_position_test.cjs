@@ -1,9 +1,10 @@
+const socialSource=require('./helpers/social-source.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),{webcrypto}=require('node:crypto');
 const {graphicGrade,checkGraphicLabel}=require('../social-graphic-design.js');
 const {teamSelectionText}=require('../social-team-layout.js');
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
-const app=fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8'),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
+const app=socialSource(fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8')),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
 function part(text,start,end){const a=text.indexOf(start),b=text.indexOf(end,a);assert(a>=0&&b>a);return text.slice(a,b);}
 const boundaries=[['function socialFixtureCompleted(','async function socialRPC('],['function socialCards(','function socialDate('],['function socialSurname(','function socialPhotoId('],
  ['function socialPlayerPhotos(','function socialOversNotice('],['function socialFeatureRequest(','function socialInk('],

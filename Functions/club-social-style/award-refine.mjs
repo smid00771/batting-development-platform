@@ -69,7 +69,7 @@ export async function refineAward(body,{url,anon,key,model,authorization,fetcher
   if(samples)content.push({type:'input_text',text:'SUPPORTED FONT SAMPLES. Match each reference text role to the closest actual font shown here. Sample words are not match facts.'},{type:'input_image',image_url:body.font_samples,detail:'high'});
   const schema=general?graphicSchema(body.kind,grades,players):{...awardStyleSchema,required:[...awardStyleSchema.required,'grade_labels','graphic_label'],properties:{...awardStyleSchema.properties,grade_labels:gradeLabelSchema(grades),graphic_label:graphicLabelSchema}};
   if(body.reference_geometry&&!body.reference_review){schema.required.push('reference_geometry');schema.properties.reference_geometry=referenceGeometrySchema;}
-  if(!general&&!supportsComposition){schema.properties.changes=structuredClone(schema.properties.changes);for(const key of Object.keys(AWARD_COMPOSITION_FIELDS)){delete schema.properties.changes.properties[key];schema.properties.changes.required=schema.properties.changes.required.filter(k=>k!==key);}}
+  if(!general){schema.properties.changes=structuredClone(schema.properties.changes);for(const key of Object.keys(AWARD_COMPOSITION_FIELDS))if(!Object.hasOwn(current,key)){delete schema.properties.changes.properties[key];schema.properties.changes.required=schema.properties.changes.required.filter(k=>k!==key);}}
   if(body.match_reference&&!body.reference_review){
    schema.properties.changes=structuredClone(schema.properties.changes);
    for(const role of ['title','week','grade','score','player','badge','margin'])schema.properties.changes.properties[role+'_font']={type:'string',enum:['sporting','modern','classic','condensed','sans','script']};
@@ -94,7 +94,7 @@ export async function refineAward(body,{url,anon,key,model,authorization,fetcher
   const value=JSON.parse(result.output_text||output.filter(x=>x.type==='output_text').map(x=>x.text).join(''));
   const changes=general?graphicPatch(body.kind,value.changes):visualPatch(value.changes),badges=badgeCrops(value.badges||[]),labels=gradeLabels(value.grade_labels||[],grades),nextLabel=graphicLabel(value.graphic_label);
   const measurements=body.reference_geometry&&!body.reference_review?referenceGeometry(value.reference_geometry):{};
-  if(!supportsComposition&&Object.keys(changes).some(key=>Object.hasOwn(AWARD_COMPOSITION_FIELDS,key)))throw Error('Unsupported composition fields');
+  if(Object.keys(changes).some(key=>Object.hasOwn(AWARD_COMPOSITION_FIELDS,key)&&!Object.hasOwn(current,key)))throw Error('Unsupported composition fields');
   if((body.example_setup||body.reference_review)&&((body.reference_review||!body.match_reference)&&badges.length||labels.length||nextLabel||value.artwork_brief))throw Error('Example setup can change only the supported visual settings.');
   if(body.match_reference&&!body.reference_review&&['title','week','grade','score','player','badge','margin'].some(role=>!['sporting','modern','classic','condensed','sans','script'].includes(changes[role+'_font'])))throw Error('Choose each reference font role.');
   const playerDisplays=graphicPlayerDisplays(value.player_displays||[],players);

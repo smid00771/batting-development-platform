@@ -45,7 +45,7 @@ test('Different opponents get the correct pair and VS in each result',async()=>{
  assert.equal(versus.length,2);assert.equal(ours.length,2);
  checkPair(result,ours[0],result.draws.find(d=>d.image===opposition),versus[0]);
  checkPair(result,ours[1],result.draws.find(d=>d.image===other),versus[1]);
- assert.ok(versus.every(t=>t.y>1350*result.layout.rows_top/100),'No single opposition is presented as applying to every grade');
+ assert.ok(versus[1].y>versus[0].y+100,'Each different opponent remains beside its own result row');
  preview('results-mixed-opponents',result);
 });
 

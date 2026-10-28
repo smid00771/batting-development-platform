@@ -211,3 +211,8 @@ test('reference measurements are bounded presentation geometry and old clients r
  const denied=setup();assert.equal((await refineAward({...old,match_reference:true,reference_geometry:true},denied.options)).status,400);assert.equal(denied.calls.length,0);
  const unsupported=setup({output:{changes:{player_align:'center'}}});assert.equal((await refineAward(old,unsupported.options)).status,502);
 });
+test('subtitle visibility is visual-only and omitted from older client contracts',async()=>{
+ const body=request(),good=setup({output:{changes:{show_week:false}}});assert.equal((await refineAward(body,good.options)).body.changes.show_week,false);
+ const old=request();delete old.current.show_week;const legacy=setup();assert.equal((await refineAward(old,legacy.options)).status,200);assert.equal(legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.show_week,undefined);
+ const unsupported=setup({output:{changes:{show_week:false}}});assert.equal((await refineAward(old,unsupported.options)).status,502);
+});

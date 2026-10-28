@@ -1,7 +1,8 @@
+const socialSource=require('./helpers/social-source.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
-const app=fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8'),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
+const app=socialSource(fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8')),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8');
 function part(s){return s.slice(s.indexOf('async function socialShowHistory('),s.indexOf('function socialGraphics('));}
 function setup(){
  const calls=[],downloads=[],status={textContent:''},img={dataset:{socialSavedImage:'club/post/0.jpg'},nextElementSibling:status},retry={addEventListener(event,fn){this['on'+event]=fn;}},host={innerHTML:'',dataset:{},isConnected:true,querySelectorAll:()=>[img],querySelector:()=>retry};
