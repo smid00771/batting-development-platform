@@ -1,5 +1,5 @@
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
-import {safeAwardStyle} from './social-awards-design.js?v=0.8.62.193';
+import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.289';
 
 export const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
@@ -96,18 +96,17 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
    ctx.textAlign='right';if(bat)text(`${bat.runs}${bat.not_out?'*':''}`,458,y+95+j*line,70,font,layout.player_colour);if(bowl)text(`${bowl.wickets}/${bowl.runs}`,right,y+95+j*line,100,font,layout.player_colour);ctx.textAlign='center';
   }
   if(!sharedOpponent){const size=Math.max(12,Math.min(72,rowHeight*.3));logoPair(images.opponents?.[item.key],r,552,y+38+size/2,size,30,'#17395a');}
-  const outcomeLabel=outcome==='LOSS'?'DEF':outcome||'CHECK RESULT';
-  drawResultBadge(ctx,text,{label:outcomeLabel,x:552,y:y+rowHeight*layout.badge_y/100,maxHeight:Math.min(100,rowHeight*.4),layout,example:images.example});
+  drawResultBadge(ctx,text,{outcome,label:resultLabel(outcome,layout),x:552,y:y+rowHeight*layout.badge_y/100,maxHeight:Math.min(100,rowHeight*.4),layout,example:images.example});
   if(!sharedOpponent)text(r.opposition,552,y+rowHeight*.87,195,18,'#17395a');
  }
 }
 
 // The label is always computed from the imported outcome, never from a design request.
-function drawResultBadge(ctx,text,{label,x,y,maxHeight,layout:d,example}){
- const crop=example&&d.badge_source===d.example_path&&d.badge_crops.find(c=>c.label===label),colour=label==='WIN'?d.win_colour:label==='DEF'?d.loss_colour:d.score_colour;
+function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,example}){
+ const crop=example&&d.badge_source===d.example_path&&matchingResultBadgeCrops(d).find(c=>c.label===label),colour=outcome==='WIN'?d.win_colour:outcome==='LOSS'?d.loss_colour:d.score_colour;
  if(crop){const iw=example.naturalWidth||example.width,ih=example.naturalHeight||example.height,sw=iw*crop.width,sh=ih*crop.height,fit=Math.min(d.badge_width/sw,maxHeight/sh);ctx.drawImage(example,iw*crop.x,ih*crop.y,sw,sh,x-sw*fit/2,y-sh*fit/2,sw*fit,sh*fit);return;}
  const size=label.length>4?Math.min(26,d.badge_size):d.badge_size;
- if(!['WIN','DEF'].includes(label)||(d.badge_style==='plain'&&!d.badge_angle)){text(label,x,y,d.badge_width,size,colour);return;}
+ if(!['WIN','LOSS'].includes(outcome)||(d.badge_style==='plain'&&!d.badge_angle)){text(label,x,y,d.badge_width,size,colour);return;}
  ctx.save();ctx.translate(x,y);const angle=d.badge_angle*Math.PI/180,w=d.badge_width,ht=Math.min(maxHeight,Math.max(54,size*1.45)),fit=Math.min(1,178/(Math.abs(Math.cos(angle))*w+Math.abs(Math.sin(angle))*ht));ctx.rotate(angle);ctx.scale(fit,fit);ctx.fillStyle=colour;ctx.strokeStyle=colour;ctx.lineWidth=4;
  if(d.badge_style==='plain'){text(label,0,0,w,size,colour);ctx.restore();return;}
  if(d.badge_style==='circle'){ctx.beginPath();ctx.ellipse(0,0,w/2,ht/2,0,0,Math.PI*2);ctx.fill();}

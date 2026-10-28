@@ -9,7 +9,7 @@ import {graphicGrade,checkGraphicLabel} from '../social-graphic-design.js';
 const require=createRequire(import.meta.url),{createCanvas,GlobalFonts}=require('@napi-rs/canvas');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const part=(a,b)=>app.slice(app.indexOf(a),app.indexOf(b,app.indexOf(a)));
-const font=app.match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 function card({round='Round 2',split=false,day=0,days=[{date:'2026-10-24',start:'10:00'}],ground='Example Oval'}={}){
  const players=['Alex Archer','Blake Brown','Chris Carter','Drew Davis','Evan Edwards','Finley Fisher','George Green','Harper Hill','Indy Irving','Jordan Jones','Kai King'].map((name,i)=>({id:String(i),name}));
  return {day,split,key:'example:0',f:{id:'example',round,features:[],published:{details:{grade:'FIRST GRADE',opposition:'Visitors',competition:'Example Competition',format:'limited_overs',overs:40,ground,days,match_roles:{d1:{captain_id:'3',keeper_id:'0'},d2:{captain_id:'3',keeper_id:'0'}}},players,slots:players.map(p=>({d1:p.id,d2:p.id}))}}};

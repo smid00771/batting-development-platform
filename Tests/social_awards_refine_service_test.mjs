@@ -47,7 +47,7 @@ test('rejects oversized/invalid previews and factual or unsafe settings before a
  }
 });
 test('model output cannot change facts, replace asset paths or produce invalid crops',async()=>{
- for(const output of [{changes:{result:'WIN'}},{changes:{background_path:example}},{changes:{rows_top:65,rows_bottom:70}},{changes:{},badges:[{label:'LOSS',x:0,y:0,width:.1,height:.1}]},{changes:{},badges:[{label:'WIN',x:.99,y:0,width:.2,height:.1}]}]){
+ for(const output of [{changes:{result:'WIN'}},{changes:{background_path:example}},{changes:{rows_top:65,rows_bottom:70}},{changes:{},badges:[{label:'VICTORY',x:0,y:0,width:.1,height:.1}]},{changes:{},badges:[{label:'WIN',x:.99,y:0,width:.2,height:.1}]}]){
   const {options}=setup({output});assert.equal((await refineAward(request(),options)).status,502);
  }
 });
@@ -144,4 +144,25 @@ test('assistant output cannot invent figures, use an unselected player or show a
  const legacy=setup({context,output:{changes:{},grade_labels:[],artwork_brief:null}}),legacyBody={...body};delete legacyBody.preview_players;
  const result=await refineAward(legacyBody,legacy.options);assert.equal(result.status,200);assert.equal(result.body.player_displays,undefined);
  assert.equal(legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.player_displays,undefined);
+});
+
+test('initial example setup matches supported typography, wording and layout without copying labels or facts',async()=>{
+ const output={changes:{font:'sporting',result_labels:'won_lost',rows_top:24,rows_bottom:95,row_gap:18},badges:[],grade_labels:[],graphic_label:null,explanation:'Matched the wording and closest supported font.',artwork_brief:null};
+ const body={...request(),example_setup:true},good=setup({output}),result=await refineAward(body,good.options);
+ assert.equal(result.status,200);assert.deepEqual(result.body.changes,output.changes);
+ assert.match(good.calls.find(c=>c.url.includes('openai')).body.instructions,/INITIAL EXAMPLE SETUP/);
+ for(const extra of [{graphic_label:'Old round'}, {artwork_brief:'Paint WON into the background'}, {badges:[{label:'WON',x:.4,y:.3,width:.15,height:.05}]}]){
+  const bad=setup({output:{...output,...extra}});assert.equal((await refineAward(body,bad.options)).status,502);
+ }
+ const missing=setup({context:{designs:{results:{revision:3,layout:{}}}}});assert.equal((await refineAward(body,missing.options)).status,400);assert.ok(!missing.calls.some(c=>c.body?.p_action==='style_request'));
+});
+test('paired wording is supported across every row; incomplete crops fall back consistently and older clients remain compatible',async()=>{
+ const changes={result_labels:'won_lost',font:'sporting'},good=setup({output:{changes,badges:[],artwork_brief:null}}),result=await refineAward(request(),good.options);
+ assert.equal(result.status,200);assert.deepEqual(result.body.changes,changes);assert.equal(result.body.artwork_brief,null);
+ const partial=setup({output:{changes:{result_labels:'won_lost'},badges:[{label:'WON',x:.4,y:.3,width:.15,height:.05}],artwork_brief:null}}),fallback=await refineAward(request(),partial.options);
+ assert.equal(fallback.status,200);assert.deepEqual(fallback.body.badges,[]);assert.match(fallback.body.explanation,/Both result words/);
+ const legacyBody=request();delete legacyBody.current.result_labels;
+ const legacy=setup(),old=await refineAward(legacyBody,legacy.options);assert.equal(old.status,200);
+ const schema=legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema;assert.equal(schema.properties.changes.properties.result_labels,undefined);assert.deepEqual(schema.properties.badges.items.properties.label.enum,['WIN','DEF']);
+ const invalid=setup({output:{changes,badges:[]}});assert.equal((await refineAward(legacyBody,invalid.options)).status,502);
 });

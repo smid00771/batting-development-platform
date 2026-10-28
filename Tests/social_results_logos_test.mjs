@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import {awardLayout,drawAwardGraphic} from '../social-awards-model.js';
 
 const require=createRequire(import.meta.url),{createCanvas,GlobalFonts}=require('@napi-rs/canvas');
-const font=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];
+const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];
 GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
 function badge(label,colour,width=100,height=100){const image=createCanvas(width,height),ctx=image.getContext('2d');ctx.fillStyle=colour;ctx.fillRect(0,0,width,height);ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.font='bold 22px Arial';ctx.fillText(label,width/2,height/2+8);return image;}
 const club=badge('CITY','#df2148'),opposition=badge('VISITORS','#146741',160,100),other=badge('OTHER','#1951a5',80,120);

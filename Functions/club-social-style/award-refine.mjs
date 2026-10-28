@@ -1,4 +1,4 @@
-import {visualPatch,badgeCrops,refinedAwardLayout,awardStyleSchema,awardStyleInstructions} from '../../social-awards-design.js';
+import {visualPatch,badgeCrops,refinedAwardLayout,matchingResultBadgeCrops,awardStyleSchema,awardStyleInstructions,awardExampleInstructions} from '../../social-awards-design.js';
 import {GRAPHIC_FIELDS,graphicPatch,refinedGraphicLayout,graphicSchema,graphicInstructions,gradeLabels,gradeLabelSchema,withGradeLabels,graphicGrade,graphicLabel,graphicLabelKinds,graphicLabelSchema,graphicLabelInstructions,graphicPlayerDisplays} from '../../social-graphic-design.js';
 
 const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -15,6 +15,7 @@ export async function refineAward(body,{url,anon,key,model,authorization,fetcher
  try{
   if(!body||typeof body!=='object')return failure(400,'Choose a graphic and describe the change.');
   const general=Object.hasOwn(GRAPHIC_FIELDS,body.kind||'');
+  if(body.example_setup!==undefined&&(body.example_setup!==true||general))return failure(400,'Choose an award example to prepare.');
   if(!uuid(body.club_id)||!general&&!['results','century','five_wickets'].includes(body.kind)||typeof body.brief!=='string'||!body.brief.trim()||body.brief.length>1500||!/^\d{4}-\d{2}-\d{2}$/.test(body.week_end||'')||!Number.isInteger(body.design_revision)||body.design_revision<0)return failure(400,'Choose a graphic and describe the change in a short message.');
   if(typeof body.preview!=='string'||body.preview.length>2800000||!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(body.preview))return failure(400,'The graphic preview could not be read. Refresh the preview and try again.');
   let current,preview,label;try{current=general?graphicPatch(body.kind,body.current):visualPatch(body.current);label=graphicLabel(body.graphic_label);if(label&&!graphicLabelKinds.includes(body.kind))throw Error('Unsupported label');preview=Uint8Array.from(atob(body.preview.slice(22)),c=>c.charCodeAt(0));}catch{return failure(400,'The graphic settings could not be read. Refresh and try again.');}
@@ -31,6 +32,7 @@ export async function refineAward(body,{url,anon,key,model,authorization,fetcher
   if((saved?.revision||0)!==body.design_revision)return failure(409,'The club’s saved artwork changed. Reload the saved layout, then try again.');
   const reference=body.kind==='team_selections'?(context.assets||[]).find(a=>['reference','reference_extra'].includes(a.kind)):null;
   const example=reference?.path||saved?.layout?.example_path||null,folder=body.kind==='team_week'?'backgrounds':body.kind==='team_selections'?'(?:reference|reference_extra)':'artwork',bucket=({team_week:'club-team-week',player_week:'club-player-week',team_selections:'club-socials'})[body.kind]||'club-social-awards';
+  if(body.example_setup&&!example)return failure(400,'Upload a previous example for this club first.');
   if(example&&!new RegExp('^'+body.club_id+'/'+folder+'/[0-9a-f-]{36}\\.png$','i').test(example))return failure(400,'Upload a previous example for this club first.');
   let grades=[...new Set([...(context.candidates||[]).map(p=>p.grade),...(context.cards||[]).map(c=>c.scorecard?.grade),...(context.fixtures||[]).map(f=>f.published?.details?.grade),...(context.grade_defaults||[]).map(g=>g.grade)].filter(g=>typeof g==='string'&&g.trim()))];
   let labelsNow;try{
@@ -55,17 +57,30 @@ export async function refineAward(body,{url,anon,key,model,authorization,fetcher
    content.push({type:'input_text',text:'THIS CLUB’S PREVIOUS EXAMPLE. Visual reference only. Old scores and results must never be reused.'},{type:'input_image',image_url:'data:image/png;base64,'+base64(bytes),detail:'high'});
   }
   const schema=general?graphicSchema(body.kind,grades,players):{...awardStyleSchema,required:[...awardStyleSchema.required,'grade_labels','graphic_label'],properties:{...awardStyleSchema.properties,grade_labels:gradeLabelSchema(grades),graphic_label:graphicLabelSchema}};
-  const instructions=general?graphicInstructions:awardStyleInstructions+'\n'+graphicLabelInstructions+'\nFor an explicit request to shorten a grade label, return grade_labels with the exact full source grade from available_grades and the requested short label. This affects the graphic only. Otherwise return an empty grade_labels array. Never rename other grades.';
+  const supportsResultLabels=Object.hasOwn(current,'result_labels');
+  if(!general&&!supportsResultLabels){
+   schema.properties.changes=structuredClone(schema.properties.changes);
+   delete schema.properties.changes.properties.result_labels;schema.properties.changes.required=schema.properties.changes.required.filter(k=>k!=='result_labels');
+   schema.properties.badges=structuredClone(schema.properties.badges);schema.properties.badges.items.properties.label.enum=['WIN','DEF'];
+  }
+  const instructions=general?graphicInstructions:awardStyleInstructions+'\n'+graphicLabelInstructions+'\nFor an explicit request to shorten a grade label, return grade_labels with the exact full source grade from available_grades and the requested short label. This affects the graphic only. Otherwise return an empty grade_labels array. Never rename other grades.'+(!supportsResultLabels?'\nThis older client supports only WIN/DEF wording. Do not return result_labels or other badge words. If different wording is requested, explain that the app must be refreshed; do not send the wording change to the image editor.':'')+(body.example_setup?'\n'+awardExampleInstructions:'');
   const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,instructions,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'club_award_refinement',strict:true,schema}},max_output_tokens:3600}),signal:AbortSignal.timeout(55000)});
   if(!response.ok)return failure(response.status===429?429:502,response.status===429?'Graphic assistance is busy. Try again later.':'The change could not be prepared. Your current graphic is still here.');
   const result=await response.json();if(result.status&&result.status!=='completed')return failure(502,'The suggestion was incomplete. Try a smaller change.');
   const output=(result.output||[]).flatMap(m=>m.content||[]);if(output.some(x=>x.type==='refusal'))return failure(422,'This change could not be prepared. Try describing it another way.');
   const value=JSON.parse(result.output_text||output.filter(x=>x.type==='output_text').map(x=>x.text).join(''));
   const changes=general?graphicPatch(body.kind,value.changes):visualPatch(value.changes),badges=badgeCrops(value.badges||[]),labels=gradeLabels(value.grade_labels||[],grades),nextLabel=graphicLabel(value.graphic_label);
+  if(body.example_setup&&(badges.length||labels.length||nextLabel||value.artwork_brief))throw Error('Example setup can change only the supported visual settings.');
   const playerDisplays=graphicPlayerDisplays(value.player_displays||[],players);
   if(nextLabel&&!graphicLabelKinds.includes(body.kind))throw Error('Unsupported label');
+  if(!supportsResultLabels&&(Object.hasOwn(changes,'result_labels')||badges.some(c=>!['WIN','DEF'].includes(c.label))))throw Error('Unsupported result wording');
+  let acceptedBadges=badges;
   if(general){if(badges.length)throw Error('Unexpected badges');refinedGraphicLayout(body.kind,{...saved?.layout,...current},{changes,grade_labels:labels},grades);}
-  else withGradeLabels(refinedAwardLayout({rows_top:29,rows_bottom:96,...current,example_path:example},{changes,badges,example_path:example},body.kind),labels,grades);
-  return reply(200,{changes,badges,grade_labels:labels,...(body.preview_players!==undefined?{player_displays:playerDisplays}:{}),...(graphicLabelKinds.includes(body.kind)?{graphic_label:nextLabel}:{}),example_path:example,explanation:String(value.explanation||'Review the updated preview.').slice(0,800),artwork_brief:typeof value.artwork_brief==='string'?value.artwork_brief.slice(0,1500):null});
+  else {
+   const next=withGradeLabels(refinedAwardLayout({rows_top:29,rows_bottom:96,result_labels:'win_def',...current,example_path:example},{changes,badges,example_path:example},body.kind),labels,grades);
+   if(badges.length)acceptedBadges=matchingResultBadgeCrops(next);
+  }
+  const badgeNote=badges.length&&!acceptedBadges.length?' Both result words use the graphic font because a matching pair of crops was not available.':'';
+  return reply(200,{changes,badges:acceptedBadges,grade_labels:labels,...(body.preview_players!==undefined?{player_displays:playerDisplays}:{}),...(graphicLabelKinds.includes(body.kind)?{graphic_label:nextLabel}:{}),example_path:example,explanation:(String(value.explanation||'Review the updated preview.')+badgeNote).slice(0,800),artwork_brief:typeof value.artwork_brief==='string'?value.artwork_brief.slice(0,1500):null});
  }catch(error){return failure(502,['TimeoutError','AbortError'].includes(error?.name)?'The change took too long. Your current graphic is still here. Try again later.':'The suggestion could not be applied safely. Your current graphic is still here. Try a smaller change.');}
 }

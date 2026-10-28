@@ -209,6 +209,8 @@ supabase.functions.invoke=async function(name,args={}){
  if(name==='club-social-style'&&['graphic_refine','award_refine'].includes(body.purpose)){
   if(!demoIsSocial())return demoFail('Socials Manager access required');
   const brief=(body.brief||'').toLowerCase(),changes={};let explanation='Demo preview: try “use gold text”, “make the names larger” or “shorten 1st Grade to 1st”.',label=null;
+  if(body.kind==='results'&&/\bwon\b/.test(brief)&&/\blost\b/.test(brief)){changes.result_labels='won_lost';changes.font=body.current?.font||'sporting';explanation='Demo preview: use WON and LOST consistently across all result rows.';}
+  if(body.example_setup){Object.assign(changes,{font:'sporting',result_labels:'won_lost'});explanation='Demo example style applied. Live clubs use their own uploaded example.';}
   if(/gold|yellow/.test(brief)){changes.text_colour='#f6ca62';explanation='Demo preview: changed the text to gold.';}
   if(/larger|bigger/.test(brief)){if(body.kind==='team_week')changes.font_scale=115;else if(body.kind==='team_selections')changes.font='bold';else changes.name_size=Math.min(120,(body.current?.name_size||76)+12);explanation='Demo preview: increased the name emphasis.';}
   const short=/shorten (.+?) to (.+?)[.!]?$/.exec(body.brief||''),grades=body.preview_grades||[],grade=short&&grades.find(g=>g.toLowerCase()===short[1].toLowerCase());
