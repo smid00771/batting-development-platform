@@ -845,7 +845,7 @@ let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.293'),import('./social-team-workflow.js?v=0.8.62.288'),import('./social-publishing.js?v=0.8.62.288'),import('./team-of-week.js?v=0.8.62.288'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.294'),import('./social-team-workflow.js?v=0.8.62.288'),import('./social-publishing.js?v=0.8.62.288'),import('./team-of-week.js?v=0.8.62.288'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];

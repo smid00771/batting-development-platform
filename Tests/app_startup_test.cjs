@@ -9,7 +9,9 @@ test('initial HTML has a visible branded shell and retry even if the loader itse
  const dom=shell(t),d=dom.window.document;
  assert.equal(d.querySelector('.app-start-brand').textContent,'Mirelion');assert.equal(d.getElementById('appStartStatus').textContent,'Opening your club…');
  assert.equal(d.querySelector('link[rel=stylesheet]'),null);assert.equal(d.querySelectorAll('link[rel=preload][as=style]').length,2);
- assert.match(d.querySelector('script[type=module]').src,/app-start\.js\?v=0\.8\.62\.293$/);
+ const version=fs.readFileSync(path.join(root,'app.js'),'utf8').match(/const APP_UI_VERSION='([^']+)'/)[1],loader=new URL(d.querySelector('script[type=module]').src);
+ assert.equal(loader.pathname,'/app-start.js');assert.equal(loader.searchParams.get('v'),version);
+ assert.ok(fs.readFileSync(path.join(root,'app-start.js'),'utf8').includes("import('./app.js?v="+version+"')"),'The loader imports the same released app version');
  const handler=new Function('document',d.querySelector('script[type=module]').getAttribute('onerror'));handler(d);
  assert.match(d.getElementById('appStartStatus').textContent,/could not open/);assert.equal(d.getElementById('appStartRetry').hidden,false);
  assert.equal(d.getElementById('appStartRetry').getAttribute('onclick'),'location.reload()');
