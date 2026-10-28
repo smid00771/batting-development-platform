@@ -5,8 +5,8 @@ const {JSDOM, VirtualConsole} = require('jsdom');
 
 // Run the delivered file, including its real bootstrap and fixture RPCs.
 // Canvas pixels and browser-only APIs are stubbed; this is not a visual test.
-async function openDemo(stage = '') {
-  const errors = [], requests = [], alerts = [];
+async function openDemo(stage = '', {traceRpc = false} = {}) {
+  const errors = [], requests = [], alerts = [], rpcCalls = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', error => errors.push(error));
   const html = fs.readFileSync(path.join(__dirname, '../../demo.html'), 'utf8');
@@ -14,6 +14,12 @@ async function openDemo(stage = '') {
     url: 'https://example.test/demo.html' + (typeof stage === 'object' ? '?' + new URLSearchParams(stage) : stage ? '?stage=' + stage : ''),
     runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole,
     beforeParse(w) {
+      if (traceRpc) {
+        let fixtureRpc;
+        Object.defineProperty(w, '__fixtureRpc', {configurable:true, get:()=>fixtureRpc, set:fn=>{
+          fixtureRpc=(name,args)=>{rpcCalls.push({name,args});return fn(name,args);};
+        }});
+      }
       Object.defineProperty(w, 'crypto', {value: webcrypto});
       Object.assign(w, {structuredClone, TextEncoder, TextDecoder, Blob, File,
         scrollTo() {}, alert: text => alerts.push(text), confirm: () => true,
@@ -47,7 +53,7 @@ async function openDemo(stage = '') {
     for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
   }
   try {await settle();} catch (error) {dom.window.close(); throw error;}
-  return {dom, window: dom.window, document: dom.window.document, errors, requests, alerts, settle,
+  return {dom, window: dom.window, document: dom.window.document, errors, requests, alerts, rpcCalls, settle,
     close: () => dom.window.close(),
     async click(selector) {
       const node = dom.window.document.querySelector(selector);
