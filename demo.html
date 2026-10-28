@@ -3743,7 +3743,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.293.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.294.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -8243,7 +8243,82 @@ async function awardFontSpecimen(){
 return {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady,awardFontSpecimen};
 })();
 
-const __demoModule28=(()=>{
+const __demoModule27=(()=>{
+// Reuse the supplied lettering, removing its local panel colour. Never OCR or
+// regenerate words here: both labelled crops must already pass the shared contract.
+const cache=new WeakMap(),median=values=>values.sort((a,b)=>a-b)[Math.floor(values.length/2)];
+function referenceBadgePair(image,crops,makeCanvas){
+ if(crops.length!==2)return null;
+ const pair=crops.map(crop=>[crop.label,referenceBadge(image,crop,makeCanvas)]);
+ return pair.every(([,badge])=>badge)?Object.fromEntries(pair):null;
+}
+// Separate the main lettering from detached fragments of adjacent rows. This
+// uses visible ink, not a club-specific colour or a fixed percentage crop.
+function isolateLettering({data,width,height}){
+ const count=width*height,labels=new Int32Array(count),queue=new Int32Array(count),parts=[];
+ const neighbours=(p,visit)=>{const x=p%width,y=Math.floor(p/width);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if((dx||dy)&&x+dx>=0&&x+dx<width&&y+dy>=0&&y+dy<height)visit(p+dy*width+dx);};
+ for(let p=0;p<count;p++){
+  if(labels[p]||data[p*4+3]<48)continue;
+  const id=parts.length+1,part={id,area:0,left:width,right:0,top:height,bottom:0};let head=0,tail=0;queue[tail++]=p;labels[p]=id;
+  while(head<tail){const q=queue[head++],x=q%width,y=Math.floor(q/width);part.area++;part.left=Math.min(part.left,x);part.right=Math.max(part.right,x);part.top=Math.min(part.top,y);part.bottom=Math.max(part.bottom,y);neighbours(q,next=>{if(!labels[next]&&data[next*4+3]>=48){labels[next]=id;queue[tail++]=next;}});}
+  part.width=part.right-part.left+1;part.height=part.bottom-part.top+1;
+  part.rule=part.height<=Math.max(3,height*.15)&&part.width/part.height>=8;
+  parts.push(part);
+ }
+ const candidates=parts.filter(p=>!p.rule&&p.area>=Math.max(3,count*.0004));
+ const seed=candidates.sort((a,b)=>b.area*Math.sqrt(b.height)-a.area*Math.sqrt(a.height))[0];
+ if(!seed)return false;
+ const overlap=(a,b)=>Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)+1);
+ const letters=candidates.filter(p=>p.height>=seed.height*.45&&overlap(p,seed)>=Math.min(p.height,seed.height)*.4);
+ const left=Math.min(...letters.map(p=>p.left)),right=Math.max(...letters.map(p=>p.right)),top=Math.min(...letters.map(p=>p.top)),bottom=Math.max(...letters.map(p=>p.bottom));
+ const area=letters.reduce((sum,p)=>sum+p.area,0),letterHeight=bottom-top+1;
+ if(right-left+1<letterHeight*1.15)return false;
+ // A second full text line is ambiguous. Use the same generated font for both
+ // outcomes instead of risking old factual text or an incorrectly cut word.
+ if(candidates.filter(p=>!letters.includes(p)&&p.height>=letterHeight*.7).reduce((sum,p)=>sum+p.area,0)>area*.35)return false;
+ const radius=Math.max(2,Math.min(8,Math.ceil(letterHeight*.12))),keep=new Set(letters.map(p=>p.id));
+ for(const p of candidates)if(p.height<letterHeight*.45&&p.bottom>=top-radius&&p.top<=bottom&&p.right>=left&&p.left<=right)keep.add(p.id);
+ const distance=new Uint8Array(count);distance.fill(255);let head=0,tail=0;
+ for(let p=0;p<count;p++)if(keep.has(labels[p])){distance[p]=0;queue[tail++]=p;}
+ // Retain the soft halo connected to the lettering, without regrowing rejected
+ // dark text or a horizontal bar from a neighbouring part of the example.
+ while(head<tail){const p=queue[head++];if(distance[p]>=radius)continue;neighbours(p,next=>{if(distance[next]===255&&data[next*4+3]&&(!labels[next]||keep.has(labels[next]))){distance[next]=distance[p]+1;queue[tail++]=next;}});}
+ for(let p=0;p<count;p++)if(distance[p]===255)data[p*4+3]=0;
+ return true;
+}
+function referenceBadge(image,crop,makeCanvas){
+ let saved=cache.get(image);if(!saved){saved=new Map();cache.set(image,saved);}
+ const key=JSON.stringify(crop);if(saved.has(key))return saved.get(key);
+ const iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height,sw=iw*crop.width,sh=ih*crop.height,scale=Math.min(1,1024/sw,512/sh);
+ const canvas=makeCanvas();canvas.width=Math.max(1,Math.round(sw*scale));canvas.height=Math.max(1,Math.round(sh*scale));
+ const ctx=canvas.getContext('2d');ctx.drawImage(image,iw*crop.x,ih*crop.y,sw,sh,0,0,canvas.width,canvas.height);
+ const pixels=ctx.getImageData(0,0,canvas.width,canvas.height),{data,width,height}=pixels,n=Math.max(1,Math.min(4,Math.floor(Math.min(width,height)/6)));
+ const depth=Math.max(n,Math.min(32,Math.floor(height/3)));
+ const corner=(right,bottom)=>[0,1,2].map(channel=>{const values=[];for(let y=0;y<depth;y++)for(let x=0;x<n;x++)values.push(data[((bottom?height-1-y:y)*width+(right?width-1-x:x))*4+channel]);return median(values);});
+ const tl=corner(false,false),tr=corner(true,false),bl=corner(false,true),br=corner(true,true);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  const i=(y*width+x)*4,fx=x/Math.max(1,width-1),fy=y/Math.max(1,height-1),bg=tl.map((v,c)=>(v*(1-fx)+tr[c]*fx)*(1-fy)+(bl[c]*(1-fx)+br[c]*fx)*fy);
+  let alpha=0;for(let c=0;c<3;c++){const delta=data[i+c]-bg[c];alpha=Math.max(alpha,delta>=0?delta/Math.max(1,255-bg[c]):-delta/Math.max(1,bg[c]));}
+  if(alpha<.12){data[i+3]=0;continue;}
+  for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,(data[i+c]-bg[c]*(1-alpha))/alpha));
+  data[i+3]=Math.round(data[i+3]*alpha);
+ }
+ if(!isolateLettering(pixels)){saved.set(key,null);return null;}
+ ctx.putImageData(pixels,0,0);
+ // The model's rectangle may include generous blank padding. Fit the visible
+ // lettering and halo, not that padding, to the requested badge width.
+ let left=width,top=height,right=-1,bottom=-1;
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(data[(y*width+x)*4+3]>=40){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
+ if(right>=left&&bottom>=top){
+  left=Math.max(0,left-2);top=Math.max(0,top-2);right=Math.min(width-1,right+2);bottom=Math.min(height-1,bottom+2);
+  const trimmed=makeCanvas();trimmed.width=right-left+1;trimmed.height=bottom-top+1;trimmed.getContext('2d').drawImage(canvas,left,top,trimmed.width,trimmed.height,0,0,trimmed.width,trimmed.height);saved.set(key,trimmed);return trimmed;
+ }
+ saved.set(key,canvas);return canvas;
+}
+return {referenceBadgePair,referenceBadge};
+})();
+
+const __demoModule29=(()=>{
 // Shared renderer/AI contract. This contains visual settings only, never match data.
 const AWARD_COMPOSITION_FIELDS={show_week:'boolean',player_align:['left','center','right'],left_column_end:[30,42],right_column_start:[58,70]};
 const AWARD_TEMPLATE_FIELDS={
@@ -8362,8 +8437,8 @@ Before returning, check that every requested element has a supported setting and
 return {AWARD_COMPOSITION_FIELDS,AWARD_TEMPLATE_FIELDS,AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,REFERENCE_GEOMETRY_FIELDS,referenceGeometrySchema,referenceGeometry,RESULT_LABELS,resultLabel,matchingResultBadgeCrops,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions,awardExampleInstructions,awardTemplateInstructions};
 })();
 
-const __demoModule27=(()=>{
-const {AWARD_STYLE_FIELDS,referenceGeometry,visualPatch}=__demoModule28;
+const __demoModule28=(()=>{
+const {AWARD_STYLE_FIELDS,referenceGeometry,visualPatch}=__demoModule29;
 const {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont}=__demoModule25;
 // Convert observed ink proportions, not guessed point sizes, to our 1080px design.
 // The caller has loaded the selected fonts. This runs once per requested match.
@@ -8399,7 +8474,7 @@ function referenceStylePatch(ctx,layout,measurements,dimensions,kind){
 return {referenceStylePatch};
 })();
 
-const __demoModule29=(()=>{
+const __demoModule30=(()=>{
 // Presentation only. Source grades, players and match figures are never rewritten.
 const normal=value=>String(value||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
 function gradeLabels(value=[],grades=null){
@@ -8492,8 +8567,8 @@ For changes to background pixels, baked-in headings, logos or sponsors, return a
 return {gradeLabels,withGradeLabels,graphicGrade,checkGraphicLabel,gradeLabelSchema,GRAPHIC_FIELDS,graphicPatch,graphicSettings,graphicLabelKinds,graphicLabelSchema,graphicLabelInstructions,graphicLabel,refinedGraphicLayout,graphicPlayerDisplays,graphicSchema,graphicInstructions};
 })();
 
-const __demoModule30=(()=>{
-const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule29;
+const __demoModule31=(()=>{
+const {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays}=__demoModule30;
 const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
 // A measured warning offers a choice; it never guesses and saves an abbreviation.
@@ -8554,7 +8629,7 @@ function assistantCanLeave(owner,notify){const r=owner?.graphicAssistant;if(r?.c
 return {assistantCSS,labelSuggestions,proposalMessage,assistantSuggestions,assistantState,assistantHTML,assistantControls,graphicPreview,bindAssistant,assistantCanLeave};
 })();
 
-const __demoModule32=(()=>{
+const __demoModule33=(()=>{
 // Shared geometry for preview and export. No model call or saved-style mutation.
 const clamp=(v,min,max)=>Math.max(min,Math.min(v,max));
 function resultsLayoutPlan(d,height,count,shared,headerBottom){
@@ -8609,46 +8684,12 @@ function resultsRowPlan(d,rowHeight,shared,marginHeight,badgeHeight,scale=1){
 return {resultsLayoutPlan,resultsRowPlan};
 })();
 
-const __demoModule33=(()=>{
-// Reuse the supplied lettering, removing its local panel colour. Never OCR or
-// regenerate words here: both labelled crops must already pass the shared contract.
-const cache=new WeakMap(),median=values=>values.sort((a,b)=>a-b)[Math.floor(values.length/2)];
-function referenceBadge(image,crop,makeCanvas){
- let saved=cache.get(image);if(!saved){saved=new Map();cache.set(image,saved);}
- const key=JSON.stringify(crop);if(saved.has(key))return saved.get(key);
- const iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height,sw=iw*crop.width,sh=ih*crop.height,scale=Math.min(1,1024/sw,512/sh);
- const canvas=makeCanvas();canvas.width=Math.max(1,Math.round(sw*scale));canvas.height=Math.max(1,Math.round(sh*scale));
- const ctx=canvas.getContext('2d');ctx.drawImage(image,iw*crop.x,ih*crop.y,sw,sh,0,0,canvas.width,canvas.height);
- const pixels=ctx.getImageData(0,0,canvas.width,canvas.height),{data,width,height}=pixels,n=Math.max(1,Math.min(4,Math.floor(Math.min(width,height)/6)));
- const corner=(right,bottom)=>[0,1,2].map(channel=>{const values=[];for(let y=0;y<n;y++)for(let x=0;x<n;x++)values.push(data[((bottom?height-1-y:y)*width+(right?width-1-x:x))*4+channel]);return median(values);});
- const tl=corner(false,false),tr=corner(true,false),bl=corner(false,true),br=corner(true,true);
- for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-  const i=(y*width+x)*4,fx=x/Math.max(1,width-1),fy=y/Math.max(1,height-1),bg=tl.map((v,c)=>(v*(1-fx)+tr[c]*fx)*(1-fy)+(bl[c]*(1-fx)+br[c]*fx)*fy);
-  let alpha=0;for(let c=0;c<3;c++){const delta=data[i+c]-bg[c];alpha=Math.max(alpha,delta>=0?delta/Math.max(1,255-bg[c]):-delta/Math.max(1,bg[c]));}
-  if(alpha<.12){data[i+3]=0;continue;}
-  for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,(data[i+c]-bg[c]*(1-alpha))/alpha));
-  data[i+3]=Math.round(data[i+3]*alpha);
- }
- ctx.putImageData(pixels,0,0);
- // The model's rectangle may include generous blank padding. Fit the visible
- // lettering and halo, not that padding, to the requested badge width.
- let left=width,top=height,right=-1,bottom=-1;
- for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(data[(y*width+x)*4+3]>=40){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
- if(right>=left&&bottom>=top){
-  left=Math.max(0,left-2);top=Math.max(0,top-2);right=Math.min(width-1,right+2);bottom=Math.min(height-1,bottom+2);
-  const trimmed=makeCanvas();trimmed.width=right-left+1;trimmed.height=bottom-top+1;trimmed.getContext('2d').drawImage(canvas,left,top,trimmed.width,trimmed.height,0,0,trimmed.width,trimmed.height);saved.set(key,trimmed);return trimmed;
- }
- saved.set(key,canvas);return canvas;
-}
-return {referenceBadge};
-})();
-
-const __demoModule31=(()=>{
-const {resultsLayoutPlan,resultsRowPlan}=__demoModule32;
-const {referenceBadge}=__demoModule33;
+const __demoModule32=(()=>{
+const {resultsLayoutPlan,resultsRowPlan}=__demoModule33;
+const {referenceBadgePair}=__demoModule27;
 const {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady}=__demoModule25;
-const {graphicGrade,checkGraphicLabel}=__demoModule29;
-const {safeAwardStyle,resultLabel,matchingResultBadgeCrops}=__demoModule28;
+const {graphicGrade,checkGraphicLabel}=__demoModule30;
+const {safeAwardStyle,resultLabel,matchingResultBadgeCrops}=__demoModule29;
 const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
  {key:'player_week',label:'Player of the Week',description:'Choose and recognise one player.'},
@@ -8746,6 +8787,8 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  const headerBottom=Math.max(weekBounds?.bottom||0,titleBounds?.bottom??height*layout.title_y/100+layout.title_size*.6);
  const plan=resultsLayoutPlan(layout,height,items.length,sharedOpponent,headerBottom),{top,bottom,gap,rowHeight,columns}=plan,inset=layout.row_inset;
  canvas.resultsLayout={...plan,sharedOpponent};
+ const crops=images.example?matchingResultBadgeCrops(layout):[],lettering=crops.length?referenceBadgePair(images.example,crops,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1)):null;
+ canvas.resultsLetteringFallback=crops.length>0&&!lettering;
  if(plan.header){const {x,y,size,gap}=plan.header;logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),x,y,size,gap,layout.text_colour);}
  const measure=(value,role,size)=>{const font=awardFont(layout,role);ctx.save();ctx.textAlign='left';ctx.font=`${AWARD_FONT_WEIGHTS[font]||'700'} ${size}px ${AWARD_FONTS[font]}`;const m=ctx.measureText(value);ctx.restore();return m;};
  const marginLines=(value,d=layout,scale=1)=>{
@@ -8777,10 +8820,8 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
   else if(d.grade_style==='bar')ctx.fillRect(540-d.grade_width/2,y-12*rowScale,d.grade_width,45*rowScale);
   const sourceGrade=graphicGrade(item.grade,d),grade=d.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
   const margin=d.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin,d,rowScale),marginHeight=lines.length*marginSize*1.15;
-  const badgeLabel=resultLabel(outcome,d),crop=images.example&&matchingResultBadgeCrops(d).find(c=>c.label===badgeLabel);
-  let badgeImage;
-  if(crop&&d.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
-  const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=crop?Math.min(100*rowScale,d.badge_width*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
+  const badgeLabel=resultLabel(outcome,d),badgeImage=lettering?.[badgeLabel];
+  const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=badgeImage?Math.min(100*rowScale,d.badge_width*badgeImage.height/badgeImage.width):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
   const row=resultsRowPlan(d,rowHeight,sharedOpponent,marginHeight,badgeHeight,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
   const font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,row.line-5)/inkHeight:row.line*.8),left=columns.left,right=columns.right;
   const playerName=(value,start,y,width)=>{ctx.textAlign=d.player_align;const x=d.player_align==='center'?start+width/2:d.player_align==='right'?start+width:start;text(value,x,y,width,font,d.player_colour);};
@@ -8796,7 +8837,7 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
   });
   ctx.textAlign='center';
   band(columns.centre-100,200,y,()=>{
-   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout:d,example:images.example,badgeImage});
+   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout:d,badgeImage});
    if(lines.length)lines.forEach((line,i)=>text(line,columns.centre,y+row.marginTop+marginSize*.6+i*marginSize*1.15,columns.centreWidth,marginSize,d.margin_colour,'margin'));
    else if(!sharedOpponent&&!d.show_margin)text(r.opposition,columns.centre,y+rowHeight*.91,columns.centreWidth,18,d.player_colour);
   });
@@ -8805,10 +8846,9 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
 }
 
 // The label is always computed from the imported outcome, never from a design request.
-function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,example,badgeImage}){
- const crop=example&&d.badge_source===d.example_path&&matchingResultBadgeCrops(d).find(c=>c.label===label),colour=outcome==='WIN'?d.win_colour:outcome==='LOSS'?d.loss_colour:d.score_colour;
+function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,badgeImage}){
+ const colour=outcome==='WIN'?d.win_colour:outcome==='LOSS'?d.loss_colour:d.score_colour;
  if(badgeImage){const fit=Math.min(d.badge_width/badgeImage.width,maxHeight/badgeImage.height);ctx.drawImage(badgeImage,x-badgeImage.width*fit/2,y-badgeImage.height*fit/2,badgeImage.width*fit,badgeImage.height*fit);return;}
- if(crop){const iw=example.naturalWidth||example.width,ih=example.naturalHeight||example.height,sw=iw*crop.width,sh=ih*crop.height,fit=Math.min(d.badge_width/sw,maxHeight/sh);ctx.drawImage(example,iw*crop.x,ih*crop.y,sw,sh,x-sw*fit/2,y-sh*fit/2,sw*fit,sh*fit);return;}
  const badgeText=(value,tx,ty,width,size,colour)=>text(value,tx,ty,width,size,colour,'badge');
  const size=label.length>4?Math.min(26,d.badge_size):Math.min(d.badge_size,maxHeight*1.1);
  if(d.badge_style==='glow'&&['WIN','LOSS'].includes(outcome)){ctx.save();ctx.shadowColor=colour;ctx.shadowBlur=Math.min(28,size*.45);ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;badgeText(label,x,y,d.badge_width,size,d.badge_text_colour);badgeText(label,x,y,d.badge_width,size,d.badge_text_colour);ctx.restore();return;}
@@ -8825,12 +8865,13 @@ return {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardCaption,awardBatc
 
 const __demoModule24=(()=>{
 const {awardFontSpecimen,awardFontsReady}=__demoModule25;
-const {referenceStylePatch}=__demoModule27;
+const {referenceBadgePair}=__demoModule27;
+const {referenceStylePatch}=__demoModule28;
 const {scopedAwardLabel}=__demoModule23;
-const {withGradeLabels,graphicLabel}=__demoModule29;
-const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule30;
-const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule31;
-const {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops}=__demoModule28;
+const {withGradeLabels,graphicLabel}=__demoModule30;
+const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule31;
+const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule32;
+const {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops}=__demoModule29;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
 
@@ -8954,7 +8995,7 @@ function createSocialAwards(h){
   if(body.reference_geometry)delete next.mixed_rows_top;
   await draw(s,canvas,kind,previewItems(state(s),kind).slice(0,4),next);
   if(!current())return result;
-  const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,using_reference_lettering:next.badge_cutout===true,brief:'Compare this rendered proposal with our previous example. Correct only the elements requested; preserve everything else. Original request: '+body.brief};
+  const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,using_reference_lettering:matchingResultBadgeCrops(next).length===2&&!canvas.resultsLetteringFallback,brief:'Compare this rendered proposal with our previous example. Correct only the elements requested; preserve everything else. Original request: '+body.brief};
   delete reviewBody.example_setup;
   reviewBody.brief=reviewBody.brief.slice(0,1500);
   let review;
@@ -9115,10 +9156,10 @@ function createSocialAwards(h){
   }if(d.show_logo&&!images.logo&&s.data.brand?.logo)images.logo=await h.image(s,s.data.brand.logo);await drawAwardGraphic(h,s,canvas,{kind,items,layout:d,photo:p,week:scopedAwardLabel(w.title??'WEEK ENDING '+date(w.end),w.context?.award_scope),images});}
  async function paintBadgeSamples(s,w,kind){
   const samples=[...document.querySelectorAll('[data-sa-badge]')],d=layout(w,kind);if(!samples.length||!d.example_path)return;
-  const image=await h.image(s,await url(s,bucket,d.example_path)),iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height;
-  for(const canvas of samples){if(!canvas.isConnected)continue;const c=d.badge_crops.find(x=>x.label===canvas.dataset.saBadge);if(!c)continue;canvas.width=Math.max(1,Math.round(iw*c.width));canvas.height=Math.max(1,Math.round(ih*c.height));canvas.getContext('2d').drawImage(image,iw*c.x,ih*c.y,iw*c.width,ih*c.height,0,0,canvas.width,canvas.height);}
+  const image=await h.image(s,await url(s,bucket,d.example_path)),pair=referenceBadgePair(image,matchingResultBadgeCrops(d),()=>document.createElement('canvas'));
+  for(const canvas of samples){if(!canvas.isConnected)continue;const badge=pair?.[canvas.dataset.saBadge];canvas.width=badge?.width||1;canvas.height=badge?.height||1;if(badge)canvas.getContext('2d').drawImage(badge,0,0);}
  }
- async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;canvas.resultsLayout=buffer.resultsLayout;if(buffer.resultsLayout){const range=document.querySelector('[data-sa-layout=rows_top]'),value=Math.round(buffer.resultsLayout.top/(buffer.height/buffer.width*1080)*100);if(range){range.value=value;document.querySelector('[data-sa-value=rows_top]').textContent=value;}}w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[],missingMargins=kind==='results'&&layout(w,kind).show_margin?items.filter(x=>['WIN','LOSS'].includes(resultsSummary(x).outcome)&&!resultsSummary(x).margin):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:missingMargins.length?'Winning margin unavailable for '+missingMargins.map(x=>x.grade).join(', ')+'. Refresh results to check for updated source data.':items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
+ async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;canvas.resultsLayout=buffer.resultsLayout;canvas.resultsLetteringFallback=buffer.resultsLetteringFallback;if(buffer.resultsLayout){const range=document.querySelector('[data-sa-layout=rows_top]'),value=Math.round(buffer.resultsLayout.top/(buffer.height/buffer.width*1080)*100);if(range){range.value=value;document.querySelector('[data-sa-value=rows_top]').textContent=value;}}w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[],missingMargins=kind==='results'&&layout(w,kind).show_margin?items.filter(x=>['WIN','LOSS'].includes(resultsSummary(x).outcome)&&!resultsSummary(x).margin):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:missingMargins.length?'Winning margin unavailable for '+missingMargins.map(x=>x.grade).join(', ')+'. Refresh results to check for updated source data.':items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';if(buffer.resultsLetteringFallback)el('saPreviewStatus').textContent+=' Reference lettering could not be isolated; both result words use the selected font.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
  async function saveGraphics(s,kind){
   const w=state(s);if(w.busy||s.busy||refinement(w,kind).candidate)return;const items=previewItems(w,kind);if(!w.pending&&(!items.length||!w.previewReady))return;if(!w.pending&&kind==='results'&&items.some(x=>!resultsSummary(x).outcome)){notice(s,'Import the updated PlayCricket result before confirming.');return;}if(!w.pending&&items.some(x=>kind!=='results'&&portrait(w,kind,x).dirty)){notice(s,'Confirm each photo position first.');return;}
   w.busy=true;notice(s,'Saving confirmed graphics…');render(s);
@@ -9138,7 +9179,7 @@ return {createSocialAwards};
 })();
 
 const __demoModule34=(()=>{
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule30;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule31;
 // One team-list workflow: club artwork, one grade's photo, then the complete post.
 function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);
@@ -9749,8 +9790,8 @@ return {rawAwardFigures,teamWeekBasicRank,teamWeekBasicRecommendations};
 
 const __demoModule36=(()=>{
 const {scopedAwardLabel}=__demoModule23;
-const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule29;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule30;
+const {graphicGrade,checkGraphicLabel,graphicPlayerDisplays}=__demoModule30;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule31;
 const {readTeamWeekReference}=__demoModule37;
 const {awardPerformance}=__demoModule38;
 const {teamWeekBasicRank,teamWeekBasicRecommendations}=__demoModule39;
@@ -10083,7 +10124,7 @@ return {resultWeekEnd,resultFixtureMatches,weeklyResultCoverage,cardStatus,creat
 })();
 
 const __demoModule41=(()=>{
-const {graphicLabel}=__demoModule29;
+const {graphicLabel}=__demoModule30;
 // Shared club preference; the actual label is stored separately for each awards week.
 function createSocialAwardLabels(h){
  const state=s=>s.awardLabels||(s.awardLabels={weeks:{},loads:{},draft:null,pending:null,busy:false,error:''});
@@ -10184,8 +10225,8 @@ return {playerWeekFigures,playerWeekRecommendations};
 
 const __demoModule42=(()=>{
 const {scopedAwardLabel}=__demoModule23;
-const {graphicGrade,checkGraphicLabel}=__demoModule29;
-const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule30;
+const {graphicGrade,checkGraphicLabel}=__demoModule30;
+const {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave}=__demoModule31;
 const {playerWeekFigures,playerWeekRecommendations}=__demoModule43;
 function playerWeekLayout(saved={}){
  return {includes_title:false,show_logo:!saved.background_path,show_photo:true,text_panel:true,text_colour:'#FFFFFF',title_y:15,week_y:23,name_y:80,figures_y:87,grade_y:93,text_x:50,text_width:90,title_size:78,name_size:84,figures_size:48,photo_x:50,photo_y:44,photo_size:55,logo_x:8,logo_y:4,logo_size:12,...saved};
@@ -11301,7 +11342,7 @@ let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([Promise.resolve(__demoModule23),Promise.resolve(__demoModule24),Promise.resolve(__demoModule34),Promise.resolve(__demoModule35),Promise.resolve(__demoModule36),Promise.resolve(__demoModule40),Promise.resolve(__demoModule41),Promise.resolve(__demoModule42),Promise.resolve(__demoModule44),Promise.resolve(__demoModule29),Promise.resolve(__demoModule45)]);
+  const modules=await Promise.all([Promise.resolve(__demoModule23),Promise.resolve(__demoModule24),Promise.resolve(__demoModule34),Promise.resolve(__demoModule35),Promise.resolve(__demoModule36),Promise.resolve(__demoModule40),Promise.resolve(__demoModule41),Promise.resolve(__demoModule42),Promise.resolve(__demoModule44),Promise.resolve(__demoModule30),Promise.resolve(__demoModule45)]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];
@@ -12594,7 +12635,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.293';
+const APP_UI_VERSION='0.8.62.294';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

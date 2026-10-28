@@ -1,5 +1,5 @@
 import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.293';
-import {referenceBadge} from './social-award-lettering.js?v=0.8.62.293';
+import {referenceBadgePair} from './social-award-lettering.js?v=0.8.62.294';
 import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.293';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
 import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.293';
@@ -101,6 +101,8 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  const headerBottom=Math.max(weekBounds?.bottom||0,titleBounds?.bottom??height*layout.title_y/100+layout.title_size*.6);
  const plan=resultsLayoutPlan(layout,height,items.length,sharedOpponent,headerBottom),{top,bottom,gap,rowHeight,columns}=plan,inset=layout.row_inset;
  canvas.resultsLayout={...plan,sharedOpponent};
+ const crops=images.example?matchingResultBadgeCrops(layout):[],lettering=crops.length?referenceBadgePair(images.example,crops,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1)):null;
+ canvas.resultsLetteringFallback=crops.length>0&&!lettering;
  if(plan.header){const {x,y,size,gap}=plan.header;logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),x,y,size,gap,layout.text_colour);}
  const measure=(value,role,size)=>{const font=awardFont(layout,role);ctx.save();ctx.textAlign='left';ctx.font=`${AWARD_FONT_WEIGHTS[font]||'700'} ${size}px ${AWARD_FONTS[font]}`;const m=ctx.measureText(value);ctx.restore();return m;};
  const marginLines=(value,d=layout,scale=1)=>{
@@ -132,10 +134,8 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   else if(d.grade_style==='bar')ctx.fillRect(540-d.grade_width/2,y-12*rowScale,d.grade_width,45*rowScale);
   const sourceGrade=graphicGrade(item.grade,d),grade=d.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
   const margin=d.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin,d,rowScale),marginHeight=lines.length*marginSize*1.15;
-  const badgeLabel=resultLabel(outcome,d),crop=images.example&&matchingResultBadgeCrops(d).find(c=>c.label===badgeLabel);
-  let badgeImage;
-  if(crop&&d.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
-  const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=crop?Math.min(100*rowScale,d.badge_width*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
+  const badgeLabel=resultLabel(outcome,d),badgeImage=lettering?.[badgeLabel];
+  const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=badgeImage?Math.min(100*rowScale,d.badge_width*badgeImage.height/badgeImage.width):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
   const row=resultsRowPlan(d,rowHeight,sharedOpponent,marginHeight,badgeHeight,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
   const font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,row.line-5)/inkHeight:row.line*.8),left=columns.left,right=columns.right;
   const playerName=(value,start,y,width)=>{ctx.textAlign=d.player_align;const x=d.player_align==='center'?start+width/2:d.player_align==='right'?start+width:start;text(value,x,y,width,font,d.player_colour);};
@@ -151,7 +151,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   });
   ctx.textAlign='center';
   band(columns.centre-100,200,y,()=>{
-   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout:d,example:images.example,badgeImage});
+   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout:d,badgeImage});
    if(lines.length)lines.forEach((line,i)=>text(line,columns.centre,y+row.marginTop+marginSize*.6+i*marginSize*1.15,columns.centreWidth,marginSize,d.margin_colour,'margin'));
    else if(!sharedOpponent&&!d.show_margin)text(r.opposition,columns.centre,y+rowHeight*.91,columns.centreWidth,18,d.player_colour);
   });
@@ -160,10 +160,9 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
 }
 
 // The label is always computed from the imported outcome, never from a design request.
-function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,example,badgeImage}){
- const crop=example&&d.badge_source===d.example_path&&matchingResultBadgeCrops(d).find(c=>c.label===label),colour=outcome==='WIN'?d.win_colour:outcome==='LOSS'?d.loss_colour:d.score_colour;
+function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,badgeImage}){
+ const colour=outcome==='WIN'?d.win_colour:outcome==='LOSS'?d.loss_colour:d.score_colour;
  if(badgeImage){const fit=Math.min(d.badge_width/badgeImage.width,maxHeight/badgeImage.height);ctx.drawImage(badgeImage,x-badgeImage.width*fit/2,y-badgeImage.height*fit/2,badgeImage.width*fit,badgeImage.height*fit);return;}
- if(crop){const iw=example.naturalWidth||example.width,ih=example.naturalHeight||example.height,sw=iw*crop.width,sh=ih*crop.height,fit=Math.min(d.badge_width/sw,maxHeight/sh);ctx.drawImage(example,iw*crop.x,ih*crop.y,sw,sh,x-sw*fit/2,y-sh*fit/2,sw*fit,sh*fit);return;}
  const badgeText=(value,tx,ty,width,size,colour)=>text(value,tx,ty,width,size,colour,'badge');
  const size=label.length>4?Math.min(26,d.badge_size):Math.min(d.badge_size,maxHeight*1.1);
  if(d.badge_style==='glow'&&['WIN','LOSS'].includes(outcome)){ctx.save();ctx.shadowColor=colour;ctx.shadowBlur=Math.min(28,size*.45);ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;badgeText(label,x,y,d.badge_width,size,d.badge_text_colour);badgeText(label,x,y,d.badge_width,size,d.badge_text_colour);ctx.restore();return;}
