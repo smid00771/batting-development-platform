@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.294",
+  "appVersion": "0.8.62.295",
   "sources": {
     "app-design.css": "ff72d99dced381c050d9824837ca09a363a2850f269a35b8396521a809b2372d",
-    "app.js": "776b78e5ddcaa1745665a23ed202a5963419cc9f7b8069d6eca02574304768c7",
+    "app.js": "c5345af465b1b39fe762b3ac9a691fb09674fa353d6f19b08f1b8c1a0b16c3cc",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
@@ -17,8 +17,8 @@
     "domain-routing.js": "ace5ba079aa31658a171cb454b8b7fbccddd83d19692fd304bf5132641711e3f",
     "fixture-results.js": "55749d5d07e87d6a8d07a135cfd45ffaa4d8a5de39621bf2605231f308ee498d",
     "help-catalogue.js": "22ce8567beefa7a1aeabb5e5fa928c762be5c460889fa6bcc5a1f1e82d9277a1",
-    "mirelion-assist-demo.js": "a452d66740108f5181b7cd1abd43706743369cf4fb7a06509647392be1f1fb82",
-    "mirelion-assist.js": "2d2c577f95daf5c68e76f14fa000488e94cc4daa59a6b2bf2f8658264a8b7b23",
+    "mirelion-assist-demo.js": "7f2013bd565e14882d338021e203bb1de4c73b003c44cacd1800dd0a9d6eb7f5",
+    "mirelion-assist.js": "422d2fc06da438e55f090b8630e71326ecdf96deefa7d85bf4b7c252e14057a3",
     "ndca-grade-benchmarks.js": "4bd78c88d337b611795d8eacc60cc3953f44da4e8c84f8bf1276bddd99f88942",
     "password-flow.js": "e9c07b1a462cbc563a933ae21e7f30690745e2d323584fd12ef8f1fbe6929610",
     "playcricket-connection.js": "911e904cfef5bc110d5635aaacf6f949cfd9de4fca472f2a05a4762ade48c50c",

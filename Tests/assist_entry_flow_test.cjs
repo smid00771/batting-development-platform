@@ -10,6 +10,7 @@ function setup(query,{signedIn=true,platform=false,savedPlatform=false}={}){
   app:dom.window.document.getElementById('app'),session:signedIn?{user:{id:'user'}}:null,platformRole:platform?'owner':null,passwordRecoveryRequired:false,legacyAppSession:false,
   allMemberships:[],membership:null,club:null,userProfile:null,currentTab:'dashboard',joinedAvailabilityClub:null,appNavigationRequest:0,pendingAssistLaunch:null,
   renderLogin:()=>result.push({login:true}),loadPlatformContext:async()=>{},resumeAppNavigationOnLoad:async()=>false,
+  passwordFlow:{takeNotice:()=>'',activeFor:()=>false},renderAppOpening(){},loadScheduledTrialContext:async()=>{},
   supabase:{from:table=>({select:()=>({eq:()=>table==='club_memberships'?Promise.resolve({data:[{club_id:clubId,clubs:club,involvement:'playing'}]}):{maybeSingle:async()=>({data:{display_name:'Fictional member'}})}})})},
   capturePhoneLaunch(){},applyPhoneLaunch:async()=>{},loadSelectionsAccess:async()=>{},hasPlayingChoice:()=>true,loadData:async()=>{},productTrialWaiting:()=>false,selectionsStandalone:()=>false,canUseClubHome:()=>true,isPlayerUser:()=>true,canOpenClubTab:()=>true,
   esc:x=>String(x),signOutClubBatting(){},renderNoClub:()=>result.push({noClub:true}),
