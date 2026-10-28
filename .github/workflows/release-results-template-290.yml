@@ -39,7 +39,7 @@ jobs:
           git add AGENTS.md Demo/build-manifest.json Demo/current-fixtures.js Functions/club-social-style/README.md Functions/club-social-style/award-refine.mjs Functions/playhq-sync/README.md Functions/playhq-sync/result-margin.mjs Functions/playhq-sync/shared-scorecard.mjs Reviews/2026-10-28-results-template-290.md Tests/app_startup_test.cjs Tests/playhq_result_margin_test.mjs Tests/social_award_fonts_test.mjs Tests/social_awards_refine_service_test.mjs Tests/social_awards_refinement_test.mjs Tests/social_awards_ui_test.mjs Tests/social_results_template_test.mjs app-start.js app.html app.js assets/font-licenses/Club-Brush-OFL.txt assets/font-licenses/Club-Display-OFL.txt assets/font-licenses/Club-Sans-OFL.txt assets/font-licenses/README.md demo.html social-award-font-data.js social-award-fonts.js social-awards-design.js social-awards-model.js social-awards.js
           git rm .github/release-results-template-290.patch.gz.b64 .github/workflows/release-results-template-290.yml
           git diff --cached --check
-          test "$(git write-tree)" = "b1c47f924455d0d53d2136be0f8ff77a5f40aaf6"
+          test "$(git write-tree)" = "7326b09be8f71c86e1c4c7a54fb151f99654c5d1"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Verify and prepare results template release 0.8.62.290"
