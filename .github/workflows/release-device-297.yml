@@ -1,0 +1,38 @@
+name: Verify remembered device sign-in
+on:
+  push:
+    branches: [codex/device-signin-297]
+    paths: [.github/release-device-297.patch.gz.b64, .github/workflows/release-device-297.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply prepared source
+        run: |
+          base64 -d .github/release-device-297.patch.gz.b64 | gzip -d > /tmp/device-297.patch
+          git apply /tmp/device-297.patch
+          npm ci --ignore-scripts
+          node --check app.js
+          node Scripts/build-demo.mjs
+          node Scripts/build-demo.mjs --check
+          git diff --check
+      - name: Verify device sign-in and app regressions
+        run: |
+          node --test Tests/device_signin_test.cjs Tests/password_flow_test.mjs Tests/password_entry_ui_test.cjs Tests/signup_entry_flow_test.cjs Tests/domain_routing_test.mjs Tests/app_startup_test.cjs Tests/demo_navigation_integration_test.cjs Tests/demo_roles_integration_test.cjs Tests/prediction_loading_test.cjs Tests/social_loading_test.cjs
+      - name: Commit verified release
+        run: |
+          git config user.name "Mirelion release verification"
+          git config user.email "actions@users.noreply.github.com"
+          git add 'AGENTS.md' 'Demo/build-manifest.json' 'Reviews/2026-10-29-device-signin-297.md' 'Scripts/build-demo.mjs' 'Tests/device_signin_test.cjs' 'app-start.js' 'app.html' 'app.js' 'demo.html' 'package-lock.json' 'package.json'
+          git rm .github/release-device-297.patch.gz.b64 .github/workflows/release-device-297.yml
+          test "$(git write-tree)" = "333c7395dee406f89e2e092269ccccaa85a76b83"
+          git commit -m "Verify remembered device sign-in 0.8.62.297"
+          git push origin HEAD:codex/device-signin-297
