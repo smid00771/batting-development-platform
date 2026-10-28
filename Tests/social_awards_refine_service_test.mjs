@@ -166,3 +166,19 @@ test('paired wording is supported across every row; incomplete crops fall back c
  const schema=legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema;assert.equal(schema.properties.changes.properties.result_labels,undefined);assert.deepEqual(schema.properties.badges.items.properties.label.enum,['WIN','DEF']);
  const invalid=setup({output:{changes,badges:[]}});assert.equal((await refineAward(legacyBody,invalid.options)).status,502);
 });
+
+test('template typography and margin styling are visual-only; actual font samples reach the model',async()=>{
+ const changes={title_font:'condensed',player_font:'sans',badge_font:'script',badge_style:'glow',margin_font:'condensed',show_margin:true,layout_mode:'template'},body={...request(),font_samples:request().preview,reference_review:true};
+ const {calls,options}=setup({output:{changes,badges:[],grade_labels:[],graphic_label:null,artwork_brief:null,explanation:'Separate heading, body and brush lettering.'}}),result=await refineAward(body,options);
+ assert.equal(result.status,200);assert.deepEqual(result.body.changes,changes);
+ const provider=calls.find(c=>c.url.includes('openai'));assert.equal(provider.body.input[0].content.filter(x=>x.type==='input_image').length,3);assert.match(provider.body.instructions,/already RENDERED/);assert.match(provider.body.instructions,/show_margin renders the true/);
+ const fields=provider.body.text.format.schema.properties.changes.properties;assert.ok(fields.badge_font.enum.includes('script'));assert.equal(fields.margin_text,undefined);assert.equal(fields.result,undefined);
+ for(const font_samples of ['https://example.test/font.png','data:image/png;base64,YmFk']){const bad=setup();assert.equal((await refineAward({...body,font_samples},bad.options)).status,400);assert.equal(bad.calls.length,0);}
+ for(const extra of [{artwork_brief:'Change the background'},{graphic_label:'Old round'},{changes:{margin_text:'BY 100 RUNS'}}]){const bad=setup({output:{changes,badges:[],...extra}});assert.equal((await refineAward(body,bad.options)).status,502);}
+});
+test('older award clients receive no unsupported typography or glow fields',async()=>{
+ const body=request();for(const key of Object.keys(body.current))if(key.endsWith('_font')||['layout_mode','title_case','grade_case','show_margin','margin_size','margin_y','margin_colour','grade_width','row_logo_size','row_logo_y','player_top','score_y'].includes(key))delete body.current[key];
+ const good=setup();assert.equal((await refineAward(body,good.options)).status,200);
+ const fields=good.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties;assert.equal(fields.title_font,undefined);assert.equal(fields.show_margin,undefined);assert.ok(!fields.badge_style.enum.includes('glow'));assert.equal(fields.row_gap.maximum,55);
+ for(const changes of [{title_font:'condensed'},{badge_style:'glow'},{row_gap:80}]){const bad=setup({output:{changes,badges:[]}});assert.equal((await refineAward(body,bad.options)).status,502);}
+});

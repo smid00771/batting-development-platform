@@ -20,7 +20,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.289';
+const APP_UI_VERSION='0.8.62.290';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -21239,7 +21239,7 @@ let socialFeaturesTask=null;
 async function loadSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.289'),import('./social-team-workflow.js?v=0.8.62.288'),import('./social-publishing.js?v=0.8.62.288'),import('./team-of-week.js?v=0.8.62.288'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.290'),import('./social-team-workflow.js?v=0.8.62.288'),import('./social-publishing.js?v=0.8.62.288'),import('./team-of-week.js?v=0.8.62.288'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];
@@ -21269,7 +21269,7 @@ socialPublishing=createSocialPublishing({canSetupPlatform:()=>platformRole==='ow
  })().catch(error=>{socialFeaturesTask=null;throw error;});
  return socialFeaturesTask;
 }
-const socialAwardRequestsPanel=createDeferredController({load:()=>import('./social-awards.js?v=0.8.62.289'),create:module=>({mount:module.renderSocialAwardRequests}),host:args=>args[1],scope:requestedFeatureScope,name:'award requests'});
+const socialAwardRequestsPanel=createDeferredController({load:()=>import('./social-awards.js?v=0.8.62.290'),create:module=>({mount:module.renderSocialAwardRequests}),host:args=>args[1],scope:requestedFeatureScope,name:'award requests'});
 function renderSocialAwardRequests(...args){return socialAwardRequestsPanel.mount(...args);}
 
 function socialAdoptResultsWeek(s,end){

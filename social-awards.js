@@ -1,8 +1,9 @@
+import {awardFontSpecimen} from './social-award-fonts.js?v=0.8.62.290';
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
 import {withGradeLabels,graphicLabel} from './social-graphic-design.js?v=0.8.62.270';
 import {labelSuggestions,assistantCSS,proposalMessage} from './social-graphic-assistant.js?v=0.8.62.270';
-import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.289';
-import {visualSettings,refinedAwardLayout,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.289';
+import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.290';
+import {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.290';
 
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
@@ -109,16 +110,34 @@ export function createSocialAwards(h){
   throw Error('This preview is too detailed to send. Try a smaller background.');
  }
  async function requestStyle(body){
+  body={...body,font_samples:await previewData(await awardFontSpecimen())};
   const response=await h.supabase.functions.invoke('club-social-style',{body});
   if(response.error||response.data?.error){let detail=response.data?.error;try{detail||=(await response.error?.context?.json())?.error;}catch{}throw Error(detail||'The change could not be prepared. Try again later.');}
   return response.data;
  }
- async function tryRefinement(s,kind,prepareBackground){
+ async function compareTemplate(s,kind,before,body,result,current){
+  if(result.artwork_brief||!current())return result;
+  const next=refinedAwardLayout(before,result,kind),canvas=document.createElement('canvas');
+  await draw(s,canvas,kind,previewItems(state(s),kind).slice(0,4),next);
+  if(!current())return result;
+  const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,brief:'Compare this rendered proposal with our previous example and correct remaining supported design mismatches. Original request: '+body.brief};
+  delete reviewBody.example_setup;
+  reviewBody.brief=reviewBody.brief.slice(0,1500);
+  let review;
+  try{review=await requestStyle(reviewBody);}catch{
+   return {...result,explanation:String(result.explanation||'Template prepared.')+' The comparison check could not finish. Please compare the preview with your example before applying.'};
+  }
+  if(!current())return result;
+  return {...result,changes:{...visualPatch(result.changes),...visualPatch(review.changes)},badges:[],explanation:review.explanation||result.explanation};
+ }
+ async function tryRefinement(s,kind,prepareBackground,matchExample=false){
   const w=state(s),r=refinement(w,kind),canvas=el('saCanvas');if(w.busy||w.pending||r.saveUncertain||!w.previewReady||!canvas||!r.brief.trim()||!previewItems(w,kind).length)return;
   const before=structuredClone(layout(w,kind)),beforeLabel=w.title,end=w.end,revision=w.context.designs[kind]?.revision||0,dirty=!!w.designDirty[kind],candidate=r.candidate,signature=()=>JSON.stringify(previewItems(w,kind).map(x=>[x.key,x.signature])),sources=signature();
   let artwork='';r.message='Preparing proposed changes…';
   await run(s,async()=>{try{
-   const preview=await previewData(canvas),scope=h.scopeRequest?await h.scopeRequest(s,kind):{},result=await requestStyle({purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],preview_grades:[...new Set(previewItems(w,kind).map(x=>x.grade))],grade_labels:before.grade_labels||[],graphic_label:beforeLabel||null,brief:r.brief.trim(),current:visualSettings(before),title_in_background:!!before.includes_title,preview});
+   const preview=await previewData(canvas),scope=h.scopeRequest?await h.scopeRequest(s,kind):{},body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],preview_grades:[...new Set(previewItems(w,kind).map(x=>x.grade))],grade_labels:before.grade_labels||[],graphic_label:beforeLabel||null,brief:r.brief.trim(),current:visualSettings(before),title_in_background:!!before.includes_title,preview};
+   let result=await requestStyle(body);
+   if(matchExample)result=await compareTemplate(s,kind,before,body,result,()=>here(s,w)&&s.view===kind&&w.end===end&&revision===(w.context.designs[kind]?.revision||0)&&sources===signature()&&sameLayout(before,layout(w,kind)));
    if(!here(s,w)||s.view!==kind||w.end!==end)return;
    if(revision!==(w.context.designs[kind]?.revision||0)||sources!==signature()||!sameLayout(before,layout(w,kind)))throw Error('The preview changed while the edit was prepared. Try the change again.');
    const next=withGradeLabels(refinedAwardLayout(before,result,kind),result.grade_labels||[],previewItems(w,kind).map(x=>x.grade));artwork=String(result.artwork_brief||'').trim().slice(0,1500);
@@ -136,7 +155,7 @@ export function createSocialAwards(h){
   const r=refinement(w,kind);
   el('saRefineBrief')?.addEventListener('input',e=>{r.brief=e.target.value;el('saTryRefinement').disabled=!r.brief.trim()||!w.previewReady||!!r.saveUncertain;});
   el('saTryRefinement')?.addEventListener('click',()=>void tryRefinement(s,kind,prepareBackground));
-  el('saMatchExample')?.addEventListener('click',()=>{r.brief='Match the lettering, result wording, colours and decorative details in our uploaded example. Use only visual treatments present in that example. Keep the current match facts and my slider positions and spacing unchanged.';void tryRefinement(s,kind,prepareBackground);});
+  el('saMatchExample')?.addEventListener('click',()=>{r.brief=kind==='results'?'Match our previous example: its separate heading, player, result and margin lettering, colours, sizes, panel spacing and composition. Include the real winning margin below WON/LOST. Adapt logos for our current opponents and keep match facts unchanged.':'Match our previous example’s separate heading, name, figure and grade lettering, colours, sizes and composition. Keep the current player, figures, grade, week and photo unchanged.';void tryRefinement(s,kind,prepareBackground,true);});
   el('saUseRefinement')?.addEventListener('click',()=>void run(s,async()=>{try{if(w.designDirty[kind])await saveLayout(s,kind);if(h.saveLabel&&w.title!==w.awardLabel?.label)await h.saveLabel(s,w.end,w.title);r.candidate=false;r.saveUncertain=false;r.message='Changes applied. You can add the graphic to the post.';}catch(e){r.saveUncertain=true;r.message='Save not confirmed. Retry Apply changes, or choose Reload saved layout.';throw e;}}));
   el('saUndoRefinement')?.addEventListener('click',()=>{if(w.busy||w.pending||r.saveUncertain)return;undoRefinement(s,w,kind);});
  }
@@ -165,7 +184,9 @@ export function createSocialAwards(h){
      if(button)button.textContent='Matching example…';
      const scope=h.scopeRequest?await h.scopeRequest(s,kind):{};
      if(!current())return;
-     styleResult=await requestStyle({purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],example_setup:true,preview_grades:grades,grade_labels:before.grade_labels||[],graphic_label:w.title||null,brief:'Match the supported lettering, result wording, colours and layout from our previous example for this new background.',current:visualSettings(before),title_in_background:!!before.includes_title,preview});
+     const body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],example_setup:true,preview_grades:grades,grade_labels:before.grade_labels||[],graphic_label:w.title||null,brief:'Match the supported lettering, result wording, colours and layout from our previous example for this new background.',current:visualSettings(before),title_in_background:!!before.includes_title,preview};
+     styleResult=await requestStyle(body);
+     styleResult=await compareTemplate(s,kind,before,body,styleResult,current);
      if(!current())return;
      // Validate before opening the artwork review, never start AI from Apply.
      refinedAwardLayout(before,styleResult,kind);
@@ -243,7 +264,7 @@ export function createSocialAwards(h){
   }));
  }
  async function remoteLogo(s,src){const parsed=new URL(src),allowed=parsed.hostname==='res.cloudinary.com'&&parsed.pathname.startsWith('/playhq/image/upload/')||parsed.hostname==='assets.playhq.com'&&parsed.pathname.startsWith('/ca/');if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.port||!allowed)throw Error('Upload the opposition logo.');const key='playcricket-logo:'+src;if(s.urls.has(key))return s.urls.get(key);const response=await fetch(src,{mode:'cors',credentials:'omit',redirect:'error',signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('Logo unavailable');const image=await response.blob();if(!image.type.startsWith('image/')||image.size>10485760)throw Error('Logo unavailable');const u=URL.createObjectURL(image);s.urls.set(key,u);return u;}
- async function draw(s,canvas,kind,items){const w=state(s),d=structuredClone(layout(w,kind)),p=items[0]&&kind!=='results'?portrait(w,kind,items[0]).photo:null;const paths={background:d.background_path,logo:d.logo_path,photo:p?.path,example:matchingResultBadgeCrops(d).length?d.example_path:null},images={};await Promise.all(Object.entries(paths).map(async([key,path])=>{if(path)images[key]=await h.image(s,await url(s,bucket,path));}));if(kind==='results'){
+ async function draw(s,canvas,kind,items,override){const w=state(s),d=structuredClone(override||layout(w,kind)),p=items[0]&&kind!=='results'?portrait(w,kind,items[0]).photo:null;const paths={background:d.background_path,logo:d.logo_path,photo:p?.path,example:matchingResultBadgeCrops(d).length?d.example_path:null},images={};await Promise.all(Object.entries(paths).map(async([key,path])=>{if(path)images[key]=await h.image(s,await url(s,bucket,path));}));if(kind==='results'){
    await logos(s,items);images.opponents={};images.opponentKeys={};
    await Promise.all(items.map(async item=>{const t=opponent(item);if(!t)return;images.opponentKeys[item.key]=opponentKey(w,t);const saved=opponentLogo(w,d,t),src=saved?await url(s,bucket,saved.path):t.logo_url||w.logos[t.id];if(src)try{images.opponents[item.key]=await h.image(s,saved?src:await remoteLogo(s,src));}catch(e){if(saved)throw e;w.logoErrors[t.id]=true;}}));
   }if(d.show_logo&&!images.logo&&s.data.brand?.logo)images.logo=await h.image(s,s.data.brand.logo);await drawAwardGraphic(h,s,canvas,{kind,items,layout:d,photo:p,week:scopedAwardLabel(w.title??'WEEK ENDING '+date(w.end),w.context?.award_scope),images});}
@@ -252,7 +273,7 @@ export function createSocialAwards(h){
   const image=await h.image(s,await url(s,bucket,d.example_path)),iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height;
   for(const canvas of samples){if(!canvas.isConnected)continue;const c=d.badge_crops.find(x=>x.label===canvas.dataset.saBadge);if(!c)continue;canvas.width=Math.max(1,Math.round(iw*c.width));canvas.height=Math.max(1,Math.round(ih*c.height));canvas.getContext('2d').drawImage(image,iw*c.x,ih*c.y,iw*c.width,ih*c.height,0,0,canvas.width,canvas.height);}
  }
- async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
+ async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[],missingMargins=kind==='results'&&layout(w,kind).show_margin?items.filter(x=>['WIN','LOSS'].includes(resultsSummary(x).outcome)&&!resultsSummary(x).margin):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:missingMargins.length?'Winning margin unavailable for '+missingMargins.map(x=>x.grade).join(', ')+'. Refresh results to check for updated source data.':items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
  async function saveGraphics(s,kind){
   const w=state(s);if(w.busy||s.busy||refinement(w,kind).candidate)return;const items=previewItems(w,kind);if(!w.pending&&(!items.length||!w.previewReady))return;if(!w.pending&&kind==='results'&&items.some(x=>!resultsSummary(x).outcome)){notice(s,'Import the updated PlayCricket result before confirming.');return;}if(!w.pending&&items.some(x=>kind!=='results'&&portrait(w,kind,x).dirty)){notice(s,'Confirm each photo position first.');return;}
   w.busy=true;notice(s,'Saving confirmed graphics…');render(s);

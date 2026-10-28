@@ -9,7 +9,7 @@ test('initial HTML has a visible branded shell and retry even if the loader itse
  const dom=shell(t),d=dom.window.document;
  assert.equal(d.querySelector('.app-start-brand').textContent,'Mirelion');assert.equal(d.getElementById('appStartStatus').textContent,'Opening your club…');
  assert.equal(d.querySelector('link[rel=stylesheet]'),null);assert.equal(d.querySelectorAll('link[rel=preload][as=style]').length,2);
- assert.match(d.querySelector('script[type=module]').src,/app-start\.js\?v=0\.8\.62\.289$/);
+ assert.match(d.querySelector('script[type=module]').src,/app-start\.js\?v=0\.8\.62\.290$/);
  const handler=new Function('document',d.querySelector('script[type=module]').getAttribute('onerror'));handler(d);
  assert.match(d.getElementById('appStartStatus').textContent,/could not open/);assert.equal(d.getElementById('appStartRetry').hidden,false);
  assert.equal(d.getElementById('appStartRetry').getAttribute('onclick'),'location.reload()');
@@ -71,7 +71,7 @@ test('users can leave Socials during its first download without losing loaded sa
 function initialGraph(entry){const files=new Set();function visit(file){if(files.has(file))return;files.add(file);const source=fs.readFileSync(path.join(root,file),'utf8');for(const [,specifier] of source.matchAll(/^import\s+(?:\{[^}]*\}\s+from\s+)?['"]([^'"]+)['"]/gm)){if(specifier.startsWith('.'))visit(path.posix.normalize(path.posix.join(path.posix.dirname(file),specifier.split('?')[0])));}}visit(entry);return files;}
 test('startup dependency graph excludes optional tools, Help, graphics font and analysis',()=>{
  const graph=initialGraph('app.js');
- for(const file of ['selection-returning.js','help-catalogue.js','social-font-fallback.js','selection-room.js','selection-evidence.js','selection-evidence-ui.js','season-stats.js','season-stats-panel.js','social-awards.js','social-team-workflow.js','social-publishing.js','team-of-week.js','player-of-week.js','playhq-import.js','fixture-results.js','selection-group-page.js','selection-group-permissions.js','video-credits.js'])assert.equal(graph.has(file),false,file+' must wait for its feature');
+ for(const file of ['social-award-font-data.js','social-award-fonts.js','selection-returning.js','help-catalogue.js','social-font-fallback.js','selection-room.js','selection-evidence.js','selection-evidence-ui.js','season-stats.js','season-stats-panel.js','social-awards.js','social-team-workflow.js','social-publishing.js','team-of-week.js','player-of-week.js','playhq-import.js','fixture-results.js','selection-group-page.js','selection-group-permissions.js','video-credits.js'])assert.equal(graph.has(file),false,file+' must wait for its feature');
  assert.ok(graph.has('selection-returning-availability.js'),'Lightweight returning names stay available');assert.ok(graph.has('password-flow.js'),'Authentication remains essential');
  assert.ok([...graph].reduce((sum,file)=>sum+fs.statSync(path.join(root,file)).size,0)<2400000,'Keep optional payload out of startup');
 });
