@@ -210,7 +210,9 @@ supabase.functions.invoke=async function(name,args={}){
   if(!demoIsSocial())return demoFail('Socials Manager access required');
   const brief=(body.brief||'').toLowerCase(),changes={};let explanation='Demo preview: try “use gold text”, “make the names larger” or “shorten 1st Grade to 1st”.',label=null;
   if(body.kind==='results'&&/\bwon\b/.test(brief)&&/\blost\b/.test(brief)){changes.result_labels='won_lost';changes.font=body.current?.font||'sporting';explanation='Demo preview: use WON and LOST consistently across all result rows.';}
-  if(body.example_setup){Object.assign(changes,{font:'sporting',result_labels:'won_lost'});explanation='Demo example style applied. Live clubs use their own uploaded example.';}
+  if(body.example_setup){Object.assign(changes,{font:'sporting',result_labels:'won_lost',title_font:'condensed',player_font:'sans',badge_font:'script',badge_style:'glow',show_margin:true});explanation='Demo example style applied. Live clubs use their own uploaded example.';}
+  if(body.kind==='results'&&/margin|below.*won|how much/.test(brief))Object.assign(changes,{show_margin:true,margin_font:'condensed'});
+  if(body.reference_review)return demoOK({changes:{},badges:[],grade_labels:[],graphic_label:null,artwork_brief:null,explanation:'Demo comparison complete. Live clubs compare the rendered proposal with their own example.'});
   if(/gold|yellow/.test(brief)){changes.text_colour='#f6ca62';explanation='Demo preview: changed the text to gold.';}
   if(/larger|bigger/.test(brief)){if(body.kind==='team_week')changes.font_scale=115;else if(body.kind==='team_selections')changes.font='bold';else changes.name_size=Math.min(120,(body.current?.name_size||76)+12);explanation='Demo preview: increased the name emphasis.';}
   const short=/shorten (.+?) to (.+?)[.!]?$/.exec(body.brief||''),grades=body.preview_grades||[],grade=short&&grades.find(g=>g.toLowerCase()===short[1].toLowerCase());

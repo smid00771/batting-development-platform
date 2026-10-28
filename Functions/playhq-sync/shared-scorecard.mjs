@@ -2,6 +2,7 @@
 // IDs have their own namespace. Appearance IDs are match-scoped until the provider
 // confirms a stable cross-match player identifier; names never merge histories.
 import {gameSummary,matchSchedule} from './public-api.mjs';
+import {summaryMargin} from './result-margin.mjs';
 const valid=n=>Number.isInteger(n)&&n>=0&&n<=9999;
 const number=n=>valid(n)?n:null;
 const text=v=>String(v??'').trim().slice(0,200);
@@ -57,9 +58,10 @@ export async function sharedScorecard(body,context){
    batters,bowlers,bowling_available:!!bowl});
  }
  const winner=game.teams.filter(t=>t.outcome==='WON'),loser=game.teams.filter(t=>t.outcome==='LOST');
- const result=summary.complete&&winner.length===1&&loser.length===1&&winner[0].id!==loser[0].id?`${text(winner[0].name)} won`:'';
+ const margin=summaryMargin(game,summary);
+ const result=summary.complete&&winner.length===1&&loser.length===1&&winner[0].id!==loser[0].id?`${text(winner[0].name)} won${margin?' by '+margin:''}`:'';
  return {schema_version:2,provider:'playhq_au',match_id:await sourceId('match',match),upstream_match_id:match,upstream_grade_id:fixture.source_grade_id,
   upstream_team_id:fixture.source_team_id,our_team_id:teamIds.get(fixture.source_team_id),url:null,status:summary.complete?'completed':'in_progress',source_status:game.status,
   dates:fixture.days.map(d=>d.date),format_key:fixture.format,format_label:fixture.format,grade:context.grade,competition:context.competition,
-  venue:fixture.days[0]?.ground||'',result,teams,innings,warnings:[...new Set(warnings)]};
+  venue:fixture.days[0]?.ground||'',result,...(margin?{result_margin_basis:'calculated_from_playhq_innings'}:{}),teams,innings,warnings:[...new Set(warnings)]};
 }
