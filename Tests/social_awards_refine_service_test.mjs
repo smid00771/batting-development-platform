@@ -199,3 +199,15 @@ test('reference matching reselects every type role and retains a complete letter
  assert.equal(result.status,200);assert.deepEqual(result.body.badges,[]);assert.equal(result.body.reference_lettering,undefined);
  const legacy=request();delete legacy.current.title_font;const denied=setup();assert.equal((await refineAward({...legacy,match_reference:true},denied.options)).status,400);assert.equal(denied.calls.length,0,'Unsupported clients are rejected before spending an allowance');
 });
+
+test('reference measurements are bounded presentation geometry and old clients retain their existing schema',async()=>{
+ const changes={title_font:'condensed',week_font:'sans',grade_font:'condensed',score_font:'condensed',player_font:'sans',badge_font:'script',margin_font:'condensed'},reference_geometry={title_top:.02,title_width:.42,title_height:.1,player_height:.018,player_align:'center',left_column_end:.34};
+ const body={...request(),match_reference:true,reference_geometry:true},good=setup({output:{changes,reference_geometry,badges:[]}}),result=await refineAward(body,good.options);
+ assert.equal(result.status,200);assert.deepEqual(result.body.reference_geometry,reference_geometry);assert.deepEqual(result.body.reference_size,{width:1,height:1});
+ const provider=good.calls.find(c=>c.url.includes('openai'));assert.ok(provider.body.text.format.schema.required.includes('reference_geometry'));assert.match(provider.body.instructions,/MEASURE THE REFERENCE/);
+ for(const measured of [{...reference_geometry,title_height:5},{...reference_geometry,result:'won'},{...reference_geometry,player_name:'Someone'}]){const bad=setup({output:{changes,reference_geometry:measured}});assert.equal((await refineAward(body,bad.options)).status,502);}
+ const old=request();for(const key of ['player_align','left_column_end','right_column_start'])delete old.current[key];
+ const legacy=setup();assert.equal((await refineAward(old,legacy.options)).status,200);assert.equal(legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.player_align,undefined);
+ const denied=setup();assert.equal((await refineAward({...old,match_reference:true,reference_geometry:true},denied.options)).status,400);assert.equal(denied.calls.length,0);
+ const unsupported=setup({output:{changes:{player_align:'center'}}});assert.equal((await refineAward(old,unsupported.options)).status,502);
+});

@@ -7,7 +7,7 @@ import {refinedAwardLayout,matchingResultBadgeCrops} from '../social-awards-desi
 test('reference lettering removes the panel rectangle, preserves foreground and caches the extraction',()=>{
  const image=createCanvas(200,100),ctx=image.getContext('2d');ctx.fillStyle='#aabacc';ctx.fillRect(0,0,200,100);ctx.fillStyle='#fff';ctx.fillRect(70,30,60,40);
  const crop={label:'WON',x:0,y:0,width:1,height:1},badge=referenceBadge(image,crop,()=>createCanvas(1,1)),pixels=badge.getContext('2d');
- assert.equal(pixels.getImageData(0,0,1,1).data[3],0);assert.deepEqual([...pixels.getImageData(90,50,1,1).data],[255,255,255,255]);assert.equal(referenceBadge(image,crop,()=>{throw Error('Cached');}),badge);
+ assert.equal(badge.width,64);assert.equal(badge.height,44);assert.equal(pixels.getImageData(0,0,1,1).data[3],0);assert.deepEqual([...pixels.getImageData(30,20,1,1).data],[255,255,255,255]);assert.equal(referenceBadge(image,crop,()=>{throw Error('Cached');}),badge);
 });
 test('a complete reference pair survives independent font matching; later wording/font edits clear both',()=>{
  const example_path='club/artwork/example.png',base=awardLayout('results',{example_path,font:'classic'}),badges=['WON','LOST'].map((label,i)=>({label,x:.4,y:.3+i*.4,width:.2,height:.06}));

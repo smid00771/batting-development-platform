@@ -15,13 +15,13 @@ export function resultsLayoutPlan(d,height,count,shared,headerBottom){
   const y=clamp((height-size)*d.logo_y/100+size/2,headerBottom+8+size/2,top-20-size/2);
   header={size,gap,x:(1080-width)*d.logo_x/100+width/2,y};
  }
- return {top,bottom,gap,rowHeight,header,columns:{left:d.row_inset+28,leftFigures:434,centre:540,centreWidth:180,rightNames:650,right:1080-d.row_inset-28}};
+ return {top,bottom,gap,rowHeight,header,columns:{left:d.row_inset+28,leftFigures:clamp(d.left_column_end*10.8,324,434),centre:540,centreWidth:180,rightNames:clamp(d.right_column_start*10.8,650,756),right:1080-d.row_inset-28}};
 }
 export function resultsRowPlan(d,rowHeight,shared,marginHeight,badgeHeight){
  const gradeBottom=34,pad=6,bottom=rowHeight-12;
  const marginTop=marginHeight?Math.min(Math.max(gradeBottom+48,rowHeight*d.margin_y/100-marginHeight/2),bottom-marginHeight):bottom;
  const room=marginTop-gradeBottom-pad*(shared?2:3);
- const logoSize=shared?0:Math.min(d.layout_mode==='template'?d.row_logo_size:44,rowHeight*.20,Math.max(18,room-Math.min(badgeHeight,room*.65)));
+ const logoSize=shared?0:Math.min(d.layout_mode==='template'?d.row_logo_size:44,rowHeight*.20,Math.max(18,room-badgeHeight));
  const height=Math.min(badgeHeight,Math.max(20,room-logoSize));
  const logoY=shared?0:clamp(rowHeight*(d.layout_mode==='template'?d.row_logo_y:30)/100,gradeBottom+pad+logoSize/2,marginTop-height-pad*2-logoSize/2);
  const contentTop=shared?gradeBottom+pad:logoY+logoSize/2+pad;

@@ -17,5 +17,14 @@ export function referenceBadge(image,crop,makeCanvas){
   for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,(data[i+c]-bg[c]*(1-alpha))/alpha));
   data[i+3]=Math.round(data[i+3]*alpha);
  }
- ctx.putImageData(pixels,0,0);saved.set(key,canvas);return canvas;
+ ctx.putImageData(pixels,0,0);
+ // The model's rectangle may include generous blank padding. Fit the visible
+ // lettering and halo, not that padding, to the requested badge width.
+ let left=width,top=height,right=-1,bottom=-1;
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(data[(y*width+x)*4+3]>=40){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
+ if(right>=left&&bottom>=top){
+  left=Math.max(0,left-2);top=Math.max(0,top-2);right=Math.min(width-1,right+2);bottom=Math.min(height-1,bottom+2);
+  const trimmed=makeCanvas();trimmed.width=right-left+1;trimmed.height=bottom-top+1;trimmed.getContext('2d').drawImage(canvas,left,top,trimmed.width,trimmed.height,0,0,trimmed.width,trimmed.height);saved.set(key,trimmed);return trimmed;
+ }
+ saved.set(key,canvas);return canvas;
 }

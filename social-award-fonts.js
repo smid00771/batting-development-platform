@@ -16,9 +16,9 @@ export async function awardFontsReady(layout){
 }
 export async function awardFontSpecimen(){
  await awardFontsReady({title_font:'condensed',player_font:'sans',badge_font:'script'});
- const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=420;const ctx=canvas.getContext('2d');
- ctx.fillStyle='#ffffff';ctx.fillRect(0,0,1080,420);ctx.fillStyle='#10253f';
+ const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=660;const ctx=canvas.getContext('2d');
+ ctx.fillStyle='#ffffff';ctx.fillRect(0,0,1080,660);ctx.fillStyle='#10253f';
  const keys=['sporting','condensed','sans','script','modern','classic'];
- keys.forEach((key,i)=>{const y=36+i*64;ctx.font='18px Arial';ctx.fillText(key.toUpperCase(),18,y);ctx.font=`${AWARD_FONT_WEIGHTS[key]||'700'} 36px ${AWARD_FONTS[key]}`;ctx.fillText(key==='script'?'WON  LOST':'Results · 1st GRADE · Alex Player · BY 20 RUNS',180,y);});
+ keys.forEach((key,i)=>{const x=24+(i%2)*540,y=28+Math.floor(i/2)*220,weight=AWARD_FONT_WEIGHTS[key]||'700';ctx.font='18px Arial';ctx.fillText(key.toUpperCase(),x,y);ctx.font=`${weight} 58px ${AWARD_FONTS[key]}`;ctx.fillText('Results',x,y+66);ctx.font=`${weight} 30px ${AWARD_FONTS[key]}`;ctx.fillText('Alex Player  66*   Jordan  3/24',x,y+112);ctx.font=`${weight} 32px ${AWARD_FONTS[key]}`;ctx.fillText('WON · LOST · BY 20 RUNS',x,y+160);});
  return canvas;
 }

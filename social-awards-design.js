@@ -1,5 +1,7 @@
 // Shared renderer/AI contract. This contains visual settings only, never match data.
+export const AWARD_COMPOSITION_FIELDS={player_align:['left','center','right'],left_column_end:[30,42],right_column_start:[58,70]};
 export const AWARD_TEMPLATE_FIELDS={
+ ...AWARD_COMPOSITION_FIELDS,
  ...Object.fromEntries(['title','week','grade','score','player','badge','margin'].map(role=>[role+'_font',['inherit','sporting','modern','classic','condensed','sans','script']])),
  layout_mode:['legacy','template'],title_case:['upper','title'],grade_case:['upper','preserve'],show_margin:'boolean',margin_size:[18,48],margin_y:[65,94],margin_colour:'colour',
  grade_width:[320,780],row_logo_size:[30,84],row_logo_y:[18,42],player_top:[32,55],score_y:[14,36],
@@ -18,6 +20,7 @@ export const AWARD_STYLE_FIELDS={
  badge_text_colour:'colour',show_logo:'boolean',text_panel:'boolean'
 };
 export const AWARD_STYLE_DEFAULTS={
+ player_align:'left',left_column_end:434/10.8,right_column_start:650/10.8,
  ...Object.fromEntries(['title','week','grade','score','player','badge','margin'].map(role=>[role+'_font','inherit'])),
  layout_mode:'legacy',title_case:'upper',grade_case:'upper',show_margin:true,margin_size:27,margin_y:86,margin_colour:'#10253F',grade_width:480,row_logo_size:72,row_logo_y:30,player_top:42,score_y:25,week_size:28,row_gap:28,row_inset:34,row_radius:0,row_opacity:100,
  grade_size:35,score_size:35,player_size:28,badge_size:38,badge_angle:0,badge_y:62,badge_width:180,
@@ -36,6 +39,19 @@ export function visualPatch(value){
  return patch;
 }
 export function visualSettings(layout){return Object.fromEntries(Object.keys(AWARD_STYLE_FIELDS).map(k=>[k,layout[k]??AWARD_STYLE_DEFAULTS[k]??null]));}
+// Normalized measurements of reference artwork, never current match facts.
+export const REFERENCE_GEOMETRY_FIELDS={title_top:[0,.5],title_width:[.05,.95],title_height:[.01,.3],grade_height:[.005,.12],score_height:[.005,.12],player_height:[.005,.12],badge_width:[.04,.3],margin_height:[.005,.12],row_inset:[.02,.1],row_gap:[0,.15],rows_top:[.1,.65],rows_bottom:[.65,1],left_column_end:[.3,.42],right_column_start:[.58,.7],player_align:['left','center','right']};
+export const referenceGeometrySchema={type:'object',additionalProperties:false,required:Object.keys(REFERENCE_GEOMETRY_FIELDS),properties:Object.fromEntries(Object.entries(REFERENCE_GEOMETRY_FIELDS).map(([key,rule])=>[key,typeof rule[0]==='number'?{type:['number','null'],minimum:rule[0],maximum:rule[1]}:{type:['string','null'],enum:[...rule,null]}]))};
+export function referenceGeometry(value){
+ if(value==null)return {};
+ if(typeof value!=='object'||Array.isArray(value))throw Error('Invalid reference measurements');
+ const result={};
+ for(const [key,v] of Object.entries(value)){
+  const rule=REFERENCE_GEOMETRY_FIELDS[key];if(!rule)throw Error('Unsupported reference measurement');if(v===null)continue;
+  if(typeof rule[0]==='number'?typeof v!=='number'||!Number.isFinite(v)||v<rule[0]||v>rule[1]:!rule.includes(v))throw Error('Invalid reference measurement');result[key]=v;
+ }
+ return result;
+}
 // One paired choice applies to every row, while the imported outcome stays intact.
 export const RESULT_LABELS={won_lost:{WIN:'WON',LOSS:'LOST'},win_loss:{WIN:'WIN',LOSS:'LOSS'},win_def:{WIN:'WIN',LOSS:'DEF'}};
 export function resultLabel(outcome,layout={}){return (RESULT_LABELS[layout.result_labels]||RESULT_LABELS.win_def)[outcome]||outcome||'CHECK RESULT';}
