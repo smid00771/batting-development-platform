@@ -10,17 +10,18 @@ import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.
 const returningPlayers=findReturningPlayers;
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.264';
 // Club Batting 0.8.62.246 — Selection Group permissions
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { createClient,isAuthRetryableFetchError } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm';
 let createSelectionRoom;
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 function requestedFeatureScope(){return JSON.stringify([session?.user?.id,club?.id,currentTab,selectionState?.view,selectionState?.navigationDrawer?.kind,platformView]);}
 
 const passwordFlow=createPasswordFlow(location.href);
-const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+// Keep the SDK's existing per-project browser storage key so saved sign-ins survive updates.
+const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.296';
+const APP_UI_VERSION='0.8.62.297';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1018,12 +1019,21 @@ function matchDraftOfferSaved(){
 function matchDraftStart(){if(matchDraftRecovery.started)return;matchDraftRecovery.started=true;const capture=()=>{for(const ctx of matchDraftRecovery.contexts){if(ctx.form?.isConnected)matchDraftCapture(ctx);else matchDraftRecovery.contexts.delete(ctx);}if(typeof teamReviewState!=='undefined'&&teamReviewState&&currentTab==='team_review')matchDraftAttachTeam(teamReviewState);};window.addEventListener('pagehide',capture);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')capture();});window.addEventListener('beforeunload',event=>{capture();const form=document.getElementById('staffDevelopmentForm')||document.getElementById('myReflectionForm');if(form&&feedbackEntryBaselines.has(form)&&feedbackEntryBaselines.get(form)!==feedbackEntryValues(form)){event.preventDefault();event.returnValue='';}});}
 // END MATCH DRAFT RECOVERY V129
 
+async function restoreDeviceSignIn(){
+  const {error:authLinkError}=await supabase.auth.initialize();
+  const {data,error}=await supabase.auth.getSession();
+  // A failed connection is not a signed-out account. Keep the saved session and
+  // let the existing startup retry reconnect instead of asking for a password.
+  if(error)throw error;
+  if(!data?.session&&isAuthRetryableFetchError(authLinkError))throw authLinkError;
+  return {session:data?.session||null,authLinkError};
+}
+
 async function boot(){
   const moved=legacyAppRedirect(location.href);if(moved){location.replace(moved);return;}
   void initialisePhoneApp();
   document.title='Mirelion';
-  const {error:authLinkError}=await supabase.auth.initialize();
-  const {data:{session:s}}=await supabase.auth.getSession();
+  const {session:s,authLinkError}=await restoreDeviceSignIn();
   session=s;
   passwordFlow.initialise(session,authLinkError);
   if(passwordFlow.isPasswordEntry)history.replaceState(history.state,'',cleanPasswordUrl(location.href));
@@ -1325,7 +1335,7 @@ function renderLogin(msg=''){
       <button class="btn secondary" type="submit" id="signInButton">Sign in</button>
     </form>
     <p><button class="guide-inline-link" type="button" id="resetPassword">Forgot password?</button> · <button class="guide-inline-link" type="button" id="firstPassword">Set a first password</button></p>
-    <p class="help">Already chose a password? Keep using it whenever you sign in.</p>
+    <p class="help">This browser keeps you signed in. Use Sign out on a shared device.</p>
     <div id="authStatus" class="help" role="status" aria-live="polite"></div>
     <p class="help">${trialEntry?'<a href="./app.html?trial=1" id="backToTrialEntry">Back to club details / create an account</a>':'New club? <a href="./app.html?trial_product=">Try it free with your club</a>.'}</p>
     ${!platform?'<p class="help"><a href="./app.html?platform=1">Platform Admin sign-in</a></p>':''}
@@ -17440,9 +17450,9 @@ function waitForPhoneWorker(reg){
  });
 }
 async function signOutClubBatting(){
- if(phoneIsDemo())return supabase.auth.signOut();
+ if(phoneIsDemo())return supabase.auth.signOut({scope:'local'});
  try{const reg=phoneRegistration||await navigator.serviceWorker?.getRegistration('./'),sub=await reg?.pushManager.getSubscription();if(sub&&session?.user){await Promise.race([supabase.rpc('phone_app_api',{p_club_id:club?.id||null,p_action:'disable',p_data:{endpoint:sub.endpoint}}),new Promise(resolve=>setTimeout(resolve,3000))]);}}catch{}
- await phoneWorkerMessage('CB_SIGN_OUT');mirelionAssist.reset();clubMessageState=null;clubMessageUnread=0;return supabase.auth.signOut();
+ await phoneWorkerMessage('CB_SIGN_OUT');mirelionAssist.reset();clubMessageState=null;clubMessageUnread=0;return supabase.auth.signOut({scope:'local'});
 }
 async function openPhoneApp(){if(!await saveClubEditsBeforeNavigation())return;currentTab='phone_app';await renderTab();}
 function phoneAppPrompt(){

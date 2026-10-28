@@ -51,7 +51,9 @@ app=app.replace(/^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];?\s*$/gm,(_,nam
 });
 app=requestedImports(app,'app.js');
 for(const [file,name] of Object.entries({'playcricket-team-demo.js':'createScorecardTeamDemo','team-of-week-demo.js':'createTeamWeekDemo','player-of-week-demo.js':'createPlayerWeekDemo','shared-match-results-demo.js':'createSharedResultsDemo','season-stats-demo.js':'createSeasonStatsDemo','social-awards-demo.js':'createSocialAwardsDemo','selection-room.js':'selectionCallLink'}))bindings.push('const {'+name+'}='+bundle(file)+';');
-app=app.replace('const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);',"const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';\nconst supabase=window.__fixtureDb;");
+const liveClient=/const supabase=createClient\(SUPABASE_URL,SUPABASE_ANON_KEY,\{auth:\{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true\}\}\);/;
+if(!liveClient.test(app))throw Error('Expected persistent browser auth configuration');
+app=app.replace(liveClient,"const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';\nconst supabase=window.__fixtureDb;");
 if(!/\nexport const appReady=boot\(\);?\s*$/.test(app))throw Error('Expected live boot() at end of app.js');
 app=app.replace(/\nexport const appReady=boot\(\);?\s*$/,'\n');
 app=app.replace('demo:false','demo:true');
