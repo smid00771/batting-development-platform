@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
+import {AWARD_FONT_DATA} from '../social-award-font-data.js';
 const require=createRequire(import.meta.url),{JSDOM}=require('jsdom'),{createCanvas,GlobalFonts,loadImage}=require('@napi-rs/canvas');
 const {createSocialAwards}=await import('../social-awards.js');
 const dom=new JSDOM('<div id="socialContent"></div>',{url:'https://clubbatting.com/'});
 Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage});
 window.HTMLElement.prototype.scrollIntoView=()=>{};
 const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+for(const face of Object.values(AWARD_FONT_DATA))GlobalFonts.register(Buffer.from(face.data,'base64'),face.family);
 window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(img,...args)=>draw(img.backing||img,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 window.HTMLCanvasElement.prototype.toBlob=function(cb,type='image/png'){cb(new Blob([this.backing.toBuffer(type)],{type}));};
 const items=['Home won by 30 runs','Visitors won by 2 wickets','Match drawn','No result','Home won by 3 wickets'].map((result,i)=>({key:'match-'+i,match_id:'match-'+i,signature:'source-'+i,kind:'results',grade:['1st','2nd','3rd','4th','5th'][i]+' Grade',our_team:'home',teams:[{id:'home',name:'Home'},{id:'away',name:'Visitors',organisation_id:'visitors'}],result,innings:[{team_id:'home',runs:250,wickets:6,batters:[{name:'Alex Hunter',runs:127,not_out:true,status:'played',importable:true},{name:'Casey Chen',runs:63,status:'played',importable:true},{name:'Jamie Park',runs:34,status:'played',importable:true}]},{team_id:'away',runs:220,wickets:10,bowlers:[{name:'Alex Hunter',team_id:'home',wickets:6,runs:24,importable:true},{name:'Casey Chen',team_id:'home',wickets:3,runs:61,importable:true},{name:'Jamie Park',team_id:'home',wickets:1,runs:42,importable:true}]}]}));
@@ -24,6 +26,7 @@ let module,labels=[];const h={supabase:api,here:x=>x===s,escape:v=>String(v??'')
 module=createSocialAwards(h);const w=module.state(s);w.end='2026-10-11';w.logoErrors.away=true;w.chosen=new Set(items.map(x=>x.key));
 const id=x=>document.getElementById(x),tick=()=>new Promise(r=>setTimeout(r,5)),until=async predicate=>{for(let i=0;i<500;i++){if(predicate())return;await tick();}throw Error('Timed out: '+id('saRefineStatus')?.textContent);},settled=()=>until(()=>!w.busy&&!w.loading&&w.previewReady),png=()=>id('saCanvas').backing.toBuffer('image/png'),answer=(changes={},extra={})=>({data:{changes,badges:[],explanation:'Review this change.',artwork_brief:null,...extra}}),edit=async(brief,response)=>{nextResponse=response;id('saRefineBrief').value=brief;id('saRefineBrief').dispatchEvent(new window.Event('input'));id('saTryRefinement').click();await settled();};
 module.render(s);await settled();const original=png(),facts=JSON.stringify(context.candidates),selected=[...w.chosen];
+assert.equal(document.querySelectorAll('#saMatchExample').length,1);assert.ok(id('saMatchExample').closest('[data-sa-asset=example]'));assert.equal(id('saMatchExample').closest('.graphic-assistant'),null);
 assert.equal(id('saReload').textContent,'Refresh page');assert.equal(id('saImport').textContent,'Add / update PlayCricket scores');
 assert.ok(id('saRefineBrief'),'The AI editor is visible directly beneath the preview.');
 await edit('Use a gold ribbon for wins.',answer({badge_style:'ribbon',win_colour:'#B98922',badge_angle:-5},{explanation:'Gold ribbon <img id="injected">'}));
@@ -130,3 +133,9 @@ assert.equal(w.layouts.results.mixed_rows_top,26);assert.equal(w.layouts.results
 await edit('Move the first team a little higher, to 23%.',answer({rows_top:23}));assert.equal(requests.at(-1).current.rows_top,26);assert.equal(w.layouts.results.mixed_rows_top,23);assert.equal(w.layouts.results.rows_top,sharedTop);
 id('saUndoRefinement').click();await settled();assert.equal(w.layouts.results.mixed_rows_top,26);
 console.log('Passed: automatic mixed-opponent placement retains slider, explicit spacing edit and undo behaviour.');
+
+const measuredBefore=structuredClone(w.layouts.results),measuredCalls=requests.length;
+responseQueue=[answer({title_font:'condensed',player_font:'sans',title_size:40},{reference_geometry:{title_top:.02,title_width:.42,title_height:.1,player_height:.018,player_align:'center'},reference_size:{width:640,height:800}}),answer({})];
+id('saMatchExample').click();await settled();assert.equal(requests.length,measuredCalls+2);assert.equal(requests.at(-2).reference_geometry,true);assert.ok(requests.at(-1).current.title_size>100,'Measured type is rendered before the comparison');assert.equal(w.layouts.results.player_align,'center');
+id('saUseRefinement').click();await settled();assert.equal(requests.length,measuredCalls+2);assert.equal(context.designs.results.layout.player_align,'center');id('saUndoRefinement').click();await settled();assert.deepEqual(w.layouts.results,measuredBefore);
+console.log('Passed: example-panel match applies measured proportions before rendered comparison and retains reviewed save/undo.');

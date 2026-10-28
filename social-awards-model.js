@@ -1,8 +1,8 @@
-import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.291';
-import {referenceBadge} from './social-award-lettering.js?v=0.8.62.291';
-import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.291';
+import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.292';
+import {referenceBadge} from './social-award-lettering.js?v=0.8.62.292';
+import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.292';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
-import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.291';
+import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.292';
 
 export const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
@@ -73,7 +73,10 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   // Include italic/script overhang, not just the advance width. This protects
   // neighbouring columns without cutting the final letter off at the clip edge.
   while(size>18){ctx.font=`${weight} ${size}px ${ctx.socialFont}`;const m=ctx.measureText(value),ink=ctx.textAlign==='center'?2*Math.max(m.actualBoundingBoxLeft,m.actualBoundingBoxRight,m.width/2):Math.max(m.width,m.actualBoundingBoxLeft+m.actualBoundingBoxRight);if(ink<=width-4)break;size--;}
+  ctx.font=`${weight} ${size}px ${ctx.socialFont}`;const bounds=ctx.measureText(value);
+  if(role==='title'||role==='week')y=Math.max(24+bounds.actualBoundingBoxAscent,Math.min(height-24-bounds.actualBoundingBoxDescent,y));
   h.text(ctx,value,x,y,width-4,size,weight);
+  return {top:y-bounds.actualBoundingBoxAscent,bottom:y+bounds.actualBoundingBoxDescent};
  };
  const title=value=>layout.title_case==='title'?value.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()):value.toUpperCase();
  const image=(img,x,y,size,maxHeight=.7)=>{if(!img)return;const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(1080*size/100/iw,height*maxHeight/ih),w=iw*fit,ht=ih*fit;ctx.drawImage(img,(1080-w)*x/100,(height-ht)*y/100,w,ht);};
@@ -87,14 +90,14 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   text(item?awardFigures(item)+(kind==='century'?' RUNS':''):'',540,height*layout.figures_y/100,980,layout.figures_size,layout.text_colour,'score');
   ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} 30px ${ctx.socialFont}`;const grade=graphicGrade(item?.grade,layout);checkGraphicLabel(canvas,ctx,{source:item?.grade,label:grade,width:980-ctx.measureText(item?.opposition?' · v '+item.opposition:'').width,size:30,grade:true});text([grade,item?.opposition&&'v '+item.opposition].filter(Boolean).join(' · '),540,height*layout.grade_y/100,980,30,layout.text_colour,'grade');return;
  }
- if(!layout.includes_title)text(title(items.some(x=>x.provisional)?'MATCH UPDATE':'RESULTS'),540,height*layout.title_y/100,990,layout.title_size,layout.text_colour,'title');
- checkGraphicLabel(canvas,ctx,{source:week,label:week,width:970,size:layout.week_size});text(week,540,height*layout.week_y/100,970,layout.week_size,layout.text_colour,'week');
+ const titleBounds=!layout.includes_title?text(title(items.some(x=>x.provisional)?'MATCH UPDATE':'RESULTS'),540,height*layout.title_y/100,990,layout.title_size,layout.text_colour,'title'):null;
+ checkGraphicLabel(canvas,ctx,{source:week,label:week,width:970,size:layout.week_size});const weekY=Math.max(height*layout.week_y/100,titleBounds?titleBounds.bottom+layout.week_size*.6+12:0),weekBounds=text(week,540,weekY,970,layout.week_size,layout.text_colour,'week');
  const sharedOpponent=resultsShareOpponent(items,images.opponentKeys);
  const logoPair=(opponent,summary,x,y,size,gap,colour)=>{
   const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/iw,size/ih);ctx.drawImage(img,cx-iw*fit/2,y-ih*fit/2,iw*fit,ih*fit);};
   badge(logo,summary.ourName,x-(size+gap)/2);text('VS',x,y,gap-8,Math.min(60,size*.5),colour);badge(opponent,summary.opposition,x+(size+gap)/2);
  };
- const headerBottom=Math.max(height*layout.week_y/100+layout.week_size*.7,height*layout.title_y/100+layout.title_size*.6);
+ const headerBottom=Math.max(weekBounds.bottom,titleBounds?.bottom??height*layout.title_y/100+layout.title_size*.6);
  const plan=resultsLayoutPlan(layout,height,items.length,sharedOpponent,headerBottom),{top,bottom,gap,rowHeight,columns}=plan,inset=layout.row_inset;
  canvas.resultsLayout={...plan,sharedOpponent};
  if(plan.header){const {x,y,size,gap}=plan.header;logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),x,y,size,gap,layout.text_colour);}
@@ -125,15 +128,16 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   if(crop&&layout.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
   const m=measure(badgeLabel,'badge',layout.badge_size),badgeHeight=crop?Math.min(100,180*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(layout.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,layout.badge_size*1.45);
   const row=resultsRowPlan(layout,rowHeight,sharedOpponent,marginHeight,badgeHeight),font=Math.min(layout.player_size,row.line*.8),left=columns.left,right=columns.right;
+  const playerName=(value,start,y,width)=>{ctx.textAlign=layout.player_align;const x=layout.player_align==='center'?start+width/2:layout.player_align==='right'?start+width:start;text(value,x,y,width,font,layout.player_colour);};
   band(left,columns.leftFigures-left,y,()=>{
    text(r.ourScore,(left+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,layout.score_size,layout.score_colour,'score');
    const figureWidth=Math.max(54,...r.batting.map(p=>Math.min(96,measure(`${p.runs}${p.not_out?'*':''}`,'player',font).width+8)));
-   for(let j=0;j<r.batting.length;j++){const bat=r.batting[j];ctx.textAlign='left';text(bat.name,left,y+row.playerTop+j*row.line,columns.leftFigures-figureWidth-16-left,font,layout.player_colour);ctx.textAlign='right';text(`${bat.runs}${bat.not_out?'*':''}`,columns.leftFigures,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+   for(let j=0;j<r.batting.length;j++){const bat=r.batting[j];playerName(bat.name,left,y+row.playerTop+j*row.line,columns.leftFigures-figureWidth-16-left);ctx.textAlign='right';text(`${bat.runs}${bat.not_out?'*':''}`,columns.leftFigures,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
   });
   band(columns.rightNames,right-columns.rightNames,y,()=>{
    ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right)/2,y+row.scoreY,right-columns.rightNames,layout.score_size,layout.score_colour,'score');
    const figureWidth=Math.max(70,...r.bowling.map(p=>Math.min(112,measure(`${p.wickets}/${p.runs}`,'player',font).width+8)));
-   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];ctx.textAlign='left';text(bowl.name,columns.rightNames,y+row.playerTop+j*row.line,right-figureWidth-16-columns.rightNames,font,layout.player_colour);ctx.textAlign='right';text(`${bowl.wickets}/${bowl.runs}`,right,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames,y+row.playerTop+j*row.line,right-figureWidth-16-columns.rightNames);ctx.textAlign='right';text(`${bowl.wickets}/${bowl.runs}`,right,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
   });
   ctx.textAlign='center';
   band(columns.centre-100,200,y,()=>{
