@@ -1,0 +1,47 @@
+name: Verify Socials loading and Results release
+on:
+  push:
+    branches: [codex/socials-loading-293]
+    paths:
+      - '.github/release-socials-loading-293.patch.gz.b64'
+      - '.github/workflows/release-socials-loading-293.yml'
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply reviewed source
+        run: |
+          base64 --decode .github/release-socials-loading-293.patch.gz.b64 | gzip --decompress > /tmp/socials-loading-293.patch
+          git apply --check /tmp/socials-loading-293.patch
+          git apply /tmp/socials-loading-293.patch
+          node --check app.js
+          node --check social-workspace.js
+          node --check social-awards.js
+          node --check social-awards-model.js
+          node --check social-award-requests.js
+          node --check Functions/club-social-style/award-refine.mjs
+          node Scripts/build-demo.mjs
+          node Scripts/build-demo.mjs --check
+      - name: Install pinned test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify loading, graphics and existing workflows
+        run: node --test Tests/social_award_reference_test.mjs Tests/social_award_lettering_test.mjs Tests/social_results_adaptive_test.mjs Tests/social_award_fonts_test.mjs Tests/social_results_template_test.mjs Tests/social_awards_refine_service_test.mjs Tests/social_awards_refinement_test.mjs Tests/social_results_wording_test.mjs Tests/social_results_outcomes_test.mjs Tests/social_results_logos_test.mjs Tests/social_awards_ui_test.mjs Tests/social_awards_recovery_test.mjs Tests/social_graphic_assistant_test.mjs Tests/social_team_reference_test.mjs Tests/team_of_week_ui_test.mjs Tests/player_of_week_ui_test.mjs Tests/team_week_figure_assistant_test.mjs Tests/social_team_workflow_test.mjs Tests/social_award_labels_test.mjs Tests/social_award_scopes_test.mjs Tests/social_prepare_service_test.cjs Tests/social_preparation_iteration_test.cjs Tests/social_guide_flow_test.cjs Tests/app_startup_test.cjs Tests/demo_navigation_integration_test.cjs Tests/demo_roles_integration_test.cjs Tests/selection_analysis_on_demand_test.cjs Tests/social_loading_test.cjs Tests/captain_social_permissions_test.cjs Tests/social_cold_reload_test.mjs Tests/social_awards_week_navigation_test.cjs Tests/social_photo_position_test.cjs Tests/social_sandbox_test.cjs Tests/social_history_test.cjs
+      - name: Commit the exact tested release
+        run: |
+          git add AGENTS.md Demo/build-manifest.json Demo/journeys.js Functions/club-social-style/README.md Functions/club-social-style/award-refine.mjs Reviews/2026-10-28-socials-loading-293.md Scripts/build-demo.mjs Tests/app_startup_test.cjs Tests/captain_social_permissions_test.cjs Tests/demo_roles_integration_test.cjs Tests/helpers/social-source.cjs Tests/social_award_reference_test.mjs Tests/social_awards_refine_service_test.mjs Tests/social_awards_refinement_test.mjs Tests/social_awards_ui_test.mjs Tests/social_awards_week_navigation_test.cjs Tests/social_cold_reload_test.mjs Tests/social_graphic_assistant_test.mjs Tests/social_guide_flow_test.cjs Tests/social_history_test.cjs Tests/social_loading_test.cjs Tests/social_photo_position_test.cjs Tests/social_preparation_iteration_test.cjs Tests/social_results_adaptive_test.mjs Tests/social_results_logos_test.mjs Tests/social_results_template_test.mjs Tests/social_sandbox_test.cjs Tests/social_team_reference_test.mjs Tests/social_team_workflow_test.mjs Tests/team_of_week_ui_test.mjs app-start.js app.html app.js demo.html social-award-reference.js social-award-requests.js social-awards-design.js social-awards-model.js social-awards.js social-results-layout.js social-workspace.js
+          git rm .github/release-socials-loading-293.patch.gz.b64 .github/workflows/release-socials-loading-293.yml
+          git diff --cached --check
+          test "$(git write-tree)" = "48339d160a70812ad1de6888fa6a2ed93a666d8c"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Verify and prepare Socials loading release 0.8.62.293"
+          git push origin HEAD:codex/socials-loading-293
