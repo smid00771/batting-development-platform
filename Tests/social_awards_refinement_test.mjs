@@ -109,3 +109,24 @@ id('saUseRefinement').click();await settled();assert.equal(requests.length,match
 // A comparison outage leaves the first valid proposal available with an explicit warning.
 responseQueue=[answer({title_font:'condensed'}),{error:{message:'Unavailable'}}];id('saMatchExample').click();await settled();assert.equal(w.layouts.results.title_font,'condensed');assert.match(id('saRefineStatus').textContent,/comparison check could not finish/);id('saUndoRefinement').click();await settled();assert.deepEqual(w.layouts.results,matchBefore);
 console.log('Passed: rendered template comparison, merged typography, no AI on Apply/Undo, and honest comparison-failure recovery.');
+
+// Matching reference lettering uses both actual words through the rendered comparison,
+// including a natural-language font request, without changing saved spacing.
+const paired=[{label:'WON',x:.4,y:.3,width:.17,height:.06},{label:'LOST',x:.4,y:.6,width:.17,height:.06}],pairCalls=requests.length;
+responseQueue=[answer({title_font:'condensed',player_font:'sans',badge_font:'script',result_labels:'won_lost'},{badges:paired,example_path:examplePath,reference_lettering:true}),answer({margin_font:'condensed'})];
+id('saRefineBrief').value='Use the same fonts as our previous example.';id('saRefineBrief').dispatchEvent(new window.Event('input'));id('saTryRefinement').click();await settled();
+assert.equal(requests.length,pairCalls+2);assert.equal(requests.at(-2).match_reference,true);assert.equal(requests.at(-1).using_reference_lettering,true);
+assert.deepEqual(w.layouts.results.badge_crops,paired);assert.equal(w.layouts.results.badge_cutout,true);assert.equal(w.layouts.results.rows_top,matchBefore.rows_top);assert.equal(w.layouts.results.row_gap,matchBefore.row_gap);
+id('saUseRefinement').click();await settled();assert.deepEqual(context.designs.results.layout.badge_crops,paired);assert.equal(requests.length,pairCalls+2);
+id('saUndoRefinement').click();await settled();assert.deepEqual(w.layouts.results,matchBefore);id('saUseRefinement').click();await settled();assert.equal(requests.length,pairCalls+2);
+console.log('Passed: paired reference lettering survives rendered comparison and save; font-only matching preserves spacing and Apply/Undo makes no AI calls.');
+
+// Automatic mixed-opponent positioning still honours the existing slider and
+// explicit AI spacing edits, without moving the club's shared-header layout.
+w.context.candidates.filter(item=>item.kind==='results').forEach((item,i)=>{item.teams.find(t=>t.id==='away').organisation_id='visitor-'+i;});
+module.render(s);await settled();assert.equal(id('saCanvas').resultsLayout.sharedOpponent,false);
+const sharedTop=w.layouts.results.rows_top,range=document.querySelector('[data-sa-layout=rows_top]');range.value='26';range.dispatchEvent(new window.Event('input'));await settled();
+assert.equal(w.layouts.results.mixed_rows_top,26);assert.equal(w.layouts.results.rows_top,sharedTop);
+await edit('Move the first team a little higher, to 23%.',answer({rows_top:23}));assert.equal(requests.at(-1).current.rows_top,26);assert.equal(w.layouts.results.mixed_rows_top,23);assert.equal(w.layouts.results.rows_top,sharedTop);
+id('saUndoRefinement').click();await settled();assert.equal(w.layouts.results.mixed_rows_top,26);
+console.log('Passed: automatic mixed-opponent placement retains slider, explicit spacing edit and undo behaviour.');

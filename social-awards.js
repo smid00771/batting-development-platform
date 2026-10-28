@@ -1,9 +1,9 @@
-import {awardFontSpecimen} from './social-award-fonts.js?v=0.8.62.290';
+import {awardFontSpecimen} from './social-award-fonts.js?v=0.8.62.291';
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
 import {withGradeLabels,graphicLabel} from './social-graphic-design.js?v=0.8.62.270';
 import {labelSuggestions,assistantCSS,proposalMessage} from './social-graphic-assistant.js?v=0.8.62.270';
-import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.290';
-import {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.290';
+import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.291';
+import {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.291';
 
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
@@ -110,7 +110,8 @@ export function createSocialAwards(h){
   throw Error('This preview is too detailed to send. Try a smaller background.');
  }
  async function requestStyle(body){
-  body={...body,font_samples:await previewData(await awardFontSpecimen())};
+  const samples=await previewData(await awardFontSpecimen());
+  if(JSON.stringify({...body,font_samples:samples}).length<=2880000)body={...body,font_samples:samples};
   const response=await h.supabase.functions.invoke('club-social-style',{body});
   if(response.error||response.data?.error){let detail=response.data?.error;try{detail||=(await response.error?.context?.json())?.error;}catch{}throw Error(detail||'The change could not be prepared. Try again later.');}
   return response.data;
@@ -120,7 +121,7 @@ export function createSocialAwards(h){
   const next=refinedAwardLayout(before,result,kind),canvas=document.createElement('canvas');
   await draw(s,canvas,kind,previewItems(state(s),kind).slice(0,4),next);
   if(!current())return result;
-  const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,brief:'Compare this rendered proposal with our previous example and correct remaining supported design mismatches. Original request: '+body.brief};
+  const reviewBody={...body,current:visualSettings(next),preview:await previewData(canvas),reference_review:true,using_reference_lettering:next.badge_cutout===true,brief:'Compare this rendered proposal with our previous example. Correct only the elements requested; preserve everything else. Original request: '+body.brief};
   delete reviewBody.example_setup;
   reviewBody.brief=reviewBody.brief.slice(0,1500);
   let review;
@@ -128,19 +129,23 @@ export function createSocialAwards(h){
    return {...result,explanation:String(result.explanation||'Template prepared.')+' The comparison check could not finish. Please compare the preview with your example before applying.'};
   }
   if(!current())return result;
-  return {...result,changes:{...visualPatch(result.changes),...visualPatch(review.changes)},badges:[],explanation:review.explanation||result.explanation};
+  return {...result,changes:{...visualPatch(result.changes),...visualPatch(review.changes)},badges:result.badges||[],explanation:review.explanation||result.explanation};
  }
  async function tryRefinement(s,kind,prepareBackground,matchExample=false){
   const w=state(s),r=refinement(w,kind),canvas=el('saCanvas');if(w.busy||w.pending||r.saveUncertain||!w.previewReady||!canvas||!r.brief.trim()||!previewItems(w,kind).length)return;
+  matchExample||=!!layout(w,kind).example_path&&/font|lettering|typograph/i.test(r.brief)&&/example|reference/i.test(r.brief)&&/same|match|copy|use|like/i.test(r.brief);
   const before=structuredClone(layout(w,kind)),beforeLabel=w.title,end=w.end,revision=w.context.designs[kind]?.revision||0,dirty=!!w.designDirty[kind],candidate=r.candidate,signature=()=>JSON.stringify(previewItems(w,kind).map(x=>[x.key,x.signature])),sources=signature();
+  const mixed=kind==='results'&&canvas.resultsLayout?.sharedOpponent===false,currentVisual=visualSettings(before);
+  if(mixed)currentVisual.rows_top=Math.max(15,Math.min(65,Math.round(canvas.resultsLayout.top/(canvas.height/canvas.width*1080)*100)));
   let artwork='';r.message='Preparing proposed changes…';
   await run(s,async()=>{try{
-   const preview=await previewData(canvas),scope=h.scopeRequest?await h.scopeRequest(s,kind):{},body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],preview_grades:[...new Set(previewItems(w,kind).map(x=>x.grade))],grade_labels:before.grade_labels||[],graphic_label:beforeLabel||null,brief:r.brief.trim(),current:visualSettings(before),title_in_background:!!before.includes_title,preview};
+   const preview=await previewData(canvas),scope=h.scopeRequest?await h.scopeRequest(s,kind):{},body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,...(matchExample?{match_reference:true}:{}),include_provisional:!!w.includeDay1?.[kind],preview_grades:[...new Set(previewItems(w,kind).map(x=>x.grade))],grade_labels:before.grade_labels||[],graphic_label:beforeLabel||null,brief:r.brief.trim(),current:currentVisual,title_in_background:!!before.includes_title,preview};
    let result=await requestStyle(body);
    if(matchExample)result=await compareTemplate(s,kind,before,body,result,()=>here(s,w)&&s.view===kind&&w.end===end&&revision===(w.context.designs[kind]?.revision||0)&&sources===signature()&&sameLayout(before,layout(w,kind)));
    if(!here(s,w)||s.view!==kind||w.end!==end)return;
    if(revision!==(w.context.designs[kind]?.revision||0)||sources!==signature()||!sameLayout(before,layout(w,kind)))throw Error('The preview changed while the edit was prepared. Try the change again.');
    const next=withGradeLabels(refinedAwardLayout(before,result,kind),result.grade_labels||[],previewItems(w,kind).map(x=>x.grade));artwork=String(result.artwork_brief||'').trim().slice(0,1500);
+   if(mixed&&!matchExample&&result.changes?.rows_top!=null){next.mixed_rows_top=next.rows_top;next.rows_top=before.rows_top;}
    const label=graphicLabel(result.graphic_label)??beforeLabel;const changed=!sameLayout(before,next)||label!==beforeLabel;if(changed||artwork){r.history.push({layout:before,label:beforeLabel,dirty,candidate,revision});w.title=label;r.history=r.history.slice(-8);w.layouts[kind]=next;w.designDirty[kind]=dirty||!sameLayout(before,next);r.candidate=true;}
    r.message=artwork?'Preparing proposed artwork changes…':proposalMessage(result,changed);
   }catch(e){if(here(s,w)&&s.view===kind)r.message=e.message;}});
@@ -164,7 +169,7 @@ export function createSocialAwards(h){
   document.querySelectorAll('[data-sa-edit]').forEach(e=>e.onclick=()=>{w.focus=e.dataset.saEdit;render(s);el('saCanvas')?.scrollIntoView({block:'center',behavior:'smooth'});});
   document.querySelectorAll('[data-sa-result]').forEach(e=>e.onchange=()=>{if(e.checked)w.chosen.add(e.dataset.saResult);else w.chosen.delete(e.dataset.saResult);void paint(s,kind);});
   const dirty=()=>{w.designDirty[kind]=true;el('saSaveLayout').disabled=false;el('saSaveLayout').textContent='Save layout';};
-  document.querySelectorAll('[data-sa-layout]').forEach(e=>e.oninput=()=>{d[e.dataset.saLayout]=Number(e.value);document.querySelector('[data-sa-value="'+e.dataset.saLayout+'"]').textContent=e.value;dirty();void paint(s,kind);});
+  document.querySelectorAll('[data-sa-layout]').forEach(e=>e.oninput=()=>{d[e.dataset.saLayout==='rows_top'&&kind==='results'&&!resultsShareOpponent(previewItems(w,kind).slice(0,4),Object.fromEntries(previewItems(w,kind).map(x=>[x.key,opponentKey(w,opponent(x))])))?'mixed_rows_top':e.dataset.saLayout]=Number(e.value);document.querySelector('[data-sa-value="'+e.dataset.saLayout+'"]').textContent=e.value;dirty();void paint(s,kind);});
   document.querySelectorAll('[data-sa-check]').forEach(e=>e.onchange=()=>{d[e.dataset.saCheck]=e.checked;dirty();void paint(s,kind);});
   el('saTextColour').oninput=e=>{d.text_colour=e.target.value;dirty();void paint(s,kind);};
   const prepareBackground=async(useExample=false,brief='',options={})=>{
@@ -184,7 +189,7 @@ export function createSocialAwards(h){
      if(button)button.textContent='Matching example…';
      const scope=h.scopeRequest?await h.scopeRequest(s,kind):{};
      if(!current())return;
-     const body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],example_setup:true,preview_grades:grades,grade_labels:before.grade_labels||[],graphic_label:w.title||null,brief:'Match the supported lettering, result wording, colours and layout from our previous example for this new background.',current:visualSettings(before),title_in_background:!!before.includes_title,preview};
+     const body={purpose:'award_refine',club_id:club(s),kind,week_end:end,design_revision:revision,...scope,include_provisional:!!w.includeDay1?.[kind],example_setup:true,match_reference:true,preview_grades:grades,grade_labels:before.grade_labels||[],graphic_label:w.title||null,brief:'Match the supported lettering, result wording, colours and layout from our previous example for this new background.',current:visualSettings(before),title_in_background:!!before.includes_title,preview};
      styleResult=await requestStyle(body);
      styleResult=await compareTemplate(s,kind,before,body,styleResult,current);
      if(!current())return;
@@ -273,7 +278,7 @@ export function createSocialAwards(h){
   const image=await h.image(s,await url(s,bucket,d.example_path)),iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height;
   for(const canvas of samples){if(!canvas.isConnected)continue;const c=d.badge_crops.find(x=>x.label===canvas.dataset.saBadge);if(!c)continue;canvas.width=Math.max(1,Math.round(iw*c.width));canvas.height=Math.max(1,Math.round(ih*c.height));canvas.getContext('2d').drawImage(image,iw*c.x,ih*c.y,iw*c.width,ih*c.height,0,0,canvas.width,canvas.height);}
  }
- async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[],missingMargins=kind==='results'&&layout(w,kind).show_margin?items.filter(x=>['WIN','LOSS'].includes(resultsSummary(x).outcome)&&!resultsSummary(x).margin):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:missingMargins.length?'Winning margin unavailable for '+missingMargins.map(x=>x.grade).join(', ')+'. Refresh results to check for updated source data.':items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
+ async function paint(s,kind){const w=state(s),token=++w.render,canvas=el('saCanvas');if(!canvas)return;const button=el('saConfirmGraphic');button.disabled=true;w.previewReady=false;try{const items=previewItems(w,kind),buffer=document.createElement('canvas');await draw(s,buffer,kind,items.slice(0,4));if(!here(s,w)||s.view!==kind||token!==w.render||!canvas.isConnected)return;const headerLogos=el('saHeaderLogos');if(headerLogos)headerLogos.hidden=!resultsShareOpponent(items.slice(0,4),Object.fromEntries(items.map(item=>[item.key,opponentKey(w,opponent(item))])));canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);await paintBadgeSamples(s,w,kind);if(!here(s,w)||token!==w.render||!canvas.isConnected)return;canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;canvas.resultsLayout=buffer.resultsLayout;if(buffer.resultsLayout){const range=document.querySelector('[data-sa-layout=rows_top]'),value=Math.round(buffer.resultsLayout.top/(buffer.height/buffer.width*1080)*100);if(range){range.value=value;document.querySelector('[data-sa-value=rows_top]').textContent=value;}}w.previewReady=true;showLabelSuggestions(s,kind,canvas);const p=kind!=='results'&&items[0]?portrait(w,kind,items[0]):null;const unresolved=kind==='results'?items.filter(x=>!resultsSummary(x).outcome):[],missingMargins=kind==='results'&&layout(w,kind).show_margin?items.filter(x=>['WIN','LOSS'].includes(resultsSummary(x).outcome)&&!resultsSummary(x).margin):[];button.disabled=w.busy||!!w.pending||!!h.labelReady&&!h.labelReady(s,w.end)||!items.length||!!p?.dirty||!!unresolved.length||refinement(w,kind).candidate;for(const id of ['saTryRefinement','saMatchExample','saUseRefinement'])if(el(id))el(id).disabled=!!(w.busy||s.busy||w.pending||!items.length||(id==='saTryRefinement'&&!refinement(w,kind).brief.trim())||(id!=='saUseRefinement'&&refinement(w,kind).saveUncertain));el('saPreviewStatus').textContent=unresolved.length?'PlayCricket result needs checking for '+unresolved.map(x=>x.grade).join(', ')+'. Import the updated scorecard before confirming.':p?.dirty?'Confirm the photo position before adding this graphic.':refinement(w,kind).candidate?'Review the changes, then choose Apply changes or Undo changes.':kind==='results'&&items.length>4?`${items.length} grades will create ${Math.ceil(items.length/4)} Results images. Preview shows the first four.`:missingMargins.length?'Winning margin unavailable for '+missingMargins.map(x=>x.grade).join(', ')+'. Refresh results to check for updated source data.':items.length?'Review the figures and artwork, then confirm.':'Choose the performances to preview.';}catch(e){if(canvas.isConnected)el('saPreviewStatus').textContent=e.message;}}
  async function saveGraphics(s,kind){
   const w=state(s);if(w.busy||s.busy||refinement(w,kind).candidate)return;const items=previewItems(w,kind);if(!w.pending&&(!items.length||!w.previewReady))return;if(!w.pending&&kind==='results'&&items.some(x=>!resultsSummary(x).outcome)){notice(s,'Import the updated PlayCricket result before confirming.');return;}if(!w.pending&&items.some(x=>kind!=='results'&&portrait(w,kind,x).dirty)){notice(s,'Confirm each photo position first.');return;}
   w.busy=true;notice(s,'Saving confirmed graphics…');render(s);

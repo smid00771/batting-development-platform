@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createCanvas} from '@napi-rs/canvas';
 import {resultsOutcome,drawAwardGraphic,awardLayout} from '../social-awards-model.js';
 
 const fixture=result=>({key:'first-grade',grade:'1st Grade',our_team:'city',teams:[{id:'visitors',name:'Toronto Workers',organisation:'Cricket Southern Lakes (Toronto)'},{id:'city',name:'Newcastle City',organisation:'Newcastle City & Eastern Districts Cricket Club'}],result,innings:[{team_id:'city',runs:180,wickets:10},{team_id:'visitors',runs:198,wickets:10}]});
@@ -15,7 +16,7 @@ test('outcome follows the stated result even when totals or team order suggest o
  assert.equal(resultsOutcome({...fixture('Newcastle City won by 5 wickets'),our_team:'unmatched'}),'');
 });
 test('next week replaces last week’s outcome and ignores any old manual outcome value',async()=>{
- const labels=[],ctx={fillStyle:'',save(){},restore(){},measureText:()=>({width:10}),scale(){},fillRect(){},createLinearGradient:()=>({addColorStop(){}})},canvas={getContext:()=>ctx},h={fontReady:async()=>{},text:(_,value)=>labels.push(value)};
+ const labels=[],canvas=createCanvas(1080,1350),h={fontReady:async()=>{},text:(_,value)=>labels.push(value)};
  for(const [result,expected,old] of [['Newcastle City won by 5 wickets','WIN','LOSS'],['Toronto Workers won by 18 runs','DEF','WIN'],['Result awaiting confirmation','CHECK RESULT','WIN']]){
   labels.length=0;await drawAwardGraphic(h,{},canvas,{kind:'results',items:[fixture(result)],layout:awardLayout('results'),week:'THIS WEEK',outcomes:{'first-grade':old}});
   assert.ok(labels.includes(expected));assert.ok(!labels.includes(expected==='WIN'?'DEF':'WIN'));
