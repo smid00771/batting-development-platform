@@ -149,7 +149,7 @@ test('assistant output cannot invent figures, use an unselected player or show a
 test('initial example setup matches supported typography, wording and layout without copying labels or facts',async()=>{
  const output={changes:{font:'sporting',result_labels:'won_lost',rows_top:24,rows_bottom:95,row_gap:18},badges:[],grade_labels:[],graphic_label:null,explanation:'Matched the wording and closest supported font.',artwork_brief:null};
  const body={...request(),example_setup:true},good=setup({output}),result=await refineAward(body,good.options);
- assert.equal(result.status,200);assert.deepEqual(result.body.changes,output.changes);
+ assert.equal(result.status,200);assert.deepEqual(result.body.changes,{...output.changes,show_margin:true});
  assert.match(good.calls.find(c=>c.url.includes('openai')).body.instructions,/INITIAL EXAMPLE SETUP/);
  for(const extra of [{graphic_label:'Old round'}, {artwork_brief:'Paint WON into the background'}, {badges:[{label:'WON',x:.4,y:.3,width:.15,height:.05}]}]){
   const bad=setup({output:{...output,...extra}});assert.equal((await refineAward(body,bad.options)).status,502);
@@ -215,4 +215,22 @@ test('subtitle visibility is visual-only and omitted from older client contracts
  const body=request(),good=setup({output:{changes:{show_week:false}}});assert.equal((await refineAward(body,good.options)).body.changes.show_week,false);
  const old=request();delete old.current.show_week;const legacy=setup();assert.equal((await refineAward(old,legacy.options)).status,200);assert.equal(legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.show_week,undefined);
  const unsupported=setup({output:{changes:{show_week:false}}});assert.equal((await refineAward(old,unsupported.options)).status,502);
+});
+
+
+test('matching examples retains recorded margins even when the model copies an omission; narrow hide edits remain possible',async()=>{
+ const changes={title_font:'condensed',week_font:'sans',grade_font:'condensed',score_font:'condensed',player_font:'sans',badge_font:'script',margin_font:'condensed',show_margin:false};
+ for(const flags of [{example_setup:true},{match_reference:true,reference_geometry:true}]){
+  const {options}=setup({output:{changes,badges:[]}}),result=await refineAward({...request(),...flags},options);
+  assert.equal(result.status,200);assert.equal(result.body.changes.show_margin,true);
+ }
+ const {options}=setup({output:{changes:{show_margin:false}}}),result=await refineAward({...request(),brief:'Hide the margins'},options);
+ assert.equal(result.status,200);assert.equal(result.body.changes.show_margin,false);
+});
+test('large row headers are supported by refreshed clients while older clients keep their supported size range',async()=>{
+ const current=setup({output:{changes:{row_logo_size:160}}});assert.equal((await refineAward(request(),current.options)).status,200);
+ const body=request();delete body.current.show_week;body.current.row_logo_size=72;
+ const old=setup({output:{changes:{row_logo_size:72}}});assert.equal((await refineAward(body,old.options)).status,200);
+ assert.equal(old.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.row_logo_size.maximum,84);
+ const unsupported=setup({output:{changes:{row_logo_size:160}}});assert.equal((await refineAward(body,unsupported.options)).status,502);
 });

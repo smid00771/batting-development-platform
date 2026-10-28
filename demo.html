@@ -8250,7 +8250,7 @@ const AWARD_TEMPLATE_FIELDS={
  ...AWARD_COMPOSITION_FIELDS,
  ...Object.fromEntries(['title','week','grade','score','player','badge','margin'].map(role=>[role+'_font',['inherit','sporting','modern','classic','condensed','sans','script']])),
  layout_mode:['legacy','template'],title_case:['upper','title'],grade_case:['upper','preserve'],show_margin:'boolean',margin_size:[18,48],margin_y:[65,94],margin_colour:'colour',
- grade_width:[320,780],row_logo_size:[30,84],row_logo_y:[18,42],player_top:[32,55],score_y:[14,36],
+ grade_width:[320,780],row_logo_size:[30,180],row_logo_y:[18,42],player_top:[32,55],score_y:[14,36],
 };
 const AWARD_STYLE_FIELDS={
  ...AWARD_TEMPLATE_FIELDS,
@@ -8268,7 +8268,7 @@ const AWARD_STYLE_FIELDS={
 const AWARD_STYLE_DEFAULTS={
  show_week:true,player_align:'left',left_column_end:434/10.8,right_column_start:650/10.8,
  ...Object.fromEntries(['title','week','grade','score','player','badge','margin'].map(role=>[role+'_font','inherit'])),
- layout_mode:'legacy',title_case:'upper',grade_case:'upper',show_margin:true,margin_size:27,margin_y:86,margin_colour:'#10253F',grade_width:480,row_logo_size:72,row_logo_y:30,player_top:42,score_y:25,week_size:28,row_gap:28,row_inset:34,row_radius:0,row_opacity:100,
+ layout_mode:'legacy',title_case:'upper',grade_case:'upper',show_margin:true,margin_size:27,margin_y:86,margin_colour:'#10253F',grade_width:480,row_logo_size:144,row_logo_y:30,player_top:42,score_y:25,week_size:28,row_gap:28,row_inset:34,row_radius:0,row_opacity:100,
  grade_size:35,score_size:35,player_size:28,badge_size:38,badge_angle:0,badge_y:62,badge_width:180,
  font:'sporting',badge_style:'plain',result_labels:'win_def',grade_style:'bar',panel_colour:'#F5F9FF',grade_colour:null,
  grade_text_colour:'#FFFFFF',score_colour:'#073554',player_colour:'#10253F',win_colour:'#087947',loss_colour:'#A0313D',badge_text_colour:'#FFFFFF'};
@@ -8351,14 +8351,14 @@ When asked to match the previous example, match its legible result wording using
 Exact reusable badge crops are allowed when explicitly requested (including REFERENCE MATCH mode) and a COMPLETE MATCHING PAIR is clearly readable in the previous example. Return tight normalized rectangles (x,y,width,height,0–1) around the two result words and decoration, excluding every name, score, logo and grade. Use the exact printed word as label: WIN or WON for a win, DEF, LOSS or LOST for a defeat. Both labels must match the selected result_labels pair. Never crop the current preview. Return an empty badges array when either member is missing, lettering is unclear, the user asks for different words or a consistent generated font, or no extraction was requested. Then generate BOTH words in the same graphic font; never mix one crop with one generated word. Explain any limitation honestly. Draw, tie and no-result labels always come from imported facts.
 For requests needing new photographic/illustrated artwork, background alterations, a baked-in title move or sponsor art changes, return a precise artwork_brief for our existing in-app image editor. It should preserve unrequested artwork and remove variable scores, player figures and result labels from reusable background art. Do not pretend those pixels have changed through layout settings. The user stays inside this product to prepare and review that artwork. Keep explanation short, practical and truthful about the proposed changes and any limitation. Return only the schema. Use Australian English.`;
 
-const awardExampleInstructions=`This request is INITIAL EXAMPLE SETUP, as part of preparing the club's reusable background. Match the PREVIOUS EXAMPLE's legible result wording, closest supported font, colours, panel treatment, text sizes and positions in changes. This initial setup explicitly permits layout changes. Fit the CURRENT PREVIEW's number of rows and actual content safely; do not copy an old example's number of grades, scores, names, dates or opponents. The app automatically chooses shared header logos only when all current opponents are the same; never imitate an obsolete shared opponent header. The background is being prepared separately. Return artwork_brief:null, graphic_label:null and grade_labels:[]. Unless REFERENCE MATCH mode is enabled, return badges:[]; render variable text consistently in the closest supported font. If the exact typeface or another detail is unsupported, say so briefly instead of claiming an exact copy. Preserve settings whose visual treatment is unclear in the example.`;
+const awardExampleInstructions=`This request is INITIAL EXAMPLE SETUP, as part of preparing the club's reusable background. Match the PREVIOUS EXAMPLE's legible result wording, closest supported font, colours, panel treatment, text sizes and positions in changes. This initial setup explicitly permits layout changes. Fit the CURRENT PREVIEW's number of rows and actual content safely; do not copy an old example's number of grades, scores, names, dates or opponents. The app automatically chooses shared header logos only when all current opponents are the same; never imitate an obsolete shared opponent header. Keep show_margin:true for Results, including when the old example omitted margins: current recorded BY … RUNS/WICKETS belongs beneath WON/LOST. Never invent a missing margin. The background is being prepared separately. Return artwork_brief:null, graphic_label:null and grade_labels:[]. Unless REFERENCE MATCH mode is enabled, return badges:[]; render variable text consistently in the closest supported font. If the exact typeface or another detail is unsupported, say so briefly instead of claiming an exact copy. Preserve settings whose visual treatment is unclear in the example.`;
 
 const awardTemplateInstructions=`The client supports SEPARATE TYPOGRAPHY FOR EACH ELEMENT. Inspect FONT SAMPLES when provided and choose the closest demonstrated face independently for title_font, grade_font, score_font, player_font, badge_font and margin_font. condensed = Anton, a heavy narrow sans suitable for large sports headings; sporting = Barlow Condensed Bold; sans = Barlow SemiBold, a clean readable player face; script = Kaushan Script, brush lettering; classic = Georgia with visible serifs. Never use classic for condensed sans or brush lettering. A reference can have condensed headings, sans player names and script outcome words simultaneously. inherit follows the legacy font. Changing font alone changes the overall default; for a request to change all lettering, explicitly update each role font too.
 For script WON/LOST with a coloured halo, use badge_font:script, badge_style:glow, badge_text_colour for the letter fill, win_colour/loss_colour for the halo. Brush STYLE alone is a painted shape, not a script font. Keep both outcome words consistent. Use title_case:title for Results, upper for RESULTS; grade_case:preserve retains the source grade's casing. grade_width adjusts its banner. row_opacity is the panel fill opacity. The rows may have generous row_gap up to 90 px.
 show_week controls the extra week/selection-group subtitle. Results defaults to no subtitle. In a reference match, set show_week:false when the example has no week or round line; do not invent one or reserve space for it. This hides only its display and does not change the saved award week or label. For clients without show_week, leave that field absent.
 show_margin renders the true BY … RUNS/WICKETS line below the outcome from imported match data. margin_font, margin_size, margin_colour and margin_y style it; never put a number, sample result, margin text or opponent name in changes. For 'add what is below WON/LOST', 'how much we won/lost by', or 'by 20 runs or whatever', set show_margin:true and match the reference's margin styling, preserving all other geometry unless requested. The application's parser supplies each match's actual margin. A missing margin is not permission to copy the example's number or infer a winner. Return artwork_brief:null for margin, font and wording edits.
-score_y, player_top, row_logo_y, badge_y and margin_y are percentages down each grade panel. Keep central result and margin separate, with compact current-opponent logos above them when opponents differ. Header logos are automatic only when all opponents match. Logo size is row_logo_size px. Keep names in the side columns with clear space below scores. Use layout_mode:template when matching a reference composition; legacy preserves earlier fixed row positions. Match visual hierarchy, case, contrast and proportions instead of flattening all text into one typeface. Preserve a background title when title_in_background:true; a new generated title requires the existing artwork editor.
-Before returning, check that every requested element has a supported setting and that the proposed margin, badge and logos fit without overlap. For a reference-matching request, explicitly consider all font roles, not just font. Reference lettering takes priority over the script font approximation when a complete matching crop pair is available. For four rows with different opponents, reserve about 38 px for the grade bar, then place small row logos below it (often 30–40 px wide at row_logo_y around 30), the outcome below those (badge_y around 62), and its margin near 88. Judge actual available room from the rendered preview; never overlap logos and the grade bar. Do not claim a perfect replica; name any unsupported detail concisely.`;
+score_y, player_top, badge_y and margin_y are percentages down each grade panel. Keep the central result and margin separate. Different opponents get a prominent club-logo / VS / opponent-logo pair ABOVE EACH grade panel, outside the score and name area. All matches against one club share a header pair. row_logo_size is the desired mixed-pair logo size at three rows, normally 144–160 px; the renderer scales the group proportionally for four rows and fits available height. Old row_logo_y is retained only for compatibility; it cannot move logos into the panel. Keep names in the side columns with clear space below scores. Use layout_mode:template when matching a reference composition; legacy preserves earlier fixed row positions. Match visual hierarchy, case, contrast and proportions instead of flattening all text into one typeface. Preserve a background title when title_in_background:true; a new generated title requires the existing artwork editor.
+Before returning, check that every requested element has a supported setting and that the proposed margin, badge and logos fit without overlap. For a reference-matching request, explicitly consider all font roles, not just font. Reference lettering takes priority over the script font approximation when a complete matching crop pair is available. Adapt a three-match example to four with proportionally smaller logo pairs and compact spacing, keeping the same above-panel arrangement. Never use tiny inline logos to make space for outcome lettering. Keep the grade bar at the panel top, the outcome around badge_y 62 and its margin near 88. Judge actual available room from the rendered preview. Do not claim a perfect replica; name any unsupported detail concisely.`;
 return {AWARD_COMPOSITION_FIELDS,AWARD_TEMPLATE_FIELDS,AWARD_STYLE_FIELDS,AWARD_STYLE_DEFAULTS,visualPatch,visualSettings,REFERENCE_GEOMETRY_FIELDS,referenceGeometrySchema,referenceGeometry,RESULT_LABELS,resultLabel,matchingResultBadgeCrops,badgeCrops,safeAwardStyle,refinedAwardLayout,awardStyleSchema,awardStyleInstructions,awardExampleInstructions,awardTemplateInstructions};
 })();
 
@@ -8559,6 +8559,25 @@ const __demoModule32=(()=>{
 const clamp=(v,min,max)=>Math.max(min,Math.min(v,max));
 function resultsLayoutPlan(d,height,count,shared,headerBottom){
  count=Math.max(1,count);
+ if(!shared){
+  // Each opponent pair belongs above its own panel, as in a multi-club example.
+  // Reduce whitespace before reducing logos; a fourth match scales the pair
+  // proportionally instead of squeezing it between the outcome and margin.
+  const bottom=height*d.rows_bottom/100,start=headerBottom+16,rowScale=Math.min(1.25,3/count),minRow=180*rowScale;
+  const desiredSize=Math.max(144,d.row_logo_size)*rowScale,minSize=48,clearance=24;
+  const available=bottom-start;
+  const gap=count===1?0:clamp(d.row_gap,12,Math.max(12,(available-count*(minRow+desiredSize+clearance))/(count-1)));
+  let logoBand=Math.min(desiredSize+clearance,(available-gap*(count-1))/count-minRow);
+  const requested=Number.isFinite(d.mixed_rows_top)?height*d.mixed_rows_top/100:null;
+  if(requested!==null&&count>1)logoBand=Math.min(logoBand,Math.max(minSize+clearance,(bottom-requested-count*minRow)/(count-1)-gap));
+  logoBand=Math.max(minSize+clearance,logoBand);
+  const maxTop=bottom-count*minRow-(count-1)*(gap+logoBand);
+  const top=clamp(requested??start+logoBand,start+logoBand,Math.max(start+logoBand,maxTop));
+  const rowHeight=(bottom-top-(count-1)*(gap+logoBand))/count;
+  if(rowHeight<120)throw Error('This background is too short for these results. Use a taller background or fewer grades.');
+  const size=logoBand-clearance;
+  return {top,bottom,gap,rowHeight,rowScale,logoBand,header:null,mixedLogos:{size,gap:Math.max(50,size*.6),offset:-clearance-size/2},columns:resultColumns(d)};
+ }
  const bottom=height*d.rows_bottom/100,minRow=180,headerEnd=headerBottom+(shared?60:36);
  const maxTop=bottom-count*minRow-12*(count-1);
  const requested=shared?height*d.rows_top/100:Number.isFinite(d.mixed_rows_top)?height*d.mixed_rows_top/100:headerEnd;
@@ -8572,21 +8591,20 @@ function resultsLayoutPlan(d,height,count,shared,headerBottom){
   const y=clamp((height-size)*d.logo_y/100+size/2,headerBottom+8+size/2,top-20-size/2);
   header={size,gap,x:(1080-width)*d.logo_x/100+width/2,y};
  }
- return {top,bottom,gap,rowHeight,header,columns:{left:d.row_inset+28,leftFigures:clamp(d.left_column_end*10.8,324,434),centre:540,centreWidth:180,rightNames:clamp(d.right_column_start*10.8,650,756),right:1080-d.row_inset-28}};
+ return {top,bottom,gap,rowHeight,header,rowScale:1,logoBand:0,columns:resultColumns(d)};
 }
-function resultsRowPlan(d,rowHeight,shared,marginHeight,badgeHeight){
- const gradeBottom=34,pad=6,bottom=rowHeight-12;
- const marginTop=marginHeight?Math.min(Math.max(gradeBottom+48,rowHeight*d.margin_y/100-marginHeight/2),bottom-marginHeight):bottom;
- const room=marginTop-gradeBottom-pad*(shared?2:3);
- const logoSize=shared?0:Math.min(d.layout_mode==='template'?d.row_logo_size:44,rowHeight*.20,Math.max(18,room-badgeHeight));
- const height=Math.min(badgeHeight,Math.max(20,room-logoSize));
- const logoY=shared?0:clamp(rowHeight*(d.layout_mode==='template'?d.row_logo_y:30)/100,gradeBottom+pad+logoSize/2,marginTop-height-pad*2-logoSize/2);
- const contentTop=shared?gradeBottom+pad:logoY+logoSize/2+pad;
+const resultColumns=d=>({left:d.row_inset+28,leftFigures:clamp(d.left_column_end*10.8,324,434),centre:540,centreWidth:180,rightNames:clamp(d.right_column_start*10.8,650,756),right:1080-d.row_inset-28});
+function resultsRowPlan(d,rowHeight,shared,marginHeight,badgeHeight,scale=1){
+ const gradeBottom=34*scale,pad=6*scale,bottom=rowHeight-12*scale;
+ const marginTop=marginHeight?Math.min(Math.max(gradeBottom+48*scale,rowHeight*d.margin_y/100-marginHeight/2),bottom-marginHeight):bottom;
+ const room=marginTop-gradeBottom-pad*2;
+ const height=Math.min(badgeHeight,Math.max(20,room));
+ const contentTop=gradeBottom+pad;
  const badgeY=clamp(rowHeight*d.badge_y/100,contentTop+height/2,marginTop-pad-height/2);
- const scoreY=Math.max(gradeBottom+d.score_size*.6+8,Math.min(rowHeight*(d.layout_mode==='template'?d.score_y:25)/100,72));
- const playerTop=Math.max(scoreY+d.score_size*.6+18,Math.min(rowHeight*d.player_top/100,rowHeight-76));
- const line=Math.min(42,Math.max(24,(rowHeight-playerTop-20)/2));
- return {logoSize,logoY,badgeY,badgeHeight:height,marginTop,scoreY,playerTop,line};
+ const scoreY=Math.max((shared?gradeBottom:0)+d.score_size*.6+8*scale,Math.min(rowHeight*(d.layout_mode==='template'?d.score_y:25)/100,72));
+ const playerTop=Math.max(scoreY+d.score_size*.6+18*scale,Math.min(rowHeight*d.player_top/100,rowHeight-76*scale));
+ const line=Math.min(42*scale,Math.max(20*scale,(rowHeight-playerTop-20*scale)/2));
+ return {badgeY,badgeHeight:height,marginTop,scoreY,playerTop,line};
 }
 return {resultsLayoutPlan,resultsRowPlan};
 })();
@@ -8730,9 +8748,13 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  canvas.resultsLayout={...plan,sharedOpponent};
  if(plan.header){const {x,y,size,gap}=plan.header;logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),x,y,size,gap,layout.text_colour);}
  const measure=(value,role,size)=>{const font=awardFont(layout,role);ctx.save();ctx.textAlign='left';ctx.font=`${AWARD_FONT_WEIGHTS[font]||'700'} ${size}px ${AWARD_FONTS[font]}`;const m=ctx.measureText(value);ctx.restore();return m;};
- const marginLines=value=>{
-  let size=Math.min(layout.margin_size,34),lines=[];
+ const marginLines=(value,d=layout,scale=1)=>{
+  let size=Math.min(d.margin_size,34*scale),lines=[];
   if(!value)return {lines,size};
+  if(/^BY \d+ (?:RUNS?|WICKETS?)$/.test(value)){
+   while(size>18&&measure(value,'margin',size).width>columns.centreWidth-4)size--;
+   return {lines:[value],size:Math.max(18,size)};
+  }
   do{
    lines=[];let line='';
    for(const word of value.split(' ')){const next=line?line+' '+word:word;if(line&&measure(next,'margin',size).width>columns.centreWidth-4){lines.push(line);line=word;}else line=next;}
@@ -8742,38 +8764,41 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  };
  const band=(x,width,y,fn)=>{ctx.save();ctx.beginPath();ctx.rect(x,y,width,rowHeight);ctx.clip();fn();ctx.restore();};
 
+ const rowScale=plan.rowScale,d={...layout};
+ for(const key of ['grade_size','grade_width','score_size','player_size','badge_size','badge_width','margin_size'])d[key]*=rowScale;
+ d.badge_width=Math.min(columns.centreWidth,d.badge_width);
  for(let n=0;n<items.length;n++){
-  const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap),outcome=r.outcome;
-  ctx.fillStyle=layout.panel_colour;ctx.globalAlpha=layout.row_opacity/100;
-  if(layout.row_radius){ctx.beginPath();ctx.roundRect(inset,y,1080-2*inset,rowHeight,Math.min(layout.row_radius,rowHeight/2));ctx.fill();}else ctx.fillRect(inset,y,1080-2*inset,rowHeight);ctx.globalAlpha=1;
-  ctx.fillStyle=layout.grade_colour||s.design?.primary||'#073554';
-  if(layout.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12);ctx.lineTo(790,y-12);ctx.lineTo(774,y+11);ctx.lineTo(790,y+33);ctx.lineTo(290,y+33);ctx.lineTo(306,y+11);ctx.closePath();ctx.fill();}
-  else if(layout.grade_style==='bar')ctx.fillRect(540-layout.grade_width/2,y-12,layout.grade_width,45);
-  const sourceGrade=graphicGrade(item.grade,layout),grade=layout.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${layout.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:layout.grade_width-25,size:layout.grade_size,grade:true});text(grade,540,y+10,layout.grade_width-25,layout.grade_size,layout.grade_style==='text'?(layout.grade_colour||layout.score_colour):layout.grade_text_colour,'grade');
-  const margin=layout.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin),marginHeight=lines.length*marginSize*1.15;
-  const badgeLabel=resultLabel(outcome,layout),crop=images.example&&matchingResultBadgeCrops(layout).find(c=>c.label===badgeLabel);
+  const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap+plan.logoBand),outcome=r.outcome;
+  if(plan.mixedLogos){const {size,gap:logoGap,offset}=plan.mixedLogos;logoPair(images.opponents?.[item.key],r,columns.centre,y+offset,size,logoGap,d.text_colour);}
+  ctx.fillStyle=d.panel_colour;ctx.globalAlpha=d.row_opacity/100;
+  if(d.row_radius){ctx.beginPath();ctx.roundRect(inset,y,1080-2*inset,rowHeight,Math.min(d.row_radius,rowHeight/2));ctx.fill();}else ctx.fillRect(inset,y,1080-2*inset,rowHeight);ctx.globalAlpha=1;
+  ctx.fillStyle=d.grade_colour||s.design?.primary||'#073554';
+  if(d.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12*rowScale);ctx.lineTo(790,y-12*rowScale);ctx.lineTo(774,y+11*rowScale);ctx.lineTo(790,y+33*rowScale);ctx.lineTo(290,y+33*rowScale);ctx.lineTo(306,y+11*rowScale);ctx.closePath();ctx.fill();}
+  else if(d.grade_style==='bar')ctx.fillRect(540-d.grade_width/2,y-12*rowScale,d.grade_width,45*rowScale);
+  const sourceGrade=graphicGrade(item.grade,d),grade=d.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
+  const margin=d.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin,d,rowScale),marginHeight=lines.length*marginSize*1.15;
+  const badgeLabel=resultLabel(outcome,d),crop=images.example&&matchingResultBadgeCrops(d).find(c=>c.label===badgeLabel);
   let badgeImage;
-  if(crop&&layout.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
-  const m=measure(badgeLabel,'badge',layout.badge_size),badgeHeight=crop?Math.min(100,180*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(layout.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,layout.badge_size*1.45);
-  const row=resultsRowPlan(layout,rowHeight,sharedOpponent,marginHeight,badgeHeight),bodyInk=measure('Alex Player','player',layout.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
-  const font=Math.min(layout.player_size,inkHeight>0?layout.player_size*Math.max(18,row.line-5)/inkHeight:row.line*.8),left=columns.left,right=columns.right;
-  const playerName=(value,start,y,width)=>{ctx.textAlign=layout.player_align;const x=layout.player_align==='center'?start+width/2:layout.player_align==='right'?start+width:start;text(value,x,y,width,font,layout.player_colour);};
+  if(crop&&d.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
+  const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=crop?Math.min(100*rowScale,d.badge_width*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
+  const row=resultsRowPlan(d,rowHeight,sharedOpponent,marginHeight,badgeHeight,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
+  const font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,row.line-5)/inkHeight:row.line*.8),left=columns.left,right=columns.right;
+  const playerName=(value,start,y,width)=>{ctx.textAlign=d.player_align;const x=d.player_align==='center'?start+width/2:d.player_align==='right'?start+width:start;text(value,x,y,width,font,d.player_colour);};
   band(left,columns.leftFigures-left,y,()=>{
-   text(r.ourScore,(left+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,layout.score_size,layout.score_colour,'score');
+   text(r.ourScore,(left+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,d.score_size,d.score_colour,'score');
    const figureWidth=Math.max(54,...r.batting.map(p=>Math.min(96,measure(`${p.runs}${p.not_out?'*':''}`,'player',font).width+8)));
-   for(let j=0;j<r.batting.length;j++){const bat=r.batting[j];playerName(bat.name,left,y+row.playerTop+j*row.line,columns.leftFigures-figureWidth-16-left);ctx.textAlign='right';text(`${bat.runs}${bat.not_out?'*':''}`,columns.leftFigures,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+   for(let j=0;j<r.batting.length;j++){const bat=r.batting[j];playerName(bat.name,left,y+row.playerTop+j*row.line,columns.leftFigures-figureWidth-16-left);ctx.textAlign='right';text(`${bat.runs}${bat.not_out?'*':''}`,columns.leftFigures,y+row.playerTop+j*row.line,figureWidth,font,d.player_colour);}
   });
   band(columns.rightNames,right-columns.rightNames,y,()=>{
-   ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right)/2,y+row.scoreY,right-columns.rightNames,layout.score_size,layout.score_colour,'score');
+   ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right)/2,y+row.scoreY,right-columns.rightNames,d.score_size,d.score_colour,'score');
    const figureWidth=Math.max(70,...r.bowling.map(p=>Math.min(112,measure(`${p.wickets}/${p.runs}`,'player',font).width+8)));
-   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames,y+row.playerTop+j*row.line,right-figureWidth-16-columns.rightNames);ctx.textAlign='right';text(`${bowl.wickets}/${bowl.runs}`,right,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames,y+row.playerTop+j*row.line,right-figureWidth-16-columns.rightNames);ctx.textAlign='right';text(`${bowl.wickets}/${bowl.runs}`,right,y+row.playerTop+j*row.line,figureWidth,font,d.player_colour);}
   });
   ctx.textAlign='center';
   band(columns.centre-100,200,y,()=>{
-   if(!sharedOpponent)logoPair(images.opponents?.[item.key],r,columns.centre,y+row.logoY,row.logoSize,30,layout.player_colour);
-   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout,example:images.example,badgeImage});
-   if(lines.length)lines.forEach((line,i)=>text(line,columns.centre,y+row.marginTop+marginSize*.6+i*marginSize*1.15,columns.centreWidth,marginSize,layout.margin_colour,'margin'));
-   else if(!sharedOpponent&&!layout.show_margin)text(r.opposition,columns.centre,y+rowHeight*.91,columns.centreWidth,18,layout.player_colour);
+   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout:d,example:images.example,badgeImage});
+   if(lines.length)lines.forEach((line,i)=>text(line,columns.centre,y+row.marginTop+marginSize*.6+i*marginSize*1.15,columns.centreWidth,marginSize,d.margin_colour,'margin'));
+   else if(!sharedOpponent&&!d.show_margin)text(r.opposition,columns.centre,y+rowHeight*.91,columns.centreWidth,18,d.player_colour);
   });
 
  }

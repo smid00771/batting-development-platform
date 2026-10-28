@@ -103,9 +103,13 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  canvas.resultsLayout={...plan,sharedOpponent};
  if(plan.header){const {x,y,size,gap}=plan.header;logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),x,y,size,gap,layout.text_colour);}
  const measure=(value,role,size)=>{const font=awardFont(layout,role);ctx.save();ctx.textAlign='left';ctx.font=`${AWARD_FONT_WEIGHTS[font]||'700'} ${size}px ${AWARD_FONTS[font]}`;const m=ctx.measureText(value);ctx.restore();return m;};
- const marginLines=value=>{
-  let size=Math.min(layout.margin_size,34),lines=[];
+ const marginLines=(value,d=layout,scale=1)=>{
+  let size=Math.min(d.margin_size,34*scale),lines=[];
   if(!value)return {lines,size};
+  if(/^BY \d+ (?:RUNS?|WICKETS?)$/.test(value)){
+   while(size>18&&measure(value,'margin',size).width>columns.centreWidth-4)size--;
+   return {lines:[value],size:Math.max(18,size)};
+  }
   do{
    lines=[];let line='';
    for(const word of value.split(' ')){const next=line?line+' '+word:word;if(line&&measure(next,'margin',size).width>columns.centreWidth-4){lines.push(line);line=word;}else line=next;}
@@ -115,38 +119,41 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  };
  const band=(x,width,y,fn)=>{ctx.save();ctx.beginPath();ctx.rect(x,y,width,rowHeight);ctx.clip();fn();ctx.restore();};
 
+ const rowScale=plan.rowScale,d={...layout};
+ for(const key of ['grade_size','grade_width','score_size','player_size','badge_size','badge_width','margin_size'])d[key]*=rowScale;
+ d.badge_width=Math.min(columns.centreWidth,d.badge_width);
  for(let n=0;n<items.length;n++){
-  const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap),outcome=r.outcome;
-  ctx.fillStyle=layout.panel_colour;ctx.globalAlpha=layout.row_opacity/100;
-  if(layout.row_radius){ctx.beginPath();ctx.roundRect(inset,y,1080-2*inset,rowHeight,Math.min(layout.row_radius,rowHeight/2));ctx.fill();}else ctx.fillRect(inset,y,1080-2*inset,rowHeight);ctx.globalAlpha=1;
-  ctx.fillStyle=layout.grade_colour||s.design?.primary||'#073554';
-  if(layout.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12);ctx.lineTo(790,y-12);ctx.lineTo(774,y+11);ctx.lineTo(790,y+33);ctx.lineTo(290,y+33);ctx.lineTo(306,y+11);ctx.closePath();ctx.fill();}
-  else if(layout.grade_style==='bar')ctx.fillRect(540-layout.grade_width/2,y-12,layout.grade_width,45);
-  const sourceGrade=graphicGrade(item.grade,layout),grade=layout.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${layout.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:layout.grade_width-25,size:layout.grade_size,grade:true});text(grade,540,y+10,layout.grade_width-25,layout.grade_size,layout.grade_style==='text'?(layout.grade_colour||layout.score_colour):layout.grade_text_colour,'grade');
-  const margin=layout.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin),marginHeight=lines.length*marginSize*1.15;
-  const badgeLabel=resultLabel(outcome,layout),crop=images.example&&matchingResultBadgeCrops(layout).find(c=>c.label===badgeLabel);
+  const item=items[n],r=resultsSummary(item),y=top+n*(rowHeight+gap+plan.logoBand),outcome=r.outcome;
+  if(plan.mixedLogos){const {size,gap:logoGap,offset}=plan.mixedLogos;logoPair(images.opponents?.[item.key],r,columns.centre,y+offset,size,logoGap,d.text_colour);}
+  ctx.fillStyle=d.panel_colour;ctx.globalAlpha=d.row_opacity/100;
+  if(d.row_radius){ctx.beginPath();ctx.roundRect(inset,y,1080-2*inset,rowHeight,Math.min(d.row_radius,rowHeight/2));ctx.fill();}else ctx.fillRect(inset,y,1080-2*inset,rowHeight);ctx.globalAlpha=1;
+  ctx.fillStyle=d.grade_colour||s.design?.primary||'#073554';
+  if(d.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12*rowScale);ctx.lineTo(790,y-12*rowScale);ctx.lineTo(774,y+11*rowScale);ctx.lineTo(790,y+33*rowScale);ctx.lineTo(290,y+33*rowScale);ctx.lineTo(306,y+11*rowScale);ctx.closePath();ctx.fill();}
+  else if(d.grade_style==='bar')ctx.fillRect(540-d.grade_width/2,y-12*rowScale,d.grade_width,45*rowScale);
+  const sourceGrade=graphicGrade(item.grade,d),grade=d.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
+  const margin=d.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin,d,rowScale),marginHeight=lines.length*marginSize*1.15;
+  const badgeLabel=resultLabel(outcome,d),crop=images.example&&matchingResultBadgeCrops(d).find(c=>c.label===badgeLabel);
   let badgeImage;
-  if(crop&&layout.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
-  const m=measure(badgeLabel,'badge',layout.badge_size),badgeHeight=crop?Math.min(100,180*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(layout.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,layout.badge_size*1.45);
-  const row=resultsRowPlan(layout,rowHeight,sharedOpponent,marginHeight,badgeHeight),bodyInk=measure('Alex Player','player',layout.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
-  const font=Math.min(layout.player_size,inkHeight>0?layout.player_size*Math.max(18,row.line-5)/inkHeight:row.line*.8),left=columns.left,right=columns.right;
-  const playerName=(value,start,y,width)=>{ctx.textAlign=layout.player_align;const x=layout.player_align==='center'?start+width/2:layout.player_align==='right'?start+width:start;text(value,x,y,width,font,layout.player_colour);};
+  if(crop&&d.badge_cutout)badgeImage=referenceBadge(images.example,crop,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1));
+  const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=crop?Math.min(100*rowScale,d.badge_width*(badgeImage?badgeImage.height/badgeImage.width:crop.height*(images.example.naturalHeight||images.example.height)/(crop.width*(images.example.naturalWidth||images.example.width)))):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
+  const row=resultsRowPlan(d,rowHeight,sharedOpponent,marginHeight,badgeHeight,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
+  const font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,row.line-5)/inkHeight:row.line*.8),left=columns.left,right=columns.right;
+  const playerName=(value,start,y,width)=>{ctx.textAlign=d.player_align;const x=d.player_align==='center'?start+width/2:d.player_align==='right'?start+width:start;text(value,x,y,width,font,d.player_colour);};
   band(left,columns.leftFigures-left,y,()=>{
-   text(r.ourScore,(left+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,layout.score_size,layout.score_colour,'score');
+   text(r.ourScore,(left+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,d.score_size,d.score_colour,'score');
    const figureWidth=Math.max(54,...r.batting.map(p=>Math.min(96,measure(`${p.runs}${p.not_out?'*':''}`,'player',font).width+8)));
-   for(let j=0;j<r.batting.length;j++){const bat=r.batting[j];playerName(bat.name,left,y+row.playerTop+j*row.line,columns.leftFigures-figureWidth-16-left);ctx.textAlign='right';text(`${bat.runs}${bat.not_out?'*':''}`,columns.leftFigures,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+   for(let j=0;j<r.batting.length;j++){const bat=r.batting[j];playerName(bat.name,left,y+row.playerTop+j*row.line,columns.leftFigures-figureWidth-16-left);ctx.textAlign='right';text(`${bat.runs}${bat.not_out?'*':''}`,columns.leftFigures,y+row.playerTop+j*row.line,figureWidth,font,d.player_colour);}
   });
   band(columns.rightNames,right-columns.rightNames,y,()=>{
-   ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right)/2,y+row.scoreY,right-columns.rightNames,layout.score_size,layout.score_colour,'score');
+   ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right)/2,y+row.scoreY,right-columns.rightNames,d.score_size,d.score_colour,'score');
    const figureWidth=Math.max(70,...r.bowling.map(p=>Math.min(112,measure(`${p.wickets}/${p.runs}`,'player',font).width+8)));
-   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames,y+row.playerTop+j*row.line,right-figureWidth-16-columns.rightNames);ctx.textAlign='right';text(`${bowl.wickets}/${bowl.runs}`,right,y+row.playerTop+j*row.line,figureWidth,font,layout.player_colour);}
+   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames,y+row.playerTop+j*row.line,right-figureWidth-16-columns.rightNames);ctx.textAlign='right';text(`${bowl.wickets}/${bowl.runs}`,right,y+row.playerTop+j*row.line,figureWidth,font,d.player_colour);}
   });
   ctx.textAlign='center';
   band(columns.centre-100,200,y,()=>{
-   if(!sharedOpponent)logoPair(images.opponents?.[item.key],r,columns.centre,y+row.logoY,row.logoSize,30,layout.player_colour);
-   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout,example:images.example,badgeImage});
-   if(lines.length)lines.forEach((line,i)=>text(line,columns.centre,y+row.marginTop+marginSize*.6+i*marginSize*1.15,columns.centreWidth,marginSize,layout.margin_colour,'margin'));
-   else if(!sharedOpponent&&!layout.show_margin)text(r.opposition,columns.centre,y+rowHeight*.91,columns.centreWidth,18,layout.player_colour);
+   drawResultBadge(ctx,text,{outcome,label:badgeLabel,x:columns.centre,y:y+row.badgeY,maxHeight:row.badgeHeight,layout:d,example:images.example,badgeImage});
+   if(lines.length)lines.forEach((line,i)=>text(line,columns.centre,y+row.marginTop+marginSize*.6+i*marginSize*1.15,columns.centreWidth,marginSize,d.margin_colour,'margin'));
+   else if(!sharedOpponent&&!d.show_margin)text(r.opposition,columns.centre,y+rowHeight*.91,columns.centreWidth,18,d.player_colour);
   });
 
  }
