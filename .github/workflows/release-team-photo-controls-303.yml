@@ -1,0 +1,39 @@
+name: Verify team photo controls release
+on:
+  push:
+    branches: ["codex/team-photo-controls-303"]
+    paths: [".github/release-team-photo-controls-303.patch.gz.b64", ".github/workflows/release-team-photo-controls-303.yml"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply reviewed source patch
+        run: base64 --decode .github/release-team-photo-controls-303.patch.gz.b64 | gzip -d | git apply --binary
+      - run: npm ci --ignore-scripts
+      - name: Verify source and delivered demo
+        run: |
+          node --check app.js
+          node --check social-workspace.js
+          node --check social-team-workflow.js
+          node --check social-publishing.js
+          node Scripts/build-demo.mjs --check
+          node --test Tests/social_team_workflow_test.mjs Tests/social_graphic_assistant_test.mjs Tests/social_photo_position_test.cjs Tests/social_loading_test.cjs Tests/social_storage_delete_test.mjs Tests/social_large_photo_test.cjs Tests/social_history_test.cjs Tests/social_sandbox_test.cjs Tests/social_guide_flow_test.cjs Tests/social_awards_publishing_test.mjs Tests/demo_navigation_integration_test.cjs Tests/demo_roles_integration_test.cjs Tests/navigation_precision_test.cjs
+      - name: Commit verified source
+        run: |
+          git add 'AGENTS.md' 'Demo/build-manifest.json' 'Demo/fixtures.js' 'Reviews/2026-10-29-team-photo-controls-303.md' 'Tests/social_photo_position_database_test.sql' 'Tests/social_photo_position_test.cjs' 'app-start.js' 'app.html' 'app.js' 'demo.html' 'social-publishing.js' 'social-team-workflow.js' 'social-workspace.js' 'supabase/migrations/20261029110722_team_photo_adjustments_303.sql'
+          git rm .github/release-team-photo-controls-303.patch.gz.b64 .github/workflows/release-team-photo-controls-303.yml
+          test "$(git write-tree)" = "44cff864c4b34ba70a0a85dee9d96d01e329f055"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Apply verified team photo controls update"
+          git push origin HEAD:${{ github.ref_name }}
