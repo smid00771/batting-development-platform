@@ -17,7 +17,7 @@ const fixture=(id,date=future,split=false)=>({id,publication:1,artwork_key:'curr
 const s={scope:'test:club',view:'graphics',date:'',selected:new Set(),data:{admin:true,brand:{name:'Test club'},members:[{user_id:'admin',name:'Admin',admin:true},{user_id:'manager',name:'Social Manager',manager:true}],fixtures:[fixture('one'),fixture('two',future,true),fixture('three'),fixture('other',otherDate),{...fixture('past','2020-01-01'),completed:true}],assets:[],awards:{enabled:['century','results']}},design:{header_layout:'separate',layout:'portrait',theme:'solid',font:'bold',frame:'cutout',photo_policy:'choose',marker:'arrows',primary:'#073554',accent:'#128FD2',photo_scale:100,photo_shift:0,header_height:310,footer:''},urls:new Map(),busy:false,notice:'',render:0};
 s.data.design=structuredClone(s.design);
 const cards=f=>(f.split?[0,1]:[0]).map(day=>({f,day,split:f.split,key:f.id+':'+day}));
-const selected=()=>s.data.fixtures.filter(f=>s.selected.has(f.id)&&f.published.details.days[0].date===s.date&&!f.completed);
+const selected=()=>s.data.fixtures.filter(f=>s.selected.has(f.id)&&f.published&&!f.completed);
 const calendar=()=>s.data.fixtures.map(f=>({id:f.id,date:f.published.details.days[0].date,grade:f.published.details.grade,published:true,completed:!!f.completed}));
 let leave=true,workflow,publisher;const saves=[],calls=[],posts=new Map(),uploads=new Map(),painted=[];
 const context={configured:true,admin:true,can_delegate:true,can_connect:true,delegation:{revision:0},delegation_members:[{user_id:'cover',name:'Replacement'}],posts:[],timezone:'Australia/Sydney',connection:{status:'connected',page_id:'test-page',page_name:'Test page',revision:1},health:{facebook:{state:'ready'}}};
@@ -31,7 +31,7 @@ workflow=createTeamSocialWorkflow(h);publisher=createSocialPublishing({supabase:
 s.publishing={context,loadedAt:Date.now(),checkedAt:Date.now()};
 draw();await tick();
 assert.equal(s.date,future);assert.equal(document.querySelectorAll('[data-upload]').length,3);assert.deepEqual([...document.querySelectorAll('[data-upload]')].map(e=>e.dataset.upload),['reference','background','logo']);
-assert.equal(document.getElementById('stGrade'),null);assert.equal(document.getElementById('spReview'),null);assert.equal(document.getElementById('socialDate').options.length,2,'Multiple fixture dates remain selectable');
+assert.equal(document.getElementById('stGrade'),null);assert.equal(document.getElementById('spReview'),null);assert.equal(document.getElementById('socialDate').options.length,4,'Date choices remain alongside Choose teams and All published teams');
 document.querySelector('[data-st-setting="layout"]').value='portrait_left';document.querySelector('[data-st-setting="layout"]').dispatchEvent(new window.Event('input'));
 document.getElementById('stNextPhotos').click();await tick();assert.equal(saves.length,1);assert.equal(saves[0].data.design.layout,'portrait_left');assert.equal(workflow.state(s).step,'photos');
 assert.equal(document.querySelectorAll('[data-social-canvas]').length,1);assert.equal(document.getElementById('stGrade').options.length,3);assert.equal(document.querySelectorAll('[data-upload]').length,0,'Artwork uploads stay on artwork step');
@@ -45,12 +45,32 @@ document.getElementById('spReview').click();for(let i=0;s.busy&&i<100;i++)await 
 document.getElementById('spCaption').value='Updated shared blurb';document.getElementById('spCaption').dispatchEvent(new window.Event('input'));document.getElementById('spBack').click();assert.equal(document.getElementById('spTeamCaption').value,'Updated shared blurb');
 document.getElementById('socialDate').value=otherDate;document.getElementById('socialDate').dispatchEvent(new window.Event('change'));await tick();assert.equal(document.querySelectorAll('[data-social-canvas]').length,1);assert.notEqual(document.getElementById('spTeamCaption').value,'Updated shared blurb','Each fixture date has its own post blurb');
 document.getElementById('socialDate').value=future;document.getElementById('socialDate').dispatchEvent(new window.Event('change'));await tick();assert.equal(document.getElementById('spTeamCaption').value,'Updated shared blurb');
+// Individual sides can share one post across dates, without moving or publishing teams.
+s.data.fixtures.find(f=>f.id==='other').published.details.grade='Under 21s';
+s.data.fixtures.push({...fixture('cup',otherDate),published:{...fixture('cup',otherDate).published,details:{...fixture('cup',otherDate).published.details,grade:'Example Cup'}}});
+const chooseMode=value=>{document.getElementById('socialDate').value=value;document.getElementById('socialDate').dispatchEvent(new window.Event('change'));};
+chooseMode('all');await tick();assert.equal(s.selected.size,5);assert.equal(document.getElementById('spReview').textContent,'Review post · 6 images');
+chooseMode('teams');await tick();assert.equal(document.querySelectorAll('[data-st-choose]').length,5);assert.equal(document.querySelector('[data-st-choose="past"]'),null,'Completed matches remain unavailable');
+const setTeam=(id,checked)=>{const input=document.querySelector('[data-st-choose="'+id+'"]');input.checked=checked;input.dispatchEvent(new window.Event('change'));};
+document.getElementById('stChooseAll').checked=false;document.getElementById('stChooseAll').dispatchEvent(new window.Event('change'));await tick();assert.equal(s.selected.size,0,'Explicit empty choice must stay empty');
+setTeam('one',true);setTeam('other',true);setTeam('cup',true);await tick();assert.deepEqual([...s.selected],['one','other','cup']);assert.equal(document.getElementById('spReview').textContent,'Review post · 3 images');
+document.querySelector('[data-st-step="photos"]').click();await tick();assert.equal(document.getElementById('stGrade').options.length,3);assert.match(document.getElementById('stGrade').textContent,/Under 21s/);assert.match(document.getElementById('stGrade').textContent,/Example Cup/);assert.match(document.body.textContent,/Player photo for each team/);
+document.getElementById('stGrade').value='cup';document.getElementById('stGrade').dispatchEvent(new window.Event('change'));await tick();assert.equal(document.querySelector('[data-social-canvas]').dataset.socialCanvas,'cup:0');
+document.getElementById('stReviewAll').click();await tick();assert.equal(document.querySelectorAll('[data-social-canvas]').length,3,'Custom preview renders only the chosen sides');
+const previousPosts=structuredClone([...posts]);document.getElementById('spReview').click();for(let i=0;s.busy&&i<100;i++)await new Promise(r=>setTimeout(r,10));assert.equal(s.publishing.review.images.length,3);assert.deepEqual(new Set(s.publishing.review.fixtures.map(f=>f.id)),new Set(['one','other','cup']));assert.equal(posts.size,2,'A different combination creates a separate draft');assert.deepEqual([...posts][0],previousPosts[0],'The first saved post stays intact');assert.ok(!calls.includes('publish'));
+document.getElementById('spBack').click();chooseMode(future);await tick();assert.deepEqual(new Set(s.selected),new Set(['one','two','three']),'The familiar date route still selects only that date');
 s.view='accounts';draw();assert.equal(document.getElementById('spArrangeCover'),null);assert.equal(document.getElementById('spManageSocials'),null);assert.equal(document.getElementById('spCoverForm'),null);
 s.view='managers';draw();document.getElementById('spArrangeCover').click();assert.ok(document.getElementById('spCoverForm'));assert.equal(s.view,'managers','Cover opens in responsibility page');assert.equal(document.getElementById('spManageSocials'),null);
 document.querySelector('[name="user_id"]').value='cover';document.querySelector('[name="until"]').value='2099-10-18';document.getElementById('spCoverForm').dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();assert.equal(s.view,'managers');assert.equal(calls.filter(x=>x==='delegate').length,1);assert.match(document.body.textContent,/Replacement/);
 // Exercise the production section shell: setup and responsibility have no creation selector.
 const source=socialSource(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'));
 function part(name){const start=source.search(new RegExp('(?:async )?function '+name+'\\(')),next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
+// Exercise the real selection and navigation functions, not only the UI dependency harness.
+const actual=vm.createContext({socialFixtureCompleted:(_,f)=>!!f.completed,socialEnsure:()=>s,socialTeamWorkflow:workflow,socialPublishing:publisher,socialAwards:{},socialWeek:{},socialPlayerWeek:{},Set});
+vm.runInContext(['socialSelection','socialNavigationRoute','restoreSocialNavigation'].map(part).join('\n'),actual);
+const dateSelection=s.selected,previousSocialView=s.view;s.view='graphics';s.selected=new Set(['one','other','cup','past']);s.teamWorkflow.teamScope='teams';
+assert.deepEqual(Array.from(actual.socialSelection(s),f=>f.id),['one','cup','other'],'Actual export selection includes both days, in preview order, but never completed fixtures');
+const route=JSON.parse(JSON.stringify(actual.socialNavigationRoute(s)));s.selected=new Set(['three']);s.teamWorkflow.teamScope='date';actual.restoreSocialNavigation(route);assert.deepEqual([...s.selected],['one','other','cup','past']);assert.equal(s.teamWorkflow.teamScope,'teams','Back/Forward restores the team choice');s.selected=dateSelection;s.teamWorkflow.teamScope='date';s.view=previousSocialView;
 const selections={view:'socials'},landing=vm.createContext({selectionRoomController:null,recordSelectionNavigation(){},confirmLeaveSelections:()=>leave,ensureSelections:()=>selections,socialEnsure:()=>s,socialTeamWorkflow:workflow,drawSelections:()=>{}});
 vm.runInContext(['seChangeView','socialLanding'].map(part).join('\n'),landing);
 for(const previous of ['managers','accounts','century','guide','publish_review']){s.view=previous;s.creationView='century';workflow.state(s).step='review';landing.seChangeView('socials');assert.equal(s.view,'graphics');assert.equal(s.creationView,'graphics');assert.equal(workflow.state(s).step,'artwork');assert.equal(s.data.assets.length,0);}
@@ -85,4 +105,4 @@ const logoHarness=vm.createContext({supabase:{rpc:async(name,args)=>{assert.equa
 vm.runInContext(part('socialRefresh'),logoHarness);
 const logoState={scope:'user:club',data:{fixtures:[]}};await logoHarness.socialRefresh(logoState);assert.equal(logoState.data.brand.logo,'blob:club/logo.png');
 logoSource.assets=[];await logoHarness.socialRefresh(logoState);assert.equal(logoState.data.brand.logo,'club-branding-logo');
-console.log('Passed: three-stage workflow, single-grade editing, two-day teams, date-specific blurbs, combined review, explicit posting only, responsibility/cover separation, scoped creation menu and demo syntax. All backend calls mocked.');
+console.log('Passed: three-stage workflow, team and date choices, mixed-date cup and Under 21 posts, two-day teams, date-specific blurbs, independent saved posts, explicit posting only, responsibility/cover separation, scoped creation menu and demo syntax. All backend calls mocked.');
