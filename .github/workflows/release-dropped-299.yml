@@ -1,0 +1,33 @@
+name: Verify dropped-player source fix 299
+on:
+  push:
+    branches: [codex/dropped-player-source-299]
+    paths: [.github/release-dropped-299.patch.gz.b64, .github/workflows/release-dropped-299.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply reviewed source patch
+        run: base64 --decode .github/release-dropped-299.patch.gz.b64 | gzip --decompress | git apply --binary
+      - run: npm ci --ignore-scripts
+      - run: node --check app.js
+      - run: node Scripts/build-demo.mjs
+      - run: node Scripts/build-demo.mjs --check
+      - run: git diff --check
+      - run: node --test Tests/dropped_player_actual_lineups_test.cjs Tests/dropped_player_reminders_test.cjs Tests/captain_board_followups_test.cjs Tests/selection_groups_board_test.cjs Tests/selection_group_permissions_ui_test.mjs Tests/selection_team_moves_demo_test.cjs Tests/selection_returning_quiet_test.cjs Tests/selection_analysis_on_demand_test.cjs Tests/demo_roles_integration_test.cjs Tests/demo_navigation_integration_test.cjs
+      - run: node --test Tests/selection_board_responsiveness_test.cjs
+      - name: Publish verified source tree
+        run: |
+          git add AGENTS.md Database/dropped_player_actual_lineups.sql Demo/build-manifest.json Demo/current-fixtures.js Demo/fixtures.js Reviews/2026-10-29-dropped-player-source-299.md Tests/captain_board_followups_test.cjs Tests/dropped_player_actual_lineups_database_test.sql Tests/dropped_player_actual_lineups_test.cjs app-start.js app.html app.js demo.html supabase/migrations/20261029081555_dropped_player_actual_lineups.sql
+          git rm .github/release-dropped-299.patch.gz.b64 .github/workflows/release-dropped-299.yml
+          test "$(git write-tree)" = "35094e1e1a12336fec700cd2ec636e1d488bb9bd"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Publish verified dropped-player source fix 0.8.62.299'
+          git push origin HEAD:codex/dropped-player-source-299
