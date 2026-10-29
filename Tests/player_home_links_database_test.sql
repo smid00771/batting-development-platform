@@ -1,0 +1,46 @@
+-- Synthetic accounts and club only. No real identities are linked; everything rolls back.
+begin;
+set local statement_timeout='20s';
+do $tests$
+declare c uuid:=gen_random_uuid();other uuid:=gen_random_uuid();admin_id uuid:=gen_random_uuid();u uuid:=gen_random_uuid();mail_user uuid:=gen_random_uuid();
+ rid uuid:=gen_random_uuid();email_rid uuid:=gen_random_uuid();r jsonb;blocked boolean;
+begin
+ insert into auth.users(id,email,email_confirmed_at) values(admin_id,'test-'||admin_id||'@example.invalid',now()),(u,'test-'||u||'@example.invalid',now()),(mail_user,'test-'||mail_user||'@example.invalid',now());
+ insert into public.user_profiles(user_id,display_name) values(admin_id,'Synthetic Admin'),(u,'Synthetic Player'),(mail_user,'Email Player');
+ insert into public.clubs(id,name,slug,created_by) values(c,'Player Home Test','home-'||c,admin_id),(other,'Other Home Test','home-'||other,admin_id);
+ insert into public.club_memberships(club_id,user_id,role,permission_role,involvement) values(c,admin_id,'admin','admin','coach_captain'),(c,u,'player','none','player'),(c,mail_user,'player','none','player');
+ insert into club_selection_private.roster(id,club_id,name,grade,account_email) values(rid,c,'  Synthetic   Player  ','2nd Grade',null),(email_rid,c,'Email Player','1st Grade','test-'||mail_user||'@example.invalid');
+ insert into club_selection_private.access(club_id,mode,status) values(c,'standalone','active');
+ perform club_selection_private.match_accounts(c,mail_user);
+ assert (select user_id=mail_user from club_selection_private.roster where id=email_rid),'Verified unique email and matching name link automatically';
+ perform set_config('request.jwt.claim.sub',u::text,true);
+ r:=public.club_selections_api(c,'player_link_context');
+ assert r->>'status'='confirm_name' and r#>>'{candidate,id}'=rid::text,'Unique name asks the player first';
+ assert not exists(select 1 from club_selection_private.roster where id=rid and user_id is not null),'Reading Home never claims a name';
+ assert not (r->'candidate' ? 'account_email'),'Candidate response does not disclose contact details';
+ r:=public.club_selections_api(c,'decline_player_link',jsonb_build_object('roster_id',rid));
+ assert r->>'status'='club_help','Decline leaves club to resolve';
+ assert public.club_selections_api(c,'decline_player_link',jsonb_build_object('roster_id',rid))->>'status'='club_help','Lost decline response can be retried';
+ assert public.club_selections_api(c,'player_link_context')->>'status'='club_help','Decline survives Home reload';
+ delete from club_selection_private.player_link_choices where club_id=c;
+ update club_selection_private.roster set account_email='different@example.invalid' where id=rid;
+ assert public.club_selections_api(c,'player_link_context')->>'status'='club_help','Different saved email needs club review';
+ update club_selection_private.roster set account_email=null,auto_link_disabled=true where id=rid;
+ assert public.club_selections_api(c,'player_link_context')->>'status'='club_help','Deliberate unlink is preserved';
+ update club_selection_private.roster set auto_link_disabled=false where id=rid;
+ insert into club_selection_private.roster(club_id,name) values(c,'Synthetic Player');
+ assert public.club_selections_api(c,'player_link_context')->>'status'='club_help','Ambiguous duplicate names are not offered';
+ delete from club_selection_private.roster where club_id=c and id not in(rid,email_rid);
+ update auth.users set email_confirmed_at=null where id=u;
+ blocked:=false;begin perform public.club_selections_api(c,'confirm_player_link',jsonb_build_object('roster_id',rid));exception when raise_exception then blocked:=true;end;assert blocked,'Unverified user cannot claim';
+ update auth.users set email_confirmed_at=now() where id=u;
+ blocked:=false;begin perform public.club_selections_api(other,'confirm_player_link',jsonb_build_object('roster_id',rid));exception when raise_exception then blocked:=true;end;assert blocked,'Other club cannot claim';
+ r:=public.club_selections_api(c,'confirm_player_link',jsonb_build_object('roster_id',rid));
+ assert r->>'status'='linked','Explicit yes claims the player';
+ assert (select count(*)=1 from club_selection_private.roster where club_id=c and user_id=u),'Exactly one player entry';
+ assert public.club_selections_api(c,'confirm_player_link',jsonb_build_object('roster_id',rid))->>'status'='linked','Lost confirmation is idempotent';
+ perform set_config('request.jwt.claim.sub',admin_id::text,true);
+ blocked:=false;begin perform public.club_selections_api(c,'confirm_player_link',jsonb_build_object('roster_id',rid));exception when raise_exception then blocked:=true;end;assert blocked,'Non-playing admin cannot claim via player endpoint';
+ assert not has_function_privilege('authenticated','club_selection_private.player_link_api(uuid,text,jsonb)','execute'),'Private helper is not a direct public endpoint';
+end $tests$;
+rollback;

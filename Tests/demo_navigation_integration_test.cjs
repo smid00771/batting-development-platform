@@ -90,6 +90,8 @@ test('role choices keep Socials, player and administrator permissions separate',
   await h.choose('#demoStage', 'social_awards');
   assert.ok(h.document.getElementById('saRequest'));
   await h.choose('#demoPersona', 'player');
+  assert.ok(h.document.querySelector('#playerHomeTitle'));
+  await h.click('#playerHomeTeam');
   assert.ok(h.document.querySelector('[data-se-view="published"]'));
   assert.equal(h.document.querySelector('[data-se-view="board"]'), null);
   assert.equal(h.document.querySelector('[data-se-view="socials"]'), null);

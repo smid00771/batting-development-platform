@@ -19,6 +19,6 @@ export function createTeamWeekDemo(clubName,sharedScores=null){
    if(action==='finish_image'){const e=editions.get(data.id);if(!e||!files.has(e.image_path))return {error:{message:'Upload the image first'}};e.sealed=true;return {data:{saved:true}};}
    return {error:{message:'Use the live club for scorecard imports.'}};
   },
-  storage:{from(){return {async upload(path,blob){if(files.has(path))return {error:{message:'Image already exists'}};files.set(path,blob);return {data:{path}};},async download(path){return files.has(path)?{data:files.get(path)}:{error:{message:'Image not found'}};}};}}
+  storage:{from(){return {async upload(path,blob){if(files.has(path))return {error:{message:'Image already exists'}};files.set(path,blob);return {data:{path}};},async remove(paths){for(const path of paths)files.delete(path);return {data:[],error:null};},async download(path){return files.has(path)?{data:files.get(path)}:{error:{message:'Image not found'}};}};}}
  };
 }

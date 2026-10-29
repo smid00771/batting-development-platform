@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.300';
+const APP_UI_VERSION='0.8.62.301';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1634,8 +1634,7 @@ async function loadContext({navigation=null,navigationRequest=null}={}){
   }
   if(!stillCurrent())return;
   // A fresh sign-in starts at Home; a reload restores its existing browser destination.
-  currentTab=productTrialWaiting()?'products':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':savedTab||'howwetrain';
-  if(joinedAvailabilityClub===club.id&&selectionsEnabled()){ensureSelections().view='availability';currentTab='teams';joinedAvailabilityClub=null;}
+  currentTab=productTrialWaiting()?'products':isPlayerUser()?'playerhome':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':savedTab||'howwetrain';
   if(routeClub===club.id || (!routeClub&&routeTab==='assist')){
     if(['products','playerhome','innings','make_your_call','myplan','howwebat','howwetrain','conversations','guide','messages','phone_app','teams','assist'].includes(routeTab) && canOpenClubTab(routeTab)){
       currentTab=routeTab;
@@ -1940,6 +1939,7 @@ function canOpenClubTab(tab){
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
   if(tab==='club_teams')return !!(session&&membership&&club&&isAdmin());
   if(tab==='teams')return !!(session&&membership&&club);
+  if(tab==='playerhome')return !!(session&&membership&&club&&isPlayerUser());
   if(selectionsStandalone()&&!['teams','permissions','club_settings','messages','phone_app','guide','assist','join_club'].includes(tab))return false;
   if(['join_club','messages','phone_app','assist'].includes(tab))return !!(session&&membership&&club);
   if(tab==='dashboard')return canUseClubHome();
@@ -2520,6 +2520,7 @@ function renderShell(){
   applyClubTheme();
 
   const nav=[];
+  if(isPlayerUser())nav.push(['playerhome','Home','player']);
   if(!selectionsStandalone()){
   if(canUseClubHome())nav.push(['dashboard','Club Home','club']);
   if(canUsePlayersWorkspace())nav.push(['players','Players','club']);
@@ -2527,7 +2528,6 @@ function renderShell(){
 
   // Keep daily player tools easy to reach, including for playing club staff.
   if(isPlayerUser()){
-    nav.push(['playerhome','Player Home','player']);
     if(howWeBatVersions.length)nav.push(['howwebat','How We Bat','player']);
     nav.push(['myplan','My Player Plan','player']);
     nav.push(['howwetrain','How We Train','player']);
@@ -2547,7 +2547,7 @@ function renderShell(){
   // Workflow screens stay available internally when their prerequisites and
   // permissions are met. They do not each become another menu choice.
   if(!canOpenClubTab(currentTab)){
-    currentTab=productTrialWaiting()?'products':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':nav[0]?.[0]||'howwetrain';
+    currentTab=productTrialWaiting()?'products':isPlayerUser()?'playerhome':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':nav[0]?.[0]||'howwetrain';
   }
 
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
@@ -2569,6 +2569,7 @@ function renderShell(){
           ${club.logo_data_url?`<div class="shell-club-logo"><img src="${esc(club.logo_data_url)}" alt="${esc(club.name)} logo"></div>`:''}
           <div class="club-header-name">${esc(club.name)}</div>
         </div>
+        ${isPlayerUser()?'<button type="button" class="btn ghost" id="playerHomeShortcut">Home</button>':''}
         <button type="button" class="btn ghost club-menu-toggle" id="clubMenuToggle" aria-expanded="false" aria-controls="clubHeaderActions clubMainNav">Menu <span aria-hidden="true">☰</span></button>
         <div class="header-actions" id="clubHeaderActions">
           ${(allMemberships.length>1||platformRole)?contextSwitcherHtml('contextSwitch',contextOptions):''}
@@ -2585,6 +2586,7 @@ function renderShell(){
   </div>`;
 
   bindClubMobileMenu();
+  document.getElementById('playerHomeShortcut')?.addEventListener('click',()=>openClubSectionHome('playerhome'));
   document.getElementById('out').onclick=async()=>{if(await saveClubEditsBeforeNavigation())await signOutClubBatting();};
   document.getElementById('accountPassword').onclick=openAccountPassword;
   document.getElementById('accountCoaching')?.addEventListener('click',openCoachConversations);
@@ -2767,8 +2769,7 @@ async function renderPlayerJoinRoute(token){
       localStorage.setItem('bdp-club-id',clubId);
       forgetClubSignupEntry();
       history.replaceState({},'',location.pathname);
-      joinedAvailabilityClub=info.products?.selections?clubId:null;
-      currentTab=joinedAvailabilityClub?'teams':'myplan';
+      currentTab='playerhome';
       await loadPlatformContext();
       await loadContext();
     }catch(error){st.textContent=error.message||'Could not join your club. Please try again.';}
@@ -3126,7 +3127,7 @@ function restoreClubNavigationState(route){
   if(typeof view.guideTopic==='string')guideSelectedCapabilityKey=view.guideTopic;
   if(typeof route.returnTab==='string')accountReturnTab=route.returnTab;
   const tab=route.tab==='workshop_preview'&&!workshopPreview?'workshop':route.tab;
-  currentTab=canOpenClubTab(tab)?tab:selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+  currentTab=canOpenClubTab(tab)?tab:isPlayerUser()?'playerhome':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':'howwetrain';
   if(currentTab==='assist')pendingAssistLaunch={threadId:route.assist?.threadId||null,platform:false};
   if(currentTab==='teams'){const s=ensureSelections(),saved=route.selections||{};s.view=saved.view||'published';s.date=saved.date||'';s.selectionGroup=saved.selectionGroup||'';s.publishedWeek=saved.publishedWeek||'';s.boardDateChosen=!!s.date;s.boardPanel=saved.boardPanel||null;s.followupOpen=saved.followupOpen===true;s.boardChatOpen=typeof saved.boardChatOpen==='string'?saved.boardChatOpen:null;s.boardCommentOpen=typeof saved.boardCommentOpen==='string'?saved.boardCommentOpen:null;s.statsOpen=saved.statsOpen===true;s.statsFilters={grade:saved.statsFilters?.grade||'',format:saved.statsFilters?.format||'',mode:saved.statsFilters?.mode==='bowling'?'bowling':'batting',compare:!!saved.statsFilters?.compare,compareDate:saved.statsFilters?.compareDate||'',firstTeam:saved.statsFilters?.firstTeam||'',secondTeam:saved.statsFilters?.secondTeam||''};s.rosterPanel=saved.rosterPanel||null;s.rosterOpen=saved.rosterOpen||null;s.rosterSearch=saved.rosterSearch||'';s.rosterGrade=saved.rosterGrade||'';s.signupOnly=!!saved.signupOnly;s.active=null;s.navigationDrawer=saved.drawer||null;s.restoreDrawer=saved.drawer||null;s.availabilityPlayerId=typeof saved.availabilityPlayerId==='string'?saved.availabilityPlayerId:null;s.availabilityMonth=/^\d{4}-\d{2}$/.test(saved.availabilityMonth||'')?saved.availabilityMonth:null;restoreSocialNavigation(saved.social);}
   if(currentTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=route.makeYourCall?.week||null;s.season=route.makeYourCall?.season||null;s.month=route.makeYourCall?.month||null;restoreCallResultsState(route.makeYourCall?.results||{});}
@@ -3221,7 +3222,7 @@ function renderTab(){
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   }
   if(!canOpenClubTab(currentTab)){
-    currentTab=productTrialWaiting()?'products':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':isPlayerUser()?'playerhome':'howwetrain';
+    currentTab=productTrialWaiting()?'products':isPlayerUser()?'playerhome':selectionsStandalone()?'teams':canUseClubHome()?'dashboard':'howwetrain';
     localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   }
   if(currentTab==='players'){resetPlayersWorkspaceForClub();if(!playersWorkspaceSelectedId&&!appNavigationRestoring)playersWorkspaceSearch='';}
@@ -13495,69 +13496,102 @@ async function openPlayerHomeAction(action){
   if(action.anchor&&club?.id===clubId&&currentTab===action.tab)requestAnimationFrame(()=>{const target=document.getElementById(action.anchor);if(target?.tagName==='DETAILS')target.open=true;for(let parent=target?.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;target?.scrollIntoView({behavior:'smooth',block:'start'});});
 }
 
+async function openPlayerHomeSelections(view){
+  if(!await saveClubEditsBeforeNavigation())return;
+  const s=ensureSelections();
+  s.view=view;s.availabilityPlayerId=null;s.availabilityReturn=null;s.navigationDrawer=null;s.restoreDrawer=null;
+  s.boardChatOpen=null;s.boardCommentOpen=null;s.publishedWeek='';
+  currentTab='teams';await renderTab();
+  window.scrollTo?.({top:0,left:0,behavior:'instant'});
+}
 async function renderPlayerHome(){
   const page=document.getElementById('page');
-  const sequence=++playerHomeRenderSequence,clubId=club?.id,playerId=myPlayer?.id;
-  const stillCurrent=()=>sequence===playerHomeRenderSequence&&club?.id===clubId&&myPlayer?.id===playerId&&currentTab==='playerhome'&&document.getElementById('page')===page;
-  if(!workspacePlayerPlansPublished()){
-    renderClubPublicationGate('Player Home');
-    if(myPlayer&&isPlayerUser()){const section=document.createElement('section');section.className='card';section.innerHTML='<button class="btn secondary" id="requestBeforePublication">Request a Coach Conversation</button>';page.appendChild(section);document.getElementById('requestBeforePublication').onclick=openCoachConversationRequest;}
-    return;
-  }
-  if(!myPlayer){
-    page.innerHTML='<section class="card"><div class="section-label">Player Home</div><h2>Your account needs a player profile.</h2><p>Ask the person coordinating Club Batting at your club to register you as a player.</p></section>';
-    return;
-  }
-  const tiles=[
-    ['playerHomePlan','My Player Plan','The shots you trust and how you want to bat.','plan'],
-    ['playerHomeTraining','How We Train','Practise your plan and current focus.','train'],
-    ['playerHomePrepare','Prepare for a Match','Plan your approach to the opposition.','prepare'],
-    ['playerHomeInnings','My Innings','Review your innings and decide what comes next.','review']
-  ];
+  const sequence=++playerHomeRenderSequence,clubId=club?.id,userId=session?.user?.id;
+  const stillCurrent=()=>sequence===playerHomeRenderSequence&&club?.id===clubId&&session?.user?.id===userId&&currentTab==='playerhome'&&document.getElementById('page')===page;
+  const batting=!selectionsStandalone(),select=selectionsEnabled(),plans=batting&&workspacePlayerPlansPublished()&&!!myPlayer;
+  let planAction={tab:'myplan'};
   page.innerHTML=`<style>
-    .player-home-landing h1{margin:0;color:var(--primary);font-size:28px;line-height:1.2}
-    .player-home-landing h1:focus{outline:none}
-    .player-home-intro{margin:6px 0 12px;font-size:15px;line-height:1.4;max-width:46rem}
-    .player-home-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
-    .player-home-tile{appearance:none;display:flex;flex-direction:column;align-items:flex-start;position:relative;min-width:0;min-height:88px;border:1px solid #ced6ee;border-radius:12px;padding:12px;text-align:left;color:var(--text,#172033);background:#eff3ff;font:inherit;cursor:pointer}
-    .player-home-tile[data-home-area="train"]{background:#eff8f4;border-color:#cce5d8}
-    .player-home-tile[data-home-area="prepare"]{background:#fff7eb;border-color:#edddc3}
-    .player-home-tile[data-home-area="review"]{background:#f5f2ff;border-color:#ddd5f0}
-    .player-home-tile strong{display:block;margin-right:16px;color:var(--primary,#202f78);font-size:20px;line-height:1.25}
-    .player-home-tile .player-home-tile-copy{display:block;margin-top:6px;font-size:15px;line-height:1.4}
-    .player-home-tile .player-home-tile-arrow{position:absolute;right:12px;top:13px;color:var(--primary,#202f78);font-size:20px;line-height:1}
-    .player-home-tile:hover{border-color:var(--primary,#202f78);box-shadow:0 2px 8px #17245f12}
-    .player-home-tile:focus-visible{outline:3px solid var(--primary,#202f78);outline-offset:3px}
-    .phone-install-prompt{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:8px}.phone-install-prompt .btn{padding:6px 8px;min-height:44px;font-size:13px}
-    .player-home-links{display:flex;gap:0 18px;flex-wrap:wrap;margin-top:8px}
-    .player-home-links button{appearance:none;border:0;background:transparent;padding:6px 0;min-height:44px;color:var(--primary,#202f78);font:inherit;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
-    @media(min-width:1050px){.player-home-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
-    @media(max-width:620px){.player-home-tile strong{font-size:17px}.player-home-tile .player-home-tile-copy{font-size:14px}.player-home-tile .player-home-tile-arrow{right:10px;top:12px}}
+    .player-home-landing{max-width:960px;margin:auto}.player-home-landing h1{margin:0;font-size:26px;color:var(--primary)}
+    .player-home-intro{margin:6px 0 12px;color:#52627a}.player-home-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+    .player-home-step{padding:16px;border:1px solid #d9e1ed;border-radius:12px;background:white;min-width:0}.player-home-step.is-next{border-color:var(--primary);background:#f0f4ff}
+    .player-home-step h2{font-size:19px;margin:0 0 6px}.player-home-step p{font-size:14px;line-height:1.45;margin:6px 0 12px}.player-home-step .btn{min-height:44px}
+    .player-home-step small{display:block;font-size:12px;font-weight:700;color:var(--primary);margin-bottom:5px}.player-home-tiles{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.player-home-tiles .btn{min-height:44px}
+    .player-home-links{display:flex;flex-wrap:wrap;gap:0 14px;margin-top:6px}.player-home-links button{border:0;background:none;padding:8px 0;min-height:44px;color:var(--primary);text-decoration:underline;font:inherit;font-size:14px;cursor:pointer}
+    .player-home-identity:empty{display:none}.player-home-identity{margin-bottom:10px}.player-home-identity h2{font-size:19px;margin:0 0 8px}.player-home-identity p{margin:6px 0 10px}.player-home-identity .actions{display:flex;gap:8px;flex-wrap:wrap}.player-home-identity .btn{min-height:44px}
+    .player-home-identity [role=status]:empty{display:none}.player-home-landing [hidden]{display:none!important}
+    @media(max-width:620px){.player-home-step{padding:14px}.player-home-landing h1{font-size:23px}}
   </style><section class="player-home-landing" aria-labelledby="playerHomeTitle">
-    <h1 id="playerHomeTitle">Player Home</h1>
-    <nav class="player-home-tiles" aria-label="Your batting tools">
-      ${tiles.map(([id,title,copy,area])=>`<button type="button" class="player-home-tile" id="${id}" data-home-area="${area}"><strong>${title}</strong><span class="player-home-tile-copy">${copy}</span><span class="player-home-tile-arrow" aria-hidden="true">→</span></button>`).join('')}
+    <h1 id="playerHomeTitle">Home</h1><p class="player-home-intro">${esc(userProfile?.display_name||myPlayer?.display_name||'Welcome')}${plans&&select?' · Your Player Plan first, then your availability.':plans?' · Start with your Player Plan.':select?' · Set your availability and see your team.':''}</p>
+    <div id="playerHomeIdentity" class="player-home-identity" aria-live="polite"></div>
+    <div class="player-home-steps">
+      ${batting?`<section class="player-home-step ${plans?'is-next':''}" id="playerHomePlanStep"><small id="playerHomePlanStatus">${select?'1 · ':''}Player Plan</small><h2>${plans?'Create your Player Plan':'Your Player Plan'}</h2><p id="playerHomePlanCopy">${plans?'Choose the shots you trust and how you want to bat.':!myPlayer?'Link your player entry to open your plan.':'Your club is preparing its Player Plans. You can return here when they are ready.'}</p>${plans?'<button class="btn" id="playerHomePlan">Create my Player Plan</button>':''}</section>`:''}
+      ${select?`<section class="player-home-step ${!plans?'is-next':''}" id="playerHomeAvailabilityStep"><small id="playerHomeAvailabilityStatus">${batting?'2 · ':''}Availability</small><h2>Set your availability</h2><p>Let your selectors know which dates you can play.</p><button class="btn ${plans?'secondary':''}" id="playerHomeAvailability">Set my availability</button></section>`:''}
+    </div>
+    <nav class="player-home-tiles" aria-label="Your club tools">
+      ${select?'<button class="btn secondary" id="playerHomeTeam">My team</button>':''}<button class="btn secondary" id="playerHomeMessages">Messages</button>
+      ${plans?'<button class="btn secondary" id="playerHomeTraining">How We Train</button><button class="btn secondary" id="playerHomePrepare">Prepare for a Match</button><button class="btn secondary" id="playerHomeInnings">My Innings</button>':''}
     </nav>
-    ${phoneAppPrompt()}<div class="player-home-links"><button type="button" id="playerHomePhilosophy">Read How We Bat</button><button type="button" id="requestConversationFromHome">Request a Coach Conversation</button></div>
+    <div class="player-home-links">${plans?'<button id="playerHomePhilosophy">Read How We Bat</button><button id="requestConversationFromHome">Request a Coach Conversation</button>':''}<button id="playerHomeHelp">Help</button></div>
   </section>`;
-  document.getElementById('playerHomePlan').onclick=()=>openPlayerHomeAction({tab:'myplan'});
-  document.getElementById('playerHomeTraining').onclick=()=>openPlayerHomeAction({tab:'howwetrain'});
-  document.getElementById('playerHomePrepare').onclick=()=>openMyInnings({prepare:true});
-  document.getElementById('playerHomeInnings').onclick=()=>openMyInnings();
-  document.getElementById('playerHomePhilosophy').onclick=()=>openPlayerHomeAction({tab:'howwebat'});
-  document.getElementById('requestConversationFromHome').onclick=openCoachConversationRequest;
-  // Only the plan tile needs current requirements. Keep the landing usable
-  // while loading and leave a neutral link if completion cannot be verified.
-  try{
-    const {data:rollout,error}=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:clubId});
-    if(!stillCurrent()||error||!rollout)return;
-    const raw=localRaw||rawAnswers(),state=playerHomePlanState(raw,rollout);
-    const complete=state.core.complete&&!state.pendingRequired.length&&state.ready.length>0;
-    const next=playerPlanNextStep(raw,rollout),button=document.getElementById('playerHomePlan');
-    button.querySelector('strong').textContent=complete?'Edit your Player Plan':'Complete your Player Plan';
-    button.querySelector('.player-home-tile-copy').textContent=complete?'Review your choices or update your approach.':'Choose the shots you trust and how you want to bat.';
-    button.onclick=()=>openPlayerHomeAction({tab:'myplan',edit:complete,section:complete?'core':next.section,anchor:!complete&&next.kind==='choose-format'?'playerPlanProgress':null});
-  }catch(_error){/* My Player Plan can check its requirements when opened. */}
+  page.querySelector('#playerHomePlan')?.addEventListener('click',()=>openPlayerHomeAction(planAction));
+  page.querySelector('#playerHomeAvailability')?.addEventListener('click',()=>openPlayerHomeSelections('availability'));
+  page.querySelector('#playerHomeTeam')?.addEventListener('click',()=>openPlayerHomeSelections('published'));
+  page.querySelector('#playerHomeMessages').onclick=()=>openPlayerHomeAction({tab:'messages'});
+  page.querySelector('#playerHomeHelp').onclick=()=>openPlayerHomeAction({tab:'guide'});
+  page.querySelector('#playerHomeTraining')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain'}));
+  page.querySelector('#playerHomePrepare')?.addEventListener('click',()=>openMyInnings({prepare:true}));
+  page.querySelector('#playerHomeInnings')?.addEventListener('click',()=>openMyInnings());
+  page.querySelector('#playerHomePhilosophy')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwebat'}));
+  page.querySelector('#requestConversationFromHome')?.addEventListener('click',openCoachConversationRequest);
+  function showLink(result){
+    if(!stillCurrent())return;
+    const host=page.querySelector('#playerHomeIdentity');
+    if(result?.status==='linked'){host.replaceChildren();return;}
+    if(result?.status==='confirm_name'){
+      const p=result.candidate;
+      host.innerHTML=`<section class="card"><h2>Is this you?</h2><p><strong>${esc(p.name)}</strong>${p.grade?` · ${esc(p.grade)}`:''}</p><p>Your club already has this player on its playing list.</p><div class="actions"><button class="btn" id="confirmPlayerName">Yes, that’s me</button><button class="btn secondary" id="declinePlayerName">No, that’s not me</button></div><p id="playerLinkStatus" role="status"></p></section>`;
+      for(const [id,action] of [['confirmPlayerName','confirm_player_link'],['declinePlayerName','decline_player_link']])host.querySelector('#'+id).onclick=async()=>{
+        if(!stillCurrent())return;
+        host.querySelectorAll('button').forEach(b=>b.disabled=true);
+        host.querySelector('#playerLinkStatus').textContent=action==='confirm_player_link'?'Linking your player entry…':'Saving…';
+        try{
+          const response=await supabase.rpc('club_selections_api',{p_club_id:clubId,p_action:action,p_data:{roster_id:p.id}});
+          if(response.error)throw Error(response.error.message);
+          if(!stillCurrent())return;
+          if(response.data?.status==='linked'){await loadContext({navigation:{clubId,tab:'playerhome'}});return;}
+          showLink(response.data);
+        }catch(error){if(stillCurrent()){host.querySelector('#playerLinkStatus').textContent=error.message||'Could not confirm the link. Please try again.';host.querySelectorAll('button').forEach(b=>b.disabled=false);}}
+      };
+    }else if(result?.status==='club_help'){
+      host.innerHTML='<section class="card"><h2>Your player entry needs checking</h2><p>Ask your Club Admin to link your sign-in to the right player on the playing list.</p></section>';
+    }else{
+      host.innerHTML='<p>We couldn’t check your player link. <button class="btn ghost" id="retryPlayerLink">Try again</button></p>';
+      host.querySelector('button').onclick=()=>renderPlayerHome();
+    }
+  }
+  const tasks=[(async()=>{
+    try{const r=await supabase.rpc('club_selections_api',{p_club_id:clubId,p_action:'player_link_context'});showLink(r.error?null:r.data);}catch{showLink(null);}
+  })()];
+  if(plans)tasks.push((async()=>{
+    try{
+      const {data:rollout,error}=await supabase.rpc('get_my_player_plan_rollout',{p_club_id:clubId});
+      if(!stillCurrent()||error||!rollout)return;
+      const raw=localRaw||rawAnswers(),state=playerHomePlanState(raw,rollout),complete=state.core.complete&&!state.pendingRequired.length&&state.ready.length>0;
+      const next=playerPlanNextStep(raw,rollout),started=state.core.answeredAny>0||state.started.length>0||state.ready.length>0;
+      const button=page.querySelector('#playerHomePlan'),step=page.querySelector('#playerHomePlanStep');
+      step.querySelector('h2').textContent=complete?'Your Player Plan is ready':started?'Finish your Player Plan':'Create your Player Plan';
+      button.textContent=complete?'View my Player Plan':started?'Continue my Player Plan':'Create my Player Plan';
+      page.querySelector('#playerHomePlanStatus').textContent=(select?'1 · ':'')+(complete?'Done':'Next: Player Plan');
+      planAction=complete?{tab:'myplan'}:{tab:'myplan',section:next.section,anchor:next.kind==='choose-format'?'playerPlanProgress':null};
+      if(complete){
+        step.classList.remove('is-next');button.classList.add('secondary');
+        page.querySelector('#playerHomePlanCopy').textContent='Review your choices or update your approach.';
+        const availability=page.querySelector('#playerHomeAvailabilityStep');
+        if(availability){availability.classList.add('is-next');page.querySelector('#playerHomeAvailabilityStatus').textContent='2 · Next: Availability';page.querySelector('#playerHomeAvailability').classList.remove('secondary');}
+      }
+    }catch{/* The plan remains usable and checks its requirements when opened. */}
+  })());
+  await Promise.all(tasks);
 }
 
 // BEGIN WEEKLY LOOP MODULES
@@ -14162,9 +14196,10 @@ async function renderMyPlan(){
   const planReadyToRead=requirementsAvailable&&readablePlan.core.complete&&!readablePlan.pendingRequired.length&&readablePlan.ready.length>0;
   if(planReadyToRead&&playerPlanEditScope!==planScope){
     document.getElementById('page').innerHTML=`${playerPlanJourneyStyles()}<section class="card player-plan-reader">
-      <div class="plan-reader-tools"><span class="help">Required plan complete ✓</span><div><button type="button" class="btn secondary" id="editMyPlayerPlan">Edit Player Plan</button><button type="button" class="btn ghost" id="readPlanTraining">How We Train</button><button type="button" class="btn ghost" id="myPlanGuideLink">Help</button></div></div>
+      <div class="plan-reader-tools"><span class="help">Required plan complete ✓</span><div>${selectionsEnabled()?'<button type="button" class="btn" id="planNextAvailability">Next: set my availability</button>':''}<button type="button" class="btn secondary" id="editMyPlayerPlan">Edit Player Plan</button><button type="button" class="btn ghost" id="readPlanTraining">How We Train</button><button type="button" class="btn ghost" id="myPlanGuideLink">Help</button></div></div>
       ${renderPlayerPlanTiles(curate(rawForProgress),myPlayer.display_name)}
     </section>`;
+    document.getElementById('planNextAvailability')?.addEventListener('click',()=>openPlayerHomeSelections('availability'));
     document.getElementById('editMyPlayerPlan').onclick=()=>{playerPlanEditScope=planScope;renderMyPlan();};
     document.getElementById('readPlanTraining').onclick=()=>{currentTab='howwetrain';renderTab();};
     document.getElementById('myPlanGuideLink').onclick=()=>openClubBattingGuideTopic('player_plan');
@@ -14262,7 +14297,7 @@ async function renderMyPlan(){
     </button>${orderedFormats.map(([key,label])=>formatCard(key,label,raw)).join('')}`;
   };
   const coreNextFormatLinks=builderSection==='core'
-    ?`<div class="btnrow compact" style="margin-top:10px"><button type="button" class="btn secondary" id="playerPlanNextStepFooter">${esc(nextStep.label)}</button></div>`
+    ?`<div class="btnrow compact" style="margin-top:10px"><button type="button" class="btn secondary" id="playerPlanNextStepFooter">${esc(selectionsEnabled()&&nextStep.kind==='training'?'Next: set my availability':nextStep.label)}</button></div>`
     :'';
 
   document.getElementById('page').innerHTML=`${playerPlanJourneyStyles()}<section class="card plan-rollout-player">
@@ -14270,7 +14305,7 @@ async function renderMyPlan(){
       <h1>My Player Plan</h1><span id="playerPlanOverallStatus" role="status" aria-live="polite" class="workflow-status ${requirementsAvailable&&completedRequiredSections===requiredSections.length?'approved':''}">${!requirementsAvailable?'Priorities unavailable':completedRequiredSections===requiredSections.length?'Required plan complete ✓':`${completedRequiredSections}/${requiredSections.length} required sections complete`}</span>
     </div>
     <div class="notice compact" id="playerPlanFocus" role="status" aria-live="polite" ${planReadyToRead?'hidden':''}>${focusHtml(rawForProgress)}</div>
-    <div class="plan-journey-links"><button type="button" class="btn secondary" id="playerPlanNextStep">${esc(nextStep.label)}</button><button type="button" class="btn ghost" id="viewMyPlanSummary">${planReadyToRead?'Done editing':'View my plan'}</button><button type="button" class="btn ghost" id="myPlanGuideLink">Help</button></div>
+    <div class="plan-journey-links"><button type="button" class="btn secondary" id="playerPlanNextStep">${esc(selectionsEnabled()&&nextStep.kind==='training'?'Next: set my availability':nextStep.label)}</button><button type="button" class="btn ghost" id="viewMyPlanSummary">${planReadyToRead?'Done editing':'View my plan'}</button><button type="button" class="btn ghost" id="myPlanGuideLink">Help</button></div>
     <details class="plan-progress-disclosure" id="playerPlanProgress"><summary>Formats & progress</summary>
     <div class="plan-format-cards" id="playerPlanFormatCards">${formatCardsHtml(rawForProgress)}</div>
     </details>
@@ -14322,7 +14357,7 @@ async function renderMyPlan(){
     if(next.kind==='choose-format'){
       const progress=document.getElementById('playerPlanProgress');progress.open=true;progress.scrollIntoView({behavior:'smooth',block:'start'});return;
     }
-    if(next.kind==='training'){currentTab='howwetrain';await renderTab();return;}
+    if(next.kind==='training'){if(selectionsEnabled())return openPlayerHomeSelections('availability');currentTab='howwetrain';await renderTab();return;}
     if(builderSection!==next.section){builderSection=next.section;await renderMyPlan();}
     document.getElementById('builderQuestions')?.scrollIntoView({behavior:'smooth',block:'start'});
   };
@@ -14345,9 +14380,10 @@ async function renderMyPlan(){
     const nextButton=document.getElementById('playerPlanNextStep');
     const focus=document.getElementById('playerPlanFocus');
     if(focus){focus.innerHTML=focusHtml(raw);const state=playerHomePlanState(raw,rollout);focus.hidden=requirementsAvailable&&state.core.complete&&!state.pendingRequired.length&&state.ready.length>0;}
-    if(nextButton)nextButton.textContent=playerPlanNextStep(raw,rollout).label;
+    const currentNext=playerPlanNextStep(raw,rollout),nextLabel=selectionsEnabled()&&currentNext.kind==='training'?'Next: set my availability':currentNext.label;
+    if(nextButton)nextButton.textContent=nextLabel;
     const nextFooter=document.getElementById('playerPlanNextStepFooter');
-    if(nextFooter)nextFooter.textContent=playerPlanNextStep(raw,rollout).label;
+    if(nextFooter)nextFooter.textContent=nextLabel;
     const overall=document.getElementById('playerPlanOverallStatus');
     const completed=requiredSections.filter(key=>sectionProgress(key,raw).complete).length;
     if(overall){
@@ -19262,7 +19298,6 @@ function seStartLiveRefresh(){if(selectionRefreshTimer)clearInterval(selectionRe
 
 
 /* BEGIN SHARED PLAYER SIGNUP */
-let joinedAvailabilityClub=null;
 function sharedSignupMessage(name,link,{selections=false,batting=true}={}){
  return `${name}: please join your club account here:\n${link}\n\n${selections?'Every player needs to mark the dates they are available in Teams & availability. You can only be selected for dates confirmed as available.': 'Use your account to access Club Batting.'}\n${selections&&batting?'The same account also gives you Club Batting.\n':''}Already registered? Sign in with your existing account.\nOn your phone: Account → App & Notifications to set up app messages.`;
 }
@@ -19976,7 +20011,7 @@ async function loadSocialFeatures(){
  const current=()=>state===socialState&&scope===selectionsScopeKey()&&request===requestedFeatureScope()&&ensureSelections().data?.socials===true;
  const task={scope,request,state};socialEngineTask=task;
  task.promise=(async()=>{
-  const module=await import('./social-workspace.js?v=0.8.62.294');
+  const module=await import('./social-workspace.js?v=0.8.62.301');
   if(!current())return null;
   const engine=module.createSocialWorkspace({appNavigationBack,club,drawSelections,ensureSelections,matchReviewExtractUrl,mountScorecardTeam,normaliseHex,platformRole,recordSelectionNavigation,renderSocialPlatformSetup,restoreSocialNavigation,seDownload,seEsc,seFormatLabel,seNotice,seOpt,seReload,selectionsScopeKey,session,socialCanLeave,socialEnsure,socialHere,socialOpenFixture,socialState,supabase});
   await engine.loadSocialFeatures();if(!current())return null;
