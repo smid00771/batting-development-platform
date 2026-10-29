@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.301';
+const APP_UI_VERSION='0.8.62.302';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2981,7 +2981,7 @@ function selectionNavigationRoute(s){
  return route;
 }
 function socialNavigationRoute(s){
- const route={view:s.view,creationView:s.creationView,date:s.date,resultsWeek:s.resultsWeek};
+ const route={view:s.view,creationView:s.creationView,date:s.date,selected:[...(s.selected||[])],resultsWeek:s.resultsWeek};
  if(s.view==='graphics'&&socialTeamWorkflow)route.team={...socialTeamWorkflow.state(s)};
  if(['awards','award_collection','results','five_wickets','century'].includes(s.view)&&s.awards)route.awards={end:s.awards.end,focus:s.awards.focus||null};
  if(s.view==='team_week'&&s.week)route.week={end:s.week.end};
@@ -2996,7 +2996,7 @@ function socialNavigationRoute(s){
  return route;
 }
 function restoreSocialNavigation(route){
- if(!route)return;const s=socialEnsure();if(!socialPublishing){s.deferredNavigation=route;return;}s.view=route.view||'graphics';s.creationView=route.creationView||'graphics';s.date=route.date||'';if(route.resultsWeek)s.resultsWeek=route.resultsWeek;
+ if(!route)return;const s=socialEnsure();if(!socialPublishing){s.deferredNavigation=route;return;}s.view=route.view||'graphics';s.creationView=route.creationView||'graphics';s.date=route.date||'';if(Array.isArray(route.selected))s.selected=new Set(route.selected);if(route.resultsWeek)s.resultsWeek=route.resultsWeek;
  if(route.team)Object.assign(socialTeamWorkflow.state(s),route.team);
  for(const [key,api] of [['awards',socialAwards],['week',socialWeek],['playerWeek',socialPlayerWeek]]){
   const saved=route[key];if(!saved)continue;const w=api.state(s);
@@ -19235,7 +19235,7 @@ function seUpdateConversationState(){
 }
 function seBindPublishedActions(){const s=ensureSelections();
  document.getElementById('seMyAvailability')?.addEventListener('click',()=>seChangeView('availability'));
- if(s.publicationResult&&s.data.socials){document.getElementById('seContent').insertAdjacentHTML('afterbegin','<div class="se-actions"><button class="btn" id="sePublishedGraphics">Create team graphics</button></div>');document.getElementById('sePublishedGraphics').onclick=()=>{if(!confirmLeaveSelections())return;const social=socialEnsure();social.view='graphics';social.date=s.data.fixtures.find(f=>s.publicationResult.ids.includes(f.id))?.published?.details?.days?.[0]?.date||'';social.selected=new Set(s.publicationResult.ids);s.view='socials';drawSelections();};}
+ if(s.publicationResult&&s.data.socials){document.getElementById('seContent').insertAdjacentHTML('afterbegin','<div class="se-actions"><button class="btn" id="sePublishedGraphics">Create team graphics</button></div>');document.getElementById('sePublishedGraphics').onclick=()=>{if(!confirmLeaveSelections())return;const social=socialEnsure();social.view='graphics';social.date=s.data.fixtures.find(f=>s.publicationResult.ids.includes(f.id))?.published?.details?.days?.[0]?.date||'';social.selected=new Set(s.publicationResult.ids);Object.assign(social.teamWorkflow||={}, {teamScope:'teams',step:'artwork',fixture:'',day:0,teamsOpen:false});s.view='socials';drawSelections();};}
 
 }
 function sePublished(){if(typeof clubWeek!=='undefined')queueMicrotask(()=>clubWeek.mount());const s=ensureSelections(),period=sePublishedWeeks(s),fs=period.fixtures.sort((a,b)=>sePublishedDates(a)[0].localeCompare(sePublishedDates(b)[0])||a.published.details.grade.localeCompare(b.published.details.grade,undefined,{numeric:true}));document.getElementById('seContent').innerHTML=`<div class="se-toolbar"><label for="sePublishedWeek">Week<select id="sePublishedWeek">${period.weeks.map(week=>`<option value="${week}" ${week===period.selected?'selected':''}>${seEsc(sePublishedWeekLabel(week,period.current))}</option>`).join('')}</select></label>${seIsCaptain(s.data)&&!seCanSetup(s.data)&&s.data.roster.some(p=>p.active&&p.user_id===session.user.id)?'<button class="btn ghost" id="seMyAvailability">My availability</button>':''}</div>`+(fs.length?`<div class="se-grid">${fs.map(f=>{const d=f.published.details,ps=f.published.players,own=s.data.roster.find(p=>p.user_id===session.user.id),name=id=>ps.find(p=>p.id===id)?.name||'Vacant';return `<section class="se-card ${f.published.scorecard_sync?.pending?.length?'se-team-gap':''}" data-cw-fixture="${seEsc(f.id)}"><div class="se-team-head se-team-fixture-head"><div class="se-team-title"><h2>${seEsc(d.grade)}</h2></div>${seCanRecordFixtureResults(f)?seFixtureDetailsAction(f,true):''}<p>${d.competition?seEsc(d.competition)+' · ':''}v ${seEsc(d.opposition)}</p>${seFormatLabel(d)?`<p>${seEsc(seFormatLabel(d))}</p>`:''}<p>${d.days.map((x,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+seDate(x.date)+(x.start?' · '+x.start:'')).join(' / ')}</p>${d.ground?`<p>${seEsc(d.ground)}</p>`:''}${d.meeting?`<p>${seEsc(d.meeting)}</p>`:''}</div>${seScorecardNote(f)}${d.cancelled?'<p>Match cancelled</p>':`<ol>${f.published.slots.map(slot=>`<li class="se-published-name">${seSnapshotName(f.published,slot.d1,0)}${slot.d1===own?.id?' · you':''}${seSnapshotSplit(f.published,slot)?` <span class="se-date-tag">Day 1</span><br>${seSnapshotName(f.published,slot.d2,1)}${slot.d2===own?.id?' · you':''} <span class="se-date-tag">Day 2</span>`:''}</li>`).join('')}</ol>`}<p class="se-muted">${seEsc(sePublicationStamp(f,s.data))}</p><div class="se-actions">${f.can_chat?`<button class="btn" data-se-chat="${f.id}">${seMatchConversationClosed(f,s.data)?'View conversation':'Match conversation'}</button>`:''}</div></section>`;}).join('')}</div>`:'<div class="se-card se-empty">No teams published for this week.</div>');
@@ -20011,7 +20011,7 @@ async function loadSocialFeatures(){
  const current=()=>state===socialState&&scope===selectionsScopeKey()&&request===requestedFeatureScope()&&ensureSelections().data?.socials===true;
  const task={scope,request,state};socialEngineTask=task;
  task.promise=(async()=>{
-  const module=await import('./social-workspace.js?v=0.8.62.301');
+  const module=await import('./social-workspace.js?v=0.8.62.302');
   if(!current())return null;
   const engine=module.createSocialWorkspace({appNavigationBack,club,drawSelections,ensureSelections,matchReviewExtractUrl,mountScorecardTeam,normaliseHex,platformRole,recordSelectionNavigation,renderSocialPlatformSetup,restoreSocialNavigation,seDownload,seEsc,seFormatLabel,seNotice,seOpt,seReload,selectionsScopeKey,session,socialCanLeave,socialEnsure,socialHere,socialOpenFixture,socialState,supabase});
   await engine.loadSocialFeatures();if(!current())return null;

@@ -46,9 +46,9 @@ function socialStyles(){return `<style>.social-create{margin:18px 0}.social-read
  </style>`;}
 function socialTeamReady(s){
  if(!['graphics','managers'].includes(s.view))return '';
- const calendar=socialFixtureCalendar(s).filter(f=>!socialCalendarCompleted(s,f)),dates=[...new Set(calendar.map(f=>f.date))].sort(),date=dates.includes(s.date)?s.date:dates[0],ready=calendar.filter(f=>f.date===date&&f.published),waiting=calendar.filter(f=>f.date===date&&!f.published);
+ const calendar=socialFixtureCalendar(s).filter(f=>!socialCalendarCompleted(s,f)),dates=[...new Set(calendar.map(f=>f.date))].sort(),date=dates.includes(s.date)?s.date:dates[0],mode=s.teamWorkflow?.teamScope||'date',ready=calendar.filter(f=>f.published&&(mode==='all'||(mode==='teams'?s.selected.has(f.id):f.date===date))),waiting=mode==='date'?calendar.filter(f=>f.date===date&&!f.published):[];
  if(!ready.length)return '';
- return `<aside class="social-ready" role="status"><strong>${ready.length} published team${ready.length===1?'':'s'} ready for posts</strong><span>${seEsc(socialDate(date))}${waiting.length?' · '+waiting.length+' awaiting publication':''}</span></aside>`;
+ return `<aside class="social-ready" role="status"><strong>${ready.length} published team${ready.length===1?'':'s'} ready for posts</strong><span>${mode==='all'?'All upcoming dates':mode==='teams'?'Chosen teams':seEsc(socialDate(date))}${waiting.length?' · '+waiting.length+' awaiting publication':''}</span></aside>`;
 }
 function socialDraw(s){
  if(!socialHere(s)||!s.data)return;const host=document.getElementById('seContent');
@@ -86,7 +86,7 @@ function socialNames(card){
   .sort((a,b)=>Number(!a.id)-Number(!b.id)||compare(socialSurname(a.name),socialSurname(b.name))||compare(a.name,b.name));
 }
 function socialPhotoId(s,card){return socialFeatured(s,card).id;}
-function socialSelection(s){return s.data.fixtures.filter(f=>s.selected.has(f.id)&&f.published.details.days[0].date===s.date&&!socialFixtureCompleted(s,f));}
+function socialSelection(s){return s.data.fixtures.filter(f=>s.selected.has(f.id)&&f.published&&!socialFixtureCompleted(s,f)).sort((a,b)=>a.published.details.days[0].date.localeCompare(b.published.details.days[0].date)||a.published.details.grade.localeCompare(b.published.details.grade,'en',{numeric:true})||a.id.localeCompare(b.id));}
 function socialFixtureCalendar(s){
  return s.data.fixture_calendar||s.data.fixtures.map(f=>({id:f.id,date:f.published.details.days[0].date,grade:f.published.details.grade,opposition:f.published.details.opposition,published:true,completed:socialFixtureCompleted(s,f)}));
 }
@@ -845,7 +845,7 @@ let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.301'),import('./social-team-workflow.js?v=0.8.62.288'),import('./social-publishing.js?v=0.8.62.301'),import('./team-of-week.js?v=0.8.62.288'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.301'),import('./social-team-workflow.js?v=0.8.62.302'),import('./social-publishing.js?v=0.8.62.302'),import('./team-of-week.js?v=0.8.62.288'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];

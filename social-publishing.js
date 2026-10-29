@@ -153,7 +153,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
    const ids=new Set(post.fixtures.map(f=>f.id)),fixtures=s.data.fixtures.filter(f=>ids.has(f.id)&&!completedFixtures(s,[f]));
    if(!fixtures.length)throw Error('These fixtures are completed. Check and correct or remove the original announcement in the social account.');
    const firstDate=fixtures.map(f=>f.published.details.days[0].date).sort()[0];
-   s.date=firstDate;s.selected=new Set(fixtures.filter(f=>f.published.details.days[0].date===firstDate).map(f=>f.id));
+   s.date=firstDate;s.selected=new Set(fixtures.map(f=>f.id));Object.assign(s.teamWorkflow||={}, {teamScope:'teams',step:'review',fixture:'',day:0,teamsOpen:false});
    p.nextCaption='🏏 UPDATED TEAMS 🏏\n\nPlease use these updated team lists for the round.'+(s.design.footer?'\n\n'+s.design.footer:'');
    s.view='graphics';p.returnView=null;h.message(s,'Current teams selected. Check the graphics, then Review & post. The correction task stays open until the old announcement is handled.');
   }catch(e){p.attentionError=e.message;}
@@ -177,7 +177,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
 
  function mount(s){
   const p=state(s),host=document.getElementById('socialTeamPost')||document.getElementById('socialContent');if(!host)return;
-  const available=s.data.fixtures.filter(f=>f.published.details.days[0].date===s.date&&!completedFixtures(s,[f])),selected=h.selection(s),count=selected.flatMap(h.cards).length,caption=teamCaption(s);
+  const available=s.data.fixtures.filter(f=>f.published&&!completedFixtures(s,[f])),selected=h.selection(s),count=selected.flatMap(h.cards).length,caption=teamCaption(s);
   const status=p.loading?'Checking accounts…':p.error?esc(p.error):connected(p)?esc(p.context.connection.page_name)+(p.context.connection.instagram_name?' · @'+esc(p.context.connection.instagram_name):''):p.context?.configured===false?'Direct posting setup pending. You can download the graphics and blurb.':'Connect your club accounts in Social accounts to post directly.';
   host.innerHTML=css+`<section class="sp-panel" aria-label="Team posting">${available.length?`<h3>Team post</h3><label for="spTeamCaption">Blurb for the whole post</label><textarea class="sp-caption" id="spTeamCaption" rows="4" maxlength="2200">${esc(caption)}</textarea><p class="sp-count" id="spTeamCaptionCount">${Array.from(caption).length} / 2,200 characters</p><div class="social-actions"><button class="btn secondary" id="spReview" ${!count||count>10?'disabled':''}>Review post · ${count} ${count===1?'image':'images'}</button><button class="btn ghost" id="spCopyTeamBlurb">Copy blurb</button></div>${count>10?'<p class="sp-warning">Choose up to ten images for one post. Different two-day line-ups count separately.</p>':''}<p id="spTeamCopyStatus" class="sp-count" role="status"></p><p class="sp-count">${status}</p>`:''}${attentionButton(s)}${history(s)}</section>`;
   document.getElementById('spTeamCaption')?.addEventListener('input',e=>{document.getElementById('spCopyTeamBlurb').textContent='Copy blurb';document.getElementById('spTeamCopyStatus').textContent='';saveTeamCaption(s,e.target.value);document.getElementById('spTeamCaptionCount').textContent=Array.from(e.target.value).length+' / 2,200 characters';});
@@ -221,7 +221,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
  }
  async function startReview(s){
   const p=state(s),fixtures=h.selection(s);if(s.busy||s.pending)return;
-  if(!fixtures.length){h.message(s,(s.data.fixture_calendar||[]).some(f=>f.date===s.date&&!f.published)?'Publish the teams for this date in Selection board first.':'Choose at least one grade first.');return;}
+  if(!fixtures.length){h.message(s,(s.data.fixture_calendar||[]).some(f=>f.date===s.date&&!f.published)?'Publish the teams for this date in Selection board first.':'Choose at least one published team first.');return;}
   if(completedFixtures(s,fixtures)){completedWarning(s);return;}
   const cards=fixtures.flatMap(h.cards);if(cards.some(card=>s.photoPositions?.[card.key])){h.message(s,'Confirm the photo position before preparing your post.');return;}if(cards.length>10){h.message(s,'Choose up to ten images for one post. Different two-day line-ups count as separate images.');return;}
   if(fixtures.some(f=>f.feature_valid===false)){h.message(s,'Choose a featured player who is in the current team, then review again.');return;}
