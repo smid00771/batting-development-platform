@@ -28,7 +28,7 @@ function setup({twoDay=false,split=false,frame='cutout',left=false,source=app}={
   socialFitImage:(ctx,img,x,y,w,h)=>ctx.drawImage(img,x,y,w,h),
   socialRPC:async(s,action,data)=>{calls.push({action,data:structuredClone(data)});if(action==='context')return structuredClone(server);if(receipts.has(data.request_id))return receipts.get(data.request_id);
    assert.equal(action,'feature');const target=server.fixtures.find(x=>x.id===data.fixture_id);for(const day of data.days){const old=target.features.find(x=>x.day===day);if((old?.revision||0)!==data.revisions['d'+day])throw Error('Featured photo changed');}
-   for(const day of data.days){const old=target.features.find(x=>x.day===day);Object.assign(old,{mode:data.mode,roster_id:data.roster_id,asset_id:data.asset_id,photo_x:data.photo_x,photo_y:data.photo_y,revision:old.revision+1});}
+   for(const day of data.days){const old=target.features.find(x=>x.day===day);Object.assign(old,{mode:data.mode,roster_id:data.roster_id,asset_id:data.asset_id,photo_x:data.photo_x,photo_y:data.photo_y,photo_scale:data.photo_scale??old.photo_scale,revision:old.revision+1});}
    const result={saved:true};receipts.set(data.request_id,result);if(fail){fail=false;throw Error('Response lost');}return result;
   }});
  vm.runInContext(code(source),c);
@@ -86,27 +86,27 @@ test('a lost save response retries the identical request and increments the save
  assert.equal(h.s.data.fixtures[0].features[0].revision,2);assert.equal(h.s.pending,null);
 });
 
-test('sliders and reset only preview until Confirm saves the photo position',async()=>{
+test('visible size and position sliders preview until Save persists that team photo',async()=>{
  const h=setup(),card=h.card();
  for(const axis of ['x','y']){h.inputs.push({dataset:{socialPosition:card.key,axis},value:0,setAttribute(){},focus(){}});h.outputs.push({dataset:{axis},textContent:''});}
  h.resets.push({dataset:{socialPositionReset:card.key},disabled:true});h.panels.push({dataset:{socialPositionPanel:card.key},open:true});
- h.c.socialBindPhotoPosition(h.s,key=>key===card.key?card:null);h.panels[0].ontoggle();
+ h.c.socialBindPhotoPosition(h.s,key=>key===card.key?card:null);
  h.inputs[0].value=-9;h.inputs[0].oninput();h.inputs[1].value=5;h.inputs[1].oninput();
  assert.equal(h.calls.length,0);assert.equal(h.outputs[0].textContent,'9% left');assert.equal(h.outputs[1].textContent,'5% down');
  assert.equal(h.frames.length,1);h.frames.shift()();await new Promise(setImmediate);
  assert.equal(h.preview.dataset.photoShiftX,'-9');assert.equal(h.preview.dataset.photoShiftY,'5');
  h.inputs[1].onchange();await new Promise(setImmediate);assert.equal(h.calls.length,0);
  await h.c.socialSavePhotoPosition(h.s,h.card(),h.c.socialPhotoPosition(h.s,h.card()));assert.equal(h.calls[0].data.photo_y,5);
- assert.match(h.s.notice,/Photo position confirmed/);assert.ok(h.s.photoPositionConfirmed[card.key]);
+ assert.match(h.s.notice,/Photo adjustments saved/);assert.ok(h.s.photoPositionConfirmed[card.key]);
  h.summary.textContent='Photo position confirmed ✓ · Adjust';
  const fresh=h.card();h.c.socialBindPhotoPosition(h.s,key=>key===fresh.key?fresh:null);h.resets[0].onclick();await new Promise(setImmediate);
- assert.equal(h.summary.textContent,'Move photo');
+ assert.equal(h.s.photoPositions[card.key].x,0);
  assert.equal(h.s.data.fixtures[0].features[0].photo_x,-9);assert.equal(h.s.data.fixtures[0].features[0].photo_y,5);
  await h.c.socialSavePhotoPosition(h.s,h.card(),h.c.socialPhotoPosition(h.s,h.card()));
  assert.equal(h.s.data.fixtures[0].features[0].photo_x,0);assert.equal(h.s.data.fixtures[0].features[0].photo_y,0);
  assert.equal(h.s.photoPositionOpen[card.key],false);
  assert.doesNotMatch(h.c.socialPhotoPositionControls(h.s,h.card()),/data-social-position-panel="[^"]+" open/);
- assert.match(h.c.socialPhotoPositionControls(h.s,h.card()),/Photo position confirmed ✓ · Adjust/);
+ assert.match(h.c.socialPhotoPositionControls(h.s,h.card()),/Photo adjustments saved ✓/);assert.doesNotMatch(h.c.socialPhotoPositionControls(h.s,h.card()),/<details|<summary/);assert.match(h.c.socialPhotoPositionControls(h.s,h.card()),/data-axis="scale"/);
 });
 
 test('confirming one grade preserves another grade’s unconfirmed photo preview',async()=>{
@@ -124,8 +124,22 @@ test('confirming one grade preserves another grade’s unconfirmed photo preview
 test('switching a player or photo starts at original placement and missing photos have no controls',()=>{
  const h=setup();const request=h.c.socialFeatureRequest(h.card(),'player','other','new-photo');
  assert.equal(request.photo_x,0);assert.equal(request.photo_y,0);
- const html=h.c.socialPhotoControls(h.s,h.card());assert.match(html,/Move photo/);assert.match(html,/left or right/);assert.match(html,/up or down/);
+ const html=h.c.socialPhotoControls(h.s,h.card());assert.match(html,/Adjust player photo/);assert.match(html,/left or right/);assert.match(html,/up or down/);
  h.s.data.assets=[];assert.equal(h.c.socialPhotoPositionControls(h.s,h.card()),'');
+});
+
+
+test('each team photo has its own saved size, with unchanged club artwork and other teams',async()=>{
+ const h=setup(),other=structuredClone(h.f);other.id='other-fixture';h.s.data.fixtures.push(other);
+ const originalRPC=h.c.socialRPC;h.c.socialRPC=async(s,action,data)=>{const result=await originalRPC(s,action,data);if(action==='context')result.fixtures.push(structuredClone(other));return result;};
+ const before=h.canvas(),otherBefore=h.canvas();await h.c.socialRender(h.s,h.card(),before);await h.c.socialRender(h.s,h.c.socialCards(other)[0],otherBefore);
+ h.c.socialPreviewPhotoPosition(h.s,h.card(),{x:-4,y:3,scale:135});assert.equal(h.calls.length,0);
+ assert.equal(await h.c.socialSavePhotoPosition(h.s,h.card(),h.c.socialPhotoPosition(h.s,h.card())),true);
+ const after=h.canvas(),otherAfter=h.canvas();await h.c.socialRender(h.s,h.card(),after);await h.c.socialRender(h.s,h.c.socialCards(h.s.data.fixtures[1])[0],otherAfter);
+ assert.equal(h.s.data.fixtures[0].features[0].photo_scale,135);assert.equal(h.s.design.photo_scale,110);
+ assert.ok(Math.abs(Number(after.dataset.photoWidth)/Number(before.dataset.photoWidth)-135/110)<.001);
+ assert.equal(otherAfter.dataset.photoWidth,otherBefore.dataset.photoWidth);assert.equal(otherAfter.dataset.photoTop,otherBefore.dataset.photoTop);
+ const split=setup({twoDay:true});split.f.features[1].photo_scale=125;assert.equal(split.c.socialCards(split.f).length,2,'Different day sizes require separate graphics');
 });
 
 test('busy or unconfirmed saves cannot be overwritten by a new position',async()=>{

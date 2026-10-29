@@ -23,13 +23,13 @@ begin
  insert into club_selection_private.fixtures(id,club_id,details,slots,publication) values(fid,c,details,slots,1),(other_fid,c,details||jsonb_build_object('opposition','Different synthetic visitors'),slots,1);
  update club_selection_private.fixtures set published=club_selection_private.draft_snapshot(id) where id in(fid,other_fid);
  old_key:=club_selection_private.social_artwork_key(fid);
- data:=jsonb_build_object('request_id',gen_random_uuid(),'fixture_id',fid,'publication',1,'days',jsonb_build_array(1,2),'revisions',jsonb_build_object('d1',0,'d2',0),'mode','player','roster_id',players[1],'photo_x',-9,'photo_y',6);
+ data:=jsonb_build_object('request_id',gen_random_uuid(),'fixture_id',fid,'publication',1,'days',jsonb_build_array(1,2),'revisions',jsonb_build_object('d1',0,'d2',0),'mode','player','roster_id',players[1],'photo_x',-9,'photo_y',6,'photo_scale',125);
  result:=public.club_socials_api(c,'feature',data);assert result->>'saved'='true';
  assert public.club_socials_api(c,'feature',data)=result;
- assert (select count(*)=2 and bool_and(photo_x=-9 and photo_y=6 and revision=1) from club_selection_private.social_features where fixture_id=fid);
+ assert (select count(*)=2 and bool_and(photo_x=-9 and photo_y=6 and photo_scale=125 and revision=1) from club_selection_private.social_features where fixture_id=fid);
  ctx:=public.club_socials_api(c,'context','{}');
  select x into feature from jsonb_array_elements(ctx->'fixtures') x where x->>'id'=fid::text;
- assert jsonb_array_length(feature->'features')=2 and feature->'features'->0->>'photo_x'='-9' and feature->'features'->0->>'photo_y'='6';
+ assert jsonb_array_length(feature->'features')=2 and feature->'features'->0->>'photo_x'='-9' and feature->'features'->0->>'photo_y'='6' and feature->'features'->0->>'photo_scale'='125';
  new_key:=club_selection_private.social_artwork_key(fid);assert new_key<>old_key;
  rejected:=false;begin perform public.club_socials_api(c,'validate_export',jsonb_build_object('fixtures',jsonb_build_array(jsonb_build_object('id',fid,'artwork_key',old_key))));exception when raise_exception then rejected:=true;end;assert rejected;
  assert public.club_socials_api(c,'validate_export',jsonb_build_object('fixtures',jsonb_build_array(jsonb_build_object('id',fid,'artwork_key',new_key))))->>'current'='true';
@@ -40,18 +40,27 @@ begin
  rejected:=false;begin perform public.club_socials_api(c,'feature',data||jsonb_build_object('request_id',gen_random_uuid()));exception when raise_exception then rejected:=sqlerrm like 'Featured photo changed%';end;assert rejected;
  rejected:=false;begin perform public.club_socials_api(c,'feature',data||jsonb_build_object('request_id',gen_random_uuid(),'publication',2));exception when raise_exception then rejected:=sqlerrm like 'Published team changed%';end;assert rejected;
  assert (select bool_and(revision=1 and photo_y=6) from club_selection_private.social_features where fixture_id=fid);
+ -- Size uses bounded integers and cannot change either day on rejection.
+ foreach bad in array array['49'::jsonb,'151'::jsonb,'100.5'::jsonb,'"100"'::jsonb,'null'::jsonb] loop
+  rejected:=false;begin perform public.club_socials_api(c,'feature',data||jsonb_build_object('request_id',gen_random_uuid(),'revisions',jsonb_build_object('d1',1,'d2',1),'photo_scale',bad));exception when raise_exception then rejected:=true;end;assert rejected;
+ end loop;
  -- Moving one day leaves its other day and every other fixture unchanged.
- data:=data||jsonb_build_object('request_id',gen_random_uuid(),'days',jsonb_build_array(1),'revisions',jsonb_build_object('d1',1),'photo_x',5,'photo_y',-7);
+ data:=data||jsonb_build_object('request_id',gen_random_uuid(),'days',jsonb_build_array(1),'revisions',jsonb_build_object('d1',1),'photo_x',5,'photo_y',-7,'photo_scale',90);
  perform public.club_socials_api(c,'feature',data);
- assert (select photo_x=5 and photo_y=-7 and revision=2 from club_selection_private.social_features where fixture_id=fid and day=1);
- assert (select photo_x=-9 and photo_y=6 and revision=1 from club_selection_private.social_features where fixture_id=fid and day=2);
+ assert (select photo_x=5 and photo_y=-7 and photo_scale=90 and revision=2 from club_selection_private.social_features where fixture_id=fid and day=1);
+ assert (select photo_x=-9 and photo_y=6 and photo_scale=125 and revision=1 from club_selection_private.social_features where fixture_id=fid and day=2);
  assert not exists(select 1 from club_selection_private.social_features where fixture_id=other_fid);
  perform set_config('request.jwt.claim.sub',ordinary::text,true);
  rejected:=false;begin perform public.club_socials_api(c,'feature',data||jsonb_build_object('request_id',gen_random_uuid(),'revisions',jsonb_build_object('d1',2)));exception when raise_exception then rejected:=true;end;assert rejected;
  perform set_config('request.jwt.claim.sub',adm::text,true);
  -- Reset and old clients that omit the new coordinates both use original placement.
- perform public.club_socials_api(c,'feature',(data-'photo_x'-'photo_y')||jsonb_build_object('request_id',gen_random_uuid(),'revisions',jsonb_build_object('d1',2)));
- assert (select photo_x=0 and photo_y=0 and revision=3 from club_selection_private.social_features where fixture_id=fid and day=1);
+ perform public.club_socials_api(c,'feature',(data-'photo_x'-'photo_y'-'photo_scale')||jsonb_build_object('request_id',gen_random_uuid(),'revisions',jsonb_build_object('d1',2)));
+ assert (select photo_x=0 and photo_y=0 and photo_scale=90 and revision=3 from club_selection_private.social_features where fixture_id=fid and day=1);
+ -- Replacing the person resets size to the club default, without touching day two.
+ perform public.club_socials_api(c,'feature',(data-'photo_x'-'photo_y'-'photo_scale')||jsonb_build_object('request_id',gen_random_uuid(),'roster_id',players[2],'revisions',jsonb_build_object('d1',3)));
+ assert (select photo_scale is null and photo_x=0 and photo_y=0 and revision=4 from club_selection_private.social_features where fixture_id=fid and day=1);
+ assert (select photo_scale=125 and revision=1 from club_selection_private.social_features where fixture_id=fid and day=2);
+ assert not has_function_privilege('authenticated','club_selection_private.social_set_feature(uuid,jsonb,uuid)','execute');
 end
 $tests$;
 rollback;
