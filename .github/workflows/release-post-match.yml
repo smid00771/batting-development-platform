@@ -1,0 +1,35 @@
+name: Verify post-match achievement alerts
+on:
+  push:
+    branches: ["codex/post-match-milestone-alerts"]
+    paths: [".github/release-post-match.patch.gz.b64", ".github/workflows/release-post-match.yml"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: base64 --decode .github/release-post-match.patch.gz.b64 | gzip -d | git apply --binary
+      - run: npm ci --ignore-scripts
+      - run: npm install --no-save --package-lock=false @electric-sql/pglite@0.5.10
+      - name: Verify post-match behavior and unchanged demo
+        run: |
+          node --test Tests/milestone_staff_database_test.cjs
+          node Scripts/build-demo.mjs --check
+      - name: Commit verified source
+        run: |
+          git add 'AGENTS.md' 'Database/post_match_milestone_alerts.sql' 'Reviews/2026-10-30-post-match-milestone-alerts.md' 'Tests/milestone_staff_database_test.cjs' 'Tests/post_match_milestone_test.sql' 'supabase/migrations/20261029221647_post_match_milestone_alerts.sql'
+          git rm .github/release-post-match.patch.gz.b64 .github/workflows/release-post-match.yml
+          test "$(git write-tree)" = "60b885c7f3525498854b0b16f9ffbd99090faeb8"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Apply verified post-match achievement alerts"
+          git push origin HEAD:${{ github.ref_name }}
