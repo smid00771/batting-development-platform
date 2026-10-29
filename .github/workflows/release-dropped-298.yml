@@ -1,0 +1,39 @@
+name: Verify dropped-player reminders
+on:
+  push:
+    branches: [codex/dropped-player-reminders-298]
+    paths: [.github/release-dropped-298.patch.gz.b64, .github/workflows/release-dropped-298.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply prepared source
+        run: |
+          base64 -d .github/release-dropped-298.patch.gz.b64 | gzip -d > /tmp/dropped-298.patch
+          git apply /tmp/dropped-298.patch
+          npm ci --ignore-scripts
+          node --check app.js
+          node Scripts/build-demo.mjs
+          node Scripts/build-demo.mjs --check
+          git diff --check
+      - name: Verify dropped reminders and selection regressions
+        run: |
+          node --test Tests/selection_board_responsiveness_test.cjs
+          node --test --test-concurrency=1 Tests/dropped_player_reminders_test.cjs Tests/selection_analysis_on_demand_test.cjs Tests/selection_returning_quiet_test.cjs Tests/selection_team_moves_demo_test.cjs Tests/selection_groups_board_test.cjs Tests/captain_board_followups_test.cjs Tests/demo_roles_integration_test.cjs Tests/demo_navigation_integration_test.cjs
+      - name: Commit verified release
+        run: |
+          git config user.name "Mirelion release verification"
+          git config user.email "actions@users.noreply.github.com"
+          git add AGENTS.md Database/dropped_player_reminders.sql Demo/build-manifest.json Demo/fixtures.js Reviews/2026-10-29-dropped-player-reminders-298.md Tests/dropped_player_reminders_database_test.sql Tests/dropped_player_reminders_test.cjs Tests/selection_team_moves_demo_test.cjs app-start.js app.html app.js demo.html supabase/migrations/20261029070829_dropped_player_reminders.sql
+          git rm .github/release-dropped-298.patch.gz.b64 .github/workflows/release-dropped-298.yml
+          test "$(git write-tree)" = "837b1c594920e6174bfa883ca35a18238a1ac4e2"
+          git commit -m "Verify dropped-player reminders 0.8.62.298"
+          git push origin HEAD:codex/dropped-player-reminders-298
