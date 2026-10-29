@@ -43,3 +43,20 @@ test('missing latest evidence blocks fallback and unfinished two-day teams canno
  })()`);
  assert.equal(counts.missing,0);assert.equal(counts.ongoing,0);assert.deepEqual(h.errors,[]);
 });
+
+test('explicit equal Dev levels find a fourth-grade drop even with a blank imported competition',async t=>{
+ const h=await openDemo('selections');t.after(h.close);const w=h.window;
+ const result=w.eval(`(()=>{
+  const fourth=demoSelections.fixtures.find(f=>f.details.grade==='4th Grade'&&!f.id.startsWith('history-'));
+  const sky=demoSelections.fixtures.find(f=>f.details.grade==='Dev Sky'&&!f.id.startsWith('history-')),id=fourth.slots[0].d1;
+  const previous={...structuredClone(fourth),id:'explicit-prior-fourth',details:{...structuredClone(fourth.details),format:sky.details.format,days:[{date:demoAddDay(sky.details.days[0].date,-7)}]}};
+  previous.published={details:structuredClone(previous.details),slots:[{d1:id,d2:null}]};demoSelections.fixtures.push(previous);
+  sky.slots[0]={d1:id,d2:null};sky.details.competition='';
+  demoSelections.access.grade_levels=['','Example District'].flatMap(competition=>['Dev Navy','Dev Sky'].map(grade=>({competition,grade,level:5})));
+  const moves=()=>demoConversations(session.user.id).filter(m=>m.fixture_id===sky.id&&m.roster_id===id&&m.kind==='lower_grade');
+  const dropped=moves().map(m=>m.previous_grade);
+  Object.assign(previous.details,{grade:'Dev Navy',grade_group_id:'group-dev-navy'});previous.published.details=structuredClone(previous.details);
+  return {dropped,equal:moves().length};
+ })()`);
+ assert.deepEqual(Array.from(result.dropped),['4th Grade']);assert.equal(result.equal,0);assert.deepEqual(h.errors,[]);
+});
