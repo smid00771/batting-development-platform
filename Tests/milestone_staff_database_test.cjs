@@ -32,8 +32,14 @@ const db=new PGlite();
  await db.exec(fs.readFileSync('Database/mirelion_support_automation.sql','utf8'));
 
  await db.exec(fs.readFileSync('Tests/fixtures/milestone_303_baseline.sql','utf8'));
+ const originalSchedule=(await db.query("select pg_get_functiondef('club_selection_private.playhq_results_due(uuid,timestamptz,timestamptz)'::regprocedure) definition")).rows[0].definition;
  await db.exec(fs.readFileSync('Database/milestone_alerts_staff_assist.sql','utf8'));
  await db.exec(fs.readFileSync('Tests/milestone_staff_database_test.sql','utf8'));
- console.log('PASS: additive migration, staff-only Assist, milestone detection/deduplication, opt-in, corrections, recipient permissions, and in-play scheduling.');
+ const [before,after]=fs.readFileSync('Tests/post_match_milestone_test.sql','utf8').split('-- APPLY POST-MATCH MIGRATION');
+ await db.exec(before);
+ await db.exec(fs.readFileSync('Database/post_match_milestone_alerts.sql','utf8'));
+ assert.equal((await db.query("select pg_get_functiondef('club_selection_private.playhq_results_due(uuid,timestamptz,timestamptz)'::regprocedure) definition")).rows[0].definition,originalSchedule,'Results scheduling exactly matches the original policy');
+ await db.exec(after);
+ console.log('PASS: staff-only Assist, post-match achievement alerts, normal results scheduling, no extra downloads, rollout leases/backoff, direct award creation, deduplication and corrections.');
  await db.close();
 })().catch(e=>{console.error(e.message,e.detail||'',e.where||'');process.exitCode=1;});
