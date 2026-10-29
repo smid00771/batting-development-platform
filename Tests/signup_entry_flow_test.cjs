@@ -56,6 +56,6 @@ for(const file of ['app.js','demo.html']){
   await c.renderPlayerJoinRoute('invite&token');const button=document.querySelector('#completePlayerJoin');await button.onclick();assert.equal(button.disabled,false);assert.equal(c.authActionInFlight,false);assert.match(document.querySelector('#completePlayerJoinStatus').textContent,/Try again later/);
   c.session={user:{id:'user-b'}};await button.onclick();assert.equal(joinCalls,1);assert.equal(stats().loaded,0);assert.match(document.querySelector('#completePlayerJoinStatus').textContent,/account changed/);
   c.session=signedIn;c.supabase.rpc=async(name,args)=>{assert.equal(name,'join_club_as_player');assert.equal(args.p_token,'invite&token');assert.equal(args.p_display_name,'Sample Player');return {data:'new-club'};};
-  await button.onclick();assert.equal(stats().loaded,1);assert.equal(stats().forgotten,1);assert.equal(c.currentTab,'teams');assert.equal(c.joinedAvailabilityClub,'new-club');assert.equal(c.localStorage.getItem('bdp-club-id'),'new-club');assert.equal(c.location.search,'');assert.equal(c.authActionInFlight,false);
+  await button.onclick();assert.equal(stats().loaded,1);assert.equal(stats().forgotten,1);assert.equal(c.currentTab,'playerhome');assert.equal(c.localStorage.getItem('bdp-club-id'),'new-club');assert.equal(c.location.search,'');assert.equal(c.authActionInFlight,false);
  });
 }

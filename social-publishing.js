@@ -42,7 +42,7 @@ export function createSocialPublishing(h){
   const p=state(s);if(p.loading)return;p.loading=true;if(redraw&&check&&h.here(s))h.draw(s);
   try{
    const old=p.context;
-   p.context=demo?{configured:true,admin:true,can_connect:true,can_delegate:true,can_hand_back:!!p.demoDelegation?.delegate_id,delegation:p.demoDelegation||{revision:0},delegation_members:s.data.members||[],timezone:'Australia/Sydney',connection:{page_id:'demo',page_name:'Harbour Cricket Club',instagram_id:'demo',instagram_name:'harbourcricket',status:'connected',revision:1},posts:[],health:{checked_at:new Date().toISOString(),facebook:{state:'ready',message:'Example connection only.'},instagram:{state:'ready',message:'Example connection only.'}}}:await invoke(s,check?'check_connection':'status');
+   p.context=demo?{configured:true,admin:true,can_connect:true,can_delegate:true,can_hand_back:!!p.demoDelegation?.delegate_id,delegation:p.demoDelegation||{revision:0},delegation_members:s.data.members||[],timezone:'Australia/Sydney',connection:{page_id:'demo',page_name:'Harbour Cricket Club',instagram_id:'demo',instagram_name:'harbourcricket',status:'connected',revision:1},posts:old?.posts||[],health:{checked_at:new Date().toISOString(),facebook:{state:'ready',message:'Example connection only.'},instagram:{state:'ready',message:'Example connection only.'}}}:await invoke(s,check?'check_connection':'status');
    if(check||demo)p.checkedAt=Date.now();
    if(p.context.connection?.status==='connected'&&p.context.connection.revision!==p.connectionRevisionAtStart)p.connectStarted=0;
    else if(old?.connection?.revision===p.context.connection?.revision&&old?.connection?.status===p.context.connection?.status&&old?.health)p.context.health=old.health;
@@ -91,8 +91,35 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
   let link='';try{const u=new URL(d.permalink);if(u.protocol==='https:'&&!u.username&&!u.password&&(d.platform==='facebook'?['facebook.com','www.facebook.com']:['instagram.com','www.instagram.com']).includes(u.hostname))link=`<a href="${esc(u.href)}" target="_blank" rel="noopener noreferrer">View post ↗</a>`;}catch{}
   return `<div class="sp-result"><div><strong>${label(d.platform)}</strong><p class="${d.state==='published'?'sp-success':d.state==='uncertain'?'sp-warning':''}">${esc(d.state==='queued'&&scheduled(post)?'Scheduled':names[d.state]||d.state)}</p>${d.message?`<small>${esc(d.message)}</small>`:''}${d.state==='published'&&!link?'<small>Published successfully. The direct link is not available yet.</small>':''}</div>${link}</div>`;
  }).join('');}
- function history(s){const p=state(s),posts=p.context?.posts||[];return `<details class="sp-history"><summary>Posting history${posts.length?' · '+posts.length:''}</summary>${posts.length?posts.map(j=>`<div class="sp-result"><div><strong>${esc(j.images?.map(i=>i.label).join(', ')||'Team announcement')}</strong><p class="sp-count">${esc(new Date(j.created_at).toLocaleString('en-AU'))} · ${j.state==='draft'?'Draft — not posted':scheduled(j)?'Scheduled: '+esc(scheduleLabel(s,j.scheduled_for)):(j.destinations||[]).map(d=>label(d.platform)+': '+({published:'posted',uncertain:'check account',failed:'not posted',blocked:'needs attention'}[d.state]||'in progress')).join(' · ')}</p></div><button class="btn ghost" data-sp-open="${esc(j.id)}">${j.state==='draft'?'Open review':'View result'}</button></div>`).join(''):'<p>No posting requests yet.</p>'}</details>`;}
- function bindHistory(s){document.querySelectorAll('[data-sp-open]').forEach(b=>b.onclick=()=>buttonAction(b,'Loading…',()=>openPost(s,b.dataset.spOpen)));}
+ function history(s){const p=state(s),posts=p.context?.posts||[];return `<details class="sp-history"><summary>Posting history${posts.length?' · '+posts.length:''}</summary>${posts.length?posts.map(j=>`<div class="sp-result"><div><strong>${esc(j.images?.map(i=>i.label).join(', ')||'Team announcement')}</strong><p class="sp-count">${esc(new Date(j.created_at).toLocaleString('en-AU'))} · ${j.state==='draft'?'Draft — not posted':scheduled(j)?'Scheduled: '+esc(scheduleLabel(s,j.scheduled_for)):(j.destinations||[]).map(d=>label(d.platform)+': '+({published:'posted',uncertain:'check account',failed:'not posted',blocked:'needs attention'}[d.state]||'in progress')).join(' · ')}</p></div><div class="social-actions"><button class="btn ghost" data-sp-open="${esc(j.id)}" ${j.deletion_pending?'disabled':''}>${j.state==='draft'?'Open review':'View result'}</button>${j.can_delete||j.deletion_pending||demo&&(j.destinations||[]).every(d=>d.state==='published')?`<button class="btn ghost" data-sp-delete="${esc(j.id)}">${j.deletion_pending?'Retry delete':'Delete saved post'}</button>`:''}</div></div>`).join(''):'<p>No posting requests yet.</p>'}</details>`;}
+ function bindDeleteHistory(s){
+  document.querySelectorAll('[data-sp-delete]').forEach(b=>b.onclick=async()=>{
+    const p=state(s),post=p.context?.posts?.find(j=>j.id===b.dataset.spDelete);
+    if(!post||s.busy||s.pending||!h.here(s))return;
+    if(!post.deletion_pending&&!confirm('Delete this saved post and its image files from Mirelion? This frees storage. Posts already on Facebook or Instagram stay there.'))return;
+    s.busy=true;h.lock(true);b.disabled=true;b.textContent='Deleting…';
+    try{
+      if(demo){post.deletion_pending=true;for(const img of post.images||[])if(img.url?.startsWith('blob:'))URL.revokeObjectURL(img.url);}
+      else{
+        const removal=await rpc(s,'delete_post',{id:post.id});if(!h.here(s))return;post.deletion_pending=true;
+        if(!removal.deleted){
+          const removed=await supabase.storage.from(removal.bucket).remove(removal.paths);
+          if(removed.error)throw Error(removed.error.message);
+          if(!h.here(s))return;
+          const finished=await rpc(s,'delete_post',{id:post.id,finish:true});
+          if(!finished.deleted)throw Error('The saved post deletion is not confirmed yet.');
+        }
+      }
+      if(!h.here(s))return;
+      p.context.posts=p.context.posts.filter(j=>j.id!==post.id);
+      if(p.review?.id===post.id)p.review=null;
+      try{localStorage.removeItem('social-post-caption:'+s.scope+':'+post.id);}catch{}
+      h.message(s,'Saved post deleted. Its stored image files have been removed.');
+    }catch(error){if(h.here(s))h.message(s,'Delete not confirmed. '+error.message+' Retry from Posting history.');}
+    finally{s.busy=false;if(h.here(s)){h.lock(false);h.draw(s);}}
+  });
+ }
+ function bindHistory(s){bindDeleteHistory(s);document.querySelectorAll('[data-sp-open]').forEach(b=>b.onclick=()=>buttonAction(b,'Loading…',()=>openPost(s,b.dataset.spOpen)));}
  function attentionButton(s){const n=state(s).context?.attention?.length||0;return n?`<button class="btn ghost" id="spAttention">Needs attention · ${n}</button>`:'';}
  function safePostLink(value,platform){try{const u=new URL(value);if(u.protocol==='https:'&&!u.username&&!u.password&&(platform==='facebook'?['facebook.com','www.facebook.com']:['instagram.com','www.instagram.com']).includes(u.hostname))return `<a href="${esc(u.href)}" target="_blank" rel="noopener noreferrer">View announcement ↗</a>`;}catch{}return '';}
  async function refreshContext(s){const p=state(s);if(!demo){p.context={...p.context,...await rpc(s,'context')};p.loadedAt=Date.now();}return p.context;}
@@ -165,7 +192,7 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
  function completedWarning(s){const message='This fixture is completed. Its team announcement cannot be posted or reposted.';h.message(s,message);window.alert(message);}
  function reviewCompleted(s,r){const ids=r.fixtures.filter(f=>f.source_type!=='award').map(f=>f.id);return completedFixtures(s,s.data.fixtures.filter(f=>ids.includes(f.id)))||(s.data.fixture_calendar||[]).some(f=>ids.includes(f.id)&&f.completed);}
  function awardsHistory(s,host){
-  if(!host)return;const p=state(s);host.innerHTML=css+history(s);host.querySelectorAll('[data-sp-open]').forEach(b=>b.onclick=()=>{p.returnView='award_collection';void buttonAction(b,'Loading…',()=>openPost(s,b.dataset.spOpen));});
+  if(!host)return;const p=state(s);host.innerHTML=css+history(s);bindDeleteHistory(s);host.querySelectorAll('[data-sp-open]').forEach(b=>b.onclick=()=>{p.returnView='award_collection';void buttonAction(b,'Loading…',()=>openPost(s,b.dataset.spOpen));});
   if((!p.context||p.loadedAt&&Date.now()-p.loadedAt>60000)&&!p.loading&&!p.error)void load(s);
  }
  async function startAwards(s,editions,caption=''){

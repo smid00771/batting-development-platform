@@ -172,6 +172,19 @@ supabase.rpc=async function(name,args={}){
    const label=demoAwardLabels[d.week_end]||={week_end:d.week_end,mode:'week_number',label:suggested,suggested_week:suggested,suggested_round:null,revision:0,needs_label:false};
    if(a==='save'){if(d.revision!==label.revision)return demoFail('Reload the shared label');Object.assign(label,{label:d.label,mode:d.mode,revision:label.revision+1});}return demoOK(label);
   }
+  if(name==='club_social_awards_api'&&a==='delete_image'){
+   if(!demoIsSocial())return demoFail('Socials Manager access required');
+   const deletions=demoSocial.imageDeletions||={};let item=deletions[d.id];
+   if(!item){
+    const context=await demoPreviousCurrentRpc(name,{...args,p_action:'context',p_data:{week_end:d.week_end||socialEnsure().awards?.end}});
+    const end=d.week_end||socialEnsure().awards?.end;
+    const source=[...(context.data?.editions||[]),...demoTeamWeek.collection(end),...demoPlayerWeek.collection(end)].find(e=>e.id===d.id);
+    if(!source)return demoFail('Saved image not found in this club');
+    item=deletions[d.id]={id:source.id,bucket:source.bucket,path:source.image_path,deleted:false};
+   }
+   if(d.finish){const download=await supabase.storage.from(item.bucket).download(item.path);if(!download.error)return demoFail('The stored file has not been deleted yet. Retry deleting the image');item.deleted=true;}
+   return demoOK(item);
+  }
   if(name==='club_social_awards_api'&&['scope_context','save_scope'].includes(a)){
    if(!demoIsSocial())return demoFail('Socials Manager access required');
    if(a==='save_scope'){const s=demoScope(d.kind);if(s.revision!==d.revision)return demoFail('Reload the selection group choice');const groups=demoGroupContext(),scope=d.award_scope,list=scope.mode==='groups'?groups.selection_groups:groups.grades;const ids=scope.mode==='all'?[]:scope.ids.filter(id=>list.some(g=>g.id===id));if(scope.mode!=='all'&&!ids.length)return demoFail('Choose at least one group or grade');s.award_scope={mode:scope.mode,ids,grade_ids:groups.grades.filter(g=>scope.mode==='all'||scope.mode==='groups'&&ids.includes(g.selection_group_id)||scope.mode==='grades'&&ids.includes(g.id)).map(g=>g.id),key:scope.mode==='all'?'all':scope.mode+':'+ids.slice().sort().join(','),label:scope.mode==='all'?'All':list.filter(g=>ids.includes(g.id)).map(g=>g.name).join(', ')};s.revision++;}
@@ -181,6 +194,18 @@ supabase.rpc=async function(name,args={}){
    if(!demoIsSocial())return demoFail('Socials Manager access required');const result=await (name==='team_of_week_api'?demoTeamWeek:demoPlayerWeek).rpc(name,args);if(a==='context'&&result.data)demoFilterAwardContext(result.data,d.award_scope||demoScope(name==='team_of_week_api'?'team_week':'player_week').award_scope);return result;
   }
   if(name==='club_selections_api'){
+   if(['player_link_context','confirm_player_link','decline_player_link'].includes(a)){
+    if(!['player','both'].includes(membership?.involvement))return demoFail('A verified player account in this club is required');
+    const own=demoSelections.roster.find(r=>r.user_id===uid&&r.active);
+    if(own)return demoOK({status:'linked',roster_id:own.id,name:own.name,grade:own.grade});
+    const norm=value=>String(value||'').trim().replace(/\s+/g,' ').toLowerCase(),matches=demoSelections.roster.filter(r=>norm(r.name)===norm(userProfile?.display_name));
+    const declined=demoSelections.linkDeclined||={},p=matches.length===1?matches[0]:null;
+    const candidate=p&&p.active&&!p.user_id&&!p.account_email&&!p.auto_link_disabled&&!declined[uid+':'+p.id]?p:null;
+    if(a==='player_link_context')return demoOK(candidate?{status:'confirm_name',candidate:{id:p.id,name:p.name,grade:p.grade}}:{status:'club_help'});
+    if(!candidate||d.roster_id!==p.id)return demoFail('This player entry changed. Return Home to check it again');
+    if(a==='decline_player_link'){(demoSelections.linkDeclined||={})[uid+':'+p.id]=true;return demoOK({status:'club_help'});}
+    p.user_id=uid;return demoOK({status:'linked',roster_id:p.id,name:p.name,grade:p.grade});
+   }
    if(a==='access'){const result=await demoPreviousCurrentRpc(name,args);if(result.data)Object.assign(result.data,{mode:demoProduct==='select'?'standalone':'bundle',enabled:demoProduct!=='batting',batting_participant:demoProduct!=='select'});return result;}
    if(['save_board','publish','send_review','fixture_lock'].includes(a)){
     const ids=a==='save_board'?(d.fixtures||[]).map(f=>f.id):d.ids||[d.id],fixtures=demoSelections.fixtures.filter(f=>ids.includes(f.id));
@@ -204,7 +229,7 @@ supabase.rpc=async function(name,args={}){
    }
   }
   const result=await demoPreviousCurrentRpc(name,args);
-  if(name==='club_social_awards_api'&&a==='context'&&result.data){result.data.editions.push(...demoTeamWeek.collection(d.week_end),...demoPlayerWeek.collection(d.week_end));demoFilterAwardContext(result.data,d.award_scope||demoScope(d.kind).award_scope);}
+  if(name==='club_social_awards_api'&&a==='context'&&result.data){result.data.editions.push(...demoTeamWeek.collection(d.week_end),...demoPlayerWeek.collection(d.week_end));result.data.editions=result.data.editions.filter(e=>!demoSocial.imageDeletions?.[e.id]?.deleted).map(e=>({...e,deletion_pending:!!demoSocial.imageDeletions?.[e.id]}));demoFilterAwardContext(result.data,d.award_scope||demoScope(d.kind).award_scope);}
   if(name==='club_match_results_api'&&a==='context'&&result.data&&d.award_scope)demoFilterAwardContext(result.data,d.award_scope);
   return result;
  }catch(error){return demoFail(error.message);}
