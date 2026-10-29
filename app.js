@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.298';
+const APP_UI_VERSION='0.8.62.299';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -18243,7 +18243,7 @@ async function seShowDropped(){
 function seMovement(f,id){return seFollowupRows(null).find(x=>x.fixture_id===f.id&&x.roster_id===id);}
 function seConversationControl(m){
  if(!m||m.spoken_at)return '';
- return `<div class="se-conversation-status"><small>Dropped from ${seEsc(m.previous_grade)}</small><button type="button" class="se-conversation-toggle" data-se-conversation="${seEsc(m.fixture_id)}" data-se-conversation-player="${seEsc(m.roster_id)}" aria-label="${seEsc(m.name)}: mark as spoken to" ${m.can_update===false?'disabled title="A selector or authorised captain/coach can mark this conversation"':''}>Mark as spoken to</button></div>`;
+ return `<div class="se-conversation-status"><small>Dropped from ${seEsc(m.previous_grade)}${m.previous_date?` · ${seEsc(seDate(m.previous_date))}`:''}</small><button type="button" class="se-conversation-toggle" data-se-conversation="${seEsc(m.fixture_id)}" data-se-conversation-player="${seEsc(m.roster_id)}" aria-label="${seEsc(m.name)}: mark as spoken to" ${m.can_update===false?'disabled title="A selector or authorised captain/coach can mark this conversation"':''}>Mark as spoken to</button></div>`;
 }
 function seBindConversations(){
  document.querySelectorAll('[data-se-conversation]').forEach(button=>button.onclick=async()=>{
@@ -18263,7 +18263,7 @@ function seGradeLevel(competition,grade,data=ensureSelections().data){
 function seGradeLevels(){
  const s=ensureSelections(),host=document.getElementById('seGradeLevels'),rows=[...(s.data.access.grade_levels||[])];
  for(const f of s.data.fixtures){const d=f.details;if(d&&!rows.some(x=>x.competition===d.competition&&x.grade===d.grade))rows.push({competition:d.competition,grade:d.grade,level:seGradeLevel(d.competition,d.grade)});}
- host.innerHTML=`<summary>Grade levels for player moves</summary><p class="se-muted">1 is highest. Use the same level for equal teams. Leave unranked teams blank.</p><form id="seGradeLevelsForm">${rows.map((r,i)=>`<label>${seEsc(r.competition)} · ${seEsc(r.grade)}<input data-se-level="${i}" type="number" min="1" max="99" step="1" value="${r.level??''}" placeholder="Unranked"></label>`).join('')||'<p>Add fixtures to set grade levels.</p>'}<button type="submit" class="btn se-editor-actions">Save grade levels</button></form>`;
+ host.innerHTML=`<summary>Grade levels for player moves</summary><p class="se-muted">1 is highest. Use the same level for equal teams. Leave unranked teams blank.</p><form id="seGradeLevelsForm">${rows.map((r,i)=>`<label>${r.competition?seEsc(r.competition)+' · ':''}${seEsc(r.grade)}<input data-se-level="${i}" type="number" min="1" max="99" step="1" value="${r.level??''}" placeholder="Unranked"></label>`).join('')||'<p>Add fixtures to set grade levels.</p>'}<button type="submit" class="btn se-editor-actions">Save grade levels</button></form>`;
  const form=document.getElementById('seGradeLevelsForm');seSettingsSaveState(form,'Save grade levels','grade_levels');
  form.onsubmit=async e=>{e.preventDefault();const values=[...form.querySelectorAll('[data-se-level]')].filter(el=>el.value!=='').map(el=>({...rows[Number(el.dataset.seLevel)],level:Number(el.value)}));if(await seMutate('grade_levels',{rows:values,revision:s.data.access.revision}))document.getElementById('seGradeLevels').open=true;};
 }

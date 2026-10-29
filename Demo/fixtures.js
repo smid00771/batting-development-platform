@@ -1865,18 +1865,31 @@ function demoMatchGroups(){return fixtureGroups.map(g=>({...g,captain_user_ids:g
 
 function demoCaptainUsers(d){return d.match_roles?[...new Set(Object.values(d.match_roles).map(r=>demoSelections.roster.find(p=>p.id===r.captain_id&&p.active)?.user_id).filter(id=>id&&fixtureRows.club_memberships.some(m=>m.club_id===club.id&&m.user_id===id)))]:d.captain_id?[d.captain_id]:[];}
 
+function demoDropPrior(f){
+ const state=demoSelections,d=f.published?.details||f.details,source=state.result_sources?.[f.id]||f.scorecard_sync;
+ if(f.details.cancelled||d.cancelled||f.no_play||source?.no_play)return null;
+ const cards=typeof demoScorecards==='undefined'?[]:Object.values(demoScorecards),card=cards.filter(c=>c.match_id===source?.match_id).at(-1);
+ const dates=d.days.map(day=>day.date).sort(),team=card?.status==='completed'&&['playhq_au','playcricket_au'].includes(card.provider)&&card.format_key===d.format&&JSON.stringify(card.dates)===JSON.stringify(dates)?card.teams?.find(t=>t.id===source.team_id&&t.lineup_available===true&&Array.isArray(t.players)):null;
+ const slots=team?[...new Set(team.players.map(p=>{
+  const direct=state.scorecard_links?.find(l=>l.source_id===p.player_id)?.roster_id,player=(state.scorecard_player_links||[]).find(l=>l.source_id===p.player_id)?.player_id;
+  return state.roster.find(r=>direct?r.id===direct:player&&r.review_player_id===player)?.id;
+ }).filter(Boolean))].map(d1=>({d1,d2:null})):f.published?.slots||[];
+ return {id:f.id,details:d,slots,ends:dates.at(-1),source:team?'completed_scorecard':f.published?'published':'unknown'};
+}
+
 function demoConversations(uid){
  const state=demoSelections,member=fixtureRows.club_memberships.find(m=>m.club_id===club.id&&m.user_id===uid),selector=state.selectors.includes(uid)||state.access.head_selector_id===uid,out=[];
  if(!member)return out;
  const key=x=>String(x||'').trim().toLowerCase(),week=x=>{const d=new Date(x+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);};
+ const scope=d=>(typeof demoGroupFor==='function'&&demoGroupFor({details:d}))||key(d.competition),lineups=state.fixtures.map(demoDropPrior).filter(Boolean);
  for(const f of state.fixtures){
-  if(f.details.cancelled)continue;const d=f.details,start=d.days[0].date,level=seGradeLevel(d.competition,d.grade,state);if(!level)continue;
-  const eligible=state.fixtures.filter(p=>p.published&&!p.published.details.cancelled&&key(p.published.details.competition)===key(d.competition)&&(p.published.details.format||'')===(d.format||'')&&(p.published.details.season||'')===(d.season||'')&&week(p.published.details.days[0].date)<week(start)&&new Date(start)-new Date(p.published.details.days[0].date)<=120*86400000),previousWeek=eligible.map(p=>week(p.published.details.days[0].date)).sort().at(-1);
+  if(f.details.cancelled||f.no_play||state.result_sources?.[f.id]?.no_play)continue;const d=f.details,start=d.days[0].date,level=seGradeLevel(d.competition,d.grade,state);if(!level)continue;
+  const eligible=lineups.filter(p=>scope(p.details)===scope(d)&&(p.details.format||'')===(d.format||'')&&(p.details.season||'')===(d.season||'')&&week(p.ends)<week(start)&&new Date(start)-new Date(p.ends)<=120*86400000),previousWeek=eligible.map(p=>week(p.ends)).sort().at(-1);
   for(const id of new Set(f.slots.flatMap(s=>[s.d1,s.d2]).filter(Boolean))){
-   const prior=eligible.filter(p=>week(p.published.details.days[0].date)===previousWeek&&p.published.slots.some(s=>s.d1===id||s.d2===id)).sort((a,b)=>(seGradeLevel(b.published.details.competition,b.published.details.grade,state)??Infinity)-(seGradeLevel(a.published.details.competition,a.published.details.grade,state)??Infinity))[0];
-   if(!prior)continue;const old=prior.published.details,oldLevel=seGradeLevel(old.competition,old.grade,state);if(!oldLevel||level<=oldLevel||!(selector||['coach','head_coach'].includes(member.permission_role)||demoCaptainUsers(old).includes(uid)))continue;
+   const prior=eligible.filter(p=>week(p.ends)===previousWeek&&p.slots.some(s=>s.d1===id||s.d2===id)).sort((a,b)=>(seGradeLevel(b.details.competition,b.details.grade,state)??Infinity)-(seGradeLevel(a.details.competition,a.details.grade,state)??Infinity)||b.ends.localeCompare(a.ends)||a.id.localeCompare(b.id))[0];
+   if(!prior)continue;const old=prior.details,oldLevel=seGradeLevel(old.competition,old.grade,state);if(!oldLevel||level<=oldLevel||!(selector||['coach','head_coach'].includes(member.permission_role)||demoCaptainUsers(old).includes(uid)))continue;
    const movement_key=JSON.stringify([prior.id,old.grade,d.grade,d.competition,d.format,start]),saved=state.conversation_status?.[f.id+':'+id+':'+movement_key];
-   out.push({fixture_id:f.id,roster_id:id,name:state.roster.find(p=>p.id===id)?.name||'Player',previous_fixture_id:prior.id,previous_grade:old.grade,grade:d.grade,competition:d.competition,format:d.format,date:start,movement_key,kind:'lower_grade',availability:'available',spoken_at:saved?.spoken_at||null,spoken_by:saved?.spoken_by||null,revision:saved?.revision||0});
+   out.push({fixture_id:f.id,roster_id:id,name:state.roster.find(p=>p.id===id)?.name||'Player',previous_fixture_id:prior.id,previous_grade:old.grade,previous_date:prior.ends,grade:d.grade,competition:d.competition,format:d.format,date:start,movement_key,kind:'lower_grade',availability:'available',spoken_at:saved?.spoken_at||null,spoken_by:saved?.spoken_by||null,revision:saved?.revision||0});
   }
  }
  const rounds=new Map();for(const f of state.fixtures){if(f.details.cancelled||f.no_play)continue;const d=f.details,k=JSON.stringify([week(d.days[0].date),key(d.competition),d.season||'',d.format||'']);if(!rounds.has(k))rounds.set(k,[]);rounds.get(k).push(f);}
@@ -1904,10 +1917,10 @@ function demoSavedDrops(uid,includeSpoken=false){
  if(!member||state.access.status==='disabled')return [];
  const selector=state.selectors.includes(uid)||state.access.head_selector_id===uid;
  return (state.drop_reminders||[]).flatMap(m=>{
-  const f=state.fixtures.find(f=>f.id===m.fixture_id),prior=state.fixtures.find(f=>f.id===m.previous_fixture_id),person=state.roster.find(p=>p.id===m.roster_id);
-  if(!person?.active||!f||f.details.cancelled||m.fixture_identity!==demoDropIdentity(f.details)||!prior?.published||prior.published.details.cancelled||prior.published.details.grade!==m.previous_grade||!f.slots.some(s=>s.d1===person.id||s.d2===person.id))return [];
+  const f=state.fixtures.find(f=>f.id===m.fixture_id),prior=state.fixtures.find(f=>f.id===m.previous_fixture_id),person=state.roster.find(p=>p.id===m.roster_id),previous=prior?.published?.details||prior?.details;
+  if(!person?.active||!f||f.details.cancelled||m.fixture_identity!==demoDropIdentity(f.details)||!previous||previous.cancelled||previous.grade!==m.previous_grade||!f.slots.some(s=>s.d1===person.id||s.d2===person.id))return [];
   if(f.details.days.some((day,i)=>f.slots.some(s=>s['d'+(i+1)]===person.id)&&person.availability?.unavailable_dates?.includes(day.date)))return [];
-  const level=typeof demoGrant==='function'?demoGrant(demoGroupFor(f)):selector?2:0,staff=['coach','head_coach'].includes(member.permission_role)||demoCaptainUsers(prior.published.details).includes(uid);
+  const level=typeof demoGrant==='function'?demoGrant(demoGroupFor(f)):selector?2:0,staff=['coach','head_coach'].includes(member.permission_role)||demoCaptainUsers(previous).includes(uid);
   if(!(level>0||staff))return [];
   const saved=state.conversation_status?.[m.fixture_id+':'+m.roster_id+':'+m.movement_key];
   if(saved?.spoken_at&&!includeSpoken)return [];
