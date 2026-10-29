@@ -21,7 +21,7 @@ const demoExtraStages=[
 ];
 for(const stage of demoExtraStages)demoStages.push(stage);
 const demoStageLabels={selections:'Selection Board',selected_teams:'Published teams',selection_admin:'Settings',socials:'Create social posts',social_awards:'Socials Awards',plan:'My Player Plan',contributor:'Workshop contribution',people:'People & sign-up'};
-function demoTasks(product=demoProduct,persona=demoPersona){const p=demoPeople[persona];return [...new Set([...(product!=='batting'?p.select:[]),...(product!=='select'?p.batting:[]),'help','assist'])];}
+function demoTasks(product=demoProduct,persona=demoPersona){const p=demoPeople[persona];return [...new Set([...(product!=='batting'?p.select:[]),...(product!=='select'?p.batting:[]),'help',...(!['player','participant'].includes(persona)?['assist']:[])])];}
 function demoPersonas(product){return Object.entries(demoPeople).filter(([,p])=>p.products.includes(product));}
 function demoRoleDescription(product,id){if(id==='player')return product==='select'?'My availability, published teams and match acknowledgements.':product==='batting'?'My plan, training, match preparation and reflections.':demoPeople[id].description;return demoPeople[id].description;}
 function demoDefaultTask(product,role){if(role==='participant'&&product==='both')return 'contributor';return demoTasks(product,role)[0];}

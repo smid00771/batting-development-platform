@@ -2625,7 +2625,7 @@ function demoDecorate(){
     // replace/remove them from a MutationObserver: it must be able to finish
     // binding handlers. Insert the demo explanation alongside the live card.
     if(!document.getElementById('demoGuideNote')){
-      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><div class="btnrow"><a class="btn secondary" href="https://mirelionhq.com/app.html?tab=guide">Sign in to your club</a><button type="button" class="btn ghost" id="demoAssistLink">Message us · Mirelion Assist</button></div></section>`);
+      chat.insertAdjacentHTML('beforebegin',`<section id="demoGuideNote" class="card demo-guide-explainer"><h2>Ask the Guide</h2><p>Guide chat is available in your signed-in club. Explore the tutorials below.</p><div class="btnrow"><a class="btn secondary" href="https://mirelionhq.com/app.html?tab=guide">Sign in to your club</a>${canUseMirelionAssist()?'<button type="button" class="btn ghost" id="demoAssistLink">Message us · Mirelion Assist</button>':''}</div></section>`);
     }
     const assistLink=document.getElementById('demoAssistLink');if(assistLink)assistLink.onclick=()=>document.getElementById('guideHumanHandoff')?.click();
     chat.hidden=true;
