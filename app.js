@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.298';
+const APP_UI_VERSION='0.8.62.299';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -18243,7 +18243,7 @@ async function seShowDropped(){
 function seMovement(f,id){return seFollowupRows(null).find(x=>x.fixture_id===f.id&&x.roster_id===id);}
 function seConversationControl(m){
  if(!m||m.spoken_at)return '';
- return `<div class="se-conversation-status"><small>Dropped from ${seEsc(m.previous_grade)}</small><button type="button" class="se-conversation-toggle" data-se-conversation="${seEsc(m.fixture_id)}" data-se-conversation-player="${seEsc(m.roster_id)}" aria-label="${seEsc(m.name)}: mark as spoken to" ${m.can_update===false?'disabled title="A selector or authorised captain/coach can mark this conversation"':''}>Mark as spoken to</button></div>`;
+ return `<div class="se-conversation-status"><small>Dropped from ${seEsc(m.previous_grade)}${m.previous_date?` · ${seEsc(seDate(m.previous_date))}`:''}</small><button type="button" class="se-conversation-toggle" data-se-conversation="${seEsc(m.fixture_id)}" data-se-conversation-player="${seEsc(m.roster_id)}" aria-label="${seEsc(m.name)}: mark as spoken to" ${m.can_update===false?'disabled title="A selector or authorised captain/coach can mark this conversation"':''}>Mark as spoken to</button></div>`;
 }
 function seBindConversations(){
  document.querySelectorAll('[data-se-conversation]').forEach(button=>button.onclick=async()=>{

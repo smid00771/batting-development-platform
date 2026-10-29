@@ -90,6 +90,8 @@ function demoSeedCurrent({empty=false}={}){
    const card=Object.values(demoScorecards).find(card=>card.match_id===demoSelections.result_sources[previous.id]?.match_id);
    if(card)for(const row of [card.teams[0].players[0],card.innings[0].batters[0]])Object.assign(row,{player_id:'demo-'+player.id,name:player.name});
   }
+  // These fictional cards are generated from these exact roster IDs.
+  demoSelections.scorecard_links=demoSelections.roster.map(p=>({source_id:'demo-'+p.id,roster_id:p.id}));
   const abandoned={id:'masters-abandoned',club_id:club.id,revision:1,publication:0,published:null,details:{grade:'Masters',grade_group_id:'group-masters',format:'limited_overs',round:'1',competition:'Example District',opposition:'Hill Example CC',ground:'Masters Oval',days:[{date:demoAddDay(first,-7),start:'12:00'}],cancelled:true,staff:[],match_roles:{d1:{captain_id:null,keeper_id:null}}},slots:Array.from({length:11},()=>({d1:null,d2:null}))};
   demoSelections.fixtures.push(abandoned);demoSelections.result_sources||={};demoSelections.result_sources[abandoned.id]={no_play:'abandoned'};
  }
