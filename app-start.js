@@ -1,6 +1,6 @@
 // The branded HTML is already visible before this small loader runs.
 // Keep the original URL intact: invitation and password callbacks need it.
-export async function startApp({load=()=>import('./app.js?v=0.8.62.299'),doc=document,view=window}={}){
+export async function startApp({load=()=>import('./app.js?v=0.8.62.300'),doc=document,view=window}={}){
  const host=doc.getElementById('app'),status=doc.getElementById('appStartStatus'),retry=doc.getElementById('appStartRetry');
  if(!host||!status||!retry)return;
  let running=false;

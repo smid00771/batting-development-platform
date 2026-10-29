@@ -24,7 +24,7 @@ test('demo RPC saves and reverses a full-team transfer atomically, with per-team
  const saved=await h.rpc('save_board',data);assert.equal(saved.error,null);assert.deepEqual(plain(saved.data.revisions),{A:4,B:4});assert.deepEqual(h.state.fixtures.map(f=>occupied(f).length),[10,12]);
  assert.deepEqual(h.state.fixtures.flatMap(f=>occupied(f)).sort(),original.flatMap(f=>occupied(f)).sort());assert.equal(h.state.fixtures[1].slots[4].d1,'A-3');
  const replay=await h.rpc('save_board',data);assert.equal(replay.error,null);assert.deepEqual(h.state.fixtures.map(f=>f.revision),[4,4]);
- const context=await h.rpc('context');assert.equal(context.error,null);assert.ok(context.data.fixtures.find(f=>f.id==='B').issues.some(i=>i.code==='over_team'&&i.level==='error'));
+ const context=await h.rpc('context');assert.equal(context.error,null);assert.deepEqual(plain(context.data.fixtures.find(f=>f.id==='B').issues),[]);assert.ok(h.c.demoSelectionIssues(h.state.fixtures.find(f=>f.id==='B')).some(i=>i.code==='over_team'&&i.level==='error'));
  const back=h.c.seMovePlan(h.state.fixtures[1],h.state.fixtures[0],4,3);assert.equal((await h.rpc('save_board',{fixtures:back.fixtures})).error,null);
  assert.deepEqual(h.state.fixtures.map(f=>f.revision),[5,5]);assert.deepEqual(h.state.fixtures.map(f=>f.slots.length),[11,11]);assert.deepEqual(plain(h.state.fixtures.map(f=>f.slots)),original.map(f=>f.slots));
 });
@@ -70,7 +70,7 @@ test('demo retains explicit acknowledgment for a short team and permits its capt
 test('demo detects overflow on Day 2 independently and accepts more than eleven draft rows',async()=>{
  const h=harness({twoDays:true});h.state.roster.push({id:'extra',name:'Extra',active:true,availability:{available_dates:[...dates]}});
  const b=structuredClone(h.state.fixtures[1]);b.slots.push({d1:null,d2:'extra'});assert.equal((await h.rpc('save_board',{fixtures:[b]})).error,null);
- const loaded=await h.rpc('context'),issues=loaded.data.fixtures.find(f=>f.id==='B').issues.filter(i=>i.code==='over_team');assert.equal(issues.length,1);assert.match(issues[0].text,/Day 2: 12/);
+ const loaded=await h.rpc('context'),issues=h.c.demoSelectionIssues(h.state.fixtures.find(f=>f.id==='B')).filter(i=>i.code==='over_team');assert.equal(issues.length,1);assert.match(issues[0].text,/Day 2: 12/);
  const result=await h.rpc('send_review',publicationData(h.state,['B']));assert.match(result.error.message,/extra players/);assert.equal(h.state.fixtures[1].review,undefined);
 });
 
@@ -84,7 +84,7 @@ test('demo blocks extra draft rows even when each playing day has eleven players
   if(kind==='split-pair'){const moved=b.slots[3].d1;b.slots[3].d1=null;b.slots.push({d1:moved,d2:null});}else b.slots.push({d1:null,d2:null});
   assert.equal((await h.rpc('save_board',{fixtures:[b]})).error,null);
   assert.equal(occupied(h.state.fixtures[1]).length,11);assert.equal(occupied(h.state.fixtures[1],'d2').length,11);
-  const loaded=await h.rpc('context'),issues=loaded.data.fixtures.find(f=>f.id==='B').issues;assert.ok(issues.some(i=>i.code==='over_slots'&&i.level==='error'),kind);assert.ok(!issues.some(i=>i.code==='over_team'),kind);
+  const loaded=await h.rpc('context'),issues=h.c.demoSelectionIssues(h.state.fixtures.find(f=>f.id==='B'));assert.ok(issues.some(i=>i.code==='over_slots'&&i.level==='error'),kind);assert.ok(!issues.some(i=>i.code==='over_team'),kind);
   const data=publicationData(h.state,['B']);assert.match((await h.rpc('send_review',data)).error.message,/extra players or places/);assert.match((await h.rpc('publish',data)).error.message,/issues/);
   assert.equal(h.state.fixtures[1].review,undefined);assert.equal(h.state.fixtures[1].published,null);
  }
