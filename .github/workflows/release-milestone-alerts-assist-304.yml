@@ -1,0 +1,41 @@
+name: Verify achievement alerts and staff Assist release
+on:
+  push:
+    branches: ["codex/milestone-alerts-assist-304"]
+    paths: [".github/release-milestone-alerts-assist-304.patch.gz.b64", ".github/workflows/release-milestone-alerts-assist-304.yml"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply reviewed source patch
+        run: base64 --decode .github/release-milestone-alerts-assist-304.patch.gz.b64 | gzip -d | git apply --binary
+      - run: npm ci --ignore-scripts
+      - run: npm install --no-save --package-lock=false @electric-sql/pglite@0.5.10
+      - name: Verify source, roles and delivered demo
+        run: |
+          node --check app.js
+          node --check assist-loader.js
+          node --check social-workspace.js
+          node --check social-awards.js
+          node Scripts/build-demo.mjs --check
+          node --test Tests/app_startup_test.cjs Tests/assist_staff_loading_test.cjs Tests/mirelion_assist_ui_test.cjs Tests/mirelion_assist_demo_test.cjs Tests/assist_entry_flow_test.cjs Tests/social_milestone_ui_test.mjs Tests/social_awards_ui_test.mjs Tests/social_awards_publishing_test.mjs Tests/demo_roles_integration_test.cjs
+          node --test Tests/milestone_staff_database_test.cjs
+      - name: Commit verified source
+        run: |
+          git add 'AGENTS.md' 'Database/milestone_alerts_staff_assist.sql' 'Demo/build-manifest.json' 'Demo/current-fixtures.js' 'Demo/fixtures.js' 'Demo/journeys.js' 'Reviews/2026-10-30-milestone-alerts-staff-assist-304.md' 'Tests/assist_staff_loading_test.cjs' 'Tests/fixtures/milestone_303_baseline.sql' 'Tests/milestone_staff_database_test.cjs' 'Tests/milestone_staff_database_test.sql' 'Tests/mirelion_assist_demo_test.cjs' 'Tests/social_milestone_ui_test.mjs' 'app-start.js' 'app.html' 'app.js' 'assist-loader.js' 'demo.html' 'social-awards-demo.js' 'social-awards.js' 'social-workspace.js' 'supabase/migrations/20261029214156_milestone_alerts_staff_assist.sql'
+          git rm .github/release-milestone-alerts-assist-304.patch.gz.b64 .github/workflows/release-milestone-alerts-assist-304.yml
+          test "$(git write-tree)" = "640d970916f1f0afa094993141808e0890429827"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Apply verified achievement alerts and staff Assist update"
+          git push origin HEAD:${{ github.ref_name }}
