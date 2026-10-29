@@ -5,7 +5,7 @@ export function createSocialAwardsDemo(getState, getResults, getSocial, getMembe
   function state() {
     const club = getState();
     if (!records.has(club)) records.set(club, {
-      settings: {enabled: [...kinds], revision: 0},
+      settings: {enabled: [...kinds], revision: 0, milestone_alerts: false},
       designs: {}, photos: [], requests: [], editions: []
     });
     return records.get(club);
@@ -58,7 +58,7 @@ export function createSocialAwardsDemo(getState, getResults, getSocial, getMembe
         } else if (action === 'save_settings') {
           if (d.revision !== s.settings.revision) throw Error('Award choices changed. Reload before saving.');
           if (!Array.isArray(d.enabled) || d.enabled.some(k => !kinds.includes(k))) throw Error('Choose awards from the list.');
-          s.settings = {enabled: [...new Set(d.enabled)], revision: d.revision + 1};
+          s.settings = {enabled: [...new Set([...d.enabled,...(d.milestone_alerts?['century','five_wickets']:[])])], revision: d.revision + 1, milestone_alerts: d.milestone_alerts??s.settings.milestone_alerts??false};
           result = {saved: true, ...s.settings};
         } else if (action === 'request') {
           if (!d.id || !d.name?.trim() || !d.criteria?.trim()) throw Error('Enter an award name and criteria.');

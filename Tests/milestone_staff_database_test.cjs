@@ -1,0 +1,39 @@
+const {PGlite}=require('@electric-sql/pglite');
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const db=new PGlite();
+(async()=>{
+ await db.exec(`
+ create role anon; create role authenticated; create role service_role;
+ create schema auth; create schema cron; create schema net; create schema supabase_functions;
+ create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+ create table public.user_profiles(user_id uuid primary key,display_name text);
+ create table public.clubs(id uuid primary key,name text,slug text,created_by uuid,archived_at timestamptz);
+ create table public.club_memberships(club_id uuid,user_id uuid,role text,permission_role text,primary key(club_id,user_id));
+ create table public.platform_admins(user_id uuid primary key,role text);
+ create table public.platform_audit_events(actor_user_id uuid,club_id uuid,event_type text,details jsonb);
+ create table public.club_batting_guide_threads(id uuid primary key default gen_random_uuid(),club_id uuid,user_id uuid,status text default 'open',human_handoff_reason text default '',created_at timestamptz default now(),updated_at timestamptz default now());
+ create table public.club_batting_guide_messages(id uuid primary key default gen_random_uuid(),thread_id uuid,role text,content text,created_at timestamptz default now());
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create function public.is_club_member(c uuid) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from public.club_memberships where club_id=c and user_id=auth.uid())$$;
+ create function public.has_platform_role(roles text[]) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from public.platform_admins where user_id=auth.uid() and role=any(roles))$$;
+ create function public.platform_get_guide_requests() returns jsonb language sql as $$select '[]'::jsonb$$;
+ create function public.platform_close_guide_request(t uuid) returns void language sql as $$update public.club_batting_guide_threads set status='closed' where id=t$$;
+ create table public.outbound_messages(id uuid primary key default gen_random_uuid(),club_id uuid,recipient_user_id uuid,recipient_email text,template_key text,subject text,payload jsonb,created_at timestamptz default now(),sent_at timestamptz,failed_at timestamptz,cancelled_at timestamptz,processing_at timestamptz);
+ create table public.platform_settings(singleton boolean primary key,email_mode text,email_live_from timestamptz);
+ insert into public.platform_settings values(true,'live',now()-interval '1 day');
+ create function cron.schedule(text,text,text) returns bigint language sql as $$select 1::bigint$$;
+ create table net.requests(id bigint generated always as identity,body jsonb);
+ create function net.http_post(url text,body jsonb,params jsonb default '{}',headers jsonb default '{}',timeout_milliseconds integer default 1000) returns bigint language plpgsql as $$declare result bigint;begin insert into net.requests(body) values(body) returning id into result;return result;end$$;
+ create function supabase_functions.http_request() returns trigger language plpgsql as $$begin return new;end$$;
+ create trigger outbound_messages after insert on public.outbound_messages for each row execute function supabase_functions.http_request('https://qa.supabase.co/functions/v1/dispatch-outbox','POST','{"Authorization":"Bearer this-is-only-a-fictional-test-credential"}','{}','10000');
+ `);
+ await db.exec(fs.readFileSync('Database/mirelion_assist.sql','utf8'));
+ await db.exec(fs.readFileSync('Database/mirelion_assist_email_alerts.sql','utf8'));
+ await db.exec(fs.readFileSync('Database/mirelion_support_automation.sql','utf8'));
+
+ await db.exec(fs.readFileSync('Tests/fixtures/milestone_303_baseline.sql','utf8'));
+ await db.exec(fs.readFileSync('Database/milestone_alerts_staff_assist.sql','utf8'));
+ await db.exec(fs.readFileSync('Tests/milestone_staff_database_test.sql','utf8'));
+ console.log('PASS: additive migration, staff-only Assist, milestone detection/deduplication, opt-in, corrections, recipient permissions, and in-play scheduling.');
+ await db.close();
+})().catch(e=>{console.error(e.message,e.detail||'',e.where||'');process.exitCode=1;});

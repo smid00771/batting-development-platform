@@ -2,7 +2,7 @@ import {createDeferredController} from './deferred-feature.js?v=0.8.62.288';
 import {createPasswordFlow,cleanPasswordUrl} from './password-flow.js?v=0.8.62.280';
 import {SPIN_STYLES,spinLabel,spinProfile,spinProfileText,bindSpinBreakdowns} from './player-bowling.js?v=0.8.62.279';
 import {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl} from './domain-routing.js?v=0.8.62.272';
-import {createMirelionAssist} from './mirelion-assist.js?v=0.8.62.295';
+import {createStaffAssistController} from './assist-loader.js?v=0.8.62.304';
 import {assistLaunchFromSearch} from './assist-routing.js?v=0.8.62.271';
 import {FIELDING_RATINGS,fieldingLabel} from './player-fielding.js?v=0.8.62.288';
 import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.288';
@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.303';
+const APP_UI_VERSION='0.8.62.304';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1928,7 +1928,11 @@ function clubSetupUnavailableReason(tab){
   return '';
 }
 
+function canUseMirelionAssist(){
+ return !!(session?.user?.id&&membership&&club&&selectionAccess?.key===selectionsScopeKey()&&!selectionAccess.error&&selectionAccess.assist_staff===true);
+}
 function canOpenClubTab(tab){
+  if(tab==='assist')return canUseMirelionAssist();
   if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','assist','join_club'].includes(tab))return false;
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
   if(productTrialWaiting()&&!['products','guide','club_settings','club_teams','permissions','messages','phone_app','assist','join_club'].includes(tab))return false;
@@ -2630,7 +2634,7 @@ function renderShell(){
   Promise.resolve(rendered).then(()=>window.requestAnimationFrame(()=>{
     const background=()=>{
       if(!firstPage.isConnected||userId!==session?.user?.id||clubId!==club?.id)return;
-      mirelionAssist.start();
+      if(canUseMirelionAssist())void mirelionAssist.start();else mirelionAssist.reset();
       if(!selectionsStandalone())void refreshMyCoachingUpdates();
       void refreshClubMessageBadge();void syncPhoneDeviceSession();
     };
@@ -3543,7 +3547,7 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
       <div id="guideChatMessages" class="guide-chat-messages${guideVisibleMessages(messages).length?'':' is-empty'}">${guideMessagesHtml(messages)}</div>
       <div class="guide-chat-compose"><textarea id="guideQuestion" aria-label="Your question for the Club Batting Guide" rows="2" placeholder="What would you like help with?"></textarea><button class="btn secondary" id="guideAsk">Ask Guide</button></div>
       <div id="guideChatStatus" class="guide-chat-feedback" role="status" aria-live="polite"></div>
-      <div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">Message us · Mirelion Assist</button></div>
+      ${canUseMirelionAssist()?'<div class="guide-human-handoff"><button class="btn ghost" id="guideHumanHandoff" type="button">Message us · Mirelion Assist</button></div>':''}
     </section>
   <h2 class="guide-process-heading" id="guideProcessHeading">Tutorials</h2>
   <div class="field"><input id="guideTopicSearch" type="search" aria-label="Search tutorials" placeholder="Search tutorials…"><small id="guideTopicSearchStatus" role="status"></small></div>
@@ -3631,7 +3635,8 @@ async function renderClubBattingGuide({revealTutorial=false}={}){
   };
   document.getElementById('guideAsk').onclick=submitQuestion;
   document.getElementById('guideQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();submitQuestion();}});
-  document.getElementById('guideHumanHandoff').onclick=async()=>{
+  if(document.getElementById('guideHumanHandoff'))document.getElementById('guideHumanHandoff').onclick=async()=>{
+    if(!canUseMirelionAssist())return;
     if(!await saveClubEditsBeforeNavigation())return;
     assistFromGuide=true;currentTab='assist';await renderTab();
   };
@@ -17294,7 +17299,7 @@ async function renderClubMessages(){
  }catch(error){if(here()){page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><h1>Messages</h1><p>${esc(error.message||'Messages could not load.')}</p><button class="btn" id="retryClubMessages">Try again</button></section>`;document.getElementById('retryClubMessages').onclick=renderClubMessages;}}
 }
 function clubWeekMessageLink(row){
- if(row.target!=='teams')return '';const found=String(row.body||'').match(/https:\/\/clubbatting\.com\/app\.html\?[^\s<>]+/);if(!found)return '';
+ if(row.target!=='teams')return '';const found=String(row.body||'').match(/https:\/\/(?:mirelionhq|clubbatting)\.com\/app\.html\?[^\s<>]+/);if(!found)return '';
  try{const u=new URL(found[0]);if(!['https://mirelionhq.com','https://clubbatting.com'].includes(u.origin)||u.pathname!=='/app.html'||u.searchParams.get('club')!==club.id||u.searchParams.get('tab')!=='teams')return '';return u.href;}catch{return '';}
 }
 function drawClubMessages(page,state){
@@ -17306,7 +17311,7 @@ function drawClubMessages(page,state){
  ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
  <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
  ${state.mode==='inbox'?seInboxFollowup(state.signupFollowup):''}
- ${state.mode==='compose'?clubMessageComposer(state):rows.length?`<div class="message-delete-tools"><label><input type="checkbox" id="messageSelectAll">Select all</label><button type="button" class="btn ghost" id="deleteClubMessages" disabled>Delete selected</button></div>`+rows.map(row=>`<div class="message-list-item"><label class="message-select"><input type="checkbox" data-message-select="${esc(row.id)}" aria-label="Select message: ${esc(row.title)}" ${state.selectedIds.includes(row.id)?'checked':''}></label><details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}" data-message-link="${esc(clubWeekMessageLink(row))}">${esc(row.target==='teams'?(clubWeekMessageLink(row).includes('team_view=availability')?'Set my availability':'Open Teams'):row.target==='workshop'?'Batting Philosophy Workshop':clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details></div>`).join(''):state.mode==='inbox'&&state.signupFollowup?.can_view&&state.signupFollowup.players.length?'':`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
+ ${state.mode==='compose'?clubMessageComposer(state):rows.length?`<div class="message-delete-tools"><label><input type="checkbox" id="messageSelectAll">Select all</label><button type="button" class="btn ghost" id="deleteClubMessages" disabled>Delete selected</button></div>`+rows.map(row=>`<div class="message-list-item"><label class="message-select"><input type="checkbox" data-message-select="${esc(row.id)}" aria-label="Select message: ${esc(row.title)}" ${state.selectedIds.includes(row.id)?'checked':''}></label><details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}" data-message-link="${esc(clubWeekMessageLink(row))}">${esc(row.target==='teams'?(clubWeekMessageLink(row).includes('social_milestone=')?'Create achievement post':clubWeekMessageLink(row).includes('team_view=availability')?'Set my availability':'Open Teams'):row.target==='workshop'?'Batting Philosophy Workshop':clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details></div>`).join(''):state.mode==='inbox'&&state.signupFollowup?.can_view&&state.signupFollowup.players.length?'':`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
  bindMessageDeletion(page,state,rows);
  document.getElementById('viewSignupFollowup')?.addEventListener('click',seOpenSignupFollowup);document.getElementById('retrySignupFollowup')?.addEventListener('click',renderClubMessages);
  document.getElementById('newClubMessage')?.addEventListener('click',()=>{state.mode='compose';state.draft??=newClubMessageDraft();drawClubMessages(page,state);});
@@ -18814,7 +18819,7 @@ async function seReload(){
   return {signup_followup:followup,week:week.data,socials:!access.error&&access.data?.allowed===true,social_handover_count:access.data?.handover_count||0};
  })();
  const [result,extras]=await Promise.all([seRPC('context',(s.view==='board'||previous?.selector||selectionAccess?.selector)?{review_snapshots:false}:{}),extrasTask]);Object.assign(result,extras);
- if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence)return false;s.data=result;seApplyWeekLaunch(s);if(result.socials&&!s.socialSetupOpened&&new URLSearchParams(location.search).get('social_accounts')==='1'){s.socialSetupOpened=true;s.view='socials';socialEnsure().view='accounts';}if(!result.selector){s.undo=[];s.active=null;}selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
+ if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence)return false;s.data=result;seApplyWeekLaunch(s);const milestone=new URLSearchParams(location.search).get('social_milestone');if(result.socials&&!s.milestoneLaunchOpened&&/^[0-9a-f-]{36}$/i.test(milestone||'')){s.milestoneLaunchOpened=true;s.view='socials';socialEnsure().pendingMilestone=milestone;}if(result.socials&&!s.socialSetupOpened&&new URLSearchParams(location.search).get('social_accounts')==='1'){s.socialSetupOpened=true;s.view='socials';socialEnsure().view='accounts';}if(!result.selector){s.undo=[];s.active=null;}selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
 async function seMutate(action,data,{undo=null,picker=null,order=null,copyLast=null}={}){const s=ensureSelections();if(s.busy)return false;s.statsOpen=false;if(!s.pending&&!seGuardFixtureEdit(action,data))return false;if(action==='save_board'&&!s.pending)data={...data,fixtures:data.fixtures.map(f=>sePrepareMatch(f))};const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(undo?{undo}:{}),...(picker?{picker}:{}),...(order?{order}:{}),...(copyLast?{copyLast}:{}),...(['availability','availability_batch'].includes(action)&&s.availabilityReturn?{availabilityReturn:structuredClone(s.availabilityReturn)}:{})};const working=pending.action==='show_dropped'?'Checking dropped players…':pending.copyLast?'Copying…':pending.action==='publish'?'Publishing…':pending.action==='import_roster'?'Importing…':['send_review','post','review_post'].includes(pending.action)?'Sending…':pending.action==='fixture_lock'?(pending.data.unlock?'Unlocking…':'Locking…'):'Saving…',restoreButton=seButtonWorking(s.actionButton,working);s.actionButton=null;s.pending=pending;s.busy=true;selectionEvidence.pause();sePersist();seNotice(pending.action==='publish'?'Publishing teams…':working,{quiet:pending.action!=='publish'});seLock(true);if(pending.copyLast)seUpdateCopyStatus(pending.copyLast.id);let requestConfirmed=false;
  try{const result=await seRPC(pending.action,pending.data);requestConfirmed=true;if(s!==selectionState)return false;if(pending.action==='publish'&&result?.published!==true)throw Error('Publication was not confirmed. Retry the same request.');s.formDirty=false;const loaded=await seReload();if(!loaded||s!==selectionState||s.key!==selectionsScopeKey())return false;s.pending=null;s.teamChange=pending.order?.feedback?{id:pending.order.id,revision:result.revisions?.[pending.order.id],text:pending.order.feedback}:null;if(pending.action==='review_post'&&s.boardCommentDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardCommentDrafts[pending.data.id];if(pending.action==='post'&&s.boardChatDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardChatDrafts[pending.data.id];s.formDirty=[...Object.values(s.boardCommentDrafts||{}),...Object.values(s.boardChatDrafts||{})].some(x=>x.trim());sePersist();if(pending.undo)s.undo.push({before:pending.undo,expected:result.revisions});if(action==='save_roster')s.rosterSaved=true;if(pending.action==='publish'){s.view='published';s.date=s.data.fixtures.find(f=>pending.data.ids.includes(f.id))?.details?.days?.[0]?.date||s.date;s.boardDateChosen=true;s.active=null;s.publicationResult={ids:pending.data.ids,recipients:Number(result.recipients)||0};}s.notice=action==='show_dropped'?(result.count?result.count+' dropped player'+(result.count===1?'':'s')+' highlighted':'No dropped players need a conversation for these teams.'):action==='publication_delegate'?(data.operation==='hand_back'?'Publishing handed back to the Head of Selections ✓':'Delegation saved ✓'):action==='review_post'?'Comment added ✓':action==='post'?'Message sent ✓':action==='conversation'?(data.spoken?'Marked spoken to ✓':'Conversation marked as needed'):action==='fixture_lock'?(data.unlock?'Unlocked · republish changes to notify players · locks after 30 minutes':'Team locked'):action==='send_review'?'Sent to captains ✓':action==='publish'?`${pending.data.ids.length} team${pending.data.ids.length===1?'':'s'} published ✓ · Messages created for ${Number(result.recipients)||0} club members.${Number.isInteger(result.groups?.added_memberships)?' Usual grades updated in Club Batting; existing grades kept.':''}${result.groups?.unlinked_players?.length?' Some players still need a Club Batting player link.':''}${result.groups?.unmapped_grades?.length?' Link these grades in Settings: '+result.groups.unmapped_grades.map(g=>g.grade).join(', ')+'.':''}`:pending.order?.feedback?'':pending.order?.message||'Saved ✓';if(pending.action==='publish'){const unnamed=s.data.fixtures.filter(f=>pending.data.ids.includes(f.id)&&seMatchRoleIssues(f,seMatchRoles(f,s.data)).some(i=>i.code==='missing_keeper')).map(f=>f.details.grade);if(unnamed.length)s.notice+=' Wicketkeeper not named: '+unnamed.join(', ')+'.';}s.quietNotice=pending.action==='publish'||pending.action==='fixture_lock'&&pending.data.unlock||pending.action==='show_dropped'&&!result.count?null:s.notice;if(pending.picker||pending.order)sePickerSaved(pending.picker);if(pending.copyLast)seCopyMessage(pending.copyLast.id,pending.copyLast.message);s.busy=false;drawSelections();if(pending.availabilityReturn)seReturnFromAvailability(pending.availabilityReturn);if(pending.action==='publish')seRevealPublication('seNotice');if(pending.picker&&currentTab==='teams'&&s.view==='board')seFocusSlot(pending.picker.active);if(pending.order&&currentTab==='teams'&&s.view==='board')seFocusOrder(pending.order.id,pending.order.slot);if(['save_roster','import_roster','selectors','publication_delegate','save_board','save_fixture','publish'].includes(action)&&!(currentTab==='teams'&&s.view==='board'))void refreshClubMessageBadge();return true;}catch(error){s.quietNotice=null;if(!requestConfirmed&&pending.action==='publish'&&error.code==='57014'){s.pending=null;sePersist();s.notice='Publishing timed out. The teams were not published. Your saved selections are safe; review and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&error.message.startsWith('Draft changed. Review the latest team before publishing')){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='The team changed since this publication was prepared. Review the latest team and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&/^(Fix selection or availability issues before publishing|Confirm publishing this team with vacant places|Review and acknowledge the balance warnings before publishing|A player is still published in an overlapping game|.+ is already selected in overlapping games on )/.test(error.reason||error.message)){s.pending=null;sePersist();try{await seReload();}catch{}let blockers=[];try{const notes=JSON.parse(error.details||'[]');if(Array.isArray(notes))blockers=notes.filter(n=>n.level==='error'&&typeof n.text==='string').map(n=>n.text);}catch{}const roles=s.data.fixtures.filter(f=>pending.data.ids.includes(f.id)).flatMap(f=>seMatchRoleIssues(f,seMatchRoles(f,s.data)).filter(i=>i.level==='error').map(i=>f.details.grade+': '+i.text));s.notice='Teams were not published. '+(roles.length?roles.join(' · '):blockers.length?blockers.join(' · '):error.reason||error.message)+' Review the teams and publish again.';}else if(!requestConfirmed&&pending.action==='save_board'&&error.code==='P0001'&&(/ is already selected (?:on \d{4}-\d{2}-\d{2}|in overlapping games on \d{4}-\d{2}-\d{2})/.test(error.message)||/^(A team changed in another session|Mark availability before selecting)/.test(error.message))){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Team was not changed. '+error.message;}else if(pending.action==='availability_batch'&&/^(A player updated their calendar|Playing list changed|A calendar changed)/.test(error.message)){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Availability changed while you were editing. Review the saved choices and try again.';}else if(pending.action==='post'&&error.message.startsWith('This match conversation is closed.')||error.message.startsWith('Completed fixture is locked.')||error.message.startsWith('Published team is locked.')||['conversation','grade_levels','review_post'].includes(action)&&/^(This selection|Conversation status|Settings changed|Club Admin|The team changed|Team comments are private)/.test(error.message)||error.message.startsWith('Only the current Head of Selections')||action==='publication_delegate'&&/^(Only |Choose |Assign |Selection responsibilities changed)/.test(error.message)){s.pending=null;sePersist();if(pending.action==='conversation'){try{await seReload();}catch{}}s.notice=error.message;}else s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;if(pending.copyLast)seCopyMessage(pending.copyLast.id,s.notice);s.busy=false;drawSelections();if(pending.action==='publish')seRevealPublication('seNotice');return false;}finally{s.busy=false;seLock(false);restoreButton();if(pending.copyLast&&s===selectionState)seUpdateCopyStatus(pending.copyLast.id);}}
 function seLock(disabled){document.querySelectorAll('#sePage button,#sePage input,#sePage select,#sePage textarea').forEach(x=>{if(disabled){x.dataset.seWasDisabled=x.disabled?'1':'0';x.disabled=true;}else if(x.dataset.seWasDisabled!==undefined){x.disabled=x.dataset.seWasDisabled==='1';delete x.dataset.seWasDisabled;}});}
@@ -20011,7 +20016,7 @@ async function loadSocialFeatures(){
  const current=()=>state===socialState&&scope===selectionsScopeKey()&&request===requestedFeatureScope()&&ensureSelections().data?.socials===true;
  const task={scope,request,state};socialEngineTask=task;
  task.promise=(async()=>{
-  const module=await import('./social-workspace.js?v=0.8.62.303');
+  const module=await import('./social-workspace.js?v=0.8.62.304');
   if(!current())return null;
   const engine=module.createSocialWorkspace({appNavigationBack,club,drawSelections,ensureSelections,matchReviewExtractUrl,mountScorecardTeam,normaliseHex,platformRole,recordSelectionNavigation,renderSocialPlatformSetup,restoreSocialNavigation,seDownload,seEsc,seFormatLabel,seNotice,seOpt,seReload,selectionsScopeKey,session,socialCanLeave,socialEnsure,socialHere,socialOpenFixture,socialState,supabase});
   await engine.loadSocialFeatures();if(!current())return null;
@@ -20098,9 +20103,13 @@ const clubWeek=createDeferredController({load:()=>import('./club-week-panel.js?v
  calendarBase:SUPABASE_URL+'/functions/v1/selection-calendar'
 }),scope:requestedFeatureScope,name:'club tools',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}},host:()=>null,onError:()=>seNotice('Club tools could not load. Reopen this section to try again.')});
 let assistFromGuide=false,pendingAssistLaunch=null;
-const mirelionAssist=createMirelionAssist({
+const mirelionAssist=createStaffAssistController({
+ load:()=>import('./mirelion-assist.js?v=0.8.62.304'),
+ allowed:()=>!!(platformRole&&document.getElementById('platformPage'))||canUseMirelionAssist(),
+ scope:()=>JSON.stringify([session?.user?.id,club?.id,!!document.getElementById('platformPage'),currentTab,platformView,selectionAccess?.assist_staff]),
+ create:module=>module.createMirelionAssist({
   supabase,
-  getContext:()=>({userId:session?.user?.id,clubId:club?.id,platform:!!(platformRole&&document.getElementById('platformPage'))}),
+  getContext:()=>({userId:(canUseMirelionAssist()||platformRole&&document.getElementById('platformPage'))?session?.user?.id:null,clubId:club?.id,platform:!!(platformRole&&document.getElementById('platformPage'))}),
   onNavigate:()=>recordAppNavigation(document.getElementById('platformPage')?platformNavigationRoute():clubNavigationRoute()),
   onUnread:(count,context)=>{
     const targets=context?.platform?'[data-platform-view="guide_requests"]':'[data-tab="assist"],#clubMenuToggle';
@@ -20112,8 +20121,10 @@ const mirelionAssist=createMirelionAssist({
     }
   },
   demo:!!window.__fixtureDb
+ })
 });
 async function renderMirelionAssist(){
+  if(!canUseMirelionAssist()){mirelionAssist.reset();return;}
   const includeGuide=assistFromGuide;assistFromGuide=false;
   const launch=pendingAssistLaunch;pendingAssistLaunch=null;
   return mirelionAssist.mount(document.getElementById('page'),{...launch,newMessage:includeGuide,includeGuide});

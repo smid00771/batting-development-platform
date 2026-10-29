@@ -215,7 +215,7 @@ supabase.rpc=async function(name,args={}){
     if(a==='decline_player_link'){(demoSelections.linkDeclined||={})[uid+':'+p.id]=true;return demoOK({status:'club_help'});}
     p.user_id=uid;return demoOK({status:'linked',roster_id:p.id,name:p.name,grade:p.grade});
    }
-   if(a==='access'){const result=await demoPreviousCurrentRpc(name,args);if(result.data)Object.assign(result.data,{mode:demoProduct==='select'?'standalone':'bundle',enabled:demoProduct!=='batting',batting_participant:demoProduct!=='select'});return result;}
+   if(a==='access'){const result=await demoPreviousCurrentRpc(name,args);if(result.data)Object.assign(result.data,{mode:demoProduct==='select'?'standalone':'bundle',enabled:demoProduct!=='batting',batting_participant:demoProduct!=='select',assist_staff:!['player','participant'].includes(demoPersona)});return result;}
    if(['save_board','publish','send_review','fixture_lock'].includes(a)){
     const ids=a==='save_board'?(d.fixtures||[]).map(f=>f.id):d.ids||[d.id],fixtures=demoSelections.fixtures.filter(f=>ids.includes(f.id));
     if(fixtures.some(f=>a==='publish'||a==='fixture_lock'?demoGroupHead(demoGroupFor(f))!==uid:demoGrant(demoGroupFor(f))<2))return demoFail('Your permissions do not allow this change in that Selection Group.');
