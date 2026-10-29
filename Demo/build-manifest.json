@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.297",
+  "appVersion": "0.8.62.298",
   "sources": {
     "app-design.css": "ff72d99dced381c050d9824837ca09a363a2850f269a35b8396521a809b2372d",
-    "app.js": "9d87fabc84e60b1695cb2d631c55db4180b30da79c07d13127aa49262ee31cf4",
+    "app.js": "9fb606ee1730f6599c328d8d76bb902fc55d116b730bd12304c095aa12f42535",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
@@ -10,7 +10,7 @@
     "deferred-feature.js": "ab3d69675c974b10b5cbea9fcdecb9500306d0fc6d827ed06e35ed1c26c4780f",
     "Demo/current-fixtures.js": "2244d6c5082b1536e42bf169850fa9d8d936240d1ba35964d3d5a2566aea42b7",
     "Demo/demo.css": "e8692b88ac16b44b09c26ecfea033e1f5e66e0efeedd80efe604d6819ba00c6c",
-    "Demo/fixtures.js": "dc8d3e14609cd7a6eb2fdd4fed7fd2ba6a46c65893f0fc4b48c5cf21c9a714d5",
+    "Demo/fixtures.js": "af8fc691522d3b0e4db21d01975f82f5cc0db91b386d26cd25419f3d5d1b45d4",
     "Demo/isolation.js": "689a8f962fc599e79d573e5dc88203f4cdd775e98cfb249787e45eb5e7650c77",
     "Demo/journeys.js": "d2fe4fccdb12285b4f4ed3c223b80f683bf225d391e7c256acb176e53c86ed26",
     "Demo/template.html": "57df21c9dce29c9b12d38197a61487cf38c583ab6370ba7f4a9a03e517f76aff",

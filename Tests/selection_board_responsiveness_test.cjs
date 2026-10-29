@@ -1,6 +1,8 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),{openDemo}=require('./helpers/demo_harness.cjs');
 test('opening, switching and closing player pickers preserves every team card and makes no request',async t=>{
  const h=await openDemo('selections');t.after(h.close);h.window.scrollBy=()=>{};
+ // Drain the shell's animation-frame and timer upkeep before measuring picker work.
+ for(let i=0;i<2;i++)await new Promise(resolve=>h.window.setTimeout(resolve,0));await h.settle();
  const cards=[...h.document.querySelectorAll('[data-se-team]')],slots=[...h.document.querySelectorAll('[data-se-slot]')];let scans=0;
  const original=h.window.sePickerEligibilityIndex;h.window.sePickerEligibilityIndex=(...args)=>{scans++;return original(...args);};
  const logs=h.window.__fixtureLogs.length;
@@ -12,7 +14,7 @@ test('opening, switching and closing player pickers preserves every team card an
  await h.choose('#seRoleFilter','pace');assert.equal(scans,2,'Changing eligibility filters rebuilds once');
  slots[2].click();await h.settle();assert.equal(scans,3);assert.equal(h.document.querySelectorAll('#sePicker').length,1);assert.equal(slots[0].getAttribute('aria-expanded'),'false');
  await h.click('[data-se-close-picker]');assert.equal(h.document.getElementById('sePicker'),null);assert.equal(h.document.activeElement,slots[2]);
- assert.deepEqual([...h.document.querySelectorAll('[data-se-team]')],cards);assert.equal(h.window.__fixtureLogs.length,logs,'Picker interactions have no database work');assert.deepEqual(h.errors,[]);
+ assert.deepEqual([...h.document.querySelectorAll('[data-se-team]')],cards);assert.equal(h.window.__fixtureLogs.length,logs,'Picker interactions have no database work: '+JSON.stringify(h.window.__fixtureLogs.slice(logs)));assert.deepEqual(h.errors,[]);
 });
 test('indexed eligibility retains overlapping games, missing times, names, unavailable dates and two-day choices',async t=>{
  const h=await openDemo('selections');t.after(h.close);const w=h.window;

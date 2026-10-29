@@ -89,3 +89,28 @@ test('unchecking predictions still saves and leaves the normal home free of pred
  await h.click('#callSettingsForm button[type="submit"]');assert.match(h.document.getElementById('page').textContent,/not enabled yet/);assert.ok(h.rpcCalls.some(x=>x.name==='save_make_your_call_settings'&&x.args.p_values.enabled===false));
  h.rpcCalls.length=0;await h.click('[data-tab="dashboard"]');assert.deepEqual(h.rpcCalls.filter(x=>predictionRpc(x.name)),[]);clean(h);
 });
+
+ test('disabled predictions disappear for players, block direct opening and remain configurable by admins',async t=>{
+ const h=await openDemo({product:'both',role:'admin',journey:'home'},{traceRpc:true});t.after(h.close);
+ await h.click('[data-tab="make_your_call"]');await h.click('#callEditSettings');
+ const enabled=h.document.getElementById('callEnabled');enabled.checked=false;enabled.dispatchEvent(new h.window.Event('change',{bubbles:true}));
+ await h.click('#callSettingsForm button[type="submit"]');
+ await h.choose('#demoPersona','player');await h.settle();
+ assert.equal(h.document.querySelector('[data-tab="make_your_call"]'),null);
+ assert.ok(h.document.querySelector('[data-tab="playerhome"]'));assert.ok(h.document.querySelector('[data-tab="teams"]'));
+ assert.equal(h.window.canOpenClubTab('make_your_call'),false);
+ h.rpcCalls.length=0;await h.window.renderMakeYourCall();assert.deepEqual(h.rpcCalls.filter(x=>predictionRpc(x.name)),[],'A direct route cannot open disabled predictions');
+ await h.choose('#demoPersona','admin');await h.click('[data-tab="make_your_call"]');await h.click('#callEditSettings');
+ assert.equal(h.document.getElementById('callEnabled').checked,false,'Admin can still reach the saved setting');
+ h.document.getElementById('callEnabled').checked=true;h.document.getElementById('callEnabled').dispatchEvent(new h.window.Event('change',{bubbles:true}));
+ await h.click('#callSettingsForm button[type="submit"]');await h.choose('#demoPersona','player');
+ assert.ok(h.document.querySelector('[data-tab="make_your_call"]'),'Enabling the feature restores member navigation');clean(h);
+ });
+ test('prediction access fails closed for missing, failed or another account’s startup context',async t=>{
+ const h=await openDemo({product:'both',role:'player',journey:'player_home'});t.after(h.close);
+ assert.equal(h.window.canOpenClubTab('make_your_call'),true);
+ for(const expression of ['selectionAccess=null','selectionAccess={key:selectionsScopeKey(),predictions_enabled:true,error:"offline"}','selectionAccess={key:"other-account",predictions_enabled:true}','selectionAccess={key:selectionsScopeKey()}']){
+  h.window.eval(expression);assert.equal(h.window.canOpenClubTab('make_your_call'),false);
+ }
+ clean(h);
+ });
