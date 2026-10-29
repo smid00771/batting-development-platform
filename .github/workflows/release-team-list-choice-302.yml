@@ -1,0 +1,39 @@
+name: Verify team-list choices release
+on:
+  push:
+    branches: ["codex/team-list-choice-302"]
+    paths: [".github/release-team-list-choice-302.patch.gz.b64", ".github/workflows/release-team-list-choice-302.yml"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply reviewed source patch
+        run: base64 --decode .github/release-team-list-choice-302.patch.gz.b64 | gzip -d | git apply --binary
+      - run: npm ci --ignore-scripts
+      - name: Verify source and delivered demo
+        run: |
+          node --check app.js
+          node --check social-workspace.js
+          node --check social-team-workflow.js
+          node --check social-publishing.js
+          node Scripts/build-demo.mjs --check
+          node --test Tests/social_team_workflow_test.mjs Tests/social_graphic_assistant_test.mjs Tests/social_photo_position_test.cjs Tests/social_loading_test.cjs Tests/social_storage_delete_test.mjs Tests/social_large_photo_test.cjs Tests/social_history_test.cjs Tests/social_awards_publishing_test.mjs Tests/demo_navigation_integration_test.cjs Tests/demo_roles_integration_test.cjs Tests/navigation_precision_test.cjs
+      - name: Commit verified source
+        run: |
+          git add 'AGENTS.md' 'Demo/build-manifest.json' 'Demo/current-fixtures.js' 'Reviews/2026-10-29-team-list-choices-302.md' 'Tests/social_team_workflow_test.mjs' 'app-start.js' 'app.html' 'app.js' 'demo.html' 'social-publishing.js' 'social-team-workflow.js' 'social-workspace.js'
+          git rm .github/release-team-list-choice-302.patch.gz.b64 .github/workflows/release-team-list-choice-302.yml
+          test "$(git write-tree)" = "e28ad85f2f4cdecbc701b6027f47fa3f9de5b5af"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Apply verified team-list choices update"
+          git push origin HEAD:${{ github.ref_name }}
