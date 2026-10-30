@@ -1,0 +1,41 @@
+name: Verify and prepare Match Review and standalone fixtures 310
+on:
+  push:
+    branches: [codex/match-review-cleanup-310]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: codex/match-review-cleanup-310
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply reviewed implementation
+        run: base64 --decode .github/review-fixtures-310.patch.gz.b64 | gzip -d | git apply --binary
+      - run: npm ci --ignore-scripts
+      - run: npm install --prefix /tmp/mirelion-db-tests --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.12
+      - name: Verify fixture and review workflows
+        env:
+          NODE_PATH: /tmp/mirelion-db-tests/node_modules
+        run: |
+          node --check app.js
+          node --check batting-fixtures.js
+          node Scripts/build-demo.mjs --check
+          git diff --check
+          cmp Database/club_batting_fixtures.sql supabase/migrations/20261030083323_club_batting_fixtures.sql
+          node --test Tests/batting_fixtures_database_test.cjs Tests/completed_scorecard_match_review_test.cjs
+          node --test Tests/batting_fixtures_ui_test.mjs Tests/batting_fixtures_demo_test.cjs Tests/match_review_home_test.cjs Tests/navigation_precision_test.cjs Tests/scorecard_identity_ui_test.cjs
+      - name: Commit exactly the reviewed tree
+        run: |
+          git add AGENTS.md Database/club_batting_fixtures.sql Demo/build-manifest.json Demo/current-fixtures.js Reviews/2026-10-30-match-review-fixtures-310.md Reviews/assets/batting-fixtures-310-desktop.jpg Reviews/assets/match-review-310-desktop.jpg Reviews/assets/match-review-310-phone.jpg Reviews/assets/match-review-310-sticky.jpg Tests/batting_fixtures_database_test.cjs Tests/batting_fixtures_demo_test.cjs Tests/batting_fixtures_ui_test.mjs Tests/fixtures/batting_fixtures_baseline.sql Tests/match_review_home_test.cjs Tests/navigation_precision_test.cjs Tests/scorecard_identity_ui_test.cjs app-start.js app.html app.js batting-fixtures.js demo.html playcricket-connection.js supabase/migrations/20261030083323_club_batting_fixtures.sql
+          git rm .github/review-fixtures-310.patch.gz.b64 .github/workflows/prepare-fixtures-310.yml
+          test "$(git write-tree)" = "498bffb34a2ef78eb6692168a911276af03dd454"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Simplify Match Review and add standalone batting fixtures (.310)'
+          git push origin HEAD:codex/match-review-cleanup-310
