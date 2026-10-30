@@ -1,3 +1,9 @@
+Late to ground is one shared fact per club player and fixture, independent of observer and innings. Both Match Review and Match Observation read and update it; repeated checks do not create duplicate events. Provide a current-season Late arrivals roll with dates, counts, repeat flags and Mark discussed, retaining history and highlighting later occurrences. Use existing coaching permissions, safe corrections and receipt-based retry. User request, 31 October 2026.
+
+Republishing notifies only players whose selection, playing days, batting place or captain/keeper appointment changes. Shared match arrangements notify every affected participant. Retain scoped selector/captain/staff oversight, removed-player notices and one batched message when a player moves teams. User clarification, 31 October 2026.
+
+Publication review offers team checkboxes within the current Selection Group. Publish and notify only the checked changed fixtures; unchecked drafts and existing published snapshots remain unchanged. Validation, warnings, vacant-place acknowledgements and the final count follow the checked teams. Keep group publishing authority, cross-team overlap checks, atomic moves, revision checks and identical-request retry. Unfinished Dev League teams must not block otherwise valid chosen teams. User request, 31 October 2026.
+
 Club Home shows all five setup-progress tiles by default after setup is complete, matching the user’s preferred expanded overview. Keep individual step editors collapsed until opened, and retain the option to collapse the overview. User preference, 30 October 2026.
 
 The user has given standing approval to publish completed Mirelion updates of any version name to GitHub and the live app. Do not ask for approval again for each release; complete relevant checks and verify the deployed result. User instruction, 30 October 2026.

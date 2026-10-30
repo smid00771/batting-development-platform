@@ -359,7 +359,7 @@ function demoPlayerRequirements(playerId){
   return [...byFormat.values()];
 }
 
-function demoPlayerAccess(playerId){if(demoTemporaryCaptainPlayer(playerId))return {view:true,edit:true};if(membership?.permission_role==='admin')return {view:true,edit:true};const groups=demoPlayerGroups(playerId);const grants=fixtureRows.club_access_grants.filter(g=>g.user_id===session.user.id&&(g.scope==='whole_club'||groups.some(group=>group.id===g.playing_group_id)));return {view:grants.some(g=>g.can_view||g.can_edit)||myPlayer?.id===playerId,edit:grants.some(g=>g.can_edit)};}
+function demoPlayerAccess(playerId){if(membership?.permission_role==='admin')return {view:true,edit:true};const groups=demoPlayerGroups(playerId),grants=fixtureRows.club_access_grants.filter(g=>g.user_id===session.user.id&&(g.scope==='whole_club'||groups.some(group=>group.id===g.playing_group_id)));if(grants.some(g=>g.can_edit)||demoTemporaryCaptainPlayer(playerId))return {view:true,edit:true};return {view:grants.some(g=>g.can_view)||myPlayer?.id===playerId,edit:false};}
 
 fixtureWorkspacePlayers=function(){return fixtureRows.players.filter(p=>p.active!==false&&demoPlayerAccess(p.id).view).map(player=>({...fixtureClone(player),can_edit:demoPlayerAccess(player.id).edit,groups:fixtureClone(demoPlayerGroups(player.id)),workflow:fixtureClone(fixtureRows.player_plan_workflows.find(w=>w.player_id===player.id)||{}),requirements:demoPlayerRequirements(player.id)}));};
 
@@ -2440,7 +2440,8 @@ function demoSharedGroup(g){const uid=demoSeasonSetup().appointments[g.id];retur
 
 demoMatchGroups=()=>fixtureGroups.filter(g=>g.active).map(demoSharedGroup);
 
-function demoCaptainExpiry(details){const s=demoSeasonSetup(),zone=s.timezone,date=new Date(details.days.map(d=>d.date).sort().at(-1)+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+s.standin_days+1);const target=date.toISOString().slice(0,10);let guess=Date.parse(target+'T00:00:00Z');for(let i=0;i<3;i++){const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(guess)),p=k=>parts.find(v=>v.type===k).value;guess+=Date.parse(target+'T00:00:00Z')-Date.parse(`${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}Z`);}return new Date(guess).toISOString();}
+const demoCaptainExpiryCache=new Map();
+function demoCaptainExpiry(details){const s=demoSeasonSetup(),zone=s.timezone,key=JSON.stringify([zone,s.standin_days,details.days.map(d=>d.date).sort()]);if(demoCaptainExpiryCache.has(key))return demoCaptainExpiryCache.get(key);const date=new Date(details.days.map(d=>d.date).sort().at(-1)+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+s.standin_days+1);const target=date.toISOString().slice(0,10);let guess=Date.parse(target+'T00:00:00Z');for(let i=0;i<3;i++){const parts=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(guess)),p=k=>parts.find(v=>v.type===k).value;guess+=Date.parse(target+'T00:00:00Z')-Date.parse(`${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}Z`);}const result=new Date(guess).toISOString();demoCaptainExpiryCache.set(key,result);return result;}
 
 function demoManualRoles(f){const r=demoSelections.match_review_rosters?.[f.id],g=demoSharedFixtureGroup(f),season=demoSharedGroup(g||{}).captain_player_ids.filter(id=>r?.ids.includes(id)).sort()[0];return {captain_player_id:season||r?.captain_player_id||null,keeper_player_id:r?.keeper_player_id||null};}
 

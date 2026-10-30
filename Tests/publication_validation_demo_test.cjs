@@ -9,6 +9,9 @@ async function setup(t){
   window.publishCalls=[];window.issueScans=0;
   const realIssues=demoSelectionIssues;demoSelectionIssues=f=>{window.issueScans++;return realIssues(f);};
   const realRpc=supabase.rpc;supabase.rpc=async(name,args)=>{if(name==='club_selections_api')window.publishCalls.push(structuredClone(args));return realRpc(name,args);};
+  const draftIds=['selection-first','selection-second','third-upcoming','fourth-upcoming','dev-navy-upcoming','dev-sky-upcoming'];
+  for(const f of demoSelections.fixtures.filter(f=>draftIds.includes(f.id))){f.published=null;f.publication=0;}
+  selectionState.date=demoSelections.fixtures.find(f=>f.id==='selection-first').details.days[0].date;selectionState.boardDateChosen=true;
   const f=demoSelections.fixtures.find(f=>f.id==='dev-navy-upcoming');
   for(const p of demoSelections.roster.filter(p=>f.slots.some(s=>s.d1===p.id)))p.keeper=false;
   f.details.match_roles.d1.keeper_id=null;f.details.match_roles.d1.keeper_manual=false;
@@ -80,4 +83,56 @@ test('failed or stale publication checks do not open a confirmation or leave an 
   assert.match(h.document.querySelector('#seNotice').textContent,mode==='failure'?/Review connection failed/:/team changed while checking/);
   assert.equal(calls(h,'publish').length,0);
  }
+});
+
+const seniors=['selection-first','selection-second','third-upcoming','fourth-upcoming'];
+const devs=['dev-navy-upcoming','dev-sky-upcoming'];
+async function omitDev(h){for(const id of devs)await h.click(`[data-se-publish-team="${id}"]`);}
+
+test('publish four grades, leave unfinished Dev drafts untouched, then publish Dev teams later',async t=>{
+ const h=await setup(t);
+ const untouched=h.window.eval('JSON.stringify(demoSelections.fixtures.filter(f=>!["selection-first","selection-second","third-upcoming","fourth-upcoming"].includes(f.id)))');
+ h.window.eval(`window.incompleteRpc=supabase.rpc;supabase.rpc=async(name,args)=>{const r=await window.incompleteRpc(name,args);if(args.p_action==='publication_check')for(const f of r.data.fixtures.filter(f=>f.id.startsWith('dev-')))f.issues.push({level:'error',text:'Team not ready'});return r;};`);
+ await review(h);assert.equal(h.document.querySelectorAll('[data-se-publish-team]').length,6);
+ assert.equal(h.document.querySelector('#seConfirmPublish').disabled,true);
+ await omitDev(h);
+ assert.equal(h.document.querySelector('#seConfirmPublish').disabled,false);
+ assert.match(h.document.querySelector('#seConfirmPublish').textContent,/Publish 4 teams/);
+ assert.doesNotMatch(h.document.querySelector('#sePublishChecks').textContent,/Team not ready|Dev Navy/);
+ assert.equal(calls(h,'publication_check').length,1,'Checkboxes reuse the checked snapshot without more requests');
+ await h.click('#seConfirmPublish');
+ const request=plain(calls(h,'publish')[0].p_data);
+ assert.deepEqual(request.ids,seniors);assert.deepEqual(Object.keys(request.revisions),seniors);assert.deepEqual(request.acknowledge_short,[]);
+ assert.equal(h.window.eval('JSON.stringify(demoSelections.fixtures.filter(f=>!["selection-first","selection-second","third-upcoming","fourth-upcoming"].includes(f.id)))'),untouched);
+ assert.equal(h.window.eval('demoSelections.fixtures.filter(f=>["selection-first","selection-second","third-upcoming","fourth-upcoming"].includes(f.id)).every(f=>!!f.published)'),true);
+ h.window.eval(`supabase.rpc=window.incompleteRpc;selectionState.view='board';drawSelections();`);await h.settle();await review(h);
+ assert.deepEqual([...h.document.querySelectorAll('[data-se-publish-team]')].map(el=>el.dataset.sePublishTeam),devs);
+ await h.click('#seConfirmPublish');assert.deepEqual(plain(calls(h,'publish').at(-1).p_data.ids),devs);
+ assert.equal(h.window.eval('demoSelections.fixtures.filter(f=>["selection-first","selection-second","third-upcoming","fourth-upcoming"].includes(f.id)).every(f=>f.publication===1)'),true,'Earlier teams are not republished');
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});
+
+test('no teams checked cannot publish, and short-team acknowledgements follow the chosen teams',async t=>{
+ const h=await setup(t);
+ h.window.eval(`for(const id of ['dev-navy-upcoming','dev-sky-upcoming'])demoSelections.fixtures.find(f=>f.id===id).slots[10].d1=null;`);
+ await h.window.eval('seReload()');h.window.eval('drawSelections()');await h.settle();await review(h);
+ assert.equal(h.document.querySelectorAll('[data-se-ack-short]').length,2);
+ await omitDev(h);assert.equal(h.document.querySelectorAll('[data-se-ack-short]').length,0);
+ for(const id of seniors)await h.click(`[data-se-publish-team="${id}"]`);
+ assert.equal(h.document.querySelector('#seConfirmPublish').disabled,true);
+ await h.click('#seConfirmPublish');assert.equal(calls(h,'publish').length,0);
+ await h.click('[data-se-publish-team="dev-navy-upcoming"]');
+ await h.click('#seConfirmPublish');assert.equal(calls(h,'publish').length,0);
+ await h.click('[data-se-ack-short="dev-navy-upcoming"]');await h.click('#seConfirmPublish');
+ const request=plain(calls(h,'publish')[0].p_data);assert.deepEqual(request.ids,['dev-navy-upcoming']);assert.deepEqual(request.acknowledge_short,['dev-navy-upcoming']);
+});
+
+test('a lost partial-publication response retries only the same selected teams',async t=>{
+ const h=await setup(t);await review(h);await omitDev(h);
+ h.window.eval(`const partialRpc=supabase.rpc;let losePartial=true;supabase.rpc=async(name,args)=>{const r=await partialRpc(name,args);if(args.p_action==='publish'&&losePartial){losePartial=false;return {data:null,error:{message:'Connection lost'}};}return r;};`);
+ await h.click('#seConfirmPublish');const pending=plain(h.window.eval('selectionState.pending'));
+ assert.deepEqual(pending.data.ids,seniors);assert.ok(h.document.querySelector('#seRetrySave'));
+ await h.click('#seRetrySave');assert.equal(h.window.eval('selectionState.pending'),null);
+ assert.deepEqual(plain(calls(h,'publish').map(c=>c.p_data)),[pending.data,pending.data]);
+ assert.equal(h.window.eval('demoSelections.fixtures.filter(f=>f.id.startsWith("dev-")&&f.id.endsWith("upcoming")).every(f=>f.published===null)'),true);
 });

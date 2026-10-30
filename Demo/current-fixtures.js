@@ -12,6 +12,7 @@ function demoGrant(group,user=session?.user.id){const g=demoPermissions.groups.f
 function demoGroupHead(group){return demoPermissions.groups.find(g=>g.id===group)?.head_id;}
 function demoGroupContext(){return {...structuredClone(demoGroups),can_edit:isAdmin(),batting_available:demoProduct!=='select',expected_grades:JSON.stringify(fixtureGroups.map(g=>[g.id,g.name])),grades:fixtureGroups.map(g=>({...g,selection_group_id:demoGroups.grades.find(x=>x.id===g.id)?.selection_group_id||null}))};}
 function demoSeedCurrent({empty=false}={}){
+ demoArrivalRows={};demoArrivalReceipts={};
  demoClubBatting=null;demoSelections=null;selectionState=null;selectionAccess=null;socialState=null;demoSeedClub();seedDemoSelections();
  const addMember=(id,name,role='player',involvement='coach_captain')=>{fixtureRows.user_profiles.push({user_id:id,display_name:name});fixtureRows.club_memberships.push({club_id:club.id,user_id:id,permission_role:role,involvement});};
  addMember('user-selector','Morgan Lane');addMember('user-head','Jamie Wells');addMember('user-lead','Jules Bennett');addMember('user-social','Avery Shaw');addMember('user-combined','Robin Hart','captain','both');addMember('user-masters-head','Drew Kelly');
@@ -360,3 +361,35 @@ function demoFilterAwardContext(context,scope){
 const demoAssistTransport=createMirelionAssistDemo(()=>({userId:session?.user?.id,clubName:club?.name,name:userProfile?.display_name}));
 const demoBeforeAssistRpc=window.__fixtureDb.rpc;
 window.__fixtureDb.rpc=function(name,args){return name==='mirelion_assist'?demoAssistTransport.rpc(name,args):demoBeforeAssistRpc.call(this,name,args);};
+
+// The same shared fixture/player arrival contract, using fictional data only.
+let demoArrivalRows={},demoArrivalReceipts={};
+const demoBeforeArrivalsRpc=window.__fixtureRpc;
+window.__fixtureRpc=async(name,args={})=>{
+ if(name!=='match_arrivals_api')return demoBeforeArrivalsRpc(name,args);
+ try{
+  demoTeamStaff(args.p_club_id);const editable=new Set(demoTeamEditable().map(p=>p.id)),p=args.p_data||{},action=args.p_action;
+  const permitted=id=>editable.has(id),stamp=()=>new Date().toISOString(),receipt=session.user.id+':'+p.request_id;
+  if(action==='roll'){
+   const now=new Date(),start=new Date(Date.UTC(now.getUTCFullYear()-(now.getUTCMonth()<6?1:0),6,1)).toISOString().slice(0,10),end=(Number(start.slice(0,4))+1)+'-06-30',people=new Map();
+   for(const r of Object.values(demoArrivalRows)){const f=demoSelections.fixtures.find(f=>f.id===r.fixture_id),date=f?.details.days[0].date;if(!r.late||!permitted(r.player_id)||!date||date<start||date>end||f.details.cancelled)continue;
+    const person=people.get(r.player_id)||{player_id:r.player_id,display_name:fixtureRows.players.find(p=>p.id===r.player_id)?.display_name||'Player',count:0,outstanding:0,matches:[]};person.count++;if(!r.discussed_at)person.outstanding++;person.matches.push({...r,match_date:date,grade:f.details.grade,opposition:f.details.opposition});people.set(r.player_id,person);
+   }
+   return demoOK({players:[...people.values()].sort((a,b)=>Number(b.count>=2&&b.outstanding>0)-Number(a.count>=2&&a.outstanding>0)||b.count-a.count),season_from:start,season_to:end,repeat_threshold:2});
+  }
+  if(!(action==='discuss'?[p.player_id]:p.player_ids||[]).every(permitted))return demoFail('Coaching edit access is required');
+  if(p.request_id&&demoArrivalReceipts[receipt])return demoOK(demoArrivalReceipts[receipt]);
+  if(action==='discuss'){
+   for(const m of p.matches){const r=demoArrivalRows[m.fixture_id+':'+p.player_id];if(!r?.late)return demoFail('An arrival changed. Reload the late-arrivals list.');if(!r.discussed_at&&r.revision!==m.revision)return demoFail('An arrival changed. Reload the late-arrivals list.');}
+   for(const m of p.matches){const r=demoArrivalRows[m.fixture_id+':'+p.player_id];if(!r.discussed_at){r.discussed_at=stamp();r.revision++;}}
+   const result={discussed:true,player_id:p.player_id};demoArrivalReceipts[receipt]=result;return demoOK(result);
+  }
+  let f=demoSelections.fixtures.find(f=>p.fixture_id?f.id===p.fixture_id:f.details.grade_group_id===p.group_id&&f.details.days[0].date===p.identity?.match_date&&f.details.format===p.identity?.format_key&&f.details.opposition.trim().toLowerCase()===p.identity?.opposition.trim().toLowerCase());
+  if(!f&&p.fixture_id)return demoFail('Fixture unavailable in this club');
+  if(!f&&action==='save'){const group=fixtureGroups.find(g=>g.id===p.group_id);if(!group)return demoFail('Choose the match and grade first');f={id:crypto.randomUUID(),club_id:club.id,details:{grade:group.name,grade_group_id:group.id,days:[{date:p.identity.match_date}],format:p.identity.format_key,opposition:p.identity.opposition},slots:[],published:null,publication:0,revision:1};demoSelections.fixtures.push(f);}
+  if(action==='get')return demoOK({fixture_id:f?.id||null,players:p.player_ids.map(id=>demoArrivalRows[f?.id+':'+id]||{player_id:id,late:false,revision:0,discussed_at:null})});
+  const id=p.player_ids[0],key=f.id+':'+id,old=demoArrivalRows[key]||{fixture_id:f.id,player_id:id,late:false,revision:0,discussed_at:null};
+  if(old.late!==p.late){if(old.revision!==p.revision)return demoFail('The arrival record changed. Reload before changing it.');demoArrivalRows[key]={...old,late:p.late,revision:old.revision+1,discussed_at:null};}
+  const result=demoArrivalRows[key]||old;demoArrivalReceipts[receipt]=structuredClone(result);return demoOK(result);
+ }catch(e){return demoFail(e.message);}
+};

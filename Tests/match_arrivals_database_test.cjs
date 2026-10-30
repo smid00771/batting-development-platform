@@ -1,0 +1,67 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),{randomUUID:uuid}=require('node:crypto'),{PGlite}=require('@electric-sql/pglite');
+test('one shared late flag per fixture/player, safe concurrent edits, scoped season roll and discussion receipts',async()=>{
+ const db=new PGlite();try{
+ await db.exec(`create role anon;create role authenticated;create schema auth;create schema club_selection_private;create schema club_batting_private;
+ create table auth.users(id uuid primary key);create table public.clubs(id uuid primary key);
+ create table public.players(id uuid primary key,club_id uuid,active boolean default true,display_name text);
+ create table public.playing_groups(id uuid primary key,club_id uuid,active boolean default true,batting_enabled boolean default true);
+ create table public.club_call_settings(club_id uuid,season_start_month int);
+ create table club_selection_private.access(club_id uuid,timezone text);
+ create table club_selection_private.fixtures(id uuid primary key,club_id uuid,details jsonb);
+ create table grants(user_id uuid,club_id uuid,player_id uuid,staff boolean);
+ create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create function club_batting_private.team_review_staff(c uuid) returns boolean language sql as $$select exists(select 1 from public.grants where user_id=auth.uid() and club_id=c and staff)$$;
+ create function public.can_read_coaching_action_player(p uuid) returns boolean language sql as $$select exists(select 1 from public.grants where user_id=auth.uid() and player_id=p)$$;
+ create function public.can_edit_player(p uuid) returns boolean language sql as $$select public.can_read_coaching_action_player(p)$$;
+ create function club_selection_private.shared_products(uuid) returns jsonb language sql as $$select '{"batting":true}'::jsonb$$;
+ create function club_batting_private.group_uses_batting(c uuid,g uuid) returns boolean language sql as $$select coalesce((select batting_enabled from public.playing_groups where id=g and club_id=c),false)$$;
+ create function club_selection_private.fixture_group_id(uuid,d jsonb) returns uuid language sql as $$select (d->>'grade_group_id')::uuid$$;
+ create function club_batting_private.innings_opposition_key(text) returns text language sql as $$select lower(trim($1))$$;
+ create function club_selection_private.fixture_identity(uuid,d jsonb) returns jsonb language sql as $$select jsonb_build_object('group_id',d->>'grade_group_id','match_date',d#>>'{days,0,date}','format_key',d->>'format','opposition',lower(trim(d->>'opposition')))$$;
+ create function club_batting_private.resolve_review_fixture(c uuid,g uuid,i jsonb,requested uuid) returns uuid language plpgsql as $$declare f uuid;begin
+ select id into f from club_selection_private.fixtures where club_id=c and club_selection_private.fixture_identity(c,details)=jsonb_build_object('group_id',g,'match_date',i->>'match_date','format_key',i->>'format_key','opposition',lower(trim(i->>'opposition')));
+ if f is null then f:=gen_random_uuid();insert into club_selection_private.fixtures values(f,c,jsonb_build_object('grade_group_id',g,'grade','First','days',jsonb_build_array(jsonb_build_object('date',i->>'match_date')),'format',i->>'format_key','opposition',i->>'opposition'));end if;return f;end$$;`);
+ await db.exec(fs.readFileSync('Database/shared_match_arrivals.sql','utf8'));
+ const c=uuid(),other=uuid(),coach=uuid(),captain=uuid(),player=uuid(),outsider=uuid(),pid=uuid(),p2=uuid(),g=uuid();
+ for(const id of [coach,captain,player,outsider])await db.query('insert into auth.users values($1)',[id]);
+ for(const id of [c,other])await db.query('insert into public.clubs values($1)',[id]);
+ await db.query('insert into public.players(id,club_id,display_name) values($1,$2,\'Alex\'),($3,$2,\'Sam\')',[pid,c,p2]);await db.query('insert into public.playing_groups(id,club_id) values($1,$2)',[g,c]);
+ await db.query('insert into grants values($1,$2,$3,true),($1,$2,$4,true),($5,$2,$3,true),($6,$2,$3,false),($7,$8,$3,true)',[coach,c,pid,p2,captain,player,outsider,other]);
+ const who=async id=>db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);
+ const call=async(action,data={},club=c)=>(await db.query('select public.match_arrivals_api($1,$2,$3) result',[club,action,JSON.stringify(data)])).rows[0].result;
+ const today=(await db.query("select current_date::text as day")).rows[0].day;
+ const makeFixture=async(date= today)=>{const id=uuid();await db.query('insert into club_selection_private.fixtures values($1,$2,$3)',[id,c,JSON.stringify({grade_group_id:g,grade:'First',opposition:'Visitors',format:'limited_overs',days:[{date}]})]);return id;};
+ const fid=await makeFixture(),fid2=await makeFixture(),fid3=await makeFixture();
+ const save=(fixture_id,late=true,revision=0,id=pid)=>({fixture_id,player_ids:[id],late,revision,request_id:uuid()});
+ await who(coach);
+ let got=await call('get',{fixture_id:fid,player_ids:[pid,p2]});assert.equal(got.players.length,2);assert.equal(got.players[0].revision,0);
+ const first=save(fid);let result=await call('save',first);assert.equal(result.revision,1);assert.equal(result.late,true);
+ await who(captain);const repeated=await call('save',save(fid));assert.equal(repeated.revision,1,'A second observer checking the same fact does not duplicate or revise it');
+ assert.equal((await db.query('select count(*)::int n from club_batting_private.match_arrivals')).rows[0].n,1);
+ assert.equal((await call('get',{fixture_id:fid,player_ids:[pid]})).players[0].late,true,'Both review and individual observation read the same fixture fact');
+ await assert.rejects(()=>call('save',save(fid,false,0)),/record changed/);
+ result=await call('save',save(fid,false,1));assert.equal(result.revision,2);
+ await who(coach);assert.equal((await call('save',first)).revision,1,'Lost old response returns its original receipt');
+ assert.equal((await call('get',{fixture_id:fid,player_ids:[pid]})).players[0].late,false,'Retry cannot undo a later correction');
+ await assert.rejects(()=>call('save',{...first,late:false}),/different arrival choices/);
+ await call('save',save(fid,true,2));await call('save',save(fid2));await call('save',save(fid3,true,0,p2));
+ let roll=await call('roll');let alex=roll.players.find(p=>p.player_id===pid);assert.equal(alex.count,2);assert.equal(alex.outstanding,2);assert.equal(roll.repeat_threshold,2);
+ const discuss={player_id:pid,matches:alex.matches.map(m=>({fixture_id:m.fixture_id,revision:m.revision})),request_id:uuid()};
+ await call('discuss',discuss);await call('discuss',discuss);alex=(await call('roll')).players.find(p=>p.player_id===pid);assert.equal(alex.count,2);assert.equal(alex.outstanding,0,'Discussing keeps history');
+ const fid4=await makeFixture();await call('save',save(fid4));await call('discuss',discuss);alex=(await call('roll')).players.find(p=>p.player_id===pid);assert.equal(alex.count,3);assert.equal(alex.outstanding,1,'A later incident remains flagged after retrying an earlier discussion');
+ await who(captain);assert.deepEqual((await call('roll')).players.map(p=>p.player_id),[pid],'Captain sees only authorised players');
+ await assert.rejects(()=>call('get',{fixture_id:fid,player_ids:[p2]}),/Coaching edit access/);
+ await who(player);await assert.rejects(()=>call('roll'),/Current club coaching access/);
+ await who(outsider);await assert.rejects(()=>call('roll'),/Current club coaching access/);
+ await who(coach);await assert.rejects(()=>call('get',{fixture_id:fid,player_ids:[pid]},other),/Current club coaching access/);
+ const old=await makeFixture('2020-01-01');await call('save',save(old));assert.equal((await call('roll')).players.find(p=>p.player_id===pid).count,3,'Old seasons do not inflate the pattern');
+ await assert.rejects(()=>call('save',{...save(fid),group_id:g,identity:{match_date:today,format_key:'limited_overs',opposition:'Different match'}}),/match details changed/);
+ const future=await makeFixture('2099-01-01');await assert.rejects(()=>call('save',save(future)),/on or after the match day/);
+ // A new manual observation and its later review resolve the same canonical fixture.
+ const manual={group_id:g,identity:{match_date:today,format_key:'t20',opposition:'New visitors'},player_ids:[pid]};
+ assert.equal((await call('get',manual)).fixture_id,null);const saved=await call('save',{...manual,late:true,revision:0,request_id:uuid()});assert.ok(saved.fixture_id);assert.equal((await call('get',manual)).fixture_id,saved.fixture_id);
+ await who(captain);await call('save',{...manual,late:true,revision:0,request_id:uuid()});assert.equal((await call('get',manual)).players[0].revision,1);
+ assert.equal((await db.query("select has_function_privilege('anon','public.match_arrivals_api(uuid,text,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
+ assert.equal((await db.query("select has_table_privilege('authenticated','club_batting_private.match_arrivals','SELECT') allowed")).rows[0].allowed,false);
+ }finally{await db.close();}
+});
