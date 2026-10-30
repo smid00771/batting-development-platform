@@ -115,7 +115,7 @@ function reviewHarness(){
  const response=()=>({shared_review_id:'anchor',own_review_id:s.sessionId,review:{id:s.sessionId,fixture_id:s.fixtureId,
   match_date:s.match_date,format_key:s.format_key,opposition:s.opposition,innings_number:s.innings_number,group_scope:'group',group_id:'first',
   can_edit:true,can_delete:false,revision:serverRevision},groups:s.groups,players:[player]});
- c.supabase={rpc:async(name,args)=>{requests.push({name,args});assert.equal(name,'get_shared_team_review');return{data:response()};}};
+ c.supabase={rpc:async(name,args)=>{requests.push({name,args});if(name==='get_team_review_roster')return{data:{groups:s.groups,players:[player],fixtures:[]}};assert.equal(name,'get_shared_team_review');return{data:response()};}};
  c.loadDevelopmentFeedback=async()=>({matches:[{id:player.match_id,...s.loaded,coach_feedback:[{id:'own-feedback',author_user_id:'u'}]}]});
  c.matchDraftRpc=async(_,name,args)=>{requests.push({name,args:structuredClone(args)});if(saveError)return{error:saveError};serverRevision++;
   for(const row of args.p_values.rows){Object.assign(player.feedback,{batting_to_plan:row.batting_to_plan,dismissal_classification:row.dismissal_classification,updated_at:'feedback-'+serverRevision});}
@@ -148,13 +148,13 @@ test('the observation Back button uses history and pending saves or unsaved answ
  h.permit(true);h.c.document.getElementById('backToFixture').click();await h.settle();assert.equal(h.index(),1);assert.equal(h.state.observation,null);assert.equal(h.c.currentTab,'team_review');
 });
 
-test('clicking Match Review opens its home table and Back still returns to the previous observation',async()=>{
+test('clicking Match Review starts at match choice and Back still returns to the previous observation',async()=>{
  const h=reviewHarness();await h.open();await h.c.openTeamReviewPlayer('p1');
  h.permit(false);await h.c.openClubSectionHome('team_review');assert.ok(h.state.observation);assert.equal(h.entries.length,3);
- h.permit(true);await h.c.openClubSectionHome('team_review');assert.equal(h.state.observation,null);assert.equal(h.state.view,'entry');assert.equal(h.state.fixtureId,'fixture-1');
- assert.ok(h.c.document.querySelector('[data-team-detail]'));await h.history.back();assert.equal(h.state.observation.player.id,'p1');
+ h.permit(true);await h.c.openClubSectionHome('team_review');assert.equal(h.state.observation,null);assert.equal(h.state.view,'entry');assert.equal(h.state.fixtureId,null);assert.equal(h.state.sessionId,null);
+ assert.ok(h.c.document.querySelector('#teamReviewGroup'));assert.equal(h.c.document.querySelector('[data-team-detail]'),null);await h.history.back();assert.equal(h.state.observation.player.id,'p1');
  await h.c.openClubSectionHome('teams');assert.equal(h.s.view,'published');
- await h.c.openClubSectionHome('team_review');assert.equal(h.state.observation,null);assert.equal(h.state.fixtureId,'fixture-1');
+ await h.c.openClubSectionHome('team_review');assert.equal(h.state.observation,null);assert.equal(h.state.fixtureId,null);
 });
 
 test('a saved or score-imported review stays editable through repeated saves, with the same review ID',async()=>{
@@ -164,7 +164,7 @@ test('a saved or score-imported review stays editable through repeated saves, wi
   assert.equal(choice(value).disabled,false);choice(value).click();assert.equal(choice(value).getAttribute('aria-pressed'),'true');
   assert.equal(h.c.document.getElementById('saveTeamReview').disabled,false);await h.c.saveTeamReview();
   assert.equal(h.state.sessionId,'own-review');assert.equal(h.state.editReview,true);assert.equal(h.c.document.querySelector('[data-team-dismissal]').disabled,false);
-  assert.equal(choice('mostly').disabled,false);assert.equal(h.c.document.getElementById('saveTeamReview').textContent,'Saved');
+  assert.equal(choice('mostly').disabled,false);assert.equal(h.c.document.getElementById('saveTeamReview'),null,'No redundant Saved button after a confirmed save');
  }
  h.state.importer={dirty:true,selected:{p1:true}};h.c.renderTeamReviewContent();await h.c.saveTeamReview();
  assert.equal(choice('mostly').disabled,false);assert.equal(h.state.importer.dirty,false);assert.equal(h.entries.length,2,'Saving stays on the same navigation step');
@@ -194,7 +194,7 @@ test('clicking a section cancels an in-flight observation without reopening it l
  h.c.loadDevelopmentFeedback=()=>new Promise(r=>resolve=r);const opening=h.c.openTeamReviewPlayer('p1');assert.equal(h.state.loading,true);
  h.c.appNavigationRestoring=true;await h.c.openClubSectionHome('team_review');
  resolve({matches:[]});await opening;assert.equal(h.state.observation,null);assert.equal(h.state.loading,false);assert.equal(h.c.appNavigationRestoring,false);
- assert.ok(h.c.document.querySelector('[data-team-detail]'));assert.equal(h.entries.length,2);
+ assert.ok(h.c.document.querySelector('#teamReviewGroup'));assert.equal(h.c.document.querySelector('[data-team-detail]'),null);assert.equal(h.entries.length,3);
 });
 
 test('a lost save response retains the receipt and choices, then retry confirms the same save',async()=>{
