@@ -16,7 +16,9 @@ jobs:
         with:
           node-version: '24'
       - name: Apply reviewed implementation
-        run: base64 --decode .github/observations-313.patch.gz.b64 | gzip -d | git apply --binary
+        run: |
+          base64 --decode .github/observations-313.patch.gz.b64 | gzip -d | git apply --binary
+          git apply .github/observations-313-tests.patch
       - name: Verify syntax and demo freshness
         run: |
           node --check app.js
@@ -34,9 +36,9 @@ jobs:
           NODE_PATH=/tmp/mirelion-db-tests/node_modules node --test Tests/observation_fixtures_database_test.cjs
       - name: Commit exactly the reviewed tree
         run: |
-          git add AGENTS.md Database/observation_saved_fixtures.sql Demo/build-manifest.json Demo/fixtures.js Reviews/2026-10-31-saved-fixture-observations-313.md Reviews/assets/observation-313-desktop.jpg Reviews/assets/observation-313-phone.jpg Tests/fixtures/observation_fixtures_baseline.sql Tests/observation_fixtures_database_test.cjs Tests/observation_fixtures_demo_test.cjs Tests/observation_fixtures_ui_test.mjs app-start.js app.html app.js batting-fixtures.js demo.html match-observation-fixtures.js supabase/migrations/20261030233033_observation_saved_fixtures.sql
-          git rm .github/observations-313.patch.gz.b64 .github/workflows/prepare-observations-313.yml
-          test "$(git write-tree)" = "fd24b8404ae10bb78872e474286c30a33d70d7d4"
+          git add AGENTS.md Database/observation_saved_fixtures.sql Demo/build-manifest.json Demo/fixtures.js Reviews/2026-10-31-saved-fixture-observations-313.md Reviews/assets/observation-313-desktop.jpg Reviews/assets/observation-313-phone.jpg Tests/fixtures/observation_fixtures_baseline.sql Tests/match_arrivals_demo_test.cjs Tests/observation_fixtures_database_test.cjs Tests/observation_fixtures_demo_test.cjs Tests/observation_fixtures_ui_test.mjs app-start.js app.html app.js batting-fixtures.js demo.html match-observation-fixtures.js supabase/migrations/20261030233033_observation_saved_fixtures.sql
+          git rm .github/observations-313-tests.patch .github/observations-313.patch.gz.b64 .github/workflows/prepare-observations-313.yml
+          test "$(git write-tree)" = "336cc313df94013b5fe5b37f410b00c348c0b2af"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Use saved fixtures and compact Match Observation (.313)'
