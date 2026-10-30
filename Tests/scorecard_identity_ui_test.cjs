@@ -62,3 +62,17 @@ test('all inline demo scripts parse as a complete page',()=>{
   new vm.Script(match[2]);count++;
  }assert.ok(count>0);
 });
+
+test('scorecard stays collapsed and unchanged saved scores have no import action',()=>{
+ const h=harness();
+ h.s.importer.preview.player_links=h.batters.map((b,n)=>({source_player_id:b.player_id,player_id:h.players[n].player_id}));
+ h.players.forEach((p,n)=>p.scorecard={...h.batters[n]});h.c.matchReviewMapScores(false);h.render();
+ assert.equal(h.host.querySelector('#matchReviewScorecard').open,false);
+ assert.equal(h.host.querySelector('#useMatchScores'),null);
+ h.batters[1].runs=8;h.render();assert.match(h.host.querySelector('#useMatchScores').textContent,/Add 1 new or updated score to review/);
+ assert.equal(h.s.importer.dirty,false);assert.equal(h.calls.length,0,'Viewing changed scores never saves them');
+ const details=h.host.querySelector('#matchReviewScorecard');details.open=true;details.dispatchEvent(new h.dom.window.Event('toggle'));h.render();
+ assert.equal(h.host.querySelector('#matchReviewScorecard').open,true,'An explicitly opened scorecard survives redraw');
+ h.players[1].can_record_score=false;h.render();assert.equal(h.host.querySelector('#useMatchScores'),null);
+ h.players[1].can_record_score=true;h.s.importer.preview.scorecard.innings[0].complete=false;h.render();assert.equal(h.host.querySelector('#useMatchScores'),null,'Unfinished scores remain preview only');
+});

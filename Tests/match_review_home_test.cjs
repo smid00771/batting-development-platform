@@ -1,0 +1,28 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {openDemo}=require('./helpers/demo_harness.cjs');
+test('section entry waits for an explicit match choice and keeps manual entry available',async t=>{
+ const h=await openDemo({product:'both',role:'coach',journey:'team_review'},{traceRpc:true});t.after(h.close);
+ await h.window.eval("openClubSectionHome('team_review')");await h.settle();
+ assert.equal(h.window.eval('ensureTeamReviewState().loaded'),null);
+ assert.equal(h.document.querySelector('#matchReviewScorecard'),null);
+ assert.equal(h.document.querySelector('[data-team-review-row]'),null);
+ assert.equal(h.document.querySelector('#teamReviewDate').closest('.field').hidden,true);
+ const grade=[...h.document.querySelector('#teamReviewGroup').options].find(o=>o.value&&!o.value.startsWith('__'));
+ const before=h.rpcCalls.length;await h.choose('#teamReviewGroup',grade.value);
+ assert.equal(h.window.eval('ensureTeamReviewState().fixtureId'),null);
+ assert.equal(h.document.querySelector('#teamReviewFixture').value,'');
+ assert.ok(!h.rpcCalls.slice(before).some(c=>['get_shared_team_review','get_team_match_review','club_match_results_api'].includes(c.name)));
+ const fixture=[...h.document.querySelector('#teamReviewFixture').options].find(o=>o.value&&!o.value.startsWith('__'));
+ await h.choose('#teamReviewFixture',fixture.value);
+ assert.equal(h.window.eval('ensureTeamReviewState().fixtureId'),fixture.value);
+ assert.ok(h.document.querySelector('[data-team-review-row]'));
+ assert.equal(h.document.querySelector('#teamReviewOptions').open,false);
+ assert.equal(h.document.querySelector('#matchReviewScorecard').open,false);
+ await h.window.eval("openClubSectionHome('team_review')");await h.settle();
+ await h.choose('#teamReviewGroup',grade.value);await h.choose('#teamReviewFixture','__new__');
+ assert.equal(h.document.querySelector('#teamReviewDate').closest('.field').hidden,false);
+ assert.equal(h.document.querySelector('#teamReviewOpposition').closest('.field').hidden,false);
+ assert.equal(h.document.querySelector('#matchReviewScorecard').open,false);
+ assert.ok(!h.rpcCalls.some(c=>c.name==='save_team_match_review'));
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});

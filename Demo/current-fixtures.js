@@ -146,8 +146,19 @@ const demoPreviousCurrentRpc=supabase.rpc;
 supabase.rpc=async function(name,args={}){
  const a=args.p_action,d=args.p_data||{},uid=session?.user.id;
  try{
+  if(name==='club_batting_fixtures'){
+   if(args.p_club_id!==club.id||demoProduct!=='batting'||!canUseTeamReview())return demoFail('Current Club Batting fixture access required');
+   if(a==='context')return demoOK({admin:isAdmin(),groups:fixtureGroups.filter(g=>g.active!==false),fixtures:demoSelections.fixtures.map(f=>({id:f.id,revision:f.revision,details:{...f.details,format:f.details.format==='two_day'?'long_form':f.details.format},imported:!!demoGroups.mappings.find(m=>m.grade_id===f.details.grade_group_id)}))});
+   if(a!=='save'||!isAdmin())return demoFail('Club Admin manages fixtures');
+   const key=uid+':fixture:'+d.request_id,receipt=demoCalendarTrialReceipts[key];if(receipt){if(receipt.payload!==JSON.stringify(d))return demoFail('Request ID already used');return demoOK(receipt.result);}
+   const f=demoSelections.fixtures.find(f=>f.id===d.id),g=fixtureGroups.find(g=>g.id===d.details.grade_group_id);if(!g||!d.details.opposition?.trim()||!d.details.days?.[0]?.date)return demoFail('Choose a team, date and opposition');
+   if((f?.revision||0)!==d.revision)return demoFail('Fixture changed. Reopen it before saving');
+   if(f?.published)return demoFail('This fixture has a published team. Use Correct match details in Match Review');
+   if(f){f.details={...f.details,...fixtureClone(d.details),grade:g.name};f.revision++;}else demoSelections.fixtures.push({id:d.id,club_id:club.id,revision:1,publication:0,published:null,details:{...fixtureClone(d.details),grade:g.name},slots:Array.from({length:11},()=>({d1:null,d2:null}))});
+   const result={saved:true,id:d.id,revision:d.revision+1};demoCalendarTrialReceipts[key]={payload:JSON.stringify(d),result};return demoOK(result);
+  }
   if(name==='club_fixture_calendar_trials'){
-   if(args.p_club_id!==club.id||demoProduct==='batting')return demoFail('Active club Selections access required');
+   if(args.p_club_id!==club.id||demoProduct==='batting'&&!isAdmin())return demoFail('Fixture editing access required');
    const teams=demoGroups.grades.filter(g=>isAdmin()||demoGrant(g.selection_group_id,uid)===2).map(g=>({id:g.id,name:g.name})),allowed=t=>isAdmin()||t.audience==='teams'&&t.team_ids.length>0&&t.team_ids.every(id=>teams.some(g=>g.id===id));
    if(!isAdmin()&&!teams.length)return demoFail('Fixture editing access required');
    if(a==='context')return demoOK({can_whole_club:isAdmin(),teams,trials:demoCalendarTrials.filter(t=>allowed(t)&&t.days.some(day=>day.date>=demoCallDay()))});
@@ -193,10 +204,10 @@ supabase.rpc=async function(name,args={}){
   if(name==='club_selection_groups'||name==='club_selection_group_manage'){
    if(a==='context')return demoOK(demoGroupContext());if(!isAdmin())return demoFail('Club Admin access required');
    if(a==='save'){
-    demoGroups.selection_groups=fixtureClone(d.groups).map(g=>({...g,batting_enabled:false}));demoGroups.grades=fixtureClone(d.grades);fixtureGroups.splice(0,fixtureGroups.length,...d.grades.map((g,i)=>({...g,club_id:club.id,active:true,sort_order:i})));
+    demoGroups.selection_groups=fixtureClone(d.groups).map(g=>({...g,batting_enabled:demoProduct==='batting'}));demoGroups.grades=fixtureClone(d.grades);fixtureGroups.splice(0,fixtureGroups.length,...d.grades.map((g,i)=>({...g,club_id:club.id,active:true,sort_order:i})));
     demoGroups.mappings=d.grades.filter(g=>g.team_id).map(g=>({grade_id:g.id,team_id:g.team_id,season_id:'demo-season'}));demoGroups.season='demo-season';demoConnection.polling_enabled=demoConnection.verified;demoGroups.teams=demoSourceTeams();
     demoPermissions.groups=demoGroups.selection_groups.map(g=>demoPermissions.groups.find(p=>p.id===g.id)||{id:g.id,name:g.name,head_id:null,members:[]});
-   }else if(a==='add_group'){if(!d.name?.trim())return demoFail('Enter a group name');const g={id:demoId('sg'),name:d.name.trim(),batting_enabled:false};demoGroups.selection_groups.push(g);demoPermissions.groups.push({...g,head_id:null,members:[]});}
+   }else if(a==='add_group'){if(!d.name?.trim())return demoFail('Enter a group name');const g={id:demoId('sg'),name:d.name.trim(),batting_enabled:demoProduct==='batting'};demoGroups.selection_groups.push(g);demoPermissions.groups.push({...g,head_id:null,members:[]});}
    else if(a==='rename_group'){const g=demoGroups.selection_groups.find(g=>g.id===d.selection_group_id);if(g)g.name=d.name;}
    else if(a==='set_batting'){const g=demoGroups.selection_groups.find(g=>g.id===d.selection_group_id);if(g)g.batting_enabled=d.batting_enabled;}
    else if(a==='move_team'){const g=demoGroups.grades.find(g=>g.id===d.grade_id);if(g)g.selection_group_id=d.selection_group_id;}
