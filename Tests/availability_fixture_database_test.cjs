@@ -1,0 +1,90 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {PGlite}=require('@electric-sql/pglite');
+const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+test('fixture calendar filters seasons/sources and trial audiences without exposing selections',async t=>{
+ const db=new PGlite();t.after(()=>db.close());
+ await db.exec(`
+ create role anon;create role authenticated;create schema auth;create schema club_selection_private;
+ grant usage on schema auth,club_selection_private to authenticated;
+ create table auth.users(id uuid primary key,email_confirmed_at timestamptz,deleted_at timestamptz,banned_until timestamptz);
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create table public.clubs(id uuid primary key,archived_at timestamptz);
+ create table public.club_memberships(club_id uuid,user_id uuid,permission_role text);
+ create table public.playing_groups(id uuid primary key,club_id uuid,name text,active boolean);
+ create table club_selection_private.access(club_id uuid,status text,timezone text,active_from date,valid_until date);
+ create table club_selection_private.roster(id uuid primary key,club_id uuid,user_id uuid,active boolean,grade text);
+ create table club_selection_private.fixtures(id uuid primary key,club_id uuid,details jsonb,slots jsonb,published jsonb);
+ create table club_selection_private.playhq_connections(club_id uuid,active_season_id uuid);
+ create table club_selection_private.playhq_links(fixture_id uuid,club_id uuid,season_id uuid,team_id uuid,source_fixture jsonb,pending_fixture jsonb);
+ create table club_selection_private.playhq_grade_mappings(club_id uuid,season_id uuid,team_id uuid,grade_id uuid);
+ create table club_selection_private.requests(club_id uuid,user_id uuid,request_id uuid,action text,payload jsonb,result jsonb,primary key(club_id,user_id,request_id));
+ create table club_selection_private.test_grants(club_id uuid,user_id uuid,grade_id uuid);
+ create function club_selection_private.member(c uuid,u uuid) returns boolean language sql stable security definer set search_path='' as $$select u is not null and exists(select 1 from public.club_memberships m join public.clubs cl on cl.id=m.club_id and cl.archived_at is null where m.club_id=c and m.user_id=u)$$;
+ create function club_selection_private.enabled(c uuid) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from club_selection_private.access a join public.clubs cl on cl.id=a.club_id and cl.archived_at is null where a.club_id=c and a.status in ('pilot','active') and (a.active_from is null or a.active_from<=(now() at time zone a.timezone)::date) and (a.valid_until is null or a.valid_until>=(now() at time zone a.timezone)::date))$$;
+ create function club_selection_private.fixture_group_id(c uuid,d jsonb) returns uuid language sql stable set search_path='' as $$select min(g.id::text)::uuid from public.playing_groups g where g.club_id=c and g.active and lower(g.name)=lower(d->>'grade') having count(*)=1$$;
+ create function club_selection_private.selection_edit(c uuid,d jsonb,u uuid) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from club_selection_private.test_grants where club_id=c and user_id=u and grade_id::text=d->>'grade_group_id')$$;
+ create function club_selection_private.validate_details(d jsonb) returns void language plpgsql set search_path='' as $$declare day jsonb;last_day text;begin
+  if jsonb_typeof(d->'days') is distinct from 'array' or jsonb_array_length(d->'days') not between 1 and 2 then raise exception 'Choose one or two actual fixture dates';end if;
+  for day in select value from jsonb_array_elements(d->'days') loop
+   if coalesce(day->>'date','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or (day->>'date')::date::text<>day->>'date' or day->>'date'<=last_day then raise exception 'Invalid fixture date';end if;
+   if coalesce(day->>'start','')<>'' and day->>'start' !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then raise exception 'Invalid start';end if;last_day:=day->>'date';
+  end loop;end$$;
+ `);
+ await db.exec(fs.readFileSync('Database/availability_fixture_finder.sql','utf8'));
+ const c=id(1),other=id(2),player=id(10),admin=id(11),editor=id(12),outsider=id(13),roster=id(20),g1=id(31),g2=id(32),g3=id(33),season=id(40),oldSeason=id(41);
+ await db.query('insert into public.clubs values ($1,null),($2,null)',[c,other]);
+ for(const user of [player,admin,editor,outsider])await db.query('insert into auth.users values($1,now(),null,null)',[user]);
+ for(const [user,role] of [[player,'player'],[admin,'admin'],[editor,'coach']])await db.query('insert into public.club_memberships values($1,$2,$3)',[c,user,role]);
+ await db.query("insert into club_selection_private.access values($1,'active','Australia/Sydney',null,null),($2,'active','Australia/Sydney',null,null)",[c,other]);
+ await db.query("insert into club_selection_private.roster values($1,$2,$3,true,'1st Grade')",[roster,c,player]);
+ for(const [g,name] of [[g1,'1st Grade'],[g2,'2nd Grade'],[g3,'U21s']]){await db.query('insert into public.playing_groups values($1,$2,$3,true)',[g,c,name]);await db.query('insert into club_selection_private.playhq_grade_mappings values($1,$2,$3,$4)',[c,season,g,g]);}
+ await db.query('insert into club_selection_private.test_grants values($1,$2,$3)',[c,editor,g1]);
+ await db.query('insert into club_selection_private.playhq_connections values($1,$2)',[c,season]);
+ const today=(await db.query("select (now() at time zone 'Australia/Sydney')::date::text today")).rows[0].today;
+ const day=n=>{const date=new Date(today+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+n);return date.toISOString().slice(0,10);};let serial=100;
+ async function fixture({group=g1,club=c,imported=true,seasonId=season,dates=[day(1)],included=false,cancelled=false,published=false,pending=null,sourceDates=dates}={}){
+  const fid=id(serial++),details={grade:'Private draft label',grade_group_id:group,opposition:'Draft opposition',days:dates.map(date=>({date,start:'12:00',ground:'Manual Ground'})),include_in_fixture_calendar:included,cancelled,staff:['SECRET-STAFF'],meeting:'SECRET-NOTES'};
+  await db.query('insert into club_selection_private.fixtures values($1,$2,$3,$4,$5)',[fid,club,details,[{d1:roster}],published?{slots:[{d1:roster}]}:null]);
+  if(imported)await db.query('insert into club_selection_private.playhq_links values($1,$2,$3,$4,$5,$6)',[fid,club,seasonId,group,{source:'playhq',opposition:'Provider opposition',days:sourceDates.map(date=>({date,time:'15:00',ground:'Provider Ground'})),cancelled},pending]);
+  return fid;
+ }
+ const twoDay=await fixture({dates:[day(-1),day(7)],published:true}),second=await fixture({group:g2}),pending=await fixture({dates:[day(19)],sourceDates:[day(2)],pending:{opposition:'Changed provider opposition',days:[{date:day(4),time:'10:00'}]}}),manual=await fixture({imported:false,included:true}),unselectedManual=await fixture({imported:false}),old=await fixture({seasonId:oldSeason,included:true,group:g2,published:true}),cancelled=await fixture({cancelled:true}),foreign=await fixture({club:other});
+ await fixture({imported:false,included:'true',group:g3});
+ async function as(user,fn){await db.exec('set role authenticated');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user||'']);try{return await fn();}finally{await db.exec('reset role');}}
+ const read=()=>db.query('select public.club_availability_fixtures($1) data',[c]).then(r=>r.rows[0].data);
+ const result=await as(player,read),ids=result.fixtures.map(f=>f.id);
+ assert.deepEqual(new Set(ids),new Set([twoDay,second,pending,manual]));assert.ok(!ids.includes(old)&&!ids.includes(unselectedManual)&&!ids.includes(cancelled)&&!ids.includes(foreign));
+ assert.deepEqual(result.fixtures.find(f=>f.id===twoDay).days,[{date:day(7),start:'15:00',ground:'Provider Ground',day:2}]);
+ assert.equal(result.fixtures.find(f=>f.id===pending).days[0].date,day(4));assert.equal(result.fixtures.find(f=>f.id===pending).opposition,'Changed provider opposition');
+ assert.equal(result.fixtures.find(f=>f.id===manual).team_id,g1,'Manual and imported games share the existing team choice');
+ assert.equal(result.teams.find(t=>t.id===g1).suggested,true);assert.equal(result.teams.find(t=>t.id===g2).suggested,false,'Last-season picks and private drafts do not suggest a team');
+ assert.doesNotMatch(JSON.stringify(result),/SECRET|slots|published|meeting|staff/);
+ for(const who of [null,outsider])await assert.rejects(as(who,read),/membership/i);
+ await assert.rejects(as(player,()=>db.query('select public.club_availability_fixtures($1)',[other])),/membership/i);
+ await db.query('update auth.users set banned_until=now()+interval \'1 day\' where id=$1',[player]);await assert.rejects(as(player,read),/active account/);await db.query('update auth.users set banned_until=null where id=$1',[player]);
+ await db.query('update club_selection_private.roster set active=false where id=$1',[roster]);await assert.rejects(as(player,read),/playing-list/);await db.query('update club_selection_private.roster set active=true where id=$1',[roster]);
+ await db.query("update club_selection_private.access set status='disabled' where club_id=$1",[c]);await assert.rejects(as(player,read),/not active/);await db.query("update club_selection_private.access set status='active' where club_id=$1",[c]);
+ await db.exec('set role anon');await assert.rejects(read(),/permission denied/);await db.exec('reset role');
+ const save=data=>db.query("select public.club_fixture_calendar_trials($1,'save',$2) data",[c,data]).then(r=>r.rows[0].data);
+ const trial={id:id(201),request_id:id(301),revision:0,title:'Whole club trial',days:[{date:day(3),start:'09:00',ground:'Trial Oval'}],audience:'club',team_ids:[],included:true};
+ const saved=await as(admin,()=>save(trial));assert.equal(saved.revision,1);assert.deepEqual(await as(admin,()=>save(trial)),saved,'Uncertain save retry is idempotent');
+ await assert.rejects(as(admin,()=>save({...trial,title:'Tampered retry'})),/different changes/);
+ await assert.rejects(as(player,()=>save({...trial,id:id(202),request_id:id(302)})),/editing access/);
+ await assert.rejects(as(editor,()=>save({...trial,id:id(202),request_id:id(302)})),/audience/);
+ const groupTrial={...trial,id:id(202),request_id:id(302),title:'1st and 2nd trial',audience:'teams',team_ids:[g1,g2]};
+ await assert.rejects(as(editor,()=>save(groupTrial)),/audience/);await as(admin,()=>save(groupTrial));
+ await as(editor,()=>save({...trial,id:id(203),request_id:id(303),title:'1st trial',audience:'teams',team_ids:[g1]}));
+ await as(admin,()=>save({...trial,id:id(204),request_id:id(304),title:'Hidden trial',included:false}));
+ await db.query('update club_selection_private.fixtures set published=null');
+ let after=await as(player,read);assert.equal(after.usual_team_id,g1);assert.equal(after.fixtures.filter(f=>f.source==='trial').length,3);assert.equal(after.fixtures.find(f=>f.id===trial.id).audience,'club');assert.deepEqual(after.fixtures.find(f=>f.id===groupTrial.id).team_ids,[g1,g2]);
+ await db.query("update club_selection_private.roster set grade='U21s' where id=$1",[roster]);
+ after=await as(player,read);assert.deepEqual(after.fixtures.filter(f=>f.source==='trial').map(f=>f.id),[trial.id],'Unrelated usual teams see only whole-club trials');
+ await db.query("update club_selection_private.roster set grade=null where id=$1",[roster]);
+ after=await as(player,read);assert.equal(after.usual_team_id,null);assert.deepEqual(after.fixtures.filter(f=>f.source==='trial').map(f=>f.id),[trial.id]);
+ await db.query("update club_selection_private.roster set grade='1st Grade' where id=$1",[roster]);
+ await assert.rejects(as(admin,()=>save({...trial,request_id:id(305),revision:0,included:false})),/changed/);
+ await as(admin,()=>save({...trial,request_id:id(306),revision:1,included:false}));after=await as(player,read);assert.ok(!after.fixtures.some(f=>f.id===trial.id));
+ assert.equal((await db.query('select count(*)::int n from club_selection_private.fixtures')).rows[0].n,9,'Trials never create a team or selection list');
+ await db.query('update club_selection_private.playhq_connections set active_season_id=null where club_id=$1',[c]);after=await as(player,read);assert.ok(after.fixtures.every(f=>f.source!=='playhq'),'A missing season never falls back to historical imports');assert.ok(after.fixtures.some(f=>f.id===manual));
+ await as(player,async()=>{await assert.rejects(db.query('select * from club_selection_private.fixture_calendar_trials'),/permission denied/);});
+});

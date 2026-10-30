@@ -11,8 +11,8 @@ function harness({direct=false,fail=false}={}){
  const draw=()=>{if(s.view==='availability')c.seAvailability();else dom.window.document.getElementById('seContent').innerHTML='<button id="slot">Player slot</button>';};
  c=vm.createContext({Date,Intl,URL,document:dom.window.document,window:dom.window,sessionStorage:dom.window.sessionStorage,crypto:webcrypto,structuredClone,session:{user:{id:'user'}},membership:{},currentTab:'teams',selectionState:s,
   ensureSelections:()=>s,selectionsScopeKey:()=>s.key,seCanSetup:()=>true,seBoardAccess:()=>true,seFixtureLocked:f=>!!f.locked,confirmLeaveSelections:()=>!s.busy&&!s.pending,
-  seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seEsc:esc,seAvailabilityDateSetup(){},drawSelections:draw,seSlotButton:()=>dom.window.document.getElementById('slot'),
-  seGuardFixtureEdit:()=>true,seButtonWorking:()=>()=>{},seLock(){},seNotice:text=>s.notice=text,refreshClubMessageBadge(){},
+  seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seEsc:esc,seAvailabilityDateSetup(){},seBindAvailabilityFixtures(){},drawSelections:draw,seSlotButton:()=>dom.window.document.getElementById('slot'),
+  selectionEvidence:{invalidate(){},pause(){}},seGuardFixtureEdit:()=>true,seButtonWorking:()=>()=>{},seLock(){},seNotice:text=>s.notice=text,refreshClubMessageBadge(){},
   seRPC:async(action,data)=>{calls.push({action,data:structuredClone(data)});if(failures-->0)throw Error('Connection interrupted');if(action==='availability'){player.availability={revision:3,available_dates:[...data.available_dates]};return {saved:true};}return {saved:true};},seReload:async()=>true});
  vm.runInContext(['sePickerOpenAvailability','seReturnFromAvailability','seAvailability','seMutate','sePersist','seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(extract).join('\n'),c);
  if(direct)c.seAvailability('player');else c.sePickerOpenAvailability('player');

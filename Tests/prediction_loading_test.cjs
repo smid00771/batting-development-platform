@@ -76,6 +76,8 @@ test('ordinary player and selector startup makes no prediction or awards request
 test('opening predictions retains voting, history navigation and unsaved-change protection',async t=>{
  const h=await openDemo({product:'both',role:'player',journey:'player_home'},{traceRpc:true});t.after(h.close);
  await h.click('[data-tab="make_your_call"]');assert.ok(h.document.getElementById('callResultsHistory'));assert.ok(h.rpcCalls.some(x=>x.name==='get_make_your_call_periods'));
+ // The upcoming fictional innings may fall in the following week on Fridays–Sundays.
+ await h.choose('#callWeek',h.window.eval('demoCallDay(3)'));
  const toggle=h.document.querySelector('[data-call-toggle]');assert.ok(toggle);await h.click('#'+toggle.id);
  const input=h.document.querySelector('[id^="callVote-"]');input.value='37';input.dispatchEvent(new h.window.Event('input',{bubbles:true}));
  h.window.confirm=()=>false;await h.click('[data-tab="playerhome"]');assert.equal(h.document.querySelector('[id^="callVote-"]').value,'37');
@@ -100,6 +102,7 @@ test('unchecking predictions still saves and leaves the normal home free of pred
  assert.ok(h.document.querySelector('[data-tab="playerhome"]'));assert.ok(h.document.querySelector('[data-tab="teams"]'));
  assert.equal(h.window.canOpenClubTab('make_your_call'),false);
  h.rpcCalls.length=0;await h.window.renderMakeYourCall();assert.deepEqual(h.rpcCalls.filter(x=>predictionRpc(x.name)),[],'A direct route cannot open disabled predictions');
+ for(const role of ['captain','selector','head','coach','lead','participant','combined','socials']){await h.choose('#demoPersona',role);assert.equal(h.document.querySelector('[data-tab="make_your_call"]'),null,role+' cannot see disabled predictions');assert.equal(h.window.canOpenClubTab('make_your_call'),false);}
  await h.choose('#demoPersona','admin');await h.click('[data-tab="make_your_call"]');await h.click('#callEditSettings');
  assert.equal(h.document.getElementById('callEnabled').checked,false,'Admin can still reach the saved setting');
  h.document.getElementById('callEnabled').checked=true;h.document.getElementById('callEnabled').dispatchEvent(new h.window.Event('change',{bubbles:true}));

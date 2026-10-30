@@ -31,9 +31,40 @@ test('unfinished Player Plan comes before Availability; complete plan points str
   await h.window.demoNavigate('player_home',{reset:true});await h.settle();
   assert.match(h.document.querySelector('#playerHomePlanStatus').textContent,/Done/);
   assert.ok(h.document.querySelector('#playerHomeAvailabilityStep.is-next'));
+  assert.equal(h.document.querySelector('.player-home-steps').firstElementChild.id,'playerHomeAvailabilityStep','The next action precedes completed work');
+  assert.ok(h.document.querySelector('#playerHomePlanStep.is-complete'),'Completed plan uses the compact summary');
   await h.click('#playerHomePlan');assert.ok(h.document.querySelector('#planNextAvailability'));
   await h.click('#planNextAvailability');assert.equal(h.window.eval('ensureSelections().view'),'availability');
  }finally{h.close();}
+});
+
+test('saved player availability offers the next destination and hides it while changes are unsaved',async()=>{
+ const h=await openDemo({product:'both',role:'player',journey:'player_home'});
+ try{
+  await h.click('#playerHomeAvailability');
+  assert.equal(h.document.querySelector('#seAvailabilityNext').hidden,false);
+  await h.click('[data-se-date]');assert.equal(h.document.querySelector('#seAvailabilityNext').hidden,true);
+  await h.click('#seSaveAvailability');assert.equal(h.document.querySelector('#seAvailabilityNext').hidden,false);
+  await h.click('#seAvailabilityNext');assert.equal(h.window.eval('ensureSelections().view'),'published');
+  assert.equal(h.window.eval('ensureSelections().formDirty'),false);
+  await h.click('#playerHomeShortcut');assert.ok(h.document.querySelector('#playerHomeTitle'));
+  assert.deepEqual(h.errors.map(e=>e.message),[]);
+ }finally{h.close();}
+});
+
+test('player task labels explain match preparation, reflection and training across products',async()=>{
+ for(const product of ['batting','both']){
+  const h=await openDemo({product,role:'player',journey:'player_home'});
+  try{
+   assert.match(h.document.querySelector('#playerHomePrepare').textContent,/Before a match.*Prepare/);
+   assert.match(h.document.querySelector('#playerHomeInnings').textContent,/After a match.*Review your innings/);
+   assert.match(h.document.querySelector('#requestConversationFromHome').textContent,/Talk to a coach.*help or feedback/);
+   if(product==='batting')assert.ok(h.document.querySelector('#playerHomeTraining.is-next'),'Batting-only players still have a next step after completing their plan');
+   await h.click('#playerHomeTraining');assert.equal(h.window.eval('currentTab'),'howwetrain');
+   await h.click('#playerHomeShortcut');await h.click('#playerHomeInnings');assert.equal(h.window.eval('currentTab'),'innings');
+   assert.deepEqual(h.errors.map(e=>e.message),[]);
+  }finally{h.close();}
+ }
 });
 
 test('name-only prompt confirms one entry, decline persists and another account cannot be claimed',async()=>{

@@ -520,9 +520,9 @@ export const CLUB_BATTING_HELP = {
   },
   "plan_dates": {
     "capability_key": "plan_dates",
-    "title": "Set Player Plan dates",
+    "title": "Player Plan reminders and dates",
     "purpose": "Show players which format needs attention next.",
-    "short_explanation": "Club Admin sets due dates per Playing Group and format; undated formats remain optional.",
+    "short_explanation": "Linked clubs choose reminder teams; published selections set dates automatically. Club Batting alone keeps manual dates.",
     "target_tab": "players",
     "audience": [
       "admin",
@@ -532,18 +532,18 @@ export const CLUB_BATTING_HELP = {
     ],
     "tutorial": [
       {
-        "title": "Open Plan dates",
-        "body": "After publication, Club Admin opens Players → Plan dates. Choose one or more Playing Groups and the format, then save the date.",
+        "title": "Choose reminder teams or dates",
+        "body": "Linked clubs: open Players → Plan reminders and choose teams from Mirelion Select. Published selections set each player’s deadline one week before their first fixture of each format this season, with one reminder per player and format. Completed plans are skipped. Club Batting alone: use Players → Plan dates to set dates for Playing Groups.",
         "target_tab": "players",
         "focus": "plan_dates"
       },
       {
         "title": "Prioritise the formats the group plays",
-        "body": "Set dates for the formats that group should complete. A group that does not play T20 can leave T20 undated. Every player still has T20, Limited Overs and Long Form, and can complete optional formats."
+        "body": "For linked clubs, leave teams that do not need Player Plan information unchecked. Players selected across several checked teams still receive one deadline and reminder per format each season. Other clubs can set manual dates per Playing Group."
       },
       {
         "title": "Let membership set the priority",
-        "body": "Players first complete Core, then see the required incomplete format with the earliest date as their next step. Unassigned players have no group-derived format priority. A later group assignment updates the priority."
+        "body": "Players first complete Core, then see the required incomplete format with the earliest date. Linked-club priorities follow published selections and update when selections change. Club Batting-only priorities follow Playing Group membership."
       },
       {
         "title": "Read progress accurately",
