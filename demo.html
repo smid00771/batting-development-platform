@@ -3743,7 +3743,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.310.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.311.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -13374,7 +13374,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.310';
+const APP_UI_VERSION='0.8.62.311';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -17051,7 +17051,7 @@ async function renderClubDashboard(){
     <h1 class="club-progress-title">Your club’s progress</h1>
     ${clubBrandingSetupPrompt()}
     ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">A new philosophy round is in progress. The published How We Bat, Player Plans and sign-up remain available.</div>':''}
-    ${progress.published?`<details class="club-preparation completed-club-setup" ${clubHomeExpandedStage?'open':''}><summary id="clubPreparationTitle">Club setup complete</summary>`:'<section class="club-preparation" aria-labelledby="clubPreparationTitle">'}
+    ${progress.published?`<details class="club-preparation completed-club-setup" open><summary id="clubPreparationTitle">Club setup complete</summary>`:'<section class="club-preparation" aria-labelledby="clubPreparationTitle">'}
       ${progress.published?'':`<div class="club-preparation-heading"><div><h2 id="clubPreparationTitle">Before players build their plans</h2><p>Complete these steps to open Player Plans.</p></div><span class="club-preparation-count">${progress.steps.filter(item=>item.complete).length} of 5 preparation steps complete</span></div>`}
       ${clubSetupProgressHtml(progress)}
       <section class="club-stage-panel" id="clubHomeStagePanel" hidden>

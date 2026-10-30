@@ -1,3 +1,5 @@
+Club Home shows all five setup-progress tiles by default after setup is complete, matching the user’s preferred expanded overview. Keep individual step editors collapsed until opened, and retain the option to collapse the overview. User preference, 30 October 2026.
+
 The user has given standing approval to publish completed Mirelion updates of any version name to GitHub and the live app. Do not ask for approval again for each release; complete relevant checks and verify the deployed result. User instruction, 30 October 2026.
 
 Keep Match Review table headings visible while scrolling below the navigation; phone cards repeat the plan-question label beside their choices. Retain column semantics and compact spacing. User request, 30 October 2026.

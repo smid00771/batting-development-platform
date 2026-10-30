@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.310",
+  "appVersion": "0.8.62.311",
   "sources": {
     "app-design.css": "ff72d99dced381c050d9824837ca09a363a2850f269a35b8396521a809b2372d",
-    "app.js": "476a2d6968d0e3b04ca91a4b78078f4310a29355700373761a5f986fa2b185e9",
+    "app.js": "c166e116c030e13c6eb99cef5657242731ddae8ef1826e08f5ffd1a0bf4ee6a6",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "availability-fixtures.js": "4dfcfa67ec367f1cd4f946731a641728210bf6a51d49127f7f6c4128c229bc60",
