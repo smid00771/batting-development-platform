@@ -1,0 +1,43 @@
+name: Prepare saved-fixture observations 313
+on:
+  push:
+    branches: [codex/fixture-match-observations-313]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: codex/fixture-match-observations-313
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply reviewed implementation
+        run: base64 --decode .github/observations-313.patch.gz.b64 | gzip -d | git apply --binary
+      - name: Verify syntax and demo freshness
+        run: |
+          node --check app.js
+          node --check app-start.js
+          node --check match-observation-fixtures.js
+          node Scripts/build-demo.mjs --check
+          git diff --check
+      - name: Install verification dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --prefix /tmp/mirelion-db-tests --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.12
+      - name: Verify fixture observations and recovery
+        run: |
+          node --test Tests/observation_fixtures_ui_test.mjs Tests/batting_fixtures_ui_test.mjs Tests/coaching_observation_safety_test.cjs Tests/observation_fixtures_demo_test.cjs Tests/match_arrivals_demo_test.cjs
+          NODE_PATH=/tmp/mirelion-db-tests/node_modules node --test Tests/observation_fixtures_database_test.cjs
+      - name: Commit exactly the reviewed tree
+        run: |
+          git add AGENTS.md Database/observation_saved_fixtures.sql Demo/build-manifest.json Demo/fixtures.js Reviews/2026-10-31-saved-fixture-observations-313.md Reviews/assets/observation-313-desktop.jpg Reviews/assets/observation-313-phone.jpg Tests/fixtures/observation_fixtures_baseline.sql Tests/observation_fixtures_database_test.cjs Tests/observation_fixtures_demo_test.cjs Tests/observation_fixtures_ui_test.mjs app-start.js app.html app.js batting-fixtures.js demo.html match-observation-fixtures.js supabase/migrations/20261030233033_observation_saved_fixtures.sql
+          git rm .github/observations-313.patch.gz.b64 .github/workflows/prepare-observations-313.yml
+          test "$(git write-tree)" = "fd24b8404ae10bb78872e474286c30a33d70d7d4"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Use saved fixtures and compact Match Observation (.313)'
+          git push origin HEAD:codex/fixture-match-observations-313
