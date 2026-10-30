@@ -533,7 +533,7 @@ export const CLUB_BATTING_HELP = {
     "tutorial": [
       {
         "title": "Choose reminder teams or dates",
-        "body": "Linked clubs: open Players → Plan reminders and choose teams from Mirelion Select. Published selections set each player’s deadline one week before their first fixture of each format this season, with one reminder per player and format. Completed plans are skipped. Club Batting alone: use Players → Plan dates to set dates for Playing Groups.",
+        "body": "Linked clubs: open Players → Plan reminders and choose teams from Mirelion Select. This season’s fixtures identify each team’s formats and starting dates. Normal team starts the season; teams played this season identify later limited-overs and long-form requirements. Separate T20 cups use published teams. Plans are due one week before the relevant first fixture, with one reminder per player and format. Completed plans are skipped. Club Batting alone: use Players → Plan dates to set dates for Playing Groups.",
         "target_tab": "players",
         "focus": "plan_dates"
       },
