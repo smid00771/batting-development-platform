@@ -125,17 +125,37 @@ function demoAvailabilityFixtures(){
  fixtures.push(...trials);
  return {club_id:club.id,player_id:player.id,season_id:season,usual_team_id:usualTeam,timezone:'Australia/Sydney',from_date:today,teams,fixtures};
 }
+function demoPlanFixtures(){
+ return demoSelections.fixtures.flatMap(f=>{
+  const l=demoFixtureCalendarLinks.find(l=>l.fixture_id===f.id),d=l?.details;
+  if(!l||l.season_id!==demoGroups.season||!d||d.cancelled||f.details.cancelled||!fixtureGroups.some(g=>g.id===l.team_id&&g.active))return [];
+  const format=['two_day','long_form'].includes(d.format)?'long_form':d.format;
+  if(!['t20','limited_overs','long_form'].includes(format))return [];
+  return [{f,d,team:l.team_id,format,date:d.days.map(d=>d.date).sort()[0]}];
+ });
+}
+function demoPlanTeamFormats(team){
+ const formats=new Map();for(const f of demoPlanFixtures().filter(f=>f.team===team))if(!formats.has(f.format)||f.date<formats.get(f.format))formats.set(f.format,f.date);
+ return [...formats].map(([format,first_fixture])=>({format,first_fixture})).sort((a,b)=>a.first_fixture.localeCompare(b.first_fixture));
+}
 const demoManualPlayerRequirements=demoPlayerRequirements;
 demoPlayerRequirements=function(playerId){
  if(demoProduct!=='both')return demoManualPlayerRequirements(playerId);
  const p=fixtureRows.players.find(p=>p.id===playerId),r=p&&demoSelections.roster.find(r=>r.user_id===p.user_id&&r.active);if(!r)return [];
- const formats=new Map();
- for(const f of demoSelections.fixtures){const d=f.published?.details,link=demoFixtureCalendarLinks.find(l=>l.fixture_id===f.id);
-  if(!d||d.cancelled||f.details.cancelled||!demoPlanReminderSettings.team_ids.includes(d.grade_group_id)||link&&link.season_id!==demoGroups.season)continue;
-  const format=['two_day','long_form'].includes(d.format)?'long_form':d.format;if(!['t20','limited_overs','long_form'].includes(format))continue;
-  for(const [i,day] of d.days.entries())if(f.published.slots.some(slot=>slot['d'+(i+1)]===r.id)){
-   const due=demoAddDay(day.date,-7),prior=formats.get(format);if(!prior||due<prior.due_date)formats.set(format,{format_key:format,required:true,due_date:due,sources:['First selected fixture · one week before']});
-  }
+ const fixtures=demoPlanFixtures().filter(f=>demoPlanReminderSettings.team_ids.includes(f.team));
+ const normal=fixtureGroups.filter(g=>g.active&&g.name===r.grade),normalTeam=normal.length===1?normal[0].id:null,history=new Map(),formats=new Map();
+ for(const x of fixtures){
+  let slots=x.f.published?.slots||[];
+  const source=demoSelections.result_sources?.[x.f.id],card=source&&Object.values(demoScorecards).find(c=>c.match_id===source.match_id),actual=card?.status==='completed'&&card.teams?.find(t=>t.id===source.team_id&&t.lineup_available);
+  if(actual)slots=actual.players.flatMap(p=>{const link=demoSelections.scorecard_links.find(l=>l.source_id===p.player_id);return link?[{d1:link.roster_id}]:[];});
+  if(slots.some(slot=>slot.d1===r.id||slot.d2===r.id)&&fixtures.some(f=>f.team===x.team&&f.format!=='t20'))if(!history.has(x.team)||x.date<history.get(x.team))history.set(x.team,x.date);
+ }
+ const memberships=history.size?history:new Map(normalTeam?[[normalTeam,'0000-00-00']]:[]),today=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Sydney'});
+ for(const x of fixtures){
+  const regular=x.format!=='t20'&&memberships.has(x.team)&&x.date>=memberships.get(x.team);
+  const opening=x.format==='t20'&&!history.size&&x.team===normalTeam&&x.date>=today&&x.date===fixtures.filter(f=>f.team===x.team).map(f=>f.date).sort()[0];
+  const published=x.format==='t20'&&x.f.published?.details?.format==='t20'&&x.f.published.slots.some(slot=>slot.d1===r.id||slot.d2===r.id)&&JSON.stringify(x.d.days.map(d=>d.date).sort())===JSON.stringify(x.f.published.details.days.map(d=>d.date).sort());
+  if(regular||opening||published){const due=demoAddDay(x.date,-7),prior=formats.get(x.format);if(!prior||due<prior.due_date)formats.set(x.format,{format_key:x.format,required:true,due_date:due,sources:['Season fixtures · one week before']});}
  }return [...formats.values()];
 };
 function demoSourceTeams(){return [{id:'source-first',name:'Harbour 1st Grade',grade:{id:'source-grade-first',name:'1st Grade'},competition:{name:'Example District'}},{id:'source-fifth',name:'Harbour 2nd Grade',grade:{id:'source-grade-fifth',name:'2nd Grade'},competition:{name:'Example District'}}];}
@@ -162,7 +182,7 @@ supabase.rpc=async function(name,args={}){
   if(name==='club_plan_reminder_settings'){
    if(args.p_club_id!==club.id||demoProduct!=='both'||!isAdmin())return demoFail('Linked Club Admin access required');
    const a=args.p_action,d=args.p_data||{},cfg=demoPlanReminderSettings;
-   if(a==='context')return demoOK({revision:cfg.revision,team_ids:cfg.team_ids,teams:fixtureGroups.filter(g=>g.active).map(g=>({id:g.id,name:g.name}))});
+   if(a==='context')return demoOK({revision:cfg.revision,team_ids:cfg.team_ids,teams:fixtureGroups.filter(g=>g.active).map(g=>({id:g.id,name:g.name,formats:demoPlanTeamFormats(g.id)}))});
    if(a!=='save'||!Array.isArray(d.team_ids)||d.team_ids.some(id=>!fixtureGroups.some(g=>g.id===id&&g.active)))return demoFail('Choose teams from this club');
    const receipt=cfg.receipts[d.request_id];if(receipt)return receipt.payload===JSON.stringify(d)?demoOK(receipt.result):demoFail('This request was used for different changes');
    if(d.revision!==cfg.revision)return demoFail('Plan reminder teams changed. Close and reopen before saving');

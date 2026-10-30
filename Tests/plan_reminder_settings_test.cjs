@@ -4,6 +4,8 @@ test('linked clubs replace manual dates with a saved Select team checklist, incl
  const h=await admin(t);assert.equal(h.document.getElementById('managePlanDatesFromPlayers').textContent,'Plan reminders');
  await h.click('#managePlanDatesFromPlayers');const form=h.document.getElementById('planReminderTeamsForm');assert.ok(form);assert.equal(form.querySelector('[type=date]'),null);
  assert.ok(form.querySelector('[value=group-u21]'));assert.equal(form.querySelector('[value=group-masters]').checked,false);
+ assert.match(form.querySelector('[value=group-first]').closest('label').textContent,/Long form · \d+ \w+/);
+ assert.match(form.querySelector('[value=group-dev-navy]').closest('label').textContent,/Limited overs · \d+ \w+/);
  await h.click('[name=team_ids][value=group-u21]');await h.click('[name=team_ids][value=group-cup]');await h.click('#savePlanReminderTeams');
  assert.equal(h.window.eval('demoPlanReminderSettings.team_ids.includes("group-u21")'),true);assert.equal(h.window.eval('demoPlanReminderSettings.team_ids.includes("group-masters")'),false);
  await h.click('#managePlanDatesFromPlayers');assert.equal(h.document.querySelector('input[value=group-u21]').checked,true);assert.equal(h.document.querySelector('input[value=group-cup]').checked,true);
