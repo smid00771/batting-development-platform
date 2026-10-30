@@ -47,12 +47,12 @@ test('a confirmed link stays confirmed if refreshing the review fails',async()=>
  const h=harness({refreshError:true});h.host.querySelector('[data-import-same]').click();await settle();assert.equal(h.s.importer.identityPending,null);assert.equal(h.host.querySelector('#retryPlayerIdentity'),null);assert.match(h.host.textContent,/Player linked\. Refresh scores/);assert.equal(h.calls.length,1);
 });
 test('unchanged name-matching helpers and the parked demo remain consistent',()=>{
- // Live-only registration preference and shared-stats invalidation do not alter matching.
- assert.equal(importer(app).replace(',prefer_registration:true','').replaceAll(" if(typeof seasonStatsPanel!=='undefined')seasonStatsPanel.invalidate?.();\n",''),importer(demo));const helpers=section(app,'function matchReviewNameParts','function matchReviewSuggestPlayers').trim();
- assert.equal(helpers,section(demo,'function matchReviewNameParts','function matchReviewSuggestPlayers').trim());
+ // The generated demo uses the same scorecard importer as the live source.
+ assert.equal(importer(app),importer(demo));const helpers=section(app,'function matchReviewNameParts','function matchReviewSuggestPlayers').trim();
+ assert.equal(helpers,section(importer(demo),'function matchReviewNameParts','function matchReviewSuggestPlayers').trim());
  const module=fs.readFileSync(path.join(root,'player-name-matching.js'),'utf8').replaceAll('export ','');assert.equal(helpers,module.slice(module.indexOf('function matchReviewNameParts')).trim());
  // The live team UI now resolves inactive registration duplicates; its behaviour is tested separately.
- const adapter=fs.readFileSync(path.join(root,'playcricket-team-demo.js'),'utf8').replaceAll('export ','');assert.equal(adapter.slice(adapter.indexOf('function createScorecardTeamDemo')).trim(),section(demo,'function createScorecardTeamDemo','const demoScorecardTeams=').trim());
+ const adapter=fs.readFileSync(path.join(root,'playcricket-team-demo.js'),'utf8').replaceAll('export ','');assert.ok(demo.includes(adapter.slice(adapter.indexOf('function createScorecardTeamDemo')).trim()));
 });
 
 

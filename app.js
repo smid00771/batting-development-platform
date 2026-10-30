@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.308';
+const APP_UI_VERSION='0.8.62.309';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -2233,14 +2233,19 @@ function renderCoachingUpdatesMenu(){
   document.getElementById('checkCoachingUpdates').onclick=()=>refreshMyCoachingUpdates();
   host.querySelectorAll('[data-open-coaching-update]').forEach(button=>button.onclick=async()=>{
     const update=myCoachingUpdates.updates.find(u=>u.source_key===button.dataset.openCoachingUpdate);
-    if(!update||!coachingUpdateScopeMatches()||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
-    pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
-    document.getElementById('coachingUpdatesMenu').open=false;
-    currentTab=update.source_kind==='conversation'?'conversations':update.source_kind==='match'?'innings':'howwetrain';
-    if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=update.can_open?null:update.match_id;}
-    howWeTrainReflectionEditId=null;
-    await renderTab();
+    if(update&&coachingUpdateScopeMatches())await openCoachingUpdate(update);
   });
+}
+
+async function openCoachingUpdate(update){
+  const key=`${session?.user?.id}:${club?.id}`;
+  if(!canOpenClubTab('conversations')||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry()||key!==`${session?.user?.id}:${club?.id}`)return;
+  pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
+  const menu=document.getElementById('coachingUpdatesMenu');if(menu)menu.open=false;
+  currentTab=update.source_kind==='conversation'?'conversations':update.source_kind==='match'?'innings':'howwetrain';
+  if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=update.can_open?null:update.match_id;}
+  howWeTrainReflectionEditId=null;
+  await renderTab();
 }
 
 async function openCoachConversations(){
@@ -2266,7 +2271,7 @@ async function refreshMyCoachingUpdates(){
   const errors=[updates.error,inbox.error].filter(Boolean);
   myCoachingUpdates={...myCoachingUpdates,clubId,userId,
     updates:updates.error?myCoachingUpdates.updates:Array.isArray(updates.data?.updates)?updates.data.updates:[],
-    openRequestCount:inbox.error?myCoachingUpdates.openRequestCount||0:(inbox.data?.actions||[]).filter(a=>a.is_player_request&&a.status==='open').length,
+    openRequestCount:inbox.error?myCoachingUpdates.openRequestCount||0:(inbox.data?.actions||[]).filter(a=>a.is_player_request&&a.status==='open'&&(a.is_own_request||a.is_preferred_person||a.is_responsible_coach)).length,
     error:errors.map(error=>error?.message||'Could not check updates').join(' '),loaded:true};
   renderCoachingUpdatesMenu();watchVisibleCoachingNotes();void updatePhoneAppBadge();
 }
@@ -2346,7 +2351,7 @@ window.addEventListener?.('focus',()=>{void refreshMyCoachingUpdates();});
 function disclosureStyles(){
   const details=[
     '#page details:is(.cb-disclosure,.setup-collapsible,.inactive-groups,.workshop-setup,.workshop-setup-review,.workshop-existing-invitations,.workshop-contribution-details,.workshop-maintenance,.workshop-about,.submitted-response-detail,.source-responses,.late-history-card,.late-history,.hwb-public-banner,.plan-player-ideas,.plan-removed-list,.train-simple-accordion,.train-format-accordion,.train-card-depth,.innings-reflection-options,.innings-prep-section,.innings-sharing,.innings-extra-shot,.weekly-loop-review-history,.weekly-focus-manage,.prep-more,.plan-progress-disclosure,.plan-reference-disclosure,.plan-preview-disclosure,.plan-section-tile,.match-review-import,.match-review-mapping,.engagement-progress-details)',
-    '#page details:is(#staffInningsHistory,#pastCoachingNotes,[data-conversation-history])',
+    '#page details:is(#staffInningsHistory,#pastCoachingNotes,#otherCoachingNotes,[data-conversation-history])',
     '#page :is(.training-page,.call-page,.prediction-results,.match-training-compact,#sharedCoachingActions,.development-match-card,.engagement-card,.match-review-import) details:not(.account-menu)'
   ];
   const summary=details.map(selector=>selector+'>summary').join(',\n');
@@ -8870,11 +8875,11 @@ async function renderCoachingStaffSetup(){
       .coaching-staff-head h2{margin:0}
       .coaching-duty-row{display:flex;align-items:center;gap:8px;border-top:1px solid #dce1ed;padding:10px 0}.coaching-duty-name{flex:1;min-width:0;overflow-wrap:anywhere}.coaching-duty-actions{display:flex;gap:4px;flex:0 0 auto}.coaching-duty-actions .btn{padding:8px}
       #coachingStaffHost input,#coachingStaffHost select{max-width:100%;width:100%;box-sizing:border-box;border:1px solid #d8deee;border-radius:10px;background:white;color:#172660;font:inherit;font-size:16px;padding:10px;min-height:42px}#coachingStaffHost [hidden]{display:none!important}#coachingStaffHost{scroll-margin-top:150px}
-      .coaching-title-disclosure{margin:8px 0 0}.coaching-title-disclosure summary{cursor:pointer;font-weight:700;padding:8px 0;color:#233478}.coaching-title-disclosure summary:focus-visible{outline:2px solid #233478;outline-offset:3px;border-radius:4px}#coachingTitleActions{margin-top:12px}
+      .coaching-duty-routing{display:flex;align-items:center;gap:8px;font-size:12px;min-height:44px}#coachingStaffHost .coaching-duty-routing input{width:18px;min-height:18px;height:18px}.coaching-title-disclosure{margin:8px 0 0}.coaching-title-disclosure summary{cursor:pointer;font-weight:700;padding:8px 0;color:#233478}.coaching-title-disclosure summary:focus-visible{outline:2px solid #233478;outline-offset:3px;border-radius:4px}#coachingTitleActions{margin-top:12px}
     </style><div class="coaching-staff-head"><h2>Club coaching titles</h2></div>
       <details id="coachingCurrentTitles" class="coaching-title-disclosure" ${state.titlesOpen?'open':''}><summary>View coaching titles (${state.roles.length})</summary>
         <div id="coachingDutyRows">${state.roles.length?state.roles.map((r,i)=>`<div class="coaching-duty-row" data-duty-row="${esc(r.id)}">
-          <div class="coaching-duty-name">${manage&&state.renamingId===r.id?`<input aria-label="Coaching title ${i+1}" data-duty-title="${esc(r.id)}" maxlength="60" placeholder="Coaching title" value="${esc(r.title)}">`:`<span data-duty-name="${esc(r.id)}">${esc(r.title)}</span>`}</div>
+          <div class="coaching-duty-name">${manage&&state.renamingId===r.id?`<input aria-label="Coaching title ${i+1}" data-duty-title="${esc(r.id)}" maxlength="60" placeholder="Coaching title" value="${esc(r.title)}">`:`<span data-duty-name="${esc(r.id)}">${esc(r.title)}</span>`}${manage?`<label class="coaching-duty-routing"><input type="checkbox" data-duty-batting="${esc(r.id)}" ${r.receives_batting_conversations?'checked':''}> Receives batting conversations</label>`:r.receives_batting_conversations?'<small>Receives batting conversations</small>':''}</div>
           ${manage?`<div class="coaching-duty-actions">${state.renamingId!==r.id?`<button class="btn ghost" data-duty-rename="${esc(r.id)}" aria-label="Rename ${esc(r.title)}">Rename</button>`:''}<button class="btn ghost" data-duty-remove="${esc(r.id)}" aria-label="Remove coaching title ${esc(r.title||String(i+1))}">Remove</button></div>`:''}
         </div>`).join(''):'<p class="help">No coaching titles added.</p>'}</div>
       </details>
@@ -8886,9 +8891,10 @@ async function renderCoachingStaffSetup(){
     adding?.addEventListener('toggle',()=>{if(adding.isConnected)state.addOpen=adding.open;});
     const focusTitle=id=>{const input=host.querySelector(`[data-duty-title="${id}"]`);input?.focus();input?.scrollIntoView({block:'nearest',behavior:'smooth'});};
     host.querySelectorAll('[data-duty-title]').forEach(input=>input.oninput=()=>{state.roles.find(r=>r.id===input.dataset.dutyTitle).title=input.value;changed();});
+    host.querySelectorAll('[data-duty-batting]').forEach(input=>input.onchange=()=>{state.roles.find(r=>r.id===input.dataset.dutyBatting).receives_batting_conversations=input.checked;changed();});
     host.querySelectorAll('[data-duty-rename]').forEach(button=>button.onclick=()=>{state.renamingId=button.dataset.dutyRename;state.titlesOpen=true;draw();focusTitle(state.renamingId);});
     host.querySelectorAll('[data-duty-remove]').forEach(button=>button.onclick=()=>{state.roles=state.roles.filter(r=>r.id!==button.dataset.dutyRemove);if(state.renamingId===button.dataset.dutyRemove)state.renamingId=null;state.titlesOpen=true;changed();draw();});
-    const add=title=>{if(state.roles.length>=50)return;const id=preparationUuid();state.roles.push({id,title,user_ids:[]});state.titlesOpen=true;state.addOpen=false;state.renamingId=title?null:id;changed();draw();if(!title)focusTitle(id);};
+    const add=title=>{if(state.roles.length>=50)return;const id=preparationUuid();state.roles.push({id,title,user_ids:[],receives_batting_conversations:title.toLowerCase()==='batting coach'});state.titlesOpen=true;state.addOpen=false;state.renamingId=title?null:id;changed();draw();if(!title)focusTitle(id);};
     host.querySelector('#addCoachingDuty')?.addEventListener('change',event=>{if(event.target.value)add(event.target.value==='__custom'?'':event.target.value);});
     host.querySelector('#cancelCoachingStaff')?.addEventListener('click',()=>{if(state.dirty&&!confirm('Discard your coaching title changes?'))return;state.roles=structuredClone(state.data.roles);state.dirty=false;state.editing=false;state.command=null;state.error='';state.renamingId=null;state.titlesOpen=false;state.addOpen=false;draw();returnToPerson();});
     host.querySelector('#saveCoachingStaff')?.addEventListener('click',async()=>{if(await state.save())returnToPerson();});
@@ -9322,7 +9328,7 @@ function developmentViewBlock(title,view,author=''){
   </div>`;
 }
 
-function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false,showReflectionAction=true}={}){
+function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false,showReflectionAction=true,collapseCoaching=false}={}){
   const coaches=Array.isArray(match.coach_feedback)?match.coach_feedback:[];
   const didNotBat=match.participation_status==='did_not_bat';
   const noPlan=coaches.some(f=>f.batting_to_plan==='no_plan');
@@ -9339,10 +9345,10 @@ function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false,s
     ${renderImportedScorecard(match)}
     ${renderInningsVideo(match.player_video)}
     ${match.player_note&&match.player_note!==match.dismissal_summary?`<p><strong>Player’s innings note:</strong> ${esc(match.player_note)}</p>`:''}
-    <div class="development-compare-grid">
+    ${collapseCoaching&&coaches.length?`<details><summary>Player reflection and coaching notes (${coaches.length})</summary>`:''}<div class="development-compare-grid">
       ${!didNotBat&&match.player_reflection?developmentViewBlock('PLAYER VIEW',match.player_reflection):!didNotBat&&!playerMode&&latestCoach?developmentViewBlock('PLAYER VIEW',null):''}
       ${visible.map(f=>developmentViewBlock(f.plan_related===false?'COACHING NOTE':'COACH VIEW',f,f.author_name||'Coach / Captain')).join('')}
-    </div>
+    </div>${collapseCoaching&&coaches.length?'</details>':''}
     <div class="development-actions">
       ${showReflectionAction&&playerMode&&!didNotBat&&(latestCoach||match.player_reflection||!coaches.length)?`<button class="btn ${reflectionNeeded?'secondary':'ghost'}" data-edit-my-reflection="${match.id}">${match.player_reflection?'Edit my reflection':'Add my reflection'}</button>`:''}
       ${playerMode&&!didNotBat&&noPlan?'<button type="button" class="btn secondary" data-complete-player-plan>Open My Player Plan</button>':''}
@@ -9611,7 +9617,7 @@ async function renderCoachConversations(){
     const [inbox,own]=await Promise.all([supabase.rpc('get_my_coach_conversations',{p_club_id:clubId}),myPlayer&&isPlayerUser()?loadDevelopmentFeedback(myPlayer.id).catch(()=>null):Promise.resolve(null)]);
     if(!current())return;if(inbox.error)throw inbox.error;
     if(coachingUpdateScopeMatches()){
-      myCoachingUpdates={...myCoachingUpdates,openRequestCount:(inbox.data?.actions||[]).filter(a=>a.is_player_request&&a.status==='open').length};
+      myCoachingUpdates={...myCoachingUpdates,openRequestCount:(inbox.data?.actions||[]).filter(a=>a.is_player_request&&a.status==='open'&&(a.is_own_request||a.is_preferred_person||a.is_responsible_coach)).length};
       renderCoachingUpdatesMenu();
     }
     const feedback={matches:own?.matches||[],training_observations:own?.training_observations||[],coaching_actions:inbox.data?.actions||[]};
@@ -9704,9 +9710,8 @@ function renderConversationObservation(action,match,note,training,{playerMode,st
         ${note?.innings_note||match.dismissal_summary?`<p class="conversation-context"><strong>Dismissal / innings:</strong> ${esc(note?.innings_note||match.dismissal_summary)}</p>`:''}
         ${assessment?`<p class="conversation-context">${esc(assessment)}</p>`:''}
         ${note?.next_training_focus?`<p class="conversation-context"><strong>Train next:</strong> ${esc(note.next_training_focus)}</p>`:''}
-        ${renderCoachingVideo(action.video)}
+        ${renderCoachingVideo(action.video||note?.video)}
       `}
-      <div class="btnrow conversation-source-links"><button type="button" class="btn ghost" data-staff-innings-source="${esc(match.id)}">View innings</button>${staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`:''}</div>
     </div>`;
   }
   if(training)return `<div class="conversation-observation" data-training-observation-id="${esc(training.id)}" data-coaching-note-updated-at="${esc(training.updated_at||training.created_at||'')}">
@@ -9715,8 +9720,7 @@ function renderConversationObservation(action,match,note,training,{playerMode,st
     ${training.note?`<p class="conversation-observation-comment">${esc(training.note)}</p>`:''}
     ${training.plan_related!==false?`<p class="conversation-context">Training to plan: ${esc(PLAN_ALIGNMENT_LABELS[training.training_to_plan]||'—')}${TRAINING_OBSERVATION_LABELS[training.observation_type]?` · ${esc(TRAINING_OBSERVATION_LABELS[training.observation_type])}`:''}</p>`:''}
     ${training.next_training_focus?`<p class="conversation-context"><strong>Train next:</strong> ${esc(training.next_training_focus)}</p>`:''}
-    ${renderCoachingVideo(action.video)}
-    ${staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit my observation</button>`:''}
+    ${renderCoachingVideo(action.video||training.video)}
   </div>`;
   return '';
 }
@@ -9729,11 +9733,12 @@ function conversationDetailsStyles(){
     #sharedCoachingActions .conversation-context{margin:8px 0;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
     #sharedCoachingActions .conversation-source-links{margin:8px 0}
     #sharedCoachingActions .conversation-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
-    #sharedCoachingActions [data-complete-coaching-action],#sharedCoachingActions #saveCoachingReview{background:#232d78;color:#fff;border:1px solid #232d78}
+    #sharedCoachingActions [data-review-coaching-action],#sharedCoachingActions #saveCoachingReview{background:#232d78;color:#fff;border:1px solid #232d78}
     #sharedCoachingActions .conversation-completed{background:#eaf4ef;color:#1d5f42;border:1px solid #c7dfd2;opacity:1}
     #sharedCoachingActions .conversation-note-form{margin-top:12px;padding-top:12px;border-top:1px solid #dce1ed}
     #sharedCoachingActions .conversation-note-form [hidden]{display:none!important}
     #sharedCoachingActions .conversation-date-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 12px}
+    #sharedCoachingActions .conversation-finish{display:flex;align-items:center;gap:8px;min-height:44px}#sharedCoachingActions .conversation-finish input{width:18px;height:18px;margin:0}
     #sharedCoachingActions .conversation-date-controls label{display:flex;gap:8px;align-items:center;min-height:44px}
     #sharedCoachingActions .conversation-date-controls input{width:18px;height:18px;margin:0}
     #sharedCoachingActions [data-coaching-review-status]:empty{display:none}
@@ -9752,7 +9757,9 @@ function conversationDetailsStyles(){
 
 function renderCoachingActions(feedback,{playerMode=true,includeObservations=false,staffCanEdit=false,signals=[],compactMatchSources=false}={}){
   const actions=Array.isArray(feedback?.coaching_actions)?feedback.coaching_actions:[];
-  const current=coachingConversationItems(actions,playerMode?[]:signals);
+  const items=coachingConversationItems(actions,playerMode?[]:signals);
+  const needsAttention=item=>!compactMatchSources||!item.action||item.action.follow_up_requested!==false||item.reviewOn||item.signals.length||item.action.is_player_request;
+  const current=items.filter(needsAttention),routine=items.filter(item=>!needsAttention(item));
   const closed=actions.filter(a=>a.status!=='open').sort((a,b)=>String(b.updated_at).localeCompare(String(a.updated_at)));
   const card=(a,reasons=[])=>{
     const due=a.status==='open'&&!!a.review_on&&String(a.review_on)<=todayIso();
@@ -9761,27 +9768,35 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
     const training=(feedback.training_observations||[]).find(o=>o.id===a.training_observation_id);
     const compactSource=compactMatchSources&&!!(match||training);
     const source=includeObservations?(compactSource?renderConversationObservation(a,match,note,training,{playerMode,staffCanEdit}):match?renderDevelopmentMatchCard({...match,coach_feedback:[{...note,followup_status:a.status}]},{playerMode,staffCanEdit}):training?renderTrainingObservationCard(training,{staffCanEdit}):''):'';
-    const hiddenPlan=playerMode&&match&&!match.player_reflection&&note?.plan_related!==false;
+    const hiddenPlan=playerMode&&match&&!match.player_reflection&&note?.plan_related!==false&&!(note?.batting_to_plan==='no_plan'&&note?.reflection_required===false);
     const isTask=!!(note?.next_training_focus||training?.next_training_focus)||(!a.match_feedback_id&&!a.training_observation_id);
+    const focusAccess=a.can_access_focus===true||a.player_id===myPlayer?.id||currentTab==='players'&&(playersWorkspaceData?.players||[]).some(p=>p.id===a.player_id);
+    const latestUpdate=(a.reviews||[]).filter(r=>Number(r.revision)>1&&r.note).sort((a,b)=>Number(b.revision)-Number(a.revision))[0];
     return `<article class="training-observation-card" data-coaching-action-card="${esc(a.id)}" data-coaching-note-updated-at="${esc(a.updated_at||'')}" style="margin-top:12px">
-      <div class="section-label">${a.status==='open'?(due?'Review due':a.follow_up_requested===false?'Current note':'Conversation open'):a.status==='completed'?'Discussed / Actioned':'Closed'}${a.review_on?` · Review ${esc(formatDateShort(a.review_on))}`:''}</div>
+      <div class="section-label">${a.status==='open'?(due?'Review due':a.follow_up_requested===false&&!reasons.length?'Saved note':'To discuss'):a.status==='completed'?'Discussed / Actioned':'Closed'}${a.review_on?` · Review ${esc(formatDateShort(a.review_on))}`:''}</div>
       ${conversationRequestDetails(a)}
       ${source||`<h3>${esc(a.task)}</h3>`}
       ${renderOutsidePlanReview(a)}
       ${!hiddenPlan&&!compactSource?renderCoachingVideo(a.video):''}
       ${conversationRecipientButtons(a)}
       ${source&&isTask&&(hiddenPlan||a.task!==(note?.next_training_focus||training?.next_training_focus))?`<p><strong>Agreed action:</strong> ${esc(a.task)}</p>`:''}
-      ${reasons.length?`<div class="notice compact"><strong>Worth discussing</strong>${reasons.map(r=>`<p data-coach-signal-card="${esc(r.key)}">${esc(r.title)} · ${esc(r.summary)}</p>`).join('')}</div>`:''}
+      ${reasons.length?`<div class="notice compact">${reasons.map(r=>`<p data-coach-signal-card="${esc(r.key)}">${esc(r.title)}</p>`).join('')}</div>`:''}
+      ${latestUpdate?`<p class="conversation-context"><strong>Latest update · ${esc(latestUpdate.reviewed_by_name||'Club member')}:</strong> ${esc(latestUpdate.note)}</p>`:''}
       <div class="conversation-controls">
-        ${a.status==='open'&&a.can_review?`<button type="button" class="btn" data-complete-coaching-action="${esc(a.id)}">Mark Discussed/Actioned</button><button type="button" class="btn secondary" data-review-coaching-action="${esc(a.id)}">Add note</button>${a.is_own_request?`<button type="button" class="btn ghost" data-withdraw-coaching-request="${esc(a.id)}">Withdraw my request</button>`:''}`:a.status!=='open'?`<button type="button" class="btn conversation-completed" disabled>${a.status==='completed'?'Discussed/Actioned ✓':a.is_player_request?'Request withdrawn ✓':'Closed ✓'}</button>`:''}
+        ${a.status==='open'&&a.can_review?`<button type="button" class="btn" data-review-coaching-action="${esc(a.id)}">Add update</button><button type="button" class="btn secondary" data-complete-coaching-action="${esc(a.id)}">Mark discussed</button>${a.is_own_request?`<button type="button" class="btn ghost" data-withdraw-coaching-request="${esc(a.id)}">Withdraw my request</button>`:''}`:a.status!=='open'?`<span class="conversation-completed">${a.status==='completed'?'Discussed / Actioned ✓':a.is_player_request?'Request withdrawn ✓':'Closed ✓'}</span>`:''}
         <span role="status" data-coaching-review-status="${esc(a.id)}"></span>
       </div>
       <div data-coaching-review-slot="${esc(a.id)}"></div>
-      ${a.can_access_focus===true||a.player_id===myPlayer?.id||currentTab==='players'&&(playersWorkspaceData?.players||[]).some(p=>p.id===a.player_id)?`<div style="margin-top:12px"><button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button><div id="conversationFocus-${esc(a.id)}"></div></div>`:''}
-      ${a.reviews?.length?`<details data-conversation-history style="margin-top:10px"><summary>Notes and updates (${a.reviews.length})</summary>${a.reviews.map(r=>`<p><strong>${Number(r.revision)===1?'Recorded':r.outcome==='continue'?'Update':r.outcome==='completed'?'Discussed / Actioned':'Closed'} · ${esc(formatDateShort(r.reviewed_at))}</strong>${r.note?`<br>${esc(r.note)}`:''}<br><small>${esc(r.reviewed_by_name||'Club member')}${r.next_review_on?` · Review ${esc(formatDateShort(r.next_review_on))}`:''}</small></p>${outsidePlanReviewContext(r)?`<details style="margin:8px 0"><summary>View scoring context for this update</summary>${renderOutsidePlanReview(r,{snapshot:true})}</details>`:''}`).join('')}</details>`:''}
+      <details data-conversation-history style="margin-top:10px"><summary>Details and history</summary>
+        <div class="btnrow">${compactSource&&match&&staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`:''}${compactSource&&training&&staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit my observation</button>`:''}${hiddenPlan?`<button type="button" class="btn ghost" data-staff-innings-source="${esc(match.id)}">Add my reflection</button>`:''}${focusAccess?`<button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button>`:''}</div>
+        ${focusAccess?`<div id="conversationFocus-${esc(a.id)}"></div>`:''}
+        ${compactSource&&match?renderDevelopmentMatchCard({...match,coach_feedback:[]},{playerMode,showReflectionAction:false}):''}
+        ${reasons.map(r=>`<p>${esc(r.summary)} ${esc(r.suggestion||'')}</p>`).join('')}
+        ${(a.reviews||[]).map(r=>`<p><strong>${Number(r.revision)===1?'Recorded':r.outcome==='continue'?'Update':r.outcome==='completed'?'Discussed / Actioned':'Closed'} · ${esc(formatDateShort(r.reviewed_at))}</strong>${r.note?`<br>${esc(r.note)}`:''}<br><small>${esc(r.reviewed_by_name||'Club member')}${r.next_review_on?` · Review ${esc(formatDateShort(r.next_review_on))}`:''}</small></p>${outsidePlanReviewContext(r)?`<details style="margin:8px 0"><summary>View scoring context for this update</summary>${renderOutsidePlanReview(r,{snapshot:true})}</details>`:''}`).join('')}
+      </details>
     </article>`;
   };
-  return `${conversationDetailsStyles()}<section class="card ${compactMatchSources?'conversation-details':''}" id="sharedCoachingActions">${compactMatchSources?'':`<h2>Current conversations (${current.length})</h2>`}${feedback?.coaching_actions_error?'<div class="notice">Conversations could not all load. Reload this page to check the latest notes and reviews.</div>':''}${current.length?current.map(item=>item.action?card(item.action,item.signals):renderConversationSignal(item.signals[0])).join(''):!feedback?.coaching_actions_error?'<p class="help">No current coaching conversations.</p>':''}${closed.length?`<details id="pastCoachingNotes" style="margin-top:14px"><summary>Past conversations (${closed.length})</summary>${closed.map(a=>card(a)).join('')}</details>`:''}</section>`;
+  return `${conversationDetailsStyles()}<section class="card ${compactMatchSources?'conversation-details':''}" id="sharedCoachingActions">${compactMatchSources?'':`<h2>Current conversations (${current.length})</h2>`}${feedback?.coaching_actions_error?'<div class="notice">Conversations could not all load. Reload this page to check the latest notes and reviews.</div>':''}${current.length?current.map(item=>item.action?card(item.action,item.signals):renderConversationSignal(item.signals[0])).join(''):!feedback?.coaching_actions_error?'<p class="help">No coaching conversations need follow-up.</p>':''}${routine.length?`<details id="otherCoachingNotes"><summary>Other saved notes (${routine.length})</summary>${routine.map(item=>card(item.action)).join('')}</details>`:''}${closed.length?`<details id="pastCoachingNotes" style="margin-top:14px"><summary>Past conversations (${closed.length})</summary>${closed.map(a=>card(a)).join('')}</details>`:''}</section>`;
 }
 
 // Shared conversation controls: explicit completion and separately saved notes.
@@ -9853,10 +9868,12 @@ function bindConversationDetailControls(feedback,onSaved){
     document.getElementById('coachingReviewForm')?.remove();document.getElementById('coachingActionForm')?.remove();
     const host=[...document.querySelectorAll('[data-coaching-review-slot]')].find(el=>el.dataset.coachingReviewSlot===action.id);if(!host)return;
     const form=document.createElement('div');form.id='coachingReviewForm';form.className='conversation-note-form';
-    form.innerHTML=`<div class="field"><label for="coachingReviewNote">Note</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What did you discuss or do?"></textarea></div><div class="conversation-date-controls"><label for="coachingAddReviewDate"><input type="checkbox" id="coachingAddReviewDate"> Add review date</label>${action.review_on?'<button type="button" class="btn ghost" id="coachingRemoveReviewDate" aria-pressed="false">Remove current review date</button>':''}</div><div class="field" id="coachingNextReviewField" hidden><label for="coachingNextReviewDate">Review date</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value=""></div><div class="btnrow"><button type="button" class="btn" id="saveCoachingReview">Save note</button><button type="button" class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
+    form.innerHTML=`<div class="field"><label for="coachingReviewNote">Update</label><textarea id="coachingReviewNote" maxlength="1000" rows="3" placeholder="What did you discuss or do?"></textarea></div><label class="conversation-finish"><input type="checkbox" id="coachingReviewComplete"> Mark discussed after saving</label><div class="conversation-date-controls"><label for="coachingAddReviewDate"><input type="checkbox" id="coachingAddReviewDate"> Add review date</label>${action.review_on?'<button type="button" class="btn ghost" id="coachingRemoveReviewDate" aria-pressed="false">Remove current review date</button>':''}</div><div class="field" id="coachingNextReviewField" hidden><label for="coachingNextReviewDate">Review date</label><input type="date" id="coachingNextReviewDate" min="${todayIso()}" value=""></div><div class="btnrow"><button type="button" class="btn" id="saveCoachingReview">Save update</button><button type="button" class="btn ghost" id="cancelCoachingReview">Cancel</button><span id="coachingReviewStatus" role="status"></span></div>`;
     host.appendChild(form);captureFeedbackEntryBaseline();
     const noteField=form.querySelector('#coachingReviewNote'),dateCheck=form.querySelector('#coachingAddReviewDate'),dateField=form.querySelector('#coachingNextReviewDate'),removeDate=form.querySelector('#coachingRemoveReviewDate');
     let requestId=null,requestPayload=null,clearDate=false;
+    const complete=form.querySelector('#coachingReviewComplete');
+    complete.onchange=()=>{form.querySelector('.conversation-date-controls').hidden=complete.checked;form.querySelector('#coachingNextReviewField').hidden=complete.checked||!dateCheck.checked;form.querySelector('#saveCoachingReview').textContent=complete.checked?'Save and mark discussed':'Save update';};
     const targetClub=club?.id,targetUser=session?.user?.id;
     const stillCurrent=()=>club?.id===targetClub&&session?.user?.id===targetUser&&document.getElementById('coachingReviewForm')===form;
     dateCheck.onchange=()=>{
@@ -9873,12 +9890,12 @@ function bindConversationDetailControls(feedback,onSaved){
     form.querySelector('#cancelCoachingReview').onclick=()=>{if(confirmLeaveFeedbackEntry()){form.remove();button.focus();}};
     form.querySelector('#saveCoachingReview').onclick=async()=>{
       if(coachingActionSavePending||!stillCurrent()||!confirmLeaveWeeklyLoop())return;
-      const note=noteField.value.trim(),reviewOn=dateCheck.checked?dateField.value||null:clearDate?null:action.review_on||null;
+      const outcome=complete.checked?'completed':'continue',note=noteField.value.trim(),reviewOn=complete.checked?null:dateCheck.checked?dateField.value||null:clearDate?null:action.review_on||null;
       const status=form.querySelector('#coachingReviewStatus');
       if(!note){status.textContent='Write a note before saving.';noteField.focus();return;}
-      if(dateCheck.checked&&(!reviewOn||reviewOn<todayIso())){status.textContent='Choose a review date from today onwards.';dateField.focus();return;}
-      const payload=JSON.stringify([note,reviewOn]);if(payload!==requestPayload){requestId=globalThis.crypto.randomUUID();requestPayload=payload;}
-      await saveConversationUpdate(action,{outcome:'continue',note,reviewOn,requestId,form,button:form.querySelector('#saveCoachingReview')},onSaved);
+      if(!complete.checked&&dateCheck.checked&&(!reviewOn||reviewOn<todayIso())){status.textContent='Choose a review date from today onwards.';dateField.focus();return;}
+      const payload=JSON.stringify([outcome,note,reviewOn]);if(payload!==requestPayload){requestId=globalThis.crypto.randomUUID();requestPayload=payload;}
+      await saveConversationUpdate(action,{outcome,note,reviewOn,requestId,form,button:form.querySelector('#saveCoachingReview')},onSaved);
     };
     noteField.focus();form.scrollIntoView({block:'nearest'});
   });
@@ -10918,7 +10935,7 @@ function renderTeamReviewContent(){
   bindTeamReviewRosterEditor();
   wireFixtureCorrectionActions(page);
   document.getElementById('saveTeamReview')?.addEventListener('click',()=>saveTeamReview());
-  document.getElementById('refreshTeamSelection')?.addEventListener('click',()=>renderTeamReview());
+  document.getElementById('refreshTeamSelection')?.addEventListener('click',()=>matchReviewTeamChanged());
   document.getElementById('newSavedTeamReview')?.addEventListener('click',clearTeamReviewEntry);
   document.getElementById('teamReviewHistory').onclick=()=>openTeamReviewHistory();document.getElementById('teamReviewHelp').onclick=()=>openClubBattingGuideTopic('team_review');
   page.querySelectorAll('[data-team-choice]').forEach(button=>button.onclick=()=>teamReviewUpdate(button.dataset.teamPlayer,{batting_to_plan:button.dataset.teamChoice}));
@@ -11078,9 +11095,9 @@ function teamReviewSelection(s=ensureTeamReviewState()){
 function teamReviewSelectedRows(s,players){
  if(!s.fixtureId)return s.sessionId||s.sharedReviewId?players.filter(p=>p.included_in_review||p.shared_included_in_review):[];
  const selection=teamReviewSelection(s);
- const current=(['published','manual'].includes(selection?.status)?selection.players||[]:[]).map(selected=>{
+ const current=(['published','manual','scorecard'].includes(selection?.status)?selection.players||[]:[]).map(selected=>{
   const player=players.find(p=>p.player_id===selected.player_id&&p.can_edit!==false);
-  const shared={current_selection:true,selection_name:selected.name,account_pending:!!selected.account_pending,account_link_review:!!selected.account_link_review,match_captain:selection.roles?.captain_player_id===selected.player_id,match_keeper:selection.roles?.keeper_player_id===selected.player_id,selected_in_teams:selection.status==='published',chosen_for_match:selection.status==='manual',selection_days:selected.days||[],selection_slot:selected.slot};
+  const shared={current_selection:true,selection_name:selected.name,account_pending:!!selected.account_pending,account_link_review:!!selected.account_link_review,match_captain:selection.roles?.captain_player_id===selected.player_id,match_keeper:selection.roles?.keeper_player_id===selected.player_id,selected_in_teams:selection.status==='published',from_scorecard:selection.status==='scorecard',chosen_for_match:selection.status==='manual',selection_days:selected.days||[],selection_slot:selected.slot};
   if(player&&selected.can_edit)return {...player,...shared};
   return {...shared,roster_id:selected.roster_id,player_id:selected.player_id||'roster:'+selected.roster_id,display_name:selected.name,name:selected.name,can_edit:false,selection_only:true,selection_issue:selected.link_status||(selected.player_id?'no_coaching_access':'unresolved_account'),selection_message:selected.player_id?'Your coaching access does not include this player.':'This selected player’s observation record needs an account check.'};
  });
@@ -11103,6 +11120,7 @@ function teamReviewSignupIcon(player){
 }
 function teamReviewPlayerMeta(player){
  if(player.historical_only)return 'Saved observation · no longer in the current team';
+ if(player.from_scorecard)return 'Played · confirmed scorecard';
  return player.selected_in_teams?'Selected in Teams'+((player.selection_days||[]).length?` · ${player.selection_days.length>1?'Days':'Day'} ${player.selection_days.join(' & ')}`:''):player.chosen_for_match?'Chosen for this match'+(player.match_captain?' · Captain':'')+(player.match_keeper?' · Wicketkeeper':''):'Saved observation';
 }
 function teamReviewSelectionHelp(player){
@@ -11123,14 +11141,15 @@ function teamReviewHistoryNotice(){
 function teamReviewEmptyMessage(){
  const s=ensureTeamReviewState(),selection=teamReviewSelection(s);
  if(selection?.status==='manual'||s.teamsEnabled===false&&!s.fixtureId)return '<strong>Choose the players for this match</strong><p>Use Set match team in Club Batting above. Only the names you choose and save become this match’s team.</p>';
- if(s.fixtureId&&selection?.status==='unpublished')return '<strong>Team not finalised</strong><p>Publish the team in Teams, or use Set match team in Club Batting above while Teams is being trialled. Playing Groups do not select anyone automatically.</p><p class="help">Individual observations can still be recorded from Players.</p>';
+ if(s.fixtureId&&selection?.status==='unpublished')return '<strong>Team not finalised</strong><p>Use a completed linked scorecard, publish the team in Teams, or choose the match team above.</p><p class="help">Individual observations can still be recorded from Players.</p>';
  if(selection?.status==='changed_fixture')return '<strong>Awaiting updated team</strong><p>The fixture details have changed. The players will appear when that fixture is published in Teams.</p>';
  if(selection?.status==='cancelled')return '<strong>Match cancelled</strong><p>Teams has published this fixture as cancelled.</p>';
+ if(selection?.status==='scorecard')return '<p>No players could be loaded from the confirmed scorecard. Refresh the team to check again.</p>';
  if(selection?.status==='published')return '<p>No players are listed in the published team.</p>';
- if(s.fixtureId)return '<p>The published team could not be checked. Use Refresh team to try again.</p>';
- return '<p>Choose a fixture from Teams. Its players appear after the team is published. Individual observations can still be recorded from Players.</p>';
+ if(s.fixtureId)return '<p>The match team could not be checked. Use Refresh team to try again.</p>';
+ return '<p>Choose a fixture. Its published team or confirmed completed-scorecard lineup supplies the players. Individual observations can still be recorded from Players.</p>';
 }
-function teamReviewRosterHelp(){return 'A team published in Teams supplies this match’s players. You can record observations before players sign up; the small person-and-clock icon marks those still to join. Until a team is published, use Set match team in Club Batting to choose players, captain and keeper.';}
+function teamReviewRosterHelp(){return 'The published team or confirmed completed scorecard supplies the players. You can record observations before they sign up. If neither is available, choose the match team below.';}
 function teamReviewCanChoosePlayers(s=ensureTeamReviewState()){
  return !!s.loaded&&!!s.group&&!s.group.startsWith('__')&&(!s.fixtureId||['manual','unpublished'].includes(teamReviewSelection(s)?.status));
 }
@@ -11825,14 +11844,10 @@ function staffMatchObservationsInView(matches,format=playersWorkspaceMatchFormat
     .sort((a,b)=>String(b.match_date||'').localeCompare(String(a.match_date||''))||Number(a.innings_number||1)-Number(b.innings_number||1)||String(a.id).localeCompare(String(b.id)));
 }
 function renderStaffMatchEvidence(match,player,data){
-  const ownPlayer=player.id===myPlayer?.id;
-  const visible=(match.coach_feedback||[]).filter(note=>!note.reflection_required&&(!ownPlayer||match.player_reflection||note.plan_related===false));
+  const visible=(match.coach_feedback||[]).filter(note=>!note.reflection_required&&(player.id!==myPlayer?.id||match.player_reflection||note.plan_related===false));
   return visible.map(note=>{
     const action=(data.coaching_actions||[]).find(row=>row.match_feedback_id===note.id);
-    const video=note.video||action?.video;
-    const updates=(action?.reviews||[]).filter(review=>Number(review.revision)!==1);
-    if(!video&&!updates.length)return '';
-    return `<section class="notice compact" data-staff-match-evidence="${esc(note.id)}"><strong>${esc(note.author_name||'Coach / Captain')}</strong>${renderCoachingVideo(video)}${updates.length?`<details><summary>Conversation notes and updates (${updates.length})</summary>${updates.map(review=>`<p><strong>${esc(review.reviewed_by_name||'Club coaching team')} · ${esc(formatDateShort(review.reviewed_at))}</strong><br>${esc(review.note||'')}</p>`).join('')}</details>`:''}${action?`<button type="button" class="btn ghost" data-staff-conversation-source="${esc(action.id)}">View Coach Conversation</button>`:''}</section>`;
+    return action?`<button type="button" class="btn ghost" data-staff-conversation-source="${esc(action.id)}">${esc(note.author_name||'Coach / Captain')} · Open conversation</button>`:renderCoachingVideo(note.video);
   }).join('');
 }
 function renderStaffMatchObservations(player,canEdit,data){
@@ -11844,7 +11859,7 @@ function renderStaffMatchObservations(player,canEdit,data){
       const open=playersWorkspaceMatchOpenId===match.id;
       const score=match.participation_status==='did_not_bat'?'DNB':match.score_text||'—';
       const innings=Number(match.innings_number||1)>1?` · innings ${match.innings_number}`:'';
-      return `<tr data-staff-innings-row="${esc(match.id)}"><td class="staff-innings-date" title="${esc(formatDateShort(match.match_date))}">${esc(inningsCompactDate(match.match_date,true))}</td><td class="staff-innings-opposition" title="${esc((match.opposition||'Not recorded')+innings)}">${esc((match.opposition||'Not recorded')+innings)}</td><td class="staff-innings-format" title="${esc(formatLabel(match.format_key))}">${esc(inningsCompactFormat(match.format_key))}</td><td class="staff-innings-score" title="${esc(score)}">${esc(score)}</td><td class="staff-innings-view"><button type="button" class="btn ghost" data-staff-innings-view="${esc(match.id)}" aria-expanded="${open}" aria-controls="staff-innings-detail-${esc(match.id)}">${open?'Close':'View'}</button></td></tr>${open?`<tr class="staff-innings-detail" id="staff-innings-detail-${esc(match.id)}"><td colspan="5">${renderDevelopmentMatchCard(match,{playerMode:player.id===myPlayer?.id,staffCanEdit:canEdit})}${renderStaffMatchEvidence(match,player,data)}</td></tr>`:''}`;
+      return `<tr data-staff-innings-row="${esc(match.id)}"><td class="staff-innings-date" title="${esc(formatDateShort(match.match_date))}">${esc(inningsCompactDate(match.match_date,true))}</td><td class="staff-innings-opposition" title="${esc((match.opposition||'Not recorded')+innings)}">${esc((match.opposition||'Not recorded')+innings)}</td><td class="staff-innings-format" title="${esc(formatLabel(match.format_key))}">${esc(inningsCompactFormat(match.format_key))}</td><td class="staff-innings-score" title="${esc(score)}">${esc(score)}</td><td class="staff-innings-view"><button type="button" class="btn ghost" data-staff-innings-view="${esc(match.id)}" aria-expanded="${open}" aria-controls="staff-innings-detail-${esc(match.id)}">${open?'Close':'View'}</button></td></tr>${open?`<tr class="staff-innings-detail" id="staff-innings-detail-${esc(match.id)}"><td colspan="5">${renderDevelopmentMatchCard(match,{playerMode:player.id===myPlayer?.id,staffCanEdit:canEdit,collapseCoaching:true})}${renderStaffMatchEvidence(match,player,data)}</td></tr>`:''}`;
     }).join('')}</tbody></table>`:`<p class="help">${playersWorkspaceMatchFormat?'No innings recorded in this format. Choose All formats to see the complete record.':'No innings recorded yet. A match review, individual observation or player’s innings entry will appear here.'}</p>`}
   </section>`;
 }
@@ -11872,7 +11887,7 @@ function wireStaffMatchObservationControls(player,canEdit,data){
   document.querySelectorAll('[data-staff-conversation-source]').forEach(button=>button.onclick=()=>{
     if(!stillCurrent())return;
     const card=[...document.querySelectorAll('[data-coaching-action-card]')].find(el=>el.dataset.coachingActionCard===button.dataset.staffConversationSource);
-    const past=card?.closest('details');if(past)past.open=true;
+    for(let parent=card?.closest('details');parent;parent=parent.parentElement?.closest('details'))parent.open=true;
     card?.scrollIntoView({block:'start'});
   });
   document.querySelectorAll('[data-complete-player-plan]').forEach(button=>button.onclick=async()=>{if(!stillCurrent()||!confirmLeaveFeedbackEntry()||!await saveClubEditsBeforeNavigation())return;builderSection='core';currentTab='myplan';await renderTab();});
@@ -11880,6 +11895,7 @@ function wireStaffMatchObservationControls(player,canEdit,data){
 
 function renderStaffDevelopmentBody(player,canEdit,data){
   return `<div class="staff-development-shell" id="developmentOverview">
+    <p class="help">Talk through the note with the player. Add an update, or mark it discussed when finished.</p>
     ${data.innings_details_error?'<div class="notice" role="status">Player innings notes and video could not load. Refresh to try again.</div>':''}
     ${playersWorkspaceDevelopmentMode==='training'&&canEdit?renderStaffTrainingObservationForm(player,data,staffObservationEditId):''}
     ${playersWorkspaceDevelopmentMode==='match'&&canEdit?renderStaffMatchFeedbackForm(player,data):''}
@@ -12760,10 +12776,11 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
   const formatProgress=plansPublished?publishedEnabledFormats().map(([key,label])=>({label,complete:sectionProgress(key,planState.raw).complete})):[];
   const completedFormats=formatProgress.filter(format=>format.complete).map(format=>format.label);
   const reminder=overdue?workspaceReminderState(player.id):{history:[],count:0,inCooldown:false,latest:null,delivery:''};
-  const planHeadline=!hasAccount?'Awaiting sign-up / account link':!plansPublished
+  const signupClash=!hasAccount&&player.signup_status==='clash';
+  const planHeadline=!hasAccount?(signupClash?'Account match needs review':'No confirmed sign-up'):!plansPublished
     ?'Player Plan questions are being prepared'
     :coreComplete?'Core complete ✓':'Core still to complete';
-  const planDetail=!hasAccount?'Coaches can record observations now. This player has no sign-in account linked yet.':!plansPublished
+  const planDetail=!hasAccount?(signupClash?'A signed-up account needs an identity check. Club Admin can resolve the match; the player should not register again.':'No verified sign-up matches this player record yet. Coaches can record observations now.'):!plansPublished
     ?'Registration, club roles and Playing Groups are available now. Player Plans open after publication.'
     :formatProgress.length
       ?`${completedFormats.length}/${formatProgress.length} format plans complete${completedFormats.length?` · ${completedFormats.join(', ')}`:''}`
@@ -12798,7 +12815,7 @@ function renderWorkspaceRosterRow(player,{discussionMode=false,signals=[],assign
     <div class="workspace-roster-person">
       <div>
         <h3>${selectReminder?`<label class="plan-reminder-person"><input type="checkbox" data-select-overdue="${esc(player.id)}" aria-label="Select ${esc(player.display_name||'player')}" ${workspaceCanRemind(player)?'':'disabled'}>${esc(player.display_name||'Player')}</label>`:esc(player.display_name||'Player')}${memberPhoneStatusIcon(player.user_id)}</h3>
-        <div class="workspace-roster-groups">${groups||'<span>Unassigned</span>'}${!player.user_id?'<span title="This player record is not yet linked to a sign-in account.">Account not linked</span>':''}</div>
+        <div class="workspace-roster-groups">${groups||'<span>Unassigned</span>'}</div>
       </div>
       <span class="workspace-access-badge ${player.can_edit?'edit':'view'}">${player.can_edit?'VIEW + EDIT':'VIEW ONLY'}</span>
     </div>
@@ -16903,7 +16920,7 @@ async function matchReviewLoadShared(snapshotId=null){
   const {data,error}=await supabase.rpc('club_match_results_api',{p_club_id:club.id,p_action:'review',p_data:{fixture_id:s.fixtureId||null,match_date:s.loaded.match_date,format_key:s.loaded.format_key,group_id:['','__all__','__unassigned__','__legacy__'].includes(s.group)?null:s.group,snapshot_id:snapshotId,existing_match_id:i.preview?.scorecard?.match_id||null}});
   if(error)throw error;if(ensureTeamReviewState()!==s||currentTab!=='team_review'||matchReviewSharedKey(s)!==identity||i.dirty)return;
   s.sharedResultChoices=data?.choices||[];
-  if(data?.preview&&data.preview.snapshot_id!==i.preview?.snapshot_id){i.preview=data.preview;i.url=data.preview.scorecard.url;i.teamId=matchReviewClubTeam(data.preview.scorecard,data.preview.our_team_id)||'';matchReviewMapScores(false);i.message='';}
+  if(data?.preview){i.preview=data.preview;i.url=data.preview.scorecard.url;i.teamId=matchReviewClubTeam(data.preview.scorecard,data.preview.our_team_id)||'';matchReviewMapScores(false);i.message='';}
  }catch(error){if(ensureTeamReviewState()===s)s.sharedResultsError='Could not check shared scores. '+error.message;}
  finally{s.sharedResultsLoading=false;if(ensureTeamReviewState()===s&&currentTab==='team_review'&&matchReviewSharedKey(s)===identity)renderTeamReviewContent();}
 }
@@ -17081,7 +17098,7 @@ function bindMatchReviewImporter(){const s=ensureTeamReviewState(),i=matchReview
  document.querySelectorAll('[data-import-skip]').forEach(b=>b.onclick=()=>{(i.skipped||={})[b.dataset.importSkip]=true;renderTeamReviewContent();});
  document.getElementById('retryPlayerIdentity')?.addEventListener('click',()=>confirmMatchReviewPlayer());
  document.querySelectorAll('[data-import-score]').forEach(el=>el.onchange=()=>{i.selected[el.dataset.importScore]=el.checked;i.dirty=true;renderTeamReviewContent();});}
-async function loadMatchReviewScorecard(){const s=ensureTeamReviewState(),i=matchReviewImportState(),scope=s.scope;if(teamReviewControlsLocked()||(s.sessionId&&s.reviewCanEdit===false))return;if(i.preview?.scorecard?.upstream_match_id&&s.fixtureId){if(i.dirty){i.message='Save or discard your score changes before reloading shared scores.';renderTeamReviewContent();return;}s.sharedResultsChecked=null;await matchReviewLoadShared();return;}if(!s.group){i.message='Choose the Grade / team first.';renderTeamReviewContent();return;}const url=matchReviewExtractUrl([i.url]);if(!url){i.message='Paste one full PlayCricket web address. When using your phone, if only team names were pasted, open the match in your browser and copy its address bar, then paste it here.';renderTeamReviewContent();return;}if(i.dirty&&matchReviewImportCount()&&!confirm('Replace the scorecard preview? Your review choices will stay.'))return;i.url=url;s.loading=true;i.message='Loading scorecard…';renderTeamReviewContent();try{const response=await supabase.functions.invoke('playcricket-scorecard',{body:{club_id:club.id,url:i.url}});if(response.error){let detail;try{detail=await response.error.context?.json();}catch{}throw Error(detail?.error||response.error.message);}if(response.data?.error)throw Error(response.data.error);const {data,error}=await supabase.rpc('get_match_review_scorecard',{p_club_id:club.id,p_snapshot_id:response.data?.snapshot_id});if(error)throw error;if(!data?.snapshot_id||!Array.isArray(data?.scorecard?.innings))throw Error('The scorecard preview could not be verified.');if(ensureTeamReviewState().scope!==scope||currentTab!=='team_review')return;i.preview=data;i.url=data.scorecard.url;if(s.sessionId)s.editReview=true;i.teamId=matchReviewClubTeam(data.scorecard,data.our_team_id)|| (data.scorecard.teams.some(t=>t.id===i.teamId)?i.teamId:'');matchReviewMapScores();try{await matchReviewShareSource();}catch(linkError){i.message='Scorecard imported. Check its fixture link: '+linkError.message;return;}i.message=matchReviewImportCount()?'Scores ready to save.':'';}catch(error){if(ensureTeamReviewState().scope!==scope)return;i.message=error?.message||'Could not load the scorecard. Your review choices are safe.';}finally{if(ensureTeamReviewState().scope===scope){s.loading=false;renderTeamReviewContent();}}}
+async function loadMatchReviewScorecard(){const s=ensureTeamReviewState(),i=matchReviewImportState(),scope=s.scope;if(teamReviewControlsLocked()||(s.sessionId&&s.reviewCanEdit===false))return;if(i.preview?.scorecard?.upstream_match_id&&s.fixtureId){if(i.dirty){i.message='Save or discard your score changes before reloading shared scores.';renderTeamReviewContent();return;}await matchReviewTeamChanged();if(ensureTeamReviewState().scope!==scope||currentTab!=='team_review')return;ensureTeamReviewState().sharedResultsChecked=null;await matchReviewLoadShared();return;}if(!s.group){i.message='Choose the Grade / team first.';renderTeamReviewContent();return;}const url=matchReviewExtractUrl([i.url]);if(!url){i.message='Paste one full PlayCricket web address. When using your phone, if only team names were pasted, open the match in your browser and copy its address bar, then paste it here.';renderTeamReviewContent();return;}if(i.dirty&&matchReviewImportCount()&&!confirm('Replace the scorecard preview? Your review choices will stay.'))return;i.url=url;s.loading=true;i.message='Loading scorecard…';renderTeamReviewContent();try{const response=await supabase.functions.invoke('playcricket-scorecard',{body:{club_id:club.id,url:i.url}});if(response.error){let detail;try{detail=await response.error.context?.json();}catch{}throw Error(detail?.error||response.error.message);}if(response.data?.error)throw Error(response.data.error);const {data,error}=await supabase.rpc('get_match_review_scorecard',{p_club_id:club.id,p_snapshot_id:response.data?.snapshot_id});if(error)throw error;if(!data?.snapshot_id||!Array.isArray(data?.scorecard?.innings))throw Error('The scorecard preview could not be verified.');if(ensureTeamReviewState().scope!==scope||currentTab!=='team_review')return;i.preview=data;i.url=data.scorecard.url;if(s.sessionId)s.editReview=true;i.teamId=matchReviewClubTeam(data.scorecard,data.our_team_id)|| (data.scorecard.teams.some(t=>t.id===i.teamId)?i.teamId:'');matchReviewMapScores();try{await matchReviewShareSource();}catch(linkError){i.message='Scorecard imported. Check its fixture link: '+linkError.message;return;}i.message=matchReviewImportCount()?'Scores ready to save.':'';}catch(error){if(ensureTeamReviewState().scope!==scope)return;i.message=error?.message||'Could not load the scorecard. Your review choices are safe.';}finally{if(ensureTeamReviewState().scope===scope){s.loading=false;renderTeamReviewContent();}}}
 function matchReviewImportCommand(){const s=ensureTeamReviewState(),i=matchReviewImportState(),inn=matchReviewSourceInnings();if(!matchReviewImportCount())return null;if(!inn)throw Error('Choose the scorecard team and innings.');if(i.preview.scorecard.dates[0]!==s.loaded.match_date)throw Error('Use the original match-start date, even when the player bats the following weekend.');if(!inn.complete)throw Error('This batting innings is still in progress; scores are preview only.');if(i.preview.scorecard.format_key&&i.preview.scorecard.format_key!==s.loaded.format_key)throw Error('The scorecard format and match review do not match.');const rows=inn.batters.filter(b=>i.selected[b.player_id]&&i.mapping[b.player_id]).map(b=>{const p=teamReviewPlayer(i.mapping[b.player_id]);if(!p?.can_record_score)throw Error('Result permission is required for each selected player.');if((p.candidates||[]).length&&!p.match_id&&!s.selectedInnings[p.player_id])throw Error(`Choose the existing innings for ${p.display_name||p.name}.`);if(s.removed.includes(p.player_id))throw Error('Untick the score before removing this player.');const base=teamReviewBase(p),choice=s.drafts[p.player_id]?.batting_to_plan;if(choice&&((choice==='did_not_bat')!==(b.status==='did_not_bat')))throw Error(`Check DNB and score for ${p.display_name||p.name}.`);return {source_player_id:b.player_id,player_id:p.player_id,score_date:p.scorecard?.score_date||i.scoreDate||s.loaded.match_date,match_id:base.match_id,expected_match_updated_at:base.expected_match_updated_at,expected_result_revision:p.official_result_revision||0,expected_mapping_player_id:(i.preview.player_links||[]).find(l=>l.source_player_id===b.player_id)?.player_id||null};});return {snapshot_id:i.preview.snapshot_id,team_id:i.teamId,innings_id:inn.id,rows,reason:i.reason.trim(),score_date:i.scoreDate||s.loaded.match_date};}
 function matchReviewRestoreScorecard(data){const s=ensureTeamReviewState();s.siblingReviews=data.sibling_reviews||s.siblingReviews||[];if(data.scorecard_preview&&!matchReviewImportState().dirty){const i=matchReviewImportState();i.preview=data.scorecard_preview;i.url=i.preview.scorecard.url;i.teamId=data.review?.source_team_id||matchReviewClubTeam(i.preview.scorecard,i.preview.our_team_id)||i.teamId;i.scoreDate=data.players?.find(p=>p.scorecard?.score_date)?.scorecard?.score_date||s.match_date;matchReviewMapScores(false);}}
 async function switchMatchReviewInnings(){const s=ensureTeamReviewState(),next=Number(document.getElementById('teamReviewInnings').value);if(teamReviewControlsLocked())return;if(teamReviewHasUnsavedChanges()){s.message='Save or discard your choices before switching innings.';renderTeamReviewContent();return;}const existing=(s.siblingReviews||[]).find(r=>Number(r.innings_number)===next);if(existing){await loadSavedTeamReview(existing.id);return;}if(s.sessionId&&!s.reviewCanEdit){s.message='No saved review is available for that innings.';renderTeamReviewContent();return;}s.innings_number=next;s.sessionId=null;s.sharedReviewId=null;s.sharedContributors=[];s.sessionRevision=null;s.sessionGroupScope=null;s.sessionGroupId=null;s.loaded=teamReviewIdentity(s);s.editReview=true;s.saved=[];s.selectedInnings={};s.lookedUpContext=null;s.drafts={};s.removed=[];const i=matchReviewImportState();i.dirty=false;i.selected={};await renderTeamReview();matchReviewMapScores(false);renderTeamReviewContent();}
@@ -17236,6 +17253,43 @@ function ensureClubMessages(){
  if(clubMessageState?.key!==key)clubMessageState={key,mode:'inbox',openId:null,context:null,data:null,draft:null,sending:false,deleting:false,selectedIds:[],selectedMode:'inbox',notice:''};
  return clubMessageState;
 }
+// Player-owned updates retain their reflection gate. Coach assignments are real inbox
+// messages, supplied by club_messages_api; shared Players access is not an inbox subscription.
+async function loadMessageCoaching(clubId){
+ if(!canOpenClubTab('conversations')||!isPlayerUser()||!myPlayer?.id)return {rows:[],errors:[]};
+ const results=await Promise.allSettled([
+  supabase.rpc('get_my_coaching_updates',{p_club_id:clubId}),
+  supabase.rpc('get_my_coach_conversations',{p_club_id:clubId})
+ ]);
+ const [updates,inbox]=results.map(r=>r.status==='fulfilled'?r.value:{error:r.reason});
+ const rows=[],included=new Set();
+ for(const a of (inbox.data?.actions||[]).filter(a=>a.status==='open'&&a.player_id===myPlayer.id)){
+  const update=(updates.data?.updates||[]).find(u=>u.source_kind==='conversation'?u.source_id===a.id:u.source_kind==='match'?u.source_id===a.match_feedback_id:u.source_id===a.training_observation_id);
+  if(update)included.add(update.source_key);
+  rows.push({key:'action:'+a.id,kind:'action',title:a.player_name||'Your coaching conversation',detail:a.is_player_request?'Conversation request':'Open coaching conversation',reviewOn:a.review_on,unread:!!update,
+   update:update||{source_key:'conversation:'+a.id,source_kind:'conversation',source_id:a.id,changed_at:a.updated_at,can_open:true}});
+ }
+ for(const update of updates.data?.updates||[]){
+  if(included.has(update.source_key)||update.player_id!==myPlayer.id)continue;
+  rows.push({key:'update:'+update.source_key,kind:'update',title:update.author_name||'Coaching team',detail:update.source_kind==='match'?'Match observation':update.source_kind==='training'?'Training observation':'Coach Conversation',unread:true,update});
+ }
+ return {rows,errors:[updates.error,inbox.error].filter(Boolean)};
+}
+function renderMessageCoaching(coaching){
+ if(!coaching?.rows?.length&&!coaching?.errors?.length)return '';
+ return `<section class="message-coaching" aria-label="Coach Conversations"><h2>Coach Conversations</h2>
+ ${coaching.errors.length?'<p class="notice" role="status">Some coaching conversations could not load. <button class="btn ghost" id="retryMessageCoaching">Try again</button></p>':''}
+ ${coaching.rows.map(row=>`<button type="button" class="message-row message-coaching-link" data-message-coaching="${esc(row.key)}" aria-label="${row.update?.can_open===false?'Add reflection':row.kind==='update'?'View note':'Open conversation'} · ${esc(row.title)}"><span><strong>${row.unread?'<span class="message-unread" aria-label="Unread coaching update"></span> ':''}${esc(row.title)}</strong><small>${esc(row.detail)}${row.reviewOn?` · ${row.reviewOn<=todayIso()?'Review due':'Review'} ${esc(formatDateShort(row.reviewOn))}`:''}</small></span><span class="message-coaching-open" aria-hidden="true">${row.update?.can_open===false?'Add reflection':'Open'} →</span></button>`).join('')}</section>`;
+}
+async function openMessageCoaching(state,key){
+ if(state!==clubMessageState||state.key!==`${session?.user?.id}:${club?.id}`)return;
+ const row=state.coaching?.rows.find(r=>r.key===key);if(row)await openCoachingUpdate(row.update);
+}
+async function openAssignedCoachingMessage(row){
+ if(!row?.coaching_action_id||!canOpenClubTab('conversations'))return;
+ if(row.coaching_player_id&&canUsePlayersWorkspace())return openWeeklyLoopConversation(row.coaching_player_id,row.coaching_action_id);
+ return openCoachingUpdate({source_key:'conversation:'+row.coaching_action_id,source_kind:'conversation',source_id:row.coaching_action_id,can_open:true});
+}
 function newClubMessageDraft(){return {request_id:crypto.randomUUID(),player_ids:[],staff_user_ids:[],include_staff:true,staff_initialised:false,recipients_changed:false,title:'',body:'',target:'',email:false,email_user_ids:[],kind:'general'};}
 function initialiseMessageStaff(state){
  const d=state.draft;if(!d||d.staff_initialised||!state.context)return;
@@ -17247,7 +17301,7 @@ function clubMessageRecipientCount(state){
  return people.size;
 }
 function messagePeople(count){return `${count} ${count===1?'person':'people'}`;}
-function canOpenMessageTarget(target){if(target==='teams')return canOpenClubTab('teams');if(target==='workshop')return canOpenClubTab('workshop');return target==='make_your_call'||(isPlayerUser()&&clubMessageTargets.some(([key])=>key===target)&&!!target);}
+function canOpenMessageTarget(target){if(target==='conversations')return canOpenClubTab('conversations');if(target==='teams')return canOpenClubTab('teams');if(target==='workshop')return canOpenClubTab('workshop');return target==='make_your_call'||(isPlayerUser()&&clubMessageTargets.some(([key])=>key===target)&&!!target);}
 function messageStaffRole(role){return ({admin:'Admin',head_coach:'Head Coach',coach:'Coach',captain:'Captain'})[role]||'Staff';}
 function clubMessageDirty(){const d=clubMessageState?.draft;return !!(d&&(d.title||d.body||d.player_ids.length||d.recipients_changed||d.target||d.email));}
 function confirmLeaveClubMessages(){
@@ -17258,8 +17312,9 @@ function confirmLeaveClubMessages(){
 function clubMessageStyles(){return `<style>
  .message-list-item{display:flex;align-items:flex-start;gap:4px}.message-list-item .message-row{flex:1;min-width:0}.message-select{display:flex;align-items:center;justify-content:center;min-width:36px;min-height:48px;cursor:pointer}.message-select input,.message-delete-tools input{width:18px;height:18px;margin:0;flex-shrink:0}.message-delete-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0 12px}.message-delete-tools label{display:flex;gap:8px;align-items:center;min-height:44px;cursor:pointer}.message-delete-tools .btn{min-height:44px;padding:8px 12px}.message-row summary>span{min-width:0;overflow-wrap:anywhere}
  .message-recipient-row{display:flex;align-items:center;gap:4px}.message-recipient-row .message-check{flex:1;min-width:0}.message-recipient-row .message-check span{overflow-wrap:anywhere}
+ .message-coaching h2{font-size:17px;margin:10px 0}.message-coaching .message-unread{display:inline-block}.messages-page .message-coaching-link{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:64px;padding:12px;text-align:left;font:inherit;color:inherit;cursor:pointer}.message-coaching-link>span:first-child{min-width:0;overflow-wrap:anywhere}.message-coaching-link strong{display:block}.message-coaching-open{font-size:12px;flex-shrink:0}.message-coaching-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
  .messages-page{max-width:840px;margin:0 auto}.messages-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.messages-head h1{font-size:24px;margin:0}.messages-head .btn{padding:8px 12px;min-height:44px}.messages-tabs{display:flex;gap:8px;margin:12px 0}.messages-tabs button[aria-pressed=true]{background:var(--navy,#17245f);color:#fff}
- .messages-page .message-row{padding:0;border:1px solid #dce2ee;border-radius:10px;background:white;margin-bottom:8px}.messages-page .message-row>summary{margin:0;display:flex;align-items:center;gap:8px;padding:12px;min-height:44px;box-sizing:border-box;cursor:pointer;list-style:none}.message-row>summary::after{content:'View ⌄';font-size:12px;margin-left:auto;white-space:nowrap}.message-row[open]>summary::after{content:'Close ⌃'}.message-row strong{font-size:15px}.message-row small{display:block;font-size:12px;color:#59657c}.message-content{padding:0 12px 12px;border-top:1px solid #eef0f7}.message-content p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5;margin:12px 0}.message-unread{width:8px;height:8px;background:#d8232a;border-radius:50%;flex-shrink:0}.message-form{margin-top:12px}.message-form .field{margin-bottom:12px}.message-form input,.message-form textarea,.message-form select{font-size:16px}.message-form label{font-size:13px}.message-form .message-check{display:flex;align-items:center;gap:9px;min-height:44px;margin:0}.message-check input{width:18px;height:18px;margin:0;flex-shrink:0}.message-recipients{max-height:230px;overflow:auto;border:1px solid #dce2ee;border-radius:8px;padding:4px 10px}.message-recipient-tools{display:flex;gap:8px;align-items:center;margin:8px 0}.message-recipient-tools select{min-width:0;flex:1}.message-form fieldset{min-width:0;border:0;padding:0;margin:0}.message-form fieldset:disabled{opacity:.7}.message-form .btn{min-height:44px;padding:8px 10px}.message-form input,.message-form textarea,.message-form select{box-sizing:border-box;max-width:100%}.message-form .help{margin:5px 0;font-size:12px}.message-email-person{justify-content:space-between}.message-email-person small{display:block;color:var(--muted);font-size:12px}.message-form summary{cursor:pointer;min-height:44px;align-content:center;font-size:13px}.se-inbox-followup{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:12px!important}.se-inbox-followup .btn{min-height:44px}.messages-status:empty{display:none}.messages-status{margin:8px 0;font-size:14px}.messages-empty{padding:16px;border:1px solid #dce2ee;border-radius:10px}.message-body-count{float:right;font-weight:400;color:#59657c}
+ .messages-page .message-row{padding:0;border:1px solid #dce2ee;border-radius:10px;background:white;margin-bottom:8px}.messages-page .message-row>summary{margin:0;display:flex;align-items:center;gap:8px;padding:12px;min-height:44px;box-sizing:border-box;cursor:pointer;list-style:none}.message-row>summary::after{content:'View ⌄';font-size:12px;margin-left:auto;white-space:nowrap}.message-row[open]>summary::after{content:'Close ⌃'}.message-row strong{font-size:15px}.message-row small{display:block;font-size:12px;color:#59657c}.message-content{padding:0 12px 12px;border-top:1px solid #eef0f7}.message-content p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5;margin:12px 0}.message-unread{width:8px;height:8px;background:#d8232a;border-radius:50%;flex-shrink:0}.message-form{margin-top:12px}.message-form .field{margin-bottom:12px}.message-form input,.message-form textarea,.message-form select{font-size:16px}.message-form label{font-size:13px}.message-form .message-check{display:flex;align-items:center;gap:9px;min-height:44px;margin:0}.message-check input{width:18px;height:18px;margin:0;flex-shrink:0}.message-recipients{max-height:min(52vh,460px);overflow:auto;border:1px solid #dce2ee;border-radius:8px;padding:4px 10px}.message-player-search{display:grid;gap:4px}.message-player-search input{width:100%}.message-form [hidden]{display:none!important}.message-team-picker{margin-top:8px;border:1px solid #dce2ee;border-radius:8px;padding:0 10px}.message-team-picker .message-recipients{max-height:250px;border:0}.message-recipient-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}.message-recipient-tools select{min-width:0;flex:1}.message-form fieldset{min-width:0;border:0;padding:0;margin:0}.message-form fieldset:disabled{opacity:.7}.message-form .btn{min-height:44px;padding:8px 10px}.message-form input,.message-form textarea,.message-form select{box-sizing:border-box;max-width:100%}.message-form .help{margin:5px 0;font-size:12px}.message-email-person{justify-content:space-between}.message-email-person small{display:block;color:var(--muted);font-size:12px}.message-form summary{cursor:pointer;min-height:44px;align-content:center;font-size:13px}.se-inbox-followup{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:12px!important}.se-inbox-followup .btn{min-height:44px}.messages-status:empty{display:none}.messages-status{margin:8px 0;font-size:14px}.messages-empty{padding:16px;border:1px solid #dce2ee;border-radius:10px}.message-body-count{float:right;font-weight:400;color:#59657c}
  </style>`;}
 async function openClubMessages({compose=false,id=null}={}){
  if(!await saveClubEditsBeforeNavigation())return;
@@ -17291,10 +17346,11 @@ async function copyClubMessage(message,button){
 }
 async function renderClubMessages(){
  const page=document.getElementById('page'),state=ensureClubMessages();
- const here=()=>state===clubMessageState&&currentTab==='messages'&&page===document.getElementById('page');
+ const sequence=state.loadSequence=(state.loadSequence||0)+1;
+ const here=()=>state===clubMessageState&&state.key===`${session?.user?.id}:${club?.id}`&&state.loadSequence===sequence&&currentTab==='messages'&&page===document.getElementById('page');
  page.innerHTML=clubMessageStyles()+'<section class="card messages-page"><div class="messages-head"><h1>Messages</h1></div><p role="status">Loading messages…</p></section>';
  try{
-  const [list,context,followup]=await Promise.all([supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'list'}),supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'context'}),seFetchSignupFollowup(club.id)]);
+  const [list,context,followup,coaching]=await Promise.all([supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'list'}),supabase.rpc('club_messages_api',{p_club_id:club.id,p_action:'context'}),seFetchSignupFollowup(club.id),loadMessageCoaching(club.id)]);
   if(list.error||context.error)throw list.error||context.error;if(!here())return;
   // A Workshop invitation can arrive while this session is already open.
   // Refresh that permission before drawing its link instead of using stale sign-in data.
@@ -17306,7 +17362,7 @@ async function renderClubMessages(){
    if(workshopResult.error||contributorResult.error)throw workshopResult.error||contributorResult.error;if(!here())return;
    workshop=workshopResult.data||null;myContributor=contributorResult.data||null;
   }
-  state.data=list.data;state.context=context.data;state.signupFollowup=followup;if(!context.data.can_send&&state.mode!=='inbox'){state.mode='inbox';state.draft=null;}
+  state.data=list.data;state.context=context.data;state.signupFollowup=followup;state.coaching=coaching;if(!context.data.can_send&&state.mode!=='inbox'){state.mode='inbox';state.draft=null;}
   drawClubMessages(page,state);void refreshClubMessageBadge();
  }catch(error){if(here()){page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><h1>Messages</h1><p>${esc(error.message||'Messages could not load.')}</p><button class="btn" id="retryClubMessages">Try again</button></section>`;document.getElementById('retryClubMessages').onclick=renderClubMessages;}}
 }
@@ -17322,13 +17378,15 @@ function drawClubMessages(page,state){
  page.innerHTML=clubMessageStyles()+`<section class="card messages-page"><div class="messages-head"><h1>${state.mode==='compose'?(state.draft?.kind==='plan_reminder'?'Player Plan reminder':'New message'):'Messages'}</h1>${staff&&state.mode!=='compose'?'<button class="btn" id="newClubMessage">New message</button>':''}</div>
  ${staff?`<div class="messages-tabs"><button class="btn ghost" data-message-mode="inbox" aria-pressed="${state.mode==='inbox'}">Inbox</button><button class="btn ghost" data-message-mode="sent" aria-pressed="${state.mode==='sent'}">Sent</button></div>`:''}
  <p class="messages-status" id="clubMessageNotice" role="status">${esc(state.notice)}</p>
- ${state.mode==='inbox'?seInboxFollowup(state.signupFollowup):''}
- ${state.mode==='compose'?clubMessageComposer(state):rows.length?`<div class="message-delete-tools"><label><input type="checkbox" id="messageSelectAll">Select all</label><button type="button" class="btn ghost" id="deleteClubMessages" disabled>Delete selected</button></div>`+rows.map(row=>`<div class="message-list-item"><label class="message-select"><input type="checkbox" data-message-select="${esc(row.id)}" aria-label="Select message: ${esc(row.title)}" ${state.selectedIds.includes(row.id)?'checked':''}></label><details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}" data-message-link="${esc(clubWeekMessageLink(row))}">${esc(row.target==='teams'?(clubWeekMessageLink(row).includes('social_milestone=')?'Create achievement post':clubWeekMessageLink(row).includes('team_view=availability')?'Set my availability':'Open Teams'):row.target==='workshop'?'Batting Philosophy Workshop':clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details></div>`).join(''):state.mode==='inbox'&&state.signupFollowup?.can_view&&state.signupFollowup.players.length?'':`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No club messages yet. Coaching discussions stay in Coach Conversations.'}</div>`}</section>`;
+ ${state.mode==='inbox'?renderMessageCoaching(state.coaching)+seInboxFollowup(state.signupFollowup):''}
+ ${state.mode==='compose'?clubMessageComposer(state):rows.length?`<div class="message-delete-tools"><label><input type="checkbox" id="messageSelectAll">Select all</label><button type="button" class="btn ghost" id="deleteClubMessages" disabled>Delete selected</button></div>`+rows.map(row=>`<div class="message-list-item"><label class="message-select"><input type="checkbox" data-message-select="${esc(row.id)}" aria-label="Select message: ${esc(row.title)}" ${state.selectedIds.includes(row.id)?'checked':''}></label><details class="message-row" data-message-id="${esc(row.id)}" ${state.openId===row.id?'open':''}><summary>${state.mode==='inbox'&&!row.opened_at?'<span class="message-unread" aria-label="Unread"></span>':''}<span><strong>${esc(row.title)}</strong><small>${esc(state.mode==='sent'?messagePeople(row.recipients):row.sender)} · ${esc(formatDateShort(row.created_at))}</small></span></summary><div class="message-content"><p>${esc(row.body)}</p>${row.target&&state.mode==='inbox'&&canOpenMessageTarget(row.target)?`<button class="btn" data-message-target="${esc(row.target)}" data-message-record="${esc(row.id)}" data-message-link="${esc(clubWeekMessageLink(row))}">${esc(row.target==='teams'?(clubWeekMessageLink(row).includes('social_milestone=')?'Create achievement post':clubWeekMessageLink(row).includes('team_view=availability')?'Set my availability':'Open Teams'):row.target==='workshop'?'Batting Philosophy Workshop':row.target==='conversations'?'Open conversation':clubMessageTargets.find(([k])=>k===row.target)?.[1]||'Open')}</button>`:''}${state.mode==='sent'?`<small>${row.opened||0} opened · ${row.push_sent||0} phone deliveries${row.email_total||row.email_requested?` · ${row.email_sent||0} emails sent${row.email_failed?` · ${row.email_failed} email failures`:''}`:''}</small><button class="btn ghost" data-message-copy="${esc(row.id)}">Copy for WhatsApp</button>`:''}</div></details></div>`).join(''):state.mode==='inbox'&&(state.coaching?.rows?.length||state.coaching?.errors?.length||state.signupFollowup?.can_view&&state.signupFollowup.players.length)?'':`<div class="messages-empty">${state.mode==='sent'?'Your sent messages will appear here.':'No messages or coaching follow-ups right now.'}</div>`}</section>`;
  bindMessageDeletion(page,state,rows);
+ page.querySelectorAll('[data-message-coaching]').forEach(button=>button.onclick=()=>openMessageCoaching(state,button.dataset.messageCoaching));
+ document.getElementById('retryMessageCoaching')?.addEventListener('click',renderClubMessages);
  document.getElementById('viewSignupFollowup')?.addEventListener('click',seOpenSignupFollowup);document.getElementById('retrySignupFollowup')?.addEventListener('click',renderClubMessages);
  document.getElementById('newClubMessage')?.addEventListener('click',()=>{state.mode='compose';state.draft??=newClubMessageDraft();drawClubMessages(page,state);});
  page.querySelectorAll('[data-message-mode]').forEach(b=>b.onclick=()=>{if(!confirmLeaveClubMessages())return;state.mode=b.dataset.messageMode;drawClubMessages(page,state);});
- page.querySelectorAll('[data-message-target]').forEach(b=>b.onclick=()=>{if(b.dataset.messageLink){if(confirmLeaveClubMessages()&&confirmLeaveSelections())location.assign(b.dataset.messageLink);}else openClubMessageTarget(b.dataset.messageTarget);});
+ page.querySelectorAll('[data-message-target]').forEach(b=>b.onclick=()=>{if(b.dataset.messageTarget==='conversations')return openAssignedCoachingMessage(rows.find(r=>r.id===b.dataset.messageRecord));if(b.dataset.messageLink){if(confirmLeaveClubMessages()&&confirmLeaveSelections())location.assign(b.dataset.messageLink);}else openClubMessageTarget(b.dataset.messageTarget);});
  page.querySelectorAll('[data-message-copy]').forEach(b=>b.onclick=()=>copyClubMessage(rows.find(r=>r.id===b.dataset.messageCopy),b));
  const markOpened=async el=>{
   if(!el.open||state.mode!=='inbox')return;const row=data.inbox.find(r=>r.id===el.dataset.messageId);if(!row||row.opened_at)return;
@@ -17364,12 +17422,20 @@ function bindMessageDeletion(page,state,rows){
   finally{state.deleting=false;if(here()){drawClubMessages(page,state);void refreshClubMessageBadge();}}
  };sync();
 }
+function messagePlayerInGroups(player,ids){return ids.includes('__all__')||ids.some(id=>id==='unassigned'?!(player.groups||[]).length:(player.groups||[]).some(g=>g.id===id));}
+function messageRecipientPickerState(d){return d.recipientPicker??={groups:[],individual:[...d.player_ids],excluded:[],query:''};}
+function messagePickedPlayerIds(players,picker){
+ const manual=new Set(picker.individual),excluded=new Set(picker.excluded);
+ return players.filter(p=>manual.has(p.id)||messagePlayerInGroups(p,picker.groups)&&!excluded.has(p.id)).map(p=>p.id);
+}
 function clubMessageComposer(state){
- const d=state.draft??=newClubMessageDraft();initialiseMessageStaff(state);const reminder=d.kind==='plan_reminder',players=(state.context.players||[]).filter(p=>!reminder||d.reminder_candidate_ids.includes(p.id)),staff=reminder?[]:state.context.staff||[],count=clubMessageRecipientCount(state),groups=new Map(players.flatMap(p=>p.groups||[]).map(g=>[g.id,g.name]));
+ const d=state.draft??=newClubMessageDraft(),picker=messageRecipientPickerState(d);initialiseMessageStaff(state);const reminder=d.kind==='plan_reminder',players=(state.context.players||[]).filter(p=>!reminder||d.reminder_candidate_ids.includes(p.id)),staff=reminder?[]:state.context.staff||[],count=clubMessageRecipientCount(state),groups=new Map(players.flatMap(p=>p.groups||[]).map(g=>[g.id,g.name]));
  return `<form class="message-form" id="clubMessageForm"><fieldset ${state.sending?'disabled':''}>
  <details id="messageRecipientPicker" ${d.player_ids.length?'':'open'}><summary>To: <strong id="messageRecipientCount">${messagePeople(count)}</strong> · choose recipients</summary>
- ${reminder?'':`<div class="message-recipient-tools"><select id="messageGroup" aria-label="Choose a Playing Group"><option value="">All players in my access</option><option value="unassigned">Currently unassigned</option>${[...groups].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select><button type="button" class="btn ghost" id="messageSelectGroup">Select</button><button type="button" class="btn ghost" id="messageClearRecipients">Clear</button></div>`}
- <div class="message-recipients">${players.length?players.map(p=>`<div class="message-recipient-row"><label class="message-check"><input type="checkbox" data-message-player="${esc(p.id)}" ${d.player_ids.includes(p.id)?'checked':''}><span>${esc(p.name)}</span></label>${phoneStatusBadge(p.phone_ready)}</div>`).join(''):'No players with messaging access. Ask your Club Admin to check your player access.'}</div></details>
+ <div class="field message-player-search"><label for="messagePlayerSearch">Find a player</label><input type="search" id="messagePlayerSearch" placeholder="Start typing a name…" value="${esc(picker.query)}" autocomplete="off"></div>
+ ${reminder?'':`<details class="message-team-picker" id="messageTeamPicker"><summary id="messageTeamSummary">Choose whole teams</summary><div class="message-recipients"><label class="message-check"><input type="checkbox" data-message-team="__all__" ${picker.groups.includes('__all__')?'checked':''}>All players in my access</label>${[...groups,['unassigned','Currently unassigned']].map(([id,name])=>`<label class="message-check"><input type="checkbox" data-message-team="${esc(id)}" ${picker.groups.includes(id)?'checked':''} ${picker.groups.includes('__all__')?'disabled':''}>${esc(name)}</label>`).join('')}</div></details>`}
+ <div class="message-recipient-tools"><button type="button" class="btn ghost" id="messageSelectShown">Select shown</button><button type="button" class="btn ghost" id="messageClearRecipients">Clear players</button><small id="messagePlayerSearchCount" role="status"></small></div>
+ <div class="message-recipients">${players.length?players.map(p=>`<div class="message-recipient-row" data-message-player-row="${esc(p.id)}"><label class="message-check"><input type="checkbox" data-message-player="${esc(p.id)}" ${d.player_ids.includes(p.id)?'checked':''}><span>${esc(p.name)}</span></label>${phoneStatusBadge(p.phone_ready)}</div>`).join(''):'No players with messaging access. Ask your Club Admin to check your player access.'}</div></details>
  ${staff.length?`<label class="message-check"><input id="messageIncludeStaff" type="checkbox" ${d.include_staff?'checked':''}>Include coaching staff</label>
  <details id="messageStaffPicker" ${d.include_staff?'':'hidden'}><summary><span id="messageStaffCount">${d.staff_user_ids.length} staff included</span> · choose staff</summary>
  <div class="message-recipients">${staff.map(p=>`<div class="message-recipient-row"><label class="message-check"><input type="checkbox" data-message-staff="${esc(p.user_id)}" ${d.staff_user_ids.includes(p.user_id)?'checked':''}><span>${esc(p.name)} <small>· ${esc(messageStaffRole(p.role))}</small></span></label>${phoneStatusBadge(p.phone_ready)}</div>`).join('')}</div></details>`:''}
@@ -17385,7 +17451,7 @@ function clubMessageComposer(state){
  <p class="messages-status" id="clubMessageSendStatus" role="status"></p></fieldset></form>`;
 }
 function bindClubMessageComposer(page,state){
- const d=state.draft,form=document.getElementById('clubMessageForm'),status=document.getElementById('clubMessageSendStatus');
+ const d=state.draft,picker=messageRecipientPickerState(d),form=document.getElementById('clubMessageForm'),status=document.getElementById('clubMessageSendStatus');
  const sync=()=>{
   d.title=form.querySelector('#clubMessageTitle').value;d.body=form.querySelector('#clubMessageBody').value;d.target=form.querySelector('#clubMessageTarget').value;d.email=form.querySelector('#clubMessageEmail').checked;
   d.player_ids=[...form.querySelectorAll('[data-message-player]:checked')].map(x=>x.dataset.messagePlayer);
@@ -17395,9 +17461,47 @@ function bindClubMessageComposer(page,state){
   const staffCount=form.querySelector('#messageStaffCount');if(staffCount)staffCount.textContent=`${d.staff_user_ids.length} staff included`;
   const count=clubMessageRecipientCount(state);form.querySelector('#messageRecipientCount').textContent=messagePeople(count);form.querySelector('#sendClubMessage').textContent=`Send to ${messagePeople(count)}`;form.querySelector('#messageBodyCount').textContent=`${d.body.length}/1500`;
  };
- form.addEventListener('input',sync);form.addEventListener('change',event=>{if(event.target.matches('[data-message-player],[data-message-staff],#messageIncludeStaff'))d.recipients_changed=true;if(event.target.matches('[data-message-email]')){const uid=event.target.dataset.messageEmail;d.email_user_ids=event.target.checked?[...new Set([...d.email_user_ids,uid])]:d.email_user_ids.filter(x=>x!==uid);}sync();if(!event.target.matches('[data-message-email]'))refreshMessageEmailChoices(state);});
- document.getElementById('messageSelectGroup')?.addEventListener('click',()=>{d.recipients_changed=true;const group=form.querySelector('#messageGroup').value;form.querySelectorAll('[data-message-player]').forEach(x=>{const p=state.context.players.find(p=>p.id===x.dataset.messagePlayer);if(!group||(group==='unassigned'?!p.groups.length:p.groups.some(g=>g.id===group)))x.checked=true;});sync();refreshMessageEmailChoices(state);});
- document.getElementById('messageClearRecipients')?.addEventListener('click',()=>{d.recipients_changed=true;form.querySelectorAll('[data-message-player],[data-message-staff],#messageIncludeStaff').forEach(x=>x.checked=false);sync();refreshMessageEmailChoices(state);});
+ const players=(state.context.players||[]).filter(p=>d.kind!=='plan_reminder'||d.reminder_candidate_ids.includes(p.id));
+ const filter=()=>{
+  picker.query=form.querySelector('#messagePlayerSearch').value;
+  const query=picker.query.trim().toLocaleLowerCase();let shown=0;
+  for(const row of form.querySelectorAll('[data-message-player-row]')){
+   const player=players.find(p=>p.id===row.dataset.messagePlayerRow);
+   row.hidden=!player||!String(player.name||'').toLocaleLowerCase().includes(query)||picker.groups.length>0&&!messagePlayerInGroups(player,picker.groups);
+   if(!row.hidden)shown++;
+  }
+  form.querySelector('#messagePlayerSearchCount').textContent=shown?`${shown} shown`:'No matching players';
+  const summary=form.querySelector('#messageTeamSummary');if(summary)summary.textContent=picker.groups.includes('__all__')?'All players in my access':picker.groups.length?`${picker.groups.length} team${picker.groups.length===1?'':'s'} selected`:'Choose whole teams';
+ };
+ const applyPicker=()=>{
+  d.recipients_changed=true;d.player_ids=messagePickedPlayerIds(players,picker);
+  form.querySelectorAll('[data-message-player]').forEach(x=>x.checked=d.player_ids.includes(x.dataset.messagePlayer));
+  form.querySelectorAll('[data-message-team]').forEach(x=>{x.checked=picker.groups.includes(x.dataset.messageTeam);x.disabled=state.sending||x.dataset.messageTeam!=='__all__'&&picker.groups.includes('__all__');});
+  sync();filter();refreshMessageEmailChoices(state);
+ };
+ form.addEventListener('input',event=>{if(event.target.id==='messagePlayerSearch')filter();else sync();});
+ form.addEventListener('change',event=>{
+  const el=event.target;
+  if(el.matches('[data-message-team]')){
+   const id=el.dataset.messageTeam;
+   picker.groups=id==='__all__'?(el.checked?['__all__']:[]):el.checked?[...new Set([...picker.groups.filter(g=>g!=='__all__'),id])]:picker.groups.filter(g=>g!==id);
+   applyPicker();return;
+  }
+  if(el.matches('[data-message-player]')){
+   const id=el.dataset.messagePlayer;
+   picker.individual=el.checked?[...new Set([...picker.individual,id])]:picker.individual.filter(x=>x!==id);
+   picker.excluded=el.checked?picker.excluded.filter(x=>x!==id):[...new Set([...picker.excluded,id])];
+  }
+  if(el.matches('[data-message-player],[data-message-staff],#messageIncludeStaff'))d.recipients_changed=true;
+  if(el.matches('[data-message-email]')){const uid=el.dataset.messageEmail;d.email_user_ids=el.checked?[...new Set([...d.email_user_ids,uid])]:d.email_user_ids.filter(x=>x!==uid);}
+  sync();if(!el.matches('[data-message-email]'))refreshMessageEmailChoices(state);
+ });
+ document.getElementById('messageSelectShown')?.addEventListener('click',()=>{
+  const ids=[...form.querySelectorAll('[data-message-player-row]')].filter(x=>!x.hidden).map(x=>x.dataset.messagePlayerRow);
+  picker.individual=[...new Set([...picker.individual,...ids])];picker.excluded=picker.excluded.filter(id=>!ids.includes(id));applyPicker();
+ });
+ document.getElementById('messageClearRecipients')?.addEventListener('click',()=>{picker.groups=[];picker.individual=[];picker.excluded=[];applyPicker();});
+ filter();
  document.getElementById('discardClubMessageDraft').onclick=()=>{if(clubMessageDirty()&&!confirm('Discard this unsent draft?'))return;state.draft=null;state.mode='inbox';drawClubMessages(page,state);};
  document.getElementById('copyClubMessageDraft').onclick=e=>{sync();void copyClubMessage(d,e.currentTarget);};
  form.onsubmit=async event=>{
@@ -17539,7 +17643,7 @@ async function renderPhoneApp(){
  <div id="phoneNotificationChoices" hidden><label><input type="checkbox" id="phoneMessages" checked>Club messages</label><label><input type="checkbox" id="phoneCoaching" checked>Coaching updates</label></div>
  <div class="btnrow"><button class="btn" id="enablePhoneNotifications" hidden>Enable notifications</button><button class="btn ghost" id="disablePhoneNotifications" hidden>Turn off on this device</button><button class="btn" id="retryPhoneSetup" hidden>Try again</button></div>
  <p id="phoneAllowHint" class="help" hidden>Tap <strong>Allow</strong> when your phone asks.</p>
- <details><summary>About notifications</summary><p class="help">Choices apply to ${esc(club?.name||'this club')} on this device. Alerts show no message details. iPhone/iPad needs iOS/iPadOS 16.4 or later. Find messages in Account → Messages and coaching updates in Coach Conversations.</p></details>
+ <details><summary>About notifications</summary><p class="help">Choices apply to ${esc(club?.name||'this club')} on this device. Alerts show no message details. iPhone/iPad needs iOS/iPadOS 16.4 or later. Find club messages and coaching follow-ups in Account → Messages.</p></details>
  <p id="phoneActionStatus" role="status" class="help"></p></div>${demo&&installFirst?'<p class="help">Demo only — no installation or real notifications.</p>':''}</section>`;
  document.getElementById('installClubBatting')?.addEventListener('click',async event=>{const button=event.currentTarget;if(button.disabled)return;const prompt=phoneInstallPrompt;phoneInstallPrompt=null;button.disabled=true;button.textContent='Opening install…';try{if(prompt){await prompt.prompt();await prompt.userChoice;}if(here())await renderPhoneApp();}catch{if(here()&&button.isConnected){const menu=button.nextElementSibling;if(menu?.tagName==='DETAILS')menu.open=true;const message=document.createElement('p');message.setAttribute('role','status');message.textContent='Installation could not open. Use Chrome’s menu below.';button.replaceWith(message);}}});
  if(demo)return;

@@ -85,7 +85,7 @@ test('provisional player records show account status without an overdue-plan war
   esc:x=>String(x??''),niceDate:x=>x,memberPhoneStatusIcon:()=>'',renderWorkspaceAssignment:()=>''});
  vm.runInContext(part(app,'function renderWorkspaceRosterRow(','async function refreshPlayersWorkspaceFeedback('),ctx);
  const pending=ctx.renderWorkspaceRosterRow({id:'provisional',display_name:'Example Player',user_id:null,can_edit:true});
- assert.match(pending,/Awaiting sign-up \/ account link/);assert.doesNotMatch(pending,/border-left:4px|Overdue:|Core still to complete/);
+ assert.match(pending,/No confirmed sign-up/);assert.doesNotMatch(pending,/border-left:4px|Overdue:|Core still to complete/);
  const registered=ctx.renderWorkspaceRosterRow({id:'registered',display_name:'Example Player',user_id:'login',can_edit:true});
  assert.match(registered,/border-left:4px/);assert.match(registered,/Overdue: Limited Overs/);assert.doesNotMatch(registered,/Awaiting sign-up/);
 });
