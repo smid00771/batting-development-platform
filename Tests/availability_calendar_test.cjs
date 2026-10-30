@@ -9,7 +9,7 @@ function harness({own=false,readOnly=false}={}){
  const s={view:'availability',availabilityMonth:'2026-10',formDirty:false,data:{can_view_club_availability:true,access:{timezone:'Australia/Sydney'},roster:[person]}};
  let allowed=true,c;
  c=vm.createContext({document,Date,session:{user:{id:'user'}},membership:{},selectionRoomController:null,
-  ensureSelections:()=>s,seCanSetup:()=>!own&&!readOnly,seEsc:String,seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seAvailabilityDateSetup(){},recordSelectionNavigation(){},
+  ensureSelections:()=>s,seCanSetup:()=>!own&&!readOnly,seEsc:String,seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seAvailabilityDateSetup(){},seBindAvailabilityFixtures(){},recordSelectionNavigation(){},
   confirmLeaveSelections:()=>allowed,seReturnFromAvailability(){},socialLanding(){},drawSelections:()=>{if(s.view==='availability')c.seAvailability();else document.getElementById('seContent').textContent='Another section';},
   seMutate:async(action,data)=>{calls.push({action,data:JSON.parse(JSON.stringify(data))});person.availability={...data,revision:data.revision+1};s.formDirty=false;return true;}});
  vm.runInContext(['seAvailability','seChangeView'].map(extract).join('\n'),c);c.seAvailability('player');

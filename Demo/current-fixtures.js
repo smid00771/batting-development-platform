@@ -1,6 +1,7 @@
 // In-memory equivalents of current service contracts. Never use customer data here.
 let demoProduct='select',demoPersona='player',demoScenario='ready';
 let demoGroups,demoPermissions,demoConnection,demoWeek,demoAwardScopes,demoAwardLabels,demoTeamWeek,demoPlayerWeek;
+let demoFixtureCalendarLinks=[],demoCalendarTrials=[],demoCalendarTrialReceipts={},demoPlanReminderSettings=null;
 const demoOK=data=>({data:structuredClone(data),error:null});
 const demoFail=message=>({data:null,error:{code:'P0001',message}});
 const demoIsSocial=()=>isAdmin()||demoSocial.managers.includes(session?.user.id);
@@ -105,6 +106,38 @@ function demoSeedCurrent({empty=false}={}){
   demoSelections.fixtures.push(abandoned);demoSelections.result_sources||={};demoSelections.result_sources[abandoned.id]={no_play:'abandoned'};
  }
 }
+const demoSeedBeforeFixtureCalendar=demoSeedCurrent;
+demoSeedCurrent=function(options){demoSeedBeforeFixtureCalendar(options);demoCalendarTrials=[];demoCalendarTrialReceipts={};for(const g of fixtureGroups)g.batting_enabled=demoProduct==='batting'||!['group-masters','group-u21','group-cup'].includes(g.id);demoPlanReminderSettings={revision:1,team_ids:fixtureGroups.filter(g=>!['group-masters','group-u21','group-cup'].includes(g.id)).map(g=>g.id),receipts:{}};demoFixtureCalendarLinks=demoSelections.fixtures.map(f=>({fixture_id:f.id,season_id:demoGroups.season,team_id:f.details.grade_group_id||fixtureGroups.find(g=>g.name===f.details.grade)?.id||f.details.grade,details:fixtureClone(f.details)}));};
+function demoAvailabilityFixtures(){
+ const player=demoSelections.roster.find(p=>p.user_id===session.user.id&&p.active);
+ if(!player||demoProduct==='batting')throw Error('A linked player with Selections access is required');
+ const usualTeams=fixtureGroups.filter(g=>g.active!==false&&g.name.toLowerCase()===String(player.grade||'').toLowerCase()),usualTeam=usualTeams.length===1?usualTeams[0].id:null;
+ const today=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Sydney'}),season=demoGroups.season,candidates=[];
+ for(const f of demoSelections.fixtures){
+  const link=demoFixtureCalendarLinks.find(l=>l.fixture_id===f.id);
+  if(link&&link.season_id!==season||!link&&f.details.include_in_fixture_calendar!==true)continue;
+  const d=link?.details||f.details,team=link?.team_id||d.grade_group_id||'manual:'+d.grade;
+  candidates.push({f,d,team,source:link?'playhq':'manual'});
+ }
+ const fixtures=candidates.filter(({d})=>!d.cancelled).map(({f,d,team,source})=>({id:f.id,team_id:team,source,opposition:d.opposition,days:d.days.map((day,i)=>({date:day.date,start:day.start||'',ground:day.ground||d.ground||'',day:i+1})).filter(day=>day.date>=today)})).filter(f=>f.days.length);
+ const trials=demoCalendarTrials.filter(t=>t.included&&(t.audience==='club'||t.team_ids.includes(usualTeam))).map(t=>({id:t.id,source:'trial',title:t.title,audience:t.audience,team_ids:t.team_ids,days:t.days.map((d,i)=>({...d,day:i+1})).filter(d=>d.date>=today)})).filter(t=>t.days.length);
+ const teams=[...new Set([...fixtures.map(f=>f.team_id),...trials.flatMap(t=>t.team_ids)])].map(id=>({id,name:fixtureGroups.find(g=>g.id===id)?.name||candidates.find(c=>c.team===id)?.d.grade||'Team',usual:id===usualTeam,suggested:id===usualTeam||candidates.some(c=>c.team===id&&c.f.published?.slots.some(slot=>slot.d1===player.id||slot.d2===player.id))})).sort((a,b)=>a.name.localeCompare(b.name));
+ fixtures.push(...trials);
+ return {club_id:club.id,player_id:player.id,season_id:season,usual_team_id:usualTeam,timezone:'Australia/Sydney',from_date:today,teams,fixtures};
+}
+const demoManualPlayerRequirements=demoPlayerRequirements;
+demoPlayerRequirements=function(playerId){
+ if(demoProduct!=='both')return demoManualPlayerRequirements(playerId);
+ const p=fixtureRows.players.find(p=>p.id===playerId),r=p&&demoSelections.roster.find(r=>r.user_id===p.user_id&&r.active);if(!r)return [];
+ const formats=new Map();
+ for(const f of demoSelections.fixtures){const d=f.published?.details,link=demoFixtureCalendarLinks.find(l=>l.fixture_id===f.id);
+  if(!d||d.cancelled||f.details.cancelled||!demoPlanReminderSettings.team_ids.includes(d.grade_group_id)||link&&link.season_id!==demoGroups.season)continue;
+  const format=['two_day','long_form'].includes(d.format)?'long_form':d.format;if(!['t20','limited_overs','long_form'].includes(format))continue;
+  for(const [i,day] of d.days.entries())if(f.published.slots.some(slot=>slot['d'+(i+1)]===r.id)){
+   const due=demoAddDay(day.date,-7),prior=formats.get(format);if(!prior||due<prior.due_date)formats.set(format,{format_key:format,required:true,due_date:due,sources:['First selected fixture · one week before']});
+  }
+ }return [...formats.values()];
+};
 function demoSourceTeams(){return [{id:'source-first',name:'Harbour 1st Grade',grade:{id:'source-grade-first',name:'1st Grade'},competition:{name:'Example District'}},{id:'source-fifth',name:'Harbour 2nd Grade',grade:{id:'source-grade-fifth',name:'2nd Grade'},competition:{name:'Example District'}}];}
 function demoWeekContext(){return {...fixtureClone(demoWeek),can_manage:isAdmin(),acknowledgements:demoSelections.fixtures.flatMap(f=>!f.published?[]:[...new Set(f.published.slots.flatMap(s=>[s.d1,s.d2]).filter(Boolean))].map(id=>({fixture_id:f.id,roster_id:id,publication:f.publication,linked:!!demoSelections.roster.find(p=>p.id===id)?.user_id,seen_at:demoWeek.acknowledgements.find(a=>a.fixture_id===f.id&&a.roster_id===id)?.seen_at||null})))};}
 function demoScope(kind){return demoAwardScopes[kind]||={revision:0,award_scope:{mode:'all',ids:[],grade_ids:demoGroups.grades.map(g=>g.id),key:'all',label:'All'}};}
@@ -113,6 +146,29 @@ const demoPreviousCurrentRpc=supabase.rpc;
 supabase.rpc=async function(name,args={}){
  const a=args.p_action,d=args.p_data||{},uid=session?.user.id;
  try{
+  if(name==='club_fixture_calendar_trials'){
+   if(args.p_club_id!==club.id||demoProduct==='batting')return demoFail('Active club Selections access required');
+   const teams=demoGroups.grades.filter(g=>isAdmin()||demoGrant(g.selection_group_id,uid)===2).map(g=>({id:g.id,name:g.name})),allowed=t=>isAdmin()||t.audience==='teams'&&t.team_ids.length>0&&t.team_ids.every(id=>teams.some(g=>g.id===id));
+   if(!isAdmin()&&!teams.length)return demoFail('Fixture editing access required');
+   if(a==='context')return demoOK({can_whole_club:isAdmin(),teams,trials:demoCalendarTrials.filter(t=>allowed(t)&&t.days.some(day=>day.date>=demoCallDay()))});
+   if(a!=='save'||!d.id||!d.request_id||typeof d.included!=='boolean'||!['club','teams'].includes(d.audience)||!Array.isArray(d.team_ids)||!allowed(d))return demoFail('You cannot manage trials for this audience');
+   const title=String(d.title||'').trim(),days=d.days;
+   if(!title||title.length>120||!Array.isArray(days)||days.length<1||days.length>2||days.some(day=>!/^\d{4}-\d{2}-\d{2}$/.test(day.date))||days.length===2&&days[1].date<=days[0].date||d.audience==='club'&&d.team_ids.length)return demoFail('Check the trial name, dates and audience');
+   const key=uid+':'+d.request_id,receipt=demoCalendarTrialReceipts[key];if(receipt){if(receipt.payload!==JSON.stringify(d))return demoFail('This request was used for different changes');return demoOK(receipt.result);}
+   const prior=demoCalendarTrials.find(t=>t.id===d.id);if(prior&&!allowed(prior))return demoFail('Trial editing access required');if((prior?.revision||0)!==d.revision)return demoFail('This trial changed. Close and reopen it before saving');
+   const next={id:d.id,title,days:fixtureClone(days),audience:d.audience,team_ids:[...new Set(d.team_ids)],included:d.included,revision:d.revision+1};if(prior)Object.assign(prior,next);else demoCalendarTrials.push(next);
+   const result={saved:true,id:next.id,revision:next.revision};demoCalendarTrialReceipts[key]={payload:JSON.stringify(d),result};return demoOK(result);
+  }
+  if(name==='club_plan_reminder_settings'){
+   if(args.p_club_id!==club.id||demoProduct!=='both'||!isAdmin())return demoFail('Linked Club Admin access required');
+   const a=args.p_action,d=args.p_data||{},cfg=demoPlanReminderSettings;
+   if(a==='context')return demoOK({revision:cfg.revision,team_ids:cfg.team_ids,teams:fixtureGroups.filter(g=>g.active).map(g=>({id:g.id,name:g.name}))});
+   if(a!=='save'||!Array.isArray(d.team_ids)||d.team_ids.some(id=>!fixtureGroups.some(g=>g.id===id&&g.active)))return demoFail('Choose teams from this club');
+   const receipt=cfg.receipts[d.request_id];if(receipt)return receipt.payload===JSON.stringify(d)?demoOK(receipt.result):demoFail('This request was used for different changes');
+   if(d.revision!==cfg.revision)return demoFail('Plan reminder teams changed. Close and reopen before saving');
+   cfg.team_ids=[...new Set(d.team_ids)];cfg.revision++;const result={saved:true,revision:cfg.revision};cfg.receipts[d.request_id]={payload:JSON.stringify(d),result};return demoOK(result);
+  }
+  if(name==='club_availability_fixtures'){if(args.p_club_id!==club.id)return demoFail('Club membership required');return demoOK(demoAvailabilityFixtures());}
   if(name==='selection_video_credit_api')return a==='balance'?demoOK({kind:'complimentary',available_seconds:86400,held_seconds:0,can_manage:isAdmin(),can_top_up:false,renews_at:demoAddDay(demoUpcomingSaturday(),30),history:[]}):demoFail('Purchases are unavailable in the demo.');
   if(name==='club_week_api'){
    if(a==='context')return demoOK(demoWeekContext());
@@ -239,6 +295,7 @@ supabase.rpc=async function(name,args={}){
   }
   const result=await demoPreviousCurrentRpc(name,args);
   if(name==='club_social_awards_api'&&a==='context'&&result.data){result.data.editions.push(...demoTeamWeek.collection(d.week_end),...demoPlayerWeek.collection(d.week_end));result.data.editions=result.data.editions.filter(e=>!demoSocial.imageDeletions?.[e.id]?.deleted).map(e=>({...e,deletion_pending:!!demoSocial.imageDeletions?.[e.id]}));demoFilterAwardContext(result.data,d.award_scope||demoScope(d.kind).award_scope);}
+  if(name==='club_match_results_api'&&a==='fixture'&&result.data)result.data.playhq={...(result.data.playhq||{}),linked:demoFixtureCalendarLinks.some(l=>l.fixture_id===d.fixture_id)};
   if(name==='club_match_results_api'&&a==='context'&&result.data&&d.award_scope)demoFilterAwardContext(result.data,d.award_scope);
   return result;
  }catch(error){return demoFail(error.message);}
