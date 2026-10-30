@@ -1,0 +1,61 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {PGlite}=require('@electric-sql/pglite');
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+test('confirmed shared identity preserves welcome messages and player history without merging independent work',async t=>{
+ const db=new PGlite();t.after(()=>db.close());
+ await db.exec(`create schema auth;create schema club_selection_private;create schema club_batting_private;
+ create function auth.uid() returns uuid language sql as $$select null::uuid$$;
+ create table auth.users(id uuid primary key,email_confirmed_at timestamptz,deleted_at timestamptz,banned_until timestamptz);
+ create table public.clubs(id uuid primary key,archived_at timestamptz);
+ create table public.club_memberships(club_id uuid,user_id uuid,involvement text);
+ create table public.players(id uuid primary key,club_id uuid,user_id uuid,active boolean,unique(club_id,user_id));
+ create table club_selection_private.roster(id uuid primary key,club_id uuid,user_id uuid,active boolean);
+ create table club_batting_private.roster_players(roster_id uuid primary key,club_id uuid,player_id uuid references public.players(id),claimed_user_id uuid,claimed_at timestamptz);
+ create table club_batting_private.club_messages(id uuid primary key,club_id uuid);
+ create table club_batting_private.club_message_recipients(message_id uuid references club_batting_private.club_messages(id),user_id uuid,player_id uuid references public.players(id),opened_at timestamptz,primary key(message_id,user_id));
+ create table club_batting_private.fixture_review_rosters(player_ids uuid[]);
+ create table public.player_plans(player_id uuid references public.players(id),answer text);
+ create table club_selection_private.audit(club_id uuid,actor_id uuid,action text,detail jsonb);
+ `);
+ await db.exec(fs.readFileSync('Tests/fixtures/shared_account_claims_baseline.sql','utf8'));
+ await db.exec(`create trigger guard_identity before update of user_id on public.players for each row execute function club_batting_private.guard_roster_player_identity();`);
+ await db.exec(fs.readFileSync('Database/shared_account_claims.sql','utf8'));
+ const c=id(1),u=id(2),r=id(3),old=id(4),fresh=id(5),m=id(6);
+ await db.query(`insert into public.clubs values($1,null)`,[c]);
+ await db.query(`insert into auth.users values($1,now(),null,null)`,[u]);
+ await db.query(`insert into public.club_memberships values($1,$2,'player')`,[c,u]);
+ await db.query(`insert into club_selection_private.roster values($1,$2,$3,true)`,[r,c,u]);
+ await db.query(`insert into public.players values($1,$2,null,true),($3,$2,$4,true)`,[old,c,fresh,u]);
+ await db.query(`insert into club_batting_private.roster_players values($1,$2,$3,null,null)`,[r,c,old]);
+ await db.query(`insert into club_batting_private.club_messages values($1,$2)`,[m,c]);
+ await db.query(`insert into club_batting_private.club_message_recipients values($1,$2,$3,'2026-10-29')`,[m,u,fresh]);
+ await db.query(`insert into public.player_plans values($1,'Existing coach notes')`,[old]);
+ const claim=async()=> (await db.query('select club_batting_private.claim_roster_player($1,$2) ok',[c,r])).rows[0].ok;
+ await t.test('established work on both profiles still blocks the automatic claim',async()=>{
+  await db.query(`insert into public.player_plans values($1,'Player started a plan')`,[fresh]);
+  assert.equal(await claim(),false);
+  assert.equal((await db.query('select count(*)::int n from public.player_plans')).rows[0].n,2);
+  await db.query('delete from public.player_plans where player_id=$1',[fresh]);
+ });
+ await t.test('a message for a different user cannot authorise a merge',async()=>{
+  await db.query('update club_batting_private.club_message_recipients set user_id=$1',[id(9)]);
+  assert.equal(await claim(),false);
+  await db.query('update club_batting_private.club_message_recipients set user_id=$1',[u]);
+ });
+ await t.test('an unverified or inactive account is not claimed',async()=>{
+  await db.query('update auth.users set email_confirmed_at=null');assert.equal(await claim(),false);
+  await db.query('update auth.users set email_confirmed_at=now()');
+  await db.query('update public.players set active=false where id=$1',[fresh]);assert.equal(await claim(),false);
+  await db.query('update public.players set active=true where id=$1',[fresh]);
+ });
+ await t.test('a welcome-only shell is linked once, with message read state and history kept',async()=>{
+  assert.equal(await claim(),true);assert.equal(await claim(),true);
+  assert.deepEqual((await db.query('select id,user_id from public.players')).rows,[{id:old,user_id:u}]);
+  assert.equal((await db.query('select player_id from club_batting_private.club_message_recipients')).rows[0].player_id,old);
+  assert.ok((await db.query('select opened_at from club_batting_private.club_message_recipients')).rows[0].opened_at);
+  assert.equal((await db.query('select answer from public.player_plans')).rows[0].answer,'Existing coach notes');
+  assert.equal((await db.query('select count(*)::int n from club_selection_private.audit')).rows[0].n,1);
+ });
+});

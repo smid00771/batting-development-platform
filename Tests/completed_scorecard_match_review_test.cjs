@@ -1,0 +1,90 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {PGlite}=require('@electric-sql/pglite');
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+test('completed scorecard supplies the review team, with write eligibility and source guards',async t=>{
+ const db=new PGlite();t.after(()=>db.close());
+ await db.exec(`create role anon;create role authenticated;create role service_role;
+ create schema club_batting_private;create schema club_selection_private;
+ create table public.players(id uuid primary key default gen_random_uuid(),club_id uuid,user_id uuid,display_name text,grade text,active boolean);
+ create table public.playing_groups(id uuid primary key,club_id uuid,active boolean,batting_enabled boolean);
+ create table public.match_review_scorecards(id uuid primary key,club_id uuid,source_match_id uuid,scorecard jsonb,created_at timestamptz default now());
+ create table club_selection_private.access(club_id uuid,timezone text);
+ create table club_selection_private.fixtures(id uuid primary key,club_id uuid,details jsonb,slots jsonb,published jsonb,scorecard_sync jsonb,revision int default 1,publication int default 0);
+ create table club_selection_private.fixture_result_sources(fixture_id uuid,club_id uuid,source_match_id uuid,team_id uuid,no_play text);
+ create table club_selection_private.roster(id uuid primary key,club_id uuid,name text,grade text,user_id uuid,active boolean);
+ create table club_selection_private.scorecard_roster_links(club_id uuid,source_player_id uuid,roster_id uuid);
+ create table club_selection_private.season_appointments(club_id uuid,group_id uuid,captain_roster_id uuid);
+ create table club_batting_private.roster_players(roster_id uuid primary key,club_id uuid,player_id uuid,claimed_user_id uuid,claimed_at timestamptz);
+ create table club_batting_private.fixture_review_rosters(fixture_id uuid,club_id uuid,player_ids uuid[],revision integer);
+ create function club_selection_private.enabled(c uuid) returns boolean language sql as $$select true$$;
+ create function club_selection_private.shared_products(c uuid) returns jsonb language sql as $$select '{"batting":true}'::jsonb$$;
+ create function club_selection_private.sync_players(c uuid,u uuid) returns int language sql as $$select 0$$;
+ create function club_selection_private.fixture_group_id(c uuid,d jsonb) returns uuid language sql as $$select (d->>'grade_group_id')::uuid$$;
+ create function club_selection_private.fixture_identity(c uuid,d jsonb) returns jsonb language sql as $$select jsonb_build_array(d->'days',d->'format',d->'grade_group_id')$$;
+ create function club_selection_private.manual_match_roles(c uuid,f uuid) returns jsonb language sql as $$select '{}'::jsonb$$;
+ create function club_selection_private.captain_expires(c uuid,d jsonb) returns timestamptz language sql as $$select now()$$;
+ create function club_batting_private.group_uses_batting(c uuid,g uuid) returns boolean language sql as $$select exists(select 1 from public.playing_groups where id=g and club_id=c and active and batting_enabled)$$;
+ create function club_batting_private.team_review_staff(c uuid) returns boolean language sql as $$select coalesce(current_setting('test.staff',true),'yes')<>'no'$$;
+ create function club_batting_private.verified_roster_user(c uuid,u uuid) returns boolean language sql as $$select u is not null$$;
+ create function club_batting_private.claim_roster_player(c uuid,r uuid) returns boolean language sql as $$select false$$;
+ create table public.club_access_grants(club_id uuid,user_id uuid,can_view boolean,can_edit boolean,scope text,playing_group_id uuid,grade text);
+ create table public.player_playing_groups(club_id uuid,player_id uuid,playing_group_id uuid);
+ create table club_batting_private.selection_plan_dates(club_id uuid,player_id uuid,active boolean,season_key text);
+ create function club_batting_private.selection_plan_season(c uuid) returns text language sql as $$select '2026'$$;
+ create function club_selection_private.member(c uuid,u uuid) returns boolean language sql as $$select u is not null$$;
+ create function club_selection_private.season_captains(c uuid,g uuid) returns uuid[] language sql as $$select '{}'::uuid[]$$;
+ create function public.can_read_coaching_action_player(p uuid) returns boolean language sql as $$select true$$;
+ create function public.can_edit_player(p uuid) returns boolean language sql as $$select coalesce(current_setting('test.edit',true),'yes')<>'no'$$;
+ `);
+ await db.exec(fs.readFileSync('Database/completed_scorecard_match_review.sql','utf8'));
+ const [c,f,g,sid,mid,tid,r1,r2,src1,src2]=Array.from({length:10},(_,i)=>id(i+1));
+ const details={grade_group_id:g,format:'limited_overs',days:[{date:'2026-01-01'}]},slots=[{d1:r2},{d1:r1}];
+ const card={provider:'playhq_au',status:'completed',match_id:mid,format_key:'limited_overs',dates:['2026-01-01'],teams:[{id:tid,lineup_available:true,players:[{player_id:src1,name:'Source One'},{player_id:src2,name:'Source Two'}]}]};
+ const sync={source:'completed_scorecard',snapshot_id:sid,match_id:mid,team_id:tid};
+ await db.query(`insert into public.playing_groups values($1,$2,true,true)`,[g,c]);
+ await db.query(`insert into club_selection_private.access values($1,'Australia/Sydney')`,[c]);
+ await db.query(`insert into club_selection_private.fixtures(id,club_id,details,slots,scorecard_sync) values($1,$2,$3,$4,$5)`,[f,c,JSON.stringify(details),JSON.stringify(slots),JSON.stringify(sync)]);
+ await db.query(`insert into club_selection_private.roster values($1,$3,'One','Grade',null,true),($2,$3,'Two','Grade',null,true)`,[r1,r2,c]);
+ await db.query(`insert into club_selection_private.scorecard_roster_links values($1,$2,$3),($1,$4,$5)`,[c,src1,r1,src2,r2]);
+ await db.query(`insert into club_selection_private.fixture_result_sources values($1,$2,$3,$4,null)`,[f,c,mid,tid]);
+ await db.query(`insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard) values($1,$2,$3,$4)`,[sid,c,mid,JSON.stringify(card)]);
+ const snapshot=async()=> (await db.query('select club_batting_private.completed_review_snapshot($1,$2) x',[c,f])).rows[0].x;
+ const selection=async()=> (await db.query('select club_batting_private.fixture_review_selection($1,$2) x',[c,f])).rows[0].x;
+ await t.test('prepares unregistered players and permits actual lineup observations without publication',async()=>{
+  await db.query('select club_batting_private.ensure_review_players($1)',[c]);
+  const selected=await selection();assert.equal(selected.status,'scorecard');assert.equal(selected.players.length,2);
+  assert.equal((await db.query('select club_batting_private.player_uses_batting($1,$2) ok',[c,selected.players[0].player_id])).rows[0].ok,true);
+  await db.query('insert into public.club_access_grants values($1,$2,true,false,\'playing_group\',$3,null)',[c,id(40),g]);
+  assert.equal((await db.query('select club_batting_private.roster_coaching_access($1,$2,$3,false) ok',[c,selected.players[0].player_id,id(40)])).rows[0].ok,true);
+  assert.equal((await db.query('select club_batting_private.roster_coaching_access($1,$2,$3,true) ok',[c,selected.players[0].player_id,id(40)])).rows[0].ok,false);
+  assert.equal(selected.players[0].roster_id,r2);assert.ok(selected.players.every(p=>p.account_pending&&p.can_edit&&p.player_id));
+  await db.query('select club_batting_private.assert_fixture_review_players($1,$2,$3)',[c,f,JSON.stringify(selected.players.map(p=>p.player_id))]);
+  await assert.rejects(db.query('select club_batting_private.assert_fixture_review_players($1,$2,$3)',[c,f,JSON.stringify([id(99)])]),/not in it/);
+  assert.deepEqual((await db.query('select published,publication,revision from club_selection_private.fixtures')).rows[0],{published:null,publication:0,revision:1});
+  await db.query('select club_batting_private.ensure_review_players($1)',[c]);assert.equal((await db.query('select count(*)::int n from public.players')).rows[0].n,2);
+ });
+ await t.test('unfinished, withheld, outdated and mismatched source teams never qualify',async()=>{
+  for(const altered of [{...card,status:'in_progress'},{...card,dates:['2026-01-02']},{...card,teams:[{...card.teams[0],lineup_available:false}]},{...card,format_key:'t20'}]){
+   await db.query('update public.match_review_scorecards set scorecard=$1',[JSON.stringify(altered)]);assert.equal(await snapshot(),null);
+  }
+  await db.query('update public.match_review_scorecards set scorecard=$1',[JSON.stringify(card)]);
+  await db.query(`update club_selection_private.fixture_result_sources set no_play='washed_out'`);assert.equal(await snapshot(),null);
+  await db.query('update club_selection_private.fixture_result_sources set no_play=null');
+  await db.query('insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard,created_at) values($1,$2,$3,$4,now()+interval \'1 second\')',[id(30),c,mid,JSON.stringify(card)]);assert.equal(await snapshot(),null);
+  await db.query('delete from public.match_review_scorecards where id=$1',[id(30)]);
+ });
+ await t.test('identity edits, drafts, opted-out groups and cancelled fixtures stay excluded',async()=>{
+  await db.query('update club_selection_private.fixtures set slots=$1',[JSON.stringify([{d1:r1},{d1:r1}])]);assert.equal(await snapshot(),null);
+  await db.query('update club_selection_private.fixtures set slots=$1',[JSON.stringify(slots)]);
+  for(const altered of [{...details,cancelled:true},{...details,brackets:true}]){await db.query('update club_selection_private.fixtures set details=$1',[JSON.stringify(altered)]);assert.equal(await snapshot(),null);}
+  await db.query('update club_selection_private.fixtures set details=$1',[JSON.stringify(details)]);
+  await db.query('update public.playing_groups set batting_enabled=false');assert.equal(await snapshot(),null);
+  await db.query('update public.playing_groups set batting_enabled=true');
+  await db.query('update club_selection_private.fixtures set scorecard_sync=null');assert.equal((await selection()).status,'unpublished');
+  await db.query('update club_selection_private.fixtures set scorecard_sync=$1',[JSON.stringify(sync)]);
+ });
+ await t.test('read and edit permissions remain in force',async()=>{
+  await db.query("select set_config('test.edit','no',false)");assert.ok((await selection()).players.every(p=>p.can_edit===false));
+  await db.query("select set_config('test.staff','no',false)");await assert.rejects(selection(),/coaching access/);
+ });
+});
