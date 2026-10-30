@@ -7,6 +7,7 @@ async function openMatch(h,index=0){
  await h.choose('#teamReviewFixture',ids[index]);return ids[index];
 }
 const control=h=>h.document.querySelector('[data-match-arrival="player-jordan"] input');
+async function waitForControl(h,selector){for(let i=0;i<100&&!h.document.querySelector(selector);i++){await new Promise(resolve=>setTimeout(resolve,10));await h.settle();}assert.ok(h.document.querySelector(selector),'Expected ready control '+selector);}
 test('review and individual observation share the flag across innings; repeat roll preserves discussed history',async t=>{
  const h=await openDemo({product:'both',role:'coach',journey:'team_review'},{traceRpc:true});t.after(h.close);
  assert.equal(h.rpcCalls.filter(c=>c.name==='match_arrivals_api').length,0,'No arrival downloads before a match or roll is opened');
@@ -16,7 +17,7 @@ test('review and individual observation share the flag across innings; repeat ro
  await h.click('[data-team-observation="player-jordan"]');assert.equal(control(h).checked,true);
  assert.equal(h.window.eval("feedbackEntryBaselines.get(document.getElementById('staffDevelopmentForm'))===feedbackEntryValues(document.getElementById('staffDevelopmentForm'))"),true);
  await h.click('[data-match-arrival="player-jordan"] input');await h.click('#backToFixture');assert.equal(control(h).checked,false,'Correction is visible back in the team review');
- await h.click('[data-match-arrival="player-jordan"] input');await h.choose('#teamReviewInnings','2');assert.equal(control(h).checked,true);
+ await h.click('[data-match-arrival="player-jordan"] input');await waitForControl(h,'#teamReviewInnings');await h.choose('#teamReviewInnings','2');assert.equal(control(h).checked,true);
  assert.equal(h.window.eval(`Object.values(demoArrivalRows).filter(r=>r.fixture_id===${JSON.stringify(first)}&&r.player_id==='player-jordan').length`),1);
  await openMatch(h,1);await h.click('[data-match-arrival="player-jordan"] input');await h.click('#teamArrivalRoll');
  assert.match(h.document.querySelector('.arrival-roll').textContent,/2 matches late · Repeated lateness/);
