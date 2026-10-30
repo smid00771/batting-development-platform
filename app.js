@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.310';
+const APP_UI_VERSION='0.8.62.311';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -3698,7 +3698,7 @@ async function renderClubDashboard(){
     <h1 class="club-progress-title">Your club’s progress</h1>
     ${clubBrandingSetupPrompt()}
     ${progress.systemLive&&!progress.published?'<div class="notice compact club-home-round-note">A new philosophy round is in progress. The published How We Bat, Player Plans and sign-up remain available.</div>':''}
-    ${progress.published?`<details class="club-preparation completed-club-setup" ${clubHomeExpandedStage?'open':''}><summary id="clubPreparationTitle">Club setup complete</summary>`:'<section class="club-preparation" aria-labelledby="clubPreparationTitle">'}
+    ${progress.published?`<details class="club-preparation completed-club-setup" open><summary id="clubPreparationTitle">Club setup complete</summary>`:'<section class="club-preparation" aria-labelledby="clubPreparationTitle">'}
       ${progress.published?'':`<div class="club-preparation-heading"><div><h2 id="clubPreparationTitle">Before players build their plans</h2><p>Complete these steps to open Player Plans.</p></div><span class="club-preparation-count">${progress.steps.filter(item=>item.complete).length} of 5 preparation steps complete</span></div>`}
       ${clubSetupProgressHtml(progress)}
       <section class="club-stage-panel" id="clubHomeStagePanel" hidden>
