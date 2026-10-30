@@ -44,6 +44,6 @@ for(const file of ['app.js','demo.html']){
 }
 for(const file of ['app.js','demo.html'])test(file+': a rejected concurrent save reloads current choices and clears the retry queue',async()=>{
  const source=fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8'),s={pending:null,busy:false,data:{}},crypto=require('node:crypto');let reloads=0,draws=0;
- const c=vm.createContext({crypto,ensureSelections:()=>s,selectionState:s,seGuardFixtureEdit:()=>true,sePersist(){},seNotice(){},seLock(){},seRPC:async()=>{throw Error('A player updated their calendar. Reload before setting this date');},seReload:async()=>{reloads++;return true;},drawSelections:()=>draws++});
+ const c=vm.createContext({crypto,ensureSelections:()=>s,selectionState:s,selectionEvidence:{pause(){}},seGuardFixtureEdit:()=>true,sePersist(){},seNotice(){},seLock(){},seRPC:async()=>{throw Error('A player updated their calendar. Reload before setting this date');},seReload:async()=>{reloads++;return true;},drawSelections:()=>draws++});
  vm.runInContext(['seButtonWorking','seMutate'].map(name=>fn(source,name)).join('\n'),c);assert.equal(await c.seMutate('availability_batch',{date:day}),false);assert.equal(s.pending,null);assert.equal(s.busy,false);assert.equal(reloads,1);assert.equal(draws,1);assert.match(s.notice,/Review the saved choices/);
 });
