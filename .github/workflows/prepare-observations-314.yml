@@ -1,0 +1,42 @@
+name: Prepare independent observations 314
+on:
+  push:
+    branches: [codex/independent-observations-314]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: codex/independent-observations-314
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply reviewed implementation
+        run: base64 --decode .github/observations-314.patch.gz.b64 | gzip -d | git apply --binary
+      - name: Verify syntax and demo freshness
+        run: |
+          node --check app.js
+          node --check app-start.js
+          node Scripts/build-demo.mjs --check
+          cmp Database/independent_match_observation_fields.sql supabase/migrations/20261031002348_independent_match_observation_fields.sql
+          git diff --check
+      - name: Install verification dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify independent contributions and safe retry
+        run: node --test Tests/observation_fixtures_demo_test.cjs Tests/coaching_observation_safety_test.cjs Tests/match_arrivals_demo_test.cjs
+      - name: Commit exactly the reviewed tree
+        run: |
+          git add AGENTS.md Database/independent_match_observation_fields.sql Demo/build-manifest.json Demo/fixtures.js Reviews/2026-10-31-independent-observations-314.md Reviews/assets/observation-314-desktop.jpg Reviews/assets/observation-314-phone.jpg Tests/independent_observation_live_test.sql Tests/observation_fixtures_demo_test.cjs app-start.js app.html app.js demo.html supabase/migrations/20261031002348_independent_match_observation_fields.sql
+          git rm .github/observations-314.patch.gz.b64 .github/workflows/prepare-observations-314.yml
+          git diff --cached --check
+          test "$(git write-tree)" = "c9c49a1ead1db6ea03e50d74cd0877c6bfd8fa0c"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Allow independent Match Observation contributions (.314)'
+          git push origin HEAD:codex/independent-observations-314
