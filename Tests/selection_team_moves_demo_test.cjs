@@ -24,15 +24,15 @@ test('demo RPC saves and reverses a full-team transfer atomically, with per-team
  const saved=await h.rpc('save_board',data);assert.equal(saved.error,null);assert.deepEqual(plain(saved.data.revisions),{A:4,B:4});assert.deepEqual(h.state.fixtures.map(f=>occupied(f).length),[10,12]);
  assert.deepEqual(h.state.fixtures.flatMap(f=>occupied(f)).sort(),original.flatMap(f=>occupied(f)).sort());assert.equal(h.state.fixtures[1].slots[4].d1,'A-3');
  const replay=await h.rpc('save_board',data);assert.equal(replay.error,null);assert.deepEqual(h.state.fixtures.map(f=>f.revision),[4,4]);
- const context=await h.rpc('context');assert.equal(context.error,null);assert.deepEqual(plain(context.data.fixtures.find(f=>f.id==='B').issues),[]);assert.ok(h.c.demoSelectionIssues(h.state.fixtures.find(f=>f.id==='B')).some(i=>i.code==='over_team'&&i.level==='error'));
+ const context=await h.rpc('context');assert.equal(context.error,null);assert.deepEqual(plain(context.data.fixtures.find(f=>f.id==='B').issues),[]);assert.ok(h.c.demoSelectionIssues(h.state.fixtures.find(f=>f.id==='B')).some(i=>i.code==='twelve_team'&&i.level==='warning'));
  const back=h.c.seMovePlan(h.state.fixtures[1],h.state.fixtures[0],4,3);assert.equal((await h.rpc('save_board',{fixtures:back.fixtures})).error,null);
  assert.deepEqual(h.state.fixtures.map(f=>f.revision),[5,5]);assert.deepEqual(h.state.fixtures.map(f=>f.slots.length),[11,11]);assert.deepEqual(plain(h.state.fixtures.map(f=>f.slots)),original.map(f=>f.slots));
 });
 
-test('demo refuses both captain checks and publication for an overfull day without partly sharing either team',async()=>{
+test('demo permits a twelve-player captain check but requires explicit acknowledgement to publish',async()=>{
  const h=harness(),plan=h.c.seMovePlan(...h.state.fixtures,3,4);assert.equal((await h.rpc('save_board',{fixtures:plan.fixtures})).error,null);
- const data=publicationData(h.state);const review=await h.rpc('send_review',data);assert.match(review.error.message,/extra players/);assert.ok(h.state.fixtures.every(f=>!f.review));
- const published=await h.rpc('publish',{...data,acknowledge_short:['A','B']});assert.match(published.error.message,/issues/);assert.ok(h.state.fixtures.every(f=>!f.published&&f.publication===0));
+ const data=publicationData(h.state);const review=await h.rpc('send_review',data);assert.equal(review.error,null);assert.ok(h.state.fixtures.every(f=>f.review));
+ const published=await h.rpc('publish',{...data,acknowledge_short:['A','B']});assert.match(published.error.message,/12 players/);assert.ok(h.state.fixtures.every(f=>!f.published&&f.publication===0));
  const back=h.c.seMovePlan(h.state.fixtures[1],h.state.fixtures[0],4,3);assert.equal((await h.rpc('save_board',{fixtures:back.fixtures})).error,null);
  const final=publicationData(h.state);assert.equal((await h.rpc('send_review',final)).error,null);assert.ok(h.state.fixtures.every(f=>f.review));assert.equal((await h.rpc('publish',final)).data.published,true);assert.ok(h.state.fixtures.every(f=>f.publication===1));
 });
@@ -67,11 +67,14 @@ test('demo retains explicit acknowledgment for a short team and permits its capt
  const saved=await h.rpc('publish',{...data,acknowledge_short:['A']});assert.equal(saved.data.published,true);assert.equal(occupied(h.state.fixtures[0].published).length,10);
 });
 
-test('demo detects overflow on Day 2 independently and accepts more than eleven draft rows',async()=>{
+test('demo checks a twelve-player Day 2 independently and still blocks thirteen',async()=>{
  const h=harness({twoDays:true});h.state.roster.push({id:'extra',name:'Extra',active:true,availability:{available_dates:[...dates]}});
  const b=structuredClone(h.state.fixtures[1]);b.slots.push({d1:null,d2:'extra'});assert.equal((await h.rpc('save_board',{fixtures:[b]})).error,null);
- const loaded=await h.rpc('context'),issues=h.c.demoSelectionIssues(h.state.fixtures.find(f=>f.id==='B')).filter(i=>i.code==='over_team');assert.equal(issues.length,1);assert.match(issues[0].text,/Day 2: 12/);
- const result=await h.rpc('send_review',publicationData(h.state,['B']));assert.match(result.error.message,/extra players/);assert.equal(h.state.fixtures[1].review,undefined);
+ const loaded=await h.rpc('context'),issues=h.c.demoSelectionIssues(h.state.fixtures.find(f=>f.id==='B')).filter(i=>i.code==='twelve_team');assert.equal(issues.length,1);assert.match(issues[0].text,/Day 2: 12/);
+ const data=publicationData(h.state,['B']);assert.equal((await h.rpc('send_review',data)).error,null);assert.match((await h.rpc('publish',data)).error.message,/12 players/);
+ h.state.roster.push({id:'extra-13',name:'Extra 13',active:true,availability:{available_dates:[...dates]}});
+ const thirteen=structuredClone(h.state.fixtures[1]);thirteen.slots.push({d1:null,d2:'extra-13'});assert.equal((await h.rpc('save_board',{fixtures:[thirteen]})).error,null);
+ const over=publicationData(h.state,['B']);assert.match((await h.rpc('send_review',over)).error.message,/extra players/);assert.match((await h.rpc('publish',{...over,acknowledge_twelve:['B']})).error.message,/issues/);
 });
 
 test('demo bounds draft slots and rejects duplicate fixture entries before mutation',async()=>{

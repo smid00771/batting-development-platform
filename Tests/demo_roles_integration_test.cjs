@@ -75,11 +75,13 @@ test('group grants distinguish view, edit and publication, including an independ
 test('availability changes persist across role and product switches, and Reset restores the example',async t=>{
  const h=await openDemo({product:'select',role:'player',journey:'availability'});t.after(h.close);
  const day=h.window.eval('demoUpcomingSaturday()'),button='[data-se-date="'+day+'"]';
+ await h.choose('#seMonth',day.slice(0,7));
  await h.click(button);await h.click('#seSaveAvailability');
  assert.equal(h.document.querySelector(button).dataset.seAvailability,'unavailable');
  await h.choose('#demoPersona','selector');await h.choose('#demoPersona','player');await h.choose('#demoProduct','both');await h.choose('#demoStage','availability');
+ await h.choose('#seMonth',day.slice(0,7));
  assert.equal(h.document.querySelector(button).dataset.seAvailability,'unavailable');
- await h.click('#demoReset');assert.equal(h.document.querySelector(button).dataset.seAvailability,'available');clean(h);
+ await h.click('#demoReset');await h.choose('#seMonth',day.slice(0,7));assert.equal(h.document.querySelector(button).dataset.seAvailability,'available');clean(h);
 });
 
 test('new club request, example credentials and season setup use the delivered UI end to end',async t=>{
