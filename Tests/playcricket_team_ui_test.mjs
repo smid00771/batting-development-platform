@@ -165,3 +165,28 @@ test('a full-name suggestion for a new PlayHQ appearance still needs confirmatio
  assert.equal(h.host.querySelectorAll('[data-pc-same]').length,2);assert.equal(h.calls.length,1);assert.equal(h.host.querySelector('[data-pc-apply]'),null);
  assert.doesNotThrow(()=>scorecardPlayerMatches([{player_id:null,name:null}],ctx.roster));
 });
+
+test('a retired exact PlayHQ name cannot replace the active short-name candidate',async()=>{
+ const ctx=context();ctx.card.provider='playhq_au';ctx.card.teams[0].players[1].name='Thomas Example';ctx.roster[1].name='Tom Example';
+ ctx.roster.push({id:'retired',name:'Thomas Example',active:false,external_id:'old-registration'});ctx.links=[{source_id:'source-a',roster_id:'a'}];
+ const h=harness(async(args,name)=>{
+  if(name==='confirm_scorecard_player'){
+   assert.equal(args.p_values.roster_id,'b');assert.equal(args.p_values.expected_name,'Tom Example');
+   ctx.links.push({source_id:'source-b',roster_id:'b'});return {data:{confirmed:true}};
+  }
+  return {data:args.p_action==='context'?ctx:{...preview(),changed:false}};
+ });await settle();
+ assert.match(h.host.textContent,/Is Thomas Example the same player as Tom Example/);
+ assert.equal(h.host.querySelector('[data-pc-same]').dataset.roster,'b');assert.equal(h.calls.length,1);
+ h.host.querySelector('[data-pc-same]').click();await settle();assert.equal(h.changed,1);assert.equal(h.host.textContent,'');
+ assert.equal(ctx.roster.find(r=>r.id==='retired').active,false,'The retired record stays retired');
+});
+test('PlayHQ inactive-only and ambiguous matches require an active choice without a broken Yes button',async()=>{
+ for(const ambiguous of [false,true]){
+  const ctx=context();ctx.card.provider='playhq_au';ctx.card.teams[0].players[1].name='Thomas Example';ctx.roster[1]={id:'retired',name:'Thomas Example',active:false};ctx.links=[{source_id:'source-a',roster_id:'a'}];
+  if(ambiguous)ctx.roster.push({id:'tom-one',name:'Tom Example',active:true},{id:'tom-two',name:'Tom Example',active:true});
+  const h=harness(async args=>{assert.equal(args.p_action,'context');return {data:ctx};});await settle();
+  assert.equal(h.host.querySelector('[data-pc-same]'),null);const choice=h.host.querySelector('[data-pc-player="source-b"]');assert.ok(choice);
+  assert.equal(choice.querySelector('option[value="retired"]'),null);assert.equal(h.calls.length,1);
+ }
+});

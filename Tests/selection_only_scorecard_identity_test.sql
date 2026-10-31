@@ -1,5 +1,6 @@
 -- Real API and schema; every synthetic record is rolled back inside this block.
 do $tests$
+<<selection_only>>
 declare
  c uuid:=gen_random_uuid();other uuid:=gen_random_uuid();staff uuid:=gen_random_uuid();member_id uuid:=gen_random_uuid();
  senior_group uuid:=gen_random_uuid();masters_group uuid:=gen_random_uuid();grade uuid:=gen_random_uuid();masters uuid:=gen_random_uuid();
@@ -82,6 +83,25 @@ begin
   assert not exists(select 1 from club_batting_private.fixture_review_rosters where club_id=c and fixture_id=fid),'Actual Masters team recovery does not create coaching activity';
   assert before_review=(select jsonb_agg(to_jsonb(r) order by r.fixture_id) from club_batting_private.fixture_review_rosters r where r.club_id=c),'Grade coaching records remain intact after recovery';
   assert not has_function_privilege('anon','public.confirm_scorecard_player(uuid,uuid,jsonb)','execute'),'Anonymous calls remain denied';
+  -- A confirmed source spelling becomes the visible roster name. An opted-out
+  -- team must still leave the existing coaching profile untouched.
+  card:=jsonb_set(jsonb_set(card,'{teams,0,players,0,name}','"Alexander Example"'),'{innings,0,batters,0,name}','"Alexander Example"');
+  update public.match_review_scorecards set scorecard=card where id=sid;
+  request_id:=gen_random_uuid();
+  result:=public.confirm_scorecard_player(c,request_id,values);
+  assert result->>'name'='Alexander Example' and result->>'roster_id'=shared_roster::text and result->>'player_id'=player_id::text,'Official spelling preserves both identities';
+  assert (select name='Alexander Example' and user_id=member_id from club_selection_private.roster where id=shared_roster),'Confirmed PlayHQ spelling is used on the roster';
+  assert (select display_name='Alex Example' and user_id=member_id from public.players where id=player_id),'An opted-out team cannot rename the coaching profile';
+  assert public.confirm_scorecard_player(c,request_id,values)=result,'The original request remains safely retryable after its expected name changes';
+  rejected:=false;begin perform public.confirm_scorecard_player(c,gen_random_uuid(),values);exception when raise_exception then rejected:=sqlerrm like 'The player name changed%';end;assert rejected,'A new stale-name confirmation is rejected';
+  -- Once this group participates, the same identity confirmation aligns its
+  -- existing batting profile without changing the account or existing history.
+  update club_selection_private.selection_groups set batting_enabled=true where id=masters_group;
+  result:=public.confirm_scorecard_player(c,gen_random_uuid(),values||jsonb_build_object('expected_name','Alexander Example'));
+  assert (select display_name='Alexander Example' and user_id=member_id from public.players where id=player_id),'Participating teams use the official name on the same batting profile';
+  assert (select rp.roster_id=shared_roster and rp.player_id=selection_only.player_id from club_batting_private.roster_players rp where rp.club_id=c and rp.roster_id=shared_roster),'The player bridge is preserved';
+  assert (select display_name='Synthetic Member' from public.user_profiles where user_id=member_id),'Account profile names are not changed';
+  assert exists(select 1 from club_batting_private.fixture_review_rosters where club_id=c and fixture_id=grade_fid and player_ids=array[player_id]),'The existing grade review retains the same player';
   raise exception using errcode='ZX002',message='Rollback synthetic selection identity checks';
  exception when sqlstate 'ZX002' then null;
  end;

@@ -95,7 +95,7 @@ test('an initial access error exposes a working retry and no protected stats',as
 test('season draft survives redraws and failed saves; saving blocks departure',async()=>{
  const h=await harness();h.input('[name=start]','2026-08-01');h.click('[data-stats-mode=bowling]');assert.equal(h.host.querySelector('[name=start]').value,'2026-08-01');
  let finish;h.reply(()=>new Promise(r=>finish=r));h.submit();assert.equal(h.panel.canLeave(),false);assert.match(h.messages.at(-1),/wait/);assert.match(h.host.querySelector('[type=submit]').textContent,/Saving/);
- assert.deepEqual(h.calls.at(-1).args.p_data,{start:'2026-08-01',end:'2027-06-30',expected_revision:0});
+ assert.deepEqual(h.calls.at(-1).args.p_data,{start:'2026-08-01',end:'2027-06-30',expected_revision:0,on_demand:true});
  finish({error:{message:'Dates changed elsewhere'}});await tick();assert.equal(h.host.querySelector('[name=start]').value,'2026-08-01');assert.match(h.host.textContent,/Dates changed elsewhere/);
  h.allow(false);h.click('[data-stats-close]');assert.equal(h.close(),0);
  h.reply(async()=>({data:{...data(),season:{...data().season,start:'2026-08-01',revision:1}}}));h.submit();await tick();assert.equal(h.s.state.seasonDraft,undefined);assert.match(h.host.textContent,/Season dates saved/);h.click('[data-stats-close]');assert.equal(h.close(),1);
