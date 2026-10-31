@@ -25,7 +25,7 @@ async function review(h){await h.click('#sePublish');assert.ok(h.document.queryS
 test('quiet board checks once on publication review; missing keeper warns without blocking or extra acknowledgement',async t=>{
  const h=await setup(t);
  assert.equal(h.window.issueScans,0);assert.equal(calls(h,'publication_check').length,0);
- await h.click('#seRefresh');assert.equal(h.window.issueScans,0);
+ await h.window.renderSelections();await h.settle();assert.equal(h.window.issueScans,0);
  await review(h);
  assert.equal(calls(h,'publication_check').length,1);
  assert.match(h.document.querySelector('#seContent').textContent,/Dev Navy: Day 1: Wicketkeeper not named/);

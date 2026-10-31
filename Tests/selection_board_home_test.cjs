@@ -17,10 +17,10 @@ function setup(file,role='captain'){
 for(const file of ['app.js','demo.html']){
  for(const role of ['captain','selector'])test(file+': '+role+' lands on one board and stays there after refresh or an old Teams route',async()=>{
   const h=setup(file,role);await h.c.renderSelections();assert.equal(h.s.view,'board');assert.equal(h.document.querySelector('[data-se-view="published"]'),null);assert.ok(h.document.querySelector('[data-se-view="board"][aria-pressed="true"]'));assert.ok(h.document.querySelector('[data-se-board-chat]'));
-  await h.document.getElementById('seRefresh').onclick();assert.equal(h.s.view,'board');h.c.seChangeView('published');assert.equal(h.s.view,'board');assert.equal(h.document.querySelector('[data-se-view="published"]'),null);
+  await h.c.renderSelections();assert.equal(h.s.view,'board');h.c.seChangeView('published');assert.equal(h.s.view,'board');assert.equal(h.document.querySelector('[data-se-view="published"]'),null);
  });
  test(file+': an ordinary player still sees published teams without draft board access',async()=>{
-  const h=setup(file,'player');await h.c.renderSelections();assert.equal(h.s.view,'published');assert.equal(h.document.querySelector('[data-se-view="board"]'),null);assert.ok(h.document.querySelector('[data-se-view="published"]'));assert.match(h.document.body.textContent,/Published player teams/);assert.equal(h.document.getElementById('seSeasonStats'),null);
+  const h=setup(file,'player');await h.c.renderSelections();assert.equal(h.s.view,'published');assert.equal(h.document.querySelector('[data-se-view="board"]'),null);assert.ok(h.document.querySelector('[data-se-view="published"]'));assert.match(h.document.body.textContent,/Published player teams/);assert.equal(h.document.getElementById('seSeasonStats'),null);assert.equal(h.document.getElementById('seMore'),null);
  });
  test(file+': Selection Room is available only on the selector board',()=>{
   const h=setup(file,'selector');
@@ -77,7 +77,7 @@ test('compact section picker opens the chosen section, repeats Home, and preserv
  h.document.querySelector('[data-se-view="availability"]').click();assert.equal(h.s.view,'availability');assert.match(button().textContent,/Availability/);assert.equal(button().getAttribute('aria-expanded'),'false');
  button().click();h.c.confirmLeaveSelections=()=>false;h.document.querySelector('[data-se-view="board"]').click();assert.equal(h.s.view,'availability');assert.equal(button().getAttribute('aria-expanded'),'true');
  h.c.confirmLeaveSelections=()=>true;h.document.querySelector('[data-se-view="board"]').click();h.s.boardPanel='unselected';button().click();h.document.querySelector('[data-se-view="board"]').click();assert.equal(h.s.boardPanel,null);
- const more=h.document.getElementById('seMore');assert.equal(more.open,false);assert.ok(more.querySelector('#seRefresh'));assert.ok(more.querySelector('#seFormIndicators'));
+ const more=h.document.getElementById('seMore');assert.equal(more.open,false);assert.equal(more.querySelector('#seRefresh'),null);assert.ok(more.querySelector('#seFormIndicators'));
  let adds=0;h.c.seFixtureEditor=()=>adds++;more.open=true;more.querySelector('#seNewFixture').click();assert.equal(adds,1);assert.equal(more.open,false);
  h.c.confirmLeaveSelections=()=>false;more.querySelector('#seNewFixture').click();assert.equal(adds,1);
  more.open=true;more.querySelector('summary').focus();more.dispatchEvent(new h.dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(more.open,false);assert.equal(h.document.activeElement,more.querySelector('summary'));

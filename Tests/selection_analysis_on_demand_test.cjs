@@ -18,7 +18,7 @@ test('delivered board offers two More actions, keeps their results through refre
  const before=labels();assert.ok(before.length>20);assert.equal(d.querySelector('[data-return-compare]'),null);
  await h.click('#seCompareReturning');assert.equal(h.analysis().length,2);assert.ok(d.querySelector('[data-return-compare]'));
  const returning=d.querySelector('[data-return-analysis]').innerHTML,withReturns=labels();
- await h.click('#seRefresh');assert.deepEqual(labels(),withReturns);assert.equal(d.querySelector('[data-return-analysis]').innerHTML,returning);assert.equal(h.analysis().length,2);
+ await h.window.renderSelections();await h.settle();assert.deepEqual(labels(),withReturns);assert.equal(d.querySelector('[data-return-analysis]').innerHTML,returning);assert.equal(h.analysis().length,2);
  const card=d.querySelector('[data-se-team="selection-first"]');await h.click('[data-se-team="selection-first"] [data-se-slot="0"]');
  const search=d.getElementById('seSearch');search.value='Sam Ellison';search.dispatchEvent(new h.window.Event('input'));await h.settle();
  assert.equal(d.querySelector('[data-se-team="selection-first"]'),card);assert.equal(h.analysis().length,2);assert.equal(d.querySelector('.sr-room'),null);

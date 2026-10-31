@@ -21,7 +21,7 @@ test('delivered board compares an unpublished actual lineup, not an older publis
  assert.equal(d.querySelector('[data-se-conversation-player="'+expected.returner+'"]'),null);
  assert.ok(d.querySelector('.se-conversation-status small').textContent.includes(w.seDate(expected.date)));
  const saved=w.eval('demoSelections.drop_reminders')[0];assert.equal(saved.previous_fixture_id,expected.priorId);
- await h.click('#seRefresh');assert.equal(scans,captured);assert.equal(d.querySelectorAll('.se-dropped').length,1);
+ await h.window.renderSelections();await h.settle();assert.equal(scans,captured);assert.equal(d.querySelectorAll('.se-dropped').length,1);
  await d.querySelector('[data-se-conversation]').onclick();await h.settle();assert.equal(scans,captured);assert.equal(d.querySelector('.se-dropped'),null);
  await h.click('#seShowDropped');assert.equal(d.querySelector('.se-dropped'),null,'Shared completion survives another request');
  assert.deepEqual(h.errors,[]);
