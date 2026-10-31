@@ -69,12 +69,14 @@ begin
    where f.club_id=c and f.details->>'grade'=coalesce(x->>'grade_hint',x#>>'{scorecard,grade}')
     and coalesce(f.details->>'competition','')=coalesce(x#>>'{scorecard,competition}','')));
  select coalesce(jsonb_agg(jsonb_build_object(
-  'id',f.id,'grade',d->>'grade','competition',d->>'competition','format',d->>'format','opposition',d->>'opposition','days',d->'days',
+  'id',f.id,'grade',d->>'grade','grade_group_id',d->>'grade_group_id','competition',d->>'competition','format',d->>'format','opposition',d->>'opposition','days',d->'days',
+  'playhq_season_id',phq.season_id,'playhq_grade_id',phq.grade_id,
   'cancelled',coalesce((d->>'cancelled')::boolean,false),'match_id',coalesce(l.source_match_id::text,f.scorecard_sync->>'match_id'),'no_play',l.no_play
  ) order by d->'days'->0->>'date',f.id),'[]') into fixtures
  from club_selection_private.fixtures f
  cross join lateral(select coalesce(f.published->'details',f.details) d) details
  left join club_selection_private.fixture_result_sources l on l.fixture_id=f.id and l.club_id=c
+ left join club_selection_private.playhq_links phq on phq.fixture_id=f.id and phq.club_id=c
  where f.club_id=c and (adm or (selecting and (not club_selection_private.scoped_selections(c) or club_selection_private.fixture_view(c,d,me)))
   or exists(select 1 from jsonb_array_elements(coaching_fixtures) allowed where allowed->>'id'=f.id::text)) and d->'days'->0->>'date' between starts::text and ends::text;
 
@@ -112,4 +114,6 @@ end $function$
 
 ;
 revoke all on function club_selection_private.season_stats_api(uuid,text,jsonb) from public,anon,authenticated;
+-- The public SQL wrapper runs with the authenticated caller. Keep its existing grant.
+grant execute on function club_selection_private.season_stats_api(uuid,text,jsonb) to authenticated;
 commit;

@@ -16,6 +16,21 @@ test('modes and grade comparison visibly change state, with no invented promotio
  assert.equal(h.host.querySelector('[data-stats-compare-mode=bowling]').getAttribute('aria-pressed'),'true');
  h.click('[data-stats-mode=batting]');assert.equal(h.s.state.compare,false);assert.equal(h.host.querySelector('[role=table]'),null);assert.equal(h.navigations(),3);
 });
+test('resolved PlayHQ grades have one plain dropdown option and preserve an old unknown-grade selection',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ for(const fixture of f.context.fixtures)Object.assign(fixture,{grade_group_id:fixture.grade,playhq_season_id:'source-season',playhq_grade_id:'source-'+fixture.grade});
+ const recent=f.context.fixtures.find(x=>x.id==='match-1-3');recent.competition='';
+ f.context.cards.find(x=>x.fixture_id===recent.id).scorecard.competition='';
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster,state:{mode:'batting',format:'long_form',grade:JSON.stringify(['','1st Grade'])}});
+ const filter=h.host.querySelector('[data-stats-filter="grade"]');
+ assert.equal([...filter.options].filter(o=>o.textContent==='1st Grade').length,1);
+ assert.doesNotMatch(filter.textContent,/unknown|NDCA/);
+ assert.equal(filter.value,JSON.stringify(['NDCA','1st Grade']));
+ assert.match(h.host.textContent,/4 completed scorecards/);
+ const alex=[...h.host.querySelectorAll('[data-stats-player]')].find(row=>row.querySelector('.ss-name').textContent.startsWith('Alex Rowan'));
+ assert.equal(alex.querySelector('[data-stat="average"] strong').textContent,'10.00');
+ assert.equal(alex.querySelector('[data-stat="runs"] strong').textContent,'40');
+});
 test('comparison names open the exact player and respect draft and access guards',async()=>{
  const opened=[],h=await harness(data(),{}, {canOpenPlayer:()=>true,openPlayer:(s,id)=>opened.push(id)});
  h.click('[data-stats-compare]');h.click('[data-stats-open-player="r2"]');assert.deepEqual(opened,['r2']);

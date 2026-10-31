@@ -1,6 +1,6 @@
-import {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat} from './season-stats.js?v=0.8.62.275';
+import {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat} from './season-stats.js?v=0.8.62.322';
 import {buildSelectionEvidence} from './selection-evidence.js?v=0.8.62.288';
-import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.288';
+import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.322';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
@@ -120,7 +120,7 @@ export function createSeasonStatsPanel(h) {
     const disabled = s.busy ? 'disabled' : '';
     const teamDate = team => team.days?.[0]?.date || '';
     const available = team => !team.cancelled && (!data || !teamDate(team) || teamDate(team) >= data.season.start && teamDate(team) <= data.season.end);
-    const sourceTeams = resolveSelectionStatsTeams(s.teams || data?.fixtures || [],data?.season);
+    const sourceTeams = resolveSelectionStatsTeams(s.teams || data?.fixtures || [],data?.season,[...(data?.fixtures || []),...(s.teams || [])]);
     const allTeams = sourceTeams.filter(available).map(t => ({...t,format:statsFormat(t.format)}));
     const latestPublished = new Map();
     for (const fixture of sourceTeams) {
@@ -155,11 +155,18 @@ export function createSeasonStatsPanel(h) {
     if (secondary) state.secondTeam = secondary.id;
     const canCompare = publishedTeams.some(t => publishedTeams.some(other => other.id !== t.id && other.competition === t.competition && other.format === t.format)) || allTeams.some(t => allTeams.some(other => other.grade !== t.grade && (!s.teams || teamDate(other) === teamDate(t)) && other.competition === t.competition && other.format === t.format));
     if (!canCompare) state.compare = false;
+    const allTotals = data ? buildSeasonStats(data) : null;
+    if (allTotals && state.grade && !allTotals.groups.some(g=>g.id===state.grade)) {
+      // Retain the selected grade when an old blank label resolves after sync.
+      let grade;try { grade=JSON.parse(state.grade)?.[1]; } catch {}
+      const matches=allTotals.groups.filter(g=>g.grade===grade);
+      state.grade=matches.length===1?matches[0].id:'';
+    }
     const knownFormats = ['limited_overs','long_form','t20'];
-    const formats = [...knownFormats,...(data ? buildSeasonStats(data).formats : []).filter(f => !knownFormats.includes(f))];
+    const formats = [...knownFormats,...(allTotals?.formats || []).filter(f => !knownFormats.includes(f))];
     const formatPicker = `<label class="ss-format">Format<select data-stats-filter="format" ${disabled}>${formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(STATS_FORMATS[f] || f)}</option>`).join('')}</select></label>`;
     const totals = data ? buildSeasonStats(data, state.compare ? {...state, groups:[primary, secondary].filter(Boolean).map(team => JSON.stringify([String(team.competition || '').trim(), String(team.grade || '').trim()]))} : state) : null;
-    s.evidence = data ? buildSelectionEvidence(buildSeasonStats(data),state.compare?[primary,secondary].filter(Boolean):[],s.roster,{seasonPlayers:state.compare && comparisonDate === 'season'}) : null;
+    s.evidence = allTotals ? buildSelectionEvidence(allTotals,state.compare?[primary,secondary].filter(Boolean):[],s.roster,{seasonPlayers:state.compare && comparisonDate === 'season'}) : null;
     s.host.innerHTML = evidenceStyles + css + `<section class="season-stats" aria-label="Season stats"><div class="ss-top"><h2 tabindex="-1">Season stats</h2><button type="button" class="btn ghost" data-stats-close>Close stats</button></div>${data ? `
       ${data.can_set_season ? `<details class="ss-season" ${state.seasonDraft ? 'open' : ''}><summary>${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</summary><form data-stats-season><label>Starts<input type="date" name="start" value="${escape(state.seasonDraft?.start ?? data.season.start)}" required ${disabled}></label><label>Ends<input type="date" name="end" value="${escape(state.seasonDraft?.end ?? data.season.end)}" required ${disabled}></label><button type="submit" class="btn secondary" ${disabled}>${s.savingSeason ? 'Saving…' : 'Save season dates'}</button></form></details>` : `<p class="ss-caption">${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</p>`}
 
@@ -210,8 +217,6 @@ export function createSeasonStatsPanel(h) {
       if (!here(s)) return;
       s.context = data; h.updated?.(s.scope,data);
       if (settings) delete s.state.seasonDraft;
-      const all = buildSeasonStats(data);
-      if (!all.groups.some(g => g.id === s.state.grade)) s.state.grade = '';
       if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = statsFormat(s.preferredFormat) !== 'unknown' ? statsFormat(s.preferredFormat) : 'limited_overs';
       s.message = settings ? 'Season dates saved.' : '';
     } catch (error) {if (here(s)) {s.error = true; s.message = error.message || 'Season stats could not be loaded.';}}

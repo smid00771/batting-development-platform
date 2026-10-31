@@ -13,32 +13,52 @@ export const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'
 export const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 export const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
 
-// Imported upcoming fixtures can omit the competition label. Reuse an
-// unambiguous saved label for the exact club grade ID, season and format.
+// Imported and older manual fixtures can omit the competition label. Prefer
+// their explicit PlayHQ season/grade link; one source grade can play several
+// formats. Unlinked fixtures require the same club grade ID, season and format.
 // This is a read-only stats projection; dates, line-ups and saved fixtures stay
 // untouched. A same-named grade, another season or conflicting labels cannot
 // establish the link.
 export function resolveSelectionStatsTeams(teams = [], season = {}, references = teams) {
-  const competitions = new Map();
-  const scope = team => team.grade_group_id && inSeason(dates(team)[0], season)
-    && !team.cancelled && statsFormat(team.format) !== 'unknown'
-    ? JSON.stringify([team.grade_group_id,statsFormat(team.format)]) : null;
-  for (const fixture of references) for (const team of [fixture,fixture.published?.details].filter(Boolean)) {
-    const id = scope(team), competition = String(team.competition || '').trim();
-    if (!id || !competition) continue;
-    if (!competitions.has(id)) competitions.set(id,new Set());
-    competitions.get(id).add(competition);
+  const competitions = new Map(), sourceLabels = new Map(), localSources = new Map();
+  const valid = team => inSeason(dates(team)[0],season) && !team.cancelled && statsFormat(team.format) !== 'unknown';
+  const scope = team => valid(team) && team.grade_group_id ? JSON.stringify([team.grade_group_id,statsFormat(team.format)]) : null;
+  const source = team => valid(team) && team.playhq_season_id && team.playhq_grade_id
+    ? JSON.stringify([team.playhq_season_id,team.playhq_grade_id]) : null;
+  const label = team => String(team.competition || '').trim();
+  const add = (map,id,value) => { if (id && value) { if (!map.has(id)) map.set(id,new Set()); map.get(id).add(value); } };
+  const linked = new Map(references.filter(t=>t.id && source(t)).map(t=>[t.id,t]));
+  const withSource = team => {
+    const saved = linked.get(team.id);
+    return !team.playhq_grade_id && saved && saved.grade_group_id === team.grade_group_id
+      ? {...team,playhq_season_id:saved.playhq_season_id,playhq_grade_id:saved.playhq_grade_id} : team;
+  };
+  const published = team => team.published?.details && {...team.published.details,
+    playhq_season_id:team.playhq_season_id,playhq_grade_id:team.playhq_grade_id};
+  const refs = references.flatMap(f => { const team=withSource(f); return [team,published(team)].filter(Boolean); });
+  for (const team of refs) {
+    add(sourceLabels,source(team),label(team));
+    add(localSources,scope(team),source(team));
   }
+  const fromSource = team => {
+    const labels = sourceLabels.get(source(team));
+    return !label(team) && labels?.size === 1 ? {...team,competition:[...labels][0]} : team;
+  };
+  for (const team of refs.map(fromSource)) add(competitions,scope(team),label(team));
   const resolve = team => {
-    if (String(team.competition || '').trim()) return team;
+    team=fromSource(team);
+    if (label(team)) return team;
+    const id=source(team), sources=localSources.get(scope(team));
+    if (sourceLabels.get(id)?.size > 1 || (sources && (id ? [...sources].some(s=>s!==id) : sources.size > 1))) return team;
     const labels = competitions.get(scope(team));
     return labels?.size === 1 ? {...team,competition:[...labels][0]} : team;
   };
   return teams.map(team => {
+    team=withSource(team);
     const resolved = resolve(team);
     if (!team.published?.details) return resolved;
-    const details = resolve(team.published.details);
-    return details === team.published.details ? resolved : {...resolved,published:{...team.published,details}};
+    const details = resolve(published(team));
+    return {...resolved,published:{...team.published,details}};
   });
 }
 
@@ -81,7 +101,7 @@ export function compareSeasonGrades(summary, first, second, roster = []) {
 
 export function buildSeasonStats(context = {}, filters = {}) {
   const season = context.season || {}, today = context.today || season.end;
-  const fixtures = (context.fixtures || []).filter(f => inSeason(dates(f)[0], season)).map(f => ({...f,format:statsFormat(f.format)}));
+  const fixtures = resolveSelectionStatsTeams(context.fixtures || [],season).filter(f => inSeason(dates(f)[0], season)).map(f => ({...f,format:statsFormat(f.format)}));
   const cards = latestStatsCards(context.cards), identities = new Map((context.identities || []).map(x => [x.source_id, x]));
   const rows = new Map(), issues = new Map(), groups = new Map(), formats = new Set(), matched = new Set();
   let included = 0, playing = 0;

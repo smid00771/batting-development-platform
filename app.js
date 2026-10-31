@@ -5,7 +5,7 @@ import {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl} from './domain-routing.
 import {createStaffAssistController} from './assist-loader.js?v=0.8.62.304';
 import {assistLaunchFromSearch} from './assist-routing.js?v=0.8.62.271';
 import {FIELDING_RATINGS,fieldingLabel} from './player-fielding.js?v=0.8.62.288';
-import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.288';
+import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.322';
 import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.288';
 const returningPlayers=findReturningPlayers;
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.316';
@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.321';
+const APP_UI_VERSION='0.8.62.322';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -18750,7 +18750,7 @@ function seFixtureEditor(f=null){
  }
  const d=f?.details||{grade:'',competition:'',opposition:'',ground:'',meeting:'',format:'',overs:null,days:[{date:s.date||'',start:'12:00'}],brackets:false,min_quicks:3,min_batters:5,staff:[]};
  document.getElementById('seContent').innerHTML=`${f?'<div id="fixtureResults"></div>':''}<form id="seFixtureForm" class="se-card se-drawer"><div class="se-top"><h2>${f?'Fixture details':'Add fixture'}</h2>${!f?'<button type="button" class="btn ghost" id="seManualClubTrial">Add Trial game</button>':''}</div><div class="se-form-grid">
- <label>Competition<input name="competition" maxlength="120" value="${seEsc(d.competition)}"></label>${seGradeFields('grade',d.grade,d.grade_group_id)}
+ ${seGradeFields('grade',d.grade,d.grade_group_id)}
  <label>Format<select name="format" required>${seOpt([['','Choose format'],...SE_FORMATS],d.format||'')}</select></label>
  <div><p id="seOversDefault" class="se-form-note"></p><label class="se-check"><input type="checkbox" name="overs_override">Use a different overs limit for this fixture</label><label id="seOversOverride" hidden>Fixture overs limit<input name="overs" type="number" min="1" max="999" step="1" value="${d.overs??''}" placeholder="No fixed limit"></label></div>
  <label>Opposition<input name="opposition" maxlength="120" required value="${seEsc(d.opposition)}"></label><label>Ground<input name="ground" maxlength="120" value="${seEsc(d.ground)}"></label>
@@ -18775,7 +18775,8 @@ function seFixtureEditor(f=null){
  document.getElementById('seCancelEdit').onclick=()=>{if(confirmLeaveSelections())drawSelections();};
  form.onsubmit=async e=>{e.preventDefault();if(!fixtureResults.canLeave())return;const data=new FormData(form),grade=seReadGrade(form,'grade'),days=[0,1].filter(i=>data.get('date'+i)).map(i=>({date:data.get('date'+i),start:data.get('start'+i)}));
   if(days.length===2&&days[1].date<=days[0].date){document.getElementById('seFormError').textContent='Day 2 must follow Day 1.';return;}
-  const details={...d,...Object.fromEntries(['competition','opposition','ground','meeting'].map(k=>[k,data.get(k).trim()])),grade:grade.grade,grade_group_id:grade.grade_group_id,format:data.get('format'),overs:data.get('overs')===''?null:Number(data.get('overs')),overs_source:data.has('overs_override')?'fixture':'default',captain_id:d.captain_id||null,days,brackets:data.get('format')==='long_form'&&data.has('brackets'),min_quicks:Number(data.get('min_quicks')),min_batters:Number(data.get('min_batters')),staff:data.getAll('staff'),cancelled:data.has('cancelled'),include_in_fixture_calendar:form.elements.include_in_fixture_calendar.disabled?d.include_in_fixture_calendar===true:data.has('include_in_fixture_calendar')};
+  const sameGrade=grade.grade_group_id&&d.grade_group_id?grade.grade_group_id===d.grade_group_id:grade.grade===d.grade;
+  const details={...d,...Object.fromEntries(['opposition','ground','meeting'].map(k=>[k,data.get(k).trim()])),competition:sameGrade?d.competition||'':'',grade:grade.grade,grade_group_id:grade.grade_group_id,format:data.get('format'),overs:data.get('overs')===''?null:Number(data.get('overs')),overs_source:data.has('overs_override')?'fixture':'default',captain_id:d.captain_id||null,days,brackets:data.get('format')==='long_form'&&data.has('brackets'),min_quicks:Number(data.get('min_quicks')),min_batters:Number(data.get('min_batters')),staff:data.getAll('staff'),cancelled:data.has('cancelled'),include_in_fixture_calendar:form.elements.include_in_fixture_calendar.disabled?d.include_in_fixture_calendar===true:data.has('include_in_fixture_calendar')};
   if(!s.data.selector){s.date=days[0].date;s.boardDateChosen=true;return seMutate('save_fixture',{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details});}
   let slots=structuredClone(f?.slots||seBlankSlots());if(f&&f.details.days.length===2&&days.length===1&&slots.some(x=>x.d2&&x.d1!==x.d2)&&!confirm('Changing to one day removes Day 2 selections from this draft. Continue?'))return;
   if(f&&f.details.brackets&&days.length===2&&!details.brackets){
@@ -20396,7 +20397,7 @@ async function renderSeasonStats(){
  await seasonStatsPanel.mount(document.getElementById('seasonStatsHost'),{scope,clubId:club.id,state:seasonStatsRoute.filters,
   teams:d?.fixtures.map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published}))||null,roster:d?.roster||[],boardDate:selectionState?.key===scope?selectionState.date:null});
 }
-const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.321'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,alert:message=>alert(message),confirm:message=>confirm(message),
+const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.322'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,alert:message=>alert(message),confirm:message=>confirm(message),
  here:s=>currentTab==='season_stats'&&s.scope===selectionsScopeKey()&&canUseSeasonStats(),
  close:closeSeasonStats,navigate:()=>recordAppNavigation(clubNavigationRoute()),
  canOpenPlayer:()=>selectionsEnabled()&&selectionState?.key===selectionsScopeKey()&&seCanSetup(selectionState.data),

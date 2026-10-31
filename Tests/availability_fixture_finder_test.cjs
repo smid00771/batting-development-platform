@@ -51,9 +51,12 @@ test('Add Trial game saves whole-club or multiple-team audiences without creatin
 test('manual team fixtures require the explicit include checkbox and retain it when reopened',async t=>{
  const h=await openDemo({product:'both',role:'admin',journey:'selection_admin'});t.after(h.close);h.window.eval('seFixtureEditor()');await h.settle();
  const form=h.document.getElementById('seFixtureForm');assert.equal(form.elements.include_in_fixture_calendar.checked,false);assert.equal(h.document.getElementById('seManualClubTrial').textContent,'Add Trial game');
+ assert.equal(form.elements.competition,undefined,'Volunteers do not enter a competition');
  const grade=[...form.elements.grade.options].find(o=>o.textContent==='1st Grade');await h.choose('#seFixtureForm [name="grade"]',grade.value);await h.choose('#seFixtureForm [name="format"]','t20');form.elements.opposition.value='Trial visitors';form.elements.date0.value=h.window.eval('demoAddDay(demoUpcomingSaturday(),3)');await h.click('[name="include_in_fixture_calendar"]');await form.onsubmit({preventDefault(){}});await h.settle();
  assert.equal(h.window.eval("demoSelections.fixtures.find(f=>f.details.opposition==='Trial visitors').details.include_in_fixture_calendar"),true);
- h.window.eval("seFixtureEditor({...ensureSelections().data.fixtures.find(f=>f.details.opposition==='Trial visitors'),can_edit:true})");await h.settle();assert.equal(h.document.querySelector('[name="include_in_fixture_calendar"]').checked,true);assert.equal(h.document.getElementById('seFixtureCalendarChoice').hidden,false);
+ h.window.eval("const manualFixture=ensureSelections().data.fixtures.find(f=>f.details.opposition==='Trial visitors'); manualFixture.details.competition='Example district'; manualFixture.can_edit=true; seFixtureEditor(manualFixture)");await h.settle();assert.equal(h.document.querySelector('[name="include_in_fixture_calendar"]').checked,true);assert.equal(h.document.getElementById('seFixtureCalendarChoice').hidden,false);
+ const edit=h.document.getElementById('seFixtureForm');assert.equal(edit.elements.competition,undefined);edit.elements.ground.value='Updated ground';await edit.onsubmit({preventDefault(){}});await h.settle();
+ assert.equal(h.window.eval("demoSelections.fixtures.find(f=>f.details.opposition==='Trial visitors').details.competition"),'Example district','Editing arrangements preserves saved competition metadata');
  assert.deepEqual(h.errors.map(e=>e.message),[]);
 });
 test('fixture errors retry and a late or wrong-account response cannot draw markers',async t=>{

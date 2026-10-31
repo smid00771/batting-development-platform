@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildSeasonStats,compareSelectedGrades,statsOvers} from '../season-stats.js';
+import {buildSeasonStats,compareSelectedGrades,statsOvers,resolveSelectionStatsTeams} from '../season-stats.js';
 import {renderStatsRows,renderGradeComparison} from '../season-stats-panel.js';
 import {createSeasonStatsDemo} from '../season-stats-demo.js';
 
@@ -11,6 +11,48 @@ const card = (id='m1',extra={}) => ({snapshot_id:id,our_team:'us',fetched_at:'20
 const fixture = (id='f1',extra={}) => ({id,grade:'1st Grade',competition:'District',format:'long_form',opposition:'Visitors',days:[{date:'2026-10-10'}],match_id:'m1',...extra});
 const context = (cards=[card()],extra={}) => ({season:{start:'2026-07-01',end:'2027-06-30',label:'2026/27',revision:0},today:'2026-10-17',cards,fixtures:[],identities:[{source_id:'p1',roster_id:'r1',name:'Alex'},{source_id:'p2',roster_id:'r2',name:'Jamie'}],...extra});
 const player = (summary,id='r1') => summary.rows.find(p=>p.roster_id===id);
+
+test('linked PlayHQ rounds with an omitted competition form one grade and recalculate every innings',()=>{
+ const source={grade_group_id:'club-first',playhq_season_id:'season-a',playhq_grade_id:'source-first'};
+ const cards=[50,25,62,52].map((runs,i)=>{const c=card('m'+i,{competition:''});c.scorecard.innings[0].batters[0].runs=runs;return c;});
+ const fixtures=cards.map((c,i)=>fixture('f'+i,{...source,match_id:c.scorecard.match_id,competition:i<3?'District':''}));
+ fixtures.push(fixture('future',{...source,competition:'',format:'t20',match_id:null,days:[{date:'2026-11-21'}]}));
+ const c=context(cards,{fixtures}),before=JSON.stringify(c),result=buildSeasonStats(c,{format:'long_form'});
+ assert.equal(result.groups.length,1);assert.equal(result.groups[0].competition,'District');assert.equal(result.included,4);
+ assert.equal(player(result).runs,189);assert.equal(player(result).average,47.25);assert.equal(player(result).strike_rate,118.125);
+ assert.equal(player(result).innings,4);assert.equal(player(result).history.length,4);assert.equal(JSON.stringify(c),before);
+ const projected=resolveSelectionStatsTeams(fixtures,c.season);assert.equal(projected.at(-1).competition,'District');
+ assert.equal(projected.at(-1).format,'t20','Source metadata can span formats, figures cannot');
+ assert.equal(buildSeasonStats(c,{format:'t20'}).included,0);
+});
+
+test('manual fixtures resolve by saved grade identity, never the shared grade name',()=>{
+ const c=context([card('m1'),card('m2',{competition:''})],{fixtures:[fixture('f1',{grade_group_id:'club-first'}),fixture('f2',{grade_group_id:'club-first',competition:'',match_id:'m2'})]});
+ assert.equal(buildSeasonStats(c).groups.length,1);assert.equal(player(buildSeasonStats(c)).innings,2);
+ c.fixtures[1].grade_group_id='other-first';assert.equal(buildSeasonStats(c).groups.length,2);
+});
+
+test('source seasons, grades and conflicting competition labels cannot be silently merged',()=>{
+ const c=context(),known=fixture('known',{grade_group_id:'club-first',playhq_season_id:'season-a',playhq_grade_id:'source-first'});
+ const blank={...known,id:'blank',competition:''};
+ for (const change of [{playhq_grade_id:'another-source'},{playhq_season_id:'another-season'}]) {
+  const result=resolveSelectionStatsTeams([{...blank,...change}],c.season,[known]);assert.equal(result[0].competition,'');
+ }
+ const conflict={...known,id:'conflict',competition:'Other district'};
+ assert.equal(resolveSelectionStatsTeams([blank],c.season,[known,conflict])[0].competition,'');
+ assert.equal(resolveSelectionStatsTeams([{...blank,playhq_grade_id:null,playhq_season_id:null}],c.season,[known,{...conflict,playhq_grade_id:'other'}])[0].competition,'');
+ assert.equal(resolveSelectionStatsTeams([blank],c.season,[{...known,days:[{date:'2025-10-10'}]}])[0].competition,'');
+ assert.equal(resolveSelectionStatsTeams([blank],c.season,[{...known,cancelled:true}])[0].competition,'');
+});
+
+test('comparison drafts reuse the scoped source link without replacing published lineups',()=>{
+ const known=fixture('known',{grade_group_id:'club-first',playhq_season_id:'season-a',playhq_grade_id:'source-first'});
+ const source={...known,id:'target',competition:'',format:'t20'};
+ const target={...source,playhq_season_id:undefined,playhq_grade_id:undefined,slots:[{d1:'draft'}],published:{details:{...source},slots:[{d1:'published'}]}};
+ const before=JSON.stringify(target),result=resolveSelectionStatsTeams([target],context().season,[known,source,target])[0];
+ assert.equal(result.competition,'District');assert.equal(result.published.details.competition,'District');
+ assert.equal(result.slots[0].d1,'draft');assert.equal(result.published.slots[0].d1,'published');assert.equal(JSON.stringify(target),before);
+});
 
 test('withheld PlayHQ details are distinguished from repeated or malformed player IDs',()=>{
  const c=card();c.scorecard.provider='playhq_au';

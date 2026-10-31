@@ -3,7 +3,7 @@ do $test$
 declare
  c uuid:=gen_random_uuid();adm uuid:=gen_random_uuid();coach uuid:=gen_random_uuid();viewer uuid:=gen_random_uuid();ordinary uuid:=gen_random_uuid();outsider uuid:=gen_random_uuid();u uuid;
  g1 uuid:=gen_random_uuid();g2 uuid:=gen_random_uuid();sg1 uuid:=gen_random_uuid();sg2 uuid:=gen_random_uuid();p1 uuid:=gen_random_uuid();p2 uuid:=gen_random_uuid();
- f1 uuid:=gen_random_uuid();f2 uuid:=gen_random_uuid();fid uuid;gid uuid;source_id uuid;mid uuid;tid uuid;card jsonb;res jsonb;ctx jsonb;before_cards jsonb;denied boolean;
+ f1 uuid:=gen_random_uuid();f2 uuid:=gen_random_uuid();source_season uuid:=gen_random_uuid();source_grade uuid:=gen_random_uuid();fid uuid;gid uuid;source_id uuid;mid uuid;tid uuid;card jsonb;res jsonb;ctx jsonb;before_cards jsonb;denied boolean;
  played date:=current_date-3;i integer;
 begin
  begin
@@ -29,6 +29,8 @@ begin
     'innings',jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'team_id',tid,'number',1,'complete',true,'batters',jsonb_build_array(jsonb_build_object('player_id',source_id,'name','Synthetic Batter','runs',30+i,'not_out',false,'importable',true)),'bowlers','[]'::jsonb)));
    insert into public.match_review_scorecards(club_id,source_match_id,fetched_by,scorecard) values(c,mid,adm,card);
    insert into club_selection_private.fixture_result_sources(club_id,fixture_id,source_match_id,team_id,updated_by) values(c,fid,mid,tid,adm);
+   insert into club_selection_private.playhq_links(club_id,fixture_id,match_id,season_id,grade_id,team_id,source_fixture)
+    values(c,fid,gen_random_uuid(),source_season,source_grade,gen_random_uuid(),'{}');
   end loop;
   assert not club_selection_private.enabled(c),'Club starts with Batting only';
   set local role authenticated;
@@ -44,6 +46,8 @@ begin
   reset role;
   assert jsonb_array_length(res->'cards')=1 and res#>>'{cards,0,fixture_id}'=f1::text,'Batting coach sees only their team scores';
   assert jsonb_array_length(res->'fixtures')=1 and res#>>'{fixtures,0,id}'=f1::text and res->>'can_set_season'='false','Coaching scope also filters fixture metadata and season edits';
+  assert res#>>'{fixtures,0,grade_group_id}'=g1::text and res#>>'{fixtures,0,playhq_grade_id}'=source_grade::text
+   and res#>>'{fixtures,0,playhq_season_id}'=source_season::text,'Authorized fixture retains stable club and PlayHQ identity';
   foreach u in array array[ordinary,outsider] loop
    perform set_config('request.jwt.claim.sub',u::text,true);denied:=false;
    set local role authenticated;
