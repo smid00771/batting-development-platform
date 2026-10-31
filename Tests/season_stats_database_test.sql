@@ -14,7 +14,7 @@ begin
   insert into public.club_memberships(club_id,user_id,role,permission_role) values(c,adm,'admin','admin'),(c,sel,'player','none'),(c,cap,'player','captain'),(c,ordinary,'player','none');
   insert into club_selection_private.access(club_id,mode,status,head_selector_id) values(c,'standalone','active',sel);
   perform set_config('request.jwt.claim.sub',adm::text,true);
-  res:=public.club_season_stats_api(c);
+  res:=public.club_season_stats_api(c,'context','{"on_demand":true}');
   yr:=extract(year from today)::int-case when extract(month from today)<7 then 1 else 0 end;
   season_start:=make_date(yr,7,1);season_end:=make_date(yr+1,6,30);played:=season_start+7;
   assert res#>>'{season,start}'=season_start::text and res#>>'{season,end}'=season_end::text,'Australian default is July-June';
@@ -33,7 +33,7 @@ begin
    'innings',jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'team_id',our,'number',1,'complete',true,'batters',jsonb_build_array(jsonb_build_object('player_id',source1,'runs',41,'not_out',false,'importable',true)),'bowlers','[]'::jsonb)));
   insert into public.match_review_scorecards(id,club_id,source_match_id,fetched_by,scorecard,created_at) values(sid,c,mid,adm,card,now()-interval '1 minute');
   insert into club_selection_private.fixture_result_sources(club_id,fixture_id,source_match_id,team_id,updated_by) values(c,f,mid,our,adm);
-  res:=public.club_season_stats_api(c);
+  res:=public.club_season_stats_api(c,'context','{"on_demand":true}');
   assert jsonb_array_length(res->'cards')=1 and res#>>'{cards,0,fixture_id}'=f::text,'Uses shared source association';
   assert res#>>'{cards,0,our_team}'=our::text,'Shared team choice is preserved';
   assert jsonb_array_length(res->'identities')=3,'Only scorecard identities returned';
@@ -42,29 +42,29 @@ begin
   assert res::text not like '%do-not-return%' and res::text not like '%private arrangements%','No contact or team arrangements in stats payload';
   card:=jsonb_set(card,'{innings,0,batters,0,runs}','73');
   insert into public.match_review_scorecards(id,club_id,source_match_id,fetched_by,scorecard,created_at) values(new_sid,c,mid,adm,card,now());
-  res:=public.club_season_stats_api(c);
+  res:=public.club_season_stats_api(c,'context','{"on_demand":true}');
   assert jsonb_array_length(res->'cards')=1 and res#>>'{cards,0,scorecard,innings,0,batters,0,runs}'='73','Newest correction replaces original snapshot';
   insert into club_selection_private.scorecard_roster_links(club_id,source_player_id,roster_id,confirmed_by) values(c,source2,r3,adm);
-  res:=public.club_season_stats_api(c);
+  res:=public.club_season_stats_api(c,'context','{"on_demand":true}');
   assert exists(select 1 from jsonb_array_elements(res->'identities') x where x->>'source_id'=source2::text and x->>'conflict'='true'),'Conflicting linked identities are explicit';
 
   foreach u in array array[sel,cap] loop
    perform set_config('request.jwt.claim.sub',u::text,true);
-   res:=public.club_season_stats_api(c);assert res->>'can_set_season'='false' and jsonb_array_length(res->'cards')=1,'Selectors and captains can read';
+   res:=public.club_season_stats_api(c,'context','{"on_demand":true}');assert res->>'can_set_season'='false' and jsonb_array_length(res->'cards')=1,'Selectors and captains can read';
    denied:=false;begin perform public.club_season_stats_api(c,'set_season',jsonb_build_object('start',season_start,'end',season_end,'expected_revision',0));exception when raise_exception then denied:=true;end;assert denied,'Only admin can set season';
   end loop;
   perform set_config('request.jwt.claim.sub',ordinary::text,true);
-  denied:=false;begin perform public.club_season_stats_api(c);exception when raise_exception then denied:=true;end;assert denied,'Ordinary player denied';
+  denied:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then denied:=true;end;assert denied,'Ordinary player denied';
   perform set_config('request.jwt.claim.sub',adm::text,true);
-  denied:=false;begin perform public.club_season_stats_api(other_c);exception when raise_exception then denied:=true;end;assert denied,'Outsider club denied';
+  denied:=false;begin perform public.club_season_stats_api(other_c,'context','{"on_demand":true}');exception when raise_exception then denied:=true;end;assert denied,'Outsider club denied';
   perform set_config('request.jwt.claim.sub','',true);
-  denied:=false;begin perform public.club_season_stats_api(c);exception when raise_exception then denied:=true;end;assert denied,'Unauthenticated denied';
+  denied:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then denied:=true;end;assert denied,'Unauthenticated denied';
   perform set_config('request.jwt.claim.sub',adm::text,true);
   update club_selection_private.access set status='disabled' where club_id=c;
-  denied:=false;begin perform public.club_season_stats_api(c);exception when raise_exception then denied:=true;end;assert denied,'Disabled Teams denied';
+  denied:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then denied:=true;end;assert denied,'Disabled Teams denied';
   update club_selection_private.access set status='active' where club_id=c;
   update public.clubs set archived_at=now() where id=c;
-  denied:=false;begin perform public.club_season_stats_api(c);exception when raise_exception then denied:=true;end;assert denied,'Archived club denied';
+  denied:=false;begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then denied:=true;end;assert denied,'Archived club denied';
   update public.clubs set archived_at=null where id=c;
 
   res:=public.club_season_stats_api(c,'set_season',jsonb_build_object('start',season_start,'end',season_end,'expected_revision',0));
@@ -74,10 +74,10 @@ begin
   denied:=false;begin perform public.club_season_stats_api(c,'set_season',jsonb_build_object('start',season_start,'end',season_start+367,'expected_revision',1));exception when raise_exception then denied:=true;end;assert denied,'Unbounded season rejected';
   -- Stored prior-year dates advance to the latest begun season, not the next one.
   update club_selection_private.season_stats_settings set starts=season_start-interval '1 year',ends=season_end-interval '1 year' where club_id=c;
-  res:=public.club_season_stats_api(c);assert res#>>'{season,start}'=season_start::text,'Season repeats without yearly admin entry';
+  res:=public.club_season_stats_api(c,'context','{"on_demand":true}');assert res#>>'{season,start}'=season_start::text,'Season repeats without yearly admin entry';
   delete from club_selection_private.season_stats_settings where club_id=c;
   update club_selection_private.access set timezone='Europe/London' where club_id=c;
-  res:=public.club_season_stats_api(c);assert res#>>'{season,start}'=extract(year from now() at time zone 'Europe/London')::text||'-01-01','Northern default uses calendar year';
+  res:=public.club_season_stats_api(c,'context','{"on_demand":true}');assert res#>>'{season,start}'=extract(year from now() at time zone 'Europe/London')::text||'-01-01','Northern default uses calendar year';
   assert not has_function_privilege('anon','public.club_season_stats_api(uuid,text,jsonb)','execute'),'Anonymous RPC execute revoked';
   assert not has_table_privilege('authenticated','club_selection_private.season_stats_settings','select'),'Settings table not directly readable';
   assert has_function_privilege('authenticated','public.club_season_stats_api(uuid,text,jsonb)','execute'),'Authenticated RPC available';

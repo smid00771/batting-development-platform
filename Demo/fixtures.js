@@ -2769,7 +2769,7 @@ supabase.rpc=async function(name,args){
  }catch(error){return {data:null,error:{code:'P0001',message:error.message}};}
 };
 
-const demoSeasonStats=createSeasonStatsDemo(()=>demoSelections,()=>demoScorecards,()=>demoScorePlayerLinks,()=>({...membership,user_id:session?.user.id}),()=>club.id,()=>new Date().toLocaleDateString('en-CA',{timeZone:demoSelections?.access.timezone||'Australia/Sydney'}));
+const demoSeasonStats=createSeasonStatsDemo(()=>demoSelections,()=>demoScorecards,()=>demoScorePlayerLinks,()=>({...membership,user_id:session?.user.id}),()=>club.id,()=>new Date().toLocaleDateString('en-CA',{timeZone:demoSelections?.access.timezone||'Australia/Sydney'}),()=>!selectionsStandalone());
 
 const demoBeforeSeasonStatsRpc=window.__fixtureDb.rpc;
 

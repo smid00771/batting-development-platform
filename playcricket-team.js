@@ -39,7 +39,14 @@ export function createScorecardTeams(h){
   const team=s.context.card.teams.find(t=>t.id===s.teamId),fixture=s.context.fixtures.find(f=>f.id===s.fixtureId);
   s.matches=scorecardPlayerMatches(visiblePlayers(team),s.context.roster,s.context.links);s.candidates=scorecardPlayerCandidates(visiblePlayers(team),s.context.roster,s.context.links,s.matches);s.rejected={};s.days={};s.plan=null;s.deferred=false;s.error=false;s.saved=false;
   // A suggested name is not a confirmed match-scoped identity.
-  if(s.context.card.provider==='playhq_au')for(const p of visiblePlayers(team)){const r=s.context.roster.find(r=>r.id===s.matches[p.player_id]);if(r&&!(s.context.links||[]).some(l=>l.source_id===p.player_id&&l.roster_id===r.id))s.candidates[p.player_id]=[r];}
+  if(s.context.card.provider==='playhq_au')for(const p of visiblePlayers(team)){
+   const r=s.context.roster.find(r=>r.id===s.matches[p.player_id]);
+   if(r&&(r.active===false||r.imported_stub)){
+    // Keep active short-name suggestions; a retired exact name cannot replace them.
+    s.candidates[p.player_id]=(s.candidates[p.player_id]||[]).filter(candidate=>candidate.active!==false&&!candidate.imported_stub);
+    s.matches[p.player_id]='';
+   }else if(r&&!(s.context.links||[]).some(l=>l.source_id===p.player_id&&l.roster_id===r.id))s.candidates[p.player_id]=[r];
+  }
   for(const [id,candidates] of Object.entries(s.candidates))if(candidates.length)s.matches[id]='';
   for(const p of visiblePlayers(team)){const id=s.matches[p.player_id];s.days[p.player_id]=fixture?.brackets?fixture.days.filter((_,i)=>fixture.slots.some(slot=>slot['d'+(i+1)]===id)).map(d=>d.date):(fixture?.days||[]).map(d=>d.date);}
  }

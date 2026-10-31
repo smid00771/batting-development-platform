@@ -124,7 +124,7 @@ test('player and competition text is escaped and scorecard links cannot run scri
 test('demo seeds shared fictional data once, reuses corrections and enforces role/date actions',()=>{
  const state={access:{status:'pilot',head_selector_id:'u'},selectors:['u'],roster:[{id:'r1',name:'Fictional Alex'}],fixtures:[{id:'f',details:{grade:'First',competition:'Demo',format:'long_form',days:[{date:'2026-10-17'}]},slots:[{d1:'r1'}]}]},cards={};let member={user_id:'u',permission_role:'admin'};
  const rpc=createSeasonStatsDemo(()=>state,()=>cards,()=>[],()=>member,()=> 'club',()=> '2026-10-17');
- const args={p_club_id:'club',p_action:'context'};let first=rpc(args);assert.equal(first.cards.length,3);assert.equal(rpc(args).cards.length,3);assert.equal(buildSeasonStats(first).included,3);
+ const args={p_club_id:'club',p_action:'context',p_data:{on_demand:true}};let first=rpc(args);assert.equal(first.cards.length,3);assert.equal(rpc(args).cards.length,3);assert.equal(buildSeasonStats(first).included,3);
  const key=Object.keys(cards)[0],changed=clone(cards[key]);changed.innings[0].batters[0].runs=100;cards['corrected']=changed;
  assert.equal(buildSeasonStats(rpc(args)).included,3);assert.equal(buildSeasonStats(rpc(args)).rows[0].hundreds,1);
  member={user_id:'nobody',permission_role:'none'};assert.throws(()=>rpc(args),/access/);member={user_id:'u',permission_role:'none'};
