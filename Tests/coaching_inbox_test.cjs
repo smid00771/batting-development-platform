@@ -45,6 +45,27 @@ test('routine notes collapse, but a conflicting player reflection still brings i
  assert.equal(h.document.querySelector('#pastCoachingNotes').open,false);clean(h);
 });
 
+test('automatic observation history cannot replace a real comment and repeated score details stay collapsed',async t=>{
+ const h=await openDemo({product:'both',role:'coach'});t.after(h.close);
+ const id=h.window.eval(`(()=>{const a=fixtureRows.feedback['player-alex'].coaching_actions.find(a=>a.match_feedback_id);a.reviews=[
+  {revision:4,outcome:'continue',note:'Observation edited. Previous focus: Match observation. Previous review date: none.',reviewed_by_name:'Example Coach',reviewed_at:'2026-10-31'},
+  {revision:3,outcome:'continue',note:'Good balance. What scoring option were you looking for?',reviewed_by_name:'Example Coach',reviewed_at:'2026-10-31'},
+  {revision:2,outcome:'continue',note:'Keep your head still.',reviewed_by_name:'Example Coach',reviewed_at:'2026-10-30'},
+  {revision:1,outcome:'continue',note:'Observation recorded. No discussion or completion has been assumed.',reviewed_by_name:'Example Coach',reviewed_at:'2026-10-29'}
+ ];return a.id;})()`);
+ await openAlex(h);
+ const card=h.document.querySelector('[data-coaching-action-card="'+id+'"]'),history=card.querySelector('[data-conversation-history]');
+ const latest=[...card.children].find(e=>e.classList.contains('conversation-context'));
+ assert.match(latest.textContent,/Good balance/);assert.doesNotMatch(latest.textContent,/Observation edited/);
+ assert.equal(card.textContent.split('Good balance.').length-1,1,'Latest comment is not repeated in history');
+ assert.match(history.textContent,/Keep your head still/);
+ const audit=history.querySelector('[data-conversation-audit]');assert.equal(audit.open,false);assert.match(audit.textContent,/Observation recorded/);assert.match(audit.textContent,/Previous focus/);
+ const reference=history.querySelector('.conversation-reference');assert.equal(reference.open,false);assert.ok(reference.querySelector('.development-match-card'));
+ assert.equal(history.querySelectorAll(':scope > .development-match-card').length,0);
+ assert.equal(h.window.eval("coachingReviewIsSystemEntry({revision:5,outcome:'completed',note:'Discussed and agreed.'})"),false);
+ clean(h);
+});
+
 test('an update can complete the conversation in one revision-checked save and removes it from follow-up',async t=>{
  const h=await openDemo({product:'both',role:'coach'},{traceRpc:true});t.after(h.close);await openAlex(h);
  const button=h.document.querySelector('#sharedCoachingActions>article [data-review-coaching-action]'),id=button.dataset.reviewCoachingAction;

@@ -37,6 +37,49 @@ test('stats links use confirmed roster IDs and do not toggle match history',asyn
  const other=await harness(unlinked,{teams:f.teams,roster:f.roster},{canOpenPlayer:()=>true,openPlayer:()=>assert.fail('Unconfirmed source identity')});
  assert.equal(other.host.querySelector('[data-stats-rows] [data-stats-open-player]'),null);
 });
+test('batting leads with descending average and visible SR, keeping missing and unbeaten figures honest',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ const cards=f.context.cards.filter(c=>c.fixture_id.startsWith('match-1-'));
+ cards.forEach((card,index)=>{
+  const bat=card.scorecard.innings[0].batters;
+  Object.assign(bat[0],{runs:100,status:index?'did_not_bat':'played',balls:80});
+  Object.assign(bat[1],{runs:80});
+  bat[2].not_out=true;
+  bat[3].runs=0;
+  bat[4].balls=null;
+  if(index===0)bat[5].importable=false;
+ });
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster});
+ const rows=()=>[...h.host.querySelectorAll('[data-stats-player]')];
+ const value=(row,key)=>row.querySelector(`summary [data-stat="${key}"] strong`).textContent;
+ const named=name=>rows().find(row=>row.querySelector('.ss-name').textContent.startsWith(name));
+ assert.equal(rows()[0],named('Alex Rowan'),'One innings at 100 ranks above 320 runs at an average of 80');
+ assert.equal(rows()[1],named('Jamie Quinn'));
+ assert.equal(value(rows()[0],'average'),'100.00');assert.equal(value(rows()[0],'strike_rate'),'125.00');
+ assert.equal(value(rows()[0],'innings'),'1');assert.equal(value(rows()[0],'not_outs'),'0');
+ assert.equal(value(named('Morgan Lee'),'average'),'—');assert.match(named('Morgan Lee').textContent,/No dismissals yet/);
+ assert.equal(value(named('Riley Hart'),'strike_rate'),'—');
+ assert.equal(value(named('Taylor Blake'),'average'),'0.00');assert.equal(value(named('Taylor Blake'),'strike_rate'),'0.00');
+ assert.equal(value(named('Casey Reid'),'average'),'—');assert.equal(value(named('Casey Reid'),'strike_rate'),'—');
+ const firstMissing=rows().findIndex(row=>value(row,'average')==='—');
+ assert.ok(rows().slice(firstMissing).every(row=>value(row,'average')==='—'));
+ assert.equal(rows()[0].querySelector('summary [data-evidence-open]'),null);
+ assert.ok(rows()[0].querySelector('.ss-detail [data-evidence-open]'),'Full form labels remain in the expanded detail');
+ h.click('[data-stats-refresh]');await tick();assert.equal(rows()[0],named('Alex Rowan'));
+ assert.equal(h.calls.length,2);
+});
+test('player search stays available for small and empty results and preserves opened history',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster});
+ const first=h.host.querySelector('.ss-row'),name=first.querySelector('.ss-name').textContent.split('1st Grade')[0].split('2nd Grade')[0];
+ first.open=true;h.input('[data-stats-search]',name);
+ assert.equal(h.host.querySelector('.ss-row').open,true);assert.equal(h.calls.length,1);
+ h.input('[data-stats-search]','zzzz-no-player');assert.match(h.host.querySelector('[data-stats-rows]').textContent,/No matching players/);
+ assert.ok(h.host.querySelector('[data-stats-search]'));
+ h.input('[data-stats-search]','');assert.ok(h.host.querySelectorAll('.ss-row').length>1);
+ h.click('[data-stats-mode=bowling]');assert.ok(h.host.querySelector('summary [data-stat=bowling_average]'));assert.equal(h.calls.length,1);
+ const empty=await harness();assert.ok(empty.host.querySelector('[data-stats-search]'));
+});
 test('comparison toggles batting and bowling without losing teams, date, focus or navigation state',async()=>{
  const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
  const h=await harness(f.context,{teams:f.teams,roster:f.roster});h.click('[data-stats-compare]');

@@ -230,7 +230,6 @@
 #app .ss-modes {gap:4px}
 #app .ss-modes [aria-pressed="true"] {background:var(--club-soft);color:var(--ink);border-color:var(--navy)}
 #app .ss-row {border-color:var(--line)}
-#app .ss-row summary {padding:8px 2px;min-height:48px}
 #app .ss-compare-row {gap:10px;padding:8px 0}
 #app .ss-values strong {font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}
 #app .ss-compare-cell span {font-variant-numeric:tabular-nums}

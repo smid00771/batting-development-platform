@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.319';
+const APP_UI_VERSION='0.8.62.321';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -9819,6 +9819,9 @@ function conversationDetailsStyles(){
     #sharedCoachingActions .conversation-date-controls label{display:flex;gap:8px;align-items:center;min-height:44px}
     #sharedCoachingActions .conversation-date-controls input{width:18px;height:18px;margin:0}
     #sharedCoachingActions [data-coaching-review-status]:empty{display:none}
+    #sharedCoachingActions .conversation-history-tools{margin:4px 0;gap:6px}
+    #sharedCoachingActions .conversation-reference>summary,#sharedCoachingActions [data-conversation-audit]>summary{min-height:44px;align-content:center;cursor:pointer;font-size:13px;color:var(--muted)}
+    #sharedCoachingActions .conversation-review-note{white-space:pre-wrap;overflow-wrap:anywhere}
     #sharedCoachingActions.conversation-details{padding:0;border:0;background:transparent;box-shadow:none}
     #sharedCoachingActions.conversation-details>article{background:#fff;margin-top:0!important;margin-bottom:12px;padding:16px;border:1px solid #dce1ed;border-radius:12px;scroll-margin-top:14px}
     .conversation-player-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0 12px}
@@ -9830,6 +9833,17 @@ function conversationDetailsStyles(){
     #staffInningsHistory .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
     @media(max-width:600px){.conversation-player-header .conversation-player-links{width:100%;padding-left:2px}#sharedCoachingActions.conversation-details>article{padding:14px}#sharedCoachingActions .btn{min-height:44px}#sharedCoachingActions .conversation-controls .btn{padding:10px 12px;font-size:13px}.conversation-player-header .btn{min-height:44px}}
   </style>`;
+}
+
+function coachingReviewIsSystemEntry(review){
+  const note=String(review?.note||'').trim();
+  if(review?.outcome!=='continue')return false;
+  return !note&&!outsidePlanReviewContext(review)
+    || Number(review.revision)===1&&note==='Observation recorded. No discussion or completion has been assumed.'
+    || /^Observation edited\. Previous focus: [\s\S]*\. Previous review date: [\s\S]*\.?$/.test(note);
+}
+function renderCoachingReviewEntry(review){
+  return `<p><strong>${Number(review.revision)===1?'Recorded':review.outcome==='continue'?'Update':review.outcome==='completed'?'Discussed / Actioned':'Closed'} · ${esc(formatDateShort(review.reviewed_at))}</strong>${review.note?`<br><span class="conversation-review-note">${esc(review.note)}</span>`:''}<br><small>${esc(review.reviewed_by_name||'Club member')}${review.next_review_on?` · Review ${esc(formatDateShort(review.next_review_on))}`:''}</small></p>${outsidePlanReviewContext(review)?`<details style="margin:8px 0"><summary>View scoring context for this update</summary>${renderOutsidePlanReview(review,{snapshot:true})}</details>`:''}`;
 }
 
 function renderCoachingActions(feedback,{playerMode=true,includeObservations=false,staffCanEdit=false,signals=[],compactMatchSources=false}={}){
@@ -9848,7 +9862,9 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
     const hiddenPlan=playerMode&&match&&!match.player_reflection&&note?.plan_related!==false&&!(note?.batting_to_plan==='no_plan'&&note?.reflection_required===false);
     const isTask=!!(note?.next_training_focus||training?.next_training_focus)||(!a.match_feedback_id&&!a.training_observation_id);
     const focusAccess=a.can_access_focus===true||a.player_id===myPlayer?.id||currentTab==='players'&&(playersWorkspaceData?.players||[]).some(p=>p.id===a.player_id);
-    const latestUpdate=(a.reviews||[]).filter(r=>Number(r.revision)>1&&r.note).sort((a,b)=>Number(b.revision)-Number(a.revision))[0];
+    const reviews=a.reviews||[],audit=reviews.filter(coachingReviewIsSystemEntry);
+    const updates=reviews.filter(r=>!coachingReviewIsSystemEntry(r));
+    const latestUpdate=updates.filter(r=>Number(r.revision)>1&&r.note).sort((a,b)=>Number(b.revision)-Number(a.revision))[0];
     return `<article class="training-observation-card" data-coaching-action-card="${esc(a.id)}" data-coaching-note-updated-at="${esc(a.updated_at||'')}" style="margin-top:12px">
       <div class="section-label">${a.status==='open'?(due?'Review due':a.follow_up_requested===false&&!reasons.length?'Saved note':'To discuss'):a.status==='completed'?'Discussed / Actioned':'Closed'}${a.review_on?` · Review ${esc(formatDateShort(a.review_on))}`:''}</div>
       ${conversationRequestDetails(a)}
@@ -9865,11 +9881,12 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
       </div>
       <div data-coaching-review-slot="${esc(a.id)}"></div>
       <details data-conversation-history style="margin-top:10px"><summary>Details and history</summary>
-        <div class="btnrow">${compactSource&&match&&staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`:''}${compactSource&&training&&staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit my observation</button>`:''}${hiddenPlan?`<button type="button" class="btn ghost" data-staff-innings-source="${esc(match.id)}">Add my reflection</button>`:''}${focusAccess?`<button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button>`:''}</div>
+        <div class="btnrow conversation-history-tools">${compactSource&&match&&staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`:''}${compactSource&&training&&staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit my observation</button>`:''}${hiddenPlan?`<button type="button" class="btn ghost" data-staff-innings-source="${esc(match.id)}">Add my reflection</button>`:''}${focusAccess?`<button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button>`:''}</div>
         ${focusAccess?`<div id="conversationFocus-${esc(a.id)}"></div>`:''}
-        ${compactSource&&match?renderDevelopmentMatchCard({...match,coach_feedback:[]},{playerMode,showReflectionAction:false}):''}
+        ${compactSource&&match?`<details class="conversation-reference"><summary>Scorecard & innings details</summary>${renderDevelopmentMatchCard({...match,coach_feedback:[]},{playerMode,showReflectionAction:false})}</details>`:''}
         ${reasons.map(r=>`<p>${esc(r.summary)} ${esc(r.suggestion||'')}</p>`).join('')}
-        ${(a.reviews||[]).map(r=>`<p><strong>${Number(r.revision)===1?'Recorded':r.outcome==='continue'?'Update':r.outcome==='completed'?'Discussed / Actioned':'Closed'} · ${esc(formatDateShort(r.reviewed_at))}</strong>${r.note?`<br>${esc(r.note)}`:''}<br><small>${esc(r.reviewed_by_name||'Club member')}${r.next_review_on?` · Review ${esc(formatDateShort(r.next_review_on))}`:''}</small></p>${outsidePlanReviewContext(r)?`<details style="margin:8px 0"><summary>View scoring context for this update</summary>${renderOutsidePlanReview(r,{snapshot:true})}</details>`:''}`).join('')}
+        ${updates.filter(r=>r!==latestUpdate||outsidePlanReviewContext(r)).map(renderCoachingReviewEntry).join('')}
+        ${audit.length?`<details data-conversation-audit><summary>Change history (${audit.length})</summary>${audit.map(renderCoachingReviewEntry).join('')}</details>`:''}
       </details>
     </article>`;
   };
@@ -20379,7 +20396,7 @@ async function renderSeasonStats(){
  await seasonStatsPanel.mount(document.getElementById('seasonStatsHost'),{scope,clubId:club.id,state:seasonStatsRoute.filters,
   teams:d?.fixtures.map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published}))||null,roster:d?.roster||[],boardDate:selectionState?.key===scope?selectionState.date:null});
 }
-const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.316'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,alert:message=>alert(message),confirm:message=>confirm(message),
+const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.321'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,alert:message=>alert(message),confirm:message=>confirm(message),
  here:s=>currentTab==='season_stats'&&s.scope===selectionsScopeKey()&&canUseSeasonStats(),
  close:closeSeasonStats,navigate:()=>recordAppNavigation(clubNavigationRoute()),
  canOpenPlayer:()=>selectionsEnabled()&&selectionState?.key===selectionsScopeKey()&&seCanSetup(selectionState.data),
