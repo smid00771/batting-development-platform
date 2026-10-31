@@ -19,10 +19,13 @@ test('does not guess across mismatched, incomplete, provisional or ambiguous res
  const changes=[d=>d.matchId='different',d=>d.teamId='unlinked',d=>d.summary.complete=false,d=>d.summary.periods[0].provisional=true,d=>d.summary.periods[1].sequence=1,d=>d.summary.periods[0].teams.push(batting('another-team',10)),d=>d.summary.periods.push({...d.summary.periods[0],sequence:3}),d=>d.summary.periods[1].name='SUPER_OVER',d=>d.format='long_form'];
  for(const change of changes){const d=input();change(d);assert.equal(selectBattingInnings(d).status,'needs_review');}
 });
-test('does not infer a halfway cut, and waits for an unprocessed replay',()=>{
+test('does not infer a halfway cut or reject a replay solely from its post_live label',()=>{
  const innings=selectBattingInnings(input());
- assert.equal(validateBattingVideoWindow({innings,video:{duration:30465,live_status:'post_live'}}).status,'waiting_for_video');
+ assert.equal(validateBattingVideoWindow({innings,video:{duration:30465,live_status:'post_live'}}).status,'needs_timestamps');
  assert.equal(validateBattingVideoWindow({innings,video:{duration:30465,live_status:'was_live'}}).status,'needs_timestamps');
+ const window={periodId:'period-1',source:'coach_confirmed',startSeconds:180,endSeconds:13020};
+ assert.equal(validateBattingVideoWindow({innings,video:{duration:30465,live_status:'post_live'},window}).status,'ready');
+ for(const live_status of ['is_live','is_upcoming'])assert.equal(validateBattingVideoWindow({innings,video:{duration:30465,live_status},window}).status,'waiting_for_video');
 });
 test('requires observed or coach-confirmed boundaries for the right innings',()=>{
  const innings=selectBattingInnings(input()),video={duration:30465,live_status:'was_live'},window={periodId:'period-1',source:'scoreboard',startSeconds:180,endSeconds:13020};

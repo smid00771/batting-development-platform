@@ -24,7 +24,8 @@ export function selectBattingInnings({summary,teamId,matchId,format}){
 
 export function validateBattingVideoWindow({innings,video,window}){
  if(innings?.status!=='selected')return review('innings','Select the batting innings before analysing footage.');
- if(video?.live_status==='post_live')return {status:'waiting_for_video',code:'processing',message:'The finished livestream is still being processed.'};
+ // An extractor's post_live label does not establish playback availability.
+ // Validate the innings window here; the provider must separately retrieve footage.
  if(video?.live_status==='is_live'||video?.live_status==='is_upcoming')return {status:'waiting_for_video',code:'not_finished',message:'Wait for the finished recording.'};
  if(!Number.isFinite(video?.duration)||video.duration<=0)return review('video','Check the recording duration.');
  if(!window)return {status:'needs_timestamps',code:'window',message:'Locate the batting innings in the video. Do not divide the recording in half.'};
