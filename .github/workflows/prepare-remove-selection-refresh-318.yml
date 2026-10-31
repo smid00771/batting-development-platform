@@ -1,0 +1,41 @@
+name: Prepare selection menu cleanup 318
+on:
+  push:
+    branches: [codex/remove-selection-refresh-318]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: codex/remove-selection-refresh-318
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply reviewed implementation
+        run: base64 --decode .github/remove-selection-refresh-318.patch.gz.b64 | gzip -d | git apply --binary
+      - name: Verify syntax and demo freshness
+        run: |
+          node --check app.js
+          node --check app-start.js
+          node Scripts/build-demo.mjs --check
+          git diff --check
+      - name: Install verification dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify navigation and remaining menu actions
+        run: node --test --test-force-exit Tests/publication_validation_demo_test.cjs Tests/demo_navigation_integration_test.cjs Tests/shared_season_stats_demo_test.cjs
+      - name: Commit exactly the reviewed tree
+        run: |
+          git add AGENTS.md Demo/build-manifest.json Reviews/2026-10-31-remove-selection-refresh-318.md Reviews/assets/menu-318-desktop.jpg Reviews/assets/menu-318-phone.jpg Tests/dropped_player_actual_lineups_test.cjs Tests/dropped_player_reminders_test.cjs Tests/publication_validation_demo_test.cjs Tests/selection_analysis_on_demand_test.cjs Tests/selection_board_home_test.cjs app-start.js app.html app.js demo.html
+          git rm .github/remove-selection-refresh-318.patch.gz.b64 .github/workflows/prepare-remove-selection-refresh-318.yml
+          git diff --cached --check
+          test "$(git write-tree)" = "609813cbb3c94b10211cef5f10d85db65abc8151"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Remove redundant Selection Board reload action (.318)'
+          git push origin HEAD:codex/remove-selection-refresh-318
