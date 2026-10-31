@@ -1,0 +1,44 @@
+name: Prepare automatic batting scores 317
+on:
+  push:
+    branches: [codex/automatic-batting-scores-317]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: codex/automatic-batting-scores-317
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply reviewed implementation
+        run: base64 --decode .github/automatic-batting-scores-317.patch.gz.b64 | gzip -d | git apply --binary
+      - name: Verify syntax and demo freshness
+        run: |
+          node --check app.js
+          node --check app-start.js
+          node --check Demo/current-fixtures.js
+          node --check Demo/fixtures.js
+          node Scripts/build-demo.mjs --check
+          cmp Database/season_stats_rpc_permission.sql supabase/migrations/20261031084615_season_stats_rpc_permission.sql
+          git diff --check
+      - name: Install verification dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify automatic scores and shared stats
+        run: node --test --test-force-exit Tests/automatic_batting_scores_demo_test.cjs Tests/observation_fixtures_demo_test.cjs Tests/shared_season_stats_demo_test.cjs Tests/observation_videos_demo_test.cjs Tests/season_stats_ui_test.cjs
+      - name: Commit exactly the reviewed tree
+        run: |
+          git add AGENTS.md Database/automatic_batting_scores.sql Database/season_stats_rpc_permission.sql Demo/build-manifest.json Demo/current-fixtures.js Demo/fixtures.js Reviews/2026-10-31-automatic-batting-scores-317.md Reviews/assets/scores-317-desktop.jpg Reviews/assets/scores-317-more.jpg Reviews/assets/scores-317-phone.jpg Tests/automatic_batting_scores_demo_test.cjs Tests/automatic_batting_scores_live_test.sql Tests/shared_season_stats_live_test.sql app-start.js app.html app.js demo.html supabase/migrations/20261031084321_automatic_batting_scores.sql supabase/migrations/20261031084615_season_stats_rpc_permission.sql supabase/migrations/20261031084904_automatic_batting_review_identity.sql
+          git rm .github/automatic-batting-scores-317.patch.gz.b64 .github/workflows/prepare-automatic-batting-scores-317.yml
+          git diff --cached --check
+          test "$(git write-tree)" = "6bf1815318328239ad5b9616424177614ada40c3"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Sync completed PlayHQ results into Club Batting automatically (.317)'
+          git push origin HEAD:codex/automatic-batting-scores-317
