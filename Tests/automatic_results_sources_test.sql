@@ -46,6 +46,15 @@ begin
  sid:=club_selection_private.playhq_store_scorecard(c,fid,card);again:=club_selection_private.playhq_store_scorecard(c,fid,card);
  assert sid is not null and again=sid and (select count(*)=count_before+1 from public.match_review_scorecards where club_id=c),'Same response does not duplicate stored scores';
  assert (select source_match_id=ns and team_id=ours from club_selection_private.fixture_result_sources where fixture_id=fid),'Fixture uses namespaced shared scorecard';
+ -- The independently verified replay page survives result refreshes, without
+ -- changing the match namespace or introducing player identity mappings.
+ update public.match_review_scorecards set scorecard=scorecard||jsonb_build_object('replay_url','https://play.cricket.com.au/match/'||gen_random_uuid()||'?tab=highlights') where id=sid;
+ assert club_selection_private.playhq_store_scorecard(c,fid,card)=sid,'Replay link alone does not create duplicate scorecards';
+ assert (select scorecard ? 'replay_url' from public.match_review_scorecards where id=sid),'Verified replay retained';
+ update public.match_review_scorecards set scorecard=jsonb_set(scorecard,'{replay_url}','"https://evil.example/clip"') where id=sid;
+ update public.match_review_scorecards set created_at=now()-interval '2 seconds' where id=sid;
+ sid:=club_selection_private.playhq_store_scorecard(c,fid,card);
+ assert not (select scorecard ? 'replay_url' from public.match_review_scorecards where id=sid),'Untrusted replay hosts are not carried forward';
  assert exists(select 1 from jsonb_array_elements(club_selection_private.team_week_cards(c,'2099-12-26','2099-12-31')) x where x->>'snapshot_id'=sid::text and x->>'our_team'=ours::text),'Awards use verified club team even when names differ';
  assert club_selection_private.playhq_store_scorecard(c,fid,jsonb_set(card,'{dates}','["2099-12-28"]')) is null,'Moved dates cannot overwrite linked scores';
  assert (select result_error is not null from club_selection_private.playhq_links where fixture_id=fid),'Mismatch is reviewable';

@@ -56,3 +56,26 @@ test('fielding-only appearances do not create incomplete bowling spells',async()
  first.statistics=[];
  assert.ok(!(await sharedScorecard(b,context)).innings[0].bowlers.some(p=>p.player_id===firstId));
 });
+
+test('both scorecard disciplines follow PlayHQ display order, independently of response order',async()=>{
+ const b=known(),before=structuredClone(b),p=b.data.periods[1];
+ const bat=p.teams.find(t=>t.discipline==='BATTING'),bowl=p.teams.find(t=>t.discipline==='BOWLING');
+ // Reverse two real bowling spells and keep the fielding-only appearance.
+ bowl.appearances=[bowl.appearances[1],bowl.appearances[2],bowl.appearances[0]];
+ const input=structuredClone(b),c=await sharedScorecard(b,context),innings=c.innings[1];
+ const expected=async rows=>Promise.all(rows.map(a=>sourceId('appearance',b.data.id,a.id)));
+ assert.deepEqual(innings.batters.map(a=>a.player_id),await expected([...bat.appearances].sort((a,b)=>a.displayOrder-b.displayOrder)));
+ assert.deepEqual(innings.bowlers.map(a=>a.player_id),await expected([before.data.periods[1].teams.find(t=>t.discipline==='BOWLING').appearances[0],before.data.periods[1].teams.find(t=>t.discipline==='BOWLING').appearances[1]]));
+ const html=renderFixtureScorecard({scorecard:c,our_team:c.our_team_id});
+ const bowling=html.slice(html.indexOf('<caption>Bowling'));
+ const displayed=c.innings.find(i=>i.team_id!==c.our_team_id).bowlers;
+ if(displayed.length>1)assert.ok(bowling.indexOf(displayed[0].name)<bowling.indexOf(displayed[1].name));
+ assert.deepEqual(b,input,'normalising must not mutate the provider response');
+});
+
+test('tied and unavailable positions preserve source order without invented positions',async()=>{
+ const b=known(),bat=b.data.periods[0].teams.find(t=>t.discipline==='BATTING');
+ [undefined,2,2,-1,1].forEach((n,i)=>bat.appearances[i].displayOrder=n);
+ const expected=await Promise.all([4,1,2,0,3].map(i=>sourceId('appearance',b.data.id,bat.appearances[i].id)));
+ assert.deepEqual((await sharedScorecard(b,context)).innings[0].batters.map(a=>a.player_id),expected);
+});

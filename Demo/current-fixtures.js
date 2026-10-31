@@ -83,6 +83,11 @@ function demoSeedCurrent({empty=false}={}){
    const f={...fixtureClone(original),id:'history-'+card.match_id,details:{...fixtureClone(original.details),round:String(round),days,brackets:false},slots:original.slots.map(s=>({d1:s.d1,d2:null}))};
    f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(original.published?.players||demoSelections.roster.filter(p=>f.slots.some(slot=>slot.d1===p.id)))};f.selection_unlocked_until=null;demoSelections.fixtures.push(f);demoSelections.result_sources[f.id]={match_id:card.match_id,team_id:card.teams[0].id};card.teams[0].name=club.name;
    const batting=card.innings[0],bowling=card.innings[1];
+   if(round===3){
+    const replayMatch='00000000-0000-4000-8000-000000000323',replayBatter=batting.batters.find(p=>p.name&&p.status!=='did_not_bat'&&p.not_out===false);
+    card.replay_url=`https://play.cricket.com.au/match/${replayMatch}?tab=highlights`;
+    if(replayBatter)replayBatter.dismissal_video_url=`https://play.cricket.com.au/match/${replayMatch}?tab=scorecard&highlightId=00000000-0000-4000-8000-000000000324`;
+   }
    if(round===3){batting.batters[0].runs=112;batting.batters[0].balls=124;}
    bowling.bowlers.forEach((p,i)=>{p.wickets=(round===3?[5,2,1,1,1]:[3,2,2,2,1])[i]||0;});
    batting.runs=batting.batters.reduce((total,p)=>total+(p.runs||0),12);batting.wickets=8;batting.overs=original.details.format==='limited_overs'?'40.0':'48.0';batting.bowling_available=true;

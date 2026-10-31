@@ -16,5 +16,6 @@ window.EventSource=class{constructor(){demoNetworkError();}};
 if(navigator.sendBeacon)navigator.sendBeacon=()=>false;
 const demoBrowserOpen=window.open?.bind(window);
 window.open=(url,...args)=>{if(!url||url==='about:blank')return demoBrowserOpen?.(url,...args);window.__fixtureError('Demo only: no messages, invitations or external connections are sent.');return null;};
+document.addEventListener('click',event=>{if(event.target.closest?.('a.scorecard-replay')){event.preventDefault();alert('Demo replay: live scorecards open the existing PlayCricket video. CricketPlus sign-in may be required.');}},true);
 window.__fixtureUnsupported=(name,args)=>{window.__fixtureLog('unsupported',name);return {data:null,error:{code:'DEMO_ONLY',message:'This action needs a live club. Nothing has been sent or changed outside this demo.'}};};
 window.__fixtureDb={from:(...args)=>window.__fixtureFrom(...args),rpc:(...args)=>window.__fixtureRpc(...args),functions:{invoke:async(...args)=>window.__fixtureUnsupported(...args)},auth:{signOut:async()=>window.__fixtureUnsupported('signOut')}};

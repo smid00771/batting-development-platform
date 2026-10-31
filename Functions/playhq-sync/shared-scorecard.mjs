@@ -9,6 +9,10 @@ const text=v=>String(v??'').trim().slice(0,200);
 // A bowling team's appearances also include fielding-only records. Keep partial
 // bowling records for review, but do not invent a spell for a catcher or keeper.
 const hasBowling=statistics=>['OVERS','WICKETS','RUNS','MAIDENS','WIDES','NO_BALLS','ECONOMY','HAT_TRICKS'].some(key=>Object.hasOwn(statistics,key));
+// Provider arrays are not scorecard order. Ties and missing positions retain
+// their source order; unknown positions follow the explicitly numbered players.
+const position=a=>Number.isInteger(a.position)&&a.position>=0?a.position:Infinity;
+export const scorecardOrder=players=>[...players].sort((a,b)=>position(a)-position(b));
 export async function sourceId(kind,match,id=match){
  const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`clubbatting:playhq:v1:${kind}:${match}:${id}`)));
  hash[6]=(hash[6]&15)|128;hash[8]=(hash[8]&63)|128;
@@ -41,13 +45,13 @@ export async function sharedScorecard(body,context){
   if(batting.length!==1||bowling.length>1||bowling[0]?.team_id===batting[0].team_id)throw Error('Unsupported innings structure');
   const bat=batting[0],bowl=bowling[0],complete=summary.complete||['ALL_OUT','DECLARED','COMPULSORY_CLOSE','END_OF_INNINGS','END_OF_GAME','END_OF_MATCH'].includes(bat.status);
   const nth=(counts.get(bat.team_id)||0)+1;counts.set(bat.team_id,nth);
-  const batters=[...bat.players].sort((a,b)=>(a.position??99)-(b.position??99)).map(a=>{
+  const batters=scorecardOrder(bat.players).map(a=>{
    const s=a.statistics,dnb=a.status==='DID_NOT_BAT',notOut=['NOT_OUT','RETIRED_NOT_OUT','RETIRED_HURT'].includes(a.status),out=['OUT','RETIRED_OUT'].includes(a.status);
    return {player_id:a.name?ids.get(a.source_appearance_id):null,name:a.name,status:dnb?'did_not_bat':'played',runs:dnb?null:number(s.TOTAL_RUNS),
     not_out:notOut?true:out?false:null,balls:number(s.BALLS_FACED),fours:number(s.FOURS),sixes:number(s.SIXES),dismissal:text(a.status).replaceAll('_',' ').toLowerCase(),
     figures_valid:!!a.name&&(dnb||(notOut||out)&&valid(s.TOTAL_RUNS)),importable:!!a.name&&complete&&(dnb||(notOut||out)&&valid(s.TOTAL_RUNS))};
   });
-  const bowlers=(bowl?.players||[]).filter(a=>hasBowling(a.statistics)).map(a=>({player_id:a.name?ids.get(a.source_appearance_id):null,name:a.name,team_id:teamIds.get(a.team_id),
+  const bowlers=scorecardOrder((bowl?.players||[]).filter(a=>hasBowling(a.statistics))).map(a=>({player_id:a.name?ids.get(a.source_appearance_id):null,name:a.name,team_id:teamIds.get(a.team_id),
    wickets:valid(a.statistics.WICKETS)&&a.statistics.WICKETS<=10?a.statistics.WICKETS:null,runs:number(a.statistics.RUNS),balls:a.balls_bowled,
    overs:a.balls_bowled===null?null:`${Math.floor(a.balls_bowled/6)}.${a.balls_bowled%6}`,maidens:number(a.statistics.MAIDENS),
    figures_valid:!!a.name&&valid(a.statistics.WICKETS)&&a.statistics.WICKETS<=10&&valid(a.statistics.RUNS),importable:!!a.name&&complete&&valid(a.statistics.WICKETS)&&a.statistics.WICKETS<=10&&valid(a.statistics.RUNS)}));

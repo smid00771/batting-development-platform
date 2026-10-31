@@ -370,7 +370,7 @@ function demoSharedCandidates(playerId,values){return (fixtureRows.feedback[play
 function demoSharedMatch(playerId,values,matchId=null,{allowNew=true}={}){
  const all=fixtureRows.feedback[playerId]?.matches||[];
  if(matchId){const found=all.find(m=>m.id===matchId);if(!found)throw Error('That innings is not attached to this player.');return found;}
- const candidates=demoSharedCandidates(playerId,values),exact=candidates.filter(m=>demoInningsOpponent(m.opposition)===demoInningsOpponent(values.opposition));
+ const candidates=demoSharedCandidates(playerId,values).filter(m=>!values.fixture_id||!m.fixture_id||m.fixture_id===values.fixture_id),exact=candidates.filter(m=>demoInningsOpponent(m.opposition)===demoInningsOpponent(values.opposition));
  if(exact.length>1)throw Error('More than one innings matches. Choose the existing innings.');
  if(exact.length)return exact[0];
  if(candidates.length&&allowNew)throw Error('A possible innings already exists. Choose the existing innings or check the match details.');
@@ -2781,3 +2781,16 @@ const demoSocialAwards=createSocialAwardsDemo(()=>demoSelections,()=>demoSharedR
 const demoBeforeAwardsRpc=window.__fixtureDb.rpc;
 
 window.__fixtureDb.rpc=function(name,args){return name==='club_social_awards_api'?demoSocialAwards.rpc(name,args):demoBeforeAwardsRpc.call(this,name,args);};
+
+// Match Review reads the same attributed innings observations as the player workspace.
+const demoBeforeInningsContributionsRpc=supabase.rpc;
+supabase.rpc=async function(name,args){
+ const out=await demoBeforeInningsContributionsRpc(name,args);
+ if(!out.error&&out.data&&['get_team_match_review','get_team_review_session','get_shared_team_review'].includes(name)){
+  for(const p of out.data.players||[]){
+   const data=fixtureRows.feedback[p.player_id],m=data?.matches.find(m=>m.id===p.match_id);
+   p.observations=(m?.coach_feedback||[]).filter(f=>f.author_user_id===session.user.id||myPlayer?.id!==p.player_id||f.plan_related===false||m.player_reflection).map(f=>({...fixtureClone(f),author_name:fixtureRows.user_profiles.find(u=>u.user_id===f.author_user_id)?.display_name||f.author_name||'Coach / Captain',video:data.coaching_actions.find(a=>a.match_feedback_id===f.id)?.video||f.video||null}));
+  }
+ }
+ return out;
+};

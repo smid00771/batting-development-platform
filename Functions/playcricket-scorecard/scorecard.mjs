@@ -2,6 +2,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function matchIdFromUrl(value){let u;try{u=new URL(String(value).trim());}catch{throw Error('Paste the full Australian PlayCricket match link.');}const id=u.pathname.split('/')[2];if(u.protocol!=='https:'||u.hostname!=='play.cricket.com.au'||u.port||u.username||u.password||u.pathname.split('/')[1]!=='match'||!uuid.test(id||''))throw Error('Use an https://play.cricket.com.au/match/… link.');return id.toLowerCase();}
 const text=(v,n=200)=>String(v??'').trim().slice(0,n);
 const integer=v=>Number.isInteger(v)&&v>=0&&v<=9999;
+const ordered=(rows,key)=>[...rows].sort((a,b)=>(Number.isInteger(a[key])&&a[key]>=0?a[key]:Infinity)-(Number.isInteger(b[key])&&b[key]>=0?b[key]:Infinity));
 export function clubLogoUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='res.cloudinary.com'&&!u.port&&!u.username&&!u.password&&u.pathname.startsWith('/playhq/image/upload/')?u.href:null;}catch{return null;}}
 export function scorecardLogos(raw,expectedId){
  if(raw?.id!==expectedId||!Array.isArray(raw.teams)||raw.teams.length!==2)throw Error('PlayCricket could not supply club logos.');
@@ -22,11 +23,12 @@ export function normalizeScorecard(raw,expectedId){
   if(!uuid.test(i.id||'')||seenInnings.has(i.id)||!teams.some(t=>t.id===i.battingTeamId)||!Number.isInteger(i.inningsNumber)||i.inningsNumber<1||i.inningsNumber>10||!Array.isArray(i.batting)||i.batting.length>30)throw Error('The innings identity is incomplete.');seenInnings.add(i.id);
   const closure=text(i.inningsCloseType).toLowerCase().replace(/[^a-z]/g,''),complete=['allout','compulsoryclose','declared','followon','endofgame','endofmatch'].includes(closure)||(matchComplete&&!closure);
   const seen=new Set();let reliableBalls=raw.isBallByBall===true||i.batting.some(b=>Number(b.ballsFaced)>0);
-  const batters=i.batting.map(b=>{
+  const batters=ordered(i.batting,'batOrder').map(b=>{
    const p=people.get(b.participantId),dismissal=text(b.dismissalType),norm=dismissal.toLowerCase().replace(/[^a-z]/g,''),dnb=norm==='didnotbat',notOut=['notout','retirednotout','retiredhurt'].includes(norm),out=['bowled','caught','caughtandbowled','lbw','runout','stumped','hitwicket','retiredout','obstructingthefield','timedout','hittheballtwice','handledtheball'].includes(norm);
    if(!p||p.team!==i.battingTeamId||seen.has(b.participantId)||b.batInstance>1)throw Error('A batter could not be identified uniquely. Use manual entry for this scorecard.');seen.add(b.participantId);
    const supported=dnb||((notOut||out)&&integer(b.runsScored));if(!supported)warnings.push(`${p.name}: check the dismissal or score manually.`);
-   return {player_id:b.participantId,name:p.name,status:dnb?'did_not_bat':'played',runs:dnb?null:integer(b.runsScored)?b.runsScored:null,not_out:notOut,dismissal,dismissal_text:text(b.dismissalText,300),balls:reliableBalls&&integer(b.ballsFaced)?b.ballsFaced:null,fours:integer(b.foursScored)?b.foursScored:null,sixes:integer(b.sixesScored)?b.sixesScored:null,...(matchComplete?{}:{figures_valid:supported}),importable:supported&&complete};
+   const replay=out&&b.highlight?.highLightType==='WICKET'&&uuid.test(b.highlight.id||'')?`https://play.cricket.com.au/match/${expectedId}?tab=scorecard&highlightId=${b.highlight.id}`:null;
+   return {player_id:b.participantId,name:p.name,status:dnb?'did_not_bat':'played',runs:dnb?null:integer(b.runsScored)?b.runsScored:null,not_out:notOut,dismissal,dismissal_text:text(b.dismissalText,300),balls:reliableBalls&&integer(b.ballsFaced)?b.ballsFaced:null,fours:integer(b.foursScored)?b.foursScored:null,sixes:integer(b.sixesScored)?b.sixesScored:null,...(replay?{dismissal_video_url:replay}:{}),...(matchComplete?{}:{figures_valid:supported}),importable:supported&&complete};
   });
   const total=integer(i.runsScored)?i.runsScored:null,extras=integer(i.totalExtras)?i.totalExtras:null,sum=batters.reduce((n,b)=>n+(b.runs||0),0);
   if(complete&&(total===null||extras===null||sum+extras!==total))warnings.push(`${text(i.name)}: PlayCricket’s batting scores and extras differ from its total. Individual figures are imported as shown.`);
@@ -34,7 +36,7 @@ export function normalizeScorecard(raw,expectedId){
   if(!complete)warnings.push(`${text(i.name)}: match in progress.`);
   const bowlingTeam=teams.find(t=>t.id!==i.battingTeamId),seenBowlers=new Set();
   if(i.bowling!=null&&(!Array.isArray(i.bowling)||i.bowling.length>30))throw Error('The bowling scorecard is incomplete.');
-  const bowlers=(i.bowling||[]).map(b=>{
+  const bowlers=ordered(i.bowling||[],'bowlOrder').map(b=>{
    const p=people.get(b.participantId);
    if(!p||p.team!==bowlingTeam.id||seenBowlers.has(b.participantId))throw Error('A bowler could not be identified uniquely. Check the scorecard.');
    seenBowlers.add(b.participantId);

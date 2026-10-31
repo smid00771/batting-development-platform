@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {readFile} from 'node:fs/promises';
+import vm from 'node:vm';
+import {scorecardReplayUrl,renderDismissalReplay} from '../scorecard-replays.js';
+import {renderFixtureScorecard} from '../fixture-results.js';
+const match='00000000-0000-4000-8000-000000000001',highlight='00000000-0000-4000-8000-000000000002',url=`https://play.cricket.com.au/match/${match}?tab=scorecard&highlightId=${highlight}`;
+test('replay links reject unsafe destinations and missing or malformed clip identities',()=>{
+ assert.equal(scorecardReplayUrl(url,true),url);
+ for(const bad of [url.replace('https:','http:'),url.replace('play.cricket.com.au','play.cricket.com.au.evil.example'),url.replace('https://','https://user@'),url.replace(highlight,'invalid'),url+'&redirect=https://evil.example','javascript:alert(1)',url+'#fragment'])assert.equal(scorecardReplayUrl(bad,true),null,bad);
+ assert.equal(scorecardReplayUrl(`https://play.cricket.com.au/match/${match}?tab=highlights`,true),null);
+});
+test('scorecard keeps order and shows replay actions only for identified dismissals',()=>{
+ const batter={name:'Alex <Lane>',status:'played',runs:12,not_out:false,dismissal_video_url:url};
+ const card={replay_url:`https://play.cricket.com.au/match/${match}?tab=highlights`,teams:[{id:'ours',name:'Example club'}],innings:[{team_id:'ours',number:1,complete:true,batters:[batter,{name:'Second',runs:44},{...batter,name:'Not out',not_out:true},{...batter,name:null}],bowlers:[]}]};
+ const doc=new JSDOM(renderFixtureScorecard({our_team:'ours',scorecard:card})).window.document;
+ const links=[...doc.querySelectorAll('a')];assert.equal(links.length,2);assert.equal(links[0].textContent,'Watch match replays ↗');assert.equal(links[1].href,url);assert.equal(links[1].target,'_blank');assert.match(links[1].rel,/noopener/);assert.equal(doc.querySelector('lane'),null);
+ assert.deepEqual([...doc.querySelectorAll('tbody tr th')].map(x=>x.textContent.replace('Watch dismissal ↗','')),['Alex <Lane>','Second','Not out','Name withheld']);
+});
+test('Match Review exposes the replay for the same mapped batter without changing score confirmation',async()=>{
+ const source=await readFile(new URL('../app.js',import.meta.url),'utf8'),start=source.indexOf('function matchReviewScoreDetails('),end=source.indexOf('\nfunction renderMatchReviewImporter',start+1),batter={player_id:'source',name:'Alex Lane',runs:12,not_out:false,dismissal_video_url:url,importable:true};
+ const c=vm.createContext({matchReviewImportState:()=>({mapping:{source:'player'},dirty:true,selected:{}}),matchReviewSourceInnings:()=>({complete:true,batters:[batter]}),teamReviewControlsLocked:()=>false,ensureTeamReviewState:()=>({}),esc:String,renderDismissalReplay});vm.runInContext(source.slice(start,end),c);
+ const detail=new JSDOM(c.matchReviewDismissalDetails({player_id:'player',name:'Alex Lane'})).window.document;assert.equal(detail.querySelector('a').href,url);
+ const doc=new JSDOM('<table><tbody><tr>'+c.matchReviewScoreCell({player_id:'player',can_record_score:true})+'</tr></tbody></table>').window.document;
+ assert.equal(doc.querySelector('a'),null,'Replay sits under the plan, outside the score column');assert.equal(doc.querySelector('[data-import-score]').dataset.importScore,'source');assert.equal(doc.querySelector('[data-import-score]').checked,false);
+});

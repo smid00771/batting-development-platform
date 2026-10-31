@@ -79,3 +79,18 @@ test('alignment compares only answers that both people supplied',async t=>{
  assert.equal(compare({batting_to_plan:'yes',dismissal_classification:'outside_plan'},{batting_to_plan:null,dismissal_classification:'plan_execution'}).key,'discuss');
  assert.equal(compare({batting_to_plan:'yes'},{batting_to_plan:null,dismissal_classification:'plan_execution'}),null);
 });
+test('same-day fixtures require an explicit match choice and keep each contribution separate',async t=>{
+ const h=await openDemo({product:'both',role:'coach',journey:'players'});t.after(h.close);
+ h.window.eval("const first=demoSelections.fixtures.find(f=>f.id==='selection-first');const second=structuredClone(first);second.id='same-day-second';second.details.opposition='Afternoon visitors';second.details.days[0].start='16:00';second.published=null;demoSelections.fixtures.push(second);");
+ await open(h);
+ assert.equal(h.document.querySelector('#staffObservationFixture').value,'','Two matches must not silently choose one');
+ assert.equal(h.document.querySelector('#saveStaffMatchFeedback').disabled,true);
+ const options=[...h.document.querySelector('#staffObservationFixture').options];assert.ok(options.some(o=>/Afternoon visitors.*16:00/.test(o.textContent)));
+ await h.choose('#staffObservationFixture','selection-first');await h.choose('#staffMatchNote','Morning match note');await h.click('#saveStaffMatchFeedback');
+ await open(h);await h.choose('#staffObservationFixture','same-day-second');assert.equal(h.document.querySelector('#staffMatchNote').value,'');
+ assert.equal(h.document.querySelector('.observation-other-conversations').open,false,'Unrelated conversations stay collapsed while choosing/entering one fixture');
+ await h.choose('#staffMatchNote','Afternoon match note');await h.click('#saveStaffMatchFeedback');
+ await open(h);await h.choose('#staffObservationFixture','selection-first');assert.equal(h.document.querySelector('#staffMatchNote').value,'Morning match note');
+ await h.choose('#staffObservationFixture','same-day-second');assert.equal(h.document.querySelector('#staffMatchNote').value,'Afternoon match note');
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});

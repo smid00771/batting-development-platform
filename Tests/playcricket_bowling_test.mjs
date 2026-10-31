@@ -14,3 +14,20 @@ test('full listed team includes players who never batted or bowled',()=>{const d
 test('ambiguous listed team cannot be used to replace selections',()=>{const data=raw();data.teams[0].players.push({...data.teams[0].players[0]});assert.equal(normalizeScorecard(data,id(1)).teams[0].lineup_available,false);});
 
 test('club logos preserve PlayCricket source size and identity with a restricted image host',()=>{const data=raw(),url='https://res.cloudinary.com/playhq/image/upload/h_256,w_256/v1/production/ca/logo.png';data.teams[1].owningOrganisation={id:id(20),name:'Visitor club',logoUrl:url};assert.equal(normalizeScorecard(data,id(1)).teams[1].logo_url,url);assert.deepEqual(scorecardLogos(data,id(1))[1],{id:id(3),organisation_id:id(20),logo_url:url});for(const bad of ['http://res.cloudinary.com/playhq/image/upload/x','https://evil.example/x','https://res.cloudinary.com/another/image/upload/x','javascript:alert(1)','https://user@res.cloudinary.com/playhq/image/upload/x'])assert.equal(clubLogoUrl(bad),null);assert.throws(()=>scorecardLogos(data,id(99)));});
+
+test('PlayCricket uses separate batting and bowling orders rather than response order',()=>{
+ const data=raw();for(const [team,n] of [[data.teams[0],40],[data.teams[1],50]])team.players.push({participantId:id(n),name:'Second player '+n});
+ data.innings[0].batting[0].batOrder=2;data.innings[0].batting.push({...data.innings[0].batting[0],participantId:id(40),batOrder:1});
+ data.innings[0].bowling[0].bowlOrder=2;data.innings[0].bowling.push({...data.innings[0].bowling[0],participantId:id(50),bowlOrder:1});
+ const before=structuredClone(data),c=normalizeScorecard(data,id(1));
+ assert.deepEqual(c.innings[0].batters.map(b=>b.player_id),[id(40),id(4)]);assert.deepEqual(c.innings[0].bowlers.map(b=>b.player_id),[id(50),id(5)]);assert.deepEqual(data,before);
+});
+
+test('dismissal links use exact source highlight IDs and preserve provider playback access',()=>{
+ const data=raw(),b=data.innings[0].batting[0];b.dismissalType='Caught';b.highlight={id:id(90),highLightType:'WICKET',highlightURL:'https://highlights.frogbox.tv/private-stream.m3u8'};
+ const card=normalizeScorecard(data,id(1)),link=card.innings[0].batters[0].dismissal_video_url;
+ assert.equal(link,`https://play.cricket.com.au/match/${id(1)}?tab=scorecard&highlightId=${id(90)}`);assert.doesNotMatch(JSON.stringify(card),/frogbox|m3u8/);
+ for(const dismissal of ['Not Out','Did Not Bat']){b.dismissalType=dismissal;assert.equal(normalizeScorecard(data,id(1)).innings[0].batters[0].dismissal_video_url,undefined);}
+ b.dismissalType='Caught';b.highlight.id='unsafe&id=other';assert.equal(normalizeScorecard(data,id(1)).innings[0].batters[0].dismissal_video_url,undefined);
+ b.highlight.id=id(90);b.highlight.highLightType='FOUR';assert.equal(normalizeScorecard(data,id(1)).innings[0].batters[0].dismissal_video_url,undefined);
+});
