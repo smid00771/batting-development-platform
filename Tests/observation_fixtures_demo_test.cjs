@@ -39,3 +39,43 @@ test('a reopened pending observation confirms the original request before editin
  const commands=JSON.parse(h.window.eval('JSON.stringify(observationWrites)'));assert.equal(commands.length,2);assert.deepEqual(commands[0],commands[1]);
  assert.deepEqual(h.errors.map(e=>e.message),[]);
 });
+for(const product of ['both','batting'])test(product+': a written comment saves without any assessment or mode checkbox',async t=>{
+ const h=await openDemo({product,role:'coach',journey:'players'},{traceRpc:true});t.after(h.close);await open(h);
+ await h.click('#saveStaffMatchFeedback');assert.equal(h.document.querySelector('#saveStaffMatchFeedback').textContent,'Add a comment or answers');assert.equal(h.document.activeElement.id,'staffMatchNote');
+ await h.choose('#staffMatchNote','Helpful encouragement from the boundary');
+ assert.equal(h.document.querySelector('#staffObservationGeneral').checked,false);
+ assert.equal(h.document.querySelector('#saveStaffMatchFeedback').textContent,'Save observation');
+ await h.click('#saveStaffMatchFeedback');
+ const commands=[...new Map(h.rpcCalls.filter(c=>c.name==='save_individual_fixture_observation').map(c=>[c.args.p_request_id,c])).values()];assert.equal(commands.length,1);assert.equal(commands[0].args.p_values.plan_related,false);assert.equal(commands[0].args.p_values.batting_to_plan,undefined);assert.equal(commands[0].args.p_values.dismissal_classification,undefined);
+ assert.equal(h.document.querySelector('#staffDevelopmentForm'),null);assert.match(h.document.querySelector('#developmentOverview').textContent,/Observation saved ✓/);
+ await open(h);assert.equal(h.document.querySelector('#staffMatchNote').value,'Helpful encouragement from the boundary');assert.equal(h.document.querySelector('#staffObservationGeneral').checked,true);
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});
+test('has no plan and general notes do not require a hidden dismissal answer',async t=>{
+ for(const mode of ['no_plan','general']){
+  const h=await openDemo({product:'both',role:'coach',journey:'players'});t.after(h.close);await open(h);await h.click('#saveStaffMatchFeedback');
+  if(mode==='no_plan')await h.click('input[name="staffBattingToPlan"][value="no_plan"]');
+  else{await h.choose('#staffMatchNote','A general match note');await h.click('#staffObservationGeneral');}
+  assert.equal(h.document.querySelectorAll('[data-observation-answer-error]').length,0);assert.equal(h.document.querySelector('#saveStaffMatchFeedback').textContent,'Save observation');
+  await h.click('#saveStaffMatchFeedback');assert.equal(h.document.querySelector('#staffDevelopmentForm'),null);
+  assert.deepEqual(h.errors.map(e=>e.message),[]);
+ }
+});
+test('individual answers and notes save independently and remain unanswered elsewhere',async t=>{
+ for(const item of [{selector:'input[name="staffBattingToPlan"][value="mostly"]',field:'batting_to_plan',value:'mostly'},{selector:'input[name="staffDismissalClass"][value="plan_execution"]',field:'dismissal_classification',value:'plan_execution'},{selector:'#staffMatchMainIssue',field:'main_issue',value:'execution'},{selector:'#staffMatchDismissal',field:'innings_note',value:'A useful observation between overs'},{selector:'#staffMatchNextFocus',field:'next_training_focus',value:'Practise calling early'},{selector:'#staffObservationConversation',field:'needs_conversation',value:true}]){
+  const h=await openDemo({product:'both',role:'coach',journey:'players'});t.after(h.close);await open(h);
+  if(item.selector.startsWith('input')||item.value===true)await h.click(item.selector);else await h.choose(item.selector,item.value);
+  await h.click('#saveStaffMatchFeedback');assert.equal(h.document.querySelector('#staffDevelopmentForm'),null,item.field+' saves on its own');
+  await open(h);
+  const saved=JSON.parse(h.window.eval('JSON.stringify(fixtureRows.feedback["player-alex"].matches.flatMap(m=>m.coach_feedback||[]).find(n=>n.id===document.getElementById("staffDevelopmentForm").dataset.observationId))'));
+  assert.equal(saved[item.field],item.value);if(item.field!=='batting_to_plan')assert.equal(saved.batting_to_plan,null);if(item.field!=='dismissal_classification')assert.equal(saved.dismissal_classification,null);
+  assert.deepEqual(h.errors.map(e=>e.message),[]);
+ }
+});
+test('alignment compares only answers that both people supplied',async t=>{
+ const h=await openDemo({product:'both',role:'coach',journey:'players'});t.after(h.close);
+ const compare=(player,coach)=>JSON.parse(h.window.eval('JSON.stringify(developmentAlignment('+JSON.stringify(player)+','+JSON.stringify(coach)+'))'));
+ assert.equal(compare({batting_to_plan:'yes',dismissal_classification:'outside_plan'},{batting_to_plan:'yes',dismissal_classification:null}).key,'aligned');
+ assert.equal(compare({batting_to_plan:'yes',dismissal_classification:'outside_plan'},{batting_to_plan:null,dismissal_classification:'plan_execution'}).key,'discuss');
+ assert.equal(compare({batting_to_plan:'yes'},{batting_to_plan:null,dismissal_classification:'plan_execution'}),null);
+});
