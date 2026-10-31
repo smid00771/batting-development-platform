@@ -31,18 +31,24 @@ begin
    insert into club_selection_private.fixture_result_sources(club_id,fixture_id,source_match_id,team_id,updated_by) values(c,fid,mid,tid,adm);
   end loop;
   assert not club_selection_private.enabled(c),'Club starts with Batting only';
+  set local role authenticated;
   res:=public.club_season_stats_api(c,'context','{"on_demand":true}');before_cards:=res->'cards';
+  reset role;
   assert jsonb_array_length(res->'cards')=2 and jsonb_array_length(res->'fixtures')=2,'Batting-only admin uses both shared scorecards';
   assert not exists(select 1 from club_selection_private.access where club_id=c),'Stats does not create or enable Select';
   assert res::text not like '%Private meeting%' and not (res->'fixtures'->0 ? 'slots'),'Stats exposes no private arrangements or draft selection slots';
   denied:=false;begin perform public.club_season_stats_api(c);exception when sqlstate 'P0285' then denied:=true;end;assert denied,'Background stats request stays denied';
   perform set_config('request.jwt.claim.sub',coach::text,true);
+  set local role authenticated;
   res:=public.club_season_stats_api(c,'context','{"on_demand":true}');
+  reset role;
   assert jsonb_array_length(res->'cards')=1 and res#>>'{cards,0,fixture_id}'=f1::text,'Batting coach sees only their team scores';
   assert jsonb_array_length(res->'fixtures')=1 and res#>>'{fixtures,0,id}'=f1::text and res->>'can_set_season'='false','Coaching scope also filters fixture metadata and season edits';
   foreach u in array array[ordinary,outsider] loop
    perform set_config('request.jwt.claim.sub',u::text,true);denied:=false;
+   set local role authenticated;
    begin perform public.club_season_stats_api(c,'context','{"on_demand":true}');exception when raise_exception then denied:=true;end;
+   reset role;
    assert denied,'Ordinary players and outsiders denied';
   end loop;
   perform set_config('request.jwt.claim.sub',adm::text,true);
@@ -51,7 +57,9 @@ begin
   ctx:=public.selection_group_permissions(c,'context');
   perform public.selection_group_permissions(c,'save_group',jsonb_build_object('group_id',sg2,'head_id',adm,'revision',ctx->>'revision','request_id',gen_random_uuid(),'members',jsonb_build_array(jsonb_build_object('user_id',adm,'access','edit'),jsonb_build_object('user_id',viewer,'access','view'),jsonb_build_object('user_id',coach,'access','view'))));
   perform set_config('request.jwt.claim.sub',viewer::text,true);
+  set local role authenticated;
   res:=public.club_season_stats_api(c,'context','{"on_demand":true}');
+  reset role;
   assert jsonb_array_length(res->'cards')=1 and res#>>'{cards,0,fixture_id}'=f2::text,'Scoped selector sees only their permitted group';
   assert jsonb_array_length(res->'fixtures')=1 and res#>>'{fixtures,0,id}'=f2::text,'Scoped selector metadata stays private';
   perform set_config('request.jwt.claim.sub',coach::text,true);

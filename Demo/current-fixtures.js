@@ -108,7 +108,33 @@ function demoSeedCurrent({empty=false}={}){
  }
 }
 const demoSeedBeforeFixtureCalendar=demoSeedCurrent;
-demoSeedCurrent=function(options){demoSeedBeforeFixtureCalendar(options);demoCalendarTrials=[];demoCalendarTrialReceipts={};for(const g of fixtureGroups)g.batting_enabled=demoProduct==='batting'||!['group-masters','group-u21','group-cup'].includes(g.id);demoPlanReminderSettings={revision:1,team_ids:fixtureGroups.filter(g=>!['group-masters','group-u21','group-cup'].includes(g.id)).map(g=>g.id),receipts:{}};demoFixtureCalendarLinks=demoSelections.fixtures.map(f=>({fixture_id:f.id,season_id:demoGroups.season,team_id:f.details.grade_group_id||fixtureGroups.find(g=>g.name===f.details.grade)?.id||f.details.grade,details:fixtureClone(f.details)}));};
+demoSeedCurrent=function(options){demoSeedBeforeFixtureCalendar(options);demoCalendarTrials=[];demoCalendarTrialReceipts={};for(const g of fixtureGroups)g.batting_enabled=demoProduct==='batting'||!['group-masters','group-u21','group-cup'].includes(g.id);demoPlanReminderSettings={revision:1,team_ids:fixtureGroups.filter(g=>!['group-masters','group-u21','group-cup'].includes(g.id)).map(g=>g.id),receipts:{}};demoFixtureCalendarLinks=demoSelections.fixtures.map(f=>({fixture_id:f.id,season_id:demoGroups.season,team_id:f.details.grade_group_id||fixtureGroups.find(g=>g.name===f.details.grade)?.id||f.details.grade,details:fixtureClone(f.details)}));demoSyncDownloadedBattingScores();};
+
+// Simulate the server's completed-result delivery using the demo's explicit IDs.
+// It never creates a coaching judgement, reflection, review or external request.
+function demoSyncDownloadedBattingScores(){
+ if(demoProduct==='select')return;
+ for(const f of demoSelections.fixtures){
+  const source=demoSelections.result_sources?.[f.id],group=fixtureGroups.find(g=>g.id===f.details.grade_group_id);
+  if(!source?.match_id||source.no_play||f.details.cancelled||group?.batting_enabled===false)continue;
+  const card=Object.values(demoScorecards).filter(c=>c.match_id===source.match_id).at(-1);
+  if(card?.status!=='completed'||card.format_key!==f.details.format||JSON.stringify(card.dates)!==JSON.stringify(f.details.days.map(d=>d.date)))continue;
+  for(const inn of card.innings.filter(i=>i.team_id===source.team_id&&i.complete))for(const b of inn.batters||[]){
+   const link=demoSelections.scorecard_links?.find(l=>l.source_id===b.player_id),roster=demoSelections.roster.find(r=>r.id===link?.roster_id&&r.active);
+   const player=roster&&fixtureRows.players.find(p=>p.active!==false&&(p.id===roster.review_player_id||p.user_id&&p.user_id===roster.user_id));
+   if(!player||!b.importable||!['played','did_not_bat'].includes(b.status))continue;
+   const feedback=fixtureRows.feedback[player.id]??=demoEmptyFeedback(),score=b.status==='did_not_bat'?'':String(b.runs)+(b.not_out?'*':'');
+   let m=feedback.matches.find(m=>m.fixture_id===f.id&&(m.innings_number||1)===inn.number);
+   if(!m){const matches=feedback.matches.filter(m=>m.match_date===card.dates[0]&&m.format_key===card.format_key&&(m.innings_number||1)===inn.number&&demoInningsOpponent(m.opposition)===demoInningsOpponent(f.details.opposition));if(matches.length>1||matches.some(m=>m.fixture_id&&m.fixture_id!==f.id))continue;m=matches[0];}
+   if(m&&((m.automatic_score!==undefined&&m.score_text!==m.automatic_score)||m.automatic_score===undefined&&m.score_text&&m.score_text!==score))continue;
+   if(b.status==='did_not_bat'&&(m?.player_reflection||m?.coach_feedback.some(n=>n.plan_related)))continue;
+   if(!m){m={id:crypto.randomUUID(),match_date:card.dates[0],format_key:card.format_key,opposition:f.details.opposition,innings_number:inn.number,created_by:null,created_at:fixtureNow(),coach_feedback:[],player_reflection:null,player_note:'',player_video:null};feedback.matches.unshift(m);}
+   const changed=m.score_text!==score||m.participation_status!==b.status;
+   Object.assign(m,{fixture_id:f.id,score_text:score,automatic_score:score,participation_status:b.status,score_recorded_by:null,scorecard:{...b,automatic_sync:true,provider:card.provider,score_date:card.dates[0],url:card.url},edit_context:{can_edit_details:false,can_edit_score:false}});
+   if(changed)m.updated_at=fixtureNow();
+  }
+ }
+}
 function demoAvailabilityFixtures(){
  const player=demoSelections.roster.find(p=>p.user_id===session.user.id&&p.active);
  if(!player||demoProduct==='batting')throw Error('A linked player with Selections access is required');
