@@ -597,6 +597,11 @@ window.__fixtureRpc=async(name,args={})=>{
    if(demoReceipts.has(args.p_request_id))return ok(demoReceipts.get(args.p_request_id));
    const f=fixtureRows.feedback[args.p_player_id],v=fixtureClone(args.p_values),kind=args.p_kind;let note,match;
    if(!f||!demoPlayerAccess(args.p_player_id).edit)return fail('Edit access to this player is required.');
+   if('videos' in v){
+     if(!Array.isArray(v.videos)||v.videos.length>20)return fail('Provide up to 20 YouTube links.');
+     try{v.videos=v.videos.map(clip=>{if(!clip||typeof clip.url!=='string'||clip.note!==undefined&&typeof clip.note!=='string')throw Error('Provide a YouTube link and a short description for each clip.');const url=normaliseCoachingYouTubeUrl(clip.url),note=String(clip.note||'').trim();if(note.length>500||!url&&note)throw Error('Add a YouTube link and keep its description within 500 characters.');return {url,note};}).filter(clip=>clip.url);}catch(error){return fail(error.message);}
+     v.video_url=v.videos[0]?.url||'';v.video_note=v.videos[0]?.note||'';
+   }
    if(kind==='match'){
      v.batting_to_plan||=null;v.dismissal_classification||=null;
      if(!v.batting_to_plan&&!v.dismissal_classification&&!v.main_issue)v.plan_related=false;
@@ -620,7 +625,8 @@ window.__fixtureRpc=async(name,args={})=>{
    let action=f.coaching_actions.find(a=>kind==='match'?a.match_feedback_id===note.id:a.training_observation_id===note.id);
    if(!action){action=demoAction(args.p_player_id,kind,note,args.p_review_on,match);f.coaching_actions.push(action);}
    else {action.revision++;action.updated_at=fixtureNow();if(action.status==='open')Object.assign(action,{review_on:args.p_review_on||null,task:v.next_training_focus||'',follow_up_requested:!!(v.next_training_focus||v.needs_conversation||args.p_review_on)});}
-   if('video_url' in v)action.video=v.video_url?{url:normaliseCoachingYouTubeUrl(v.video_url),note:v.video_note||''}:null;
+   if('videos' in v)action.video=v.videos.length?{...v.videos[0],links:v.videos}:null;
+   else if('video_url' in v)action.video=v.video_url?{url:normaliseCoachingYouTubeUrl(v.video_url),note:v.video_note||'',...(action.video?.links?.length>1?{links:[{url:normaliseCoachingYouTubeUrl(v.video_url),note:v.video_note||''},...action.video.links.slice(1)]}:{})}:null;
    const data={observation_id:note.id,match_id:match?.id,action_id:action.id};demoReceipts.set(args.p_request_id,data);return ok(data);
  }
  case 'review_coaching_action':{
