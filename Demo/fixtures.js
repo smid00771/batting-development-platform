@@ -406,7 +406,7 @@ function demoSharedMatchProjection(playerId,match){
 
 function demoObservationContext(playerId){
  const f=fixtureRows.feedback[playerId]||demoEmptyFeedback();
- return {matches:f.matches.map(m=>({id:m.id,updated_at:m.updated_at,can_edit_details:demoPlayerAccess(playerId).edit})),feedback:f.matches.flatMap(m=>m.coach_feedback.map(n=>({...n,match_id:m.id,match_updated_at:m.updated_at,can_edit:n.author_user_id===session.user.id}))),training_observations:f.training_observations.map(n=>({...n,can_edit:n.observer_user_id===session.user.id}))};
+ return {matches:f.matches.map(m=>({id:m.id,updated_at:m.updated_at,can_edit_details:m.automatic_score===undefined&&demoPlayerAccess(playerId).edit})),feedback:f.matches.flatMap(m=>m.coach_feedback.map(n=>({...n,match_id:m.id,match_updated_at:m.updated_at,can_edit:n.author_user_id===session.user.id}))),training_observations:f.training_observations.map(n=>({...n,can_edit:n.observer_user_id===session.user.id}))};
 }
 
 function demoAlerts(){
