@@ -598,6 +598,12 @@ window.__fixtureRpc=async(name,args={})=>{
    const f=fixtureRows.feedback[args.p_player_id],v=fixtureClone(args.p_values),kind=args.p_kind;let note,match;
    if(!f||!demoPlayerAccess(args.p_player_id).edit)return fail('Edit access to this player is required.');
    if(kind==='match'){
+     v.batting_to_plan||=null;v.dismissal_classification||=null;
+     if(!v.batting_to_plan&&!v.dismissal_classification&&!v.main_issue)v.plan_related=false;
+     if(v.batting_to_plan==='no_plan')Object.assign(v,{plan_related:false,completion_requested:true,dismissal_classification:null,main_issue:null});
+     if(v.plan_related===false&&!v.completion_requested)Object.assign(v,{batting_to_plan:null,dismissal_classification:null,main_issue:null});
+     if(!(v.batting_to_plan||v.dismissal_classification||v.main_issue||String(v.note||'').trim()||String(v.next_training_focus||'').trim()||String(v.dismissal_summary||'').trim()||v.needs_conversation||args.p_review_on||v.video_url))return fail('Add a comment or choose something to record');
+     if(v.batting_to_plan&&!['yes','mostly','no','no_plan'].includes(v.batting_to_plan)||v.dismissal_classification&&!['plan_execution','outside_plan','not_applicable'].includes(v.dismissal_classification))return fail('Choose valid match observation answers');
      try{match=demoSharedMatch(args.p_player_id,v,v.match_id);}catch(error){return fail(error.message);}
      if(match?.participation_status==='did_not_bat'&&v.plan_related!==false)return fail('This innings is recorded as Did not bat. Only a general note can be added.');
      if(!match){match={id:demoId('match'),created_by:userId,created_at:fixtureNow(),coach_feedback:[],player_reflection:null};f.matches.unshift(match);}

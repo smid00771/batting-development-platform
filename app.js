@@ -21,7 +21,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.313';
+const APP_UI_VERSION='0.8.62.314';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -9314,10 +9314,10 @@ function observationNeedsReflection(view){return !!view&&view.plan_related!==fal
 
 function developmentAlignment(reflection,coachFeedback){
   if(!reflection||!coachFeedback||coachFeedback.plan_related===false||coachFeedback.batting_to_plan==='no_plan')return null;
-  const samePlan=reflection.batting_to_plan===coachFeedback.batting_to_plan;
-  const sameDismissal=reflection.dismissal_classification===coachFeedback.dismissal_classification;
-  return samePlan&&sameDismissal
-    ?{key:'aligned',label:'PLAYER + COACH ALIGNED'}
+  const shared=['batting_to_plan','dismissal_classification'].filter(key=>reflection[key]&&coachFeedback[key]);
+  if(!shared.length)return null;
+  return shared.every(key=>reflection[key]===coachFeedback[key])
+    ?{key:'aligned',label:shared.length===2?'PLAYER + COACH ALIGNED':'RECORDED ANSWER ALIGNS'}
     :{key:'discuss',label:'WORTH DISCUSSING'};
 }
 
@@ -11691,8 +11691,8 @@ function observationReviewField(action=null){
 function observationConversationField(selected=false){
   return `<div class="field" id="staffObservationConversationField"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="staffObservationConversation" ${selected?'checked':''} style="width:auto;margin:0">Needs a coaching conversation</label><p class="help">This, a training focus, or a review date brings the player into Coach Conversations. The note, date and updates stay together.</p></div>`;
 }
-function observationPurposeField(note=null){
-  return `<div class="field"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="staffObservationGeneral" ${note?.plan_related===false?'checked':''} style="width:auto;margin:0">This isn’t about their Player Plan</label><p class="help" id="staffObservationPurposeHint">General notes are shared straight away. Player Plan match observations ask for an independent player reflection first.</p></div>`;
+function observationPurposeField(note=null,label='This isn’t about their Player Plan'){
+  return `<div class="field"><label style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="staffObservationGeneral" ${note?.plan_related===false?'checked':''} style="width:auto;margin:0">${esc(label)}</label><p class="help" id="staffObservationPurposeHint">General notes are shared straight away. Player Plan match observations ask for an independent player reflection first.</p></div>`;
 }
 
 // BEGIN INDIVIDUAL FIXTURE OBSERVATION
@@ -11758,6 +11758,12 @@ function wireObservationSave(player,kind,onSaved,options={}){
   queueMicrotask(()=>{if(stillCurrent())matchDraftAttachObservation(form,player,kind);});
   const idleLabel=button.textContent;
   const report=(message,error=false)=>staffObservationStatus(form,message,error);
+  const requestComment=()=>{
+    button.textContent='Add a comment or answers';form.dataset.observationNeedsComment='true';
+    const status=form.querySelector('#staffDevelopmentStatus');status.textContent='Not saved yet. Add a comment or choose something to record.';status.setAttribute('role','alert');
+    const note=form.querySelector('#staffMatchNote');note?.scrollIntoView({block:'center'});note?.focus({preventScroll:true});
+  };
+  if(kind==='match')for(const eventName of ['input','change'])form.addEventListener(eventName,event=>{if(form.dataset.observationNeedsComment==='true'&&event.target.matches('input,textarea,select')){delete form.dataset.observationNeedsComment;button.textContent=idleLabel;report('');}});
   let requestId=null,requestPayload=null,uncertainArgs=null,uncertainRestore=null;
   button.onclick=async()=>{
     if(coachingActionSavePending||button.disabled||!stillCurrent())return;
@@ -11776,12 +11782,17 @@ function wireObservationSave(player,kind,onSaved,options={}){
       next_training_focus:val('staffTrainingNextFocus'),note:val('staffTrainingNote')
     };
     try{Object.assign(values,coachingVideoValues('staffObservation'));}catch(error){report(error.message,true);return;}
-    values.plan_related=!general?.checked;
+    values.plan_related=kind==='match'?!general?.checked&&!!(values.batting_to_plan||values.dismissal_classification||values.main_issue):!general?.checked;
+    if(kind==='match'&&general?.checked){values.batting_to_plan=null;values.dismissal_classification=null;values.main_issue=null;}
     values.needs_conversation=!!document.getElementById('staffObservationConversation')?.checked;
-    if(kind==='match'&&values.plan_related&&values.batting_to_plan==='no_plan'){values.dismissal_classification='not_applicable';values.main_issue=null;}
+    if(kind==='match'&&values.batting_to_plan==='no_plan'){values.dismissal_classification=null;values.main_issue=null;}
     if(kind==='match'&&(!Number.isInteger(values.innings_number)||values.innings_number<1||values.innings_number>10)){report('Choose an innings number from 1 to 10.',true);return;}
-    if(!values.plan_related&&!values.note&&!values.next_training_focus){report('Add a coaching note or training focus.',true);return;}
-    if(values.plan_related&&(kind==='match'?(!values.batting_to_plan||!values.dismissal_classification):(!values.training_to_plan||!values.observation_type))){report('Choose the two quick observation answers first.',true);return;}
+    if(kind==='match'){
+      if(!(values.batting_to_plan||values.dismissal_classification||values.main_issue||values.note.trim()||values.next_training_focus.trim()||values.dismissal_summary.trim()||values.needs_conversation||review.value||values.video_url)){requestComment();return;}
+    }else{
+      if(!values.plan_related&&!values.note.trim()&&!values.next_training_focus.trim()){report('Add a coaching note or training focus.',true);return;}
+      if(values.plan_related&&(!values.training_to_plan||!values.observation_type)){report('Choose the two quick observation answers first.',true);return;}
+    }
     const reviewOn=review.value||null;
     if(!closed&&reviewOn&&reviewOn<todayIso()&&reviewOn!==form.dataset.originalReview){report('Choose a review date from today onwards.',true);return;}
     try{if(!uncertainArgs)options.validate?.(values);}catch(error){report(error.message,true);return;}
@@ -11853,12 +11864,12 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
     <p class="observation-match-summary" data-observation-match-summary>${match?esc([formatDateShort(match.match_date),match.opposition,formatLabel(match.format_key)].filter(Boolean).join(' · ')):''}</p>
     <div hidden><input id="staffMatchDate" type="date" value="${esc(match?.match_date||todayIso())}"><select id="staffMatchFormat">${FORMATS.map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select><input id="staffMatchOpposition" value="${esc(match?.opposition||'')}"></div>
     <div data-observation-body>
-    <div class="observation-facts"><div class="field" ${format==='long_form'||Number(match?.innings_number)>1?'':'hidden'}><label for="staffMatchInningsNumber">Innings</label><select id="staffMatchInningsNumber" ${sharedReadonly?'disabled':''}>${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}" ${Number(match?.innings_number||1)===n?'selected':''}>${n===1?'First':n===2?'Second':n}</option>`).join('')}</select></div><div class="field"><label for="staffMatchScore">Score <span>optional</span></label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}" ${sharedReadonly?'disabled':''}></div>${matchArrivalField(player.id)}${didNotBat?observationPurposeField({plan_related:false}).replace('id="staffObservationGeneral"','id="staffObservationGeneral" disabled')+'<p class="notice">DNB — no Player Plan assessment. Correct the batting status in Match review if needed.</p>':observationPurposeField(feedback?.batting_to_plan==='no_plan'?{...feedback,plan_related:true}:feedback)}</div>
+    <div class="observation-facts"><div class="field" ${format==='long_form'||Number(match?.innings_number)>1?'':'hidden'}><label for="staffMatchInningsNumber">Innings</label><select id="staffMatchInningsNumber" ${sharedReadonly?'disabled':''}>${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}" ${Number(match?.innings_number||1)===n?'selected':''}>${n===1?'First':n===2?'Second':n}</option>`).join('')}</select></div><div class="field"><label for="staffMatchScore">Score</label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}" ${sharedReadonly?'disabled':''}></div>${matchArrivalField(player.id)}${didNotBat?observationPurposeField({plan_related:false},'Comment only').replace('id="staffObservationGeneral"','id="staffObservationGeneral" disabled')+'<p class="notice">DNB — no Player Plan assessment. Correct the batting status in Match review if needed.</p>':observationPurposeField(feedback?.batting_to_plan==='no_plan'?{...feedback,plan_related:true}:feedback,'Comment only')}</div>
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","Not really","The approach moved away from the plan"],["no_plan","Has no plan","Ask the player to complete their Player Plan"]],feedback?.batting_to_plan||'')}</div>
     <div id="staffMatchDismissalAssessment"><div class="development-question"><label>On the dismissal ball, how did the choice fit the plan?</label>${radioChoiceHtml('staffDismissalClass',[["plan_execution","Within plan · execution to improve","Right shot and ball; an execution detail to practise was identified"],["outside_plan","Decision outside plan","The option for this ball was outside the Player Plan"],["not_applicable","No dismissal decision to review","Not dismissed / good bowling / run out / other"]],feedback?.dismissal_classification||'')}</div>
     <div class="development-question"><label>Main issue <span>optional</span></label><select id="staffMatchMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${feedback?.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div></div></div>
     <div class="field"><label>Dismissal / innings note <span>optional · your observation</span></label><input id="staffMatchDismissal" maxlength="300" value="${esc(ownInningsNote)}" placeholder="e.g. Caught at point driving on the up; the plan was to wait for a fuller ball."></div>
-    <div class="field"><label for="staffMatchNote">Coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="No essay needed">${esc(feedback?.note||'')}</textarea></div>
+    <div class="field"><label for="staffMatchNote">Coaching note <span>optional</span></label><textarea id="staffMatchNote" maxlength="500" rows="3" placeholder="You can save a comment on its own">${esc(feedback?.note||'')}</textarea></div>
     ${observationConversationField(feedback?.needs_conversation)}
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" value="${esc(feedback?.next_training_focus||'')}" ${closed?'disabled':''} maxlength="240" placeholder="One useful focus is enough"></div>
     <details class="observation-extra" ${action?.review_on||action?.video?'open':''}><summary>Review date &amp; video</summary>${observationReviewField(action)}${coachingVideoFields('staffObservation',action?.video)}</details>
