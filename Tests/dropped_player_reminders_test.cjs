@@ -22,7 +22,7 @@ test('requested reminders persist through refresh, redraw and saved edits withou
  const players=()=>[...d.querySelectorAll('[data-se-conversation]')].map(b=>b.dataset.seConversationPlayer);
  const before=players();assert.equal(before.length,2);assert.equal(d.querySelectorAll('.se-dropped').length,2);
  assert.ok(h.calls.some(c=>c.p_action==='show_dropped'&&c.p_data.ids.includes('selection-second')));
- await h.click('#seRefresh');assert.deepEqual(players(),before);assert.equal(h.scans(),1);
+ await h.window.renderSelections();await h.settle();assert.deepEqual(players(),before);assert.equal(h.scans(),1);
  w.seBoard();await h.settle();assert.deepEqual(players(),before);assert.equal(h.scans(),1);
  const first=w.eval('demoSelections.fixtures.find(f=>f.id==="selection-first")');
  await w.seMutate('save_board',{fixtures:[w.structuredClone(first)]});await h.settle();
@@ -37,7 +37,7 @@ test('marking spoken removes only that highlight and stored completion survives 
  assert.equal(d.querySelectorAll('[data-se-conversation]').length,1);
  assert.equal(d.querySelector('[data-se-conversation]').dataset.seConversationPlayer,remaining);
  assert.equal(d.querySelector('.se-spoken'),null);assert.equal(h.scans(),1,'Marking a captured reminder uses its saved record');
- await h.click('#seRefresh');assert.equal(d.querySelector('[data-se-conversation-player="'+done+'"]'),null);
+ await h.window.renderSelections();await h.settle();assert.equal(d.querySelector('[data-se-conversation-player="'+done+'"]'),null);
  await h.click('#seShowDropped');assert.equal(h.scans(),2);assert.equal(d.querySelectorAll('.se-dropped').length,1);
  await d.querySelector('[data-se-conversation]').onclick();await h.settle();assert.equal(d.querySelector('.se-dropped,[data-se-conversation]'),null);
  await h.click('#seShowDropped');assert.match(d.getElementById('seNotice').textContent,/No dropped players/);assert.deepEqual(h.errors,[]);
@@ -47,9 +47,9 @@ test('saved reminders respect changed availability and teams without creating ne
  const h=await setup(t),w=h.window,d=h.document;await h.click('#seShowDropped');
  const id=d.querySelector('[data-se-conversation]').dataset.seConversationPlayer;
  w.eval(`demoSelections.roster.find(p=>p.id===${JSON.stringify(id)}).availability.unavailable_dates=[demoSelections.fixtures.find(f=>f.id==='selection-second').details.days[0].date]`);
- await h.click('#seRefresh');assert.equal(d.querySelector('[data-se-conversation-player="'+id+'"]'),null);assert.equal(h.scans(),1);
+ await h.window.renderSelections();await h.settle();assert.equal(d.querySelector('[data-se-conversation-player="'+id+'"]'),null);assert.equal(h.scans(),1);
  w.eval("demoSelections.fixtures.find(f=>f.id==='selection-second').details.grade='1st Grade'");
- await h.click('#seRefresh');assert.equal(d.querySelector('.se-dropped'),null);assert.equal(h.scans(),1);assert.deepEqual(h.errors,[]);
+ await h.window.renderSelections();await h.settle();assert.equal(d.querySelector('.se-dropped'),null);assert.equal(h.scans(),1);assert.deepEqual(h.errors,[]);
 });
 
 test('failed capture keeps existing reminders and offers the existing safe retry',async t=>{
