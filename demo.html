@@ -3714,8 +3714,13 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 .team-review-detail-controls .btn{min-height:44px}
 .team-review-row-status:empty{display:none}
 .team-review-dismissal{font-size:12px;color:var(--muted);margin:8px 0 0}
-.match-review-runs{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-variant-numeric:tabular-nums}
-.match-review-runs>span{font-size:12px;color:var(--muted)}
+#app .match-review-figures{display:grid;grid-template-columns:1fr 1fr 1.4fr .7fr .7fr;gap:8px;margin:0;padding:12px;background:var(--soft);border-radius:8px;font-variant-numeric:tabular-nums}
+#app .match-review-figures>div{min-width:0;text-align:center}
+#app .match-review-figures dt{font-size:12px;font-weight:600;line-height:1.4;color:var(--muted)}
+#app .match-review-figures dd{margin:5px 0 0;font-size:20px;font-weight:600;line-height:34px;white-space:nowrap;color:var(--ink)}
+#app .match-review-figures dd strong{font:inherit}
+#app .match-review-figures .match-review-figure-runs dd{font-size:28px;font-weight:750;color:var(--navy)}
+#app .match-review-dnb{font-size:20px;font-weight:650;padding:12px;color:var(--muted)}
 .innings-contributions{border:1px solid var(--line,#dce1ed);border-radius:8px;margin:10px 0 0;background:var(--mirelion-surface,#fff);overflow:hidden}
 .innings-contributions>summary{cursor:pointer;min-height:44px;align-content:center;padding:8px 10px;font-size:13px;font-weight:600}
 .innings-contributions>summary small{font-weight:400;color:var(--muted);margin-left:8px}
@@ -3725,17 +3730,20 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 .observation-video-link{display:flex;align-items:center;min-height:44px;width:fit-content;gap:6px;font-size:13px;font-weight:600;text-underline-offset:3px}
 .staff-match-observation .innings-contributions{margin:0 0 12px}
 @media(max-width:760px){
- .team-review-table tr[data-team-review-row]:has(.team-review-person){display:grid;grid-template-columns:minmax(0,1fr) 126px;gap:10px 12px;grid-template-areas:"person score" "observations observations"}
+ #app .team-review-table tr[data-team-review-row]:has(.team-review-person){display:grid;grid-template-columns:minmax(0,1fr);gap:8px;grid-template-areas:"person" "score" "observations"}
  .team-review-table .team-review-person{grid-area:person}
  .team-review-table .team-review-observations{grid-area:observations}
- .team-review-table .match-review-score{grid-area:score;align-self:start}
+ #app .team-review-table td.match-review-score{grid-area:score;align-self:start;background:none;padding:0}
  .team-review-table .match-review-score-label{display:none}
  .team-review-table .match-review-score small{margin:3px 0}
  .team-review-detail-controls>select{max-width:none;min-width:0;flex-basis:100%}
  .innings-contributions>summary small{display:block;margin-left:14px;margin-top:2px}
 }
-.team-review-table .match-review-runs>strong{font-size:28px;line-height:1.15;letter-spacing:-.02em}
-@media(min-width:761px){.team-review-table .team-review-detail-controls>select{flex:0 1 370px;max-width:370px}}
+@media(min-width:761px){
+ #app .team-review-table thead th:first-child{width:19%}
+ #app .team-review-table thead th:last-child{width:34%}
+ .team-review-table .team-review-detail-controls>select{flex:0 1 370px;max-width:370px}
+}
 @media(max-width:760px){
  #app .team-review-table .team-review-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
  #app .team-review-table .team-review-option{min-width:0;padding:8px 4px;line-height:1.35}
@@ -3778,7 +3786,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.323.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.324.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -13676,7 +13684,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.323';
+const APP_UI_VERSION='0.8.62.324';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -30751,7 +30759,12 @@ function matchReviewOrderRows(rows){
   .sort((a,b)=>Number(!!a.player.historical_only)-Number(!!b.player.historical_only)||a.position-b.position||a.index-b.index).map(row=>row.player);
 }
 function matchReviewMappingPlayers(){return teamReviewRows().filter(p=>p.can_edit!==false&&!p.selection_only);}
-function matchReviewScoreChanged(previous,next){if(!previous)return true;return ['status','runs','not_out','balls','fours','sixes'].some(key=>(previous[key]??null)!==(next[key]??null))||(previous.dismissal_text||previous.dismissal||'')!==(next.dismissal_text||next.dismissal||'');}
+function matchReviewScoreChanged(previous,next){
+ if(!previous)return true;
+ // DNB has no not-out result: saved innings use false, provider cards use null.
+ const value=(score,key)=>key==='not_out'&&score.status==='did_not_bat'?null:score[key]??null;
+ return ['status','runs','not_out','balls','fours','sixes'].some(key=>value(previous,key)!==value(next,key))||(previous.dismissal_text||previous.dismissal||'')!==(next.dismissal_text||next.dismissal||'');
+}
 function matchReviewNameParts(value){
  let name=String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\((?:c|capt|captain|wk|wkt|keeper|c\s*\/\s*wk)\)/g,'').replace(/['’]/g,'');
  const reversed=name.split(',');if(reversed.length===2)name=reversed[1]+' '+reversed[0];
@@ -30846,7 +30859,8 @@ function matchReviewScoreDetails(player){
 function matchReviewScoreCell(player){
  const {i,source,b,stored,shown}=matchReviewScoreDetails(player),score=shown?(shown.status==='did_not_bat'?'DNB':`${shown.runs??'—'}${shown.not_out?'*':''}`):(player.score_text||'—'),lock=teamReviewControlsLocked()||(ensureTeamReviewState().sessionId&&ensureTeamReviewState().reviewCanEdit===false);
  const sr=shown?.balls>0&&shown.runs!=null?(100*Number(shown.runs)/Number(shown.balls)).toFixed(2):null;
- return `<td class="match-review-score"><span class="match-review-score-label">Score</span><div class="match-review-runs"><strong>${esc(score)}</strong>${shown?.balls!=null&&score!=='DNB'?`<span>${esc(shown.balls)} balls</span>`:''}</div>${sr?`<small>SR ${sr}</small>`:''}${shown&&(shown.fours!=null||shown.sixes!=null)&&score!=='DNB'?`<small>${shown.fours??'—'} × 4 · ${shown.sixes??'—'} × 6</small>`:''}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
+ const figures=score==='DNB'?'<div class="match-review-dnb"><strong>DNB</strong></div>':`<dl class="match-review-figures">${[['Runs',score],['Balls',shown?.balls],['SR',sr],['4s',shown?.fours],['6s',shown?.sixes]].map(([label,value],index)=>`<div${index===0?' class="match-review-figure-runs"':''}><dt>${label}</dt><dd><strong>${esc(value??'—')}</strong></dd></div>`).join('')}</dl>`;
+ return `<td class="match-review-score">${figures}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
 }
 function matchReviewDismissalDetails(player){
  const {b,shown}=matchReviewScoreDetails(player),replay=b?.dismissal_video_url?b:shown,name=player.display_name||player.name;

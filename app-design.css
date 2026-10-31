@@ -565,8 +565,13 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 .team-review-detail-controls .btn{min-height:44px}
 .team-review-row-status:empty{display:none}
 .team-review-dismissal{font-size:12px;color:var(--muted);margin:8px 0 0}
-.match-review-runs{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-variant-numeric:tabular-nums}
-.match-review-runs>span{font-size:12px;color:var(--muted)}
+#app .match-review-figures{display:grid;grid-template-columns:1fr 1fr 1.4fr .7fr .7fr;gap:8px;margin:0;padding:12px;background:var(--soft);border-radius:8px;font-variant-numeric:tabular-nums}
+#app .match-review-figures>div{min-width:0;text-align:center}
+#app .match-review-figures dt{font-size:12px;font-weight:600;line-height:1.4;color:var(--muted)}
+#app .match-review-figures dd{margin:5px 0 0;font-size:20px;font-weight:600;line-height:34px;white-space:nowrap;color:var(--ink)}
+#app .match-review-figures dd strong{font:inherit}
+#app .match-review-figures .match-review-figure-runs dd{font-size:28px;font-weight:750;color:var(--navy)}
+#app .match-review-dnb{font-size:20px;font-weight:650;padding:12px;color:var(--muted)}
 .innings-contributions{border:1px solid var(--line,#dce1ed);border-radius:8px;margin:10px 0 0;background:var(--mirelion-surface,#fff);overflow:hidden}
 .innings-contributions>summary{cursor:pointer;min-height:44px;align-content:center;padding:8px 10px;font-size:13px;font-weight:600}
 .innings-contributions>summary small{font-weight:400;color:var(--muted);margin-left:8px}
@@ -576,17 +581,20 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 .observation-video-link{display:flex;align-items:center;min-height:44px;width:fit-content;gap:6px;font-size:13px;font-weight:600;text-underline-offset:3px}
 .staff-match-observation .innings-contributions{margin:0 0 12px}
 @media(max-width:760px){
- .team-review-table tr[data-team-review-row]:has(.team-review-person){display:grid;grid-template-columns:minmax(0,1fr) 126px;gap:10px 12px;grid-template-areas:"person score" "observations observations"}
+ #app .team-review-table tr[data-team-review-row]:has(.team-review-person){display:grid;grid-template-columns:minmax(0,1fr);gap:8px;grid-template-areas:"person" "score" "observations"}
  .team-review-table .team-review-person{grid-area:person}
  .team-review-table .team-review-observations{grid-area:observations}
- .team-review-table .match-review-score{grid-area:score;align-self:start}
+ #app .team-review-table td.match-review-score{grid-area:score;align-self:start;background:none;padding:0}
  .team-review-table .match-review-score-label{display:none}
  .team-review-table .match-review-score small{margin:3px 0}
  .team-review-detail-controls>select{max-width:none;min-width:0;flex-basis:100%}
  .innings-contributions>summary small{display:block;margin-left:14px;margin-top:2px}
 }
-.team-review-table .match-review-runs>strong{font-size:28px;line-height:1.15;letter-spacing:-.02em}
-@media(min-width:761px){.team-review-table .team-review-detail-controls>select{flex:0 1 370px;max-width:370px}}
+@media(min-width:761px){
+ #app .team-review-table thead th:first-child{width:19%}
+ #app .team-review-table thead th:last-child{width:34%}
+ .team-review-table .team-review-detail-controls>select{flex:0 1 370px;max-width:370px}
+}
 @media(max-width:760px){
  #app .team-review-table .team-review-options{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
  #app .team-review-table .team-review-option{min-width:0;padding:8px 4px;line-height:1.35}

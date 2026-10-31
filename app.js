@@ -22,7 +22,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.323';
+const APP_UI_VERSION='0.8.62.324';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -17097,7 +17097,12 @@ function matchReviewOrderRows(rows){
   .sort((a,b)=>Number(!!a.player.historical_only)-Number(!!b.player.historical_only)||a.position-b.position||a.index-b.index).map(row=>row.player);
 }
 function matchReviewMappingPlayers(){return teamReviewRows().filter(p=>p.can_edit!==false&&!p.selection_only);}
-function matchReviewScoreChanged(previous,next){if(!previous)return true;return ['status','runs','not_out','balls','fours','sixes'].some(key=>(previous[key]??null)!==(next[key]??null))||(previous.dismissal_text||previous.dismissal||'')!==(next.dismissal_text||next.dismissal||'');}
+function matchReviewScoreChanged(previous,next){
+ if(!previous)return true;
+ // DNB has no not-out result: saved innings use false, provider cards use null.
+ const value=(score,key)=>key==='not_out'&&score.status==='did_not_bat'?null:score[key]??null;
+ return ['status','runs','not_out','balls','fours','sixes'].some(key=>value(previous,key)!==value(next,key))||(previous.dismissal_text||previous.dismissal||'')!==(next.dismissal_text||next.dismissal||'');
+}
 function matchReviewNameParts(value){
  let name=String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\((?:c|capt|captain|wk|wkt|keeper|c\s*\/\s*wk)\)/g,'').replace(/['’]/g,'');
  const reversed=name.split(',');if(reversed.length===2)name=reversed[1]+' '+reversed[0];
@@ -17192,7 +17197,8 @@ function matchReviewScoreDetails(player){
 function matchReviewScoreCell(player){
  const {i,source,b,stored,shown}=matchReviewScoreDetails(player),score=shown?(shown.status==='did_not_bat'?'DNB':`${shown.runs??'—'}${shown.not_out?'*':''}`):(player.score_text||'—'),lock=teamReviewControlsLocked()||(ensureTeamReviewState().sessionId&&ensureTeamReviewState().reviewCanEdit===false);
  const sr=shown?.balls>0&&shown.runs!=null?(100*Number(shown.runs)/Number(shown.balls)).toFixed(2):null;
- return `<td class="match-review-score"><span class="match-review-score-label">Score</span><div class="match-review-runs"><strong>${esc(score)}</strong>${shown?.balls!=null&&score!=='DNB'?`<span>${esc(shown.balls)} balls</span>`:''}</div>${sr?`<small>SR ${sr}</small>`:''}${shown&&(shown.fours!=null||shown.sixes!=null)&&score!=='DNB'?`<small>${shown.fours??'—'} × 4 · ${shown.sixes??'—'} × 6</small>`:''}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
+ const figures=score==='DNB'?'<div class="match-review-dnb"><strong>DNB</strong></div>':`<dl class="match-review-figures">${[['Runs',score],['Balls',shown?.balls],['SR',sr],['4s',shown?.fours],['6s',shown?.sixes]].map(([label,value],index)=>`<div${index===0?' class="match-review-figure-runs"':''}><dt>${label}</dt><dd><strong>${esc(value??'—')}</strong></dd></div>`).join('')}</dl>`;
+ return `<td class="match-review-score">${figures}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
 }
 function matchReviewDismissalDetails(player){
  const {b,shown}=matchReviewScoreDetails(player),replay=b?.dismissal_video_url?b:shown,name=player.display_name||player.name;
