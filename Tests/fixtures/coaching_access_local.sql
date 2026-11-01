@@ -1,0 +1,40 @@
+-- Minimal, entirely fictional local Postgres fixture. Access predicates under
+-- test are loaded from the saved production definitions, then the migration.
+-- Peripheral fixture/date helpers are controlled inputs, not a production clone.
+create schema auth;create schema club_batting_private;create schema club_selection_private;
+create role authenticated;create role anon;
+create table auth.users(id uuid primary key,email text);
+create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+create table public.user_profiles(user_id uuid,display_name text);
+create table public.clubs(id uuid primary key,name text,slug text,created_by uuid,archived_at timestamptz);
+create table public.players(id uuid primary key,club_id uuid,user_id uuid,display_name text,grade text,active boolean default true);
+create table public.club_memberships(club_id uuid,user_id uuid,role text,permission_role text,involvement text);
+create table public.club_access_grants(club_id uuid,user_id uuid,scope text,grade text,player_id uuid,playing_group_id uuid,can_view boolean,can_edit boolean);
+create table public.player_playing_groups(club_id uuid,player_id uuid,playing_group_id uuid);
+create table public.playing_groups(id uuid primary key,club_id uuid,name text,active boolean,created_by uuid);
+create table public.player_coaching_actions(id uuid,club_id uuid,player_id uuid,signal_key text,source_at timestamptz,outcome text,task text,recorded_by uuid,is_player_request boolean,preferred_user_id uuid);
+create table public.player_match_entries(id uuid primary key,club_id uuid,player_id uuid);
+create table public.player_match_coach_feedback(id uuid primary key,player_id uuid,match_entry_id uuid,note text);
+create table club_selection_private.access(club_id uuid,mode text,status text,head_selector_id uuid);
+create table club_selection_private.roster(id uuid primary key,club_id uuid,name text,user_id uuid,active boolean default true);
+create table club_selection_private.selection_groups(id uuid,club_id uuid,name text,batting_enabled boolean);
+create table club_selection_private.selection_group_grades(club_id uuid,grade_id uuid,selection_group_id uuid);
+create table club_selection_private.fixtures(id uuid default gen_random_uuid(),club_id uuid,details jsonb,slots jsonb,published jsonb);
+create table club_selection_private.season_appointments(group_id uuid,club_id uuid,captain_user_id uuid,updated_by uuid);
+create table club_batting_private.roster_players(club_id uuid,roster_id uuid,player_id uuid);
+create table club_batting_private.fixture_review_rosters(club_id uuid,fixture_id uuid,player_ids uuid[]);
+create table club_batting_private.coaching_duties(club_id uuid,id uuid,receives_batting_conversations boolean);
+create table club_batting_private.coaching_duty_members(club_id uuid,duty_id uuid,user_id uuid);
+create function public.is_club_admin(c uuid) returns boolean language sql stable as $$select exists(select 1 from public.club_memberships where club_id=c and user_id=auth.uid() and permission_role='admin')$$;
+create function club_selection_private.member(c uuid,u uuid) returns boolean language sql stable as $$select exists(select 1 from public.club_memberships where club_id=c and user_id=u)$$;
+create function club_selection_private.enabled(c uuid) returns boolean language sql stable as $$select exists(select 1 from club_selection_private.access where club_id=c and status='active')$$;
+create function club_selection_private.shared_products(c uuid) returns jsonb language sql stable as $$select jsonb_build_object('batting',exists(select 1 from club_selection_private.access where club_id=c and mode='bundle'))$$;
+create function club_selection_private.fixture_group_id(c uuid,d jsonb) returns uuid language sql stable as $$select (d->>'grade_group_id')::uuid$$;
+create function club_selection_private.fixture_identity(c uuid,d jsonb) returns jsonb language sql stable as $$select d-'cancelled'$$;
+create function club_selection_private.captain_expires(c uuid,d jsonb) returns timestamptz language sql stable as $$select (d#>>'{days,0,date}')::timestamptz+interval '2 days'$$;
+create function club_selection_private.manual_match_roles(c uuid,f uuid) returns jsonb language sql stable as $$select '{}'::jsonb$$;
+create function club_selection_private.season_captains(c uuid,g uuid) returns uuid[] language sql stable as $$select array_agg(captain_user_id) from club_selection_private.season_appointments where club_id=c and group_id=g$$;
+create function club_batting_private.completed_review_snapshot(c uuid,f uuid) returns jsonb language sql stable as $$select null::jsonb$$;
+create function club_batting_private.group_uses_batting(c uuid,g uuid) returns boolean language sql stable as $$select exists(select 1 from club_selection_private.selection_group_grades x join club_selection_private.selection_groups s on s.id=x.selection_group_id where x.club_id=c and x.grade_id=g and s.batting_enabled)$$;
+create function club_batting_private.player_uses_batting(c uuid,p uuid) returns boolean language sql stable as $$select coalesce((club_selection_private.shared_products(c)->>'batting')::boolean,false)$$;
+create function club_batting_private.shared_innings_json(mid uuid) returns jsonb language sql stable as $$select jsonb_build_object('id',m.id,'scorecard','{"unused":true}'::jsonb,'coach_feedback',(select coalesce(jsonb_agg(to_jsonb(f)),'[]'::jsonb) from public.player_match_coach_feedback f where f.match_entry_id=m.id)) from public.player_match_entries m where m.id=mid$$;

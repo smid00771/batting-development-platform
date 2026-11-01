@@ -452,11 +452,12 @@ window.__fixtureRpc=async(name,args={})=>{
  const userId=session?.user?.id;
  switch(name){
  case 'get_player_innings_details':return ok({matches:(fixtureRows.feedback[args.p_player_id]?.matches||[]).map(m=>({id:m.id,player_note:m.player_note||'',player_video:m.player_video||null}))});
+ case 'get_my_coaching_observation':
  case 'get_my_innings':{
    if(!myPlayer)return fail('An active player registration is required');
    const feedback=fixtureRows.feedback[myPlayer.id]||demoEmptyFeedback();
-   return ok({matches:feedback.matches.map(m=>({...m,innings_number:m.innings_number||1,participation_status:m.participation_status||'played',score_recorded_by:m.score_recorded_by??(String(m.score_text||'').trim()?m.created_by:null),can_edit_score:demoCanEditInningsScore(myPlayer.id,m),can_edit_details:m.created_by===userId,player_note:m.player_note||'',dismissal_summary:m.player_note||'',player_video:m.player_video||null,
-     coach_feedback:m.coach_feedback.map(f=>{
+   return ok({matches:feedback.matches.filter(m=>name!=='get_my_coaching_observation'||m.coach_feedback.some(f=>f.id===args.p_observation_id)).map(m=>({...m,innings_number:m.innings_number||1,participation_status:m.participation_status||'played',score_recorded_by:m.score_recorded_by??(String(m.score_text||'').trim()?m.created_by:null),can_edit_score:demoCanEditInningsScore(myPlayer.id,m),can_edit_details:m.created_by===userId,player_note:m.player_note||'',dismissal_summary:m.player_note||'',player_video:m.player_video||null,
+     coach_feedback:m.coach_feedback.filter(f=>name!=='get_my_coaching_observation'||f.id===args.p_observation_id).map(f=>{
        const a=feedback.coaching_actions.find(a=>a.match_feedback_id===f.id);
        if(observationHasAssessment(f)&&!m.player_reflection)return {id:f.id,author_name:f.author_name,plan_related:true,reflection_required:true,followup_status:a?.status};
        return {...f,reflection_required:false,action_id:a?.id,video:a?demoConversationView(a).video:null,followup_status:a?.status};

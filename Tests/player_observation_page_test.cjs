@@ -22,7 +22,7 @@ test('a comment opens by itself even when another observation on that innings re
  const page=h.document.querySelector('#page');assert.match(page.textContent,/Coach comment to read/);assert.doesNotMatch(page.textContent,/Separate assessed feedback|Your view first|Main issue|Season|Prepare for a match|Current focus|General coaching note/);
  assert.equal(page.querySelectorAll('input,textarea,select').length,0);assert.equal(page.querySelector('#myReflectionForm'),null);
  assert.equal(page.querySelectorAll('[data-coach-feedback-id]').length,1);
- assert.equal(calls(h).slice(start).filter(c=>c.name==='get_my_innings').length,1);assert.ok(!calls(h).slice(start).some(c=>['get_my_match_preparations','get_player_focus','get_player_engagement','get_feedback_workspace'].includes(c.name)));
+ assert.equal(calls(h).slice(start).filter(c=>c.name==='get_my_coaching_observation').length,1);assert.ok(!calls(h).slice(start).some(c=>['get_my_innings','get_my_match_preparations','get_player_focus','get_player_engagement','get_feedback_workspace','get_coach_observation_context','get_player_innings_details'].includes(c.name)));
  assert.ok(calls(h).slice(start).some(c=>c.name==='mark_my_coaching_update_seen'));clean(h);
 });
 
@@ -40,7 +40,7 @@ test('an explicit plan assessment opens only two quick questions and retains saf
  assert.equal(form.dataset.reflectionOnly,'true');assert.equal(form.querySelectorAll('fieldset').length,2);assert.equal(form.querySelectorAll('input[type=radio]').length,6);assert.equal(form.querySelector('details').open,false);
  assert.doesNotMatch(page.textContent,/Coach comment to read|Update this innings|Who can see my preparation|Keep one or two priorities|Season|YouTube link/);
  assert.equal(page.querySelectorAll('#reflectionDate,#reflectionScore,#inningsVideoUrl,.innings-table').length,0);
- assert.equal(calls(h).slice(start).filter(c=>c.name==='get_my_innings').length,1);assert.ok(!calls(h).slice(start).some(c=>['get_my_match_preparations','get_player_focus','get_player_engagement','get_feedback_workspace'].includes(c.name)));
+ assert.equal(calls(h).slice(start).filter(c=>c.name==='get_my_coaching_observation').length,1);assert.ok(!calls(h).slice(start).some(c=>['get_my_innings','get_my_match_preparations','get_player_focus','get_player_engagement','get_feedback_workspace','get_coach_observation_context','get_player_innings_details'].includes(c.name)));
  assert.ok(!calls(h).slice(start).some(c=>c.name==='mark_my_coaching_update_seen'));
  await h.click('#saveMyReflection');assert.match(h.document.querySelector('#myReflectionStatus').textContent,/Choose one answer for each/);
  await h.click('[name=myBattingToPlan][value=mostly]');await h.click('#saveMyReflection');assert.ok(h.document.querySelector('#myReflectionForm'));
