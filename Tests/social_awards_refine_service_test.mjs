@@ -234,3 +234,27 @@ test('large row headers are supported by refreshed clients while older clients k
  assert.equal(old.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.row_logo_size.maximum,84);
  const unsupported=setup({output:{changes:{row_logo_size:160}}});assert.equal((await refineAward(body,unsupported.options)).status,502);
 });
+
+
+test('team label alignment reaches the supported client and is excluded from older client contracts',async()=>{
+ const layout={top:620,bottom:1230,left:65,figures_right:825,grade_right:1015,grade_align:'right'},context={design:{revision:3,layout},candidates:[]};
+ const base={...request(),kind:'team_week',purpose:'graphic_refine',current:layout},output={changes:{grade_align:'center'},grade_labels:[],explanation:'Centre the team names.',artwork_brief:null};
+ const good=setup({context,output}),result=await refineAward(base,good.options);assert.equal(result.status,200);assert.deepEqual(result.body.changes,{grade_align:'center'});
+ const model=good.calls.find(c=>c.url.includes('openai')).body;assert.deepEqual(model.text.format.schema.properties.changes.properties.grade_align.enum,['left','center','right',null]);assert.match(model.instructions,/centre align the team names/);
+ const old={...layout};delete old.grade_align;const legacy=setup({context,output:{...output,changes:{}}});assert.equal((await refineAward({...base,current:old},legacy.options)).status,200);
+ const fields=legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes;assert.ok(!fields.required.includes('grade_align'));assert.equal(fields.properties.grade_align,undefined);
+ const unsupported=setup({context,output});assert.equal((await refineAward({...base,current:old},unsupported.options)).status,502);
+ const invalid=setup({context,output:{...output,changes:{grade_align:'justify'}}});assert.equal((await refineAward(base,invalid.options)).status,502);
+});
+
+
+test('resizing Week 4 changes overlay type size and cannot route that resize to the background editor',async()=>{
+ const layout={top:620,bottom:1230,left:65,figures_right:825,grade_right:1015,week_size:34},context={design:{revision:3,layout},candidates:[]};
+ const base={...request(),kind:'team_week',purpose:'graphic_refine',current:layout,graphic_label:'Week 4',brief:'Make the tiny Week 4 slightly larger'};
+ const output={changes:{week_size:42},grade_labels:[],explanation:'Make Week 4 slightly larger.',artwork_brief:null},good=setup({context,output}),result=await refineAward(base,good.options);
+ assert.equal(result.status,200);assert.deepEqual(result.body.changes,{week_size:42});assert.equal(result.body.artwork_brief,null);assert.match(good.calls.find(c=>c.url.includes('openai')).body.instructions,/never painted into it/);
+ const wrong=setup({context,output:{...output,changes:{},artwork_brief:'Slightly enlarge the existing WEEK 4 text beneath the title, preserving its current font, colour and position.'}}),blocked=await refineAward(base,wrong.options);assert.equal(blocked.status,422);assert.match(blocked.body.error,/No background edit was started/);assert.equal(blocked.body.artwork_brief,undefined);
+ const old={...layout};delete old.week_size;const legacy=setup({context,output:{...output,changes:{}}});assert.equal((await refineAward({...base,current:old},legacy.options)).status,200);assert.equal(legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.week_size,undefined);
+ const unsupported=setup({context,output});assert.equal((await refineAward({...base,current:old},unsupported.options)).status,502);
+ const invalid=setup({context,output:{...output,changes:{week_size:200}}});assert.equal((await refineAward(base,invalid.options)).status,502);
+});

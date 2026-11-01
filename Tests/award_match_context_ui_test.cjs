@@ -16,6 +16,7 @@ test('both delivered award screens use scorecard context, including Team of the 
   return result;
  };
  await h.choose('#socialCreateMenu','team_week');
+ await h.click('[name=twMethod][value=smart]');
  assert.match(h.document.querySelector('.tw-table tbody').textContent,/76% of 79/);
  assert.match(h.document.querySelector('.tw-table tbody').textContent,/1\/5 in 8 overs · Econ 0.63 vs team-mates 2.49/);
  assert.match(h.document.querySelector('.tw-table tbody').textContent,/SR 200 vs rest of match 39/);
@@ -34,6 +35,7 @@ test('both delivered award screens use scorecard context, including Team of the 
  Object.assign(card.scorecard.innings[0],{runs:275,wickets:9,batters:[{player_id:'visitor',runs:275,balls:300}],bowlers:[...p.bowling,{player_id:'other',wickets:9,runs:260,balls:240}]});
  Object.assign(card.scorecard.innings[1],{runs:276,wickets:1,batters:[...p.batting,{player_id:'partner',runs:276,balls:298}]});
  await h.choose('#socialCreateMenu','team_week');
+ await h.click('[name=twMethod][value=smart]');
  await h.window.eval('socialWeek.load(socialEnsure())');await h.settle();
  assert.equal(h.window.eval('socialWeek.state(socialEnsure()).rows[0].display'),'bowling');
  await h.click('[data-tw-pick="context-player"]');

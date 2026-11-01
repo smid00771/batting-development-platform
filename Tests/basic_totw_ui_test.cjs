@@ -18,6 +18,9 @@ test('delivered Basic/Smart controls keep separate drafts, require eleven human 
  await h.choose('#socialCreateMenu','team_week');
  const state=()=>h.window.eval('socialWeek.state(socialEnsure())');
  const keys=()=>Array.from(state().rows,p=>p.player_id);
+ assert.ok(h.document.querySelector('[name=twMethod][value=basic]').checked);
+ assert.equal(state().rows.length,0);
+ await h.click('[name=twMethod][value=smart]');
  const smart=keys(),smartPoints=Array.from(state().review.contenders,p=>[p.key,p.points]);
  assert.ok(h.document.querySelector('[name=twMethod][value=smart]').checked);
  await h.click('[name=twMethod][value=basic]');
@@ -51,19 +54,21 @@ test('delivered Basic/Smart controls keep separate drafts, require eleven human 
  // Saving/finalising locks the method just like the other selection controls.
  state().pending={};h.window.eval('socialWeek.render(socialEnsure())');await h.settle();
  assert.ok([...h.document.querySelectorAll('[name=twMethod]')].every(e=>e.disabled));state().pending=null;
- // Reopening for this user/club remembers Basic, without bringing in an old XI.
+ // Fresh workspaces default to Basic, even after choosing Smart or an older stored preference.
+ await h.click('[name=twMethod][value=smart]');
+ h.window.eval("fixtureLocalStorage.setItem('cb-totw-mode:'+socialEnsure().scope,'smart')");
  await h.window.eval('socialEnsure().week=null;socialWeek.render(socialEnsure())');await h.settle();
  assert.equal(state().totwMode,'basic');assert.equal(state().rows.length,0);
  assert.equal(h.errors.length,0,h.errors.map(e=>e.message).join('\n'));
 });
 
-test('Basic preference is isolated by account/club and switching weeks cannot restore a prior XI',async t=>{
+test('Basic defaults across clubs and switching weeks cannot restore a prior XI',async t=>{
  const h=await openDemo({product:'select',role:'socials',journey:'socials'});t.after(h.close);
  await h.choose('#socialCreateMenu','team_week');await h.click('[name=twMethod][value=basic]');
  await h.click('.tw-choice input:not(:checked):not(:disabled)');
  const next=h.window.eval("(()=>{const w=socialWeek.state(socialEnsure());w.end='2026-12-20';w.context=null;return socialWeek.load(socialEnsure());})()");
  await next;await h.settle();await h.click('[name=twMethod][value=smart]');await h.click('[name=twMethod][value=basic]');
  assert.equal(h.window.eval('socialWeek.state(socialEnsure()).rows.length'),0);
- assert.equal(h.window.eval("socialWeek.state({scope:'other-user:other-club',data:{timezone:'Australia/Sydney'}}).totwMode"),'smart');
+ assert.equal(h.window.eval("socialWeek.state({scope:'other-user:other-club',data:{timezone:'Australia/Sydney'}}).totwMode"),'basic');
  assert.equal(h.errors.length,0,h.errors.map(e=>e.message).join('\n'));
 });

@@ -30,3 +30,7 @@ The .293 client can match `show_week` to the reference. Older clients do not rec
 
 
 Results multi-opponent layouts use above-panel logo pairs with proportional two/three/four-match sizing. Refreshed clients accept row_logo_size up to 180; clients without show_week retain the old maximum of 84. Full example setup and measured composition matching preserve show_margin:true so omitted reference margins cannot hide recorded current results. Narrow follow-up requests still control visibility. Auth, RLS and allowances are unchanged.
+
+Version 0.8.62.331 supports Team of the Week team-label alignment through `grade_align` (`left`, `center`, `right`). The setting aligns only the labels inside the existing team column, preserving names, figures and source grades. Older clients omit the field and are asked to refresh for alignment requests. Preview, Apply, Undo, access checks and club limits are unchanged.
+
+The same release exposes `week_size` (20–80 pixels, default 34). Week/round labels remain text overlays; a modest enlargement is 34 to 42. A provider response that redirects a week-label resize to background editing is blocked before artwork generation. Older clients omit the size field and are asked to refresh.

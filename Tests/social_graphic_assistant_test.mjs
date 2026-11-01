@@ -27,9 +27,9 @@ for(const [kind,create,apiCreate,prefix,canvasId] of [['team_week',createTeamOfW
  api.rpc=async(name,args)=>{calls.push(structuredClone(args));if(args.p_action==='save_design'&&failSave)return {error:{message:'Connection lost'}};const result=await rpc(name,args);if(args.p_action==='context')for(const p of result.data.candidates)p.grade=grade;return result;};
  api.functions={invoke:async(_,request)=>{calls.push(request.body);if(release)return await release;return {data:answer||{changes:{},grade_labels:[{grade,label:'Dev'}],explanation:'Shortened the grade label.'}};}};
  const s={scope:'test:club-test',view:kind,data:{brand:{name:'Test Club'},timezone:'Australia/Sydney'},design:{primary:'#073554',accent:'#128fd2'},urls:new Map()};
- let backgroundHelp;const mod=create({supabase:api,sharedResults:true,loadLabel:async()=>sharedLabel,here:x=>x===s,escape:esc,extractUrl:x=>x[0],fontReady:async()=>{},image:async()=>null,text:(ctx,t,x,y,width,size)=>{ctx.font=`700 ${size}px ${ctx.socialFont}`;while(ctx.measureText(String(t)).width>width&&size>12)ctx.font=`700 ${--size}px ${ctx.socialFont}`;ctx.fillText(String(t),x,y);},savedPhotos:()=>[],openBackground:(_,file,apply,options)=>backgroundHelp={file,apply,options}}),w=mod.state(s);
+ const drawn=[];let backgroundHelp;const mod=create({supabase:api,sharedResults:true,loadLabel:async()=>sharedLabel,here:x=>x===s,escape:esc,extractUrl:x=>x[0],fontReady:async()=>{},image:async()=>null,text:(ctx,t,x,y,width,size)=>{drawn.push({text:String(t),x,y,align:ctx.textAlign,size});ctx.font=`700 ${size}px ${ctx.socialFont}`;while(ctx.measureText(String(t)).width>width&&size>12)ctx.font=`700 ${--size}px ${ctx.socialFont}`;ctx.fillText(String(t),x,y);},savedPhotos:()=>[],openBackground:(_,file,apply,options)=>backgroundHelp={file,apply,options}}),w=mod.state(s);
  w.end='2026-10-11';mod.render(s);const settled=()=>until(()=>w.context&&!w.busy&&w.previewReady);await settled();
- if(kind==='team_week'){id('twUseSuggested')?.click();}else document.querySelector('[data-pw-choose]').click();await settled();
+ if(kind==='team_week'){document.querySelector('[name=twMethod][value=smart]').click();await settled();id('twUseSuggested')?.click();}else document.querySelector('[data-pw-choose]').click();await settled();
  assert.ok(id(prefix+'Brief'),'Assistant is visible without opening a hidden editor');
  const facts=JSON.stringify(w.context.candidates),before=id(canvasId).backing.toBuffer('image/png');
  id(prefix+'Brief').value='Shorten Development League to Dev';id(prefix+'Brief').dispatchEvent(new window.Event('input'));id(prefix+'Try').click();await settled();
@@ -38,6 +38,25 @@ for(const [kind,create,apiCreate,prefix,canvasId] of [['team_week',createTeamOfW
  id(prefix+'Undo').click();await settled();assert.equal(w.graphicAssistant.candidate,false);assert.deepEqual(id(canvasId).backing.toBuffer('image/png'),before);assert.equal(mod.canLeave(s),true);
  id(prefix+'Try').click();await settled();failSave=true;id(prefix+'Use').click();await settled();assert.equal(w.graphicAssistant.saveUncertain,true);assert.equal(id(prefix+'Undo').disabled,true);assert.equal(id(prefix+'Try').disabled,true);assert.equal(id(prefix+'Reload').disabled,false);
  failSave=false;id(prefix+'Use').click();await settled();assert.equal(w.graphicAssistant.candidate,false);assert.equal(w.graphicAssistant.saveUncertain,false);await mod.load(s,{preserve:true});await settled();assert.equal(w.layout.grade_labels[0].label,'Dev');assert.equal(JSON.stringify(w.context.candidates),facts);
+ if(kind==='team_week'){
+  const beforeAlign=id(canvasId).backing.toBuffer('image/png'),positions=drawn.slice(-w.rows.length*3),savedLayout=JSON.stringify(w.layout),selected=JSON.stringify(w.rows);
+  answer={changes:{grade_align:'center'},grade_labels:[],explanation:'Centre the team labels.'};
+  const centre=async()=>{id(prefix+'Brief').value='Centre align the team names';id(prefix+'Brief').dispatchEvent(new window.Event('input'));drawn.length=0;id(prefix+'Try').click();await settled();};
+  await centre();assert.equal(w.layout.grade_align,'center');assert.equal(id('twGradeAlign').value,'center');assert.notDeepEqual(id(canvasId).backing.toBuffer('image/png'),beforeAlign);
+  const aligned=drawn.slice(-w.rows.length*3);
+  for(let i=0;i<aligned.length;i+=3){assert.deepEqual(aligned[i],positions[i],'Player name stays put');assert.deepEqual(aligned[i+1],positions[i+1],'Figures stay put');assert.equal(aligned[i+2].align,'center');assert.equal(aligned[i+2].x,930,'Centre of the 845–1015 team column');}
+  assert.equal(JSON.stringify(w.rows),selected);assert.equal(JSON.stringify(w.context.candidates),facts);
+  id(prefix+'Undo').click();await settled();assert.equal(JSON.stringify(w.layout),savedLayout);assert.deepEqual(id(canvasId).backing.toBuffer('image/png'),beforeAlign);
+  await centre();id(prefix+'Use').click();await settled();await mod.load(s,{preserve:true});await settled();assert.equal(w.layout.grade_align,'center');assert.equal(calls.filter(c=>c.p_action==='save_design').at(-1).p_data.layout.grade_align,'center');
+  const manual=id('twGradeAlign');manual.value='left';manual.dispatchEvent(new window.Event('change'));await settled();assert.equal(w.designDirty,true);assert.equal(w.layout.grade_align,'left');
+  manual.value='center';manual.dispatchEvent(new window.Event('change'));await settled();id('twSaveDesign').click();await settled();assert.equal(w.designDirty,false);
+  const labelPixels=id(canvasId).backing.toBuffer('image/png'),labelRows=drawn.slice(-w.rows.length*3),labelLayout=JSON.stringify(w.layout);backgroundHelp=null;
+  answer={changes:{week_size:42},grade_labels:[],explanation:'Make Week 4 slightly larger.',artwork_brief:null};
+  const enlarge=async()=>{id(prefix+'Brief').value='Make the tiny Week 4 slightly larger';id(prefix+'Brief').dispatchEvent(new window.Event('input'));drawn.length=0;id(prefix+'Try').click();await settled();};
+  await enlarge();assert.equal(w.layout.week_size,42);assert.equal(id('twWeekSize').value,'42');assert.equal(backgroundHelp,null);assert.notDeepEqual(id(canvasId).backing.toBuffer('image/png'),labelPixels);assert.deepEqual(drawn.slice(-w.rows.length*3),labelRows,'All player rows stay unchanged');assert.equal(drawn.findLast(d=>d.text===w.title.toUpperCase()).size,42);
+  id(prefix+'Undo').click();await settled();assert.equal(JSON.stringify(w.layout),labelLayout);assert.deepEqual(id(canvasId).backing.toBuffer('image/png'),labelPixels);
+  await enlarge();id(prefix+'Use').click();await settled();await mod.load(s,{preserve:true});await settled();assert.equal(w.layout.week_size,42);assert.equal(backgroundHelp,null);assert.equal(JSON.stringify(w.context.candidates),facts);answer=null;
+ }
  if(process.env.GRAPHIC_PREVIEW_DIR&&kind==='team_week'){fs.mkdirSync(process.env.GRAPHIC_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.GRAPHIC_PREVIEW_DIR+'/team-week-dev.png',id(canvasId).backing.toBuffer('image/png'));}
  // The reported request must change actual pixels before approval, without repainting artwork or changing dates.
  assert.equal(id(prefix+'Try').textContent,'Preview changes');

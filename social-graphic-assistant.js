@@ -1,4 +1,4 @@
-import {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays} from './social-graphic-design.js?v=0.8.62.270';
+import {graphicSettings,refinedGraphicLayout,withGradeLabels,graphicLabel,graphicPlayerDisplays} from './social-graphic-design.js?v=0.8.62.331';
 
 export const assistantCSS=`<style>.graphic-assistant{margin:10px 0}.graphic-assistant label{display:grid;gap:5px;margin:0!important;font-size:14px;font-weight:600}.graphic-assistant textarea{width:100%;box-sizing:border-box;font:inherit;resize:vertical}.graphic-assistant .ga-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.graphic-assistant .btn{min-height:44px}.graphic-assistant p{font-size:13px;line-height:1.4;margin:6px 0}.graphic-assistant p:empty{display:none}.ga-label-warning{padding:8px;background:#fff3dc;border-radius:6px;margin-bottom:8px}.ga-label-warning input{box-sizing:border-box;max-width:100%;min-height:40px;margin:4px 6px 4px 0}.ga-label-warning .btn{margin-top:4px}</style>`;
 
