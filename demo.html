@@ -3796,7 +3796,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.328.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.329.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -9395,11 +9395,12 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  await h.fontReady();await awardFontsReady(layout);canvas.width=bg?(bg.naturalWidth||bg.width):1080;canvas.height=bg?(bg.naturalHeight||bg.height):1350;
  const ctx=canvas.getContext('2d');canvas.graphicLabelWarnings=[];if(bg)ctx.drawImage(bg,0,0);else{const g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);g.addColorStop(0,s.design?.primary||'#073554');g.addColorStop(1,s.design?.accent||'#128fd2');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);}
  const scale=canvas.width/1080,height=canvas.height/scale;ctx.scale(scale,scale);ctx.socialFont=AWARD_FONTS[layout.font];ctx.textAlign='center';ctx.textBaseline='middle';
+ const inkWidth=(m,align)=>align==='center'?2*Math.max(m.actualBoundingBoxLeft,m.actualBoundingBoxRight,m.width/2):Math.max(m.width,m.actualBoundingBoxLeft+m.actualBoundingBoxRight);
  const text=(value,x,y,width,size,colour=layout.text_colour,role='player')=>{
   value=String(value);const font=awardFont(layout,role),weight=AWARD_FONT_WEIGHTS[font]||'700';ctx.socialFont=AWARD_FONTS[font];ctx.fillStyle=colour;
   // Include italic/script overhang, not just the advance width. This protects
   // neighbouring columns without cutting the final letter off at the clip edge.
-  while(size>18){ctx.font=`${weight} ${size}px ${ctx.socialFont}`;const m=ctx.measureText(value),ink=ctx.textAlign==='center'?2*Math.max(m.actualBoundingBoxLeft,m.actualBoundingBoxRight,m.width/2):Math.max(m.width,m.actualBoundingBoxLeft+m.actualBoundingBoxRight);if(ink<=width-4)break;size--;}
+  while(size>18){ctx.font=`${weight} ${size}px ${ctx.socialFont}`;if(inkWidth(ctx.measureText(value),ctx.textAlign)<=width-4)break;size--;}
   ctx.font=`${weight} ${size}px ${ctx.socialFont}`;const bounds=ctx.measureText(value);
   if(role==='title'||role==='week')y=Math.max(24+bounds.actualBoundingBoxAscent,Math.min(height-24-bounds.actualBoundingBoxDescent,y));
   h.text(ctx,value,x,y,width-4,size,weight);
@@ -9431,7 +9432,7 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  const crops=images.example?matchingResultBadgeCrops(layout):[],lettering=crops.length?referenceBadgePair(images.example,crops,()=>canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1)):null;
  canvas.resultsLetteringFallback=crops.length>0&&!lettering;
  if(plan.header){const {x,y,size,gap}=plan.header;logoPair(items.map(item=>images.opponents?.[item.key]).find(Boolean),resultsSummary(items[0]),x,y,size,gap,layout.text_colour);}
- const measure=(value,role,size)=>{const font=awardFont(layout,role);ctx.save();ctx.textAlign='left';ctx.font=`${AWARD_FONT_WEIGHTS[font]||'700'} ${size}px ${AWARD_FONTS[font]}`;const m=ctx.measureText(value);ctx.restore();return m;};
+ const measure=(value,role,size,align='left')=>{const font=awardFont(layout,role);ctx.save();ctx.textAlign=align;ctx.font=`${AWARD_FONT_WEIGHTS[font]||'700'} ${size}px ${AWARD_FONTS[font]}`;const m=ctx.measureText(String(value));ctx.restore();return m;};
  const marginLines=(value,d=layout,scale=1)=>{
   let size=Math.min(d.margin_size,34*scale),lines=[];
   if(!value)return {lines,size};
@@ -9452,6 +9453,23 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  const rowScale=plan.rowScale,d={...layout};
  for(const key of ['grade_size','grade_width','score_size','player_size','badge_size','badge_width','margin_size'])d[key]*=rowScale;
  d.badge_width=Math.min(columns.centreWidth,d.badge_width);
+ // Fit the complete list once. Individual long names must not shrink while
+ // their neighbours and figures keep a larger size. Recalculate the shared
+ // figure grid at each candidate size to retain the largest size that fits.
+ const bodyRow=resultsRowPlan(d,rowHeight,sharedOpponent,0,0,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
+ let font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,bodyRow.line-5)/inkHeight:bodyRow.line*.8);
+ const left=columns.left,right=columns.right,nameInset=d.player_align==='center'?16*rowScale:0,nameGap=12*rowScale;
+ const bodyWidth=(value,size,align='left')=>inkWidth(measure(value,'player',size,align),align);
+ const gridAt=size=>{
+  const markerWidth=bodyWidth('*',size)+4,battingWidth=Math.max(24*rowScale,...batting.map(p=>bodyWidth(p.runs,size)+4)),bowlingWidth=Math.max(36*rowScale,...bowling.map(p=>bodyWidth(`${p.wickets}/${p.runs}`,size)+4));
+  const battingStart=Math.min(columns.leftFigures-measure('88','player',size).width,columns.centre-100-battingWidth-markerWidth-8),bowlingStart=right-bowlingWidth+4;
+  return {markerWidth,battingWidth,bowlingWidth,battingStart,bowlingStart,leftNameWidth:battingStart-nameGap-left-nameInset,rightNameWidth:bowlingStart-nameGap-columns.rightNames-nameInset};
+ };
+ let grid=gridAt(font);
+ const namesFit=()=>batting.every(p=>bodyWidth(p.name,font,d.player_align)<=grid.leftNameWidth-4)&&bowling.every(p=>bodyWidth(p.name,font,d.player_align)<=grid.rightNameWidth-4);
+ while(font>18&&!namesFit()){font=Math.max(18,font-1);grid=gridAt(font);}
+ const {markerWidth,battingWidth,bowlingWidth,battingStart,bowlingStart,leftNameWidth,rightNameWidth}=grid;
+ const playerName=(value,start,y,width)=>{ctx.textAlign=d.player_align;const x=d.player_align==='center'?start+width/2:d.player_align==='right'?start+width:start;text(value,x,y,width,font,d.player_colour);};
  for(let n=0;n<items.length;n++){
   const item=items[n],r=summaries[n],y=top+n*(rowHeight+gap+plan.logoBand),outcome=r.outcome;
   if(plan.mixedLogos){const {size,gap:logoGap,offset}=plan.mixedLogos;logoPair(images.opponents?.[item.key],r,columns.centre,y+offset,size,logoGap,d.text_colour);}
@@ -9464,30 +9482,23 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
   const margin=d.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin,d,rowScale),marginHeight=lines.length*marginSize*1.15;
   const badgeLabel=resultLabel(outcome,d),badgeImage=lettering?.[badgeLabel];
   const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=badgeImage?Math.min(100*rowScale,d.badge_width*badgeImage.height/badgeImage.width):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
-  const row=resultsRowPlan(d,rowHeight,sharedOpponent,marginHeight,badgeHeight,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
-  const font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,row.line-5)/inkHeight:row.line*.8),left=columns.left,right=columns.right;
-  const playerName=(value,start,y,width)=>{ctx.textAlign=d.player_align;const x=d.player_align==='center'?start+width/2:d.player_align==='right'?start+width:start;text(value,x,y,width,font,d.player_colour);};
-  const nameInset=d.player_align==='center'?16*rowScale:0,nameGap=12*rowScale;
+  const row=resultsRowPlan(d,rowHeight,sharedOpponent,marginHeight,badgeHeight,rowScale);
   // Every figure starts at the same left edge, including a three-digit score
   // or a not-out. A marker follows its number; it never moves the column.
   // Use one measured name/figure grid across all grades in this graphic.
-  const markerWidth=measure('*','player',font).width+4;
-  const battingWidth=Math.max(24*rowScale,...batting.map(p=>measure(String(p.runs),'player',font).width+4));
-  const bowlingWidth=Math.max(36*rowScale,...bowling.map(p=>measure(`${p.wickets}/${p.runs}`,'player',font).width+4));
-  const battingStart=Math.min(columns.leftFigures-measure('88','player',font).width,columns.centre-100-battingWidth-markerWidth-8),bowlingStart=right-bowlingWidth+4;
   band(left,battingStart-left+battingWidth+markerWidth+4,y,()=>{
    ctx.textAlign='center';
    text(r.ourScore,(left+nameInset+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,d.score_size,d.score_colour,'score');
    for(let j=0;j<r.batting.length;j++){
     const bat=r.batting[j],playerY=y+row.playerTop+j*row.line;
-    playerName(bat.name,left+nameInset,playerY,battingStart-nameGap-left-nameInset);
+    playerName(bat.name,left+nameInset,playerY,leftNameWidth);
     ctx.textAlign='left';text(String(bat.runs),battingStart,playerY,battingWidth,font,d.player_colour);
     if(bat.not_out){const end=battingStart+ctx.measureText(String(bat.runs)).width;text('*',end+1,playerY,markerWidth+4,font,d.player_colour);}
    }
   });
   band(columns.rightNames,right-columns.rightNames,y,()=>{
    ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right+(nameInset?bowlingWidth:0))/2,y+row.scoreY,right-columns.rightNames,d.score_size,d.score_colour,'score');
-   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames+nameInset,y+row.playerTop+j*row.line,bowlingStart-nameGap-columns.rightNames-nameInset);ctx.textAlign='left';text(`${bowl.wickets}/${bowl.runs}`,bowlingStart,y+row.playerTop+j*row.line,bowlingWidth,font,d.player_colour);}
+   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames+nameInset,y+row.playerTop+j*row.line,rightNameWidth);ctx.textAlign='left';text(`${bowl.wickets}/${bowl.runs}`,bowlingStart,y+row.playerTop+j*row.line,bowlingWidth,font,d.player_colour);}
   });
   ctx.textAlign='center';
   band(columns.centre-100,200,y,()=>{
@@ -13751,7 +13762,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.328';
+const APP_UI_VERSION='0.8.62.329';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

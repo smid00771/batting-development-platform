@@ -47,7 +47,7 @@ test('compact shared results honour a high score position and keep the requested
 });
 test('centred reference lists stay compact and not-out markers do not shift the figure column',async()=>{
  const saved={layout_mode:'template',title_font:'condensed',title_size:158,title_y:6.8,rows_top:25.8,rows_bottom:89.3,row_gap:65,row_inset:49,grade_font:'condensed',grade_size:48,grade_width:390,score_size:36,score_y:19,player_top:44,player_size:28,player_font:'sans',player_align:'center',score_font:'condensed',left_column_end:32.9,right_column_start:65.8,logo_size:9,logo_y:16,margin_size:43,margin_font:'condensed'};
- const items=fixture(true);items.forEach((item,i)=>{item.innings[0].batters.forEach((b,j)=>{b.name=['Alex Example','Casey Sample','Jamie Player'][j];b.runs=[i===0?112:58,52,9][j];b.not_out=j===0;});});
+ const items=fixture(true);items.forEach((item,i)=>{item.innings[0].batters.forEach((b,j)=>{b.name=['Alex Example','Casey Sample','Jamie Player'][j];b.runs=[i===0?112:58,52,9][j];b.not_out=j===0;});item.innings[1].bowlers.forEach((b,j)=>b.name=['Jordan Example','Taylor Sample','Morgan Player'][j]);});
  const before=JSON.stringify(items),r=await render(items,saved,1350);
  const names=r.text.filter(t=>['Alex Example','Casey Sample','Jamie Player'].includes(t.value));
  assert.ok(names.every(n=>Math.abs(n.x-names[0].x)<.01),'Names share one centre across rows and grades');
@@ -65,4 +65,25 @@ test('centred reference lists stay compact and not-out markers do not shift the 
   for(const name of [first,second,third])assert.ok(name.right+10<digits.find(n=>n.y===name.y).left,'Names and figures remain distinct');
  }
  assert.equal(JSON.stringify(items),before,'Layout cannot alter imported match facts');
+});
+
+test('short and long player names share one readable size with figures across all grades',async()=>{
+ const saved={layout_mode:'template',font:'sporting',title_font:'condensed',title_size:158,title_y:6.8,rows_top:25.8,rows_bottom:89.3,row_gap:65,row_inset:49,grade_font:'condensed',grade_size:48,grade_width:390,score_size:36,score_y:19,player_top:44,player_size:28,player_font:'sans',player_align:'center',score_font:'condensed',left_column_end:32.9,right_column_start:65.8,logo_size:14,logo_y:14.5,margin_size:43,margin_font:'condensed'};
+ const bowlingNames=[['Callan Fowler','Jonah Rhineberger','Izaac Coyle'],['Anthonie Clement','Anik Arya','Izaan Mohammed'],['Mitch King','Brendon Young','Callum van Huisstede'],["Bradley O'Dell",'John Sinclair','Stephan du Plooy']];
+ for(const shared of [true,false]){
+  const items=fixture(shared);items.forEach((item,i)=>{item.grade=(i+1)+'st Grade';item.innings[0].batters.forEach((b,j)=>{b.name=['Alex Example','Casey Sample','Jamie Player'][j];b.runs=[i===0?112:58,52,9][j];b.not_out=j===0;});item.innings[1].bowlers.forEach((b,j)=>b.name=bowlingNames[i][j]);});
+  const before=JSON.stringify(items),r=await render(items,saved),names=new Set(items.flatMap(item=>[...item.innings[0].batters,...item.innings[1].bowlers].map(p=>p.name)));
+  const body=r.text.filter(t=>names.has(t.value)||['112','58','52','9','*'].includes(t.value)||/^[1-3]\/2[4-6]$/.test(t.value));
+  assert.equal(body.length,52,'Every complete name, figure and not-out is retained');
+  assert.equal(new Set(body.map(t=>t.size)).size,1,'All names and figures use one type size, regardless of name length or grade');
+  assert.ok(body[0].size>=(shared?22:20),'Common type remains readable: '+body[0].size);
+  for(const n of body.filter(t=>names.has(t.value))){
+   const figure=body.find(t=>t.y===n.y&&/^\d/.test(t.value)&&t.x>n.x);
+   assert.ok(figure&&n.right+8<figure.left,'A complete name stays clear of its figure: '+n.value);
+  }
+  const bat=body.filter(t=>['112','58','52','9'].includes(t.value)),bowl=body.filter(t=>/^[1-3]\/2[4-6]$/.test(t.value));
+  assert.equal(new Set(bat.map(t=>t.x)).size,1);assert.equal(new Set(bowl.map(t=>t.x)).size,1);
+  assert.equal(JSON.stringify(items),before,'Sizing does not change any source facts');
+  if(process.env.AWARDS_PREVIEW_DIR){fs.mkdirSync(process.env.AWARDS_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results-uniform-type-'+(shared?'shared':'mixed')+'.png',r.canvas.toBuffer('image/png'));}
+ }
 });
