@@ -36,3 +36,12 @@ test('an intentional mixed-opponent start adjustment does not move shared-oppone
  const saved={mixed_rows_top:24},mixed=await render(fixture(),saved),shared=await render(fixture(true),saved);
  assert.equal(mixed.plan.top,1350*.24);assert.equal(shared.plan.top,1350*.29);assert.equal(saved.mixed_rows_top,24);
 });
+test('compact shared results honour a high score position and keep the requested body size',async()=>{
+ const saved={layout_mode:'template',title_font:'condensed',title_size:158,title_y:6.8,rows_top:25.8,rows_bottom:89.3,row_gap:65,row_inset:49,grade_font:'condensed',grade_size:48,grade_width:390,score_size:48,score_y:14,player_top:40,player_size:24,player_font:'sporting',score_font:'sporting',logo_size:9,logo_y:16,margin_size:43,margin_font:'condensed'};
+ const r=await render(fixture(true),saved,1364),scores=r.text.filter(t=>t.value==='8/180');
+ assert.equal(scores.length,4);
+ assert.ok(scores.every((s,i)=>s.y-(r.plan.top+i*(r.plan.rowHeight+r.plan.gap))<45),'Side totals sit near the panel top');
+ const names=r.text.filter(t=>t.value==='Alexandra Henderson');assert.ok(names.every(n=>n.size>=22),'Three player lines retain readable type');
+ assert.ok(r.plan.header.y+r.plan.header.size/2<r.plan.top-40,'Header logos clear the first grade ribbon');
+ for(let i=0;i<4;i++){const y=r.plan.top+i*(r.plan.rowHeight+r.plan.gap),lines=r.text.filter(t=>t.value==='Samantha Chamberlain'&&t.y>y&&t.y<y+r.plan.rowHeight);assert.equal(lines.length,1);assert.ok(lines[0].bottom<y+r.plan.rowHeight,'Last player stays within its panel');}
+});

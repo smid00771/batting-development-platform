@@ -3,11 +3,24 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {createFixtureResults,renderFixtureScorecard} from '../fixture-results.js';
+import {createFixtureResults,renderFixtureScorecard,automaticScoreCheckText} from '../fixture-results.js';
 import {createSharedResultsDemo} from '../shared-match-results-demo.js';
 const require=createRequire(import.meta.url),{JSDOM}=require('jsdom');
 const escape=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 const settle=async()=>{for(let n=0;n<12;n++)await new Promise(r=>setTimeout(r,0));};
+test('pending results show club-local scheduling from the existing saved read only',async()=>{
+ const now=Date.parse('2026-10-31T06:00:00Z'),playhq={linked:true,automatic_enabled:true,next_check_at:'2026-10-31T08:05:00Z',timezone:'Australia/Sydney'};
+ assert.match(automaticScoreCheckText(playhq,now),/31 Oct.*7:05 pm/);
+ assert.match(automaticScoreCheckText({...playhq,next_check_at:'2026-10-31T05:00:00Z'},now),/due shortly/);
+ assert.match(automaticScoreCheckText({...playhq,automatic_enabled:false},now),/paused/);
+ assert.equal(automaticScoreCheckText({linked:true},now),'','Older database responses remain compatible');
+ const dom=new JSDOM('<main></main>'),host=dom.window.document.querySelector('main');let reads=0;
+ const context={playhq:{...playhq,next_check_at:'2099-10-31T08:05:00Z'},fixtures:[{id:'f',match_id:'match',days:[],format:'t20'}],cards:[]};
+ const ui=createFixtureResults({supabase:{rpc:async()=>{reads++;return {data:context};},functions:{invoke:()=>{throw Error('Opening scores must not call PlayHQ');}}},escape,here:()=>true});
+ ui.mount(host,{clubId:'c',fixtureId:'f'});await settle();assert.match(host.textContent,/Next automatic score check/);assert.equal(reads,1);
+ context.cards=[{fixture_id:'f',snapshot_id:'saved',our_team:'ours',scorecard:{match_id:'match',status:'completed',teams:[{id:'ours',name:'Example club'}],innings:[]}}];
+ ui.mount(host,{clubId:'c',fixtureId:'f'});await settle();assert.equal(host.querySelector('.fr-automatic-check'),null,'Completed results add no scheduling clutter');dom.window.close();
+});
 test('fixture scorecard shows our batting and bowling, preserves unknowns and escapes source text',()=>{
  const card={our_team:'ours',scorecard:{result:'Club <won>',teams:[{id:'them',name:'Visitors'},{id:'ours',name:'Our club'}],innings:[
   {team_id:'ours',number:1,complete:true,runs:19,wickets:1,extras:0,batters:[{name:'Alex <Smith>',runs:19,balls:26,not_out:false,fours:0,sixes:null,dismissal_text:'c <keeper>'},{name:'Jordan Lee',status:'did_not_bat'}],bowlers:[{team_id:'them',name:'Other Bowler',balls:6,runs:19,wickets:1,maidens:0}]},

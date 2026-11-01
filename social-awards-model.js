@@ -1,4 +1,4 @@
-import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.293';
+import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.326';
 import {referenceBadgePair} from './social-award-lettering.js?v=0.8.62.294';
 import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.293';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';

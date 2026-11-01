@@ -6,6 +6,14 @@ const escapeScore = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&'
 const scoreNumber = value => Number.isInteger(value) && value >= 0 ? String(value) : '—';
 const scoreOvers = balls => Number.isInteger(balls) && balls >= 0 ? `${Math.floor(balls / 6)}.${balls % 6}` : '—';
 const scoreRate = (runs, balls, factor) => Number.isInteger(runs) && runs >= 0 && Number.isInteger(balls) && balls > 0 ? (runs * factor / balls).toFixed(2) : '—';
+export function automaticScoreCheckText(playhq,now=Date.now()){
+ if(!playhq?.linked||typeof playhq.automatic_enabled!=='boolean')return '';
+ if(!playhq.automatic_enabled)return 'Automatic score checks are paused.';
+ const due=Date.parse(playhq.next_check_at);if(!Number.isFinite(due))return 'Scores will be checked automatically.';
+ if(due<=now)return 'Automatic score check due shortly.';
+ try{return 'Next automatic score check: '+new Intl.DateTimeFormat('en-AU',{timeZone:playhq.timezone||'Australia/Sydney',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(due))+'.';}
+ catch{return 'Scores will be checked automatically.';}
+}
 export function renderFixtureScorecard(wrapped, openTeams = null) {
  const card=wrapped?.scorecard;
  if(!card?.teams?.length)return '';
@@ -30,10 +38,11 @@ export function createFixtureResults(h){
  async function read(s){const result=await rpc(s,'fixture');if(!Array.isArray(result?.fixtures)||!Array.isArray(result?.cards))throw Error('Scorecard could not be checked.');if(live(s)){s.context=result;const c=selected(s);if(!s.dirty)s.url=c?.scorecard.url||'';h.loaded?.(s,c);}return result;}
  function draw(s){
   if(!live(s))return;const c=selected(s),f=s.context?.fixtures[0],locked=s.busy?'disabled':'',candidates=(s.context?.cards||[]).filter(x=>!x.fixture_id||x.fixture_id===s.fixtureId);
+  const automaticNote=!c&&!f?.no_play?automaticScoreCheckText(s.context?.playhq):'';
   const previous=s.host.querySelectorAll('[data-score-team]'),openTeams=previous.length?new Set([...previous].filter(el=>el.open).map(el=>el.dataset.scoreTeam)):null;
   s.host.innerHTML=`<section class="se-card fixture-results" aria-label="Fixture scorecard"><style>.fixture-results{margin:12px 0}.fixture-results h3{margin:0 0 8px}.fixture-results p{margin:8px 0}.fixture-results .fr-input{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.fixture-results .fr-input input{flex:1;min-width:min(240px,100%)}.fixture-results [role=status]:empty{display:none}.fixture-results summary{cursor:pointer;padding:8px 0}.fixture-results label{margin:8px 0}</style><div class="se-top" style="align-items:center;margin-bottom:8px"><h3 style="margin:0">Match scorecard</h3>${s.context?.can_review&&h.openMatchReview?`<button class="btn ghost" type="button" data-fixture-match-review ${locked}>Match Review</button>`:''}</div>${s.context?`
    ${c?`<p><strong>${esc(labels[cardStatus(c)])}</strong>${c.scorecard.url?` · <a href="${esc(c.scorecard.url)}" target="_blank" rel="noopener">View on PlayCricket</a>`:c.scorecard.provider==='playhq_au'?' · PlayHQ':''}</p>`:f.no_play?`<p>Marked ${esc(f.no_play.replaceAll('_',' '))}.</p>`:''}
-   ${s.context.playhq?.linked?`<div class="se-actions">${s.context.playhq.can_check?`<button type="button" class="btn ghost" data-phq-check="results" ${locked}>Check scores now</button><button type="button" class="btn ghost" data-phq-check="fixtures" ${locked}>Check fixture changes</button>`:''}${s.context.playhq.pending_change&&s.context.playhq.can_check?'<button type="button" class="btn ghost" data-phq-review>Review fixture change</button>':''}</div>${s.context.playhq.error?`<p role="alert">${esc(s.context.playhq.error)}</p>`:''}`:''}
+   ${s.context.playhq?.linked?`<div class="se-actions">${s.context.playhq.can_check?`<button type="button" class="btn ghost" data-phq-check="results" ${locked}>Check scores now</button><button type="button" class="btn ghost" data-phq-check="fixtures" ${locked}>Check fixture changes</button>`:''}${s.context.playhq.pending_change&&s.context.playhq.can_check?'<button type="button" class="btn ghost" data-phq-review>Review fixture change</button>':''}</div>${automaticNote?`<p class="muted fr-automatic-check">${esc(automaticNote)}</p>`:''}${s.context.playhq.error?`<p role="alert">${esc(s.context.playhq.error)}</p>`:''}`:''}
    <details ${!c&&!s.context.playhq?.linked?'open':''}><summary>Use a PlayCricket match link</summary><div class="fr-input"><input type="url" data-fixture-score-url aria-label="PlayCricket match link" placeholder="Paste PlayCricket match link" value="${esc(s.url)}" ${locked}><button type="button" class="btn secondary" data-fixture-score-load ${locked}>${s.busy?'Saving…':c?'Refresh scores':'Load scores'}</button></div></details>
    ${c?renderFixtureScorecard(c,openTeams):''}
    ${!c&&candidates.length?`<label>Already imported<select data-fixture-score-existing ${locked}><option value="">Choose this match’s scorecard</option>${candidates.map(x=>`<option value="${esc(x.snapshot_id)}">${esc(x.scorecard.grade)} · ${esc(x.scorecard.teams.map(t=>t.name).join(' v '))}</option>`).join('')}</select></label>`:''}

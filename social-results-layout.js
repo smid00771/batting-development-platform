@@ -44,7 +44,10 @@ export function resultsRowPlan(d,rowHeight,shared,marginHeight,badgeHeight,scale
  const height=Math.min(badgeHeight,Math.max(20,room));
  const contentTop=gradeBottom+pad;
  const badgeY=clamp(rowHeight*d.badge_y/100,contentTop+height/2,marginTop-pad-height/2);
- const scoreY=Math.max((shared?gradeBottom:0)+d.score_size*.6+8*scale,Math.min(rowHeight*(d.layout_mode==='template'?d.score_y:25)/100,72));
+ // Scores occupy the side columns; the central grade ribbon does not reserve
+ // vertical space there. Respect the saved height instead of pushing both
+ // scores and player lines down and then shrinking the names to fit.
+ const scoreY=Math.max(d.score_size*.6+8*scale,Math.min(rowHeight*(d.layout_mode==='template'?d.score_y:25)/100,72));
  const playerTop=Math.max(scoreY+d.score_size*.6+18*scale,Math.min(rowHeight*d.player_top/100,rowHeight-76*scale));
  const line=Math.min(42*scale,Math.max(20*scale,(rowHeight-playerTop-20*scale)/2));
  return {badgeY,badgeHeight:height,marginTop,scoreY,playerTop,line};

@@ -22,7 +22,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.325';
+const APP_UI_VERSION='0.8.62.326';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -20364,7 +20364,7 @@ async function loadSocialFeatures(){
  const current=()=>state===socialState&&scope===selectionsScopeKey()&&request===requestedFeatureScope()&&ensureSelections().data?.socials===true;
  const task={scope,request,state};socialEngineTask=task;
  task.promise=(async()=>{
-  const module=await import('./social-workspace.js?v=0.8.62.304');
+  const module=await import('./social-workspace.js?v=0.8.62.326');
   if(!current())return null;
   const engine=module.createSocialWorkspace({appNavigationBack,club,drawSelections,ensureSelections,matchReviewExtractUrl,mountScorecardTeam,normaliseHex,platformRole,recordSelectionNavigation,renderSocialPlatformSetup,restoreSocialNavigation,seDownload,seEsc,seFormatLabel,seNotice,seOpt,seReload,selectionsScopeKey,session,socialCanLeave,socialEnsure,socialHere,socialOpenFixture,socialState,supabase});
   await engine.loadSocialFeatures();if(!current())return null;
@@ -20480,7 +20480,7 @@ const planReminderSettings=createDeferredController({load:()=>import('./plan-rem
  supabase,scope:selectionsScopeKey,uuid:()=>crypto.randomUUID(),alert,confirm,saved:refreshPlanDeadlineViews
 }),scope:requestedFeatureScope,name:'Plan reminders',passive:{canLeave:()=>true,hasChanges:()=>false}});
 window.addEventListener('beforeunload',event=>{if(planReminderSettings.hasChanges()){event.preventDefault();event.returnValue='';}});
-const fixtureResults=createDeferredController({load:()=>import('./fixture-results.js?v=0.8.62.323'),create:({createFixtureResults})=>createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}}),scope:requestedFeatureScope,name:'fixture results',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
+const fixtureResults=createDeferredController({load:()=>import('./fixture-results.js?v=0.8.62.326'),create:({createFixtureResults})=>createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async()=>{seFixtureScoresChanged();await seReload();},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();}}),scope:requestedFeatureScope,name:'fixture results',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 
 function seApplyWeekLaunch(s){
  const launch=s.weekLaunch;if(!launch)return;delete s.weekLaunch;
