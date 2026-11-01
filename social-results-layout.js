@@ -21,13 +21,13 @@ export function resultsLayoutPlan(d,height,count,shared,headerBottom){
   const size=logoBand-clearance;
   return {top,bottom,gap,rowHeight,rowScale,logoBand,header:null,mixedLogos:{size,gap:Math.max(50,size*.6),offset:-clearance-size/2},columns:resultColumns(d)};
  }
- const bottom=height*d.rows_bottom/100,minRow=180,headerEnd=headerBottom+(shared?60:36);
+ const bottom=height*d.rows_bottom/100,minRow=d.layout_mode==='template'?160:180,headerEnd=headerBottom+(shared?60:36);
  const maxTop=bottom-count*minRow-12*(count-1);
  const requested=shared?height*d.rows_top/100:Number.isFinite(d.mixed_rows_top)?height*d.mixed_rows_top/100:headerEnd;
  const top=clamp(requested,headerEnd,Math.max(headerEnd,maxTop));
  const gap=count===1?0:clamp(d.row_gap,12,Math.max(12,(bottom-top-count*minRow)/(count-1)));
  const rowHeight=(bottom-top-gap*(count-1))/count;
- if(rowHeight<174)throw Error('This background is too short for these results. Use a taller background or fewer grades.');
+ if(rowHeight<minRow-6)throw Error('This background is too short for these results. Use a taller background or fewer grades.');
  let header=null;
  if(shared){
   const room=top-20-(headerBottom+8),size=Math.min(1080*d.logo_size/100,height*.11,Math.max(24,room)),gap=Math.max(50,size*.6),width=size*2+gap;
@@ -49,6 +49,8 @@ export function resultsRowPlan(d,rowHeight,shared,marginHeight,badgeHeight,scale
  // scores and player lines down and then shrinking the names to fit.
  const scoreY=Math.max(d.score_size*.6+8*scale,Math.min(rowHeight*(d.layout_mode==='template'?d.score_y:25)/100,72));
  const playerTop=Math.max(scoreY+d.score_size*.6+18*scale,Math.min(rowHeight*d.player_top/100,rowHeight-76*scale));
- const line=Math.min(42*scale,Math.max(20*scale,(rowHeight-playerTop-20*scale)/2));
+ // A taller panel must not stretch three short player lines apart. Match the
+ // compact leading of the reference while retaining room for every line.
+ const line=Math.min(42*scale,d.player_size*1.25,Math.max(20*scale,(rowHeight-playerTop-20*scale)/2));
  return {badgeY,badgeHeight:height,marginTop,scoreY,playerTop,line};
 }

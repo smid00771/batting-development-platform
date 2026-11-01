@@ -45,3 +45,24 @@ test('compact shared results honour a high score position and keep the requested
  assert.ok(r.plan.header.y+r.plan.header.size/2<r.plan.top-40,'Header logos clear the first grade ribbon');
  for(let i=0;i<4;i++){const y=r.plan.top+i*(r.plan.rowHeight+r.plan.gap),lines=r.text.filter(t=>t.value==='Samantha Chamberlain'&&t.y>y&&t.y<y+r.plan.rowHeight);assert.equal(lines.length,1);assert.ok(lines[0].bottom<y+r.plan.rowHeight,'Last player stays within its panel');}
 });
+test('centred reference lists stay compact and not-out markers do not shift the figure column',async()=>{
+ const saved={layout_mode:'template',title_font:'condensed',title_size:158,title_y:6.8,rows_top:25.8,rows_bottom:89.3,row_gap:65,row_inset:49,grade_font:'condensed',grade_size:48,grade_width:390,score_size:36,score_y:19,player_top:44,player_size:28,player_font:'sans',player_align:'center',score_font:'condensed',left_column_end:32.9,right_column_start:65.8,logo_size:9,logo_y:16,margin_size:43,margin_font:'condensed'};
+ const items=fixture(true);items.forEach((item,i)=>{item.innings[0].batters.forEach((b,j)=>{b.name=['Alex Example','Casey Sample','Jamie Player'][j];b.runs=[i===0?112:58,52,9][j];b.not_out=j===0;});});
+ const before=JSON.stringify(items),r=await render(items,saved,1350);
+ const names=r.text.filter(t=>['Alex Example','Casey Sample','Jamie Player'].includes(t.value));
+ assert.ok(names.every(n=>Math.abs(n.x-names[0].x)<.01),'Names share one centre across rows and grades');
+ assert.ok(names.every(n=>n.size===28),'Reference body type keeps its intended size');
+ const digits=r.text.filter(t=>['112','58','52','9'].includes(t.value)),stars=r.text.filter(t=>t.value==='*');
+ assert.equal(digits.length,12);assert.equal(stars.length,4);
+ assert.ok(digits.every(n=>Math.abs(n.x-digits[0].x)<.01&&Math.abs(n.left-n.x)<2),'Every score starts at the same left anchor, including 112 and 58*');
+ const bowls=r.text.filter(t=>/^[1-3]\/2[4-6]$/.test(t.value));assert.equal(bowls.length,12);assert.ok(bowls.every(n=>Math.abs(n.x-bowls[0].x)<.01&&Math.abs(n.left-n.x)<2),'Bowling figures also start at one left anchor');
+ assert.equal(r.plan.gap,65,'Reference panel gaps are no longer squeezed by an oversized minimum panel');
+ for(const star of stars){const number=digits.find(n=>n.y===star.y);assert.ok(star.left>=number.right-1,'The star hangs after the digits');assert.ok(star.right<r.plan.columns.centre-100,'The star cannot enter the result column');}
+ for(let i=0;i<4;i++){
+  const first=names[i*3],second=names[i*3+1],third=names[i*3+2];
+  assert.ok(second.y-first.y<=35&&third.y-second.y<=35,'Player lines use compact reference leading');
+  assert.ok(first.bottom<second.top&&second.bottom<third.top,'Larger type does not overlap');
+  for(const name of [first,second,third])assert.ok(name.right+10<digits.find(n=>n.y===name.y).left,'Names and figures remain distinct');
+ }
+ assert.equal(JSON.stringify(items),before,'Layout cannot alter imported match facts');
+});
