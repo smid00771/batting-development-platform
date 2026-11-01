@@ -60,6 +60,7 @@ test('centred reference lists stay compact and not-out markers do not shift the 
  assert.ok(names.every(n=>n.size===28),'Reference body type keeps its intended size');
  const digits=r.text.filter(t=>['112','58','52','9'].includes(t.value)),stars=r.text.filter(t=>t.value==='*');
  assert.equal(digits.length,12);assert.equal(stars.length,4);
+ assert.ok(digits.every(t=>Math.abs(t.x-(540-saved.grade_width/2))<.01),'Batting figures start directly under the grade banner left corner');
  assert.ok(digits.every(n=>Math.abs(n.x-digits[0].x)<.01&&Math.abs(n.left-n.x)<2),'Every score starts at the same left anchor, including 112 and 58*');
  const bowls=r.text.filter(t=>/^[1-3]\/2[4-6]$/.test(t.value));assert.equal(bowls.length,12);assert.ok(bowls.every(n=>Math.abs(n.x-bowls[0].x)<.01&&Math.abs(n.left-n.x)<2),'Bowling figures also start at one left anchor');
  assert.equal(r.plan.gap,65,'Reference panel gaps are no longer squeezed by an oversized minimum panel');
@@ -89,6 +90,7 @@ test('short and long player names share one readable size with figures across al
   }
   const bat=body.filter(t=>['112','58','52','9'].includes(t.value)),bowl=body.filter(t=>/^[1-3]\/2[4-6]$/.test(t.value));
   assert.equal(new Set(bat.map(t=>t.x)).size,1);assert.equal(new Set(bowl.map(t=>t.x)).size,1);
+  if(shared)assert.ok(bat.every(t=>Math.abs(t.x-(540-saved.grade_width/2))<.01),'The batting figure column follows the banner corner');
   const gradeHalf=saved.grade_width*r.plan.rowScale/2,leftCentre=(saved.row_inset+540-gradeHalf)/2,rightCentre=(540+gradeHalf+1080-saved.row_inset)/2;
   const leftTexts=r.text.filter(t=>t.value==='8/180'||['Alex Example','Casey Sample','Jamie Player'].includes(t.value));
   assert.ok(leftTexts.every(t=>t.align==='center'&&Math.abs(t.x-leftCentre)<.01),'Left total and names centre on the visible light section');
@@ -106,10 +108,15 @@ test('the supplied four-grade player list keeps larger uniform text with full na
  const battingNames=[['Mitchell Nesbitt','Haydon Mustard','Liam Simpson'],['Anthonie Clement','Bryce Garrett','Sulaiman Moin Muhammad'],['James Dunn','Harrison Fleming','Adrian Mannel'],['Thomas Fulmer','Max Gallagher','troy arnold']];
  const bowlingNames=[['Callan Fowler','Jonah Rhineberger','Izaac Coyle'],['Anthonie Clement','Anik Arya','Izaan Mohammed'],['Mitch King','Brendon Young','Callum van Huisstede'],["Bradley O'Dell",'John Sinclair','Stephan du Plooy']];
  const items=fixture(true);items.forEach((item,i)=>{item.innings[0].batters.forEach((b,j)=>{b.name=battingNames[i][j];b.runs=[58,52,22][j];});item.innings[1].bowlers.forEach((b,j)=>b.name=bowlingNames[i][j]);});
- const r=await render(items,saved),allNames=new Set([...battingNames.flat(),...bowlingNames.flat()]),body=r.text.filter(t=>allNames.has(t.value)||['58','52','22','*'].includes(t.value)||/^[1-3]\/2[4-6]$/.test(t.value));
+ const original=JSON.stringify(items),r=await render(items,saved),allNames=new Set([...battingNames.flat(),...bowlingNames.flat()]),body=r.text.filter(t=>allNames.has(t.value)||['58','52','22','*'].includes(t.value)||/^[1-3]\/2[4-6]$/.test(t.value));
  assert.equal(body.length,60,'Every full name, figure and not-out is present');
  assert.equal(new Set(body.map(t=>t.size)).size,1,'Names and figures retain one common size');
  assert.ok(body[0].size>=24,'The supplied list must render larger than the previous 21px text');
  assert.ok(body.filter(t=>allNames.has(t.value)).every(t=>t.align==='center'),'Both name columns stay centre aligned');
  for(const name of body.filter(t=>allNames.has(t.value))){const figure=body.find(t=>t.y===name.y&&/^\d/.test(t.value)&&t.x>name.x);assert.ok(figure&&name.right+8<figure.left&&name.left>=saved.row_inset&&name.right<1080-saved.row_inset,'Full name stays on its pale panel and clear of figures: '+name.value);}
+ const labelled=await render(items,{...saved,player_name_labels:[{name:'Sulaiman Moin Muhammad',label:'Sulaiman Muhammad'}]});
+ assert.equal(labelled.text.filter(t=>t.value==='Sulaiman Muhammad').length,1);
+ assert.ok(!labelled.text.some(t=>t.value==='Sulaiman Moin Muhammad'),'Only the requested display name is shortened');
+ assert.ok(labelled.text.filter(t=>allNames.has(t.value)||t.value==='Sulaiman Muhammad').every(t=>t.size>=26),'The shorter label allows larger consistent player type');
+ assert.equal(JSON.stringify(items),original,'Presentation labels cannot change source names or figures');
 });

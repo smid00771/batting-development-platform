@@ -1,0 +1,5 @@
+# Results batting figures under the grade-banner corner — .334
+
+The left-hand batting figures now start directly beneath the dark grade banner’s left edge, matching the supplied previous example. They keep one left-aligned column across all grades, with not-out markers following each number. Centred team totals and names retain their positions; the right-hand name/figures columns are unchanged. The supplied four-grade list uses a saved Results-only display label of Sulaiman Muhammad, as requested, while retaining his full source name. The common player type now renders at 26px for this list, up from 24px in .333.
+
+Validation covers the shared and mixed-opponent banner positions, separate figures, not-out markers, full names, one common readable size and the existing Results geometry. The rendered export was inspected and the shared-module demo rebuilt and checked. Only the requested name label is added to Newcastle City’s saved Results layout, using its current revision; player records, scorecards and saved artwork are unchanged.

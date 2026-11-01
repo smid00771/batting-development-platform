@@ -138,7 +138,14 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   return {lines:lines.length<=2?lines:[value],size:Math.max(18,size)};
  };
  const band=(x,width,y,fn)=>{ctx.save();ctx.beginPath();ctx.rect(x,y,width,rowHeight);ctx.clip();fn();ctx.restore();};
- const summaries=items.map(resultsSummary),batting=summaries.flatMap(r=>r.batting),bowling=summaries.flatMap(r=>r.bowling);
+ // Club-saved presentation labels never rewrite scorecards or player records.
+ const displayName=value=>{
+  const normal=v=>String(v||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
+  const labels=Array.isArray(layout.player_name_labels)?layout.player_name_labels.slice(0,40):[];
+  const alias=labels.find(entry=>typeof entry?.name==='string'&&normal(entry.name)===normal(value));
+  return typeof alias?.label==='string'&&alias.label.trim()&&alias.label.length<=80&&!/[<>\x00-\x1f\x7f]/.test(alias.label)?alias.label.trim():value;
+ };
+ const summaries=items.map(item=>{const r=resultsSummary(item);return {...r,batting:r.batting.map(p=>({...p,name:displayName(p.name)})),bowling:r.bowling.map(p=>({...p,name:displayName(p.name)}))};}),batting=summaries.flatMap(r=>r.batting),bowling=summaries.flatMap(r=>r.bowling);
 
  const rowScale=plan.rowScale,d={...layout};
  for(const key of ['grade_size','grade_width','score_size','player_size','badge_size','badge_width','margin_size'])d[key]*=rowScale;
@@ -148,7 +155,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  // figure grid at each candidate size to retain the largest size that fits.
  const bodyRow=resultsRowPlan(d,rowHeight,sharedOpponent,0,0,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
  let font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,bodyRow.line-5)/inkHeight:bodyRow.line*.8);
- const left=columns.left,right=columns.right,centred=d.player_align==='center',nameGap=12*rowScale;
+ const left=columns.left,right=columns.right,centred=d.player_align==='center',nameGap=(centred?8:12)*rowScale;
  // Totals sit in the visible pale gaps beside the grade banner. The wider
  // body lanes below it still stop at the central result/margin column.
  const leftSide={start:inset,end:columns.centre-100},rightSide={start:columns.centre+100,end:1080-inset},sidePad=6*rowScale;
@@ -158,8 +165,10 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  const bodyWidth=(value,size,align='left')=>inkWidth(measure(value,'player',size,align),align);
  const gridAt=size=>{
   const markerWidth=bodyWidth('*',size)+4,battingWidth=Math.max(24*rowScale,...batting.map(p=>bodyWidth(p.runs,size)+4)),bowlingWidth=Math.max(36*rowScale,...bowling.map(p=>bodyWidth(`${p.wickets}/${p.runs}`,size)+4));
-  const battingStart=centred?leftSide.end-sidePad-battingWidth-markerWidth:Math.min(columns.leftFigures-measure('88','player',size).width,columns.centre-100-battingWidth-markerWidth-8),bowlingStart=centred?rightSide.end-sidePad-bowlingWidth:right-bowlingWidth+4;
-  const leftNameWidth=centred?2*Math.min(leftCentre-leftSide.start-sidePad,battingStart-nameGap-leftCentre):battingStart-nameGap-left;
+  // The batting figures begin below the grade banner's left corner, as in
+  // the reference. Keep a small gap without shrinking the centred names.
+  const battingStart=centred?Math.min(leftScoreEnd,leftSide.end-sidePad-battingWidth-markerWidth):Math.min(columns.leftFigures-measure('88','player',size).width,columns.centre-100-battingWidth-markerWidth-8),bowlingStart=centred?rightSide.end-sidePad-bowlingWidth:right-bowlingWidth+4;
+  const leftNameWidth=centred?2*Math.min(leftCentre-leftSide.start-sidePad,battingStart-sidePad-leftCentre):battingStart-nameGap-left;
   const rightNameStart=columns.rightNames,rightNameWidth=bowlingStart-nameGap-rightNameStart;
   return {markerWidth,battingWidth,bowlingWidth,battingStart,bowlingStart,leftNameWidth,rightNameWidth,leftNameStart:centred?leftCentre-leftNameWidth/2:left,rightNameStart};
  };
