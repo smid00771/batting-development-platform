@@ -148,17 +148,23 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  // figure grid at each candidate size to retain the largest size that fits.
  const bodyRow=resultsRowPlan(d,rowHeight,sharedOpponent,0,0,rowScale),bodyInk=measure('Alex Player','player',d.player_size),inkHeight=bodyInk.actualBoundingBoxAscent+bodyInk.actualBoundingBoxDescent;
  let font=Math.min(d.player_size,inkHeight>0?d.player_size*Math.max(18,bodyRow.line-5)/inkHeight:bodyRow.line*.8);
- const left=columns.left,right=columns.right,nameInset=d.player_align==='center'?16*rowScale:0,nameGap=12*rowScale;
+ const left=columns.left,right=columns.right,centred=d.player_align==='center',nameGap=12*rowScale;
+ // The pale sides flank the isolated result/margin column. A centred list
+ // shares its side's centre with the team total; figures keep their own lane.
+ const leftSide={start:inset,end:columns.centre-100},rightSide={start:columns.centre+100,end:1080-inset},sidePad=12*rowScale;
+ const leftCentre=(leftSide.start+leftSide.end)/2,rightCentre=(rightSide.start+rightSide.end)/2;
  const bodyWidth=(value,size,align='left')=>inkWidth(measure(value,'player',size,align),align);
  const gridAt=size=>{
   const markerWidth=bodyWidth('*',size)+4,battingWidth=Math.max(24*rowScale,...batting.map(p=>bodyWidth(p.runs,size)+4)),bowlingWidth=Math.max(36*rowScale,...bowling.map(p=>bodyWidth(`${p.wickets}/${p.runs}`,size)+4));
-  const battingStart=Math.min(columns.leftFigures-measure('88','player',size).width,columns.centre-100-battingWidth-markerWidth-8),bowlingStart=right-bowlingWidth+4;
-  return {markerWidth,battingWidth,bowlingWidth,battingStart,bowlingStart,leftNameWidth:battingStart-nameGap-left-nameInset,rightNameWidth:bowlingStart-nameGap-columns.rightNames-nameInset};
+  const battingStart=centred?leftSide.end-sidePad-battingWidth-markerWidth:Math.min(columns.leftFigures-measure('88','player',size).width,columns.centre-100-battingWidth-markerWidth-8),bowlingStart=centred?rightSide.end-sidePad-bowlingWidth:right-bowlingWidth+4;
+  const leftNameWidth=centred?2*Math.min(leftCentre-leftSide.start-sidePad,battingStart-nameGap-leftCentre):battingStart-nameGap-left;
+  const rightNameWidth=centred?2*Math.min(rightCentre-rightSide.start-sidePad,bowlingStart-nameGap-rightCentre):bowlingStart-nameGap-columns.rightNames;
+  return {markerWidth,battingWidth,bowlingWidth,battingStart,bowlingStart,leftNameWidth,rightNameWidth,leftNameStart:centred?leftCentre-leftNameWidth/2:left,rightNameStart:centred?rightCentre-rightNameWidth/2:columns.rightNames};
  };
  let grid=gridAt(font);
  const namesFit=()=>batting.every(p=>bodyWidth(p.name,font,d.player_align)<=grid.leftNameWidth-4)&&bowling.every(p=>bodyWidth(p.name,font,d.player_align)<=grid.rightNameWidth-4);
  while(font>18&&!namesFit()){font=Math.max(18,font-1);grid=gridAt(font);}
- const {markerWidth,battingWidth,bowlingWidth,battingStart,bowlingStart,leftNameWidth,rightNameWidth}=grid;
+ const {markerWidth,battingWidth,bowlingWidth,battingStart,bowlingStart,leftNameWidth,rightNameWidth,leftNameStart,rightNameStart}=grid;
  const playerName=(value,start,y,width)=>{ctx.textAlign=d.player_align;const x=d.player_align==='center'?start+width/2:d.player_align==='right'?start+width:start;text(value,x,y,width,font,d.player_colour);};
  for(let n=0;n<items.length;n++){
   const item=items[n],r=summaries[n],y=top+n*(rowHeight+gap+plan.logoBand),outcome=r.outcome;
@@ -176,19 +182,19 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   // Every figure starts at the same left edge, including a three-digit score
   // or a not-out. A marker follows its number; it never moves the column.
   // Use one measured name/figure grid across all grades in this graphic.
-  band(left,battingStart-left+battingWidth+markerWidth+4,y,()=>{
+  band(centred?leftSide.start:left,centred?leftSide.end-leftSide.start:battingStart-left+battingWidth+markerWidth+4,y,()=>{
    ctx.textAlign='center';
-   text(r.ourScore,(left+nameInset+columns.leftFigures)/2,y+row.scoreY,columns.leftFigures-left,d.score_size,d.score_colour,'score');
+   text(r.ourScore,centred?leftCentre:(left+columns.leftFigures)/2,y+row.scoreY,centred?leftSide.end-leftSide.start-2*sidePad:columns.leftFigures-left,d.score_size,d.score_colour,'score');
    for(let j=0;j<r.batting.length;j++){
     const bat=r.batting[j],playerY=y+row.playerTop+j*row.line;
-    playerName(bat.name,left+nameInset,playerY,leftNameWidth);
+    playerName(bat.name,leftNameStart,playerY,leftNameWidth);
     ctx.textAlign='left';text(String(bat.runs),battingStart,playerY,battingWidth,font,d.player_colour);
     if(bat.not_out){const end=battingStart+ctx.measureText(String(bat.runs)).width;text('*',end+1,playerY,markerWidth+4,font,d.player_colour);}
    }
   });
-  band(columns.rightNames,right-columns.rightNames,y,()=>{
-   ctx.textAlign='center';text(r.theirScore,(columns.rightNames+right+(nameInset?bowlingWidth:0))/2,y+row.scoreY,right-columns.rightNames,d.score_size,d.score_colour,'score');
-   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,columns.rightNames+nameInset,y+row.playerTop+j*row.line,rightNameWidth);ctx.textAlign='left';text(`${bowl.wickets}/${bowl.runs}`,bowlingStart,y+row.playerTop+j*row.line,bowlingWidth,font,d.player_colour);}
+  band(centred?rightSide.start:columns.rightNames,centred?rightSide.end-rightSide.start:right-columns.rightNames,y,()=>{
+   ctx.textAlign='center';text(r.theirScore,centred?rightCentre:(columns.rightNames+right)/2,y+row.scoreY,centred?rightSide.end-rightSide.start-2*sidePad:right-columns.rightNames,d.score_size,d.score_colour,'score');
+   for(let j=0;j<r.bowling.length;j++){const bowl=r.bowling[j];playerName(bowl.name,rightNameStart,y+row.playerTop+j*row.line,rightNameWidth);ctx.textAlign='left';text(`${bowl.wickets}/${bowl.runs}`,bowlingStart,y+row.playerTop+j*row.line,bowlingWidth,font,d.player_colour);}
   });
   ctx.textAlign='center';
   band(columns.centre-100,200,y,()=>{

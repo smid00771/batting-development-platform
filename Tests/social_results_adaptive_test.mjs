@@ -51,6 +51,11 @@ test('centred reference lists stay compact and not-out markers do not shift the 
  const before=JSON.stringify(items),r=await render(items,saved,1350);
  const names=r.text.filter(t=>['Alex Example','Casey Sample','Jamie Player'].includes(t.value));
  assert.ok(names.every(n=>Math.abs(n.x-names[0].x)<.01),'Names share one centre across rows and grades');
+ const ourScores=r.text.filter(t=>t.value==='8/180'),theirScores=r.text.filter(t=>t.value==='10/78'),bowlNames=r.text.filter(t=>['Jordan Example','Taylor Sample','Morgan Player'].includes(t.value));
+ const leftCentre=(saved.row_inset+440)/2,rightCentre=(640+1080-saved.row_inset)/2;
+ assert.ok([...ourScores,...names].every(t=>Math.abs(t.x-leftCentre)<.01),'Left scores and names share the pale side centre');
+ assert.ok([...theirScores,...bowlNames].every(t=>Math.abs(t.x-rightCentre)<.01),'Right scores and names share the pale side centre');
+ assert.equal(ourScores.length,4);assert.equal(theirScores.length,4);assert.equal(bowlNames.length,12);
  assert.ok(names.every(n=>n.size===28),'Reference body type keeps its intended size');
  const digits=r.text.filter(t=>['112','58','52','9'].includes(t.value)),stars=r.text.filter(t=>t.value==='*');
  assert.equal(digits.length,12);assert.equal(stars.length,4);
@@ -83,6 +88,8 @@ test('short and long player names share one readable size with figures across al
   }
   const bat=body.filter(t=>['112','58','52','9'].includes(t.value)),bowl=body.filter(t=>/^[1-3]\/2[4-6]$/.test(t.value));
   assert.equal(new Set(bat.map(t=>t.x)).size,1);assert.equal(new Set(bowl.map(t=>t.x)).size,1);
+  for(const [total,sideNames,centre] of [['8/180',['Alex Example','Casey Sample','Jamie Player'],(saved.row_inset+440)/2],['10/78',bowlingNames.flat(),(640+1080-saved.row_inset)/2]]){const aligned=r.text.filter(t=>t.value===total||sideNames.includes(t.value));assert.equal(aligned.length,16);assert.ok(aligned.every(t=>Math.abs(t.x-centre)<.01),'Totals and names stay centred for shared and mixed opponents');}
+  assert.ok(bat.every(t=>t.right<440)&&bowl.every(t=>t.right<1080-saved.row_inset),'Figures remain inside their own pale side');
   assert.equal(JSON.stringify(items),before,'Sizing does not change any source facts');
   if(process.env.AWARDS_PREVIEW_DIR){fs.mkdirSync(process.env.AWARDS_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results-uniform-type-'+(shared?'shared':'mixed')+'.png',r.canvas.toBuffer('image/png'));}
  }
