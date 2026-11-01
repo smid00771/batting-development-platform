@@ -22,7 +22,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.329';
+const APP_UI_VERSION='0.8.62.330';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1010,11 +1010,11 @@ function matchDraftAttachObservation(form,player,kind){
  return matchDraftContext(form,{kind:'observation',id,label:'match observation',route:{tab:'players',playerId:player.id,matchId:form.dataset.matchId||null,observationId:form.dataset.observationId||null,fixtureId:form.dataset.fixtureId||null,fixtureInnings:Number(val('staffMatchInningsNumber')||1)},revision:[form.dataset.fixtureId||null,form.dataset.matchUpdatedAt||null,form.dataset.observationUpdatedAt||null,form.dataset.actionRevision||null]});
 }
 
-function matchDraftAttachInnings(form,{record=null,match=null,preparation=null,planning=false}={}){const p=planning?record:preparation;return matchDraftContext(form,{kind:planning?'preparation':'innings',id:myPlayer.id+':'+(planning?'prepare:':'')+(p?.id||match?.id||'new'),label:planning?'match preparation':'innings and reflection',route:{tab:'innings',editId:planning?'prepare:'+(p?.id||'new'):p?'record:'+p.id:match?.id||'new'},revision:[p?.revision??null,match?.updated_at||null,match?.player_reflection?.updated_at||null]});}
+function matchDraftAttachInnings(form,{record=null,match=null,preparation=null,planning=false}={}){const p=planning?record:preparation;return matchDraftContext(form,{kind:planning?'preparation':'innings',id:myPlayer.id+':'+(planning?'prepare:':'')+(p?.id||match?.id||'new'),label:planning?'match preparation':'innings and reflection',route:{tab:'innings',editId:planning?'prepare:'+(p?.id||'new'):p?'record:'+p.id:match?.id||'new',observationId:form.dataset.reflectionOnly==='true'?ensureMyInningsState().observationId:null},revision:[p?.revision??null,match?.updated_at||null,match?.player_reflection?.updated_at||null]});}
 function matchDraftTeamContext(s){const scope=matchDraftScope();if(!scope)return null;const id=s.fixtureId?s.fixtureId+':'+s.innings_number:JSON.stringify([s.group,s.match_date,s.format_key,s.opposition,s.innings_number]);let ctx=matchDraftRecovery.team;if(!ctx||ctx.id!==id||ctx.user!==scope.user||ctx.club!==scope.club)ctx=matchDraftRecovery.team={...scope,kind:'team',id,key:matchDraftKey('team',id),label:'Match Review',route:{tab:'team_review',state:serializeTeamReviewState()},revision:JSON.stringify([s.sessionRevision,s.loaded]),adopted:false};return ctx;}
 function matchDraftTeamSnapshot(s){return matchDraftClone({route:serializeTeamReviewState(),drafts:s.drafts,removed:s.removed,rosterDraft:s.rosterDraft,selectedInnings:s.selectedInnings,importer:s.importer,editReview:s.editReview});}
 function matchDraftAttachTeam(s){if(s.loading||!teamReviewCache||currentTab!=='team_review'||s.observation)return;const ctx=matchDraftTeamContext(s),entry=matchDraftRead(ctx.key),dirty=Object.keys(s.drafts||{}).length||s.removed?.length||s.rosterDraft||s.importer?.dirty;if(dirty&&!entry||dirty&&ctx.adopted){ctx.adopted=true;matchDraftWrite(ctx,{snapshot:matchDraftTeamSnapshot(s)});}else if(!dirty&&ctx.adopted&&!entry?.command){matchDraftRemove(ctx);ctx.adopted=false;}if(entry&&!ctx.adopted&&!document.querySelector('[data-match-draft-banner="team"]')){const box=document.createElement('section');box.className='match-draft-recovery';box.dataset.matchDraftBanner='team';box.innerHTML='<strong>Unfinished Match Review</strong><p data-draft-message>Your choices are available on this device.</p><div class="btnrow"><button class="btn" type="button" data-draft-restore>Restore choices</button><button class="btn ghost" type="button" data-draft-discard>Discard draft</button></div>';document.getElementById('page').prepend(box);box.querySelector('[data-draft-restore]').onclick=async()=>{if(entry.command)return matchDraftRecoverCommand(ctx,entry,box);try{await matchDraftPreflight(ctx,entry);Object.assign(s,matchDraftClone(entry.snapshot),{loading:false,saving:false});delete s.route;ctx.adopted=true;teamReviewReconcile({...teamReviewCache,fixtures:s.fixtures,teams_enabled:s.teamsEnabled});s.editReview=true;renderTeamReviewContent();}catch(error){box.querySelector('[data-draft-message]').textContent=error.message||'Could not load current match access.';}};box.querySelector('[data-draft-discard]').disabled=!!entry.command;box.querySelector('[data-draft-discard]').onclick=()=>{matchDraftRemove(ctx);ctx.adopted=true;box.remove();};if(entry.command){ctx.blocked=true;box.querySelector('[data-draft-restore]').textContent='Check previous save';box.querySelector('[data-draft-message]').textContent='A previous save was not confirmed. Check that same request before editing.';for(const el of document.querySelectorAll('#page input,#page select,#page textarea,#page button'))if(!el.closest('[data-match-draft-banner]'))el.disabled=true;}}}
-async function matchDraftOpen(entry){const scope=matchDraftScope();if(!scope||entry.user!==scope.user||entry.club!==scope.club)return;const ctx={...entry,route:entry.route};await matchDraftPreflight(ctx,entry);matchDraftRecovery.opening=entry.key;if(entry.kind==='team'){currentTab='team_review';resetTeamReviewState();restoreTeamReviewState(entry.route.state||entry.snapshot?.route||{});await renderTeamReview();}else if(entry.kind==='observation'){currentTab='players';resetPlayersWorkspaceForClub();playersWorkspaceSelectedId=entry.route.playerId;playersWorkspaceSection='development';playersWorkspaceDevelopmentMode='match';playersWorkspaceDevelopmentMatchId=entry.route.matchId||null;staffObservationEditId=entry.route.observationId||null;await renderPlayersWorkspace();}else{currentTab='innings';ensureMyInningsState().editId=entry.route.editId;await renderMyInnings();}}
+async function matchDraftOpen(entry){const scope=matchDraftScope();if(!scope||entry.user!==scope.user||entry.club!==scope.club)return;const ctx={...entry,route:entry.route};await matchDraftPreflight(ctx,entry);matchDraftRecovery.opening=entry.key;if(entry.kind==='team'){currentTab='team_review';resetTeamReviewState();restoreTeamReviewState(entry.route.state||entry.snapshot?.route||{});await renderTeamReview();}else if(entry.kind==='observation'){currentTab='players';resetPlayersWorkspaceForClub();playersWorkspaceSelectedId=entry.route.playerId;playersWorkspaceSection='development';playersWorkspaceDevelopmentMode='match';playersWorkspaceDevelopmentMatchId=entry.route.matchId||null;staffObservationEditId=entry.route.observationId||null;await renderPlayersWorkspace();}else{currentTab='innings';Object.assign(ensureMyInningsState(),{editId:entry.route.editId,observationId:entry.route.observationId||null});await renderMyInnings();}}
 function matchDraftOfferSaved(){
  const page=document.getElementById('page');if(!matchDraftScope()||!page||document.querySelector('[data-match-draft-banner]'))return;
  const entries=matchDraftEntries().filter(e=>e.route?.tab===currentTab&&matchDraftRecovery.forms.get(document.getElementById('staffDevelopmentForm'))?.key!==e.key&&matchDraftRecovery.forms.get(document.getElementById('myReflectionForm'))?.key!==e.key);
@@ -2253,7 +2253,7 @@ async function openCoachingUpdate(update){
   pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
   const menu=document.getElementById('coachingUpdatesMenu');if(menu)menu.open=false;
   currentTab=update.source_kind==='conversation'?'conversations':update.source_kind==='match'?'innings':'howwetrain';
-  if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=update.can_open?null:update.match_id;}
+  if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=null;state.observationId=update.source_id;}
   howWeTrainReflectionEditId=null;
   await renderTab();
 }
@@ -2956,7 +2956,7 @@ async function openClubSectionHome(nextTab){
     s.followupOpen=false;s.boardChatOpen=null;s.boardCommentOpen=null;s.teamChange=null;s.availabilityReturn=null;
   }
   if(nextTab==='messages'){const s=ensureClubMessages();s.mode='inbox';s.openId=null;}
-  if(nextTab==='innings'){const s=ensureMyInningsState();s.openId=null;s.editId=null;}
+  if(nextTab==='innings'){const s=ensureMyInningsState();s.openId=null;s.editId=null;s.observationId=null;pendingCoachingUpdate=null;}
   if(nextTab==='make_your_call'){const s=ensureMakeYourCallState();s.week=null;s.month=null;s.season=null;s.openId=null;s.savedOpenId=null;s.editSettings=false;restoreCallResultsState();}
   if(nextTab==='dashboard'){clubHomeStageClubId=club.id;clubHomeExpandedStage=null;clubHomeRestoredStage=true;}
   if(nextTab==='howwetrain')howWeTrainReflectionEditId=null;
@@ -2983,7 +2983,7 @@ function clubNavigationRoute(){
     const {source,search,target}=ensurePlayingGroupsView();
     route.assignments={source,search,target};
   }
-  if(currentTab==='innings'){const {season,format,openId,editId}=ensureMyInningsState();route.innings={season,format,openId,editId};}
+  if(currentTab==='innings'){const {season,format,openId,editId,observationId}=ensureMyInningsState();route.innings={season,format,openId,editId,observationId};}
   if(currentTab==='make_your_call'){const {week,season,month}=ensureMakeYourCallState();route.makeYourCall={week,season,month:month||null,results:serializeCallResultsState()};}
   if(currentTab==='training_preparation')route.trainingPreparation={group:ensureTrainingPreparationState().group};
   if(currentTab==='messages'){const m=ensureClubMessages();route.messages={mode:m.mode,openId:m.mode==='compose'?null:m.openId};}
@@ -3092,7 +3092,7 @@ function teamReviewNavigationIdentity(saved={}){
 function appNavigationKey(route){
   return JSON.stringify([route.scope,route.clubId,route.tab,route.playerId,route.playerId?route.playerSection:null,
     route.playerId?[route.matchOpenId,route.developmentMode,route.developmentMatchId,route.observationEditId]:null,
-    route.planSection,route.homeStage,route.tab==='guide'?route.viewState?.guideTopic:null,route.innings?.openId,route.innings?.editId,route.messages?.mode,route.messages?.openId,
+    route.planSection,route.homeStage,route.tab==='guide'?route.viewState?.guideTopic:null,route.innings?.openId,route.innings?.editId,route.innings?.observationId,route.messages?.mode,route.messages?.openId,
     route.previewKey,route.view,route.prospectId,route.onboardingId,route.assist?.threadId,
     route.tab==='make_your_call'?(route.makeYourCall?.results?.view||'board'):null,route.selections,
     route.teamReview?[route.teamReview.view,teamReviewNavigationIdentity(route.teamReview),route.teamReview.observation_player_id]:null,
@@ -3173,7 +3173,7 @@ function restoreClubNavigationState(route){
     playersWorkspaceDevelopmentMatchId=typeof route.developmentMatchId==='string'?route.developmentMatchId:null;
     staffObservationEditId=typeof route.observationEditId==='string'?route.observationEditId:null;
   }
-  if(currentTab==='innings'){const state=ensureMyInningsState(),saved=route.innings||{};Object.assign(state,{season:saved.season==='all'||/^\d{4}$/.test(saved.season||'')?saved.season:null,format:FORMATS.some(([k])=>k===saved.format)?saved.format:'',openId:typeof saved.openId==='string'?saved.openId:null,editId:typeof saved.editId==='string'?saved.editId:null});}
+  if(currentTab==='innings'){const state=ensureMyInningsState(),saved=route.innings||{};Object.assign(state,{season:saved.season==='all'||/^\d{4}$/.test(saved.season||'')?saved.season:null,format:FORMATS.some(([k])=>k===saved.format)?saved.format:'',openId:typeof saved.openId==='string'?saved.openId:null,editId:typeof saved.editId==='string'?saved.editId:null,observationId:typeof saved.observationId==='string'?saved.observationId:null});}
   if(currentTab==='training_preparation')restoreTrainingPreparationState(route.trainingPreparation||{});
   if(currentTab==='messages'){const m=ensureClubMessages();m.mode=['sent','compose'].includes(route.messages?.mode)?route.messages.mode:'inbox';if(m.mode==='compose'&&!m.draft)m.mode='inbox';m.openId=route.messages?.openId||null;}
   if(currentTab==='team_review')restoreTeamReviewState(route.teamReview||{});
@@ -9316,7 +9316,9 @@ function developmentFocusItems(data,raw){
   return [];
 }
 
-function observationNeedsReflection(view){return !!view&&view.plan_related!==false&&view.batting_to_plan!=='no_plan'&&(!view.followup_status||view.followup_status==='open');}
+function observationHasAssessment(view){return !!view&&view.plan_related!==false&&(view.reflection_required===true||['yes','mostly','no'].includes(view.batting_to_plan));}
+function observationHiddenUntilReflection(match,view){return !match?.player_reflection&&view?.reflection_required!==false&&observationHasAssessment(view);}
+function observationNeedsReflection(view){return observationHasAssessment(view)&&view.reflection_required!==false&&(!view.followup_status||view.followup_status==='open');}
 
 function developmentAlignment(reflection,coachFeedback){
   if(!reflection||!coachFeedback||coachFeedback.plan_related===false||coachFeedback.batting_to_plan==='no_plan')return null;
@@ -9357,7 +9359,7 @@ function renderDevelopmentMatchCard(match,{playerMode=false,staffCanEdit=false,s
   const latestCoach=coaches.find(f=>f.plan_related!==false&&f.batting_to_plan!=='no_plan')||null;
   const alignment=didNotBat?null:developmentAlignment(match.player_reflection,latestCoach);
   const reflectionNeeded=playerMode&&!didNotBat&&!match.player_reflection&&coaches.some(observationNeedsReflection);
-  const visible=coaches.filter(f=>!playerMode||!!match.player_reflection||f.plan_related===false||(f.batting_to_plan==='no_plan'&&f.reflection_required===false));
+  const visible=coaches.filter(f=>!playerMode||!observationHiddenUntilReflection(match,f));
   return `<article class="development-match-card ${reflectionNeeded?'reflection-needed':''}">
     <div class="development-match-head"><div><div class="section-label">${esc(matchMetaLine(match))}</div><h3>${esc(match.dismissal_summary||'Match observation')}</h3></div>
       ${reflectionNeeded?'<span class="alignment-badge discuss">REFLECTION NEEDED</span>':alignment?`<span class="alignment-badge ${alignment.key}">${esc(alignment.label)}</span>`:''}</div>
@@ -9700,11 +9702,11 @@ async function renderCoachConversations(){
       renderCoachingUpdatesMenu();
     }
     const feedback={matches:own?.matches||[],training_observations:own?.training_observations||[],coaching_actions:inbox.data?.actions||[]};
-    page.innerHTML=`<section class="card"><div class="section-label">Your club</div><h1>Coach Conversations</h1><p>Your conversations and requests to you appear here.${canUsePlayersWorkspace()?' Player requests also appear in the Players coaching filter.':''}</p><div class="btnrow">${myPlayer&&isPlayerUser()?'<button class="btn" id="newCoachRequest">Request a Coach Conversation</button>':''}<button class="btn ghost" id="refreshCoachConversations">Refresh conversations</button></div></section><div id="coachRequestFormHost"></div>${renderCoachingActions(feedback,{playerMode:true,includeObservations:true})}`;
+    page.innerHTML=`<section class="card"><div class="section-label">Your club</div><h1>Coach Conversations</h1><p>Your conversations and requests to you appear here.${canUsePlayersWorkspace()?' Player requests also appear in the Players coaching filter.':''}</p><div class="btnrow">${myPlayer&&isPlayerUser()?'<button class="btn" id="newCoachRequest">Request a Coach Conversation</button>':''}<button class="btn ghost" id="refreshCoachConversations">Refresh conversations</button></div></section><div id="coachRequestFormHost"></div>${renderCoachingActions(feedback,{playerMode:true,includeObservations:true,compactMatchSources:true})}`;
     document.getElementById('newCoachRequest')?.addEventListener('click',renderCoachConversationRequestForm);
     document.getElementById('refreshCoachConversations').onclick=()=>{if(confirmLeaveFeedbackEntry())return renderCoachConversations();};
     bindCoachingActionControls(feedback,renderCoachConversations);
-    document.querySelectorAll('[data-edit-my-reflection]').forEach(button=>button.onclick=()=>openMyInnings({matchId:button.dataset.editMyReflection,edit:true}));
+    document.querySelectorAll('[data-edit-my-reflection]').forEach(button=>button.onclick=()=>openMyInnings({matchId:button.dataset.editMyReflection,observationId:button.dataset.observationId||null,edit:true}));
     await revealPendingCoachingUpdate();watchVisibleCoachingNotes();
   }catch(error){if(current())page.innerHTML=`<section class="card notice"><h1>Coach Conversations</h1><p>${esc(error?.message||'Could not load conversations.')}</p><button class="btn ghost" id="retryCoachConversations">Try again</button></section>`;document.getElementById('retryCoachConversations')?.addEventListener('click',renderCoachConversations);}
 }
@@ -9773,7 +9775,7 @@ function renderOutsidePlanReview(action,{compact=false,snapshot=false}={}){
 // BEGIN CONVERSATION DETAILS V66
 // A conversation shows its source straight away. Wider innings history is separate.
 function renderConversationObservation(action,match,note,training,{playerMode,staffCanEdit}){
-  const hidden=playerMode&&match&&!match.player_reflection&&note?.plan_related!==false&&!(note?.batting_to_plan==='no_plan'&&note?.reflection_required===false);
+  const hidden=playerMode&&match&&observationHiddenUntilReflection(match,note);
   if(match){
     const meta=[matchMetaLine(match),Number(match.innings_number||1)>1?'Innings '+match.innings_number:''].filter(Boolean).join(' · ');
     const assessment=note?.batting_to_plan==='no_plan'?'Has no Player Plan':note?.plan_related!==false?[
@@ -9784,7 +9786,7 @@ function renderConversationObservation(action,match,note,training,{playerMode,st
     return `<div class="conversation-observation" data-coach-feedback-id="${esc(note?.id||'')}" data-coaching-note-updated-at="${esc(note?.updated_at||note?.created_at||'')}">
       <h3>Match observation <span>· ${esc(note?.author_name||'Coach / Captain')}</span></h3>
       <p class="conversation-match-meta">${esc(meta)}</p>
-      ${hidden?'<p class="notice">Add your own innings reflection to see this coach’s observation.</p>':`
+      ${hidden?`<p class="help">Share your own view, then read this coach’s feedback.</p><button type="button" class="btn" data-edit-my-reflection="${esc(match.id)}" data-observation-id="${esc(note?.id||'')}">Share my view &amp; read feedback</button>`:`
         ${note?.note?`<p class="conversation-observation-comment">${esc(note.note)}</p>`:''}
         ${note?.innings_note||match.dismissal_summary?`<p class="conversation-context"><strong>Dismissal / innings:</strong> ${esc(note?.innings_note||match.dismissal_summary)}</p>`:''}
         ${assessment?`<p class="conversation-context">${esc(assessment)}</p>`:''}
@@ -9861,7 +9863,7 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
     const training=(feedback.training_observations||[]).find(o=>o.id===a.training_observation_id);
     const compactSource=compactMatchSources&&!!(match||training);
     const source=includeObservations?(compactSource?renderConversationObservation(a,match,note,training,{playerMode,staffCanEdit}):match?renderDevelopmentMatchCard({...match,coach_feedback:[{...note,followup_status:a.status}]},{playerMode,staffCanEdit}):training?renderTrainingObservationCard(training,{staffCanEdit}):''):'';
-    const hiddenPlan=playerMode&&match&&!match.player_reflection&&note?.plan_related!==false&&!(note?.batting_to_plan==='no_plan'&&note?.reflection_required===false);
+    const hiddenPlan=playerMode&&match&&observationHiddenUntilReflection(match,note);
     const isTask=!!(note?.next_training_focus||training?.next_training_focus)||(!a.match_feedback_id&&!a.training_observation_id);
     const focusAccess=a.can_access_focus===true||a.player_id===myPlayer?.id||currentTab==='players'&&(playersWorkspaceData?.players||[]).some(p=>p.id===a.player_id);
     const reviews=a.reviews||[],audit=reviews.filter(coachingReviewIsSystemEntry);
@@ -9883,7 +9885,7 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
       </div>
       <div data-coaching-review-slot="${esc(a.id)}"></div>
       <details data-conversation-history style="margin-top:10px"><summary>Details and history</summary>
-        <div class="btnrow conversation-history-tools">${compactSource&&match&&staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`:''}${compactSource&&training&&staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit my observation</button>`:''}${hiddenPlan?`<button type="button" class="btn ghost" data-staff-innings-source="${esc(match.id)}">Add my reflection</button>`:''}${focusAccess?`<button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button>`:''}</div>
+        <div class="btnrow conversation-history-tools">${compactSource&&match&&staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`:''}${compactSource&&training&&staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit my observation</button>`:''}${hiddenPlan&&!compactSource?`<button type="button" class="btn ghost" data-edit-my-reflection="${esc(match.id)}">Add my reflection</button>`:''}${focusAccess?`<button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button>`:''}</div>
         ${focusAccess?`<div id="conversationFocus-${esc(a.id)}"></div>`:''}
         ${compactSource&&match?`<details class="conversation-reference"><summary>Scorecard & innings details</summary>${renderDevelopmentMatchCard({...match,coach_feedback:[]},{playerMode,showReflectionAction:false})}</details>`:''}
         ${reasons.map(r=>`<p>${esc(r.summary)} ${esc(r.suggestion||'')}</p>`).join('')}
@@ -10054,7 +10056,7 @@ function bindCoachingActionControls(feedback,onSaved){
     if(!action)return;
     const host=document.getElementById('conversationFocus-'+action.id);
     const match=(feedback.matches||[]).find(m=>(m.coach_feedback||[]).some(f=>f.id===action.match_feedback_id));
-    const reviewReady=action.focus_review_ready!==false&&!(action.player_id===myPlayer?.id&&match&&!match.player_reflection&&(match.coach_feedback||[]).some(f=>f.id===action.match_feedback_id&&f.plan_related!==false));
+    const reviewReady=action.focus_review_ready!==false&&!(action.player_id===myPlayer?.id&&match&&!match.player_reflection&&(match.coach_feedback||[]).some(f=>f.id===action.match_feedback_id&&observationHiddenUntilReflection(match,f)));
     await mountWeeklyLoop(host,{playerId:action.player_id,context:'conversation',actionId:action.id,reviewReady,readOnly:action.status!=='open',onSaved:async()=>{await refreshMyCoachingUpdates();}});
   });
   bindConversationDetailControls(feedback,onSaved);
@@ -10278,13 +10280,13 @@ function playerReflectionNeededMatches(feedback){
 
 let howWeTrainRenderSequence=0;
 // BEGIN MY INNINGS — one season entry from preparation through review.
-let myInningsState={scope:'',season:null,format:'',openId:null,editId:null};
+let myInningsState={scope:'',season:null,format:'',openId:null,editId:null,observationId:null};
 let myInningsCache=null;
 let myInningsSequence=0;
 const preparationScoringState=new WeakMap();
 function ensureMyInningsState(){
   const scope=`${club?.id||''}:${session?.user?.id||''}`;
-  if(myInningsState.scope!==scope){myInningsState={scope,season:null,format:'',openId:null,editId:null};myInningsCache=null;}
+  if(myInningsState.scope!==scope){myInningsState={scope,season:null,format:'',openId:null,editId:null,observationId:null};myInningsCache=null;}
   return myInningsState;
 }
 function inningsSeason(date){
@@ -10377,9 +10379,9 @@ function revealMyInningsForm(){
     if(heading){heading.setAttribute('tabindex','-1');heading.focus({preventScroll:true});}
   });
 }
-async function openMyInnings({matchId=null,edit=false,add=false,prepare=false}={}){
+async function openMyInnings({matchId=null,observationId=null,edit=false,add=false,prepare=false}={}){
   if(!canOpenClubTab('innings')||!await saveClubEditsBeforeNavigation()||!confirmLeaveFeedbackEntry())return;
-  const state=ensureMyInningsState();state.openId=matchId;state.editId=prepare?'prepare:new':add?'new':edit?matchId:null;
+  const state=ensureMyInningsState();state.observationId=observationId;state.openId=matchId;state.editId=prepare?'prepare:new':add?'new':edit?matchId:null;
   if(matchId)state.season='all';
   currentTab='innings';await renderTab();
   if(state.editId)revealMyInningsForm();
@@ -10458,16 +10460,66 @@ function preparationEditContext(){
   const match=matches.find(m=>m.id===edit)||null;
   return {planning:false,match,record:match?records.find(p=>preparationLinkedMatch(p)===match.id)||null:null,missing:!!edit&&edit!=='new'&&!match};
 }
+// A coaching alert opens one contribution, not the season editor.
+function playerObservationStyles(){return `<style>
+.player-observation-page{max-width:680px;margin:0 auto}.player-observation-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}.player-observation-header h1{margin:0;font-size:25px}.player-observation-meta{font-size:13px;color:var(--muted);margin:0 0 14px}.player-observation-page .card{margin:0 0 12px;padding:16px}.player-observation-page h2{margin:0 0 8px;font-size:19px}.player-observation-page p{margin:8px 0;overflow-wrap:anywhere}.player-observation-comment{font-size:17px;line-height:1.55;white-space:pre-wrap}.player-observation-page .observation-author{font-weight:700;font-size:15px;margin:0 0 8px}.player-observation-page details{margin-top:12px}.player-observation-page details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-size:14px}.player-observation-page .observation-footer{margin-top:8px}.player-quick-reflection fieldset{border:0;padding:0;margin:16px 0;min-width:0}.player-quick-reflection legend{font-weight:650;font-size:15px;margin-bottom:8px;padding:0}.player-quick-reflection .quick-choice-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.player-quick-reflection .dismissal-choices .quick-choice-grid{grid-template-columns:1fr}.player-quick-reflection .quick-choice{margin:0;min-width:0}.player-quick-reflection .quick-choice>span{padding:10px 12px;min-height:44px;box-sizing:border-box;display:flex;align-items:center;gap:6px}.player-quick-reflection .quick-choice strong{font-size:14px}.player-quick-reflection .quick-choice small{font-size:12px}.player-quick-reflection .btnrow{gap:8px;flex-wrap:wrap}.player-observation-page details>summary::after{content:"⌄";margin-left:auto}.player-observation-page details[open]>summary::after{transform:rotate(180deg)}.player-quick-reflection .field{margin:10px 0}.player-quick-reflection input,.player-quick-reflection select,.player-quick-reflection textarea{font-size:16px;box-sizing:border-box;max-width:100%}.player-quick-reflection .status:empty{display:none}.player-quick-reflection .status{margin:8px 0 0;white-space:normal}.player-observation-page .development-compare-grid{display:block}.player-observation-page .development-view{padding:10px;margin:8px 0}.player-observation-page .help{font-size:13px}
+@media(max-width:520px){.player-observation-page .card{padding:12px}.player-observation-header h1{font-size:22px}.player-observation-comment{font-size:16px}.player-quick-reflection fieldset{margin:12px 0}.player-observation-meta{margin-bottom:10px}}
+</style>`;}
+function renderQuickObservationReflection(match,note){
+ const r=match.player_reflection||{};
+ return `<section class="card player-quick-reflection" id="myReflectionForm" data-reflection-only="true">
+  <h2>Your view first</h2><p class="help">Two quick answers, then read ${esc(note.author_name||'your coach')}’s feedback.</p>
+  <fieldset><legend>Did you bat to your plan?</legend>${radioChoiceHtml('myBattingToPlan',[["yes","Yes"],["mostly","Mostly"],["no","Not really"]],r.batting_to_plan||'')}</fieldset>
+  <fieldset class="dismissal-choices"><legend>And on the dismissal ball?</legend>${radioChoiceHtml('myDismissalClass',[["plan_execution","Within my plan · execution to improve"],["outside_plan","Decision outside my plan"],["not_applicable","No dismissal decision to review","Not out, good ball, run out or other"]],r.dismissal_classification||'')}</fieldset>
+  <details><summary>Add a note or training focus (optional)</summary>
+   <div class="field"><label for="reflectionMainIssue">Main issue</label><select id="reflectionMainIssue"><option value="">Choose only if useful</option>${Object.entries(DEVELOPMENT_ISSUE_LABELS).map(([k,l])=>`<option value="${k}" ${r.main_issue===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+   <div class="field"><label for="reflectionNextFocus">One thing to train next</label><input id="reflectionNextFocus" maxlength="240" value="${esc(r.next_training_focus||'')}"></div>
+   <div class="field"><label for="reflectionNote">My note</label><textarea id="reflectionNote" maxlength="500" rows="2">${esc(r.note||'')}</textarea></div>
+  </details>
+  <div class="btnrow"><button class="btn" type="button" id="saveMyReflection">Save &amp; read feedback</button><button class="btn ghost" type="button" id="cancelMyReflection">Back</button></div><p class="status" id="myReflectionStatus" role="status" aria-live="polite"></p>
+ </section>`;
+}
+function renderPlayerObservationComment(match,note){
+ const assessment=observationHasAssessment(note);
+ return `<article class="card" data-coach-feedback-id="${esc(note.id)}" data-coaching-note-updated-at="${esc(note.updated_at||note.created_at||'')}">
+  <p class="observation-author">${esc(note.author_name||'Coach / Captain')}</p>
+  ${note.note?`<p class="player-observation-comment">${esc(note.note)}</p>`:''}
+  ${note.innings_note&&note.innings_note!==note.note?`<p class="${note.note?'help':'player-observation-comment'}">${esc(note.innings_note)}</p>`:''}
+  ${note.next_training_focus?`<p><strong>Train next:</strong> ${esc(note.next_training_focus)}</p>`:''}
+  ${observationVideoLinks(note.video)}
+  ${assessment?`<details><summary>Plan review</summary>${developmentViewBlock('YOUR VIEW',match.player_reflection)}${developmentViewBlock('COACH VIEW',{...note,note:'',innings_note:'',next_training_focus:'',video:null})}</details>`:''}
+  ${!assessment&&(note.dismissal_classification||note.main_issue)?`<p class="help">${esc([DISMISSAL_CLASSIFICATION_LABELS[note.dismissal_classification],DEVELOPMENT_ISSUE_LABELS[note.main_issue]].filter(Boolean).join(' · '))}</p>`:''}
+  ${note.batting_to_plan==='no_plan'?'<button class="btn secondary" type="button" data-complete-player-plan>Open My Player Plan</button>':''}
+ </article>`;
+}
+async function renderMyObservationPage(state,current,{message=''}={}){
+ const page=document.getElementById('page'),match=myInningsCache.matches.find(m=>(m.coach_feedback||[]).some(n=>n.id===state.observationId)),note=match?.coach_feedback.find(n=>n.id===state.observationId);
+ const hidden=note&&observationHiddenUntilReflection(match,note),meta=match?[formatDateShort(match.match_date),match.opposition,Number(match.innings_number||1)>1?'Innings '+match.innings_number:''].filter(Boolean).join(' · '):'';
+ const leave=async(showInnings=false)=>{if(!current()||!confirmLeaveFeedbackEntry())return;state.observationId=null;state.editId=null;state.openId=showInnings?match?.id||null:null;pendingCoachingUpdate=null;await renderMyInnings({refresh:false});};
+ page.innerHTML=`${playerObservationStyles()}<div class="player-observation-page"><div class="player-observation-header"><button class="btn ghost" type="button" id="observationBack" aria-label="Back to My Innings">←</button><h1 id="playerObservationTitle" tabindex="-1">${hidden?'Match feedback':'Coach’s comment'}</h1></div>${meta?`<p class="player-observation-meta">${esc(meta)}</p>`:''}${message?`<p class="help" role="status">${esc(message)}</p>`:''}${note?hidden?renderQuickObservationReflection(match,note):renderPlayerObservationComment(match,note):'<p class="notice" role="status">This observation is no longer available. Open My Innings to check the current record.</p>'}${note?'<div class="observation-footer"><button class="btn ghost" type="button" id="observationInnings">View innings</button></div>':''}</div>`;
+ document.getElementById('observationBack').onclick=()=>leave();
+ document.getElementById('observationInnings')?.addEventListener('click',()=>leave(true));
+ if(hidden){
+  state.editId=match.id;wireQuickChoices(page);captureFeedbackEntryBaseline();
+  document.getElementById('cancelMyReflection').onclick=()=>leave();
+  bindMyInningsSave(match,state,current);
+  matchDraftAttachInnings(document.getElementById('myReflectionForm'),{match});
+ }else state.editId=null;
+ bindCompletePlayerPlanButtons(page);recordAppNavigation(clubNavigationRoute());
+ if(hidden){document.getElementById('playerObservationTitle')?.scrollIntoView({block:'start'});document.getElementById('playerObservationTitle')?.focus({preventScroll:true});}
+ else{await revealPendingCoachingUpdate();watchVisibleCoachingNotes();document.getElementById('playerObservationTitle')?.focus({preventScroll:true});}
+}
 async function renderMyInnings({refresh=true,message=''}={}){
   const page=document.getElementById('page'),state=ensureMyInningsState(),scope=state.scope,sequence=++myInningsSequence;
   const current=()=>currentTab==='innings'&&ensureMyInningsState().scope===scope&&sequence===myInningsSequence&&page===document.getElementById('page');
   if(!myPlayer||!isPlayerUser()){page.innerHTML='<section class="card"><h1>My Innings</h1><p>A player registration is needed to keep an innings record.</p></section>';return;}
-  if(refresh||!myInningsCache){
-    page.innerHTML='<p class="splash">Loading your innings…</p>';
-    try{const results=await Promise.all([supabase.rpc('get_my_innings',{p_club_id:club.id}),supabase.rpc('get_my_match_preparations',{p_club_id:club.id})]);if(!current())return;for(const r of results)if(r.error)throw r.error;const [innings,prepared]=results;if(!Array.isArray(innings.data?.matches)||!Array.isArray(prepared.data?.preparations))throw new Error('The complete season record could not be confirmed. Please try again.');myInningsCache={matches:innings.data.matches,preparations:prepared.data.preparations};myInningsCache.entries=mergeMyInnings(myInningsCache.matches,myInningsCache.preparations);}
+  if(refresh||!myInningsCache||(!state.observationId&&myInningsCache.observationOnly)){
+    page.innerHTML='<p class="splash">'+(state.observationId?'Loading the comment…':'Loading your innings…')+'</p>';
+    try{const results=await Promise.all([supabase.rpc('get_my_innings',{p_club_id:club.id}),state.observationId?Promise.resolve({data:{preparations:[]}}):supabase.rpc('get_my_match_preparations',{p_club_id:club.id})]);if(!current())return;for(const r of results)if(r.error)throw r.error;const [innings,prepared]=results;if(!Array.isArray(innings.data?.matches)||!Array.isArray(prepared.data?.preparations))throw new Error('The complete season record could not be confirmed. Please try again.');myInningsCache={matches:innings.data.matches,preparations:prepared.data.preparations,observationOnly:!!state.observationId};myInningsCache.entries=mergeMyInnings(myInningsCache.matches,myInningsCache.preparations);}
     catch(error){if(current()){page.innerHTML=`<section class="card notice"><h1>My Innings</h1>${message?`<p class="notice" role="status">${esc(message)}</p>`:''}<p>Your innings list could not be loaded. Your saved records are still there.</p><p class="help">${esc(error?.message||'Check your connection and try again.')}</p><button class="btn" id="retryMyInnings">Try again</button><button class="btn ghost" id="inningsBackHome">Player Home</button></section>`;document.getElementById('retryMyInnings').onclick=()=>renderMyInnings();document.getElementById('inningsBackHome').onclick=()=>openPlayerHomeAction({tab:'playerhome'});}return;}
   }
   if(!current())return;
+  if(state.observationId){await renderMyObservationPage(state,current,{message});return;}
   const all=myInningsCache.entries,currentSeason=inningsSeason(todayIso()),years=[...new Set([currentSeason,...all.map(m=>inningsSeason(m.match_date))].filter(Boolean))].sort().reverse();
   if(state.season===null)state.season=currentSeason;if(state.season!=='all'&&!years.includes(state.season))state.season=currentSeason;
   let edit=preparationEditContext();if(edit.missing||edit.planning&&edit.record?.locked_at){state.editId=null;edit=preparationEditContext();message='That entry has changed. The current saved list is shown below.';}
@@ -10730,7 +10782,7 @@ function expectedInningsSnapshot(values,original){
   return inningsCommittedSnapshot({...values,player_video:values.video_url?{url:values.video_url,note:values.video_note}:null,player_reflection:values.reflection||original?.player_reflection||null});
 }
 function bindMyInningsSave(match,state,current,preparation=null){
-  const form=document.getElementById('myReflectionForm'),saveButton=form.querySelector('#saveMyReflection'),saveLabel=saveButton.textContent;let requestId=null,lastPayload=null,uncertainCommand=null,saveConflict=null,pendingLinkCommand=null;
+  const form=document.getElementById('myReflectionForm'),saveButton=form.querySelector('#saveMyReflection'),saveLabel=saveButton.textContent,reflectionOnly=form.dataset.reflectionOnly==='true';let requestId=null,lastPayload=null,uncertainCommand=null,saveConflict=null,pendingLinkCommand=null;
   const clearReflection=form.querySelector('#clearInningsReflection'),reflectionPanel=form.querySelector('#inningsReflectionPanel');
   if(clearReflection&&reflectionPanel&&!match?.player_reflection){
     const fields=()=>[...reflectionPanel.querySelectorAll('input,select,textarea')];
@@ -10780,10 +10832,11 @@ function bindMyInningsSave(match,state,current,preparation=null){
     if(pendingLinkCommand){status.textContent='Retry the selected existing innings to confirm its link before saving other changes.';return;}
     const batting=document.querySelector('input[name="myBattingToPlan"]:checked')?.value,dismissal=document.querySelector('input[name="myDismissalClass"]:checked')?.value;
     const extra={main_issue:val('reflectionMainIssue')||null,next_training_focus:val('reflectionNextFocus'),note:val('reflectionNote')};
-    if((batting||dismissal||Object.values(extra).some(Boolean))&&(!batting||!dismissal)){status.textContent='Choose both reflection answers to save a reflection. For a quick innings entry, leave the reflection section blank.';document.getElementById('inningsReflectionPanel').open=true;return;}
-    let video;try{video=coachingVideoValues('innings');}catch(error){status.textContent=error.message;return;}
-    if(!val('reflectionDate')){status.textContent='Choose the match date.';return;}
-    const values={match_date:val('reflectionDate'),format_key:val('reflectionFormat'),opposition:val('reflectionOpposition'),innings_number:Number(val('reflectionInningsNumber')||1),score_text:val('reflectionScore'),player_note:val('reflectionDismissal'),...video,reflection:batting&&dismissal?{batting_to_plan:batting,dismissal_classification:dismissal,...extra}:null};
+    if((reflectionOnly||batting||dismissal||Object.values(extra).some(Boolean))&&(!batting||!dismissal)){status.textContent=reflectionOnly?'Choose one answer for each question.':'Choose both reflection answers to save a reflection. For a quick innings entry, leave the reflection section blank.';const panel=document.getElementById('inningsReflectionPanel');if(panel)panel.open=true;return;}
+    let video;try{video=reflectionOnly?{video_url:match.player_video?.url||'',video_note:match.player_video?.note||''}:coachingVideoValues('innings');}catch(error){status.textContent=error.message;return;}
+    if(!reflectionOnly&&!val('reflectionDate')){status.textContent='Choose the match date.';return;}
+    const identity=reflectionOnly?{match_date:match.match_date,format_key:match.format_key,opposition:match.opposition,innings_number:Number(match.innings_number||1),score_text:match.score_text||'',player_note:match.player_note||''}:{match_date:val('reflectionDate'),format_key:val('reflectionFormat'),opposition:val('reflectionOpposition'),innings_number:Number(val('reflectionInningsNumber')||1),score_text:val('reflectionScore'),player_note:val('reflectionDismissal')};
+    const values={...identity,...video,reflection:batting&&dismissal?{batting_to_plan:batting,dismissal_classification:dismissal,...extra}:null};
     if(!Number.isInteger(values.innings_number)||values.innings_number<1||values.innings_number>10){status.textContent='Choose an innings number from 1 to 10.';return;}
     const candidates=!match?(myInningsCache?.matches||[]).filter(m=>sameInningsSlot(m,values)):[];
     if(candidates.length){showExistingInnings(candidates,values);return;}
@@ -10802,8 +10855,8 @@ function bindMyInningsSave(match,state,current,preparation=null){
         match=saved;state.editId=data.match_id;if(preparation)preparation={...preparation,id:data.preparation_id,revision:data.revision,status:data.status,match_id:data.match_id};uncertainCommand=null;requestId=null;lastPayload=null;coachingActionSavePending=false;if(!current())return;restore();recordAppNavigation(clubNavigationRoute());feedbackEntryBaselines.set(form,'confirmed-save-with-latest-edits');status.textContent='Previous save confirmed. Your latest edits are still here. Choose Save innings to update that same entry.';return;
       }
       uncertainCommand=null;feedbackEntryBaselines.set(form,feedbackEntryValues(form));coachingActionSavePending=false;if(!current())return;
-      state.editId=null;state.openId=data.match_id;state.season=inningsSeason(values.match_date);state.format='';await renderMyInnings({message:values.reflection?'Innings and reflection saved.':'Innings saved. You can add a reflection whenever you are ready.'});await refreshMyCoachingUpdates();
-    }catch(error){uncertainCommand=receiptConfirmed||!definiteInningsSaveFailure(error)?command:null;if(current()){if(uncertainCommand)feedbackEntryBaselines.set(form,'save-outcome-unconfirmed');status.textContent=(error?.message||'Could not confirm the save. Your entry is still here; try again.')+(uncertainCommand?' Retry Save innings to confirm the previous save before saving any further edits.':'');restore();}}
+      state.editId=null;state.openId=data.match_id;state.season=inningsSeason(values.match_date);state.format='';await renderMyInnings({message:reflectionOnly?'':values.reflection?'Innings and reflection saved.':'Innings saved. You can add a reflection whenever you are ready.'});await refreshMyCoachingUpdates();
+    }catch(error){uncertainCommand=receiptConfirmed||!definiteInningsSaveFailure(error)?command:null;if(current()){if(uncertainCommand)feedbackEntryBaselines.set(form,'save-outcome-unconfirmed');status.textContent=(error?.message||'Could not confirm the save. Your entry is still here; try again.')+(uncertainCommand?(reflectionOnly?' Your answers are kept. Choose Check previous save to confirm them.':' Retry Save innings to confirm the previous save before saving any further edits.'):'');restore();}}
     finally{coachingActionSavePending=false;saveButton.removeAttribute('aria-busy');if(document.getElementById('myReflectionForm')===form)saveButton.textContent=saveLabel;matchDraftAfterAttempt(form);}
   };
   if(!match&&preparation?.resolution_ambiguous){const candidates=(myInningsCache?.matches||[]).filter(m=>sameInningsSlot(m,preparation));if(candidates.length)showExistingInnings(candidates,preparation);}
@@ -11760,7 +11813,7 @@ async function renderHowWeTrain(){
   if(document.getElementById('howWeTrainGuideLink'))document.getElementById('howWeTrainGuideLink').onclick=()=>openClubBattingGuideTopic('how_we_train');
   page.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!confirmLeaveFeedbackEntry())return;if(b.dataset.planSection){builderSection=b.dataset.planSection;playerPlanEditScope=`${club?.id}:${myPlayer?.id}`;}currentTab=b.dataset.go;renderTab();});
 
-  page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=()=>openMyInnings({matchId:b.dataset.editMyReflection,edit:true}));
+  page.querySelectorAll('[data-edit-my-reflection]').forEach(b=>b.onclick=()=>openMyInnings({matchId:b.dataset.editMyReflection,observationId:b.dataset.observationId||null,edit:true}));
   await revealPendingCoachingUpdate();
 }
 
@@ -11946,7 +11999,7 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
     <p class="observation-match-summary" data-observation-match-summary>${match?esc([formatDateShort(match.match_date),match.opposition,formatLabel(match.format_key)].filter(Boolean).join(' · ')):''}</p>
     <div hidden><input id="staffMatchDate" type="date" value="${esc(match?.match_date||todayIso())}"><select id="staffMatchFormat">${FORMATS.map(([k,l])=>`<option value="${k}" ${format===k?'selected':''}>${esc(l)}</option>`).join('')}</select><input id="staffMatchOpposition" value="${esc(match?.opposition||'')}"></div>
     <div data-observation-body>
-    ${match?renderInningsContributions((match.coach_feedback||[]).filter(o=>o.id!==feedback?.id&&(player.id!==myPlayer?.id||match.player_reflection||o.plan_related===false||o.author_user_id===session?.user?.id))):''}
+    ${match?renderInningsContributions((match.coach_feedback||[]).filter(o=>o.id!==feedback?.id&&(player.id!==myPlayer?.id||!observationHiddenUntilReflection(match,o)||o.author_user_id===session?.user?.id))):''}
     ${match?.scorecard?renderImportedScorecard(match):''}
     <div class="observation-facts"><div class="field" ${format==='long_form'||Number(match?.innings_number)>1?'':'hidden'}><label for="staffMatchInningsNumber">Innings</label><select id="staffMatchInningsNumber" ${sharedReadonly?'disabled':''}>${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}" ${Number(match?.innings_number||1)===n?'selected':''}>${n===1?'First':n===2?'Second':n}</option>`).join('')}</select></div><div class="field"><label for="staffMatchScore">Score</label><input id="staffMatchScore" maxlength="80" value="${esc(match?.score_text||'')}" ${sharedReadonly?'disabled':''}></div>${matchArrivalField(player.id)}${didNotBat?observationPurposeField({plan_related:false},'Comment only').replace('id="staffObservationGeneral"','id="staffObservationGeneral" disabled')+'<p class="notice">DNB — no Player Plan assessment. Correct the batting status in Match review if needed.</p>':observationPurposeField(feedback?.batting_to_plan==='no_plan'?{...feedback,plan_related:true}:feedback,'Comment only')}</div>
     <div id="staffObservationPlanQuestions"><div class="development-question"><label>In the innings overall, did the player bat to their Player Plan?</label>${radioChoiceHtml('staffBattingToPlan',[["yes","Yes","Overall, the approach matched the plan"],["mostly","Mostly","Some periods or choices moved outside it"],["no","Not really","The approach moved away from the plan"],["no_plan","Has no plan","Ask the player to complete their Player Plan"]],feedback?.batting_to_plan||'')}</div>
@@ -11957,7 +12010,7 @@ function renderStaffMatchFeedbackForm(player,data,matchId=playersWorkspaceDevelo
     ${observationConversationField(feedback?.needs_conversation)}
     <div class="field"><label>One thing to train next <span>optional</span></label><input id="staffMatchNextFocus" value="${esc(feedback?.next_training_focus||'')}" ${closed?'disabled':''} maxlength="240" placeholder="One useful focus is enough"></div>
     <details class="observation-extra" ${action?.review_on||action?.video?'open':''}><summary>Videos &amp; review date</summary>${coachingVideoFields('staffObservation',action?.video||feedback?.video,{multiple:true})}${observationReviewField(action)}</details>
-    <p class="help">The training focus is shared straight away. For Player Plan observations, the match answers, note and video wait for the player’s reflection.</p>
+    <p class="help">Comments are shared straight away unless you select Yes, Mostly or Not really above. Those assessments ask for the player’s reflection first.</p>
     ${closed?'<p class="notice">This follow-up is closed. You can correct the observation; add a new observation for a new follow-up.</p>':''}
     ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'<p class="notice">The latest observation and linked action could not be checked. Reload before editing.</p>':''}
     </div><div class="btnrow observation-save"><button type="button" class="btn secondary" id="saveStaffMatchFeedback" ${feedback&&(data?.coaching_actions_error||data?.observation_edit_error)?'disabled':''}>${feedback?'Save changes':'Save observation'}</button><button type="button" class="btn ghost" id="cancelStaffDevelopment">Cancel</button></div><p class="status" id="staffDevelopmentStatus" role="status" aria-live="polite" tabindex="-1" style="margin:10px 0 0;white-space:normal;overflow-wrap:anywhere"></p>
@@ -11969,7 +12022,7 @@ function staffMatchObservationsInView(matches,format=playersWorkspaceMatchFormat
     .sort((a,b)=>String(b.match_date||'').localeCompare(String(a.match_date||''))||Number(a.innings_number||1)-Number(b.innings_number||1)||String(a.id).localeCompare(String(b.id)));
 }
 function renderStaffMatchEvidence(match,player,data){
-  const visible=(match.coach_feedback||[]).filter(note=>!note.reflection_required&&(player.id!==myPlayer?.id||match.player_reflection||note.plan_related===false));
+  const visible=(match.coach_feedback||[]).filter(note=>!note.reflection_required&&(player.id!==myPlayer?.id||!observationHiddenUntilReflection(match,note)));
   return visible.map(note=>{
     const action=(data.coaching_actions||[]).find(row=>row.match_feedback_id===note.id);
     return action?`<button type="button" class="btn ghost" data-staff-conversation-source="${esc(action.id)}">${esc(note.author_name||'Coach / Captain')} · Open conversation</button>`:renderCoachingVideo(note.video);
@@ -13645,7 +13698,7 @@ async function openPlayerHomeAction(action){
   if(action.tab==='myplan'&&action.edit)playerPlanEditScope=`${clubId}:${myPlayer?.id}`;
   if(action.section)builderSection=action.section;
   if(action.tab==='howwetrain')howWeTrainReflectionEditId=action.matchId||null;
-  if(action.tab==='innings'){const state=ensureMyInningsState();state.editId=action.matchId||null;state.openId=action.matchId||null;if(action.matchId){state.season='all';state.format='';}}
+  if(action.tab==='innings'){const state=ensureMyInningsState();state.observationId=null;state.editId=action.matchId||null;state.openId=action.matchId||null;if(action.matchId){state.season='all';state.format='';}}
   currentTab=action.tab;
   localStorage.setItem(`bdp-tab-${club.id}`,currentTab);
   await renderTab();
@@ -17856,7 +17909,7 @@ function capturePhoneLaunch(params){
 async function applyPhoneLaunch(){
  const launch=pendingPhoneLaunch;if(!launch||launch.clubId!==club?.id)return;pendingPhoneLaunch=null;
  if(launch.message){const s=ensureClubMessages();s.mode='inbox';s.openId=launch.message;currentTab='messages';return;}
- if(launch.prepare&&isPlayerUser()){const s=ensureMyInningsState();s.editId='prepare:new';s.openId=null;currentTab='innings';return;}
+ if(launch.prepare&&isPlayerUser()){const s=ensureMyInningsState();s.editId='prepare:new';s.openId=null;s.observationId=null;currentTab='innings';return;}
  if(launch.coaching){
   const requestedUser=session?.user?.id;
   const {data,error}=await supabase.rpc('get_my_coaching_updates',{p_club_id:club.id});
@@ -17865,7 +17918,7 @@ async function applyPhoneLaunch(){
   if(!update){currentTab='conversations';return;}
   pendingCoachingUpdate={...update,clubId:club.id,userId:session.user.id};
   currentTab=update.source_kind==='conversation'?'conversations':update.source_kind==='match'?'innings':'howwetrain';
-  if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=update.can_open?null:update.match_id;}
+  if(currentTab==='innings'){const state=ensureMyInningsState();state.season='all';state.format='';state.openId=update.match_id;state.editId=null;state.observationId=update.source_id;}
  }
 }
 async function openPhoneNotification(raw){

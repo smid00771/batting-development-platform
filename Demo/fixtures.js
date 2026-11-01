@@ -419,7 +419,7 @@ function demoConversationAccess(a){return demoPlayerAccess(a.player_id).view||(a
 function demoConversationView(a){
  const copy=fixtureClone(a),f=fixtureRows.feedback[a.player_id];
  const match=f?.matches.find(m=>m.coach_feedback.some(n=>n.id===a.match_feedback_id)),note=match?.coach_feedback.find(n=>n.id===a.match_feedback_id);
- if(myPlayer?.id===a.player_id&&note?.plan_related!==false&&match&&!match.player_reflection)copy.video=null;
+ if(myPlayer?.id===a.player_id&&observationHasAssessment(note)&&match&&!match.player_reflection)copy.video=null;
  return {...copy,player_name:fixtureRows.players.find(p=>p.id===a.player_id)?.display_name,
   preferred_name:fixtureRows.user_profiles.find(p=>p.user_id===a.preferred_user_id)?.display_name,preferred_available:true,
   is_own_request:!!a.is_player_request&&myPlayer?.id===a.player_id,is_preferred_person:!!a.is_player_request&&a.preferred_user_id===session.user.id,
@@ -434,7 +434,7 @@ function demoUpdates(){
    const a=f.coaching_actions.find(a=>kind==='match'?a.match_feedback_id===n.id:a.training_observation_id===n.id);
    const key=kind+':'+n.id,changed=n.updated_at||n.created_at;
    if(a?.status!=='open'||demoSeen.get(session.user.id+':'+key)===changed)return;
-   updates.push({source_key:key,source_id:n.id,source_kind:kind,match_id:m?.id,changed_at:changed,author_name:n.author_name||n.observer_name,can_open:kind!=='match'||n.plan_related===false||!!m.player_reflection});
+   updates.push({source_key:key,source_id:n.id,source_kind:kind,match_id:m?.id,changed_at:changed,author_name:n.author_name||n.observer_name,can_open:kind!=='match'||!observationHasAssessment(n)||!!m.player_reflection});
  };
  f.matches.forEach(m=>m.coach_feedback.forEach(n=>add('match',n,m)));f.training_observations.forEach(n=>add('training',n));
  for(const a of demoInbox().filter(a=>a.is_player_request&&a.status==='open')){
@@ -458,8 +458,8 @@ window.__fixtureRpc=async(name,args={})=>{
    return ok({matches:feedback.matches.map(m=>({...m,innings_number:m.innings_number||1,participation_status:m.participation_status||'played',score_recorded_by:m.score_recorded_by??(String(m.score_text||'').trim()?m.created_by:null),can_edit_score:demoCanEditInningsScore(myPlayer.id,m),can_edit_details:m.created_by===userId,player_note:m.player_note||'',dismissal_summary:m.player_note||'',player_video:m.player_video||null,
      coach_feedback:m.coach_feedback.map(f=>{
        const a=feedback.coaching_actions.find(a=>a.match_feedback_id===f.id);
-       if(f.plan_related!==false&&!m.player_reflection)return {id:f.id,author_name:f.author_name,plan_related:true,reflection_required:true,followup_status:a?.status};
-       return {...f,action_id:a?.id,video:a?demoConversationView(a).video:null,followup_status:a?.status};
+       if(observationHasAssessment(f)&&!m.player_reflection)return {id:f.id,author_name:f.author_name,plan_related:true,reflection_required:true,followup_status:a?.status};
+       return {...f,reflection_required:false,action_id:a?.id,video:a?demoConversationView(a).video:null,followup_status:a?.status};
      })}))});
  }
  case 'save_my_innings':{
@@ -673,7 +673,7 @@ function demoFocusSourceVisible(playerId,kind,id){
   if(!a)return false;
   const match=f.matches.find(m=>m.coach_feedback.some(n=>n.id===a.match_feedback_id));
   const note=match?.coach_feedback.find(n=>n.id===a.match_feedback_id);
-  return !note||note.plan_related===false||!!match.player_reflection;
+  return !observationHasAssessment(note)||!!match.player_reflection;
 }
 
 function demoFocusVisible(playerId,row){
@@ -1544,7 +1544,7 @@ window.__fixtureRpc=async(name,args={})=>{
   if(name==='get_team_review_session'){
    const review=demoTeamReviewById(args.p_review_id),meta=demoTeamMetadata(review),result=await demoBeforeTeamWorkflowRpc('get_team_match_review',{p_club_id:club.id,p_match_date:review.match_date,p_format_key:review.format_key,p_opposition:review.opposition,p_innings_number:review.innings_number,p_group_id:null});if(result.error)throw Error(result.error.message);
    result.data.players=result.data.players.filter(p=>review.rows.some(r=>r.player_id===p.player_id)||(review.author_user_id===session.user.id&&(review.group_scope==='all'||review.group_scope==='legacy'||review.group_scope==='unassigned'&&!p.group_ids.length||review.group_scope==='group'&&(review.fixture_id||p.group_ids.includes(review.group_id)))));
-   for(const p of result.data.players){const linked=review.rows.find(r=>r.player_id===p.player_id);p.included_in_review=!!linked;if(linked){const match=fixtureRows.feedback[p.player_id]?.matches.find(m=>m.id===linked.match_id),original=match?.coach_feedback.find(n=>n.id===linked.feedback_id),note=myPlayer?.id===p.player_id&&original?.author_user_id!==session.user.id&&original?.plan_related!==false&&!match?.player_reflection?null:original,action=note?fixtureRows.feedback[p.player_id]?.coaching_actions.find(a=>a.match_feedback_id===note.id):null;Object.assign(p,{match_id:match?.id||null,match_updated_at:match?.updated_at||null,participation_status:match?.participation_status||'played',own_feedback_id:note?.id||null,own_feedback_updated_at:note?.updated_at||null,own_action_revision:action?.revision||null,batting_to_plan:match?.participation_status==='did_not_bat'?'did_not_bat':note?.batting_to_plan||'',dismissal_classification:note?.dismissal_classification||null,feedback:note?{id:note.id,batting_to_plan:note.batting_to_plan,dismissal_classification:note.dismissal_classification,updated_at:note.updated_at,action_revision:action?.revision||null}:null});}}
+   for(const p of result.data.players){const linked=review.rows.find(r=>r.player_id===p.player_id);p.included_in_review=!!linked;if(linked){const match=fixtureRows.feedback[p.player_id]?.matches.find(m=>m.id===linked.match_id),original=match?.coach_feedback.find(n=>n.id===linked.feedback_id),note=myPlayer?.id===p.player_id&&original?.author_user_id!==session.user.id&&observationHasAssessment(original)&&!match?.player_reflection?null:original,action=note?fixtureRows.feedback[p.player_id]?.coaching_actions.find(a=>a.match_feedback_id===note.id):null;Object.assign(p,{match_id:match?.id||null,match_updated_at:match?.updated_at||null,participation_status:match?.participation_status||'played',own_feedback_id:note?.id||null,own_feedback_updated_at:note?.updated_at||null,own_action_revision:action?.revision||null,batting_to_plan:match?.participation_status==='did_not_bat'?'did_not_bat':note?.batting_to_plan||'',dismissal_classification:note?.dismissal_classification||null,feedback:note?{id:note.id,batting_to_plan:note.batting_to_plan,dismissal_classification:note.dismissal_classification,updated_at:note.updated_at,action_revision:action?.revision||null}:null});}}
    return ok({review:meta,groups,players:result.data.players});
   }
   if(name==='save_team_match_review'){
@@ -2761,7 +2761,7 @@ supabase.rpc=async function(name,args){
    const links=innings.flatMap(r=>r.rows.filter(x=>x.player_id===p.player_id)),ids=[...new Set(links.map(x=>x.match_id))],mid=p.match_id||(ids.length===1?ids[0]:null),m=fixtureRows.feedback[p.player_id]?.matches.find(m=>m.id===mid);
    p.shared_included_in_review=!!links.length;p.included_in_review=!!mine&&!!p.included_in_review;
    if(m)Object.assign(p,{match_id:m.id,match_updated_at:m.updated_at,score_text:m.score_text,scorecard:m.scorecard||p.scorecard,participation_status:m.participation_status});
-   p.shared_observations=(m?.coach_feedback||[]).filter(f=>f.author_user_id!==session.user.id&&(myPlayer?.id!==p.player_id||f.plan_related===false||m.player_reflection)).map(f=>({author_user_id:f.author_user_id,author_name:fixtureRows.user_profiles.find(u=>u.user_id===f.author_user_id)?.display_name||'Coach',batting_to_plan:f.batting_to_plan,dismissal_classification:f.dismissal_classification,updated_at:f.updated_at}));
+   p.shared_observations=(m?.coach_feedback||[]).filter(f=>f.author_user_id!==session.user.id&&(myPlayer?.id!==p.player_id||!observationHasAssessment(f)||m.player_reflection)).map(f=>({author_user_id:f.author_user_id,author_name:fixtureRows.user_profiles.find(u=>u.user_id===f.author_user_id)?.display_name||'Coach',batting_to_plan:f.batting_to_plan,dismissal_classification:f.dismissal_classification,updated_at:f.updated_at}));
   }
   const source=related.find(r=>r.scorecard_id),card=source?demoScorecardPreview(source.scorecard_id):null;
   if(card){data.scorecard_preview={...card,our_team_id:source.source_team_id};data.review.source_team_id||=source.source_team_id;}
@@ -2789,7 +2789,7 @@ supabase.rpc=async function(name,args){
  if(!out.error&&out.data&&['get_team_match_review','get_team_review_session','get_shared_team_review'].includes(name)){
   for(const p of out.data.players||[]){
    const data=fixtureRows.feedback[p.player_id],m=data?.matches.find(m=>m.id===p.match_id);
-   p.observations=(m?.coach_feedback||[]).filter(f=>f.author_user_id===session.user.id||myPlayer?.id!==p.player_id||f.plan_related===false||m.player_reflection).map(f=>({...fixtureClone(f),author_name:fixtureRows.user_profiles.find(u=>u.user_id===f.author_user_id)?.display_name||f.author_name||'Coach / Captain',video:data.coaching_actions.find(a=>a.match_feedback_id===f.id)?.video||f.video||null}));
+   p.observations=(m?.coach_feedback||[]).filter(f=>f.author_user_id===session.user.id||myPlayer?.id!==p.player_id||!observationHasAssessment(f)||m.player_reflection).map(f=>({...fixtureClone(f),author_name:fixtureRows.user_profiles.find(u=>u.user_id===f.author_user_id)?.display_name||f.author_name||'Coach / Captain',video:data.coaching_actions.find(a=>a.match_feedback_id===f.id)?.video||f.video||null}));
   }
  }
  return out;

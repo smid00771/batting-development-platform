@@ -84,7 +84,7 @@ function reviewHarness(){
   TEAM_REVIEW_CHOICES:[['yes','Yes'],['mostly','Mostly'],['no','Not really'],['no_plan','Has no plan'],['did_not_bat','DNB']],
   TEAM_REVIEW_DISMISSALS:[['plan_execution','Within plan'],['outside_plan','Outside plan']],
   teamReviewStyles:()=>'',teamReviewRosterHelp:()=>'',teamReviewHistoryNotice:()=>'',teamReviewRosterEditor:()=>'',
-  teamReviewSignupIcon:()=>'',teamReviewPlayerMeta:()=>'',matchReviewOtherObservations:()=>'',matchReviewScoreCell:()=>'<td>34</td>',
+  teamReviewSignupIcon:()=>'',teamReviewPlayerMeta:()=>'',matchReviewOtherObservations:()=>'',matchReviewDismissalDetails:()=>'',matchReviewScoreCell:()=>'<td>34</td>',
   teamReviewFixturePicker:()=>'',fixtureCorrectionAction:()=>'',renderMatchReviewImporter:()=>'',
   bindTeamReviewRosterEditor:()=>{},wireFixtureCorrectionActions:()=>{},bindMatchReviewImporter:()=>{},matchDraftAttachTeam:()=>{},
   matchReviewImportCount:()=>c.ensureTeamReviewState().importer?.dirty?1:0,
@@ -94,7 +94,7 @@ function reviewHarness(){
   teamReviewMatchChanged:()=>{},teamReviewChooseFixture:()=>{},switchMatchReviewInnings:()=>{},teamReviewAdoptRevision:()=>{},clearTeamReviewEntry:()=>{},
   openClubBattingGuideTopic:()=>{},matchReviewTableRows:()=>'',teamReviewTableRows:rows=>rows.map(p=>c.teamReviewRowHtml(p)).join(''),
   teamReviewRequestId:()=>webcrypto.randomUUID(),matchDraftConfirmed:()=>{},wireQuickChoices:()=>{},wireObservationSave:()=>{},
-  coachingActionSavePending:false,feedbackEntryBaselines:new WeakMap(),fixtureCorrectionState:null,
+  bindReplayThumbnails:()=>{},openMatchArrivalRoll:()=>{},matchArrivalsService:null,matchArrivalField:()=>'',bindMatchArrivals:()=>{},teamArrivalOptions:()=>({}),coachingActionSavePending:false,feedbackEntryBaselines:new WeakMap(),fixtureCorrectionState:null,
   confirmLeaveEngagement:()=>true,confirmLeaveWeeklyLoop:()=>true,confirm:()=>permitted,alert:()=>{},matchDraftDiscardForm:()=>{},
   renderStaffMatchFeedbackForm:()=>'<form id="staffDevelopmentForm"><input id="staffMatchDate"><select id="staffMatchFormat"><option value="limited_overs">Limited overs</option></select><input id="staffMatchOpposition"><input id="staffMatchInningsNumber"><textarea id="staffMatchNote"></textarea><button type="button" id="cancelStaffDevelopment">Cancel</button></form>'});
  const names=['ensureTeamReviewState','serializeTeamReviewState','restoreTeamReviewState','teamReviewIdentity',
@@ -230,6 +230,7 @@ test('nested Players, Innings and Messages screens have distinct navigation iden
  for(const [before,after] of [
   [{tab:'players',playerId:'p',playerSection:'development'},{tab:'players',playerId:'p',playerSection:'development',developmentMode:'match',developmentMatchId:'m',observationEditId:'f'}],
   [{tab:'innings',innings:{}},{tab:'innings',innings:{openId:'m'}}],
+  [{tab:'innings',innings:{openId:'m',observationId:'first'}},{tab:'innings',innings:{openId:'m',observationId:'second'}}],
   [{tab:'messages',messages:{mode:'inbox'}},{tab:'messages',messages:{mode:'inbox',openId:'m'}}],
   [{tab:'messages',messages:{mode:'inbox'}},{tab:'messages',messages:{mode:'compose'}}]
  ])assert.notEqual(key(before),key(after));
