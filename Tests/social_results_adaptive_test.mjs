@@ -11,7 +11,7 @@ const fixture=(shared=false)=>Array.from({length:4},(_,i)=>({key:'m'+i,grade:'De
 async function render(items,saved={},height=1350){
  const canvas=createCanvas(1080,height),background=createCanvas(1080,height),text=[];
  const d=awardLayout('results',{font:'classic',row_opacity:72,rows_top:29,rows_bottom:96,row_gap:28,...saved});
- await drawAwardGraphic({fontReady:async()=>{},text:(ctx,value,x,y,width,size,weight='700')=>{ctx.font=`${weight} ${size}px ${ctx.socialFont}`;while(ctx.measureText(value).width>width&&size>18)ctx.font=`${weight} ${--size}px ${ctx.socialFont}`;const m=ctx.measureText(value);text.push({value,x,y,size,left:x-m.actualBoundingBoxLeft,right:x+m.actualBoundingBoxRight,top:y-m.actualBoundingBoxAscent,bottom:y+m.actualBoundingBoxDescent});ctx.fillText(value,x,y,width);}},{design:{primary:'#073554',accent:'#1273a2'}},canvas,{kind:'results',items,layout:d,week:'Week 3',images:{background}});
+ await drawAwardGraphic({fontReady:async()=>{},text:(ctx,value,x,y,width,size,weight='700')=>{ctx.font=`${weight} ${size}px ${ctx.socialFont}`;while(ctx.measureText(value).width>width&&size>18)ctx.font=`${weight} ${--size}px ${ctx.socialFont}`;const m=ctx.measureText(value);text.push({value,x,y,size,align:ctx.textAlign,left:x-m.actualBoundingBoxLeft,right:x+m.actualBoundingBoxRight,top:y-m.actualBoundingBoxAscent,bottom:y+m.actualBoundingBoxDescent});ctx.fillText(value,x,y,width);}},{design:{primary:'#073554',accent:'#1273a2'}},canvas,{kind:'results',items,layout:d,week:'Week 3',images:{background}});
  return {canvas,text,d,plan:canvas.resultsLayout};
 }
 test('existing Georgia layout reclaims unused header space automatically and keeps all figures out of margins',async()=>{
@@ -52,9 +52,10 @@ test('centred reference lists stay compact and not-out markers do not shift the 
  const names=r.text.filter(t=>['Alex Example','Casey Sample','Jamie Player'].includes(t.value));
  assert.ok(names.every(n=>Math.abs(n.x-names[0].x)<.01),'Names share one centre across rows and grades');
  const ourScores=r.text.filter(t=>t.value==='8/180'),theirScores=r.text.filter(t=>t.value==='10/78'),bowlNames=r.text.filter(t=>['Jordan Example','Taylor Sample','Morgan Player'].includes(t.value));
- const leftCentre=(saved.row_inset+440)/2,rightCentre=(640+1080-saved.row_inset)/2;
+ const leftCentre=(saved.row_inset+540-saved.grade_width/2)/2,rightCentre=(540+saved.grade_width/2+1080-saved.row_inset)/2;
  assert.ok([...ourScores,...names].every(t=>Math.abs(t.x-leftCentre)<.01),'Left scores and names share the pale side centre');
- assert.ok([...theirScores,...bowlNames].every(t=>Math.abs(t.x-rightCentre)<.01),'Right scores and names share the pale side centre');
+ assert.ok(theirScores.every(t=>Math.abs(t.x-rightCentre)<.01),'Right totals use the visible pale gap beside the grade banner');
+ assert.ok(bowlNames.every(t=>t.align==='center'&&Math.abs(t.x-bowlNames[0].x)<.01&&t.x<rightCentre-20),'Right names share their own centre to the left of the team total');
  assert.equal(ourScores.length,4);assert.equal(theirScores.length,4);assert.equal(bowlNames.length,12);
  assert.ok(names.every(n=>n.size===28),'Reference body type keeps its intended size');
  const digits=r.text.filter(t=>['112','58','52','9'].includes(t.value)),stars=r.text.filter(t=>t.value==='*');
@@ -88,9 +89,27 @@ test('short and long player names share one readable size with figures across al
   }
   const bat=body.filter(t=>['112','58','52','9'].includes(t.value)),bowl=body.filter(t=>/^[1-3]\/2[4-6]$/.test(t.value));
   assert.equal(new Set(bat.map(t=>t.x)).size,1);assert.equal(new Set(bowl.map(t=>t.x)).size,1);
-  for(const [total,sideNames,centre] of [['8/180',['Alex Example','Casey Sample','Jamie Player'],(saved.row_inset+440)/2],['10/78',bowlingNames.flat(),(640+1080-saved.row_inset)/2]]){const aligned=r.text.filter(t=>t.value===total||sideNames.includes(t.value));assert.equal(aligned.length,16);assert.ok(aligned.every(t=>Math.abs(t.x-centre)<.01),'Totals and names stay centred for shared and mixed opponents');}
+  const gradeHalf=saved.grade_width*r.plan.rowScale/2,leftCentre=(saved.row_inset+540-gradeHalf)/2,rightCentre=(540+gradeHalf+1080-saved.row_inset)/2;
+  const leftTexts=r.text.filter(t=>t.value==='8/180'||['Alex Example','Casey Sample','Jamie Player'].includes(t.value));
+  assert.ok(leftTexts.every(t=>t.align==='center'&&Math.abs(t.x-leftCentre)<.01),'Left total and names centre on the visible light section');
+  assert.ok(r.text.filter(t=>t.value==='10/78').every(t=>Math.abs(t.x-rightCentre)<.01),'Right total centres on the visible light section');
+  const rightNames=r.text.filter(t=>bowlingNames.flat().includes(t.value));
+  assert.ok(rightNames.every(t=>t.align==='center'&&Math.abs(t.x-rightNames[0].x)<.01&&t.x<rightCentre-10),'Right names centre within their own name column, independently of the score');
   assert.ok(bat.every(t=>t.right<440)&&bowl.every(t=>t.right<1080-saved.row_inset),'Figures remain inside their own pale side');
   assert.equal(JSON.stringify(items),before,'Sizing does not change any source facts');
   if(process.env.AWARDS_PREVIEW_DIR){fs.mkdirSync(process.env.AWARDS_PREVIEW_DIR,{recursive:true});fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results-uniform-type-'+(shared?'shared':'mixed')+'.png',r.canvas.toBuffer('image/png'));}
  }
+});
+
+test('the supplied four-grade player list keeps larger uniform text with full names',async()=>{
+ const saved={layout_mode:'template',grade_style:'bar',grade_width:390,row_inset:49,rows_top:25.8,rows_bottom:89.3,row_gap:65,player_top:44,player_size:28,player_font:'sans',player_align:'center',score_font:'condensed',score_size:36,score_y:19,left_column_end:32.9,right_column_start:65.8};
+ const battingNames=[['Mitchell Nesbitt','Haydon Mustard','Liam Simpson'],['Anthonie Clement','Bryce Garrett','Sulaiman Moin Muhammad'],['James Dunn','Harrison Fleming','Adrian Mannel'],['Thomas Fulmer','Max Gallagher','troy arnold']];
+ const bowlingNames=[['Callan Fowler','Jonah Rhineberger','Izaac Coyle'],['Anthonie Clement','Anik Arya','Izaan Mohammed'],['Mitch King','Brendon Young','Callum van Huisstede'],["Bradley O'Dell",'John Sinclair','Stephan du Plooy']];
+ const items=fixture(true);items.forEach((item,i)=>{item.innings[0].batters.forEach((b,j)=>{b.name=battingNames[i][j];b.runs=[58,52,22][j];});item.innings[1].bowlers.forEach((b,j)=>b.name=bowlingNames[i][j]);});
+ const r=await render(items,saved),allNames=new Set([...battingNames.flat(),...bowlingNames.flat()]),body=r.text.filter(t=>allNames.has(t.value)||['58','52','22','*'].includes(t.value)||/^[1-3]\/2[4-6]$/.test(t.value));
+ assert.equal(body.length,60,'Every full name, figure and not-out is present');
+ assert.equal(new Set(body.map(t=>t.size)).size,1,'Names and figures retain one common size');
+ assert.ok(body[0].size>=24,'The supplied list must render larger than the previous 21px text');
+ assert.ok(body.filter(t=>allNames.has(t.value)).every(t=>t.align==='center'),'Both name columns stay centre aligned');
+ for(const name of body.filter(t=>allNames.has(t.value))){const figure=body.find(t=>t.y===name.y&&/^\d/.test(t.value)&&t.x>name.x);assert.ok(figure&&name.right+8<figure.left&&name.left>=saved.row_inset&&name.right<1080-saved.row_inset,'Full name stays on its pale panel and clear of figures: '+name.value);}
 });

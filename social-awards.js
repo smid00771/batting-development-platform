@@ -4,7 +4,7 @@ import {referenceStylePatch} from './social-award-reference.js?v=0.8.62.293';
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
 import {withGradeLabels,graphicLabel} from './social-graphic-design.js?v=0.8.62.270';
 import {labelSuggestions,assistantCSS,proposalMessage} from './social-graphic-assistant.js?v=0.8.62.270';
-import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,awardLogoAsset,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.332';
+import {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,awardLogoAsset,resultsShareOpponent,resultsSummary,drawAwardGraphic} from './social-awards-model.js?v=0.8.62.333';
 import {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.293';
 
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
