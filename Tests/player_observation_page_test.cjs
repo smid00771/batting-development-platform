@@ -52,7 +52,7 @@ test('an explicit plan assessment opens only two quick questions and retains saf
  const writes=calls(h).filter(c=>c.name==='save_my_fixture_innings');assert.equal(writes.length,2);assert.deepEqual(plain(writes[0].args),plain(writes[1].args));
  assert.equal(writes[0].args.p_values.reflection.batting_to_plan,'mostly');assert.equal(writes[0].args.p_values.reflection.dismissal_classification,'plan_execution');assert.ok(writes[0].args.p_expected_updated_at);
  const after=plain(h.window.eval("(()=>{const m=fixtureRows.feedback['player-alex'].matches.find(m=>m.id==='alex-pull');return {date:m.match_date,score:m.score_text,note:m.player_note,video:m.player_video};})()"));assert.deepEqual(after,before);
- assert.equal(h.document.querySelector('.player-observation-page article details').open,false);clean(h);
+ const comparison=h.document.querySelector('.player-observation-page [data-assessment-comparison]');assert.ok(comparison);assert.equal(comparison.closest('details'),null);assert.match(comparison.textContent,/Mostly/);assert.match(comparison.textContent,/Yes/);clean(h);
 });
 
 test('View innings leaves the focused comment and loads preparation only on that explicit visit',async t=>{

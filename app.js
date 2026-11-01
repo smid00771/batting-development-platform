@@ -22,7 +22,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.334';
+const APP_UI_VERSION='0.8.62.335';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -9321,12 +9321,29 @@ function observationHiddenUntilReflection(match,view){return !match?.player_refl
 function observationNeedsReflection(view){return observationHasAssessment(view)&&view.reflection_required!==false&&(!view.followup_status||view.followup_status==='open');}
 
 function developmentAlignment(reflection,coachFeedback){
-  if(!reflection||!coachFeedback||coachFeedback.plan_related===false||coachFeedback.batting_to_plan==='no_plan')return null;
-  const shared=['batting_to_plan','dismissal_classification'].filter(key=>reflection[key]&&coachFeedback[key]);
+  const shared=developmentComparisonRows(reflection,coachFeedback).filter(row=>row.playerAnswered&&row.coachAnswered);
   if(!shared.length)return null;
-  return shared.every(key=>reflection[key]===coachFeedback[key])
+  return shared.every(row=>!row.different)
     ?{key:'aligned',label:shared.length===2?'PLAYER + COACH ALIGNED':'RECORDED ANSWER ALIGNS'}
     :{key:'discuss',label:'WORTH DISCUSSING'};
+}
+
+function developmentComparisonRows(reflection,coach){
+  if(!reflection||!coach||coach.plan_related===false||coach.batting_to_plan==='no_plan')return [];
+  const rows=[['batting_to_plan','Batted to plan',PLAN_ALIGNMENT_LABELS],['dismissal_classification','Dismissal ball',{...DISMISSAL_CLASSIFICATION_LABELS,not_applicable:'No dismissal decision to review'}]].map(([key,label,labels])=>{
+    const playerAnswer=Object.hasOwn(labels,reflection[key])?labels[reflection[key]]:null,coachAnswer=Object.hasOwn(labels,coach[key])?labels[coach[key]]:null;
+    return {key,label,playerAnswer:playerAnswer||'Not answered',coachAnswer:coachAnswer||'Not answered',playerAnswered:!!playerAnswer,coachAnswered:!!coachAnswer,different:!!playerAnswer&&!!coachAnswer&&reflection[key]!==coach[key]};
+  }).filter(row=>row.playerAnswered||row.coachAnswered);
+  return rows.some(row=>row.coachAnswered)?rows:[];
+}
+function developmentComparisonStyles(){
+  return `<style>.development-comparison{margin:10px 0;font-size:13px;line-height:1.4}.development-comparison table{width:100%;table-layout:fixed;border-collapse:collapse}.development-comparison caption{text-align:left;font-weight:700;padding:0 0 6px}.development-comparison th,.development-comparison td{text-align:left;vertical-align:top;padding:7px 6px;border-bottom:1px solid #dce1ed;overflow-wrap:anywhere}.development-comparison thead th{font-size:12px;color:var(--muted)}.development-comparison th:first-child{width:30%}.development-comparison tbody th{font-weight:600}.development-comparison tr[data-answer-different]{background:#fff5dd}.development-comparison .comparison-difference{display:block;font-size:11px;color:#815300;font-weight:600}.development-comparison .comparison-unanswered{color:var(--muted);font-weight:400}</style>`;
+}
+function renderDevelopmentComparison(match,coach,{playerMode=false}={}){
+  if(match?.participation_status==='did_not_bat')return '';
+  const rows=developmentComparisonRows(match?.player_reflection,coach),different=rows.some(row=>row.different);
+  if(!rows.length)return '';
+  return `<div class="development-comparison" data-assessment-comparison="${esc(coach.id||'')}" ${different?`data-coach-signal-card="${esc('view_mismatch:'+match.id)}"`:''}><table><caption>${different?'Where the views differ':'Player and coach views'}</caption><thead><tr><th scope="col">Question</th><th scope="col">${playerMode?'You':'Player'}</th><th scope="col">Coach</th></tr></thead><tbody>${rows.map(row=>`<tr data-assessment-question="${row.key}" ${row.different?'data-answer-different="true"':''}><th scope="row">${row.label}${row.different?'<span class="comparison-difference">Different answers</span>':''}</th><td ${row.playerAnswered?'':'class="comparison-unanswered"'}>${esc(row.playerAnswer)}</td><td ${row.coachAnswered?'':'class="comparison-unanswered"'}>${esc(row.coachAnswer)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function matchMetaLine(match){
@@ -9778,6 +9795,7 @@ function renderConversationObservation(action,match,note,training,{playerMode,st
   const hidden=playerMode&&match&&observationHiddenUntilReflection(match,note);
   if(match){
     const meta=[matchMetaLine(match),Number(match.innings_number||1)>1?'Innings '+match.innings_number:''].filter(Boolean).join(' · ');
+    const comparison=!hidden?renderDevelopmentComparison(match,note,{playerMode}):'';
     const assessment=note?.batting_to_plan==='no_plan'?'Has no Player Plan':note?.plan_related!==false?[
       note?.batting_to_plan?'Batted to plan: '+(PLAN_ALIGNMENT_LABELS[note.batting_to_plan]||'—'):'',
       DISMISSAL_CLASSIFICATION_LABELS[note?.dismissal_classification]||'',
@@ -9789,7 +9807,8 @@ function renderConversationObservation(action,match,note,training,{playerMode,st
       ${hidden?`<p class="help">Share your own view, then read this coach’s feedback.</p><button type="button" class="btn" data-edit-my-reflection="${esc(match.id)}" data-observation-id="${esc(note?.id||'')}">Share my view &amp; read feedback</button>`:`
         ${note?.note?`<p class="conversation-observation-comment">${esc(note.note)}</p>`:''}
         ${note?.innings_note||match.dismissal_summary?`<p class="conversation-context"><strong>Dismissal / innings:</strong> ${esc(note?.innings_note||match.dismissal_summary)}</p>`:''}
-        ${assessment?`<p class="conversation-context">${esc(assessment)}</p>`:''}
+        ${comparison|| (assessment?`<p class="conversation-context">${esc(assessment)}</p>`:'')}
+        ${comparison&&note?.main_issue?`<p class="conversation-context">${esc(DEVELOPMENT_ISSUE_LABELS[note.main_issue]||'')}</p>`:''}
         ${note?.next_training_focus?`<p class="conversation-context"><strong>Train next:</strong> ${esc(note.next_training_focus)}</p>`:''}
         ${renderCoachingVideo(action.video||note?.video)}
       `}
@@ -9806,7 +9825,7 @@ function renderConversationObservation(action,match,note,training,{playerMode,st
   return '';
 }
 function conversationDetailsStyles(){
-  return `<style>
+  return `${developmentComparisonStyles()}<style>
     #sharedCoachingActions .conversation-observation h3{margin:6px 0;font-size:18px;line-height:1.4}
     #sharedCoachingActions .conversation-observation h3 span{font-size:13px;font-weight:500;color:var(--muted)}
     #sharedCoachingActions .conversation-match-meta{margin:4px 0 12px;font-size:13px;color:var(--muted)}
@@ -9866,9 +9885,12 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
     const hiddenPlan=playerMode&&match&&observationHiddenUntilReflection(match,note);
     const isTask=!!(note?.next_training_focus||training?.next_training_focus)||(!a.match_feedback_id&&!a.training_observation_id);
     const focusAccess=a.can_access_focus===true||a.player_id===myPlayer?.id||currentTab==='players'&&(playersWorkspaceData?.players||[]).some(p=>p.id===a.player_id);
-    const reviews=a.reviews||[],audit=reviews.filter(coachingReviewIsSystemEntry);
+    const reviews=a.reviews||[],audit=reviews.filter(r=>Number(r.revision)>1&&coachingReviewIsSystemEntry(r));
     const updates=reviews.filter(r=>!coachingReviewIsSystemEntry(r));
     const latestUpdate=updates.filter(r=>Number(r.revision)>1&&r.note).sort((a,b)=>Number(b.revision)-Number(a.revision))[0];
+    const history=[...updates.filter(r=>r!==latestUpdate||outsidePlanReviewContext(r)),...audit].sort((a,b)=>Number(b.revision)-Number(a.revision));
+    const visibleReasons=reasons.filter(r=>!(compactSource&&match&&r.key===`view_mismatch:${match.id}`));
+    const showFocus=focusAccess&&(isTask||!!outsidePlanReviewContext(a));
     return `<article class="training-observation-card" data-coaching-action-card="${esc(a.id)}" data-coaching-note-updated-at="${esc(a.updated_at||'')}" style="margin-top:12px">
       <div class="section-label">${a.status==='open'?(due?'Review due':a.follow_up_requested===false&&!reasons.length?'Saved note':'To discuss'):a.status==='completed'?'Discussed / Actioned':'Closed'}${a.review_on?` · Review ${esc(formatDateShort(a.review_on))}`:''}</div>
       ${conversationRequestDetails(a)}
@@ -9877,24 +9899,23 @@ function renderCoachingActions(feedback,{playerMode=true,includeObservations=fal
       ${!hiddenPlan&&!compactSource?renderCoachingVideo(a.video):''}
       ${conversationRecipientButtons(a)}
       ${source&&isTask&&(hiddenPlan||a.task!==(note?.next_training_focus||training?.next_training_focus))?`<p><strong>Agreed action:</strong> ${esc(a.task)}</p>`:''}
-      ${reasons.length?`<div class="notice compact">${reasons.map(r=>`<p data-coach-signal-card="${esc(r.key)}">${esc(r.title)}</p>`).join('')}</div>`:''}
+      ${visibleReasons.length?`<div class="notice compact">${visibleReasons.map(r=>`<p data-coach-signal-card="${esc(r.key)}"><strong>${esc(r.title)}</strong>${r.summary?`<br>${esc(r.summary)}`:''}</p>`).join('')}</div>`:''}
       ${latestUpdate?`<p class="conversation-context"><strong>Latest update · ${esc(latestUpdate.reviewed_by_name||'Club member')}:</strong> ${esc(latestUpdate.note)}</p>`:''}
       <div class="conversation-controls">
         ${a.status==='open'&&a.can_review?`<button type="button" class="btn" data-review-coaching-action="${esc(a.id)}">Add update</button><button type="button" class="btn secondary" data-complete-coaching-action="${esc(a.id)}">Mark discussed</button>${a.is_own_request?`<button type="button" class="btn ghost" data-withdraw-coaching-request="${esc(a.id)}">Withdraw my request</button>`:''}`:a.status!=='open'?`<span class="conversation-completed">${a.status==='completed'?'Discussed / Actioned ✓':a.is_player_request?'Request withdrawn ✓':'Closed ✓'}</span>`:''}
+        ${compactSource&&match&&staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit observation</button>`:''}
+        ${compactSource&&training&&staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit observation</button>`:''}
+        ${hiddenPlan&&!compactSource?`<button type="button" class="btn ghost" data-edit-my-reflection="${esc(match.id)}">Add my reflection</button>`:''}
         <span role="status" data-coaching-review-status="${esc(a.id)}"></span>
       </div>
       <div data-coaching-review-slot="${esc(a.id)}"></div>
-      <details data-conversation-history style="margin-top:10px"><summary>Details and history</summary>
-        <div class="btnrow conversation-history-tools">${compactSource&&match&&staffCanEdit&&note?.author_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-coach-feedback="${esc(note.id)}" data-edit-match="${esc(match.id)}">Edit my observation</button>`:''}${compactSource&&training&&staffCanEdit&&training.observer_user_id===session?.user?.id?`<button type="button" class="btn ghost" data-edit-training-observation="${esc(training.id)}">Edit my observation</button>`:''}${hiddenPlan&&!compactSource?`<button type="button" class="btn ghost" data-edit-my-reflection="${esc(match.id)}">Add my reflection</button>`:''}${focusAccess?`<button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review current focus</button>`:''}</div>
-        ${focusAccess?`<div id="conversationFocus-${esc(a.id)}"></div>`:''}
-        ${compactSource&&match?`<details class="conversation-reference"><summary>Scorecard & innings details</summary>${renderDevelopmentMatchCard({...match,coach_feedback:[]},{playerMode,showReflectionAction:false})}</details>`:''}
-        ${reasons.map(r=>`<p>${esc(r.summary)} ${esc(r.suggestion||'')}</p>`).join('')}
-        ${updates.filter(r=>r!==latestUpdate||outsidePlanReviewContext(r)).map(renderCoachingReviewEntry).join('')}
-        ${audit.length?`<details data-conversation-audit><summary>Change history (${audit.length})</summary>${audit.map(renderCoachingReviewEntry).join('')}</details>`:''}
-      </details>
+      ${showFocus?`<details class="conversation-reference"><summary>Training focus</summary><button class="btn ghost" data-open-focus-review="${esc(a.id)}">Review training focus</button><div id="conversationFocus-${esc(a.id)}"></div></details>`:''}
+      ${compactSource&&match&&currentTab!=='players'?`<details class="conversation-reference"><summary>Innings details</summary>${renderDevelopmentMatchCard({...match,coach_feedback:[]},{playerMode,showReflectionAction:false})}</details>`:''}
+      ${history.length?`<details data-conversation-history style="margin-top:8px"><summary>Updates &amp; edits (${history.length})</summary>${history.map(renderCoachingReviewEntry).join('')}</details>`:''}
     </article>`;
   };
-  return `${conversationDetailsStyles()}<section class="card ${compactMatchSources?'conversation-details':''}" id="sharedCoachingActions">${compactMatchSources?'':`<h2>Current conversations (${current.length})</h2>`}${feedback?.coaching_actions_error?'<div class="notice">Conversations could not all load. Reload this page to check the latest notes and reviews.</div>':''}${current.length?current.map(item=>item.action?card(item.action,item.signals):renderConversationSignal(item.signals[0])).join(''):!feedback?.coaching_actions_error?'<p class="help">No coaching conversations need follow-up.</p>':''}${routine.length?`<details id="otherCoachingNotes"><summary>Other saved notes (${routine.length})</summary>${routine.map(item=>card(item.action)).join('')}</details>`:''}${closed.length?`<details id="pastCoachingNotes" style="margin-top:14px"><summary>Past conversations (${closed.length})</summary>${closed.map(a=>card(a)).join('')}</details>`:''}</section>`;
+  const other=[...routine.map(item=>item.action),...closed].sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
+  return `${conversationDetailsStyles()}<section class="card ${compactMatchSources?'conversation-details':''}" id="sharedCoachingActions">${compactMatchSources?'':`<h2>Current conversations (${current.length})</h2>`}${feedback?.coaching_actions_error?'<div class="notice">Conversations could not all load. Reload this page to check the latest notes and reviews.</div>':''}${current.length?current.map(item=>item.action?card(item.action,item.signals):renderConversationSignal(item.signals[0])).join(''):!feedback?.coaching_actions_error?'<p class="help">No coaching conversations need follow-up.</p>':''}${other.length?`<details id="otherCoachingNotes"><summary>${current.length?'Other notes &amp; conversations':'Notes &amp; conversations'} (${other.length})</summary>${other.map(a=>card(a)).join('')}</details>`:''}</section>`;
 }
 
 // Shared conversation controls: explicit completion and separately saved notes.
@@ -10481,13 +10502,16 @@ function renderQuickObservationReflection(match,note){
 }
 function renderPlayerObservationComment(match,note){
  const assessment=observationHasAssessment(note);
- return `<article class="card" data-coach-feedback-id="${esc(note.id)}" data-coaching-note-updated-at="${esc(note.updated_at||note.created_at||'')}">
+ const reflection=match.player_reflection,extraReflection=assessment&&reflection&&(reflection.note||reflection.next_training_focus||reflection.main_issue);
+ return `${developmentComparisonStyles()}<article class="card" data-coach-feedback-id="${esc(note.id)}" data-coaching-note-updated-at="${esc(note.updated_at||note.created_at||'')}">
   <p class="observation-author">${esc(note.author_name||'Coach / Captain')}</p>
   ${note.note?`<p class="player-observation-comment">${esc(note.note)}</p>`:''}
   ${note.innings_note&&note.innings_note!==note.note?`<p class="${note.note?'help':'player-observation-comment'}">${esc(note.innings_note)}</p>`:''}
   ${note.next_training_focus?`<p><strong>Train next:</strong> ${esc(note.next_training_focus)}</p>`:''}
   ${observationVideoLinks(note.video)}
-  ${assessment?`<details><summary>Plan review</summary>${developmentViewBlock('YOUR VIEW',match.player_reflection)}${developmentViewBlock('COACH VIEW',{...note,note:'',innings_note:'',next_training_focus:'',video:null})}</details>`:''}
+  ${renderDevelopmentComparison(match,note,{playerMode:true})}
+  ${assessment&&note.main_issue?`<p class="help">Coach’s main issue: ${esc(DEVELOPMENT_ISSUE_LABELS[note.main_issue]||'')}</p>`:''}
+  ${extraReflection?`<details><summary>My reflection notes</summary>${reflection.main_issue?`<p>${esc(DEVELOPMENT_ISSUE_LABELS[reflection.main_issue]||'')}</p>`:''}${reflection.note?`<p>${esc(reflection.note)}</p>`:''}${reflection.next_training_focus?`<p><strong>Train next:</strong> ${esc(reflection.next_training_focus)}</p>`:''}</details>`:''}
   ${!assessment&&(note.dismissal_classification||note.main_issue)?`<p class="help">${esc([DISMISSAL_CLASSIFICATION_LABELS[note.dismissal_classification],DEVELOPMENT_ISSUE_LABELS[note.main_issue]].filter(Boolean).join(' · '))}</p>`:''}
   ${note.batting_to_plan==='no_plan'?'<button class="btn secondary" type="button" data-complete-player-plan>Open My Player Plan</button>':''}
  </article>`;
@@ -12074,12 +12098,11 @@ function wireStaffMatchObservationControls(player,canEdit,data){
 function renderStaffDevelopmentBody(player,canEdit,data){
   const editingMatch=playersWorkspaceDevelopmentMode==='match'&&canEdit;
   return `<div class="staff-development-shell" id="developmentOverview">
-    ${playersWorkspaceDevelopmentMode==='match'?'':'<p class="help">Talk through the note with the player. Add an update, or mark it discussed when finished.</p>'}
     ${data.innings_details_error?'<div class="notice" role="status">Player innings notes and video could not load. Refresh to try again.</div>':''}
     ${playersWorkspaceDevelopmentMode==='training'&&canEdit?renderStaffTrainingObservationForm(player,data,staffObservationEditId):''}
     ${playersWorkspaceDevelopmentMode==='match'&&canEdit?renderStaffMatchFeedbackForm(player,data):''}
     ${editingMatch?'<details class="observation-other-conversations"><summary>Other coaching conversations</summary>':''}${renderCoachingActions(data,{playerMode:player.id===myPlayer?.id,includeObservations:true,staffCanEdit:canEdit,signals:workspaceSignalsForPlayer(player.id),compactMatchSources:true})}${editingMatch?'</details>':''}
-    ${canEdit&&!editingMatch?'<div class="conversation-secondary-tools"><button type="button" class="btn ghost" id="addNewMatchFeedback">Edit / add to match observation</button></div>':''}
+    ${canEdit&&!editingMatch?'<div class="conversation-secondary-tools"><button type="button" class="btn ghost" id="addNewMatchFeedback">Add another observation</button></div>':''}
     <details id="staffInningsHistory" ${playersWorkspaceMatchOpenId&&!editingMatch?'open':''}><summary>All innings (${(data.matches||[]).length})</summary>${renderStaffMatchObservations(player,canEdit,data)}</details>
     ${renderExternalTrainingEvidenceSection(data.external_training_evidence)}
   </div>`;
@@ -12234,11 +12257,12 @@ function feedbackDiscussionSignals(data){
       const sourceAt=newestIso(reflection.updated_at,coach.updated_at,coach.created_at,match.created_at,match.match_date);
       const format=match.format_key||'limited_overs';
 
-      if(reflection.batting_to_plan!==coach.batting_to_plan || reflection.dismissal_classification!==coach.dismissal_classification){
+      if(developmentAlignment(reflection,coach)?.key==='discuss'){
+        const differences=developmentComparisonRows(reflection,coach).filter(row=>row.different);
         signals.push({
           key:`view_mismatch:${match.id}`,player,formatKey:format,sourceAt,tone:'amber',priority:1,
           title:'Player and coach see this innings differently',
-          summary:`The player and coach did not classify the innings the same way${match.opposition?` against ${match.opposition}`:''}.`,
+          summary:differences.map(row=>`${row.label} — player: ${row.playerAnswer}; coach: ${row.coachAnswer}.`).join(' '),
           suggestion:'Compare the two views before deciding what should change in training.',
           match
         });

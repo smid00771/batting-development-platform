@@ -28,8 +28,8 @@ test('a coaching inbox row opens the correct player with evidence collapsed and 
  assert.equal(h.window.eval('playersWorkspaceSelectedId'),'player-alex');
  assert.equal(h.document.querySelector('#staffInningsHistory').open,false);
  const card=h.document.querySelector('#sharedCoachingActions>article');assert.ok(card);
- assert.equal(card.querySelector('[data-conversation-history]').open,false);
- assert.deepEqual([...card.querySelectorAll('.conversation-controls button')].map(b=>b.textContent),['Add update','Mark discussed']);
+ assert.doesNotMatch(card.textContent,/Details and history/);
+ assert.deepEqual([...card.querySelectorAll('.conversation-controls button')].map(b=>b.textContent).slice(0,2),['Add update','Mark discussed']);
  assert.ok(card.querySelector('[data-open-focus-review]').closest('details'));
  clean(h);
 });
@@ -42,7 +42,7 @@ test('routine notes collapse, but a conflicting player reflection still brings i
  const routine=h.document.querySelector('#otherCoachingNotes');assert.ok(routine);assert.equal(routine.open,false);
  assert.ok(routine.querySelector('[data-review-coaching-action]'));
  assert.ok(h.document.querySelector('#sharedCoachingActions>article [data-coach-signal-card]'));
- assert.equal(h.document.querySelector('#pastCoachingNotes').open,false);clean(h);
+ assert.equal(h.document.querySelector('#pastCoachingNotes'),null);assert.match(routine.querySelector('summary').textContent,/Other notes & conversations/);clean(h);
 });
 
 test('automatic observation history cannot replace a real comment and repeated score details stay collapsed',async t=>{
@@ -59,8 +59,8 @@ test('automatic observation history cannot replace a real comment and repeated s
  assert.match(latest.textContent,/Good balance/);assert.doesNotMatch(latest.textContent,/Observation edited/);
  assert.equal(card.textContent.split('Good balance.').length-1,1,'Latest comment is not repeated in history');
  assert.match(history.textContent,/Keep your head still/);
- const audit=history.querySelector('[data-conversation-audit]');assert.equal(audit.open,false);assert.match(audit.textContent,/Observation recorded/);assert.match(audit.textContent,/Previous focus/);
- const reference=history.querySelector('.conversation-reference');assert.equal(reference.open,false);assert.ok(reference.querySelector('.development-match-card'));
+ assert.equal(history.open,false);assert.match(history.textContent,/Previous focus/);assert.doesNotMatch(history.textContent,/Observation recorded/);assert.equal(history.querySelector('details'),null);
+ assert.equal(card.querySelector('.development-match-card'),null,'Do not duplicate the separate innings record inside each conversation');assert.ok(h.document.querySelector('#staffInningsHistory'));
  assert.equal(history.querySelectorAll(':scope > .development-match-card').length,0);
  assert.equal(h.window.eval("coachingReviewIsSystemEntry({revision:5,outcome:'completed',note:'Discussed and agreed.'})"),false);
  clean(h);
@@ -75,7 +75,7 @@ test('an update can complete the conversation in one revision-checked save and r
  await h.click('#saveCoachingReview');
  const saved=h.rpcCalls.filter(c=>c.name==='review_coaching_action').at(-1);
  assert.equal(saved.args.p_action_id,id);assert.equal(saved.args.p_outcome,'completed');assert.equal(saved.args.p_note,note.value);assert.ok(saved.args.p_expected_revision>=1);assert.ok(saved.args.p_request_id);
- assert.ok(h.document.querySelector('#pastCoachingNotes [data-coaching-action-card="'+id+'"]'));
+ assert.ok(h.document.querySelector('#otherCoachingNotes [data-coaching-action-card="'+id+'"]'));
  assert.equal(h.window.eval(`workspaceCoachConversations('player-alex').some(i=>i.action?.id===${JSON.stringify(id)})`),false);clean(h);
 });
 
