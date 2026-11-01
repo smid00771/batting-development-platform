@@ -1,8 +1,8 @@
 {
-  "appVersion": "0.8.62.324",
+  "appVersion": "0.8.62.325",
   "sources": {
-    "app-design.css": "5e624859ceb73328c823f7d11d3097fa90acd78a19882942a504abd2ef4720ad",
-    "app.js": "5b9ed9b1f0b93e0ca7d11565a81dcdde398e04b6bd8ec01ff1a5301325ae8d73",
+    "app-design.css": "5e35fbcd1594e2fc927fdfdb8124af240247b1139bab2f8a466c22ad3137d07a",
+    "app.js": "4b353d0805dfcd3103bef67444dffd1757e01e6f48d8c28b0d00b82e44611cf8",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "availability-fixtures.js": "4dfcfa67ec367f1cd4f946731a641728210bf6a51d49127f7f6c4128c229bc60",
@@ -40,7 +40,7 @@
     "playhq-import.js": "1b43756a5c33f1d6d591cec560b8345cff01c308902e0b1eb541651c5747d8dd",
     "prediction-preparation.js": "a996f5b66b13f54086b7817503b25d6d07700e3e6583dd48b40ee4f80e8836ba",
     "prediction-workspace.js": "5d2f118dd98737321ffc38cafa722d717e6ee353f57fae52e046641abc8f85da",
-    "scorecard-replays.js": "2aa340adcd28ea97603bb3991c424305c5873c8b9aa771f83992b8ec824b1a87",
+    "scorecard-replays.js": "9695786cd4ba63e303d7a3dfc63b2cc0fb565bb02344c2b4102376d2e9906ab9",
     "season-stats-demo.js": "f68edcd7f565275fb3f0c4db446dbb8e196e4c29309f04a686a36d9c33a29db1",
     "season-stats-panel.js": "967d2b834effe84dc957e835b262279687d1b215dd11f70416adedfdbff7907c",
     "season-stats.js": "56f8fd39b2c64a137800d8e25d567b2db180a3e78917a7e13273553e484d9dea",

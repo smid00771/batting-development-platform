@@ -3721,6 +3721,16 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 #app .match-review-figures dd strong{font:inherit}
 #app .match-review-figures .match-review-figure-runs dd{font-size:28px;font-weight:750;color:var(--navy)}
 #app .match-review-dnb{font-size:20px;font-weight:650;padding:12px;color:var(--muted)}
+#app .match-review-score>.scorecard-replay{box-sizing:border-box;justify-content:center;width:100%;margin-top:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;color:var(--navy);font-size:13px;font-weight:650;text-decoration:none;background:var(--mirelion-surface)}
+#app .match-review-score>.scorecard-replay::before{content:'▶';font-size:10px;margin-right:5px}
+#app .match-review-score>.scorecard-replay:hover{background:var(--soft);border-color:var(--navy)}
+#app .match-review-score>.scorecard-replay:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+#app .match-review-score>.scorecard-replay-preview{position:relative;display:grid;max-width:320px;aspect-ratio:16/9;margin:8px auto 0;padding:0;overflow:hidden;background:#19352f;border:0}
+#app .match-review-score>.scorecard-replay-preview::before{content:none}
+.scorecard-replay-preview img{display:block;width:100%;height:100%;object-fit:cover;grid-area:1/1;transition:filter .15s}
+.scorecard-replay-play{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);display:grid;place-items:center;box-sizing:border-box;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.95);color:#19352f;font-size:17px;padding-left:3px;box-shadow:0 2px 12px #0004}
+.scorecard-replay-caption{position:absolute;bottom:0;left:0;right:0;padding:9px 12px;background:linear-gradient(transparent,rgba(0,0,0,.85));color:white;font-size:13px;line-height:1.5;text-align:left}
+.scorecard-replay-preview:hover img{filter:brightness(.85)}
 .innings-contributions{border:1px solid var(--line,#dce1ed);border-radius:8px;margin:10px 0 0;background:var(--mirelion-surface,#fff);overflow:hidden}
 .innings-contributions>summary{cursor:pointer;min-height:44px;align-content:center;padding:8px 10px;font-size:13px;font-weight:600}
 .innings-contributions>summary small{font-weight:400;color:var(--muted);margin-left:8px}
@@ -3786,7 +3796,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.324.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.325.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -5838,11 +5848,22 @@ function renderMatchReplay(card){
  const url=scorecardReplayUrl(card?.replay_url);
  return url?`<a class="scorecard-replay" href="${escape(url)}" target="_blank" rel="noopener noreferrer" title="Opens PlayCricket · CricketPlus sign-in may be required">Watch match replays ↗</a>`:'';
 }
-function renderDismissalReplay(batter){
- const url=scorecardReplayUrl(batter?.dismissal_video_url,true);
- return url&&batter?.name&&batter.status!=='did_not_bat'&&batter.not_out!==true?`<a class="scorecard-replay" href="${escape(url)}" target="_blank" rel="noopener noreferrer" aria-label="Watch dismissal for ${escape(batter.name)} on PlayCricket" title="Opens PlayCricket · CricketPlus sign-in may be required">Watch dismissal ↗</a>`:'';
+function scorecardReplayThumbnail(value){
+ try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='i.ytimg.com'&&!u.port&&!u.username&&!u.password&&!u.search&&!u.hash&&/^\/vi\/[a-zA-Z0-9_-]{11}\/hqdefault\.jpg$/.test(u.pathname)?u.href:null;}catch{return null;}
 }
-return {scorecardReplayUrl,renderMatchReplay,renderDismissalReplay};
+function renderDismissalReplay(batter,{thumbnail=false}={}){
+ const url=scorecardReplayUrl(batter?.dismissal_video_url,true);
+ const poster=thumbnail&&scorecardReplayThumbnail(batter?.dismissal_video_thumbnail_url);
+ return url&&batter?.name&&batter.status!=='did_not_bat'&&batter.not_out!==true?`<a class="scorecard-replay${poster?' scorecard-replay-preview':''}" href="${escape(url)}" target="_blank" rel="noopener noreferrer" aria-label="Watch dismissal for ${escape(batter.name)} on PlayCricket" title="Opens PlayCricket · CricketPlus sign-in may be required">${poster?`<img src="${escape(poster)}" alt="Match video preview" loading="lazy" decoding="async" referrerpolicy="no-referrer"><span class="scorecard-replay-play" aria-hidden="true">▶</span><span class="scorecard-replay-caption">Watch dismissal ↗</span>`:'Watch dismissal ↗'}</a>`:'';
+}
+function bindReplayThumbnails(root){
+ for(const img of root.querySelectorAll('.scorecard-replay-preview img')){
+  const fallback=()=>{const link=img.closest('.scorecard-replay-preview');if(link){link.classList.remove('scorecard-replay-preview');link.textContent='Watch dismissal ↗';}};
+  img.addEventListener('error',fallback,{once:true});
+  if(img.complete&&!img.naturalWidth)fallback();
+ }
+}
+return {scorecardReplayUrl,renderMatchReplay,scorecardReplayThumbnail,renderDismissalReplay,bindReplayThumbnails};
 })();
 
 const __demoModule3=(()=>{
@@ -13624,7 +13645,7 @@ const {createMirelionAssistDemo}=__demoModule0;
 
 const demoHelpCatalogue=__demoModule1.CLUB_BATTING_HELP;
 
-const {renderDismissalReplay,renderMatchReplay}=__demoModule2;
+const {renderDismissalReplay,renderMatchReplay,bindReplayThumbnails}=__demoModule2;
 
 const {createDeferredController}=__demoModule3;
 
@@ -13684,7 +13705,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.324';
+const APP_UI_VERSION='0.8.62.325';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -24730,7 +24751,7 @@ function renderTeamReviewContent(){
   page.querySelectorAll('[data-team-discard]').forEach(button=>button.onclick=()=>{if(teamReviewSavePending())return;delete s.drafts[button.dataset.teamDiscard];renderTeamReviewContent();});
   page.querySelectorAll('[data-team-remove]').forEach(button=>button.onclick=()=>{const id=button.dataset.teamRemove;if(teamReviewSavePending())return;if(s.removed.includes(id))s.removed=s.removed.filter(x=>x!==id);else{const player=teamReviewPlayer(id);if(!player||!confirm(`Remove ${player.display_name||player.name||'this player'} from this review when you save? Their preparation, reflection, official score and other observers’ contributions are retained. An otherwise empty innings created only for this review may be removed.`))return;s.removed.push(id);delete s.drafts[id];}renderTeamReviewContent();});
   page.querySelectorAll('[data-team-observation]').forEach(button=>button.onclick=()=>openTeamReviewPlayer(button.dataset.teamObservation));
-  page.querySelectorAll('[data-team-detail]').forEach(button=>button.onclick=()=>openTeamReviewPlayer(button.dataset.teamDetail));bindMatchReviewImporter();matchDraftAttachTeam(s);
+  page.querySelectorAll('[data-team-detail]').forEach(button=>button.onclick=()=>openTeamReviewPlayer(button.dataset.teamDetail));bindMatchReviewImporter();bindReplayThumbnails(page);matchDraftAttachTeam(s);
   if(!s.loading)recordAppNavigation(clubNavigationRoute());
 }
 async function renderTeamReview(options={}){
@@ -30860,12 +30881,13 @@ function matchReviewScoreCell(player){
  const {i,source,b,stored,shown}=matchReviewScoreDetails(player),score=shown?(shown.status==='did_not_bat'?'DNB':`${shown.runs??'—'}${shown.not_out?'*':''}`):(player.score_text||'—'),lock=teamReviewControlsLocked()||(ensureTeamReviewState().sessionId&&ensureTeamReviewState().reviewCanEdit===false);
  const sr=shown?.balls>0&&shown.runs!=null?(100*Number(shown.runs)/Number(shown.balls)).toFixed(2):null;
  const figures=score==='DNB'?'<div class="match-review-dnb"><strong>DNB</strong></div>':`<dl class="match-review-figures">${[['Runs',score],['Balls',shown?.balls],['SR',sr],['4s',shown?.fours],['6s',shown?.sixes]].map(([label,value],index)=>`<div${index===0?' class="match-review-figure-runs"':''}><dt>${label}</dt><dd><strong>${esc(value??'—')}</strong></dd></div>`).join('')}</dl>`;
- return `<td class="match-review-score">${figures}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
+ const replay=b?.dismissal_video_url?b:shown;
+ return `<td class="match-review-score">${figures}${renderDismissalReplay({...replay,status:shown?.status||replay?.status,not_out:shown?.not_out??replay?.not_out,name:replay?.name||player.display_name||player.name},{thumbnail:true})}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
 }
 function matchReviewDismissalDetails(player){
- const {b,shown}=matchReviewScoreDetails(player),replay=b?.dismissal_video_url?b:shown,name=player.display_name||player.name;
+ const {shown}=matchReviewScoreDetails(player);
  const dismissal=shown?.dismissal_text||shown?.dismissal;
- return `${dismissal?`<p class="team-review-dismissal">${esc(dismissal)}</p>`:''}${renderDismissalReplay({...replay,name:replay?.name||name})}`;
+ return dismissal?`<p class="team-review-dismissal">${esc(dismissal)}</p>`:'';
 }
 function renderMatchReviewImporter(){
  const s=ensureTeamReviewState(),i=matchReviewImportState(),card=i.preview?.scorecard,source=matchReviewSourceInnings(),locked=teamReviewControlsLocked()||(!!s.sessionId&&s.reviewCanEdit===false),canRefresh=!locked;

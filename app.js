@@ -1,4 +1,4 @@
-import {renderDismissalReplay,renderMatchReplay} from './scorecard-replays.js?v=0.8.62.323';
+import {renderDismissalReplay,renderMatchReplay,bindReplayThumbnails} from './scorecard-replays.js?v=0.8.62.325';
 import {createDeferredController} from './deferred-feature.js?v=0.8.62.288';
 import {createPasswordFlow,cleanPasswordUrl} from './password-flow.js?v=0.8.62.280';
 import {SPIN_STYLES,spinLabel,spinProfile,spinProfileText,bindSpinBreakdowns} from './player-bowling.js?v=0.8.62.279';
@@ -22,7 +22,7 @@ const passwordFlow=createPasswordFlow(location.href);
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.324';
+const APP_UI_VERSION='0.8.62.325';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -11068,7 +11068,7 @@ function renderTeamReviewContent(){
   page.querySelectorAll('[data-team-discard]').forEach(button=>button.onclick=()=>{if(teamReviewSavePending())return;delete s.drafts[button.dataset.teamDiscard];renderTeamReviewContent();});
   page.querySelectorAll('[data-team-remove]').forEach(button=>button.onclick=()=>{const id=button.dataset.teamRemove;if(teamReviewSavePending())return;if(s.removed.includes(id))s.removed=s.removed.filter(x=>x!==id);else{const player=teamReviewPlayer(id);if(!player||!confirm(`Remove ${player.display_name||player.name||'this player'} from this review when you save? Their preparation, reflection, official score and other observers’ contributions are retained. An otherwise empty innings created only for this review may be removed.`))return;s.removed.push(id);delete s.drafts[id];}renderTeamReviewContent();});
   page.querySelectorAll('[data-team-observation]').forEach(button=>button.onclick=()=>openTeamReviewPlayer(button.dataset.teamObservation));
-  page.querySelectorAll('[data-team-detail]').forEach(button=>button.onclick=()=>openTeamReviewPlayer(button.dataset.teamDetail));bindMatchReviewImporter();matchDraftAttachTeam(s);
+  page.querySelectorAll('[data-team-detail]').forEach(button=>button.onclick=()=>openTeamReviewPlayer(button.dataset.teamDetail));bindMatchReviewImporter();bindReplayThumbnails(page);matchDraftAttachTeam(s);
   if(!s.loading)recordAppNavigation(clubNavigationRoute());
 }
 async function renderTeamReview(options={}){
@@ -17198,12 +17198,13 @@ function matchReviewScoreCell(player){
  const {i,source,b,stored,shown}=matchReviewScoreDetails(player),score=shown?(shown.status==='did_not_bat'?'DNB':`${shown.runs??'—'}${shown.not_out?'*':''}`):(player.score_text||'—'),lock=teamReviewControlsLocked()||(ensureTeamReviewState().sessionId&&ensureTeamReviewState().reviewCanEdit===false);
  const sr=shown?.balls>0&&shown.runs!=null?(100*Number(shown.runs)/Number(shown.balls)).toFixed(2):null;
  const figures=score==='DNB'?'<div class="match-review-dnb"><strong>DNB</strong></div>':`<dl class="match-review-figures">${[['Runs',score],['Balls',shown?.balls],['SR',sr],['4s',shown?.fours],['6s',shown?.sixes]].map(([label,value],index)=>`<div${index===0?' class="match-review-figure-runs"':''}><dt>${label}</dt><dd><strong>${esc(value??'—')}</strong></dd></div>`).join('')}</dl>`;
- return `<td class="match-review-score">${figures}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
+ const replay=b?.dismissal_video_url?b:shown;
+ return `<td class="match-review-score">${figures}${renderDismissalReplay({...replay,status:shown?.status||replay?.status,not_out:shown?.not_out??replay?.not_out,name:replay?.name||player.display_name||player.name},{thumbnail:true})}${b&&!source.complete?'<small>In progress · preview only</small>':''}${b&&i.dirty?`<label class="match-review-confirm"><input type="checkbox" data-import-score="${esc(b.player_id)}" ${i.selected[b.player_id]?'checked':''} ${lock||!b.importable||!player.can_record_score?'disabled':''}> Confirm score</label>${!player.can_record_score?'<small>Result-entry permission is needed.</small>':''}`:stored?.corrected?'<small class="team-review-saved">Official score corrected</small>':''}</td>`;
 }
 function matchReviewDismissalDetails(player){
- const {b,shown}=matchReviewScoreDetails(player),replay=b?.dismissal_video_url?b:shown,name=player.display_name||player.name;
+ const {shown}=matchReviewScoreDetails(player);
  const dismissal=shown?.dismissal_text||shown?.dismissal;
- return `${dismissal?`<p class="team-review-dismissal">${esc(dismissal)}</p>`:''}${renderDismissalReplay({...replay,name:replay?.name||name})}`;
+ return dismissal?`<p class="team-review-dismissal">${esc(dismissal)}</p>`:'';
 }
 function renderMatchReviewImporter(){
  const s=ensureTeamReviewState(),i=matchReviewImportState(),card=i.preview?.scorecard,source=matchReviewSourceInnings(),locked=teamReviewControlsLocked()||(!!s.sessionId&&s.reviewCanEdit===false),canRefresh=!locked;

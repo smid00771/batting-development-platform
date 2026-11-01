@@ -66,10 +66,11 @@ begin
  clip:='https://play.cricket.com.au/match/'||source||'?tab=scorecard&highlightId='||gen_random_uuid();
  insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard,fetched_by) values(snapshot,c,source,jsonb_build_object('provider','playcricket_au','match_id',source,'innings',jsonb_build_array(
   jsonb_build_object('id',gen_random_uuid(),'batters',jsonb_build_array(jsonb_build_object('player_id',sp,'dismissal_video_url','wrong-innings'))),
-  jsonb_build_object('id',inn,'batters',jsonb_build_array(jsonb_build_object('player_id',gen_random_uuid(),'dismissal_video_url','wrong-player'),jsonb_build_object('player_id',sp,'dismissal_video_url',clip))))),captain);
+  jsonb_build_object('id',inn,'batters',jsonb_build_array(jsonb_build_object('player_id',gen_random_uuid(),'dismissal_video_url','wrong-player'),jsonb_build_object('player_id',sp,'dismissal_video_url',clip,'dismissal_video_thumbnail_url','https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg'))))),captain);
  insert into public.match_review_score_links(club_id,source_match_id,source_innings_id,source_player_id,player_id,match_id,snapshot_id,stats,confirmed_by) values(c,source,inn,sp,pid,mid,snapshot,'{"runs":12,"balls":14,"status":"played","not_out":false}',captain);
  set local role authenticated;
  individual:=public.get_development_feedback_for_player(pid);
+ assert individual#>>'{matches,0,scorecard,dismissal_video_thumbnail_url}'='https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg','Verified match thumbnail follows the exact player innings';
  assert individual#>>'{matches,0,scorecard,dismissal_video_url}'=clip,'Verified clip follows only the exact source innings and player';
  reset role;
 end $test$;

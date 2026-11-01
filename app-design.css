@@ -572,6 +572,16 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 #app .match-review-figures dd strong{font:inherit}
 #app .match-review-figures .match-review-figure-runs dd{font-size:28px;font-weight:750;color:var(--navy)}
 #app .match-review-dnb{font-size:20px;font-weight:650;padding:12px;color:var(--muted)}
+#app .match-review-score>.scorecard-replay{box-sizing:border-box;justify-content:center;width:100%;margin-top:8px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;color:var(--navy);font-size:13px;font-weight:650;text-decoration:none;background:var(--mirelion-surface)}
+#app .match-review-score>.scorecard-replay::before{content:'▶';font-size:10px;margin-right:5px}
+#app .match-review-score>.scorecard-replay:hover{background:var(--soft);border-color:var(--navy)}
+#app .match-review-score>.scorecard-replay:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+#app .match-review-score>.scorecard-replay-preview{position:relative;display:grid;max-width:320px;aspect-ratio:16/9;margin:8px auto 0;padding:0;overflow:hidden;background:#19352f;border:0}
+#app .match-review-score>.scorecard-replay-preview::before{content:none}
+.scorecard-replay-preview img{display:block;width:100%;height:100%;object-fit:cover;grid-area:1/1;transition:filter .15s}
+.scorecard-replay-play{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);display:grid;place-items:center;box-sizing:border-box;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.95);color:#19352f;font-size:17px;padding-left:3px;box-shadow:0 2px 12px #0004}
+.scorecard-replay-caption{position:absolute;bottom:0;left:0;right:0;padding:9px 12px;background:linear-gradient(transparent,rgba(0,0,0,.85));color:white;font-size:13px;line-height:1.5;text-align:left}
+.scorecard-replay-preview:hover img{filter:brightness(.85)}
 .innings-contributions{border:1px solid var(--line,#dce1ed);border-radius:8px;margin:10px 0 0;background:var(--mirelion-surface,#fff);overflow:hidden}
 .innings-contributions>summary{cursor:pointer;min-height:44px;align-content:center;padding:8px 10px;font-size:13px;font-weight:600}
 .innings-contributions>summary small{font-weight:400;color:var(--muted);margin-left:8px}

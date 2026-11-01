@@ -15,7 +15,18 @@ export function renderMatchReplay(card){
  const url=scorecardReplayUrl(card?.replay_url);
  return url?`<a class="scorecard-replay" href="${escape(url)}" target="_blank" rel="noopener noreferrer" title="Opens PlayCricket · CricketPlus sign-in may be required">Watch match replays ↗</a>`:'';
 }
-export function renderDismissalReplay(batter){
+export function scorecardReplayThumbnail(value){
+ try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='i.ytimg.com'&&!u.port&&!u.username&&!u.password&&!u.search&&!u.hash&&/^\/vi\/[a-zA-Z0-9_-]{11}\/hqdefault\.jpg$/.test(u.pathname)?u.href:null;}catch{return null;}
+}
+export function renderDismissalReplay(batter,{thumbnail=false}={}){
  const url=scorecardReplayUrl(batter?.dismissal_video_url,true);
- return url&&batter?.name&&batter.status!=='did_not_bat'&&batter.not_out!==true?`<a class="scorecard-replay" href="${escape(url)}" target="_blank" rel="noopener noreferrer" aria-label="Watch dismissal for ${escape(batter.name)} on PlayCricket" title="Opens PlayCricket · CricketPlus sign-in may be required">Watch dismissal ↗</a>`:'';
+ const poster=thumbnail&&scorecardReplayThumbnail(batter?.dismissal_video_thumbnail_url);
+ return url&&batter?.name&&batter.status!=='did_not_bat'&&batter.not_out!==true?`<a class="scorecard-replay${poster?' scorecard-replay-preview':''}" href="${escape(url)}" target="_blank" rel="noopener noreferrer" aria-label="Watch dismissal for ${escape(batter.name)} on PlayCricket" title="Opens PlayCricket · CricketPlus sign-in may be required">${poster?`<img src="${escape(poster)}" alt="Match video preview" loading="lazy" decoding="async" referrerpolicy="no-referrer"><span class="scorecard-replay-play" aria-hidden="true">▶</span><span class="scorecard-replay-caption">Watch dismissal ↗</span>`:'Watch dismissal ↗'}</a>`:'';
+}
+export function bindReplayThumbnails(root){
+ for(const img of root.querySelectorAll('.scorecard-replay-preview img')){
+  const fallback=()=>{const link=img.closest('.scorecard-replay-preview');if(link){link.classList.remove('scorecard-replay-preview');link.textContent='Watch dismissal ↗';}};
+  img.addEventListener('error',fallback,{once:true});
+  if(img.complete&&!img.naturalWidth)fallback();
+ }
 }
