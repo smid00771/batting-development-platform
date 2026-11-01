@@ -1,4 +1,4 @@
-import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.327';
+import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.328';
 import {referenceBadgePair} from './social-award-lettering.js?v=0.8.62.294';
 import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.293';
 import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
@@ -12,6 +12,23 @@ export const SOCIAL_AWARDS = [
  {key:'century',label:'Century',description:'Every innings of 100 runs or more.'}
 ];
 export const awardLabel=kind=>SOCIAL_AWARDS.find(x=>x.key===kind)?.label||'Social graphic';
+// Prepared public artwork is opt-in per saved design and loaded only on entry.
+// Uploaded private artwork retains priority; never accept arbitrary URLs here.
+export const awardLogoAsset=layout=>typeof layout?.logo_asset==='string'&&/^social-assets\/[a-z0-9-]+\.(?:png|webp)$/.test(layout.logo_asset)?'./'+layout.logo_asset:null;
+const logoBoundsCache=new WeakMap();
+function logoBounds(img,canvas){
+ if(logoBoundsCache.has(img))return logoBoundsCache.get(img);
+ const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,full={x:0,y:0,width:iw,height:ih};let bounds=full;
+ try{
+  const probe=canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1),scale=Math.min(1,384/Math.max(iw,ih));
+  probe.width=Math.max(1,Math.round(iw*scale));probe.height=Math.max(1,Math.round(ih*scale));
+  const c=probe.getContext('2d',{willReadFrequently:true});c.drawImage(img,0,0,probe.width,probe.height);
+  const {data}=c.getImageData(0,0,probe.width,probe.height);let left=probe.width,top=probe.height,right=-1,bottom=-1;
+  for(let y=0;y<probe.height;y++)for(let x=0;x<probe.width;x++)if(data[(y*probe.width+x)*4+3]>8){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+  if(right>=left){left=Math.max(0,left-1);top=Math.max(0,top-1);right=Math.min(probe.width-1,right+1);bottom=Math.min(probe.height-1,bottom+1);bounds={x:left*iw/probe.width,y:top*ih/probe.height,width:(right-left+1)*iw/probe.width,height:(bottom-top+1)*ih/probe.height};}
+ }catch{/* A non-readable source keeps its original proportions. */}
+ logoBoundsCache.set(img,bounds);return bounds;
+}
 export function awardLayout(kind,saved={}){
  return {includes_title:false,show_logo:!saved.background_path,text_panel:true,text_colour:'#FFFFFF',title_y:9,title_size:kind==='results'?112:104,
   week_y:kind==='results'?15:18,name_y:77,name_size:76,figures_y:86,figures_size:94,grade_y:94,rows_top:29,rows_bottom:96,
@@ -95,8 +112,8 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  if(layout.show_week){checkGraphicLabel(canvas,ctx,{source:week,label:week,width:970,size:layout.week_size});const weekY=Math.max(height*layout.week_y/100,titleBounds?titleBounds.bottom+layout.week_size*.6+12:0);weekBounds=text(week,540,weekY,970,layout.week_size,layout.text_colour,'week');}
  const sharedOpponent=resultsShareOpponent(items,images.opponentKeys);
  const logoPair=(opponent,summary,x,y,size,gap,colour)=>{
-  const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/iw,size/ih);ctx.drawImage(img,cx-iw*fit/2,y-ih*fit/2,iw*fit,ih*fit);};
-  badge(logo,summary.ourName,x-(size+gap)/2);text('VS',x,y,gap-8,Math.min(60,size*.5),colour);badge(opponent,summary.opposition,x+(size+gap)/2);
+  const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const b=logoBounds(img,canvas),iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/b.width,size/b.height),dest=[cx-b.width*fit/2,y-b.height*fit/2,b.width*fit,b.height*fit];if(b.x||b.y||b.width!==iw||b.height!==ih)ctx.drawImage(img,b.x,b.y,b.width,b.height,...dest);else ctx.drawImage(img,...dest);};
+  badge(logo,summary.ourName,x-(size+gap)/2);text('VS',x,y,gap-8,Math.min(60,size*.5),colour,'grade');badge(opponent,summary.opposition,x+(size+gap)/2);
  };
  const headerBottom=Math.max(weekBounds?.bottom||0,titleBounds?.bottom??height*layout.title_y/100+layout.title_size*.6);
  const plan=resultsLayoutPlan(layout,height,items.length,sharedOpponent,headerBottom),{top,bottom,gap,rowHeight,columns}=plan,inset=layout.row_inset;

@@ -30,7 +30,9 @@ export function resultsLayoutPlan(d,height,count,shared,headerBottom){
  if(rowHeight<minRow-6)throw Error('This background is too short for these results. Use a taller background or fewer grades.');
  let header=null;
  if(shared){
-  const room=top-20-(headerBottom+8),size=Math.min(1080*d.logo_size/100,height*.11,Math.max(24,room)),gap=Math.max(50,size*.6),width=size*2+gap;
+  // The shared pair has a full badge-width between the crests, matching the
+  // reference header. Keep the smaller row-pair spacing for mixed opponents.
+  const room=top-20-(headerBottom+8),size=Math.min(1080*d.logo_size/100,height*.11,Math.max(24,room)),gap=Math.max(50,size),width=size*2+gap;
   const y=clamp((height-size)*d.logo_y/100+size/2,headerBottom+8+size/2,top-20-size/2);
   header={size,gap,x:(1080-width)*d.logo_x/100+width/2,y};
  }

@@ -58,6 +58,20 @@ selectedResult.result=originalResult;h.draw();await settled();assert.equal(id('s
 const pixels=id('saCanvas').backing.getContext('2d').getImageData(0,0,id('saCanvas').width,id('saCanvas').height).data;
 let clubPixels=0,opponentPixels=0;for(let i=0;i<pixels.length;i+=4){if(pixels[i]===255&&pixels[i+1]===0&&pixels[i+2]===85)clubPixels++;if(pixels[i]===255&&pixels[i+1]===224&&pixels[i+2]===0)opponentPixels++;}
 assert.ok(clubPixels>1000&&opponentPixels>1000,'Saved club logo and uploaded opposition logo both appear in the preview');
+// A design-specific prepared badge is lazy, replaceable, and never changes the
+// club-wide branding used by other post types.
+const normalImage=h.image,preparedLogo=sharedLogo,preparedLoads=[];
+h.image=async(state,src)=>{if(src==='./social-assets/test-results.webp'){preparedLoads.push(src);return preparedLogo;}return normalImage(state,src);};
+Object.assign(s.awards.layouts.results,{logo_asset:'social-assets/test-results.webp',logo_name:'Prepared Results badge'});h.draw();await settled();
+assert.ok(preparedLoads.length);assert.ok(document.querySelector('img[src="./social-assets/test-results.webp"]'));
+assert.equal(s.data.brand.logo,clubLogo,'Global branding is unchanged');
+document.querySelector('[data-sa-remove="logo"]').click();await settled();
+assert.equal(context.designs.results.layout.logo_asset,undefined);assert.ok(document.querySelector('img[alt="Saved club logo"]'));
+Object.assign(s.awards.layouts.results,{logo_asset:'social-assets/test-results.webp',logo_name:'Prepared Results badge'});h.draw();await settled();
+const replacementInput=id('saFile-logo');Object.defineProperty(replacementInput,'files',{value:[opponentFile]});replacementInput.dispatchEvent(new window.Event('change'));await settled();
+assert.ok(context.designs.results.layout.logo_path);assert.equal(context.designs.results.layout.logo_asset,undefined,'Uploading a logo replaces the prepared badge');
+document.querySelector('[data-sa-remove="logo"]').click();await settled();
+h.image=normalImage;
 if(process.env.AWARDS_PREVIEW_DIR)fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results-saved-logos.png',id('saCanvas').backing.toBuffer('image/png'));
 for(const e of document.querySelectorAll('[data-sa-result]:not(:checked)'))e.click();await settled();assert.equal(id('saHeaderLogos').hidden,true);assert.match(id('saPreviewStatus').textContent,/2 Results images/);
 if(process.env.AWARDS_PREVIEW_DIR)fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results.png',id('saCanvas').backing.toBuffer('image/png'));

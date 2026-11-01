@@ -3796,7 +3796,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.327.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.328.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -9279,7 +9279,9 @@ function resultsLayoutPlan(d,height,count,shared,headerBottom){
  if(rowHeight<minRow-6)throw Error('This background is too short for these results. Use a taller background or fewer grades.');
  let header=null;
  if(shared){
-  const room=top-20-(headerBottom+8),size=Math.min(1080*d.logo_size/100,height*.11,Math.max(24,room)),gap=Math.max(50,size*.6),width=size*2+gap;
+  // The shared pair has a full badge-width between the crests, matching the
+  // reference header. Keep the smaller row-pair spacing for mixed opponents.
+  const room=top-20-(headerBottom+8),size=Math.min(1080*d.logo_size/100,height*.11,Math.max(24,room)),gap=Math.max(50,size),width=size*2+gap;
   const y=clamp((height-size)*d.logo_y/100+size/2,headerBottom+8+size/2,top-20-size/2);
   header={size,gap,x:(1080-width)*d.logo_x/100+width/2,y};
  }
@@ -9320,6 +9322,23 @@ const SOCIAL_AWARDS = [
  {key:'century',label:'Century',description:'Every innings of 100 runs or more.'}
 ];
 const awardLabel=kind=>SOCIAL_AWARDS.find(x=>x.key===kind)?.label||'Social graphic';
+// Prepared public artwork is opt-in per saved design and loaded only on entry.
+// Uploaded private artwork retains priority; never accept arbitrary URLs here.
+const awardLogoAsset=layout=>typeof layout?.logo_asset==='string'&&/^social-assets\/[a-z0-9-]+\.(?:png|webp)$/.test(layout.logo_asset)?'./'+layout.logo_asset:null;
+const logoBoundsCache=new WeakMap();
+function logoBounds(img,canvas){
+ if(logoBoundsCache.has(img))return logoBoundsCache.get(img);
+ const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,full={x:0,y:0,width:iw,height:ih};let bounds=full;
+ try{
+  const probe=canvas.ownerDocument?canvas.ownerDocument.createElement('canvas'):new canvas.constructor(1,1),scale=Math.min(1,384/Math.max(iw,ih));
+  probe.width=Math.max(1,Math.round(iw*scale));probe.height=Math.max(1,Math.round(ih*scale));
+  const c=probe.getContext('2d',{willReadFrequently:true});c.drawImage(img,0,0,probe.width,probe.height);
+  const {data}=c.getImageData(0,0,probe.width,probe.height);let left=probe.width,top=probe.height,right=-1,bottom=-1;
+  for(let y=0;y<probe.height;y++)for(let x=0;x<probe.width;x++)if(data[(y*probe.width+x)*4+3]>8){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+  if(right>=left){left=Math.max(0,left-1);top=Math.max(0,top-1);right=Math.min(probe.width-1,right+1);bottom=Math.min(probe.height-1,bottom+1);bounds={x:left*iw/probe.width,y:top*ih/probe.height,width:(right-left+1)*iw/probe.width,height:(bottom-top+1)*ih/probe.height};}
+ }catch{/* A non-readable source keeps its original proportions. */}
+ logoBoundsCache.set(img,bounds);return bounds;
+}
 function awardLayout(kind,saved={}){
  return {includes_title:false,show_logo:!saved.background_path,text_panel:true,text_colour:'#FFFFFF',title_y:9,title_size:kind==='results'?112:104,
   week_y:kind==='results'?15:18,name_y:77,name_size:76,figures_y:86,figures_size:94,grade_y:94,rows_top:29,rows_bottom:96,
@@ -9403,8 +9422,8 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
  if(layout.show_week){checkGraphicLabel(canvas,ctx,{source:week,label:week,width:970,size:layout.week_size});const weekY=Math.max(height*layout.week_y/100,titleBounds?titleBounds.bottom+layout.week_size*.6+12:0);weekBounds=text(week,540,weekY,970,layout.week_size,layout.text_colour,'week');}
  const sharedOpponent=resultsShareOpponent(items,images.opponentKeys);
  const logoPair=(opponent,summary,x,y,size,gap,colour)=>{
-  const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/iw,size/ih);ctx.drawImage(img,cx-iw*fit/2,y-ih*fit/2,iw*fit,ih*fit);};
-  badge(logo,summary.ourName,x-(size+gap)/2);text('VS',x,y,gap-8,Math.min(60,size*.5),colour);badge(opponent,summary.opposition,x+(size+gap)/2);
+  const badge=(img,name,cx)=>{if(!img){text(name,cx,y,size,Math.min(26,size*.3),colour);return;}const b=logoBounds(img,canvas),iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,fit=Math.min(size/b.width,size/b.height),dest=[cx-b.width*fit/2,y-b.height*fit/2,b.width*fit,b.height*fit];if(b.x||b.y||b.width!==iw||b.height!==ih)ctx.drawImage(img,b.x,b.y,b.width,b.height,...dest);else ctx.drawImage(img,...dest);};
+  badge(logo,summary.ourName,x-(size+gap)/2);text('VS',x,y,gap-8,Math.min(60,size*.5),colour,'grade');badge(opponent,summary.opposition,x+(size+gap)/2);
  };
  const headerBottom=Math.max(weekBounds?.bottom||0,titleBounds?.bottom??height*layout.title_y/100+layout.title_size*.6);
  const plan=resultsLayoutPlan(layout,height,items.length,sharedOpponent,headerBottom),{top,bottom,gap,rowHeight,columns}=plan,inset=layout.row_inset;
@@ -9495,7 +9514,7 @@ function drawResultBadge(ctx,text,{outcome,label,x,y,maxHeight,layout:d,badgeIma
  else{ctx.beginPath();const points=d.badge_style==='ribbon'?[[-.5,-.5],[.5,-.5],[.42,0],[.5,.5],[-.5,.5],[-.42,0]]:[[-.49,-.4],[-.13,-.5],[.46,-.44],[.43,-.22],[.5,-.1],[.46,.22],[.49,.4],[.1,.49],[-.5,.4],[-.46,.2],[-.5,.1],[-.46,-.12]];points.forEach(([a,b],i)=>i?ctx.lineTo(a*w,b*ht):ctx.moveTo(a*w,b*ht));ctx.closePath();ctx.fill();}
  badgeText(label,0,0,w-24,Math.min(size,ht*.72),d.badge_style==='outline'?colour:d.badge_text_colour);ctx.restore();
 }
-return {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardCaption,awardBatches,resultsShareOpponent,resultsOutcome,resultsMargin,resultsSummary,drawAwardGraphic};
+return {SOCIAL_AWARDS,awardLabel,awardLogoAsset,awardLayout,awardFigures,awardCaption,awardBatches,resultsShareOpponent,resultsOutcome,resultsMargin,resultsSummary,drawAwardGraphic};
 })();
 
 const __demoModule31=(()=>{
@@ -9505,7 +9524,7 @@ const {referenceStylePatch}=__demoModule35;
 const {scopedAwardLabel}=__demoModule30;
 const {withGradeLabels,graphicLabel}=__demoModule37;
 const {labelSuggestions,assistantCSS,proposalMessage}=__demoModule38;
-const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule39;
+const {SOCIAL_AWARDS,awardLabel,awardLayout,awardFigures,awardBatches,awardLogoAsset,resultsShareOpponent,resultsSummary,drawAwardGraphic}=__demoModule39;
 const {visualPatch,visualSettings,refinedAwardLayout,matchingResultBadgeCrops}=__demoModule36;
 const REQUEST_STATUSES=[['requested','Submitted'],['in_progress','Will do'],['closed','Not right now'],['ready','Completed']];
 const requestStatus=value=>REQUEST_STATUSES.find(([key])=>key===value)?.[1]||value;
@@ -9647,7 +9666,7 @@ function createSocialAwards(h){
   if(!(s.data.awards?.enabled||[]).includes(kind))return '<p class="sa-missing">Enable this graphic in Socials Awards first.</p>';
   const items=candidates(w,kind),d=layout(w,kind);let item=items.find(x=>x.key===w.focus);if(!item&&items.length){item=items[0];w.focus=item.key;}const p=item&&kind!=='results'?portrait(w,kind,item):null;
   const range=(key,label,min=0,max=100)=>`<label class="sa-field">${label} <output data-sa-value="${key}">${d[key]}</output><input type="range" data-sa-layout="${key}" min="${min}" max="${max}" step="1" value="${d[key]}"></label>`;
-  const asset=(key,label)=>{const own=d[key+'_path'],shared=key==='logo'&&!own?s.data.brand?.logo:null;return `<div class="sa-asset" data-sa-asset="${key}"><strong>${label}</strong><small>${esc(own?d[key+'_name']||'Saved image':shared?'Saved club logo':'Optional')}</small>${own?`<img data-sa-image="${esc(own)}" alt="${label}">`:shared?`<img src="${esc(shared)}" alt="Saved club logo">`:''}${key==='example'&&own?`<button class="btn secondary" id="saMatchExample" disabled>${refinement(w,kind).matching?'Matching…':'Match our example'}</button>${refinement(w,kind).fromExample?`<p class="sa-note sa-status" role="status">${esc(refinement(w,kind).message)}</p>`:''}`:''}<button class="btn ghost" data-sa-upload="${key}">${own||shared?'Replace':'Upload'} ${label.toLowerCase()}</button><input type="file" id="saFile-${key}" accept="image/png,image/jpeg,image/webp" hidden>${own?`<button class="btn ghost" data-sa-remove="${key}">${key==='logo'&&s.data.brand?.logo?'Use saved club logo':'Remove '+label.toLowerCase()}</button>`:''}${key==='background'?`<details data-sa-open="background-help"><summary>Need help preparing the background?</summary><p class="sa-note">${d.background_path?'Make changes to your saved background.':'Use your example’s background and match its text style. Uses your club’s AI allowance.'}${kind==='results'?' Scores and results are added from PlayCricket.':''}</p><button class="btn ghost" id="saPrepareBackground">${d.background_path?'Edit background':'Prepare background'}</button>${d.background_path&&d.example_path?'<button class="btn ghost" id="saPrepareExample">Start from previous example</button>':''}</details>`:''}</div>`;};
+  const asset=(key,label)=>{const path=d[key+'_path'],prepared=key==='logo'&&!path?awardLogoAsset(d):null,own=path||prepared,shared=key==='logo'&&!own?s.data.brand?.logo:null;return `<div class="sa-asset" data-sa-asset="${key}"><strong>${label}</strong><small>${esc(own?d[key+'_name']||'Saved image':shared?'Saved club logo':'Optional')}</small>${path?`<img data-sa-image="${esc(path)}" alt="${label}">`:prepared?`<img src="${esc(prepared)}" alt="${label}">`:shared?`<img src="${esc(shared)}" alt="Saved club logo">`:''}${key==='example'&&own?`<button class="btn secondary" id="saMatchExample" disabled>${refinement(w,kind).matching?'Matching…':'Match our example'}</button>${refinement(w,kind).fromExample?`<p class="sa-note sa-status" role="status">${esc(refinement(w,kind).message)}</p>`:''}`:''}<button class="btn ghost" data-sa-upload="${key}">${own||shared?'Replace':'Upload'} ${label.toLowerCase()}</button><input type="file" id="saFile-${key}" accept="image/png,image/jpeg,image/webp" hidden>${own?`<button class="btn ghost" data-sa-remove="${key}">${key==='logo'&&s.data.brand?.logo?'Use saved club logo':'Remove '+label.toLowerCase()}</button>`:''}${key==='background'?`<details data-sa-open="background-help"><summary>Need help preparing the background?</summary><p class="sa-note">${d.background_path?'Make changes to your saved background.':'Use your example’s background and match its text style. Uses your club’s AI allowance.'}${kind==='results'?' Scores and results are added from PlayCricket.':''}</p><button class="btn ghost" id="saPrepareBackground">${d.background_path?'Edit background':'Prepare background'}</button>${d.background_path&&d.example_path?'<button class="btn ghost" id="saPrepareExample">Start from previous example</button>':''}</details>`:''}</div>`;};
   const draft=p&&w.positionOpen[photoKey(kind,item)],savedPhotos=item?(h.savedPhotos?.(s,item)||[]):[];
   return `<section class="sa-panel"><h3>${kind==='results'?'Choose grades':'Needs creation'} · ${items.length}</h3><p class="sa-note">${kind==='results'?'Scores and match status come from the imported scorecard. Up to four grades per image.':'Figures come from PlayCricket. Confirm each individual graphic to add it to your post.'}</p><div class="sa-list">${items.map(x=>`<div class="sa-performance">${kind==='results'?`<input type="checkbox" data-sa-result="${esc(x.key)}" aria-label="Include ${esc(x.grade)}" ${w.chosen.has(x.key)?'checked':''}>`:''}<strong>${esc(kind==='results'?x.grade:x.name)}<small>${kind==='results'?esc(resultsSummary(x).result):esc(awardFigures(x)+' · '+x.grade+' · v '+x.opposition+' · innings '+x.innings_number)}</small></strong>${kind==='results'?`<span class="sa-badge ${resultsSummary(x).outcome?'sa-ready':''}" data-sa-outcome="${esc(x.key)}">${esc(({WIN:'Win',LOSS:'Defeat',DRAW:'Draw',TIE:'Tie','NO RESULT':'No result','IN PROGRESS':'Match in progress'})[resultsSummary(x).outcome]||'Check result')} · PlayCricket</span>`:`<span class="sa-badge">Needs creation</span><button class="btn ${w.focus===x.key?'secondary':'ghost'}" data-sa-edit="${esc(x.key)}">${w.focus===x.key?'Editing graphic':'Create graphic'}</button>`}</div>`).join('')||`<p>${kind==='results'?'No included, matched scorecards for this week.':candidates(w,kind,true).length?'All qualifying performances are saved for your post.':'No qualifying performances in the included scores for this week.'}</p>`}</div></section>
   <div class="sa-grid"><section class="sa-panel" id="saArtwork"><h3>Artwork · ${esc(awardLabel(kind))}</h3><p class="sa-note">Your saved artwork is reused each week.</p><div class="sa-artwork">${asset('example','Previous example')}${asset('background','Background')}${asset('logo','Logo')}${kind==='results'?opponentHTML(w,d,items):''}</div>
@@ -9779,8 +9798,8 @@ function createSocialAwards(h){
   bindRefinement(s,w,kind,prepareBackground);
   el('saPrepareBackground').onclick=()=>prepareBackground();el('saPrepareExample')?.addEventListener('click',()=>prepareBackground(true));
   el('saSaveLayout').onclick=()=>void run(s,()=>saveLayout(s,kind));el('saResetLayout').onclick=()=>void run(s,async()=>{if(h.reloadLabel)await h.reloadLabel(s,w.end);if(await load(s,false)){w.layouts[kind]=awardLayout(kind,w.context.designs[kind]?.layout);w.designDirty[kind]=false;delete w.refinements?.[kind];notice(s,'Saved layout reloaded.');}else notice(s,'Could not reload the layout. Your changes are still here. '+w.error);});
-  document.querySelectorAll('[data-sa-upload]').forEach(e=>{const key=e.dataset.saUpload,input=el('saFile-'+key);e.onclick=()=>input.click();input.onchange=()=>{const file=input.files?.[0];if(file)void run(s,async()=>{const saved=await uploadArtwork(s,file);d[key+'_path']=saved.path;d[key+'_name']=saved.name;if(key==='logo')d.show_logo=true;if(key==='background')d.show_logo=false;dirty();await saveLayout(s,kind);notice(s,saved.name+' uploaded and saved.');});};});
-  document.querySelectorAll('[data-sa-remove]').forEach(e=>e.onclick=()=>void run(s,async()=>{delete d[e.dataset.saRemove+'_path'];delete d[e.dataset.saRemove+'_name'];w.designDirty[kind]=true;await saveLayout(s,kind);}));
+  document.querySelectorAll('[data-sa-upload]').forEach(e=>{const key=e.dataset.saUpload,input=el('saFile-'+key);e.onclick=()=>input.click();input.onchange=()=>{const file=input.files?.[0];if(file)void run(s,async()=>{const saved=await uploadArtwork(s,file);d[key+'_path']=saved.path;d[key+'_name']=saved.name;if(key==='logo'){d.show_logo=true;delete d.logo_asset;}if(key==='background')d.show_logo=false;dirty();await saveLayout(s,kind);notice(s,saved.name+' uploaded and saved.');});};});
+  document.querySelectorAll('[data-sa-remove]').forEach(e=>e.onclick=()=>void run(s,async()=>{delete d[e.dataset.saRemove+'_path'];delete d[e.dataset.saRemove+'_name'];if(e.dataset.saRemove==='logo')delete d.logo_asset;w.designDirty[kind]=true;await saveLayout(s,kind);}));
   document.querySelectorAll('[data-sa-opponent]').forEach(button=>{const key=button.dataset.saOpponent,input=el('saOpponent-'+key);button.onclick=()=>input.click();input.onchange=()=>{const file=input.files?.[0];if(file)void run(s,async()=>{(d.opponent_logos||={})[key]=await uploadArtwork(s,file);w.designDirty[kind]=true;await saveLayout(s,kind);notice(s,'Opposition logo saved for this club.');});};});
   document.querySelectorAll('[data-sa-opponent-reset]').forEach(button=>button.onclick=()=>void run(s,async()=>{const team=itemsForLogos(w).map(opponent).find(t=>t&&opponentKey(w,t)===button.dataset.saOpponentReset);for(const key of team?opponentLogoKeys(w,team):[button.dataset.saOpponentReset])delete d.opponent_logos[key];w.designDirty[kind]=true;await saveLayout(s,kind);notice(s,'PlayCricket logo selected.');}));
   if(kind==='results'&&!w.logosChecked){w.logosChecked=true;void logos(s,itemsForLogos(w)).then(()=>{if(here(s,w)&&s.view===kind&&!w.busy)render(s);});}
@@ -9839,7 +9858,7 @@ function createSocialAwards(h){
  async function draw(s,canvas,kind,items,override){const w=state(s),d=structuredClone(override||layout(w,kind)),p=items[0]&&kind!=='results'?portrait(w,kind,items[0]).photo:null;const paths={background:d.background_path,logo:d.logo_path,photo:p?.path,example:matchingResultBadgeCrops(d).length?d.example_path:null},images={};await Promise.all(Object.entries(paths).map(async([key,path])=>{if(path)images[key]=await h.image(s,await url(s,bucket,path));}));if(kind==='results'){
    await logos(s,items);images.opponents={};images.opponentKeys={};
    await Promise.all(items.map(async item=>{const t=opponent(item);if(!t)return;images.opponentKeys[item.key]=opponentKey(w,t);const saved=opponentLogo(w,d,t),src=saved?await url(s,bucket,saved.path):t.logo_url||w.logos[t.id];if(src)try{images.opponents[item.key]=await h.image(s,saved?src:await remoteLogo(s,src));}catch(e){if(saved)throw e;w.logoErrors[t.id]=true;}}));
-  }if(d.show_logo&&!images.logo&&s.data.brand?.logo)images.logo=await h.image(s,s.data.brand.logo);await drawAwardGraphic(h,s,canvas,{kind,items,layout:d,photo:p,week:scopedAwardLabel(w.title??'WEEK ENDING '+date(w.end),w.context?.award_scope),images});}
+  }if(d.show_logo&&!images.logo){const src=awardLogoAsset(d)||s.data.brand?.logo;if(src)images.logo=await h.image(s,src);}await drawAwardGraphic(h,s,canvas,{kind,items,layout:d,photo:p,week:scopedAwardLabel(w.title??'WEEK ENDING '+date(w.end),w.context?.award_scope),images});}
  async function paintBadgeSamples(s,w,kind){
   const samples=[...document.querySelectorAll('[data-sa-badge]')],d=layout(w,kind);if(!samples.length||!d.example_path)return;
   const image=await h.image(s,await url(s,bucket,d.example_path)),pair=referenceBadgePair(image,matchingResultBadgeCrops(d),()=>document.createElement('canvas'));
@@ -13732,7 +13751,7 @@ const SUPABASE_URL='https://demo.invalid',SUPABASE_ANON_KEY='demo-unused';
 const supabase=window.__fixtureDb;
 const app=document.getElementById('app');
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.327';
+const APP_UI_VERSION='0.8.62.328';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

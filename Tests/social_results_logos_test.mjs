@@ -2,18 +2,20 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
-import {awardLayout,drawAwardGraphic} from '../social-awards-model.js';
+import {awardLayout,awardLogoAsset,drawAwardGraphic} from '../social-awards-model.js';
+import {AWARD_FONT_DATA} from '../social-award-font-data.js';
 
 const require=createRequire(import.meta.url),{createCanvas,GlobalFonts}=require('@napi-rs/canvas');
 const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];
 GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
+for(const f of Object.values(AWARD_FONT_DATA))GlobalFonts.register(Buffer.from(f.data.split(',').at(-1),'base64'),f.family);
 function badge(label,colour,width=100,height=100){const image=createCanvas(width,height),ctx=image.getContext('2d');ctx.fillStyle=colour;ctx.fillRect(0,0,width,height);ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.font='bold 22px Arial';ctx.fillText(label,width/2,height/2+8);return image;}
 const club=badge('CITY','#df2148'),opposition=badge('VISITORS','#146741',160,100),other=badge('OTHER','#1951a5',80,120);
 const fixture=(n,org='opposition')=>({key:'match-'+n,grade:n+'st Grade',our_team:'city',teams:[{id:'city',name:'Newcastle City'},{id:'grade-team-'+n,organisation_id:org,name:org==='opposition'?'Visitors':'Other Club'}],innings:[{team_id:'city',runs:180,wickets:10,batters:[{name:'Liam Simpson',runs:49,not_out:true,status:'played',importable:true},{name:'Haydon Mustard',runs:27,status:'played',importable:true},{name:'Archie Lenham',runs:25,status:'played',importable:true}]},{team_id:'grade-team-'+n,runs:198,wickets:10,bowlers:[{name:'Archie Lenham',team_id:'city',wickets:4,runs:35,importable:true},{name:'Jonah Roser',team_id:'city',wickets:3,runs:36,importable:true},{name:'Callan Fowler',team_id:'city',wickets:2,runs:20,importable:true}]}],result:'Visitors won by 18 runs'});
 async function render(items,{layout={},images={}}={}){
  const canvas=createCanvas(1080,1350),draws=[],labels=[],ctx=canvas.getContext('2d'),draw=ctx.drawImage.bind(ctx);
  ctx.drawImage=(image,...box)=>{draws.push({image,box});draw(image,...box);};
- const h={fontReady:async()=>{},text:(ctx,value,x,y,width,size)=>{ctx.font=`700 ${size}px "Club Sporting"`;while(ctx.measureText(value).width>width&&size>10)ctx.font=`700 ${--size}px "Club Sporting"`;labels.push({value,x,y,size});ctx.fillText(value,x,y);}};
+ const h={fontReady:async()=>{},text:(ctx,value,x,y,width,size,weight='700')=>{ctx.font=`${weight} ${size}px ${ctx.socialFont}`;labels.push({value,x,y,size,font:ctx.socialFont});ctx.fillText(value,x,y,width);}};
  const d=awardLayout('results',layout);
  await drawAwardGraphic(h,{design:{primary:'#292d75',accent:'#a8223d'}},canvas,{kind:'results',items,layout:d,week:'WEEK ENDING 11/10/2026',images:{logo:club,opponents:Object.fromEntries(items.map(x=>[x.key,opposition])),...images}});
  return {canvas,draws,labels,layout:d,plan:canvas.resultsLayout};
@@ -58,6 +60,27 @@ test('Header positioning moves both badges and VS together on a saved background
 test('Missing opposition artwork uses its name without borrowing another club’s badge',async()=>{
  const result=await render([fixture(1)],{images:{opponents:{}}});
  assert.equal(result.draws.filter(d=>d.image===club).length,1);assert.ok(result.labels.some(t=>t.value==='Visitors'));assert.ok(result.labels.some(t=>t.value==='VS'));
+});
+
+test('Reference header keeps equally visible badges level, widely spaced and clear of title and grade',async()=>{
+ const padded=createCanvas(240,200),c=padded.getContext('2d');c.fillStyle='#f05';c.fillRect(70,30,100,100);
+ const layout={layout_mode:'template',title_font:'condensed',title_case:'title',title_size:158,title_y:6.8,grade_font:'condensed',logo_size:14,logo_x:49,logo_y:14.5,rows_top:25.8,rows_bottom:89.3,row_gap:65};
+ const result=await render([1,2,3,4].map(n=>fixture(n)),{layout,images:{logo:padded,opponents:Object.fromEntries([1,2,3,4].map(n=>['match-'+n,club]))}}),vs=result.labels.find(x=>x.value==='VS');
+ const left=result.draws.find(d=>d.image===padded),right=result.draws.find(d=>d.image===club),[lx,ly,lw,lh]=left.box.slice(-4),[rx,ry,rw,rh]=right.box.slice(-4),scale=640/1080;
+ assert.equal(left.box.length,8,'Transparent padding is excluded from source bounds');
+ assert.ok(Math.abs(lw-rw)<.01&&Math.abs(lh-rh)<.01,'Visible square badges have the same size despite different source padding');
+ assert.ok(Math.abs((lx+lw/2)*scale-228)<2&&Math.abs((rx+rw/2)*scale-404)<2,'Both centres follow the reference');
+ assert.ok(Math.abs((ly+lh/2)*scale-147)<2&&Math.abs(ly-ry)<.01,'Badges share the reference height');
+ assert.ok(Math.abs(lw*scale-88)<1,'Visible badges match the reference size');
+ assert.ok(ly>160&&ly+lh<result.plan.top-20,'Header stays below title and above grade');
+ assert.equal(vs.font,'"Club Display",sans-serif');
+ assert.equal(result.plan.gap,65,'Existing grade spacing remains intact');
+ preview('results-reference-header',result);
+});
+
+test('Prepared logos accept only local image assets and never remote URLs or path traversal',()=>{
+ assert.equal(awardLogoAsset({logo_asset:'social-assets/example-results.webp'}),'./social-assets/example-results.webp');
+ for(const logo_asset of ['https://example.com/logo.png','//example.com/logo.png','social-assets/../private.png','social-assets/x.svg','social-assets/x.png?redirect=1','data:image/png;base64,AAA',null])assert.equal(awardLogoAsset({logo_asset}),null);
 });
 
 test('each grade displays its own imported result, and a later round can reverse all outcomes',async()=>{
