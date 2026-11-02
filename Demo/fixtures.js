@@ -1994,7 +1994,7 @@ window.__fixtureRpc=async(name,args={})=>{
  if(action==='review_posts')return reviewAudience(state.fixtures.find(f=>f.id===d.id))?ok(state.review_posts[d.id]||[]):bad('Team comments are private');
  if(action==='posts')return audience(state.fixtures.find(f=>f.id===d.id))?ok(state.posts[d.id]||[]):bad('Current selected team only');
  if(action==='history')return ok(state.history[d.id]||[]);
- if(['save_board','publish','send_review','history'].includes(action)&&!selector)return bad('Selector access required');
+ if(['save_board','publish','send_review','history'].includes(action)&&!selector&&!(admin&&['publish','history'].includes(action)))return bad('Selector access required');
  if(['save_fixture','save_roster','import_roster','availability_batch','fixture_lock'].includes(action)&&!manager)return bad('Club Admin or selector access required');
  if(['selectors','fixture_defaults','group_links'].includes(action)&&!admin)return bad('Club Admin permission required');
  if(state.receipts[d.request_id])return ok(state.receipts[d.request_id]);
@@ -2028,7 +2028,7 @@ window.__fixtureRpc=async(name,args={})=>{
   }else return bad('Choose Delegate or Hand back');
   a.revision++;result={saved:true,operation:d.operation};
  }else if(action==='fixture_lock'){
-  const f=state.fixtures.find(f=>f.id===d.id);if(!f)return bad('Unknown fixture');if(f.revision!==d.revision)return bad('Fixture changed. Reload before changing its lock');if(typeof d.unlock!=='boolean')return bad('Choose whether to unlock or lock the fixture');if(f.published&&state.access.head_selector_id!==uid&&demoPublicationHead()!==uid)return bad('Only the current Head of Selections or Acting Head can unlock a published team');if(d.unlock&&!f.published&&!seFixtureCompleted(f))return bad('This fixture is still open');f.selection_unlocked_until=d.unlock?new Date(Date.now()+30*60000).toISOString():null;f.selection_unlocked_by=d.unlock?uid:null;f.revision++;result={saved:true,id:f.id,revision:f.revision,selection_unlocked_until:f.selection_unlocked_until};
+  const f=state.fixtures.find(f=>f.id===d.id);if(!f)return bad('Unknown fixture');if(f.revision!==d.revision)return bad('Fixture changed. Reload before changing its lock');if(typeof d.unlock!=='boolean')return bad('Choose whether to unlock or lock the fixture');if(!admin&&f.published&&state.access.head_selector_id!==uid&&demoPublicationHead()!==uid)return bad('Only the current Head of Selections or Acting Head can unlock a published team');if(d.unlock&&!f.published&&!seFixtureCompleted(f))return bad('This fixture is still open');f.selection_unlocked_until=d.unlock?new Date(Date.now()+30*60000).toISOString():null;f.selection_unlocked_by=d.unlock?uid:null;f.revision++;result={saved:true,id:f.id,revision:f.revision,selection_unlocked_until:f.selection_unlocked_until};
  }else if(action==='show_dropped'){
   if(!selector)return bad('Selector access required');
   if(!Array.isArray(d.ids)||!d.ids.length||d.ids.some(id=>!state.fixtures.some(f=>f.id===id&&(typeof demoGrant!=='function'||demoGrant(demoGroupFor(f))>0))))return bad('Choose teams from a Selection Group you can view');
@@ -2045,7 +2045,9 @@ window.__fixtureRpc=async(name,args={})=>{
   if(!admin)return bad('Club Admin permission required');if(d.revision!==state.access.revision)return bad('Settings changed. Refresh before saving');state.access.grade_levels=structuredClone(d.rows);state.access.revision++;
  }else if(action==='availability_batch'){
   if(!manager)return bad('Club Admin or selector access required');if(!d.make_all_available)return bad('Confirm Make all players available for this date');
-  const ps=state.roster.filter(p=>p.active);if(d.roster_revision!==state.roster_revision||ps.some(p=>(p.availability?.revision||0)!==d.revisions[p.id]))return bad('A calendar changed. Reload before setting this date');
+  if(d.scope_ids!==undefined&&(!Array.isArray(d.scope_ids)||!d.scope_ids.length||d.scope_ids.length>2000||new Set(d.scope_ids).size!==d.scope_ids.length||d.scope_ids.some(id=>!state.roster.some(p=>p.id===id&&p.active))))return bad('Choose active players from this club playing list');
+  if(d.scope_ids&&[...(d.unavailable_ids||[]),...(d.available_ids||[])].some(id=>!d.scope_ids.includes(id)))return bad('Availability choices must belong to the selected players');
+  const ps=state.roster.filter(p=>p.active&&(!d.scope_ids||d.scope_ids.includes(p.id)));if(d.roster_revision!==state.roster_revision||ps.some(p=>(p.availability?.revision||0)!==d.revisions[p.id]))return bad('A calendar changed. Reload before setting this date');
   for(const p of ps){const dates=new Set(p.availability?.available_dates||[]),unavailable=new Set(p.availability?.unavailable_dates||[]),blocked=d.unavailable_ids.includes(p.id)||unavailable.has(d.date)&&!d.reset_unavailable&&!(d.available_ids||[]).includes(p.id);if(blocked){dates.delete(d.date);unavailable.add(d.date);}else{dates.add(d.date);unavailable.delete(d.date);}p.availability={...p.availability,usual_available:false,blocks:[],available_dates:[...dates].sort(),unavailable_dates:[...unavailable].sort(),revision:(p.availability?.revision||0)+1,checked_at:fixtureNow()};}
   state.availability_dates=(state.availability_dates||[]).filter(x=>x.date!==d.date).concat({date:d.date,bulk_saved_at:fixtureNow(),updated_at:fixtureNow()});result={saved:true,date:d.date,saved_at:fixtureNow()};
  }else if(action==='fixture_defaults'){
@@ -2077,7 +2079,7 @@ window.__fixtureRpc=async(name,args={})=>{
   const replacements=new Map(rows.map(f=>[f.id,f]));state.fixtures=state.fixtures.map(f=>replacements.get(f.id)||f).concat(rows.filter(f=>!state.fixtures.some(old=>old.id===f.id)));
   result.revisions=Object.fromEntries(d.fixtures.map(f=>[f.id,f.revision+1]));
  }else if(action==='publish'){
-  if(demoPublicationHead()!==uid)return bad('Only the current Head of Selections or Acting Head can publish to players');
+  if(!admin&&demoPublicationHead()!==uid)return bad('Only a Club Admin, current Head of Selections or Acting Head can publish to players');
   const conflict=demoDuplicateSelection(state.fixtures,d.ids);if(conflict)return bad(conflict);
   const fs=state.fixtures.filter(f=>d.ids.includes(f.id));if(fs.some(f=>f.revision!==d.revisions[f.id]))return bad('Draft changed');if(fs.some(f=>demoSelectionIssues(f).some(i=>i.level==='error')))return bad('Fix selection or availability issues before publishing');
   if(fs.some(f=>demoSelectionIssues(f).some(i=>i.code==='twelve_team')&&(!Array.isArray(d.acknowledge_twelve)||!d.acknowledge_twelve.includes(f.id))))return bad('Confirm publishing this team with 12 players');

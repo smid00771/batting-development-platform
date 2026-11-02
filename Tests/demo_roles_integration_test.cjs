@@ -53,7 +53,7 @@ test('each role opens its allowed journeys without borrowing another role',async
   try{
    const identity=h.window.eval('session.user.id'),tasks=plain(h.window.eval('demoTasks()'));
    for(const journey of tasks){await h.choose('#demoStage',journey);assert.equal(h.window.eval('session.user.id'),identity);clean(h);}
-   if(role==='admin'){await h.choose('#demoStage','selection_admin');assert.equal(h.document.querySelector('[data-se-view=board]'),null);}
+   if(role==='admin'){await h.choose('#demoStage','selection_admin');assert.ok(h.document.querySelector('[data-se-view=board]'));assert.equal(h.window.eval('selectionState.data.selection_editor'),false);}
    if(role==='participant'||role==='combined'){assert.equal(h.window.eval('canContributePhilosophy()'),true);assert.equal(h.window.eval('isPlayerUser()'),true);assert.ok(h.document.querySelector('#clubMainNav [data-tab=myplan]'));assert.equal(h.window.eval('isPhilosophyLead()'),false);}
    if(role==='lead')assert.equal(h.window.eval('isPhilosophyLead()'),true);
   }finally{h.close();}

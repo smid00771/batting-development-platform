@@ -317,21 +317,31 @@ supabase.rpc=async function(name,args={}){
    if(a==='access'){const result=await demoPreviousCurrentRpc(name,args);if(result.data)Object.assign(result.data,{mode:demoProduct==='select'?'standalone':'bundle',enabled:demoProduct!=='batting',batting_participant:demoProduct!=='select',assist_staff:!['player','participant'].includes(demoPersona)});return result;}
    if(['save_board','publish','send_review','fixture_lock'].includes(a)){
     const ids=a==='save_board'?(d.fixtures||[]).map(f=>f.id):d.ids||[d.id],fixtures=demoSelections.fixtures.filter(f=>ids.includes(f.id));
-    if(fixtures.some(f=>a==='publish'||a==='fixture_lock'?demoGroupHead(demoGroupFor(f))!==uid:demoGrant(demoGroupFor(f))<2))return demoFail('Your permissions do not allow this change in that Selection Group.');
+    if(fixtures.some(f=>a==='publish'||a==='fixture_lock'?!isAdmin()&&demoGroupHead(demoGroupFor(f))!==uid:demoGrant(demoGroupFor(f))<2))return demoFail('Your permissions do not allow this change in that Selection Group.');
+   }
+   if(a==='availability_candidates'){
+    if(!isAdmin()&&!demoPermissions.groups.some(g=>demoGrant(g.id)>=2))return demoFail('Club Admin or selector access required');
+    const teams=new Map(),today=seClubDate(new Date(),demoSelections);
+    for(const f of demoSelections.fixtures){const p=demoDropPrior(f);if(!p||p.source==='unknown'||p.ends>today||p.source!=='completed_scorecard'&&!seFixtureCompleted({details:p.details}))continue;
+     const g=demoSharedFixtureGroup({details:p.details}),key=g?.id||p.details.grade;
+     if(!teams.has(key))teams.set(key,{grade_id:g?.id||null,grade:p.details.grade,player_ids:[]});const row=teams.get(key);
+     for(const slot of p.slots)for(const id of [slot.d1,slot.d2])if(id&&!row.player_ids.includes(id)&&demoSelections.roster.some(r=>r.id===id&&r.active))row.player_ids.push(id);
+    }
+    return demoOK({teams:[...teams.values()]});
    }
    if(a==='publication_check'){
-    if(!Array.isArray(d.ids)||!d.ids.length||d.ids.length>30||new Set(d.ids).size!==d.ids.length||d.ids.some(id=>{const f=demoSelections.fixtures.find(f=>f.id===id);return !f||demoGrant(demoGroupFor(f))<1;}))return demoFail('View access to each Selection Group is required');
+    if(!Array.isArray(d.ids)||!d.ids.length||d.ids.length>30||new Set(d.ids).size!==d.ids.length||d.ids.some(id=>{const f=demoSelections.fixtures.find(f=>f.id===id);return !f||!isAdmin()&&demoGrant(demoGroupFor(f))<1;}))return demoFail('View access to each Selection Group is required');
     return demoOK({fixtures:d.ids.map(id=>{const f=demoSelections.fixtures.find(f=>f.id===id);return {id,revision:f.revision,issues:demoSelectionIssues(f)};})});
    }
    if(a==='context'){
     const result=await demoPreviousCurrentRpc(name,args);if(result.error)return result;const c=result.data;
     const editor=demoPermissions.groups.some(g=>demoGrant(g.id)>=2),selector=demoPermissions.groups.some(g=>demoGrant(g.id)>0);
-    Object.assign(c,{group_permissions_enabled:true,selection_editor:editor,selector,selection_setup:demoGroupContext(),selection_group_access:demoPermissions.groups.map(g=>({id:g.id,level:demoGrant(g.id),head_id:g.head_id,can_view:demoGrant(g.id)>0||demoSelections.fixtures.some(f=>demoGroupFor(f)===g.id&&demoCaptainUsers(f.details).includes(uid))})),access:{...c.access,mode:demoProduct==='select'?'standalone':'bundle'}});
+    Object.assign(c,{group_permissions_enabled:true,selection_editor:editor,selector,selection_setup:demoGroupContext(),selection_group_access:demoPermissions.groups.map(g=>({id:g.id,level:demoGrant(g.id),head_id:g.head_id,can_view:isAdmin()||demoGrant(g.id)>0||demoSelections.fixtures.some(f=>demoGroupFor(f)===g.id&&demoCaptainUsers(f.details).includes(uid))})),access:{...c.access,mode:demoProduct==='select'?'standalone':'bundle'}});
     c.fixtures=demoSelections.fixtures.filter(f=>isAdmin()||demoGrant(demoGroupFor(f))>0||demoCaptainUsers(f.details).includes(uid)||f.published).map(f=>{
-     const group=demoGroupFor(f),view=demoGrant(group)>0||demoCaptainUsers(f.details).includes(uid),head=demoGroupHead(group),base=view?fixtureClone(f):{id:f.id,publication:f.publication,published:fixtureClone(f.published),...(f.published?{details:fixtureClone(f.published.details),slots:fixtureClone(f.published.slots)}:isAdmin()?{details:fixtureClone(f.details),revision:f.revision}:{})};
+     const group=demoGroupFor(f),view=isAdmin()||demoGrant(group)>0||demoCaptainUsers(f.details).includes(uid),head=demoGroupHead(group),base=view?fixtureClone(f):{id:f.id,publication:f.publication,published:fixtureClone(f.published),...(f.published?{details:fixtureClone(f.published.details),slots:fixtureClone(f.published.slots)}:isAdmin()?{details:fixtureClone(f.details),revision:f.revision}:{})};
      const source=demoSelections.result_sources?.[f.id],completed=!!source?.match_id&&!source.no_play&&Object.values(demoScorecards).some(card=>card.match_id===source.match_id&&card.status==='completed');
-     return {...base,result_complete:completed,selection_group_id:group,normal_player_limit:demoNormalPlayerLimit(f),draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:[]};
-    });c.can_view_board=selector||c.captain;
+     return {...base,result_complete:completed,selection_group_id:group,normal_player_limit:demoNormalPlayerLimit(f),draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:isAdmin()||head===uid,can_unlock:isAdmin()||head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:[]};
+    });c.can_view_board=isAdmin()||selector||c.captain;
     if(c.can_view_board)c.returning_context={season:fixtureClone(demoSelections.stats_season),no_play:c.fixtures.filter(f=>demoSelections.result_sources?.[f.id]?.no_play).map(f=>f.id)};
     return demoOK(c);
    }

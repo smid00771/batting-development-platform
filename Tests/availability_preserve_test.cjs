@@ -6,7 +6,7 @@ function setup(file,existing=true){
  const source=fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8'),dom=new JSDOM('<main id="seContent"></main>'),s={view:'availability',date:day,data:{roster_revision:4,access:{timezone:'Australia/Sydney'},availability_dates:existing?[{date:day,bulk_saved_at:'2026-10-15T22:05:00Z',updated_at:'2026-10-15T22:06:00Z'}]:[],roster:existing?[player('Alice',[],[day]),player('Bob',[day]),player('Casey',[day])]:[player('Alice'),player('Bob'),player('Casey')]}};
  const calls=[];let leave=true;
  const c=vm.createContext({document:dom.window.document,Date,Intl,FormData:dom.window.FormData,console,session:{user:{id:'admin'}},ensureSelections:()=>s,seCanSetup:()=>true,seEsc:x=>String(x??''),seClubDate:()=>day,confirmLeaveSelections:()=>leave,seNotice:()=>{},drawSelections:()=>c.seAvailability(),seMutate:async(action,data)=>{calls.push({action,data});return false;}});
- vm.runInContext(['seAvailabilityDateLabel','seAvailabilitySetupDate','seAvailabilitySavedNotice','seAvailabilityDateSetup','seAvailability'].map(n=>fn(source,n)).join('\n'),c);
+ vm.runInContext(['seAvailabilityDateLabel','seAvailabilitySetupDate','seAvailabilitySavedNotice','seAvailabilityTeamKey','seAvailabilityTeams','seAvailabilityPool','seAvailabilityDateSetup','seAvailability'].map(n=>fn(source,n)).join('\n'),c);
  const change=(el,event='input')=>el.dispatchEvent(new dom.window.Event(event,{bubbles:true}));
  return {s,c,calls,doc:dom.window.document,change,leave:v=>leave=v,box:id=>dom.window.document.querySelector('[name="unavailable"][value="'+id+'"]'),submit:()=>dom.window.document.getElementById('seAvailabilityDateForm').onsubmit({preventDefault(){}})};
 }

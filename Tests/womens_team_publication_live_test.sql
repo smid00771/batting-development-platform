@@ -50,8 +50,8 @@ begin
   set local role authenticated;
   rejected:=false;begin perform public.club_selections_api(c,'publish',req);exception when raise_exception then rejected:=true;end;assert rejected,'Other groups still reject thirteen';
   reset role;update club_selection_private.selection_groups set normal_player_limit=13 where id=sg;
-  perform set_config('request.jwt.claim.sub',a::text,true);set local role authenticated;
-  rejected:=false;begin perform public.club_selections_api(c,'publish',req);exception when raise_exception then rejected:=true;end;assert rejected,'Admin cannot override publishing authority';
+  perform set_config('request.jwt.claim.sub',u::text,true);set local role authenticated;
+  rejected:=false;begin perform public.club_selections_api(c,'publish',req);exception when raise_exception then rejected:=true;end;assert rejected,'Ordinary members cannot publish teams';
   reset role;perform set_config('request.jwt.claim.sub',h::text,true);
   update club_selection_private.fixtures f set slots=f.slots||jsonb_build_array(jsonb_build_object('d1',roster[14],'d2',null)) where id=fid;
   set local role authenticated;

@@ -14,8 +14,8 @@ function harness({direct=false,fail=false}={}){
   seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seEsc:esc,seAvailabilityDateSetup(){},seBindAvailabilityFixtures(){},drawSelections:draw,seSlotButton:()=>dom.window.document.getElementById('slot'),
   selectionEvidence:{invalidate(){},pause(){}},seGuardFixtureEdit:()=>true,seButtonWorking:()=>()=>{},seLock(){},seNotice:text=>s.notice=text,refreshClubMessageBadge(){},
   seRPC:async(action,data)=>{calls.push({action,data:structuredClone(data)});if(failures-->0)throw Error('Connection interrupted');if(action==='availability'){player.availability={revision:3,available_dates:[...data.available_dates]};return {saved:true};}return {saved:true};},seReload:async()=>true});
- vm.runInContext(['sePickerOpenAvailability','seReturnFromAvailability','seAvailability','seMutate','sePersist','seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(extract).join('\n'),c);
- if(direct)c.seAvailability('player');else c.sePickerOpenAvailability('player');
+ vm.runInContext(['sePickerOpenAvailability','seReturnFromAvailability','seAvailability','seMutate','sePersist','seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seCopyState','seTeamPlayerLimit','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(extract).join('\n'),c);
+ if(direct){s.availabilityMonth='2026-10';c.seAvailability('player');}else c.sePickerOpenAvailability('player');
  const save=async()=>{dom.window.document.querySelector('[data-se-date="2026-10-24"]').click();await dom.window.document.getElementById('seAvailabilityForm').onsubmit({preventDefault(){}});};
  return {c,s,f,player,calls,scroll,dom,active,save};
 }
