@@ -1,9 +1,9 @@
 {
-  "appVersion": "0.8.62.336",
+  "appVersion": "0.8.62.337",
   "sources": {
     "action-feedback.js": "ac05754280949d1a30a92a8937e40309104998e9c323d7cc2031bd6feb66d1bc",
     "app-design.css": "5e35fbcd1594e2fc927fdfdb8124af240247b1139bab2f8a466c22ad3137d07a",
-    "app.js": "080db1a9082144cd8a5c8e368bd3791d3e0b7acff4148c0bbadb31a59cee43df",
+    "app.js": "56908c8929020b64a659acdab7dd394b1a4ca10f47d6769244312f7009d735a0",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "availability-fixtures.js": "4dfcfa67ec367f1cd4f946731a641728210bf6a51d49127f7f6c4128c229bc60",
@@ -78,10 +78,10 @@
     "social-sandbox.js": "6e17e7ce9359e97fcf8b8fff16140aae02d7dc29f360800754b53e6fdb1e04be",
     "social-team-layout.js": "16ba93bbf243e6501ffbed06801ea96a900a0f368929f9122ac96fd440c0d2eb",
     "social-team-workflow.js": "7df5dd3aef8f3863e01b66bac9f34529552e2a4ac0dc07dc142ab60b05da885c",
-    "social-workspace.js": "4acea1486c537076aa1624394d8d9038d39f63b2cc228aa6d38847feda593e47",
+    "social-workspace.js": "6e8274ffb90c2cda488a689b5aa7ddf1a2375e81de7710aeff2c4b5238141755",
     "styles.css": "2eb131ae2558239bad24075528d1eeafca383947422cadec00aca2f8e1946015",
     "team-of-week-demo.js": "abc3bd63ea017fdc1a929610a25e4875d485df1a2164df8e9340df5a728b7426",
-    "team-of-week.js": "832fa4c711eeaf2931bf4baf34513a11362e4807766709982b603df33ae24f1e",
+    "team-of-week.js": "24b9719fc62e60f6ab0fcfe626425a254ca4526b21e66fbd7bc581b1a715f593",
     "team-week-basic.js": "883e4d6751d06eff6bd15afc2d98ee2884d300129204c2ee012b96f54b8f1981",
     "team-week-reference.js": "33f58bd63b375aaeb944d1d2bcc1cacbbf1c426425b4e64e919cef9b80264e52",
     "video-credits.js": "79c9f32e0c0f913053334a832b315bb838e3d8de32ab86a965f5cf37ab6aaecb"

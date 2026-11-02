@@ -241,7 +241,15 @@ export function createTeamOfWeek(h){
   checkGraphicLabel(canvas,ctx,{source:title,label:title.toUpperCase(),width:1080-2*layout.left,size:layout.week_size});h.text(ctx,title.toUpperCase(),layout.left,y(layout.week_y),1080-2*layout.left,layout.week_size);
   const gap=y(layout.bottom-layout.top)/10,size=Math.min(49*layout.font_scale/100,gap*.9),nameWidth=Math.max(180,layout.figures_right-layout.left-280),figureWidth=Math.max(150,layout.figures_right-layout.left-nameWidth-20),gradeWidth=Math.max(70,layout.grade_right-layout.figures_right-20);
   const gradeAlign=['left','center','right'].includes(layout.grade_align)?layout.grade_align:'right',gradeX=layout.grade_right-(gradeAlign==='center'?gradeWidth/2:gradeAlign==='left'?gradeWidth:0);
-  for(const [i,p] of rows.entries()){const line=y(layout.top)+i*gap;ctx.textAlign='left';h.text(ctx,p.name.toUpperCase(),layout.left,line,nameWidth,size);ctx.textAlign='right';h.text(ctx,teamWeekFigures(p),layout.figures_right,line,figureWidth,size);const label=teamWeekGrade(p.grade,layout);checkGraphicLabel(canvas,ctx,{source:p.grade,label,width:gradeWidth,size:size-2,grade:true});ctx.textAlign=gradeAlign;h.text(ctx,label,gradeX,line,gradeWidth,size-2);}
+  ctx.font=`700 ${size}px ${ctx.socialFont}`;const markerWidth=ctx.measureText('*').width+1,numberRight=layout.figures_right-markerWidth;
+  for(const [i,p] of rows.entries()){
+   const line=y(layout.top)+i*gap,figures=teamWeekFigures(p),notOut=figures.endsWith('*');
+   ctx.textAlign='left';h.text(ctx,p.name.toUpperCase(),layout.left,line,nameWidth,size);
+   // Reserve the marker's space on every row so the digits align and team labels keep their gap.
+   ctx.textAlign='right';h.text(ctx,notOut?figures.slice(0,-1):figures,numberRight,line,figureWidth-markerWidth,size);
+   if(notOut){ctx.textAlign='left';ctx.fillText('*',numberRight+1,line);}
+   const label=teamWeekGrade(p.grade,layout);checkGraphicLabel(canvas,ctx,{source:p.grade,label,width:gradeWidth,size:size-2,grade:true});ctx.textAlign=gradeAlign;h.text(ctx,label,gradeX,line,gradeWidth,size-2);
+  }
   ctx.textAlign='left';
  }
  async function paint(s){const w=state(s),token=++w.render,canvas=document.getElementById('twCanvas'),status=document.getElementById('twPreviewStatus');if(!canvas)return;w.previewReady=false;saveControls(s);
