@@ -8,7 +8,7 @@ function harness(source){
  const target=fixture('target','2099-10-31'),s={data:{selector:true,access:{timezone:'Australia/Sydney',fixture_defaults:{rows:[]}},members:[],fixtures:[target],roster:[{id:'a',name:'Alex',active:true},{id:'b',name:'Blair',active:true},{id:'c',name:'Casey',active:false}]}};
  let confirmed=true,saved=true;const unavailable=new Set();
  const c=vm.createContext({document,FormData:dom.window.FormData,structuredClone,ensureSelections:()=>s,recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},seCanSetup:()=>true,seFixtureLocked:()=>false,seEsc:String,seGradeFields:()=>'<select name="grade"><option value="5th Grade">5th Grade</option></select>',SE_FORMATS:[['t20','T20'],['limited_overs','Limited Overs'],['long_form','Long-form']],seOpt:(opts,value)=>opts.map(([v,label])=>`<option value="${v}" ${v===value?'selected':''}>${label}</option>`).join(''),fixtureResults:{canLeave:()=>true},fixtureCorrectionDecorateEditor(){},seMountFixtureScores(){},seReadGrade:()=>({grade:'5th Grade',grade_group_id:null}),seBindGrade(){},confirmLeaveSelections:()=>true,drawSelections(){},seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Unknown',seDate:String,seNotice:message=>notices.push(message),confirm:message=>{prompts.push(message);return confirmed;},seDayStatus:(p,day)=>unavailable.has(p.id+':'+day.date)?'unknown':'available',seMutate:async(action,data,options)=>{requests.push({action,data,options});return saved;}});
- vm.runInContext(['seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seFixtureEditor','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(name=>extract(source,name)).join('\n'),c);
+ vm.runInContext(['seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seFixtureEditor','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seTeamPlayerLimit','seCopyLast'].map(name=>extract(source,name)).join('\n'),c);
  return {c,s,target,document,requests,prompts,notices,unavailable,confirm:value=>confirmed=value,saved:value=>saved=value,submit:()=>document.getElementById('seFixtureForm').onsubmit({preventDefault(){}})};
 }
 for(const file of ['app.js','demo.html']){
@@ -88,4 +88,13 @@ test('app: copy keeps unaffected dates, skips duplicate identities and ignores c
  h.s.data.roster.push({id:'alias',name:'  ALEX  ',active:false});
  const previous=fixture('previous','2099-10-10',{slots:[{d1:'a',d2:'b'},{d1:'b',d2:'b'}]}),other=fixture('other','2099-10-31',{slots:[{d1:'alias',d2:null}]}),cancelled=fixture('cancelled','2099-10-31',{cancelled:true,slots:[{d1:'b',d2:'b'}]});h.s.data.fixtures.push(previous,other,cancelled);
  await h.c.seCopyLast('target');const slots=plain(h.requests[0].data.fixtures[0].slots);assert.deepEqual(slots[0],{d1:null,d2:'b'});assert.deepEqual(slots[1],{d1:'b',d2:null},'Same-day duplicates in the source also leave a blank');
+});
+
+test('copy keeps all thirteen players for a group with a normal allowance of thirteen',async()=>{
+ const h=harness(fs.readFileSync('app.js','utf8'));h.target.normal_player_limit=13;
+ const slots=Array.from({length:13},(_,i)=>({d1:'women-'+i,d2:'women-'+i}));
+ h.s.data.roster=slots.map((slot,i)=>({id:slot.d1,name:'Example player '+i,active:true}));
+ h.s.data.fixtures.push(fixture('previous','2099-10-10',{slots}));
+ await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots),slots);
+ assert.match(h.notices.at(-1),/13 players/);
 });

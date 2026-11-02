@@ -330,7 +330,7 @@ supabase.rpc=async function(name,args={}){
     c.fixtures=demoSelections.fixtures.filter(f=>isAdmin()||demoGrant(demoGroupFor(f))>0||demoCaptainUsers(f.details).includes(uid)||f.published).map(f=>{
      const group=demoGroupFor(f),view=demoGrant(group)>0||demoCaptainUsers(f.details).includes(uid),head=demoGroupHead(group),base=view?fixtureClone(f):{id:f.id,publication:f.publication,published:fixtureClone(f.published),...(f.published?{details:fixtureClone(f.published.details),slots:fixtureClone(f.published.slots)}:isAdmin()?{details:fixtureClone(f.details),revision:f.revision}:{})};
      const source=demoSelections.result_sources?.[f.id],completed=!!source?.match_id&&!source.no_play&&Object.values(demoScorecards).some(card=>card.match_id===source.match_id&&card.status==='completed');
-     return {...base,result_complete:completed,selection_group_id:group,draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:[]};
+     return {...base,result_complete:completed,selection_group_id:group,normal_player_limit:demoNormalPlayerLimit(f),draft_visible:view,can_edit:demoGrant(group)>=2,can_publish:head===uid,can_unlock:head===uid,group_head_id:head,can_comment:view,can_post_comment:demoGrant(group)>=2||demoCaptainUsers(f.details).includes(uid),issues:[]};
     });c.can_view_board=selector||c.captain;
     if(c.can_view_board)c.returning_context={season:fixtureClone(demoSelections.stats_season),no_play:c.fixtures.filter(f=>demoSelections.result_sources?.[f.id]?.no_play).map(f=>f.id)};
     return demoOK(c);

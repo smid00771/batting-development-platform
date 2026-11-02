@@ -2,12 +2,12 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {openDemo}=require('./helpers/demo_harness.cjs');
 const plain=x=>JSON.parse(JSON.stringify(x));
-async function setup(t,count=12){
+async function setup(t,count=12,limit=11){
  const h=await openDemo({product:'select',role:'head',journey:'selections'});t.after(h.close);
- h.window.testCount=count;
+ h.window.testCount=count;h.window.testLimit=limit;
  h.window.eval(`
   const f=demoSelections.fixtures.find(f=>f.id==='dev-navy-upcoming');
-  f.published=null;f.publication=0;
+  f.published=null;f.publication=0;demoGroups.selection_groups.find(g=>g.id===demoGroupFor(f)).normal_player_limit=window.testLimit;
   for(let i=11;i<window.testCount;i++){
    const p=structuredClone(demoSelections.roster.find(p=>p.id===f.slots[0].d1));
    p.id='twelve-test-'+i;p.name='Test Extra '+i;p.user_id=null;p.keeper=false;
@@ -86,4 +86,18 @@ test('another selector publishing while the picker is open reloads the locked te
  assert.equal(h.window.eval("seFixtureLocked(selectionState.data.fixtures.find(f=>f.id==='dev-navy-upcoming'))"),true);
  assert.equal(h.window.eval("selectionState.data.fixtures.find(f=>f.id==='dev-navy-upcoming').slots.filter(s=>s.d1).length"),11);
  assert.deepEqual(h.errors.map(e=>e.message),[]);
+});
+
+for(const count of [12,13])test(`configured women's group publishes ${count} without a size acknowledgement`,async t=>{
+ const h=await setup(t,count,13);assert.equal(h.document.querySelector('[data-se-ack-twelve]'),null);
+ assert.equal(h.window.eval("seOverflowText(selectionState.data.fixtures.find(f=>f.id==='dev-navy-upcoming'))"),'');
+ assert.equal(h.document.querySelector('#seConfirmPublish').disabled,false);
+ if(h.document.querySelector('#seAcknowledge'))await h.click('#seAcknowledge');await h.click('#seConfirmPublish');
+ assert.deepEqual(plain(h.window.publishRequests[0].acknowledge_twelve),[]);
+ assert.equal(h.window.eval("demoSelections.fixtures.find(f=>f.id==='dev-navy-upcoming').published.slots.filter(s=>s.d1).length"),count);
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});
+test('women’s allowance still blocks fourteen players',async t=>{
+ const h=await setup(t,14,13);assert.equal(h.document.querySelector('#seConfirmPublish').disabled,true);
+ assert.match(h.document.querySelector('#sePublishChecks').textContent,/14 players/);
 });

@@ -1,9 +1,9 @@
 {
-  "appVersion": "0.8.62.337",
+  "appVersion": "0.8.62.338",
   "sources": {
     "action-feedback.js": "ac05754280949d1a30a92a8937e40309104998e9c323d7cc2031bd6feb66d1bc",
     "app-design.css": "5e35fbcd1594e2fc927fdfdb8124af240247b1139bab2f8a466c22ad3137d07a",
-    "app.js": "56908c8929020b64a659acdab7dd394b1a4ca10f47d6769244312f7009d735a0",
+    "app.js": "2a6097a87a28bee8668c46980330c8dbc7a0afe88db3843264e8d9637a83bf42",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "availability-fixtures.js": "4dfcfa67ec367f1cd4f946731a641728210bf6a51d49127f7f6c4128c229bc60",
@@ -12,9 +12,9 @@
     "club-week-panel.js": "4ac35eddfc9b85e9a95ecd97c95e1c876a4908a1fb9f3b9533376fe53d6b836a",
     "club-week.js": "8cf32ed2eb59ce212ad26677133fd539ea9a4e52443527b89cb396e37d3c8c9f",
     "deferred-feature.js": "ab3d69675c974b10b5cbea9fcdecb9500306d0fc6d827ed06e35ed1c26c4780f",
-    "Demo/current-fixtures.js": "2c0123111401ff62f7c283f4d81ba58b41bff8d8ede6b63fdfcc67f38efeed87",
+    "Demo/current-fixtures.js": "83645c6e74617cfcbf49df164a966012049499734c2c2b20aef1fa8b23b7f915",
     "Demo/demo.css": "e8692b88ac16b44b09c26ecfea033e1f5e66e0efeedd80efe604d6819ba00c6c",
-    "Demo/fixtures.js": "374a7d22e0dd9dec79f7f8c25b15fe51f841d77086b903f314909c9bbb49dc2a",
+    "Demo/fixtures.js": "47edbd2e53ec902d6723c9ba449a566c649aa0336f3071a41f9205eca089b8f6",
     "Demo/isolation.js": "ae711c7b1eff101ab5cc822caa67905ca3edcf27442cdf3e5e2f198666b3fa96",
     "Demo/journeys.js": "d0cccc862338f732a294ecd0f9e345331246204f95971f365902fdee2f42e37f",
     "Demo/template.html": "57df21c9dce29c9b12d38197a61487cf38c583ab6370ba7f4a9a03e517f76aff",

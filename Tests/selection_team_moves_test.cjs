@@ -11,7 +11,7 @@ function harness(fixtures=[team('A'),team('B'),team('C')]){
  const s={key:'selector:club',view:'board',busy:false,pending:null,undo:[],data:{selector:true,fixtures,roster,access:{timezone:'UTC'}}},calls=[],notices=[],orders=[];let saveResult=true;
  const c=vm.createContext({Date,Intl,structuredClone,selectionEvidence:{pause(){}},ensureSelections:()=>s,selectionState:s,currentTab:'teams',selectionsScopeKey:()=>s.key,seName:id=>s.data.roster.find(p=>p.id===id)?.name||'Vacant',seNotice:text=>notices.push(text),seDate:String,sePickerSaved(){s.active=null;},seBoard(){},seFocusOrder(){},seMoveOrder:async(...args)=>{orders.push(args);return true;},seMutate:async(action,data,options)=>{calls.push({action,data,options});return saveResult;}});
  vm.runInContext(fs.readFileSync('player-bowling.js','utf8').replace(/^export /gm,''),c);
- vm.runInContext(['seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seDayTime','seUsed','seFixtureCompleted','seFixtureLocked','seOrderName','seTeamNumbers','seBlankSlots','seClearTeam','seTrimSlots','seOverflow','seOverflowText','seTransferProblem','seMovePlan','seMovePlayer','seClearOrder'].map(extract).join('\n'),c);
+ vm.runInContext(['seDayStatus','seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seDayTime','seUsed','seFixtureCompleted','seFixtureLocked','seOrderName','seTeamPlayerLimit','seTeamNumbers','seBlankSlots','seClearTeam','seTrimSlots','seOverflow','seOverflowText','seTransferProblem','seMovePlan','seMovePlayer','seClearOrder'].map(extract).join('\n'),c);
  return {c,s,calls,notices,orders,saved:value=>saveResult=value};
 }
 const occupied=(f,day='d1')=>f.slots.map(slot=>slot[day]).filter(Boolean);
@@ -166,7 +166,7 @@ test('tap dialog disables a no-op, enables a new position and cancels without sa
 
 test('tap dialog exposes overflow before moving and submits one atomic request',async()=>{
  const h=interactionHarness();h.handle('A').click();const dialog=h.document.getElementById('seOrderDialog'),choice=dialog.querySelector('#seOrderTeam');choice.value='B';choice.dispatchEvent(new h.dom.window.Event('change'));
- assert.match(dialog.querySelector('#seMoveHint').textContent,/12\/11/);assert.equal(dialog.querySelector('#seOrderPosition').options.length,12);assert.equal(dialog.querySelector('[type=submit]').disabled,false);dialog.querySelector('form').onsubmit({preventDefault(){}});await Promise.resolve();
+ assert.match(dialog.querySelector('#seMoveHint').textContent,/12 players/);assert.equal(dialog.querySelector('#seOrderPosition').options.length,12);assert.equal(dialog.querySelector('[type=submit]').disabled,false);dialog.querySelector('form').onsubmit({preventDefault(){}});await Promise.resolve();
  assert.equal(h.document.getElementById('seOrderDialog'),null);assert.equal(h.calls.length,1);assert.equal(h.calls[0].data.fixtures.length,2);assert.equal(h.calls[0].options.order.id,'B');assert.equal(h.calls[0].options.order.slot,11);
 });
 
@@ -181,7 +181,7 @@ test('Escape closes the tap dialog and stale target changes cannot be submitted'
 });
 
 test('cross-team pointer drop previews an insertion and suppresses its following click',async()=>{
- const h=interactionHarness(),before=plain(h.s.data.fixtures);h.start();h.pointer('pointermove',450,250);assert.ok(h.document.querySelector('[data-se-team="B"].se-team-drop'));assert.match(h.document.querySelector('.se-order-ghost').textContent,/B.*12\/11/);assert.equal(h.document.querySelector('.se-order-marker').parentElement.dataset.seOrderList,'B');assert.deepEqual(plain(h.s.data.fixtures),before,'Hover never changes data');
+ const h=interactionHarness(),before=plain(h.s.data.fixtures);h.start();h.pointer('pointermove',450,250);assert.ok(h.document.querySelector('[data-se-team="B"].se-team-drop'));assert.match(h.document.querySelector('.se-order-ghost').textContent,/B.*12 players/);assert.equal(h.document.querySelector('.se-order-marker').parentElement.dataset.seOrderList,'B');assert.deepEqual(plain(h.s.data.fixtures),before,'Hover never changes data');
  h.pointer('pointerup',450,250);await Promise.resolve();assert.equal(h.calls.length,1);assert.equal(h.calls[0].options.order.id,'B');assert.equal(h.calls[0].options.order.slot,5);assert.equal(h.document.querySelector('.se-order-ghost,.se-order-marker,.se-team-drop'),null);assert.equal(h.s.ordering,false);h.handle('A').click();assert.equal(h.document.getElementById('seOrderDialog'),null,'Synthetic click after a drag must not open the move dialog');
 });
 
@@ -235,7 +235,7 @@ test('clear team cancellation, stale revision, empty team and access guards neve
 test('move feedback distinguishes filling a vacancy from adding a twelfth player',async()=>{
  for(const vacant of [false,true]){
   const h=harness(),[a,b]=h.s.data.fixtures;if(vacant)b.slots[4]={d1:null,d2:null};await h.c.seMovePlayer(a.id,0,b.id,2,a.revision,b.revision);
-  const note=h.calls[0].options.order.feedback;assert.match(note,/A: 10\/11/);assert.match(note,vacant?/B: 11\/11/:/B: 12\/11/);assert.equal(note.includes('vacant place filled'),vacant);
+  const note=h.calls[0].options.order.feedback;assert.match(note,/A: 10\/11/);assert.match(note,vacant?/B: 11\/11/:/B: 12 players/);assert.equal(note.includes('vacant place filled'),vacant);
  }
 });
 
@@ -255,12 +255,12 @@ function savedBoardHarness(fixtures=[team('A'),team('B')]){
  vm.runInContext(['seRPC','seReload','seMutate','seCounts','seBoardCounts','seTeamChangeNotice','seCopyState','seCopyControls','seTeamCard'].map(extract).join('\n'),h.c);
  return {...h,document,requests,stored:()=>stored};
 }
-test('full XI move survives save and reload, renders 12/11 with warning, and Undo restores both teams',async()=>{
+test('full XI move survives save and reload, renders twelve with warning, and Undo restores both teams',async()=>{
  const h=savedBoardHarness(),before=plain(h.s.data.fixtures),[a,b]=h.s.data.fixtures;
  assert.equal(await h.c.seMovePlayer(a.id,3,b.id,4,a.revision,b.revision),true);assert.equal(h.requests.length,1);
  assert.deepEqual(h.s.data.fixtures.map(f=>occupied(f).length),[10,12]);assert.equal(h.document.querySelectorAll('[data-se-team="B"] [data-row]').length,12);
- assert.ok(h.document.querySelector('[data-se-team="B"].se-team-overfull'));assert.match(h.document.querySelector('[data-se-team="B"] .se-overflow-count').textContent,/12\/11/);
- assert.match(h.document.querySelector('[data-se-team="B"] .se-team-change').textContent,/A: 10\/11.*B: 12\/11/);assert.equal(h.s.undo.length,1);
+ assert.ok(h.document.querySelector('[data-se-team="B"].se-team-overfull'));assert.match(h.document.querySelector('[data-se-team="B"] .se-overflow-count').textContent,/12 players/);
+ assert.match(h.document.querySelector('[data-se-team="B"] .se-team-change').textContent,/A: 10\/11.*B: 12 players/);assert.equal(h.s.undo.length,1);
  assert.deepEqual(h.s.data.fixtures.flatMap(f=>occupied(f)).sort(),before.flatMap(f=>occupied(f)).sort());
  const undo=h.s.undo.at(-1);await h.c.seMutate('save_board',{fixtures:undo.before.map(f=>({...f,revision:undo.expected[f.id]}))});
  assert.deepEqual(plain(h.s.data.fixtures.map(f=>f.slots)),before.map(f=>f.slots));assert.equal(h.document.querySelector('.se-team-overfull,.se-team-change'),null);

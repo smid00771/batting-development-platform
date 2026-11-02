@@ -8,7 +8,7 @@ const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
 let exercisedSource=source;
 function get(name){const source=exercisedSource;const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const start=match.index,next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
-const names=['seScorecardNote','seRevealPublication','sePublishReview','seWithSavedRoles','seShortTeams','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seButtonWorking','seMutate','seLock','sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seIsCaptain','seCanSetup','seBindPublishedActions','sePublished'];
+const names=['seScorecardNote','seRevealPublication','sePublishReview','seWithSavedRoles','seShortTeams','seTeamPlayerLimit','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seButtonWorking','seMutate','seLock','sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seIsCaptain','seCanSetup','seBindPublishedActions','sePublished'];
 // The parked demo keeps its older team-card actions and notice presentation; publication behaviour is exercised in both below.
 for(const name of names.filter(name=>!['seNotice','sePersist','seMutate','seBindPublishedActions','sePublished'].includes(name)))assert.ok(demo.includes(get(name)),'Demo shares '+name);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -26,11 +26,11 @@ function harness({stale=false,timeout=false,warn=true,short=false,failReload=fal
  const receipts=new Map(),requests=[],social={view:'awards',data:{fixtures:[]}};
  const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date:PublicationDate,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,fixtureSessionStorage:dom.window.sessionStorage,
   session:{user:{id:'head'}},membership:{permission_role:'selector'},hasMatchCaptainAccess:()=>false,club:{id:'club',name:'Test Club'},selectionState:s,currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
-  seEsc:esc,seDate:x=>x,seBoard:()=>{},seReviewLabel:()=> 'Captain checked',sePublicationChangeSummary:()=>'<p>Review lineup</p>',
+  selectionEvidence:{pause(){}},seMatchRoleIssues:()=>[],seMatchRoles:()=>({}),seEsc:esc,seDate:x=>x,seBoard:()=>{},seReviewLabel:()=> 'Captain checked',sePublicationChangeSummary:()=>'<p>Review lineup</p>',
   seFixtureLocked:()=>false,seCanRecordFixtureResults:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,
   seFormatLabel:()=> 'Limited overs',seSnapshotName:(snap,id)=>esc(snap.players.find(p=>p.id===id)?.name||'Vacant'),seSnapshotSplit:()=>false,sePublicationStamp:()=> 'Published version 1',
   confirmLeaveSelections:()=>true,socialEnsure:()=>social,refreshClubMessageBadge:()=>{},sePickerSaved:()=>{},
-  supabase:{rpc:async(_,args)=>{const {p_action:action,p_data:data}=args;requests.push({action,data:structuredClone(data)});
+  supabase:{rpc:async(_,args)=>{const {p_action:action,p_data:data}=args;if(action==='publication_check')return {data:{fixtures:server.map(f=>({id:f.id,revision:f.revision,issues:f.issues}))}};requests.push({action,data:structuredClone(data)});
    if(receipts.has(data.request_id))return {data:receipts.get(data.request_id)};
    if(action==='save_board'){server=server.map(f=>({...data.fixtures.find(x=>x.id===f.id)||f,revision:f.revision+1}));return {data:{saved:true}};}
    assert.equal(action,'publish');if(stale)return {error:{code:'P0001',message:'Draft changed. Review the latest team before publishing'}};if(timeout)return {error:{code:'57014',message:'canceling statement due to statement timeout'}};if(badResponse)return {data:{saved:true}};
