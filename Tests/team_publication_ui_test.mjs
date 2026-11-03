@@ -56,7 +56,7 @@ h.document.getElementById('seAcknowledge').checked=true;await h.document.getElem
 assert.equal(h.publicationCount(),1);assert.equal(h.s.view,'published');assert.equal(h.s.pending,null);
 assert.match(h.document.getElementById('seNotice').textContent,/6 teams published.*Messages created for 7.*existing grades kept/);
 assert.equal(h.document.querySelectorAll('.se-team-head').length,6);assert.equal(h.document.activeElement.id,'seNotice');
-h.document.getElementById('sePublishedGraphics').click();assert.equal(h.s.view,'socials');assert.equal(h.social.view,'graphics');assert.equal(h.socialLoads(),1);assert.equal(h.social.data.fixtures.length,6);assert.equal(h.social.date,'2099-10-17');assert.equal(h.social.selected.size,6);
+assert.equal(h.document.getElementById('sePublishedGraphics'),null,'Social Graphics remains the navigation entry; publication adds no duplicate button');assert.equal(h.socialLoads(),0);
 
 // Preparing default roles still opens review; a draft save is never reported as publication.
 const prepared=harness({prepare:true});await prepared.ctx.seWithSavedRoles(prepared.s.data.fixtures,prepared.ctx.sePublishReview);

@@ -97,7 +97,9 @@ test('role choices keep Socials, player and administrator permissions separate',
   assert.equal(h.document.querySelector('[data-se-view="socials"]'), null);
   await h.choose('#demoPersona', 'admin');
   assert.match(h.document.getElementById('demoRole').textContent, /Club Admin/);
-  assert.equal(h.document.querySelector('[data-se-view="board"]'), null);
+  assert.ok(h.document.querySelector('[data-se-view="board"]'));
+  assert.ok(h.document.querySelector('[data-se-view="socials"]'));
+  assert.equal(h.window.ensureSelections().data.selection_editor, false);
   await h.choose('#demoPersona', 'selector');
   assert.ok(h.document.querySelector('[data-se-view="board"]'));
   assert.equal(h.document.querySelector('[data-se-view="published"]'), null);
