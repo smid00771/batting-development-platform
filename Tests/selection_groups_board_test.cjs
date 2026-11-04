@@ -6,7 +6,7 @@ function setup(){const dom=new JSDOM('<div id="seContent"></div>'),s={selectionG
  {id:'b-new',selection_group_id:'b',details:{grade:'Evening XI',days:[{date:'2099-10-19'}]}}
  ]}},calls=[];let mayLeave=true;
  const c=vm.createContext({Date,Intl,document:dom.window.document,ensureSelections:()=>s,seClubDate:()=> '2099-10-15',seOpt:(opts,v)=>opts.map(([id,n])=>`<option value="${id}" ${id===v?'selected':''}>${n}</option>`).join(''),confirmLeaveSelections:()=>mayLeave,recordSelectionNavigation:()=>calls.push('navigation'),seEditSelectionGroups:()=>calls.push('setup'),seBoard:()=>calls.push(c.seBoardFixtures().map(f=>f.id))});
- vm.runInContext(['seSelectionFixtures','seBoardFixtures','seBoardGroupControl','seBindGroupControl'].map(extract).join('\n'),c);return {s,c,calls,dom,mayLeave:v=>mayLeave=v};}
+ vm.runInContext(['seClockMinutes','seSelectionFixtures','seBoardFixtures','seBoardGroupControl','seBindGroupControl'].map(extract).join('\n'),c);return {s,c,calls,dom,mayLeave:v=>mayLeave=v};}
 test('board date, stats fixture input and group dropdown share a single group scope',()=>{
  const h=setup();assert.deepEqual(Array.from(h.c.seSelectionFixtures(),f=>f.id),['a-old','a-new']);assert.deepEqual(Array.from(h.c.seBoardFixtures(),f=>f.id),['a-new']);
  h.dom.window.document.querySelector('#seContent').innerHTML=h.c.seBoardGroupControl();h.c.seBindGroupControl();const select=h.dom.window.document.querySelector('select');select.value='b';select.dispatchEvent(new h.dom.window.Event('change'));
@@ -21,4 +21,11 @@ test('before setup the existing board is retained; unmatched legacy fixtures sta
 test('direct transfer is rejected between Selection Groups without weakening date conflicts',()=>{
  const a={id:'one',selection_group_id:'a',details:{days:[{date:'2099-10-17'}]},slots:[{d1:'player'}]},b={id:'two',selection_group_id:'b',details:{days:[{date:'2099-10-17'}]},slots:[]};
  const c=vm.createContext({seFixtureLocked:()=>false});vm.runInContext(extract('seTransferProblem'),c);assert.match(c.seTransferProblem(a,b,0,{roster:[]}),/same Selection Group/);
+});
+test('double headers run earliest first without changing team order, equal-time order or source data',()=>{
+ const h=setup(),fixture=(id,grade,start,group=grade)=>({id,selection_group_id:'a',details:{grade,grade_group_id:group,days:[{date:h.s.date,start}]}});
+ h.s.data.fixtures=[fixture('afternoon','Cup','14:00'),fixture('second','2nd Grade','9:00'),fixture('morning','Cup','10:00'),fixture('unknown','Cup',''),fixture('nine','Cup','9:00'),fixture('same-time','Cup','10:00'),fixture('invalid','Cup','99:00')];
+ const before=JSON.stringify(h.s.data.fixtures);
+ assert.deepEqual(Array.from(h.c.seBoardFixtures(),f=>f.id),['nine','morning','same-time','afternoon','unknown','invalid','second']);
+ assert.equal(JSON.stringify(h.s.data.fixtures),before);assert.deepEqual(h.calls,[],'Sorting stays local');
 });

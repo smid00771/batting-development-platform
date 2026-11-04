@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.342';
+const APP_UI_VERSION='0.8.62.343';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19414,7 +19414,11 @@ function seBoardFixtures(){
   s.date=active.map(f=>f.details.days[0].date).sort()[0]||dates.at(-1)||'';
  }
  s.boardDateInitialised=true;
- return fixtures.filter(f=>f.details.days[0].date===s.date);
+ const visible=fixtures.filter(f=>f.details.days[0].date===s.date),teamKey=f=>f.details.grade_group_id||f.details.grade,teamOrder=new Map();
+ for(const f of visible)if(!teamOrder.has(teamKey(f)))teamOrder.set(teamKey(f),teamOrder.size);
+ // Preserve the normal team sequence; put each team's double header in time order.
+ return visible.sort((a,b)=>teamOrder.get(teamKey(a))-teamOrder.get(teamKey(b))
+  ||(seClockMinutes(a.details.days[0].start)??1440)-(seClockMinutes(b.details.days[0].start)??1440));
 }
 function seIdentityReviewNotice(){
  const s=ensureSelections(),rows=s.data.identity_reviews||[],fixtures=[...new Set(rows.map(r=>r.fixture_id))].map(id=>s.data.fixtures.find(f=>f.id===id)).filter(Boolean);
