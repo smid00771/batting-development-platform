@@ -9,11 +9,11 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 async function settle(){for(let i=0;i<8;i++)await tick();}
 function context(){return {enabled:true,our_team:'ours',card:{status:'completed',match_id:'match',grade:'First Grade',teams:[{id:'ours',name:'Our club',lineup_available:true,players:[{player_id:'source-a',name:'Alice'},{player_id:'source-b',name:'Bob'}]}]},fixtures:[{id:'fixture',grade:'First Grade',opposition:'Visitors',days:[{date:'2026-10-10'}],slots:[{d1:'a'},{d1:'c'}]}],roster:[{id:'a',name:'Alice',active:true},{id:'b',name:'Bob',active:true},{id:'c',name:'Chris',active:true}],links:[]};}
 function preview(){return {changed:true,expected:'revision-check',fixtures:[{id:'fixture',grade:'First Grade',added:['Bob'],removed:['Chris']},{id:'other',grade:'Second Grade',departures:[{name:'Bob',date:'2026-10-10'}]}]};}
-function harness(respond){
+function harness(respond,extra={}){
  const dom=new JSDOM('<main id="host"></main>',{url:'https://clubbatting.com'});globalThis.document=dom.window.document;globalThis.window=dom.window;
  const calls=[],host=document.getElementById('host');let here=true,changed=0;
  const ui=createScorecardTeams({escape:esc,scope:()=> 'user',supabase:{rpc:async(name,args)=>{calls.push({name,args});return respond?respond(args,name):{data:args.p_action==='context'?context():args.p_action==='preview'?preview():{saved:true}};}}});
- const options={clubId:'club',snapshotId:'snapshot',here:()=>here,changed:()=>{changed++;}};ui.mount(host,options);
+ const options={clubId:'club',snapshotId:'snapshot',here:()=>here,changed:()=>{changed++;},...extra};ui.mount(host,options);
  return {dom,host,calls,ui,options,leave(){here=false;},get changed(){return changed;}};
 }
 test('identity matching respects remembered registrations and leaves ambiguous names unresolved',()=>{
@@ -189,4 +189,29 @@ test('PlayHQ inactive-only and ambiguous matches require an active choice withou
   assert.equal(h.host.querySelector('[data-pc-same]'),null);const choice=h.host.querySelector('[data-pc-player="source-b"]');assert.ok(choice);
   assert.equal(choice.querySelector('option[value="retired"]'),null);assert.equal(h.calls.length,1);
  }
+});
+test('the review queue asks for its exact-name player even for a PlayCricket card and never updates teams',async()=>{
+ const ctx=context();ctx.card.provider='playcricket_au';ctx.links=[{source_id:'source-a',roster_id:'a'}];
+ const h=harness(async(args,name)=>name==='confirm_scorecard_player'?{data:{confirmed:true}}:{data:ctx},{identityOnly:true,sourceIds:['source-b'],fixtureId:'fixture',teamId:'ours'});await settle();
+ assert.match(h.host.textContent,/Is Bob the same player as Bob/);assert.doesNotMatch(h.host.textContent,/Is Alice/);assert.equal(h.calls.length,1);assert.equal(h.host.querySelector('[data-pc-apply]'),null);
+ h.host.querySelector('[data-pc-same]').click();await settle();assert.equal(h.changed,1);assert.equal(h.host.textContent,'');
+ const confirm=h.calls.find(c=>c.name==='confirm_scorecard_player');assert.equal(confirm.args.p_values.source_player_id,'source-b');assert.equal(confirm.args.p_values.fixture_id,'fixture');assert.equal(confirm.args.p_values.expected_name,'Bob');
+ assert.equal(h.calls.filter(c=>['preview','apply'].includes(c.args.p_action)).length,0);
+});
+test('one queued identity stays reviewable with an existing batting link and has no playing-day or new-player choice',async()=>{
+ const ctx=context();ctx.card.provider='playcricket_au';ctx.links=[{source_id:'source-b',roster_id:'b'}];ctx.fixtures[0].brackets=true;ctx.fixtures[0].days.push({date:'2026-10-17'});
+ const h=harness(async()=>({data:ctx}),{identityOnly:true,sourceIds:['source-b'],fixtureId:'fixture',teamId:'ours'});await settle();assert.match(h.host.textContent,/Is Bob the same player as Bob/);
+ h.host.querySelector('[data-pc-different]').click();assert.ok(h.host.querySelector('[data-pc-player="source-b"]'));assert.equal(h.host.querySelector('option[value="new"],[data-pc-days]'),null);assert.equal(h.calls.length,1);
+});
+test('an uncertain queue confirmation blocks leaving and retries its original identity command',async()=>{
+ let attempt=0;const h=harness(async(args,name)=>name==='confirm_scorecard_player'?(++attempt===1?{error:{message:'Connection interrupted'}}:{data:{confirmed:true}}):{data:context()},{identityOnly:true,sourceIds:['source-b'],fixtureId:'fixture',teamId:'ours'});await settle();
+ h.host.querySelector('[data-pc-same]').click();await settle();assert.equal(h.ui.canLeave(),false);assert.match(h.host.textContent,/Retry player link/);
+ h.host.querySelector('[data-pc-retry-identity]').click();await settle();assert.equal(h.ui.canLeave(),true);assert.equal(h.changed,1);assert.equal(h.host.textContent,'');
+ const writes=h.calls.filter(c=>c.name==='confirm_scorecard_player');assert.deepEqual(writes[0].args,writes[1].args);assert.equal(h.calls.filter(c=>c.args.p_action==='apply').length,0);
+});
+test('queue checks and ordinary team checks do not reuse each other’s cached mode',async()=>{
+ const h=harness(async args=>({data:args.p_action==='context'?context():preview()}));await settle();assert.ok(h.host.querySelector('[data-pc-apply]'));
+ h.ui.mount(h.host,{...h.options,identityOnly:true,sourceIds:['source-b'],fixtureId:'fixture',teamId:'ours'});await settle();assert.equal(h.host.querySelector('[data-pc-apply]'),null);assert.match(h.host.textContent,/Is Bob the same player as Bob/);
+ h.ui.mount(h.host,{...h.options,identityOnly:true,sourceIds:['source-a'],fixtureId:'fixture',teamId:'ours'});await settle();assert.match(h.host.textContent,/Is Alice the same player as Alice/);assert.doesNotMatch(h.host.textContent,/Is Bob/);
+ assert.equal(h.calls.filter(c=>c.args.p_action==='preview').length,1);
 });

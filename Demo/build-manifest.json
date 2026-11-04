@@ -1,9 +1,9 @@
 {
-  "appVersion": "0.8.62.343",
+  "appVersion": "0.8.62.344",
   "sources": {
     "action-feedback.js": "ac05754280949d1a30a92a8937e40309104998e9c323d7cc2031bd6feb66d1bc",
     "app-design.css": "5e35fbcd1594e2fc927fdfdb8124af240247b1139bab2f8a466c22ad3137d07a",
-    "app.js": "d9bb9c39089baf057ed7bce52dd972e3f12c0157ecb7855d5977477c68c52fd7",
+    "app.js": "b1efa875fb23185619d1966c8791ac06af27eb5a4f483167504d302d18cd61db",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "availability-fixtures.js": "4dfcfa67ec367f1cd4f946731a641728210bf6a51d49127f7f6c4128c229bc60",
@@ -31,7 +31,7 @@
     "plan-reminder-settings.js": "8f4168c444befbcd7f89d8caa60a261b4bde51b74e635214a67d2c39aec2e12c",
     "playcricket-connection.js": "026627ec30a7f0fae1ccf0e3291fdcc841953a2f3183e30255fc53ae0273be69",
     "playcricket-team-demo.js": "02fd724226ab4d8d4ce48e798348c483b39e80dc94d5dc692a7ffebc5bbe202c",
-    "playcricket-team.js": "63c8be2531880f4284bd66dec58e4fed384d188f6c2b78e9743db66a1d3895af",
+    "playcricket-team.js": "ad2b938c93e9c0db4264a52a15e1f5ecf825a38467d5c202253ca0fce9662539",
     "player-bowling.js": "439d44012d4a11a29be1f450799399c9c4ba46bb5ee1aeeeaddc455a12e51c71",
     "player-fielding.js": "c7b1c6fabbc8be925eacde1b802f4b4f24eaa5b7192215a791fb256c256e49bd",
     "player-name-matching.js": "0761298dbfa19a90a3eb680cd200528a62dbad9076437147074fb80321b78fd0",
