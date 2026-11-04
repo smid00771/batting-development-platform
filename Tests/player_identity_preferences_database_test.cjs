@@ -13,7 +13,7 @@ test('club names, usual teams, safe merges and remembered imported identities',a
   create table club_batting_private.roster_players(roster_id uuid primary key references club_selection_private.roster(id),club_id uuid,player_id uuid unique references public.players(id),claimed_user_id uuid,claimed_at timestamptz);
   create table public.player_playing_groups(club_id uuid,player_id uuid references public.players(id),playing_group_id uuid,unique(club_id,player_id,playing_group_id));
   create table public.player_match_entries(id uuid primary key,player_id uuid references public.players(id),score integer);
-  create table public.match_review_player_links(club_id uuid,source_player_id uuid,player_id uuid references public.players(id),confirmed_by uuid,updated_at timestamptz default now(),primary key(club_id,source_player_id));
+  create table public.match_review_player_links(club_id uuid,source_player_id uuid,player_id uuid references public.players(id),confirmed_by uuid,updated_at timestamptz default now(),primary key(club_id,source_player_id),unique(club_id,player_id));
   create table public.match_review_score_links(club_id uuid,source_player_id uuid,player_id uuid references public.players(id));
   create table public.match_review_scorecards(id uuid primary key,club_id uuid,source_match_id uuid,scorecard jsonb,created_at timestamptz default now());
   create table club_selection_private.scorecard_roster_links(club_id uuid,source_player_id uuid,roster_id uuid references club_selection_private.roster(id),confirmed_by uuid,updated_at timestamptz default now(),primary key(club_id,source_player_id));
@@ -35,11 +35,10 @@ test('club names, usual teams, safe merges and remembered imported identities',a
   create function club_selection_private.fixture_identity(uuid,d jsonb) returns jsonb language sql as $$select d$$;
   create function club_selection_private.fixtures_enabled(c uuid) returns boolean language sql as $$select club_selection_private.enabled(c)$$;
   create function club_selection_private.recover_completed_scorecard_team(uuid,uuid,uuid,uuid,uuid) returns boolean language sql as $$select false$$;
-  create function club_selection_private.scorecard_identity_slots(slots jsonb,old_id uuid,new_id uuid) returns jsonb language sql as $$select replace(slots::text,old_id::text,new_id::text)::jsonb$$;
-  create function club_selection_private.scorecard_identity_roles(details jsonb,old_id uuid,new_id uuid) returns jsonb language sql as $$select replace(details::text,old_id::text,new_id::text)::jsonb$$;
   create function public.can_edit_player(uuid) returns boolean language sql as $$select true$$;
   create function public.can_read_coaching_action_player(uuid) returns boolean language sql as $$select true$$;
  `);
+ await db.exec(read('supabase/migrations/20261017102500_confirm_scorecard_identity.sql').split('create function club_batting_private.confirm_scorecard_player')[0]);
  await db.exec(read('Tests/fixtures/identity_preferences_before_341.sql'));
  await db.exec(read('Database/player_identity_preferences.sql'));
  await db.exec(read('Tests/fixtures/scorecard_identity_public_rpc_before_fix.sql'));
@@ -147,4 +146,80 @@ test('club names, usual teams, safe merges and remembered imported identities',a
  const regularCommand={snapshot_id:regular.sid,fixture_id:regular.fid,team_id:regular.tid,source_player_id:regular.source,roster_id:ordinary,expected_name:'Rob Stone'};
  await confirm(regularCommand);assert.equal((await db.query('select name from club_selection_private.roster where id=$1',[ordinary])).rows[0].name,'Robert James Stone');
  await db.exec('set role authenticated');await assert.rejects(db.query('select * from club_selection_private.player_source_names'),/permission denied/);await db.exec('reset role');
+
+ await t.test('PlayCricket confirmations preserve verified PlayHQ appearances and reject real identity conflicts',async()=>{
+  const {sourceId}=await import('../Functions/playhq-sync/shared-scorecard.mjs');
+  const firstRoster=uuid(),secondRoster=uuid(),secondPlayer=uuid(),foreignClub=uuid();
+  await person(firstRoster,null,'Casey Example','Women 1');
+  await person(secondRoster,secondPlayer,'Kelly Example','Women 1');
+  await db.query('insert into public.player_match_entries values($1,$2,47)',[uuid(),secondPlayer]);
+  async function oldAppearance(rid,name,pid=null,clubId=c){
+   const match=uuid(),source=await sourceId('appearance',match,uuid()),team=uuid();
+   const card={provider:'playhq_au',status:'completed',match_id:await sourceId('match',match),teams:[{id:team,players:[{player_id:source,name}]}],innings:[]};
+   await db.query('insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard) values($1,$2,$3,$4)',[uuid(),clubId,card.match_id,card]);
+   if(rid)await db.query('insert into club_selection_private.scorecard_roster_links(club_id,source_player_id,roster_id,confirmed_by) values($1,$2,$3,$4)',[c,source,rid,admin]);
+   if(pid)await db.query('insert into public.match_review_player_links(club_id,source_player_id,player_id,confirmed_by) values($1,$2,$3,$4)',[c,source,pid,admin]);
+   return source;
+  }
+  const firstOld=await oldAppearance(firstRoster,'Casey Example');
+  const secondOld=await oldAppearance(secondRoster,'Kelly Example');
+  const secondOther=await oldAppearance(secondRoster,'Kelly Example');
+  const firstSource=uuid(),secondSource=uuid(),sid=uuid(),fid=uuid(),tid=uuid(),mid=uuid();
+  const details={grade:'Women 1',format:'t20',days:[{date:'2026-11-04',start:'17:00'}]},slots=[{d1:firstRoster,d2:null},{d1:secondRoster,d2:null}];
+  const card={provider:'playcricket_au',status:'completed',match_id:mid,format_key:'t20',dates:['2026-11-04'],teams:[{id:tid,lineup_available:true,players:[{player_id:firstSource,name:'Casey Example'},{player_id:secondSource,name:'Kelly Example'}]}],innings:[]};
+  await db.query('insert into club_selection_private.fixtures(id,club_id,details,slots) values($1,$2,$3,$4)',[fid,c,details,slots]);
+  await db.query('insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard) values($1,$2,$3,$4)',[sid,c,mid,card]);
+  await db.query('insert into club_selection_private.fixture_result_sources values($1,$2,$3,$4,null)',[c,fid,mid,tid]);
+  const firstCommand={snapshot_id:sid,fixture_id:fid,team_id:tid,source_player_id:firstSource,roster_id:firstRoster,expected_name:'Casey Example',prefer_registration:true};
+  const secondCommand={...firstCommand,source_player_id:secondSource,roster_id:secondRoster,expected_name:'Kelly Example'};
+  await assert.rejects(confirm(firstCommand),/already has a different PlayCricket identity/,'Reproduces a selection-only player with an existing PlayHQ appearance');
+  await assert.rejects(confirm(secondCommand),/already has a different PlayCricket identity/,'Reproduces the player with both a batting profile and earlier appearances');
+  await db.exec(read('Database/scorecard_mixed_provider_identity.sql'));
+  const countBefore=(await db.query('select count(*)::int n from club_selection_private.roster where club_id=$1',[c])).rows[0].n;
+  const savedRequest=uuid(),saved=await confirm(firstCommand,savedRequest);
+  assert.equal(saved.roster_id,firstRoster);assert.equal(saved.player_id,null);assert.equal(saved.name,'Casey Example');
+  assert.deepEqual(await confirm(firstCommand,savedRequest),saved,'Retry returns exactly the saved confirmation');
+  await assert.rejects(confirm({...firstCommand,expected_name:'Stale'},savedRequest),/Request ID already used/);
+  const secondSaved=await confirm(secondCommand);assert.equal(secondSaved.roster_id,secondRoster);assert.equal(secondSaved.player_id,secondPlayer);assert.equal(secondSaved.name,'Kelly Example');
+  assert.equal((await db.query('select source_player_id from public.match_review_player_links where player_id=$1',[secondPlayer])).rows[0].source_player_id,secondSource,'The existing batting profile receives one stable source identity');
+  assert.equal((await db.query('select count(*)::int n from club_selection_private.roster where club_id=$1',[c])).rows[0].n,countBefore,'No duplicate club players are created');
+  const firstLinks=(await db.query('select source_player_id from club_selection_private.scorecard_roster_links where roster_id=$1 order by source_player_id',[firstRoster])).rows.map(r=>r.source_player_id);
+  assert.deepEqual(firstLinks,[firstOld,firstSource].sort(),'Earlier appearance and new stable identity both remain linked');
+  const secondLinks=(await db.query('select source_player_id from club_selection_private.scorecard_roster_links where roster_id=$1 order by source_player_id',[secondRoster])).rows.map(r=>r.source_player_id);
+  assert.deepEqual(secondLinks,[secondOld,secondOther,secondSource].sort());
+  assert.equal((await db.query('select score from public.player_match_entries where player_id=$1',[secondPlayer])).rows[0].score,47,'Saved batting history is preserved');
+  assert.deepEqual((await db.query('select slots from club_selection_private.fixtures where id=$1',[fid])).rows[0].slots,slots,'Selected player IDs and batting order stay the same');
+  await db.query('select club_selection_private.queue_scorecard_identities($1,$2,$3,$4)',[c,sid,fid,tid]);
+  assert.equal((await db.query('select count(*)::int n from club_selection_private.scorecard_identity_reviews where snapshot_id=$1',[sid])).rows[0].n,0,'The same source is not queued again');
+  assert.equal((await db.query("select count(*)::int n from club_selection_private.player_source_names where club_id=$1 and provider='playcricket_au' and roster_id in ($2,$3)",[c,firstRoster,secondRoster])).rows[0].n,2,'Source spellings are remembered for later imports');
+
+  // A legacy global identity, an unproven UUIDv8 and evidence from another club are not appearances.
+  for(const kind of ['global','unknown','other-club']){
+   const roster=uuid(),incoming=uuid(),old=kind==='global'?uuid():kind==='unknown'?await sourceId('appearance',uuid(),uuid()):await oldAppearance(null,'Other Example',null,foreignClub);
+   await person(roster,null,'Other Example','Women 1');
+   await db.query('insert into club_selection_private.scorecard_roster_links(club_id,source_player_id,roster_id,confirmed_by) values($1,$2,$3,$4)',[c,old,roster,admin]);
+   const badCard={...card,teams:[{id:tid,players:[{player_id:incoming,name:'Other Example'}]}]};
+   const badSid=uuid();await db.query('insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard) values($1,$2,$3,$4)',[badSid,c,mid,badCard]);
+   await assert.rejects(confirm({...firstCommand,snapshot_id:badSid,source_player_id:incoming,roster_id:roster,expected_name:'Other Example'}),/already has a different PlayCricket identity/,kind+' conflict is retained');
+  }
+  // The incoming source cannot be reassigned to another established batting history.
+  const otherRoster=uuid(),otherPlayer=uuid();await person(otherRoster,otherPlayer,'Other History','Women 1');
+  await assert.rejects(confirm({...secondCommand,roster_id:otherRoster,expected_name:'Other History'}),/different player history/);
+  const globalRoster=uuid(),globalPlayer=uuid(),globalIncoming=uuid(),globalSid=uuid();await person(globalRoster,globalPlayer,'Global History','Women 1');
+  await oldAppearance(globalRoster,'Global History',globalPlayer);
+  await db.query('insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard) values($1,$2,$3,$4)',[globalSid,c,mid,{...card,teams:[{id:tid,players:[{player_id:globalIncoming,name:'Global History'}]}]}]);
+  await assert.rejects(confirm({...firstCommand,snapshot_id:globalSid,source_player_id:globalIncoming,roster_id:globalRoster,expected_name:'Global History'}),/already has a different PlayCricket identity/,'The global batting-link table retains its one-identity rule even for a known appearance');
+  // Two distinct appearances in this same scorecard cannot become one person, even with a known historical appearance.
+  const collisionRoster=uuid();await person(collisionRoster,null,'Collision Example','Women 1');
+  const collisionOld=await oldAppearance(collisionRoster,'Collision Example'),collisionSource=uuid(),collisionSid=uuid();
+  const collisionCard={...card,teams:[{id:tid,players:[{player_id:collisionSource,name:'Collision Example'},{player_id:collisionOld,name:'Second Person'}]}]};
+  await db.query('insert into public.match_review_scorecards(id,club_id,source_match_id,scorecard) values($1,$2,$3,$4)',[collisionSid,c,mid,collisionCard]);
+  await assert.rejects(confirm({...firstCommand,snapshot_id:collisionSid,source_player_id:collisionSource,roster_id:collisionRoster,expected_name:'Collision Example'}),/This match already has a different player link/);
+  await assert.rejects(confirm(firstCommand,uuid(),other),/Coaching, selection or socials access/);
+  await assert.rejects(confirm(firstCommand,uuid(),admin,foreignClub),/Current club membership/);
+  await assert.rejects(confirm(firstCommand,uuid(),admin,c,'anon'),/permission denied/);
+  await db.exec('set role authenticated');
+  await assert.rejects(db.query('select club_selection_private.is_playhq_appearance($1,$2)',[c,firstOld]),/permission denied/);
+  await db.exec('reset role');
+ });
 });
