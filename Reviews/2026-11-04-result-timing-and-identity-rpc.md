@@ -1,0 +1,41 @@
+# Earlier T20 results and working identity confirmations
+
+Two backend corrections are live. The browser remains 0.8.62.342; no client assets or demo rebuild are needed.
+
+## T20 automatic results
+
+On 4 November, three 17:00 Newcastle City games were manually imported at 19:50–19:51 Sydney. Their automatic jobs subsequently succeeded at 20:30:19–22. The connection and five-minute dispatcher were healthy: the initial T20 result check was scheduled at start + 210 minutes, which was too late for the socials workflow.
+
+The guarded migration changes only the private T20 timing estimate to 150 minutes. Explicit finish times, unknown-start fallback, daylight saving, limited-overs and long-form estimates remain unchanged. Selection overlap still uses its conservative allowance. Missing saved scorecards retain half-hour retries; completed cards retain slower correction checks. Provider errors, leases, eligibility, bounded dispatch and paused connections keep their existing behaviour. There are no browser requests or polling changes.
+
+The one-time update brought 25 eligible upcoming T20 result jobs forward by exactly one hour. Completed/no-play matches, historical matches, active leases, errors, inactive seasons, paused/unverified connections and already-earlier checks are excluded. The next three 17:00 games on 11 November now have 19:30 Sydney due times.
+
+Verification immediately after migration showed:
+
+- All 25 changed jobs moved exactly one hour earlier; every other job field was identical.
+- Fixture and connection hashes were unchanged.
+- Worker, dispatcher and retry-function definitions were unchanged.
+- The timing helper remains inaccessible to anon, authenticated and service_role.
+- The full SQL integration test passed on the live schema and rolled back its synthetic data, covering imports, manual time changes, two playing days, missing/final scorecards and provider backoff.
+
+Applied migration: `20261104111957_playhq_t20_earlier_results.sql`. Helper definition MD5: `d909bfb2f71b07116c3c8dbc9d4efd14` → `5656069c97408b33091dc61b11bc1b40`.
+
+## Yes, link player permission error
+
+The public `confirm_scorecard_player` RPC was an invoker wrapper, while the private implementation permitted only its owner to execute it. Authenticated browsers could reach the wrapper but failed before any identity validation with `permission denied for function confirm_scorecard_player`. Earlier identity tests called the private implementation as the database owner and missed this boundary.
+
+The guarded correction makes only the public wrapper security definer, following the existing `club_selections_api` pattern. Its owner and empty search path are verified. The public and private ACLs are unchanged; the private implementation, including all signed-in-user, club, staff, scorecard, name and receipt checks, is byte-for-byte unchanged. No player records are merged or renamed by this migration.
+
+The local regression now reproduces the old failure through the public RPC under `SET ROLE authenticated`, applies the migration, and confirms successfully through the same route. It covers preferred short names, source-name defaults, persistent identity memory, duplicate-free retry, changed/stale commands, ordinary members, missing identity, other clubs, anonymous execution and denied direct private calls.
+
+The live-schema SQL integration test also calls the real public RPC under the authenticated role. Both confirmations and identical retries passed; remembered source links and deliberately shortened names were preserved. Ordinary-member, other-club and anonymous calls were rejected. All synthetic users and clubs were rolled back, with zero remaining synthetic club rows.
+
+Applied migration: `20261104112534_scorecard_identity_public_rpc_permissions.sql`. Public wrapper MD5: `0e05a8addd4e42a987c590ccdb1637f5` → `0db1edd1cc61073dce22721b43ebd88a`. Private implementation remains `664b5667fe6a3ce946c1008d4190eeea`.
+
+## Checks
+
+49 focused local checks passed across `player_identity_preferences_database_test.cjs`, `scorecard_identity_ui_test.cjs`, `playcricket_team_ui_test.mjs`, `playhq_t20_earlier_results_test.cjs` and `playhq_due_batch_test.cjs`. PGlite tests use the existing local SQL-test dependency through `NODE_PATH`; no production dependency changed. Both live-schema SQL integration scripts passed and rolled back. Recent scheduler runs remained successful.
+
+Security and performance advisors were compared before and after. Performance findings and anonymous-function findings are unchanged. The one additional authenticated security-definer finding is the deliberately guarded public identity wrapper reviewed above; it still rejects unauthorised users in the actual-role tests. See the [Supabase function security guidance](https://supabase.com/docs/guides/database/functions#security-definer-vs-invoker). Existing advisor findings are outside these corrections.
+
+Migration filenames were initially generated by the Supabase CLI and then aligned to the timestamps returned by the applied migration history. Source and migration copies are identical. No Edge Function, authentication setting, client download, user grant, fixture selection or social post was changed.

@@ -42,6 +42,7 @@ test('club names, usual teams, safe merges and remembered imported identities',a
  `);
  await db.exec(read('Tests/fixtures/identity_preferences_before_341.sql'));
  await db.exec(read('Database/player_identity_preferences.sql'));
+ await db.exec(read('Tests/fixtures/scorecard_identity_public_rpc_before_fix.sql'));
  // The existing public wrapper and actual authenticated role exercise the save boundary.
  await db.exec('grant usage on schema auth to authenticated; grant execute on function public.club_selections_api(uuid,text,jsonb) to authenticated; revoke all on function club_selection_private.api(uuid,text,jsonb),club_batting_private.consolidate_scorecard_roster(uuid,uuid,uuid,text) from public,anon,authenticated');
  const c=uuid(),admin=uuid(),other=uuid(),short=uuid(),canonical=uuid(),shortPlayer=uuid(),player=uuid();
@@ -112,9 +113,25 @@ test('club names, usual teams, safe merges and remembered imported identities',a
  const first=await imported(uuid(),'Arun Vijay Raman');
  assert.equal((await db.query('select count(*)::int n from club_selection_private.scorecard_identity_reviews where club_id=$1',[c])).rows[0].n,1,'Unmatched results wait for confirmation');
  const command={snapshot_id:first.sid,fixture_id:first.fid,team_id:first.tid,source_player_id:first.source,roster_id:canonical,expected_name:'Arun V'},confirmation=uuid();
- let confirmed=(await db.query('select club_batting_private.confirm_scorecard_player($1,$2,$3) result',[c,confirmation,command])).rows[0].result;
+ async function confirm(values,request=uuid(),who=admin,club=c,role='authenticated'){
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[who||'']);await db.exec(`set role ${role}`);
+  try{return (await db.query('select public.confirm_scorecard_player($1,$2,$3) result',[club,request,values])).rows[0].result;}finally{await db.exec('reset role');}
+ }
+ await assert.rejects(confirm(command,confirmation),/permission denied for function confirm_scorecard_player/,'Reproduces the browser failure using the real authenticated database role');
+ assert.equal((await db.query('select count(*)::int n from club_selection_private.requests where request_id=$1',[confirmation])).rows[0].n,0,'Rejected confirmation saves no receipt');
+ await db.exec(read('Database/scorecard_identity_public_rpc_permissions.sql'));
+ let confirmed=await confirm(command,confirmation);
  assert.equal(confirmed.name,'Arun V');assert.equal(confirmed.roster_id,canonical);
- assert.deepEqual((await db.query('select club_batting_private.confirm_scorecard_player($1,$2,$3) result',[c,confirmation,command])).rows[0].result,confirmed);
+ assert.deepEqual(await confirm(command,confirmation),confirmed);
+ await assert.rejects(confirm({...command,expected_name:'Changed'},confirmation),/Request ID already used/);
+ await assert.rejects(confirm({...command,expected_name:'Stale'}),/The player name changed/);
+ await assert.rejects(confirm(command,uuid(),other),/Coaching, selection or socials access/);
+ await assert.rejects(confirm(command,uuid(),admin,uuid()),/Current club membership/);
+ await assert.rejects(confirm(command,uuid(),null),/Current club membership/);
+ await assert.rejects(confirm(command,uuid(),admin,c,'anon'),/permission denied for function confirm_scorecard_player/);
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query('select club_batting_private.confirm_scorecard_player($1,$2,$3)',[c,uuid(),command]),/permission denied for function confirm_scorecard_player/);
+ await db.exec('reset role');
  const second=await imported(uuid(),'Arun Vijay Raman',1);
  assert.equal((await db.query('select roster_id from club_selection_private.scorecard_roster_links where source_player_id=$1',[second.source])).rows[0].roster_id,canonical,'A new appearance reuses the explicit remembered identity');
  assert.equal((await db.query('select count(*)::int n from club_selection_private.scorecard_identity_reviews where club_id=$1',[c])).rows[0].n,0,'Confirmed people are not prompted again');
@@ -128,8 +145,6 @@ test('club names, usual teams, safe merges and remembered imported identities',a
  // Ordinary source names remain the default until a club deliberately renames.
  const ordinary=uuid();await person(ordinary,null,'Rob Stone','Dev Sky');const regular=await imported(uuid(),'Robert James Stone',3);
  const regularCommand={snapshot_id:regular.sid,fixture_id:regular.fid,team_id:regular.tid,source_player_id:regular.source,roster_id:ordinary,expected_name:'Rob Stone'};
- await db.query("select set_config('request.jwt.claim.sub','',false)");await assert.rejects(db.query('select club_batting_private.confirm_scorecard_player($1,$2,$3)',[c,uuid(),regularCommand]),/Current club membership/);
- await db.query("select set_config('request.jwt.claim.sub',$1,false)",[admin]);
- await db.query('select club_batting_private.confirm_scorecard_player($1,$2,$3)',[c,uuid(),regularCommand]);assert.equal((await db.query('select name from club_selection_private.roster where id=$1',[ordinary])).rows[0].name,'Robert James Stone');
+ await confirm(regularCommand);assert.equal((await db.query('select name from club_selection_private.roster where id=$1',[ordinary])).rows[0].name,'Robert James Stone');
  await db.exec('set role authenticated');await assert.rejects(db.query('select * from club_selection_private.player_source_names'),/permission denied/);await db.exec('reset role');
 });

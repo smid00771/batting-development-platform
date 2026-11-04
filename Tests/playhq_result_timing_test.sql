@@ -4,9 +4,9 @@ set local statement_timeout='25s';
 do $tests$
 declare c uuid:=gen_random_uuid();u uuid:=gen_random_uuid();g uuid:=gen_random_uuid();sg uuid:=gen_random_uuid();season uuid:=gen_random_uuid();team uuid:=gen_random_uuid();grade uuid:=gen_random_uuid();generation uuid:=gen_random_uuid();mid uuid:=gen_random_uuid();fid uuid;src jsonb;result jsonb;job jsonb;old_due timestamptz;card jsonb;sid uuid;ns uuid:=gen_random_uuid();ours uuid:=gen_random_uuid();theirs uuid:=gen_random_uuid();before_slots jsonb;
 begin
- assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-10-25","start":"10:00"}','Australia/Sydney')='2026-10-25 02:30:00+00'::timestamptz,'Morning T20 due at 13:30 Sydney';
- assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-10-25","start":"14:00"}','Australia/Sydney')='2026-10-25 06:30:00+00'::timestamptz,'Afternoon T20 due at 17:30 Sydney';
- assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-06-01","start":"10:00"}','Australia/Sydney')='2026-06-01 03:30:00+00'::timestamptz,'Standard time is distinct from summer time';
+ assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-10-25","start":"10:00"}','Australia/Sydney')='2026-10-25 01:30:00+00'::timestamptz,'Morning T20 due at 12:30 Sydney';
+ assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-10-25","start":"14:00"}','Australia/Sydney')='2026-10-25 05:30:00+00'::timestamptz,'Afternoon T20 due at 16:30 Sydney';
+ assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-06-01","start":"10:00"}','Australia/Sydney')='2026-06-01 02:30:00+00'::timestamptz,'Standard time is distinct from summer time';
  assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-10-25","start":"10:00","end":"13:00"}','Australia/Sydney')='2026-10-25 02:00:00+00'::timestamptz,'Recorded finish overrides estimate';
  assert club_selection_private.fixture_day_expected_finish('{"format":"t20"}','{"date":"2026-10-25"}','Australia/Sydney')='2026-10-25 07:00:00+00'::timestamptz,'Missing start uses 18:00 local';
  assert club_selection_private.fixture_day_expected_finish('{"format":"limited_overs","overs":50}','{"date":"2026-10-25","start":"10:00"}','Australia/Sydney')='2026-10-25 06:25:00+00'::timestamptz,'Overs-based allowance';
@@ -27,22 +27,22 @@ begin
  perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(src));
  select fixture_id into fid from club_selection_private.playhq_links where club_id=c and match_id=mid;
  select due_at into old_due from club_selection_private.playhq_jobs where club_id=c and kind='results';
- assert old_due='2099-10-25 02:30:00+00'::timestamptz,'New import schedules expected finish';
+ assert old_due='2099-10-25 01:30:00+00'::timestamptz,'New import schedules expected finish';
  select slots into before_slots from club_selection_private.fixtures where id=fid;
  update club_selection_private.fixtures set details=jsonb_set(details,'{days,0,start}','"14:00"') where id=fid;
- assert (select due_at='2099-10-25 06:30:00+00'::timestamptz from club_selection_private.playhq_jobs where club_id=c and kind='results'),'Manual time changes reschedule';
+ assert (select due_at='2099-10-25 05:30:00+00'::timestamptz from club_selection_private.playhq_jobs where club_id=c and kind='results'),'Manual time changes reschedule';
  assert (select slots=before_slots from club_selection_private.fixtures where id=fid),'Rescheduling preserves selections';
  assert not (select polling_enabled from club_selection_private.playhq_connections where club_id=c),'A paused connection stays paused';
  update club_selection_private.fixtures set details=jsonb_set(details,'{days}','[{"date":"2026-10-25","start":"10:00"}]') where id=fid;
- assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:00+00')='2026-10-25 02:30+00'::timestamptz,'No scheduled check before expected finish';
- assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 02:30+00')='2026-10-25 02:30+00'::timestamptz,'First check is due at expected finish';
- assert club_selection_private.playhq_results_due(fid,'2026-10-25 02:30+00','2026-10-25 02:30+00')='2026-10-25 03:00+00'::timestamptz,'Missing results retry in 30 minutes';
+ assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:00+00')='2026-10-25 01:30+00'::timestamptz,'No scheduled check before expected finish';
+ assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:30+00')='2026-10-25 01:30+00'::timestamptz,'First check is due at expected finish';
+ assert club_selection_private.playhq_results_due(fid,'2026-10-25 01:30+00','2026-10-25 01:30+00')='2026-10-25 02:00+00'::timestamptz,'Missing results retry in 30 minutes';
  assert club_selection_private.playhq_results_due(fid,'2026-10-26 03:00+00','2026-10-26 03:00+00')='2026-10-26 05:00+00'::timestamptz,'Delayed results retry every two hours';
  assert club_selection_private.playhq_results_due(fid,'2026-11-03 03:00+00','2026-11-03 03:00+00')='2026-11-04 03:00+00'::timestamptz,'Late results continue daily';
  update club_selection_private.fixtures set details=jsonb_set(details,'{days}','[{"date":"2026-10-25","start":"10:00"},{"date":"2026-11-01","start":"10:00"}]') where id=fid;
- assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:00+00')='2026-10-25 02:30+00'::timestamptz,'Day 1 score downloads are retained';
- assert club_selection_private.playhq_results_due(fid,'2026-11-01 01:00+00','2026-11-01 01:00+00')='2026-11-01 02:30+00'::timestamptz,'Next playing day bounds the wait';
- assert club_selection_private.playhq_results_due(fid,'2026-11-01 02:30+00','2026-11-01 02:30+00')='2026-11-01 03:00+00'::timestamptz,'Day 2 gets a fresh 30-minute retry window';
+ assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:00+00')='2026-10-25 01:30+00'::timestamptz,'Day 1 score downloads are retained';
+ assert club_selection_private.playhq_results_due(fid,'2026-11-01 01:00+00','2026-11-01 01:00+00')='2026-11-01 01:30+00'::timestamptz,'Next playing day bounds the wait';
+ assert club_selection_private.playhq_results_due(fid,'2026-11-01 01:30+00','2026-11-01 01:30+00')='2026-11-01 02:00+00'::timestamptz,'Day 2 gets a fresh 30-minute retry window';
  -- Exercise the actual worker with an expected finish earlier today.
  update club_selection_private.fixtures set details=jsonb_set(details,'{days}',jsonb_build_array(jsonb_build_object('date',to_char((now()-interval '6 hours') at time zone 'Australia/Sydney','YYYY-MM-DD'),'start',to_char((now()-interval '6 hours') at time zone 'Australia/Sydney','HH24:MI')))) where id=fid;
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
