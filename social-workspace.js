@@ -835,7 +835,7 @@ async function socialReviewUpdatedAward(s,edition){
 }
 async function socialAwardScopeChanged(s,kind){
  const api=kind==='team_week'?socialWeek:kind==='player_week'?socialPlayerWeek:socialAwards,w=api.state(s);
- Object.assign(w,{context:null,sharedStale:false,attempted:false,loadAttempted:false,rows:[],winner:null,photo:null,blurb:'',saved:null,savedImage:null,prepared:null,preparedImage:null,contextPlayer:null,focus:null,chosen:new Set(),graphicAssistant:null,previewReady:false,includeDay1:api===socialAwards?{}:false});
+ Object.assign(w,{context:null,sharedStale:false,attempted:false,loadAttempted:false,rows:[],winner:null,photo:null,blurb:'',saved:null,savedImage:null,prepared:null,preparedImage:null,contextPlayer:null,focus:null,chosen:new Set(),resultsOrder:null,resultsOrdering:false,graphicAssistant:null,previewReady:false,includeDay1:api===socialAwards?{}:false});
  if(s.results){s.results.context=null;s.results.attempted=false;s.results.ack=null;s.results.token++;}
  if(api===socialAwards)await api.load(s,false);else await api.load(s,{preserve:false});
 }
@@ -844,7 +844,7 @@ let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.334'),import('./social-team-workflow.js?v=0.8.62.303'),import('./social-publishing.js?v=0.8.62.303'),import('./team-of-week.js?v=0.8.62.337'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.342'),import('./social-team-workflow.js?v=0.8.62.303'),import('./social-publishing.js?v=0.8.62.303'),import('./team-of-week.js?v=0.8.62.337'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];
@@ -878,7 +878,7 @@ function socialAdoptResultsWeek(s,end){
  s.resultsWeek=end;
  for(const api of [socialAwards,socialWeek,socialPlayerWeek]){
   const w=api.state(s);if(w.end===end)continue;
-  Object.assign(w,{end,context:null,attempted:false,loadAttempted:false,title:'',blurb:'',message:'',rows:[],winner:null,photo:null,saved:null,savedImage:null,contextPlayer:null,focus:null,caption:'',drafts:{},refinements:{},graphicAssistant:null,selectedSources:new Set(),selected:new Set(),chosen:new Set()});
+  Object.assign(w,{end,context:null,attempted:false,loadAttempted:false,title:'',blurb:'',message:'',rows:[],winner:null,photo:null,saved:null,savedImage:null,contextPlayer:null,focus:null,caption:'',drafts:{},refinements:{},graphicAssistant:null,selectedSources:new Set(),selected:new Set(),chosen:new Set(),resultsOrder:null,resultsOrdering:false});
  }
 }
 async function socialResultsChanged(s){

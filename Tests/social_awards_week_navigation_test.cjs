@@ -23,9 +23,9 @@ test('production initializer uses the exact-week hook and weekly APIs expose exi
 
 test('changing the shared awards week clears per-graphic labels without changing reusable styles',()=>{
  const begin=source.indexOf('function socialAdoptResultsWeek(s,end){'),finish=source.indexOf('\nasync function socialResultsChanged(',begin),states=['awards','week','playerWeek'];
- const s=Object.fromEntries(states.map(key=>[key,{end:'2026-10-18',title:'Round 2',layout:{text_colour:'#FFFFFF'},graphicAssistant:{candidate:false}}]));
+ const s=Object.fromEntries(states.map(key=>[key,{end:'2026-10-18',title:'Round 2',layout:{text_colour:'#FFFFFF'},graphicAssistant:{candidate:false},resultsOrder:['old-result'],resultsOrdering:true}]));
  const context={socialAwards:{state:s=>s.awards},socialWeek:{state:s=>s.week},socialPlayerWeek:{state:s=>s.playerWeek}};vm.createContext(context);vm.runInContext(source.slice(begin,finish),context);
- context.socialAdoptResultsWeek(s,'2026-10-25');for(const key of states){assert.equal(s[key].title,'');assert.equal(s[key].end,'2026-10-25');assert.equal(s[key].layout.text_colour,'#FFFFFF');assert.equal(s[key].graphicAssistant,null);}
+ context.socialAdoptResultsWeek(s,'2026-10-25');for(const key of states){assert.equal(s[key].title,'');assert.equal(s[key].end,'2026-10-25');assert.equal(s[key].layout.text_colour,'#FFFFFF');assert.equal(s[key].graphicAssistant,null);assert.equal(s[key].resultsOrder,null);assert.equal(s[key].resultsOrdering,false);}
 });
 
 test('reviewing another saved scope opens that scope and resets current selections',async()=>{const t=setup('team_week',{end:'2026-10-11',context:{award_scope:{key:'all'}},rows:[{key:'old'}]});const scope={key:'groups:masters',mode:'groups',ids:['masters']};assert.equal(await t.context.socialReviewUpdatedAward(t.s,{kind:'team_week',week_end:'2026-10-11',award_scope:scope}),true);assert.equal(t.s.openedScope,scope);assert.equal(t.s.week.rows.length,0);assert.equal(t.loads[0].options.preserve,false);});

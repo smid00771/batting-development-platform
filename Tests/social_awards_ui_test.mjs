@@ -7,7 +7,7 @@ const {renderSocialAwardRequests}=await import('../social-award-requests.js');
 const dom=new JSDOM('<main><div id="menu"></div><div id="socialContent"></div></main>',{url:'https://clubbatting.com/'});
 globalThis.window=dom.window;globalThis.document=dom.window.document;globalThis.localStorage=window.localStorage;globalThis.FormData=window.FormData;window.HTMLElement.prototype.scrollIntoView=()=>{};
 const font=fs.readFileSync(new URL('../social-font-fallback.js',import.meta.url),'utf8').match(/data:font\/ttf;base64,([A-Za-z0-9+/=]+)/)[1];GlobalFonts.register(Buffer.from(font,'base64'),'Club Sporting');
-window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);ctx.drawImage=(i,...args)=>draw(i.backing||i,...args);}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
+window.HTMLCanvasElement.prototype.getContext=function(){if(!this.backing){this.backing=createCanvas(this.width,this.height);const ctx=this.backing.getContext('2d'),draw=ctx.drawImage.bind(ctx);const fill=ctx.fillText.bind(ctx);ctx.fillText=(value,...args)=>{(this.drawnText||=[]).push(String(value));return fill(value,...args);};ctx.drawImage=(i,...args)=>{if(i.drawnText)this.drawnText=[...i.drawnText];return draw(i.backing||i,...args);};}if(this.backing.width!==this.width)this.backing.width=this.width;if(this.backing.height!==this.height)this.backing.height=this.height;return this.backing.getContext('2d');};
 window.HTMLCanvasElement.prototype.toBlob=function(cb,type='image/png'){cb(new Blob([this.backing.toBuffer(type)],{type}));};
 const players=['Alex Hunter','Ben Senior','Chris Carter'],milestones=players.map((name,i)=>({key:'match:century:innings:'+i,signature:'signature-'+i,kind:'century',player_id:'player-'+i,name,stat:{runs:100+i*27,not_out:i===1},grade:'1st Grade',opposition:'Visitors',innings_number:1}));
 const bowler={...milestones[0],key:'match:five_wickets:innings:0',kind:'five_wickets',stat:{wickets:6,runs:24}};
@@ -75,7 +75,26 @@ h.image=normalImage;
 if(process.env.AWARDS_PREVIEW_DIR)fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results-saved-logos.png',id('saCanvas').backing.toBuffer('image/png'));
 for(const e of document.querySelectorAll('[data-sa-result]:not(:checked)'))e.click();await settled();assert.equal(id('saHeaderLogos').hidden,true);assert.match(id('saPreviewStatus').textContent,/2 Results images/);
 if(process.env.AWARDS_PREVIEW_DIR)fs.writeFileSync(process.env.AWARDS_PREVIEW_DIR+'/results.png',id('saCanvas').backing.toBuffer('image/png'));
-id('saConfirmGraphic').click();await settled();assert.equal(context.editions.filter(e=>e.kind==='results').length,2);assert.equal(context.editions.find(e=>e.kind==='results').performance_keys.length,4);
+// Reordering is optional and reuses the selection list. The actual preview,
+// image batches, saved source identities and uncertain-save retry agree.
+const keys=resultItems.map(x=>x.key),ordered=()=>[...document.querySelectorAll('[data-sa-ordered]')].map(e=>e.dataset.saOrdered),previewGrades=()=>id('saCanvas').drawnText.filter(t=>/^\dTH GRADE$/.test(t));
+const move=async(index,step)=>{document.querySelector(`[data-sa-move="${keys[index]}"][data-sa-step="${step}"]`).click();await settled();};
+assert.equal(document.querySelector('[data-sa-move]'),null,'Ordinary posts have no ordering step');assert.equal(id('saOrderTeams').textContent,'Re-order teams');
+assert.deepEqual(previewGrades(),['1TH GRADE','2TH GRADE','3TH GRADE','4TH GRADE']);
+const beforeOrder=calls.length;id('saOrderTeams').click();assert.deepEqual(ordered(),keys);assert.equal(document.querySelectorAll('[data-sa-result]').length,0,'The same list is used, without a duplicate team list');
+assert.equal(document.querySelector('[data-sa-step="-1"]').disabled,true);assert.equal(document.querySelectorAll('[data-sa-step="1"]')[4].disabled,true);
+await move(4,-1);await move(4,-1);await move(4,-1);assert.deepEqual(ordered(),[keys[0],keys[4],keys[1],keys[2],keys[3]]);assert.deepEqual(previewGrades(),['1TH GRADE','5TH GRADE','2TH GRADE','3TH GRADE']);
+assert.equal(document.activeElement.dataset.saMove,keys[4],'Keyboard focus follows the moved team');
+id('saResetTeamOrder').click();await settled();assert.deepEqual(ordered(),keys);assert.deepEqual(previewGrades(),['1TH GRADE','2TH GRADE','3TH GRADE','4TH GRADE']);
+await move(4,-1);await move(4,-1);await move(4,-1);id('saOrderTeams').click();assert.equal(document.querySelector('[data-sa-move]'),null);
+document.querySelector(`[data-sa-result="${keys[1]}"]`).click();await settled();document.querySelector(`[data-sa-result="${keys[1]}"]`).click();await settled();
+const finalOrder=[keys[0],keys[4],keys[2],keys[3],keys[1]];assert.deepEqual(s.awards.resultsOrder,finalOrder);assert.deepEqual(previewGrades(),['1TH GRADE','5TH GRADE','3TH GRADE','4TH GRADE']);assert.equal(calls.length,beforeOrder,'Reordering has no database reads or writes');
+await module.load(s);await settled();assert.deepEqual(previewGrades(),['1TH GRADE','5TH GRADE','3TH GRADE','4TH GRADE'],'A context refresh preserves the chosen order');
+id('saOrderTeams').click();loseFinish=true;id('saConfirmGraphic').click();await settled();assert.ok(s.awards.pending);assert.equal(id('saOrderTeams').disabled,true);assert.ok([...document.querySelectorAll('[data-sa-move]')].every(e=>e.disabled));
+const pendingResults=structuredClone(s.awards.pending.map(x=>x.request));assert.deepEqual(pendingResults.map(x=>x.sources.map(p=>p.key)),[finalOrder.slice(0,4),finalOrder.slice(4)]);
+id('saRetrySave').click();await settled();assert.equal(s.awards.pending,null);assert.equal(context.editions.filter(e=>e.kind==='results').length,2);assert.deepEqual(context.editions.filter(e=>e.kind==='results').map(e=>e.performance_keys),[finalOrder.slice(0,4),finalOrder.slice(4)]);
+const resultReservations=calls.filter(c=>c.action==='reserve_image'&&c.data.kind==='results');assert.deepEqual(resultReservations[0].data,resultReservations[1].data,'Retry preserves the exact ordered image reservation');assert.equal(s.awards.resultsOrdering,false);
+
 id('socialCreateMenu').value='award_collection';id('socialCreateMenu').dispatchEvent(new window.Event('change'));await settled();assert.equal(id('saRequest'),null);assert.equal(document.querySelectorAll('[data-sa-select]').length,5);assert.match(id('saCaption').value,/outstanding round/);s.view='awards';h.draw();await settled();const form=id('saRequest');form.elements.name.value='Spirit of cricket';form.elements.criteria.value='Chosen by the club for sportsmanship.';form.dispatchEvent(new window.Event('input'));form.dispatchEvent(new window.Event('submit',{cancelable:true}));await settled();assert.equal(context.requests.length,1);assert.match(id('saStatus').textContent,/submitted/);
 assert.ok(id('saRequestUpdates'));assert.equal(id('saRequestUpdates').closest('details'),null);assert.match(id('saRequestUpdates').textContent,/Submitted/);assert.equal(id('saRequestUpdates').querySelector('select'),null,'Club cannot change the owner’s response');
 const owner=document.createElement('div');document.body.append(owner);
