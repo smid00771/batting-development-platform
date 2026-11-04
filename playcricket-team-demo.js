@@ -21,16 +21,17 @@ export function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
    const f=fixtures.find(f=>f.id===data.fixture_id),old=stub?.id!==r?.id?stub?.id:null,used=x=>[...x.slots,...(x.published?.slots||[])].some(s=>[s.d1,s.d2].includes(r?.id));
    if(data.fixture_id&&r&&!f)throw Error('The fixture changed. Reload before confirming.');
    const conflict=!!old&&state.fixtures.some(x=>!x.details.cancelled&&dates(x).some(d=>card.dates.includes(d))&&used(x));
-   if(player){player.display_name=source.name;state.scorecard_player_links=state.scorecard_player_links.filter(l=>l.source_id!==source.player_id).concat({source_id:source.player_id,player_id:player.id});}
-   if(r){r.name=source.name;if(player){r.review_player_id=player.id;r.imported_stub=false;}state.scorecard_links=state.scorecard_links.filter(l=>l.source_id!==source.player_id).concat({source_id:source.player_id,roster_id:r.id});}
+   const displayName=r?.preferred_name?r.name:source.name;
+   if(player){player.display_name=displayName;state.scorecard_player_links=state.scorecard_player_links.filter(l=>l.source_id!==source.player_id).concat({source_id:source.player_id,player_id:player.id});}
+   if(r){r.name=displayName;if(player){r.review_player_id=player.id;r.imported_stub=false;}state.scorecard_links=state.scorecard_links.filter(l=>l.source_id!==source.player_id).concat({source_id:source.player_id,roster_id:r.id});}
    let repaired=false;
    if(f&&r&&!conflict&&[...f.slots,...(f.published?.slots||[])].some(s=>[s.d1,s.d2].includes(old||r.id))){
-    const replaceSlots=slots=>slots.map(s=>({...s,d1:old&&s.d1===old?r.id:s.d1,d2:old&&s.d2===old?r.id:s.d2})),roles=details=>{const d=copy(details);for(const day of ['d1','d2'])for(const role of ['captain_id','keeper_id'])if(old&&d.match_roles?.[day]?.[role]===old)d.match_roles[day][role]=r.id;return d;},sync=value=>value?{...value,players:(value.players||[]).map(p=>p.source_id===source.player_id?{...p,roster_id:r.id,name:source.name}:p)}:value;
+    const replaceSlots=slots=>slots.map(s=>({...s,d1:old&&s.d1===old?r.id:s.d1,d2:old&&s.d2===old?r.id:s.d2})),roles=details=>{const d=copy(details);for(const day of ['d1','d2'])for(const role of ['captain_id','keeper_id'])if(old&&d.match_roles?.[day]?.[role]===old)d.match_roles[day][role]=r.id;return d;},sync=value=>value?{...value,players:(value.players||[]).map(p=>p.source_id===source.player_id?{...p,roster_id:r.id,name:displayName}:p)}:value;
     f.slots=replaceSlots(f.slots);f.details=roles(f.details);f.scorecard_sync=sync(f.scorecard_sync);f.revision++;repaired=true;
-    if(f.published){state.scorecard_history||=[];state.scorecard_history.push({fixture_id:f.id,publication:f.publication,snapshot:copy(f.published)});f.published={...f.published,details:roles(f.published.details),slots:replaceSlots(f.published.slots),players:(f.published.players||[]).map(p=>p.id===(old||r.id)?{...p,id:r.id,name:source.name}:p),scorecard_sync:sync(f.published.scorecard_sync)};f.publication++;}
+    if(f.published){state.scorecard_history||=[];state.scorecard_history.push({fixture_id:f.id,publication:f.publication,snapshot:copy(f.published)});f.published={...f.published,details:roles(f.published.details),slots:replaceSlots(f.published.slots),players:(f.published.players||[]).map(p=>p.id===(old||r.id)?{...p,id:r.id,name:displayName}:p),scorecard_sync:sync(f.published.scorecard_sync)};f.publication++;}
    }
    if(old&&!state.fixtures.some(x=>[...x.slots,...(x.published?.slots||[])].some(s=>[s.d1,s.d2].includes(old))))stub.active=false;
-   const result={confirmed:true,source_player_id:source.player_id,player_id:player?.id||null,roster_id:r?.id||null,name:source.name,fixture_repaired:repaired,needs_team_review:conflict};
+   const result={confirmed:true,source_player_id:source.player_id,player_id:player?.id||null,roster_id:r?.id||null,name:displayName,fixture_repaired:repaired,needs_team_review:conflict};
    state.scorecard_receipts[key]={data:copy(data),result:copy(result)};return result;
   }
   if(action==='context')return {enabled:true,card:copy(card),our_team:card.teams[0].id,fixtures:fixtures.map(f=>({id:f.id,grade:f.details.grade,opposition:f.details.opposition,days:copy(f.details.days),brackets:f.details.brackets,slots:copy(f.slots),sync:f.scorecard_sync})),roster:copy(state.roster),links:copy(state.scorecard_links)};

@@ -91,3 +91,9 @@ test('a permitted player outside this selection is suggested without silently ad
  const h=setup(['Other Person'],['Sulaiman Moin Muhammad']);h.c.teamReviewCache.players.push({player_id:'original',display_name:'Sulaiman Muhammad',can_edit:true});
  h.c.teamReviewRows=()=>h.players.filter(p=>p.player_id!=='original');assert.deepEqual(h.run(),['']);assert.equal(h.s.importer.suggestions.b0,'original');
 });
+
+test('omitted final names are suggestions only and ambiguous prefixes stay unresolved',()=>{
+ const h=setup(['Arun Vijay'],['Arun Vijay Raman']);assert.deepEqual(h.run(),['']);assert.equal(h.s.importer.suggestions.b0,'p0');
+ assert.deepEqual(setup(['Arun Vijay'],['Arun Vijay Raman','Arun Vijay Kumar']).suggest(),['','']);
+ assert.deepEqual(setup(['A Vijay'],['Arun Vijay Raman']).suggest(),['']);
+});

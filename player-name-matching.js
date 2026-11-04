@@ -16,6 +16,8 @@ export function matchReviewGivenNameMatches(a,b){
 export function matchReviewShortNameMatches(a,b){
  if(!a.length||!b.length)return false;
  if(a.length===1||b.length===1){const single=a.length===1?a:b,full=a.length===1?b:a;return single[0].length>=3&&full[0].length>=3&&matchReviewGivenNameMatches(single[0],full[0]);}
+ const shorter=a.length<b.length?a:b,longer=a.length<b.length?b:a;
+ if(shorter.length>=2&&shorter.length<longer.length&&shorter.every((part,n)=>part.length>=2&&part===longer[n]))return true;
  if(a.at(-1)!==b.at(-1)||!matchReviewGivenNameMatches(a[0],b[0]))return false;
  const middleA=a.slice(1,-1),middleB=b.slice(1,-1);
  return middleA.slice(0,middleB.length).every((part,n)=>matchReviewGivenNameMatches(part,middleB[n]));
