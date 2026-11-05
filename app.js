@@ -10,7 +10,7 @@ import {FIELDING_RATINGS,fieldingLabel} from './player-fielding.js?v=0.8.62.288'
 import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.322';
 import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.288';
 const returningPlayers=findReturningPlayers;
-import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.344';
+import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.345';
 // Club Batting 0.8.62.246 — Selection Group permissions
 import { createClient,isAuthRetryableFetchError } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm';
 let createSelectionRoom;
@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.344';
+const APP_UI_VERSION='0.8.62.345';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -1069,7 +1069,7 @@ async function boot(){
   // comes back. This is independent of browser back/forward restoration and survives a redraw.
   window.addEventListener('pagehide',savePlatformMarketScroll);
   window.addEventListener('popstate',handleAppNavigationHistory);
-  window.addEventListener('beforeunload',event=>{if(matchArrivalsService?.hasPending()||mirelionAssist.hasChanges()||(typeof fixtureCalendarTrials!=='undefined'&&fixtureCalendarTrials.hasChanges())||(typeof selectionGroupPermissions!=='undefined'&&selectionGroupPermissions.hasChanges())||(typeof playCricketConnection!=='undefined'&&playCricketConnection.hasChanges())||(typeof playhqImport!=='undefined'&&playhqImport.hasChanges())||(typeof selectionGroupSetup!=='undefined'&&selectionGroupSetup.hasChanges())||(typeof clubWeek!=='undefined'&&clubWeek.hasChanges())||selectionState?.busy||selectionState?.pending||selectionState?.formDirty||coachingStaffDirty()||coachingStaffPending()||clubMessageDirty()||clubMessageState?.sending||teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if((typeof clubStandingsPanel!=='undefined'&&clubStandingsPanel.hasChanges())||matchArrivalsService?.hasPending()||mirelionAssist.hasChanges()||(typeof fixtureCalendarTrials!=='undefined'&&fixtureCalendarTrials.hasChanges())||(typeof selectionGroupPermissions!=='undefined'&&selectionGroupPermissions.hasChanges())||(typeof playCricketConnection!=='undefined'&&playCricketConnection.hasChanges())||(typeof playhqImport!=='undefined'&&playhqImport.hasChanges())||(typeof selectionGroupSetup!=='undefined'&&selectionGroupSetup.hasChanges())||(typeof clubWeek!=='undefined'&&clubWeek.hasChanges())||selectionState?.busy||selectionState?.pending||selectionState?.formDirty||coachingStaffDirty()||coachingStaffPending()||clubMessageDirty()||clubMessageState?.sending||teamReviewSavePending()||teamReviewHasUnsavedChanges()||weeklyLoopSavePending()||weeklyLoopHasUnsavedChanges()||makeYourCallSavePending()||makeYourCallHasUnsavedChanges()||engagementSavePending()||engagementHasUnsavedChanges()){event.preventDefault();event.returnValue='';}});
   window.addEventListener('pageshow',()=>restorePlatformMarketScroll());
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')savePlatformMarketScroll();
@@ -1953,7 +1953,7 @@ function canOpenClubTab(tab){
   if(tab==='products')return !!(session&&membership&&club&&isAdmin());
   if(tab==='club_teams')return !!(session&&membership&&club&&isAdmin());
   if(tab==='teams')return !!(session&&membership&&club);
-  if(tab==='season_stats')return canUseSeasonStats();
+  if(tab==='season_stats')return canUseSeasonStats()||canUseClubStandings();
   if(tab==='playerhome')return !!(session&&membership&&club&&isPlayerUser());
   if(selectionsStandalone()&&!['teams','permissions','club_settings','messages','phone_app','guide','assist','join_club'].includes(tab))return false;
   if(['join_club','messages','phone_app','assist'].includes(tab))return !!(session&&membership&&club);
@@ -2089,6 +2089,7 @@ async function expandClubHomeStage(key,progress){
 
 
 async function saveClubEditsBeforeNavigation(){
+  if(typeof clubStandingsPanel!=='undefined'&&!clubStandingsPanel.canLeave())return false;
   if(typeof battingFixtures!=='undefined'&&!battingFixtures.canLeave())return false;
   if(typeof planReminderSettings!=='undefined'&&!planReminderSettings.canLeave())return false;
   if(!mirelionAssist.canLeave())return false;
@@ -2992,7 +2993,7 @@ function clubNavigationRoute(){
   if(currentTab==='messages'){const m=ensureClubMessages();route.messages={mode:m.mode,openId:m.mode==='compose'?null:m.openId};}
   if(currentTab==='team_review')route.teamReview=serializeTeamReviewState();
   if(currentTab==='batting_fixtures')route.battingFixtures={...battingFixturesRoute};
-  if(currentTab==='season_stats')route.seasonStats={returnTab:seasonStatsRoute.returnTab,filters:{...seasonStatsRoute.filters,seasonDraft:undefined}};
+  if(currentTab==='season_stats')route.seasonStats={section:seasonStatsRoute.section,standings:{...seasonStatsRoute.standings},returnTab:seasonStatsRoute.returnTab,filters:{...seasonStatsRoute.filters,seasonDraft:undefined}};
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
   if(currentTab==='workshop_preview'&&workshopPreview){
@@ -3059,6 +3060,7 @@ function restoreSelectionDrawer(drawer){
   case 'fixture':return seFixtureEditor(fixture(drawer.id)||null);
   case 'player':return sePlayerEditor(s.data.roster.find(p=>p.id===drawer.id)||null);
   case 'player_name':return sePlayerNameEditor(s.data.roster.find(p=>p.id===drawer.id));
+  case 'availability_paste':return sePasteUnavailability();
   case 'import':return seImport();
   case 'playhq_import':return seImportFixtures();
   case 'playhq_connection':return sePlayCricketConnection();
@@ -3083,7 +3085,7 @@ function bindAppBackButtons(){
 }
 function appNavigationBack(fallback){if(canUseAppNavigationBack()){history.back();return true;}return fallback?.();}
 function bindSelectionBackButtons(){
- const ids=['seDelegationCancel','seReviewClose','seBackBoard','seReviewBack','seLockedBack','seChatBack','seImportCancel','sePlayerCancel','seCancelEdit','seCancelPlayer','seInactiveBack','seUnselectedBack','seDateCancel'];
+ const ids=['seDelegationCancel','seReviewClose','seBackBoard','seReviewBack','seLockedBack','seChatBack','seImportCancel','sePlayerCancel','seCancelEdit','seCancelPlayer','seInactiveBack','seUnselectedBack','seDateCancel','sePasteBack'];
  for(const id of ids){const button=document.getElementById(id);if(!button||button.dataset.navigationBack)continue;const fallback=button.onclick;if(!fallback)continue;button.dataset.navigationBack='1';button.onclick=e=>appNavigationBack(()=>fallback(e));}
 }
 
@@ -3100,7 +3102,7 @@ function appNavigationKey(route){
     route.previewKey,route.view,route.prospectId,route.onboardingId,route.assist?.threadId,
     route.tab==='make_your_call'?(route.makeYourCall?.results?.view||'board'):null,route.selections,
     route.teamReview?[route.teamReview.view,teamReviewNavigationIdentity(route.teamReview),route.teamReview.observation_player_id]:null,
-    route.battingFixtures,route.makeYourCall?.results?.openKind,route.makeYourCall?.results?.openStart]);
+    route.seasonStats?.section,route.battingFixtures,route.makeYourCall?.results?.openKind,route.makeYourCall?.results?.openStart]);
 }
 function validAppNavigationMarker(marker){
   return !!(marker?.version===1&&marker.userId===session?.user?.id&&typeof marker.trail==='string'&&Number.isInteger(marker.index)&&marker.index>=0&&
@@ -3182,7 +3184,7 @@ function restoreClubNavigationState(route){
   if(currentTab==='messages'){const m=ensureClubMessages();m.mode=['sent','compose'].includes(route.messages?.mode)?route.messages.mode:'inbox';if(m.mode==='compose'&&!m.draft)m.mode='inbox';m.openId=route.messages?.openId||null;}
   if(currentTab==='team_review')restoreTeamReviewState(route.teamReview||{});
   if(currentTab==='batting_fixtures')battingFixturesRoute={...route.battingFixtures,scope:selectionsScopeKey()};
-  if(currentTab==='season_stats')seasonStatsRoute={scope:selectionsScopeKey(),filters:{...route.seasonStats?.filters},returnTab:route.seasonStats?.returnTab==='teams'?'teams':'dashboard'};
+  if(currentTab==='season_stats')seasonStatsRoute={scope:selectionsScopeKey(),filters:{...route.seasonStats?.filters},section:route.seasonStats?.section,standings:{...route.seasonStats?.standings},returnTab:['teams','playerhome'].includes(route.seasonStats?.returnTab)?route.seasonStats.returnTab:'dashboard'};
   if(currentTab==='myplan')builderSection=route.planSection||'core';
   if(currentTab==='groups'){
     const state=ensurePlayingGroupsView();
@@ -13775,12 +13777,13 @@ async function renderPlayerHome(){
       ${select?'<button class="btn secondary" id="playerHomeTeam"><span>My team</span><small>See published selections</small></button>':''}<button class="btn secondary" id="playerHomeMessages"><span>Messages</span><small>Read club updates</small></button>
       ${plans?'<button class="btn secondary" id="playerHomePrepare"><span>Before a match</span><small>Prepare your batting focus</small></button><button class="btn secondary" id="playerHomeInnings"><span>After a match</span><small>Review your innings</small></button><button class="btn secondary" id="playerHomeTraining"><span>Training</span><small>Choose what to practise</small></button><button class="btn secondary" id="requestConversationFromHome"><span>Talk to a coach</span><small>Ask for help or feedback</small></button>':''}
     </nav>
-    <div class="player-home-links">${plans?'<button id="playerHomePhilosophy">Read How We Bat</button>':''}<button id="playerHomeHelp">Help & tutorials</button></div>
+    <div class="player-home-links">${plans?'<button id="playerHomePhilosophy">Read How We Bat</button>':''}${canUseClubStandings()?'<button id="playerHomeStandings">Club standings</button>':''}<button id="playerHomeHelp">Help & tutorials</button></div>
   </section>`;
   page.querySelector('#playerHomePlan')?.addEventListener('click',()=>openPlayerHomeAction(planAction));
   page.querySelector('#playerHomeAvailability')?.addEventListener('click',()=>openPlayerHomeSelections('availability'));
   page.querySelector('#playerHomeTeam')?.addEventListener('click',()=>openPlayerHomeSelections('published'));
   page.querySelector('#playerHomeMessages').onclick=()=>openPlayerHomeAction({tab:'messages'});
+  page.querySelector('#playerHomeStandings')?.addEventListener('click',()=>openSeasonStats('ladders'));
   page.querySelector('#playerHomeHelp').onclick=()=>openPlayerHomeAction({tab:'guide'});
   page.querySelector('#playerHomeTraining')?.addEventListener('click',()=>openPlayerHomeAction({tab:'howwetrain'}));
   page.querySelector('#playerHomePrepare')?.addEventListener('click',()=>openMyInnings({prepare:true}));
@@ -17115,6 +17118,7 @@ function mountScorecardTeam(host,options){
 }
 async function matchReviewTeamChanged(){
  if(typeof seasonStatsPanel!=='undefined')seasonStatsPanel.invalidate?.();
+ if(typeof clubStandingsPanel!=='undefined')clubStandingsPanel.invalidate?.();
  const s=ensureTeamReviewState(),scope=s.scope,i=matchReviewImportState(),saved={...i,mapping:{...i.mapping},selected:{...i.selected}},mapping={...i.mapping},selected={...i.selected};
  await renderTeamReview();if(ensureTeamReviewState().scope!==scope||currentTab!=='team_review')return;
  s.importer=saved;matchReviewMapScores();const allowed=new Set(matchReviewMappingPlayers().map(p=>p.player_id));
@@ -17141,6 +17145,7 @@ async function matchReviewShareSource(){
  const result=await supabase.rpc('club_match_results_api',{p_club_id:club.id,p_action:s.fixtureId?'link':'identify',p_data:{snapshot_id:i.preview.snapshot_id,team_id:i.teamId,fixture_id:s.fixtureId||null}});
  if(result.error)throw Error(result.error.message);s.sharedResultsChecked=matchReviewSharedKey(s);
  if(typeof seasonStatsPanel!=='undefined')seasonStatsPanel.invalidate?.();
+ if(typeof clubStandingsPanel!=='undefined')clubStandingsPanel.invalidate?.();
  if(socialState?.scope===selectionsScopeKey()){if(socialState.results){socialState.results.context=null;socialState.results.attempted=false;}for(const key of ['week','playerWeek','awards'])if(socialState[key])socialState[key].sharedStale=true;}
 }
 function matchReviewExtractUrl(values){
@@ -18400,7 +18405,7 @@ function seUsualGrades(p){return [...new Set((p.usual_grades?.length?p.usual_gra
 function seReadUsualGrades(row,p){const checked=[...row.querySelectorAll('[name=usual_grade]:checked')].map(x=>x.value);const usual_grades=[...seUsualGrades(p).filter(x=>checked.includes(x)),...checked.filter(x=>!seUsualGrades(p).includes(x))];return {usual_grades,grade:usual_grades[0]||''};}
 function seRosterGradeEditor(p){
  const chosen=seUsualGrades(p),grades=[...new Set([...seGradeChoices().map(c=>c.grade),...chosen])];
- return `<div class="se-usual-teams"><span class="se-usual-teams-label">Usual teams</span><details><summary>${seEsc(chosen.length?chosen.join(' · '):'Choose teams')}</summary><div class="se-usual-team-options">${grades.map(grade=>`<label class="se-check"><input type="checkbox" name="usual_grade" value="${seEsc(grade)}" ${chosen.includes(grade)?'checked':''}><span>${seEsc(grade)}</span></label>`).join('')||'<p>Add your club teams in Selection Groups.</p>'}</div></details></div>`;
+ return `<div class="se-usual-teams"><span class="se-usual-teams-label">Usual teams</span><details><summary>${seEsc(chosen.length?chosen.join(' · '):'Choose teams')}</summary><p class="se-form-note">Published teams and confirmed results add usual teams automatically. After three matches this season, the most-used teams appear first. You can still adjust these choices.</p><div class="se-usual-team-options">${grades.map(grade=>`<label class="se-check"><input type="checkbox" name="usual_grade" value="${seEsc(grade)}" ${chosen.includes(grade)?'checked':''}><span>${seEsc(grade)}</span></label>`).join('')||'<p>Add your club teams in Selection Groups.</p>'}</div></details></div>`;
 }
 function seRosterRow(p){
  const open=ensureSelections().rosterOpen===p.id,id=seEsc(p.id);
@@ -18942,6 +18947,7 @@ function seCanRecordFixtureResults(f){
 }
 function seFixtureScoresChanged(){
  if(typeof seasonStatsPanel!=='undefined')seasonStatsPanel.invalidate?.();
+ if(typeof clubStandingsPanel!=='undefined')clubStandingsPanel.invalidate?.();
  if(teamReviewState){teamReviewState.sharedResultsChecked=null;teamReviewState.needsReload=true;}
  if(socialState){if(socialState.results){socialState.results.context=null;socialState.results.attempted=false;socialState.results.ack=null;}for(const key of ['week','playerWeek','awards'])if(socialState[key])socialState[key].sharedStale=true;}
 }
@@ -19292,7 +19298,7 @@ async function seReload({accept=()=>true}={}){
  const [result,extras]=await Promise.all([seRPC('context',(s.view==='board'||previous?.selector||selectionAccess?.selector)?{review_snapshots:false}:{}),extrasTask]);Object.assign(result,extras);
  if(s!==selectionState||s.key!==selectionsScopeKey()||sequence!==s.loadSequence||!accept())return false;s.data=result;s.lastLoadedAt=Date.now();s.fixtureRefreshRequested=false;seApplyWeekLaunch(s);const milestone=new URLSearchParams(location.search).get('social_milestone');if(result.socials&&!s.milestoneLaunchOpened&&/^[0-9a-f-]{36}$/i.test(milestone||'')){s.milestoneLaunchOpened=true;s.view='socials';socialEnsure().pendingMilestone=milestone;}if(result.socials&&!s.socialSetupOpened&&new URLSearchParams(location.search).get('social_accounts')==='1'){s.socialSetupOpened=true;s.view='socials';socialEnsure().view='accounts';}if(!result.selector){s.undo=[];s.active=null;}selectionAccess={...selectionAccess,key:s.key,enabled:true,error:'',mode:result.access.mode,selector:result.selector,admin:result.admin};return true;}
 async function seMutate(action,data,{undo=null,picker=null,order=null,copyLast=null}={}){const s=ensureSelections();if(s.busy)return false;s.statsOpen=false;if(!s.pending&&!seGuardFixtureEdit(action,data))return false;if(action==='save_board'&&!s.pending)data={...data,fixtures:data.fixtures.map(f=>sePrepareMatch(f))};const pending=s.pending||{action,data:{...data,request_id:crypto.randomUUID()},...(undo?{undo}:{}),...(picker?{picker}:{}),...(order?{order}:{}),...(copyLast?{copyLast}:{}),...(['availability','availability_batch'].includes(action)&&s.availabilityReturn?{availabilityReturn:structuredClone(s.availabilityReturn)}:{})};const working=pending.action==='show_dropped'?'Checking dropped players…':pending.copyLast?'Copying…':pending.action==='publish'?'Publishing…':pending.action==='import_roster'?'Importing…':['send_review','post','review_post'].includes(pending.action)?'Sending…':pending.action==='fixture_lock'?(pending.data.unlock?'Unlocking…':'Locking…'):'Saving…',restoreButton=seButtonWorking(s.actionButton,working);s.actionButton=null;s.pending=pending;s.busy=true;selectionEvidence.pause();sePersist();seNotice(pending.action==='publish'?'Publishing teams…':working,{quiet:pending.action!=='publish'});seLock(true);if(pending.copyLast)seUpdateCopyStatus(pending.copyLast.id);let requestConfirmed=false;
- try{const result=await seRPC(pending.action,pending.data);requestConfirmed=true;if(s!==selectionState)return false;if(pending.action==='publish'&&result?.published!==true)throw Error('Publication was not confirmed. Retry the same request.');s.formDirty=false;const loaded=await seReload();if(!loaded||s!==selectionState||s.key!==selectionsScopeKey())return false;s.pending=null;s.teamChange=pending.order?.feedback?{id:pending.order.id,revision:result.revisions?.[pending.order.id],text:pending.order.feedback}:null;if(pending.action==='review_post'&&s.boardCommentDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardCommentDrafts[pending.data.id];if(pending.action==='post'&&s.boardChatDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardChatDrafts[pending.data.id];s.formDirty=[...Object.values(s.boardCommentDrafts||{}),...Object.values(s.boardChatDrafts||{})].some(x=>x.trim());sePersist();if(pending.undo)s.undo.push({before:pending.undo,expected:result.revisions});if(action==='save_roster')s.rosterSaved=true;if(pending.action==='publish'){s.view='published';s.date=s.data.fixtures.find(f=>pending.data.ids.includes(f.id))?.details?.days?.[0]?.date||s.date;s.boardDateChosen=true;s.active=null;s.publicationResult={ids:pending.data.ids,recipients:Number(result.recipients)||0};}s.notice=action==='show_dropped'?(result.count?result.count+' dropped player'+(result.count===1?'':'s')+' highlighted':'No dropped players need a conversation for these teams.'):action==='publication_delegate'?(data.operation==='hand_back'?'Publishing handed back to the Head of Selections ✓':'Delegation saved ✓'):action==='review_post'?'Comment added ✓':action==='post'?'Message sent ✓':action==='conversation'?(data.spoken?'Marked spoken to ✓':'Conversation marked as needed'):action==='fixture_lock'?(data.unlock?'Unlocked · republish changes to notify players · locks after 30 minutes':'Team locked'):action==='send_review'?'Sent to captains ✓':action==='publish'?`${pending.data.ids.length} team${pending.data.ids.length===1?'':'s'} published ✓ · Messages created for ${Number(result.recipients)||0} club members.${Number.isInteger(result.groups?.added_memberships)?' Usual grades updated in Club Batting; existing grades kept.':''}${result.groups?.unlinked_players?.length?' Some players still need a Club Batting player link.':''}${result.groups?.unmapped_grades?.length?' Link these grades in Settings: '+result.groups.unmapped_grades.map(g=>g.grade).join(', ')+'.':''}`:pending.order?.feedback?'':pending.order?.message||'Saved ✓';if(pending.action==='publish'){const unnamed=s.data.fixtures.filter(f=>pending.data.ids.includes(f.id)&&seMatchRoleIssues(f,seMatchRoles(f,s.data)).some(i=>i.code==='missing_keeper')).map(f=>f.details.grade);if(unnamed.length)s.notice+=' Wicketkeeper not named: '+unnamed.join(', ')+'.';}s.quietNotice=pending.action==='publish'||pending.action==='fixture_lock'&&pending.data.unlock||pending.action==='show_dropped'&&!result.count?null:s.notice;if(pending.picker||pending.order)sePickerSaved(pending.picker);if(pending.copyLast)seCopyMessage(pending.copyLast.id,pending.copyLast.message);s.busy=false;drawSelections();if(pending.availabilityReturn)seReturnFromAvailability(pending.availabilityReturn);if(pending.action==='publish')seRevealPublication('seNotice');if(pending.picker&&currentTab==='teams'&&s.view==='board')seFocusSlot(pending.picker.active);if(pending.order&&currentTab==='teams'&&s.view==='board')seFocusOrder(pending.order.id,pending.order.slot);if(['save_roster','import_roster','selectors','publication_delegate','save_board','save_fixture','publish'].includes(action)&&!(currentTab==='teams'&&s.view==='board'))void refreshClubMessageBadge();return true;}catch(error){s.quietNotice=null;if(!requestConfirmed&&pending.action==='publish'&&error.code==='57014'){s.pending=null;sePersist();s.notice='Publishing timed out. The teams were not published. Your saved selections are safe; review and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&error.message.startsWith('Draft changed. Review the latest team before publishing')){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='The team changed since this publication was prepared. Review the latest team and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&/^(Fix selection or availability issues before publishing|Confirm publishing this team with vacant places|Confirm publishing this team with 12 players|Review and acknowledge the balance warnings before publishing|A player is still published in an overlapping game|.+ is already selected in overlapping games on )/.test(error.reason||error.message)){s.pending=null;sePersist();try{await seReload();}catch{}let blockers=[];try{const notes=JSON.parse(error.details||'[]');if(Array.isArray(notes))blockers=notes.filter(n=>n.level==='error'&&typeof n.text==='string').map(n=>n.text);}catch{}const roles=s.data.fixtures.filter(f=>pending.data.ids.includes(f.id)).flatMap(f=>seMatchRoleIssues(f,seMatchRoles(f,s.data)).filter(i=>i.level==='error').map(i=>f.details.grade+': '+i.text));s.notice='Teams were not published. '+(roles.length?roles.join(' · '):blockers.length?blockers.join(' · '):error.reason||error.message)+' Review the teams and publish again.';}else if(!requestConfirmed&&pending.action==='save_board'&&error.code==='P0001'&&(/ is already selected (?:on \d{4}-\d{2}-\d{2}|in overlapping games on \d{4}-\d{2}-\d{2})/.test(error.message)||/^(A team changed in another session|Mark availability before selecting)/.test(error.message))){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Team was not changed. '+error.message;}else if(!requestConfirmed&&error.code==='P0001'&&/^(Completed fixture is locked\.|Published team is locked\.)/.test(error.message)){s.pending=null;sePersist();sePickerSaved();try{await seReload();}catch{}s.notice='Team was not changed. '+error.message;}else if(pending.action==='availability_batch'&&/^(A player updated their calendar|Playing list changed|A calendar changed)/.test(error.message)){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Availability changed while you were editing. Review the saved choices and try again.';}else if(pending.action==='post'&&error.message.startsWith('This match conversation is closed.')||error.message.startsWith('Completed fixture is locked.')||error.message.startsWith('Published team is locked.')||['conversation','grade_levels','review_post'].includes(action)&&/^(This selection|Conversation status|Settings changed|Club Admin|The team changed|Team comments are private)/.test(error.message)||error.message.startsWith('Only the current Head of Selections')||action==='publication_delegate'&&/^(Only |Choose |Assign |Selection responsibilities changed)/.test(error.message)){s.pending=null;sePersist();if(pending.action==='conversation'){try{await seReload();}catch{}}s.notice=error.message;}else s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;if(pending.copyLast)seCopyMessage(pending.copyLast.id,s.notice);s.busy=false;drawSelections();if(pending.action==='publish'||pending.picker&&!s.pending)seRevealPublication('seNotice');return false;}finally{s.busy=false;seLock(false);restoreButton();if(pending.copyLast&&s===selectionState)seUpdateCopyStatus(pending.copyLast.id);}}
+ try{const result=await seRPC(pending.action,pending.data);requestConfirmed=true;if(s!==selectionState)return false;if(pending.action==='publish'&&result?.published!==true)throw Error('Publication was not confirmed. Retry the same request.');s.formDirty=false;const loaded=await seReload();if(!loaded||s!==selectionState||s.key!==selectionsScopeKey())return false;s.pending=null;s.teamChange=pending.order?.feedback?{id:pending.order.id,revision:result.revisions?.[pending.order.id],text:pending.order.feedback}:null;if(pending.action==='review_post'&&s.boardCommentDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardCommentDrafts[pending.data.id];if(pending.action==='post'&&s.boardChatDrafts?.[pending.data.id]?.trim()===pending.data.body?.trim())delete s.boardChatDrafts[pending.data.id];s.formDirty=[...Object.values(s.boardCommentDrafts||{}),...Object.values(s.boardChatDrafts||{})].some(x=>x.trim());sePersist();if(pending.undo)s.undo.push({before:pending.undo,expected:result.revisions});if(action==='save_roster')s.rosterSaved=true;if(pending.action==='availability_paste'){s.pasteAvailabilityDraft=null;s.navigationDrawer=null;s.view='availability';}if(pending.action==='publish'){s.view='published';s.date=s.data.fixtures.find(f=>pending.data.ids.includes(f.id))?.details?.days?.[0]?.date||s.date;s.boardDateChosen=true;s.active=null;s.publicationResult={ids:pending.data.ids,recipients:Number(result.recipients)||0};}s.notice=action==='show_dropped'?(result.count?result.count+' dropped player'+(result.count===1?'':'s')+' highlighted':'No dropped players need a conversation for these teams.'):action==='publication_delegate'?(data.operation==='hand_back'?'Publishing handed back to the Head of Selections ✓':'Delegation saved ✓'):action==='review_post'?'Comment added ✓':action==='post'?'Message sent ✓':action==='conversation'?(data.spoken?'Marked spoken to ✓':'Conversation marked as needed'):action==='fixture_lock'?(data.unlock?'Unlocked · republish changes to notify players · locks after 30 minutes':'Team locked'):action==='send_review'?'Sent to captains ✓':action==='publish'?`${pending.data.ids.length} team${pending.data.ids.length===1?'':'s'} published ✓ · Messages created for ${Number(result.recipients)||0} club members.${Number.isInteger(result.groups?.added_memberships)?' Usual grades updated in Club Batting; existing grades kept.':''}${result.groups?.unlinked_players?.length?' Some players still need a Club Batting player link.':''}${result.groups?.unmapped_grades?.length?' Link these grades in Settings: '+result.groups.unmapped_grades.map(g=>g.grade).join(', ')+'.':''}`:pending.order?.feedback?'':pending.order?.message||'Saved ✓';if(pending.action==='publish'){const unnamed=s.data.fixtures.filter(f=>pending.data.ids.includes(f.id)&&seMatchRoleIssues(f,seMatchRoles(f,s.data)).some(i=>i.code==='missing_keeper')).map(f=>f.details.grade);if(unnamed.length)s.notice+=' Wicketkeeper not named: '+unnamed.join(', ')+'.';}s.quietNotice=pending.action==='publish'||pending.action==='fixture_lock'&&pending.data.unlock||pending.action==='show_dropped'&&!result.count?null:s.notice;if(pending.picker||pending.order)sePickerSaved(pending.picker);if(pending.copyLast)seCopyMessage(pending.copyLast.id,pending.copyLast.message);s.busy=false;drawSelections();if(pending.availabilityReturn)seReturnFromAvailability(pending.availabilityReturn);if(pending.action==='publish')seRevealPublication('seNotice');if(pending.picker&&currentTab==='teams'&&s.view==='board')seFocusSlot(pending.picker.active);if(pending.order&&currentTab==='teams'&&s.view==='board')seFocusOrder(pending.order.id,pending.order.slot);if(['save_roster','import_roster','selectors','publication_delegate','save_board','save_fixture','publish'].includes(action)&&!(currentTab==='teams'&&s.view==='board'))void refreshClubMessageBadge();return true;}catch(error){s.quietNotice=null;if(!requestConfirmed&&pending.action==='publish'&&error.code==='57014'){s.pending=null;sePersist();s.notice='Publishing timed out. The teams were not published. Your saved selections are safe; review and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&error.message.startsWith('Draft changed. Review the latest team before publishing')){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='The team changed since this publication was prepared. Review the latest team and publish again.';}else if(!requestConfirmed&&pending.action==='publish'&&error.code==='P0001'&&/^(Fix selection or availability issues before publishing|Confirm publishing this team with vacant places|Confirm publishing this team with 12 players|Review and acknowledge the balance warnings before publishing|A player is still published in an overlapping game|.+ is already selected in overlapping games on )/.test(error.reason||error.message)){s.pending=null;sePersist();try{await seReload();}catch{}let blockers=[];try{const notes=JSON.parse(error.details||'[]');if(Array.isArray(notes))blockers=notes.filter(n=>n.level==='error'&&typeof n.text==='string').map(n=>n.text);}catch{}const roles=s.data.fixtures.filter(f=>pending.data.ids.includes(f.id)).flatMap(f=>seMatchRoleIssues(f,seMatchRoles(f,s.data)).filter(i=>i.level==='error').map(i=>f.details.grade+': '+i.text));s.notice='Teams were not published. '+(roles.length?roles.join(' · '):blockers.length?blockers.join(' · '):error.reason||error.message)+' Review the teams and publish again.';}else if(!requestConfirmed&&pending.action==='save_board'&&error.code==='P0001'&&(/ is already selected (?:on \d{4}-\d{2}-\d{2}|in overlapping games on \d{4}-\d{2}-\d{2})/.test(error.message)||/^(A team changed in another session|Mark availability before selecting)/.test(error.message))){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Team was not changed. '+error.message;}else if(!requestConfirmed&&error.code==='P0001'&&/^(Completed fixture is locked\.|Published team is locked\.)/.test(error.message)){s.pending=null;sePersist();sePickerSaved();try{await seReload();}catch{}s.notice='Team was not changed. '+error.message;}else if(pending.action==='availability_batch'&&/^(A player updated their calendar|Playing list changed|A calendar changed)/.test(error.message)){s.pending=null;sePersist();try{await seReload();}catch{}s.notice='Availability changed while you were editing. Review the saved choices and try again.';}else if(pending.action==='post'&&error.message.startsWith('This match conversation is closed.')||error.message.startsWith('Completed fixture is locked.')||error.message.startsWith('Published team is locked.')||['conversation','grade_levels','review_post'].includes(action)&&/^(This selection|Conversation status|Settings changed|Club Admin|The team changed|Team comments are private)/.test(error.message)||error.message.startsWith('Only the current Head of Selections')||action==='publication_delegate'&&/^(Only |Choose |Assign |Selection responsibilities changed)/.test(error.message)){s.pending=null;sePersist();if(pending.action==='conversation'){try{await seReload();}catch{}}s.notice=error.message;}else s.notice=`Save not confirmed. Your change is kept here. ${error.message}`;if(pending.copyLast)seCopyMessage(pending.copyLast.id,s.notice);s.busy=false;drawSelections();if(pending.action==='publish'||pending.picker&&!s.pending)seRevealPublication('seNotice');return false;}finally{s.busy=false;seLock(false);restoreButton();if(pending.copyLast&&s===selectionState)seUpdateCopyStatus(pending.copyLast.id);}}
 function seLock(disabled){document.querySelectorAll('#sePage button,#sePage input,#sePage select,#sePage textarea').forEach(x=>{if(disabled){x.dataset.seWasDisabled=x.disabled?'1':'0';x.disabled=true;}else if(x.dataset.seWasDisabled!==undefined){x.disabled=x.dataset.seWasDisabled==='1';delete x.dataset.seWasDisabled;}});}
 function seDownload(name,text,type='text/plain'){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 function seStyles(){return `<style>
@@ -19790,10 +19796,23 @@ function seBindAvailabilityFixtures(h){
  };
 }
 // END OPTIONAL AVAILABILITY FIXTURES
+async function sePasteUnavailability(){
+ const s=ensureSelections();if(!seCanSetup(s.data))return;
+ recordSelectionDrawer('availability_paste');const drawer=s.navigationDrawer,host=document.getElementById('seContent');
+ host.innerHTML='<p role="status">Opening pasted availability…</p>';
+ try{const module=await import('./paste-unavailability.js?v=0.8.62.345');
+  const here=()=>s===selectionState&&s.key===selectionsScopeKey()&&currentTab==='teams'&&s.navigationDrawer===drawer&&host.isConnected;if(!here())return;
+  module.mountPasteUnavailability(host,{roster:s.data.roster,defaultDate:seAvailabilitySetupDate(s),rosterRevision:s.data.roster_revision,here,
+   draft:s.pasteAvailabilityDraft,dirty:draft=>{s.pasteAvailabilityDraft=draft;s.formDirty=true;},
+   save:async data=>{if(await seMutate('availability_paste',data)){s.pasteAvailabilityDraft=null;}},
+   back:()=>{if(!confirmLeaveSelections())return;s.pasteAvailabilityDraft=null;s.navigationDrawer=null;seAvailability();}});
+  queueMicrotask(bindSelectionBackButtons);
+ }catch(error){if(s===selectionState&&host.isConnected)host.innerHTML='<p role="alert">'+seEsc(error.message||'Could not open pasted availability.')+'</p><button class="btn" id="sePasteRetry">Try again</button>';host.querySelector('#sePasteRetry')?.addEventListener('click',sePasteUnavailability);}
+}
 function seAvailability(playerId=null){if(typeof clubWeek!=='undefined')queueMicrotask(()=>clubWeek.mount());
  const s=ensureSelections(),d=s.data,viewAll=seCanSetup(d)||d.can_view_club_availability&&!d.captain&&membership?.permission_role!=='captain',players=d.roster.filter(p=>p.active).sort((a,b)=>a.name.localeCompare(b.name)),host=document.getElementById('seContent');
  const selected=playerId??s.availabilityPlayerId,p=viewAll?players.find(p=>p.id===selected):players.find(p=>p.user_id===session.user.id);
- const dateSetup=seCanSetup(d)&&players.length?seAvailabilitySavedNotice(s,seAvailabilitySetupDate(s))+'<button type="button" class="btn" id="seSetAvailabilityDate">Set availability for a date</button>':'';
+ const dateSetup=seCanSetup(d)&&players.length?seAvailabilitySavedNotice(s,seAvailabilitySetupDate(s))+'<div class="se-actions"><button type="button" class="btn" id="seSetAvailabilityDate">Set availability for a date</button><button type="button" class="btn ghost" id="sePasteUnavailable">Paste unavailable players</button></div>':'';
  const chooser=value=>`<div class="se-availability-player"><label for="seAvailabilityPlayer">Find a player</label><input id="seAvailabilityPlayer" type="search" role="combobox" aria-label="Find a player" aria-autocomplete="list" aria-expanded="false" aria-controls="seAvailabilityMatches" autocomplete="off" spellcheck="false" placeholder="Start typing a name…" value="${seEsc(players.find(x=>x.id===value)?.name||'')}"><div class="se-availability-suggestions" hidden><div id="seAvailabilityMatches" role="listbox" aria-label="Matching players"></div><p id="seAvailabilityMatchCount" class="se-muted" role="status" aria-live="polite"></p></div></div>`;
  const bindChooser=()=>{
   const input=document.getElementById('seAvailabilityPlayer');if(!input)return;
@@ -19828,7 +19847,7 @@ function seAvailability(playerId=null){if(typeof clubWeek!=='undefined')queueMic
  if(!p){
   s.availabilityPlayerId=null;
   host.innerHTML=viewAll?`<section class="se-card se-drawer"><h2>Player availability</h2>${players.length?dateSetup+chooser(''):seCanSetup(d)?'<button class="btn" id="seAvailabilityAddPlayers">Add players</button>':'<p>No players added yet.</p>'}</section>`:'<section class="se-card se-drawer"><h2>Your availability</h2><p>Ask a selector to link your name in the playing list to your account.</p></section>';
-  document.getElementById('seSetAvailabilityDate')?.addEventListener('click',seAvailabilityDateSetup);
+  document.getElementById('seSetAvailabilityDate')?.addEventListener('click',seAvailabilityDateSetup);document.getElementById('sePasteUnavailable')?.addEventListener('click',()=>{if(confirmLeaveSelections())sePasteUnavailability();});
   bindChooser();
   document.getElementById('seAvailabilityAddPlayers')?.addEventListener('click',()=>{s.view='roster';drawSelections();});return;
  }
@@ -19839,7 +19858,7 @@ function seAvailability(playerId=null){if(typeof clubWeek!=='undefined')queueMic
  const form=document.getElementById('seAvailabilityForm');
  document.getElementById('seAvailabilityBack')?.addEventListener('click',()=>{if(confirmLeaveSelections())seReturnFromAvailability();});
  document.getElementById('seAvailabilityNext')?.addEventListener('click',()=>openPlayerHomeSelections('published'));
- document.getElementById('seSetAvailabilityDate')?.addEventListener('click',()=>{if(confirmLeaveSelections())seAvailabilityDateSetup();});
+ document.getElementById('seSetAvailabilityDate')?.addEventListener('click',()=>{if(confirmLeaveSelections())seAvailabilityDateSetup();});document.getElementById('sePasteUnavailable')?.addEventListener('click',()=>{if(confirmLeaveSelections())sePasteUnavailability();});
  const paint=()=>{
   s.availabilityMonth=month;document.getElementById('seMonth').value=month;
   const first=new Date(month+'-01T12:00:00Z'),offset=(first.getUTCDay()+6)%7,count=new Date(first.getUTCFullYear(),first.getUTCMonth()+1,0).getDate();
@@ -20686,22 +20705,28 @@ function canUseSeasonStats(){
  return selectionsEnabled()&&(isAdmin()||selectionAccess.selector===true||hasMatchCaptainAccess()||membership.permission_role==='captain'||selectionState?.key===selectionsScopeKey()&&seBoardAccess(selectionState.data))
   ||!selectionsStandalone()&&canUseTeamReview();
 }
-async function openSeasonStats(){
- if(!canUseSeasonStats()||!await saveClubEditsBeforeNavigation())return;
+function canUseClubStandings(){return !!(session?.user?.id&&club?.id&&membership&&!productTrialWaiting()&&selectionAccess?.key===selectionsScopeKey()&&!selectionAccess.error&&(selectionAccess.can_view_ladders||selectionAccess.can_view_championship||selectionAccess.can_manage_standings));}
+async function openSeasonStats(section){
+ if(!(canUseSeasonStats()||canUseClubStandings())||!await saveClubEditsBeforeNavigation())return;
  recordAppNavigation(clubNavigationRoute());
- seasonStatsRoute={scope:selectionsScopeKey(),returnTab:currentTab==='teams'?'teams':'dashboard',filters:{}};
+ seasonStatsRoute={scope:selectionsScopeKey(),returnTab:currentTab==='playerhome'?'playerhome':currentTab==='teams'?'teams':'dashboard',section:typeof section==='string'?section:canUseSeasonStats()?'players':'ladders',standings:{},filters:{}};
  currentTab='season_stats';await renderTab();
 }
 async function closeSeasonStats(){
  if(!await saveClubEditsBeforeNavigation())return;
- currentTab=seasonStatsRoute.returnTab==='teams'&&selectionsEnabled()?'teams':canUseClubHome()?'dashboard':'players';
+ currentTab=seasonStatsRoute.returnTab==='playerhome'&&isPlayerUser()?'playerhome':seasonStatsRoute.returnTab==='teams'&&selectionsEnabled()?'teams':canUseClubHome()?'dashboard':'players';
  await renderTab();
+ document.getElementById('playerHomeStandings')?.focus();
  const button=document.getElementById('seSeasonStats');if(button){document.getElementById('seMore').open=true;button.focus();}
 }
 async function renderSeasonStats(){
- if(!canUseSeasonStats())return;
+ if(!canUseSeasonStats()&&!canUseClubStandings())return;
  const scope=selectionsScopeKey();
  if(seasonStatsRoute.scope!==scope)seasonStatsRoute={scope,filters:{},returnTab:selectionsEnabled()?'teams':'dashboard'};
+ const standings=canUseClubStandings(),privateStats=canUseSeasonStats();
+ const section=!privateStats?'ladders':!standings?'players':seasonStatsRoute.section||'players';seasonStatsRoute.section=section;
+ const shell=()=>{document.getElementById('page').innerHTML=seStyles()+(standings&&privateStats?'<nav class="cs-tabs" aria-label="Season stats"><button class="btn ghost" data-season-section="ladders" aria-current="'+(section==='ladders'?'page':'false')+'">Ladders</button><button class="btn ghost" data-season-section="players" aria-current="'+(section==='players'?'page':'false')+'">Player stats</button></nav>':'')+'<div id="seasonStatsHost"></div>';document.querySelectorAll('[data-season-section]').forEach(b=>b.onclick=async()=>{if(!await saveClubEditsBeforeNavigation())return;seasonStatsRoute.section=b.dataset.seasonSection;recordAppNavigation(clubNavigationRoute());await renderSeasonStats();});};
+ if(section==='ladders'){shell();await clubStandingsPanel.mount(document.getElementById('seasonStatsHost'),{scope,clubId:club.id,state:seasonStatsRoute.standings||(seasonStatsRoute.standings={})});return;}
  if(selectionsEnabled()&&!(selectionState?.key===scope&&selectionState.data)){
   document.getElementById('page').innerHTML='<section class="card"><h1>Season stats</h1><p role="status">Loading teams…</p></section>';
   try{
@@ -20715,12 +20740,13 @@ async function renderSeasonStats(){
   }
  }
  const d=selectionsEnabled()&&selectionState?.key===scope?selectionState.data:null;
- document.getElementById('page').innerHTML=seStyles()+'<div id="seasonStatsHost"></div>';
+ shell();
  await seasonStatsPanel.mount(document.getElementById('seasonStatsHost'),{scope,clubId:club.id,state:seasonStatsRoute.filters,
   teams:d?.fixtures.map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published}))||null,roster:d?.roster||[],boardDate:selectionState?.key===scope?selectionState.date:null});
 }
+const clubStandingsPanel=createDeferredController({load:()=>import('./club-standings.js?v=0.8.62.345'),create:({createClubStandings})=>createClubStandings({supabase,here:s=>currentTab==='season_stats'&&seasonStatsRoute.section==='ladders'&&s.scope===selectionsScopeKey()&&canUseClubStandings(),close:closeSeasonStats,confirm:message=>confirm(message),alert:message=>alert(message)}),scope:requestedFeatureScope,name:'club standings',passive:{canLeave:()=>true,hasChanges:()=>false,invalidate:()=>{}}});
 const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.322'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,alert:message=>alert(message),confirm:message=>confirm(message),
- here:s=>currentTab==='season_stats'&&s.scope===selectionsScopeKey()&&canUseSeasonStats(),
+ here:s=>currentTab==='season_stats'&&seasonStatsRoute.section!=='ladders'&&s.scope===selectionsScopeKey()&&canUseSeasonStats(),
  close:closeSeasonStats,navigate:()=>recordAppNavigation(clubNavigationRoute()),
  canOpenPlayer:()=>selectionsEnabled()&&selectionState?.key===selectionsScopeKey()&&seCanSetup(selectionState.data),
  openPlayer:async(panel,id)=>{if(!await saveClubEditsBeforeNavigation())return;currentTab='teams';await renderTab();seOpenStatsPlayer(panel,id);recordAppNavigation(clubNavigationRoute());},

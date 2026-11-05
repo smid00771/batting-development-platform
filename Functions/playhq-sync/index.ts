@@ -1,6 +1,7 @@
 import {linkedScorecard} from './linked-scorecard.mjs';
 import {publicAPI,clubTeams,gradeFixtures,gameSummary} from './public-api.mjs';
 import {teamLogos,summaryLogoTeams,seasonLogoCache} from './team-logos.mjs';
+import {normaliseLadders,standingsCatalogue,standingsDirectory,completeStandingsDirectory} from './standings.mjs';
 const cachedSeasonTeams=seasonLogoCache();
 const origins=new Set(['https://mirelionhq.com','https://www.mirelionhq.com','https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 Deno.serve(async(req:Request)=>{
@@ -23,6 +24,25 @@ Deno.serve(async(req:Request)=>{
   const api=publicAPI({key:connection.key});
   try{
    let result:any;
+   if(job.kind==='ladder'){
+    const standings=(action:string,data:unknown={})=>rpc('club_standings_worker',{p_action:action,p_data:{club_id:club,generation:connection.generation,job,...data as object}},true);
+    try{
+     const context=await standings('begin');if(context.skip)return reply({checked:0,cached:true});
+     let directory=context.directory,catalogue=context.catalogue;
+     if(!directory||!catalogue){
+      const [teams,grades]=await Promise.all([api.teams(context.season_id),api.grades(context.season_id)]);
+      directory=standingsDirectory(teams);catalogue=standingsCatalogue(grades);
+     }
+     const body=await api.ladder(job.source_id),options={gradeId:job.source_id,seasonId:context.season_id,teams:directory,grades:catalogue};
+     const completed=await completeStandingsDirectory(normaliseLadders(body,options),directory,api);
+     const ladder=normaliseLadders(body,{...options,teams:completed});
+     await standings('store',{result:ladder,directory:context.directory?null:directory,catalogue:context.catalogue?null:catalogue});
+     return reply({checked:1});
+    }catch(error){
+     await standings('error',{status:(error as any).status||null}).catch(()=>{});
+     return reply({checked:0,error:'The latest ladder could not be checked.'},502);
+    }
+   }
    if(job.kind==='season'){
     const [teams,grades]=await Promise.all([api.teams(job.source_id),api.grades(job.source_id)]);
     const discovered=clubTeams(teams,connection.organisation_id).map((t:any)=>({...t,grade:t.grade?.id?{...t.grade,...grades.find((g:any)=>g.id===t.grade.id)}:null}));

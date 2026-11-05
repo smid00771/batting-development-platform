@@ -25,6 +25,30 @@ test('scheduled request without token cannot claim work',async()=>{
  globalThis.fetch=async()=>{throw Error('Must not call backend');};
  assert.equal((await handler(request({action:'run'}))).status,403);
 });
+test('scheduled ladders use the shared cache and isolate provider failures from result syncing',async()=>{
+ const season='11111111-1111-4111-8111-111111111111',grade='22222222-2222-4222-8222-222222222222',team='33333333-3333-4333-8333-333333333333';
+ for(const mode of ['fresh','cached','denied']){
+  let providers=0,saved=false,failed=false;
+  globalThis.fetch=async(url,opts)=>{
+   const endpoint=String(url),b=opts.body?JSON.parse(opts.body):null;
+   if(endpoint.endsWith('/playhq_sync_worker')){
+    if(b.p_action==='claim')return json({club_id:club,kind:'ladder',source_id:grade,team_id:club,lease_id:'lease'});
+    if(b.p_action==='connection')return json({key:'club-secret-test',organisation_id:club,generation:'version'});
+    throw Error('Ladder failure must not change the results connection');
+   }
+   if(endpoint.endsWith('/club_standings_worker')){
+    assert.equal(opts.headers.Authorization,'Bearer service-test');
+    if(b.p_action==='begin')return json(mode==='cached'?{skip:true}:{season_id:season,directory:[{id:team,club:{id:club,name:'Example'}}],catalogue:[{id:grade,name:'First'}]});
+    if(b.p_action==='store'){assert.equal(b.p_data.result.ladders[0].rows[0].values.competitionPoints,12);saved=true;return json({saved:true});}
+    assert.equal(b.p_action,'error');assert.equal(b.p_data.status,403);failed=true;return json({saved:true});
+   }
+   providers++;assert.equal(endpoint,`https://api.playhq.com/v2/grades/${grade}/ladder`);assert.equal(opts.headers['x-api-key'],'club-secret-test');assert.equal(opts.headers.Authorization,undefined);
+   return mode==='denied'?json({private:'details'},403):json({gradeId:grade,ladders:[{type:'overall',headers:[{key:'competitionPoints',name:'Points'}],standings:[{team:{id:team,name:'Example'},values:[12]}]}]});
+  };
+  const response=await handler(request({action:'run',run_id:'run',token:'a'.repeat(64)}));const body=await response.text();
+  assert.equal(providers,mode==='cached'?0:1);assert.equal(saved,mode==='fresh');assert.equal(failed,mode==='denied');assert.equal(response.status,mode==='denied'?502:200);assert.ok(!/secret|private|details/.test(body));
+ }
+});
 test('season discovery enriches grade names and stores only this club’s source teams on the server',async()=>{
  const season='11111111-1111-4111-8111-111111111111',grade='22222222-2222-4222-8222-222222222222',team='33333333-3333-4333-8333-333333333333';let stored;
  globalThis.fetch=async(url,opts)=>{

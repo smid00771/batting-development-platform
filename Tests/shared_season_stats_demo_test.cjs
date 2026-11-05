@@ -47,10 +47,21 @@ test('Club Batting-only staff use the same view without enabling or fetching Sel
   }finally{h.close();}
  }
 });
-test('ordinary players cannot open stats or request its totals in any product',async()=>{
+test('ordinary players can open standings without private stats or selection context in any product',async()=>{
  for(const product of ['batting','select','both']){
   const h=await openDemo({product,role:'player',journey:'player_home'},{traceRpc:true});
-  try{assert.equal(h.window.eval("canOpenClubTab('season_stats')"),false);assert.equal(h.document.querySelector('[data-tab="season_stats"]'),null);assert.equal(statsCalls(h).length,0);}finally{h.close();}
+  try{
+   assert.equal(h.window.eval('canUseSeasonStats()'),false);assert.equal(h.document.querySelector('[data-tab="season_stats"]'),null);
+   assert.ok(h.document.querySelector('.player-home-links #playerHomeStandings'));
+   assert.equal(h.rpcCalls.filter(c=>c.name==='club_standings_api').length,0,'No startup standings request');
+   const start=h.rpcCalls.length;await h.click('#playerHomeStandings');
+   assert.ok(h.document.querySelector('.club-standings'));assert.equal(h.document.querySelector('[data-season-section="players"]'),null);
+   assert.equal(h.document.querySelector('#csSettings'),null);
+   assert.equal(h.rpcCalls.slice(start).filter(c=>c.name==='club_season_stats_api'||c.name==='club_selections_api'&&c.args.p_action==='context').length,0);
+   const count=h.rpcCalls.filter(c=>c.name==='club_standings_api').length;const grade=h.document.querySelector('#csGrade');await h.choose('#csGrade',grade.options[1].value);
+   assert.equal(h.rpcCalls.filter(c=>c.name==='club_standings_api').length,count,'Changing competitions stays local');
+   await h.click('#csBack');assert.ok(h.document.querySelector('#playerHomeTitle'));assert.deepEqual(h.errors.map(e=>e.message),[]);
+  }finally{h.close();}
  }
 });
 test('season-date edits block navigation and Back/Forward retains stats filters',async()=>{

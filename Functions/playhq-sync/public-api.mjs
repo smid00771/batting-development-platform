@@ -33,6 +33,7 @@ export function publicAPI({key,fetchImpl=fetch,maxPages=100}) {
     seasons:organisation=>list(`/v1/organisations/${id(organisation)}/seasons`),
     teams:season=>list(`/v1/seasons/${id(season)}/teams`),
     grades:season=>list(`/v1/seasons/${id(season)}/grades`),
+    ladder:grade=>get(`/v2/grades/${id(grade)}/ladder`),
     fixtures:grade=>get(`/v2/grades/${id(grade)}/games`),
     summary:game=>get(`/v2/games/${id(game)}/summary`)
   };

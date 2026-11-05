@@ -404,6 +404,27 @@ const demoBeforeAssistRpc=window.__fixtureDb.rpc;
 window.__fixtureDb.rpc=function(name,args){return name==='mirelion_assist'?demoAssistTransport.rpc(name,args):demoBeforeAssistRpc.call(this,name,args);};
 
 // The same shared fixture/player arrival contract, using fictional data only.
+let demoStandingsSettings={revision:1,ladder_audience:'members',championship_audience:'members',title:'Club Championship',calculation:'total',minimum_teams:1,rules:[]},demoStandingsReceipts={};
+const demoBeforeStandingsRpc=window.__fixtureRpc;
+window.__fixtureRpc=async(name,args={})=>{
+ const admin=membership?.permission_role==='admin',staff=admin||canUseSeasonStats(),settings=demoStandingsSettings;
+ const flags={can_view_ladders:staff||settings.ladder_audience==='members',can_view_championship:settings.championship_audience!=='off'&&(staff||settings.championship_audience==='members'),can_manage_standings:admin};
+ if(name==='club_selections_api'&&args.p_action==='access'){const r=await demoBeforeStandingsRpc(name,args);if(r.data)Object.assign(r.data,flags);return r;}
+ if(name!=='club_standings_api')return demoBeforeStandingsRpc(name,args);
+ if(args.p_club_id!==club?.id)return demoFail('Current club membership required');
+ const catalogue=demoGroupContext().grades.map(g=>({id:g.id,name:g.name})),d=args.p_data||{};
+ if(args.p_action==='save_settings'){
+  if(!admin)return demoFail('Club Admin can change standings settings');
+  if(demoStandingsReceipts[d.request_id])return demoOK(demoStandingsReceipts[d.request_id]);
+  if(d.revision!==settings.revision)return demoFail('Standings settings changed. Reopen settings before saving');
+  Object.assign(settings,d,{revision:d.revision+1});
+ }
+ const clubName=club.name,ladders=catalogue.map((g,i)=>({grade_id:g.id,name:g.name,checked_at:fixtureNow(),error:null,ladders:[{type:'overall',headers:[{key:'played',name:'Played',short_name:'P'},{key:'won',name:'Won',short_name:'W'},{key:'lost',name:'Lost',short_name:'L'},{key:'competitionPoints',name:'Points',short_name:'Pts'}],rows:[{team_id:'bay-'+i,club_id:'bay',club_name:'Bay Example CC',name:'Bay Example CC',position:1,values:{played:5,won:4,lost:1,competitionPoints:24}},{team_id:'ours-'+i,club_id:'demo-club',club_name:clubName,name:clubName,position:2,values:{played:5,won:3,lost:2,competitionPoints:18}},{team_id:'hill-'+i,club_id:'hill',club_name:'Hill Example CC',name:'Hill Example CC',position:3,values:{played:5,won:2,lost:3,competitionPoints:12}}]}]}));
+ const weights=settings.rules.length?settings.rules:catalogue.slice(0,4).map((g,i)=>({grade_id:g.id,name:g.name,weight:5-i}));
+ const championship={title:settings.title,complete:true,missing:[],checked_at:fixtureNow(),stale:false,rows:[['bay','Bay Example CC',24],['demo-club',clubName,18],['hill','Hill Example CC',12]].map(([id,name,points],i)=>({club_id:id,name,position:i+1,points:weights.reduce((n,r)=>n+points*r.weight,0),teams:weights.length,contributions:weights.map(r=>({name:r.name,points,weight:r.weight,contribution:points*r.weight,teams:1}))}))};
+ const result={...flags,season_id:'demo-season',club_organisation_id:'demo-club',automatic_enabled:true,settings:admin?settings:null,catalogue:admin?catalogue:[],own_grades:catalogue.slice(0,1).map(g=>g.id),ladders:flags.can_view_ladders?ladders:[],championship:flags.can_view_championship?championship:null};
+ if(args.p_action==='save_settings')demoStandingsReceipts[d.request_id]=fixtureClone(result);return demoOK(result);
+};
 let demoArrivalRows={},demoArrivalReceipts={};
 const demoBeforeArrivalsRpc=window.__fixtureRpc;
 window.__fixtureRpc=async(name,args={})=>{

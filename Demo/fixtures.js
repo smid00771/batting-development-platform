@@ -2043,6 +2043,13 @@ window.__fixtureRpc=async(name,args={})=>{
   (state.conversation_status??={})[marker||m.fixture_id+':'+m.roster_id+':'+m.movement_key]={spoken_at:d.spoken?fixtureNow():null,spoken_by:d.spoken?userProfile.display_name:null,revision:m.revision+1};result={saved:true,spoken:d.spoken};
  }else if(action==='grade_levels'){
   if(!admin)return bad('Club Admin permission required');if(d.revision!==state.access.revision)return bad('Settings changed. Refresh before saving');state.access.grade_levels=structuredClone(d.rows);state.access.revision++;
+ }else if(action==='availability_paste'){
+  if(!manager)return bad('Club Admin or selector access required');
+  const ps=state.roster.filter(p=>p.active&&d.player_ids.includes(p.id));
+  if(ps.length!==d.player_ids.length||d.roster_revision!==state.roster_revision||ps.some(p=>(p.availability?.revision||0)!==d.revisions[p.id]))return bad('A calendar changed. Reopen before saving');
+  if(!d.dates?.length||d.dates.some(x=>!/^\d{4}-\d{2}-\d{2}$/.test(x)))return bad('Choose valid dates');
+  for(const p of ps)p.availability={...p.availability,available_dates:(p.availability?.available_dates||[]).filter(x=>!d.dates.includes(x)),unavailable_dates:[...new Set([...(p.availability?.unavailable_dates||[]),...d.dates])].sort(),revision:(p.availability?.revision||0)+1,checked_at:fixtureNow()};
+  result={saved:true,players:ps.length,dates:d.dates};
  }else if(action==='availability_batch'){
   if(!manager)return bad('Club Admin or selector access required');if(!d.make_all_available)return bad('Confirm Make all players available for this date');
   if(d.scope_ids!==undefined&&(!Array.isArray(d.scope_ids)||!d.scope_ids.length||d.scope_ids.length>2000||new Set(d.scope_ids).size!==d.scope_ids.length||d.scope_ids.some(id=>!state.roster.some(p=>p.id===id&&p.active))))return bad('Choose active players from this club playing list');
