@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),{randomUUID:uuid}=require('node:crypto');
 const {PGlite}=require('@electric-sql/pglite');
-test('standings isolate member access, calculate weighted clubs and protect cached jobs/settings',async t=>{
+async function setup(t,{cache=true}={}){
  const db=new PGlite();t.after(()=>db.close());
  await db.exec(fs.readFileSync('Tests/fixtures/fielding_test_schema.sql','utf8'));
  await db.exec(`
@@ -17,6 +17,11 @@ test('standings isolate member access, calculate weighted clubs and protect cach
  create function public.club_selections_api(p_club_id uuid,p_action text,p_data jsonb default '{}') returns jsonb language plpgsql security definer as $$declare result jsonb:='{}';begin if p_action='access' then result:=result||'{"enabled":true}';end if;return result;end$$;
  `);
  await db.exec(fs.readFileSync('Database/club_standings.sql','utf8'));
+ if(cache)await db.exec(fs.readFileSync('Database/cache_championship_totals.sql','utf8'));
+ return db;
+}
+test('standings isolate member access, calculate weighted clubs and protect cached jobs/settings',async t=>{
+ const db=await setup(t);
  const c=uuid(),admin=uuid(),player=uuid(),outsider=uuid(),season=uuid(),org=uuid(),otherOrg=uuid(),grade1=uuid(),grade2=uuid(),local1=uuid(),local2=uuid(),team1=uuid(),team2=uuid(),otherTeam=uuid();
  await db.query('insert into public.clubs(id,name) values($1,$2)',[c,'Example Club']);
  await db.query('insert into auth.users(id) values($1),($2),($3)',[admin,player,outsider]);
@@ -66,4 +71,68 @@ test('standings isolate member access, calculate weighted clubs and protect cach
  await db.query("update club_selection_private.playhq_jobs set lease_id=$1,leased_until=now()+interval '5 minutes' where club_id=$2 and source_id=$3",[lease,c,grade2]);
  assert.equal((await worker('begin')).skip,true,'Fresh shared data avoids another provider request');
  await db.exec('set role anon');await assert.rejects(db.query('select public.club_standings_api($1)',[c]),/permission denied/);await db.exec('reset role');
+});
+
+test('Championship tables are built on source/config changes, never on reads or unchanged checks',async t=>{
+ const db=await setup(t,{cache:false}),clubs=[uuid(),uuid(),uuid(),uuid()],seasons=[uuid(),uuid()],grade=uuid(),unused=uuid(),org=uuid(),team=uuid(),admin=uuid(),member=uuid();
+ const rule=weight=>[{grade_id:grade,name:'First',weight,type:'auto',points_column:'competitionPoints',aggregation:'sum'}];
+ const ladder=points=>({grade_id:grade,season_id:seasons[0],name:'First',ladders:[{type:'overall',rows:[{team_id:team,club_id:org,club_name:'Example Club',name:'First XI',values:{competitionPoints:points},position:1}]}]});
+ for(let i=0;i<4;i++){
+  await db.query('insert into public.clubs(id,name) values($1,$2)',[clubs[i],'Club '+i]);
+  await db.query('insert into club_standings_private.settings(club_id,season_id,championship_audience,rules) values($1,$2,$3,$4)',[clubs[i],seasons[i===3?1:0],i===2?'off':'members',rule(i===1?2:5)]);
+ }
+ await db.query('insert into club_standings_private.ladders(season_id,grade_id,data,checked_at) values($1,$2,$3,now())',[seasons[0],grade,ladder(10)]);
+ const before=(await db.query('select club_standings_private.championship($1,$2) result',[clubs[0],seasons[0]])).rows[0].result;
+ await db.exec(fs.readFileSync('Database/cache_championship_totals.sql','utf8'));
+ const read=async(c=clubs[0],sid=seasons[0])=>(await db.query('select club_standings_private.championship($1,$2) result',[c,sid])).rows[0].result;
+ const cached=async(c=clubs[0])=>(await db.query('select data,computed_at::text,checked_at::text from club_standings_private.championship_totals where club_id=$1',[c])).rows[0];
+ assert.deepEqual(await read(),before,'Migration warms the same standings before the first player opens them');
+ assert.equal((await cached(clubs[1])).data.rows[0].points,20);assert.equal(await cached(clubs[2]),undefined,'Off clubs are not calculated');
+ assert.equal((await read(clubs[3],seasons[1])).complete,false,'Other seasons do not borrow current rows');
+ // Instrument the calculator, not the reader, so even an invisible repeated sum fails the check.
+ await db.exec(`create table test_calculations(club_id uuid);
+ alter function club_standings_private.calculate_championship(uuid,uuid) rename to original_calculation;
+ create function club_standings_private.calculate_championship(c uuid,sid uuid) returns jsonb language plpgsql set search_path='' as $$begin
+ insert into public.test_calculations values(c);return club_standings_private.original_calculation(c,sid);end$$;
+ revoke all on function club_standings_private.calculate_championship(uuid,uuid) from public,anon,authenticated,service_role;`);
+ const calls=async()=>Number((await db.query('select count(*) n from test_calculations')).rows[0].n);
+ await db.query('insert into auth.users(id) values($1),($2)',[admin,member]);
+ await db.query("insert into public.club_memberships(club_id,user_id,permission_role) values($1,$2,'admin'),($1,$3,'player')",[clubs[0],admin,member]);
+ await db.query("insert into club_selection_private.access(club_id,status) values($1,'active')",[clubs[0]]);
+ await db.query('insert into club_selection_private.playhq_connections(club_id,organisation_id,active_season_id) values($1,$2,$3)',[clubs[0],org,seasons[0]]);
+ await db.query("select set_config('request.jwt.claim.sub',$1,false)",[member]);await db.exec('set role authenticated');
+ for(let i=0;i<3;i++)assert.equal((await db.query('select public.club_standings_api($1) result',[clubs[0]])).rows[0].result.championship.rows[0].points,50);
+ await db.exec('reset role');assert.equal(await calls(),0,'Repeated authenticated page reads do not call the calculator');
+ const initial=await cached();
+ await db.query("update club_standings_private.ladders set data=data,checked_at=now()+interval '1 minute' where season_id=$1 and grade_id=$2",[seasons[0],grade]);
+ assert.equal(await calls(),0);assert.equal((await cached()).computed_at,initial.computed_at);assert.notEqual((await cached()).checked_at,initial.checked_at);
+ await db.query("update club_standings_private.ladders set last_error='Temporary error' where season_id=$1 and grade_id=$2",[seasons[0],grade]);
+ assert.equal((await read()).stale,true);assert.equal(await calls(),0,'Errors preserve totals without calculating');
+ await db.query("update club_standings_private.ladders set last_error=null,checked_at=now()-interval '2 days' where season_id=$1 and grade_id=$2",[seasons[0],grade]);
+ assert.equal((await read()).stale,true,'Age remains visible even though totals are cached');
+ await db.query('update club_standings_private.ladders set checked_at=now() where season_id=$1 and grade_id=$2',[seasons[0],grade]);
+ assert.equal((await read()).stale,false);assert.equal(await calls(),0,'Freshness recovery does not calculate');
+ await db.query("update club_standings_private.settings set rules=rules,revision=revision+1,ladder_audience='staff',championship_audience='staff' where club_id=$1",[clubs[0]]);
+ assert.equal(await calls(),0,'Same calculation and audience-only changes reuse the table');
+ await db.query('insert into club_standings_private.ladders(season_id,grade_id,data,checked_at) values($1,$2,$3,now())',[seasons[0],unused,ladder(999)]);
+ assert.equal(await calls(),0,'Unselected competitions do not calculate');
+ await db.query('update club_standings_private.ladders set data=$1 where season_id=$2 and grade_id=$3',[ladder(12),seasons[0],grade]);
+ assert.equal(await calls(),2,'Only the two enabled clubs using this season/grade are rebuilt');
+ assert.equal((await read()).rows[0].points,60);assert.equal((await read(clubs[1])).rows[0].points,24);
+ await db.query('update club_standings_private.settings set rules=$1 where club_id=$2',[rule(3),clubs[0]]);
+ assert.equal(await calls(),3);assert.equal((await read()).rows[0].points,36,'Weight changes are ready before the next read');
+ await db.query('delete from club_standings_private.ladders where season_id=$1 and grade_id=$2',[seasons[0],grade]);
+ assert.equal(await calls(),5);assert.equal((await read()).complete,false);assert.deepEqual((await read()).rows,[],'Removed source cannot leave a fabricated rank');
+ await db.query("update club_standings_private.settings set championship_audience='off' where club_id=$1",[clubs[0]]);
+ assert.equal(await cached(),undefined);assert.equal(await calls(),5);
+ await db.query('insert into club_standings_private.ladders(season_id,grade_id,data,checked_at) values($1,$2,$3,now())',[seasons[0],grade,ladder(13)]);
+ assert.equal(await calls(),6,'Disabled club stays idle');
+ await db.query("update club_standings_private.settings set championship_audience='members' where club_id=$1",[clubs[0]]);
+ assert.equal(await calls(),7);assert.equal((await read()).rows[0].points,39,'Re-enabling builds from the latest sources');
+ assert.equal((await read(clubs[0],seasons[1])).complete,false,'Cache lookup is season-specific');
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query('select * from club_standings_private.championship_totals'),/permission denied/);
+ await assert.rejects(db.query('select club_standings_private.refresh_championship($1,true)',[clubs[0]]),/permission denied/);
+ await assert.rejects(db.query('select club_standings_private.calculate_championship($1,$2)',[clubs[0],seasons[0]]),/permission denied/);
+ await db.exec('reset role');
 });
