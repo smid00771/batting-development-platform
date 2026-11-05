@@ -8,7 +8,7 @@ const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const demo=fs.readFileSync(new URL('../demo.html',import.meta.url),'utf8');
 let exercisedSource=source;
 function get(name){const source=exercisedSource;const match=new RegExp('(?:async )?function '+name+'\\(').exec(source);assert.ok(match,name);const start=match.index,next=source.slice(start+1).search(/\n(?:async )?function /);return source.slice(start,start+1+next);}
-const names=['seScorecardNote','seRevealPublication','sePublishReview','seWithSavedRoles','seShortTeams','seTeamPlayerLimit','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seButtonWorking','seMutate','seLock','sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seIsCaptain','seCanSetup','seBindPublishedActions','sePublished'];
+const names=['seScorecardNote','seRevealPublication','sePublishReview','seWithSavedRoles','seSameSelectionValue','seShortTeams','seTeamPlayerLimit','seTeamNumbers','seDraftChanged','sePublishLabel','seNotice','sePersist','seRPC','seButtonWorking','seMutate','seLock','sePublishedDates','sePublishedWeekStart','seClubDate','sePublishedWeeks','sePublishedWeekLabel','seIsCaptain','seCanSetup','seBindPublishedActions','sePublished'];
 // The parked demo keeps its older team-card actions and notice presentation; publication behaviour is exercised in both below.
 for(const name of names.filter(name=>!['seNotice','sePersist','seMutate','seBindPublishedActions','sePublished'].includes(name)))assert.ok(demo.includes(get(name)),'Demo shares '+name);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,7 +27,7 @@ function harness({stale=false,timeout=false,warn=true,short=false,failReload=fal
  const ctx=vm.createContext({recordSelectionDrawer(){},queueMicrotask(){},bindSelectionBackButtons(){},document,Date:PublicationDate,structuredClone,Set,Number,JSON,Error,crypto:{randomUUID},sessionStorage:dom.window.sessionStorage,fixtureSessionStorage:dom.window.sessionStorage,
   session:{user:{id:'head'}},membership:{permission_role:'selector'},hasMatchCaptainAccess:()=>false,club:{id:'club',name:'Test Club'},selectionState:s,currentTab:'teams',ensureSelections:()=>s,selectionsScopeKey:()=>s.key,
   selectionEvidence:{pause(){}},seMatchRoleIssues:()=>[],seMatchRoles:()=>({}),seEsc:esc,seDate:x=>x,seBoard:()=>{},seReviewLabel:()=> 'Captain checked',sePublicationChangeSummary:()=>'<p>Review lineup</p>',
-  seFixtureLocked:()=>false,seCanRecordFixtureResults:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,
+  seFixtureLocked:()=>false,seFixtureCompleted:()=>false,seCanRecordFixtureResults:()=>false,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>prepare?{...f,details:{...f.details,prepared:true}}:f,
   seFormatLabel:()=> 'Limited overs',seSnapshotName:(snap,id)=>esc(snap.players.find(p=>p.id===id)?.name||'Vacant'),seSnapshotSplit:()=>false,sePublicationStamp:()=> 'Published version 1',
   confirmLeaveSelections:()=>true,socialEnsure:()=>social,refreshClubMessageBadge:()=>{},sePickerSaved:()=>{},
   supabase:{rpc:async(_,args)=>{const {p_action:action,p_data:data}=args;if(action==='publication_check')return {data:{fixtures:server.map(f=>({id:f.id,revision:f.revision,issues:f.issues}))}};requests.push({action,data:structuredClone(data)});
@@ -46,13 +46,14 @@ function harness({stale=false,timeout=false,warn=true,short=false,failReload=fal
 // The demo remains parked. Execute publication behavior in both versions instead of requiring an identical move-feedback implementation.
 for(const candidate of [source,demo]){
 exercisedSource=candidate;
-// First action opens a focused review. Unacknowledged warnings explain the blocker beside the button.
+// Balance warnings remain available; the explicit publication click needs no extra checkbox.
 const h=harness();await h.ctx.seWithSavedRoles(h.s.data.fixtures,h.ctx.sePublishReview);
 assert.match(h.document.body.textContent,/Not published yet/);assert.equal(h.document.activeElement.id,'sePublishHeading');
 assert.equal(h.document.querySelectorAll('details[open]').length,0,'Long team changes and warnings stay compact');
-await h.document.getElementById('seConfirmPublish').onclick();assert.equal(h.requests.length,0);
-assert.match(h.document.getElementById('sePublishStatus').textContent,/Tick the warnings/);assert.equal(h.document.activeElement.id,'sePublishStatus');
-h.document.getElementById('seAcknowledge').checked=true;await h.document.getElementById('seConfirmPublish').onclick();
+assert.equal(h.document.getElementById('seAcknowledge'),null);
+assert.match(h.document.body.textContent,/role and team-balance warnings/);
+await h.document.getElementById('seConfirmPublish').onclick();
+assert.equal(h.requests[0].data.acknowledge_balance,true);
 assert.equal(h.publicationCount(),1);assert.equal(h.s.view,'published');assert.equal(h.s.pending,null);
 assert.match(h.document.getElementById('seNotice').textContent,/6 teams published.*Messages created for 7.*existing grades kept/);
 assert.equal(h.document.querySelectorAll('.se-team-head').length,6);assert.equal(h.document.activeElement.id,'seNotice');
