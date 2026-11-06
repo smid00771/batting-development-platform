@@ -4,20 +4,19 @@ const {openDemo}=require('./helpers/demo_harness.cjs');
 const plain=x=>JSON.parse(JSON.stringify(x));
 const calls=(h,action)=>h.window.reviewCalls.filter(c=>c.p_action===action);
 
-async function setup(t,{locked=false}={}){
- const h=await openDemo({product:'select',role:'head',journey:'selections'});t.after(h.close);
- h.window.testLocked=locked;
+async function setup(t,{locked=false,role='head',changedTeams=['third-upcoming','fourth-upcoming']}={}){
+ const h=await openDemo({product:'select',role,journey:'selections'});t.after(h.close);
+ h.window.testLocked=locked;h.window.changedTeams=changedTeams;
  h.window.eval(`
   const ids=['selection-first','selection-second','third-upcoming','fourth-upcoming','dev-navy-upcoming','dev-sky-upcoming'];
   for(const f of demoSelections.fixtures.filter(f=>ids.includes(f.id))){
    f.details=sePrepareMatch(f,{...demoSelections,groups:demoMatchGroups()}).details;
    f.published={details:structuredClone(f.details),slots:structuredClone(f.slots),players:structuredClone(demoSelections.roster)};
    f.publication=1;f.selection_unlocked_until=null;
-   if(['third-upcoming','fourth-upcoming'].includes(f.id)){
+   if(window.changedTeams.includes(f.id)){
     [f.slots[2],f.slots[3]]=[f.slots[3],f.slots[2]];
-    f.selection_unlocked_until=window.testLocked&&f.id==='third-upcoming'?null:new Date(Date.now()+30*60000).toISOString();
-   }
-   if(f.id.startsWith('dev-')){f.published=null;f.publication=0;}
+    f.selection_unlocked_until=window.testLocked&&f.id===window.changedTeams[0]?null:new Date(Date.now()+30*60000).toISOString();
+   }else if(f.id.startsWith('dev-')){f.published=null;f.publication=0;}
   }
   const fixture=demoSelections.fixtures.find(f=>f.id==='third-upcoming');
   selectionState.date=fixture.details.days[0].date;selectionState.boardDateChosen=true;
@@ -187,4 +186,85 @@ test('Relock cannot hide another selector’s newer unpublished changes or trap 
  assert.ok(h.document.querySelector('#sePublish'));
  assert.equal(h.window.eval('demoSelections.fixtures[0].publication'),1);
  assert.equal(calls(h,'publish').length,0);
+});
+
+const navy='dev-navy-upcoming',sky='dev-sky-upcoming';
+const navyWarning='[data-se-republication="dev-navy-upcoming"]';
+
+test('the warning on the current fixture date opens and focuses a review for the named team alone',async t=>{
+ const h=await setup(t,{changedTeams:[navy,sky]});
+ assert.match(h.document.querySelector(navyWarning).textContent,/^Review Dev Navy · /);
+ assert.ok(h.document.querySelector('[data-se-team="dev-navy-upcoming"]'));
+ await h.click(navyWarning);
+ assert.equal(h.document.activeElement.id,'sePublishHeading');
+ assert.deepEqual([...h.document.querySelectorAll('[data-se-publish-team]')].map(b=>b.dataset.sePublishTeam),[navy]);
+ assert.equal(h.document.querySelector('[data-se-publish-team]').checked,true);
+ assert.match(h.document.querySelector('#seContent').textContent,/current team list until you republish/);
+ assert.equal(h.document.querySelector('#sePublishStatus').textContent,'1 team selected');
+ assert.equal(h.document.querySelector('#seConfirmPublish').textContent,'Republish 1 team & notify players');
+ assert.equal(calls(h,'context').length,1);
+ assert.deepEqual(plain(calls(h,'publication_check').map(c=>c.p_data.ids)),[[navy]]);
+ assert.equal(calls(h,'save_board').length,0);assert.equal(calls(h,'publish').length,0);
+ await h.click('#seConfirmPublish');
+ assert.deepEqual(plain(calls(h,'publish')[0].p_data.ids),[navy]);
+ assert.ok(h.document.querySelector('[data-se-republication="dev-sky-upcoming"]'));
+ assert.equal(h.document.querySelector(navyWarning),null);
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});
+
+test('a warning for a different date opens the locked team and Back restores the original date',async t=>{
+ const h=await setup(t,{locked:true,changedTeams:[navy]});
+ const dates=h.document.querySelector('#seBoardDate'),other=[...dates.options].find(o=>o.value!==dates.value).value;
+ await h.choose('#seBoardDate',other);
+ assert.equal(h.document.querySelector('[data-se-team="dev-navy-upcoming"]'),null);
+ assert.equal(calls(h,'context').length,0);
+ await h.click(navyWarning);
+ assert.ok(h.document.querySelector('[data-se-review-unlock="dev-navy-upcoming"]'));
+ assert.equal(h.document.querySelector('#seConfirmPublish').disabled,true);
+ assert.equal(calls(h,'fixture_lock').length,0);assert.equal(calls(h,'publish').length,0);
+ const back=new Promise(resolve=>h.window.addEventListener('popstate',resolve,{once:true}));
+ await h.click('#seBackBoard');await back;await h.settle();
+ assert.equal(h.document.querySelector('#seBoardDate').value,other);
+ assert.ok(h.document.querySelector(navyWarning));
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});
+
+test('the warning follows the group locally and takes a selector with view access to the team heading',async t=>{
+ const h=await setup(t,{role:'selector',changedTeams:[navy]});
+ h.window.eval(`demoPermissions.groups.find(g=>g.id==='sg-senior').members.find(m=>m.user_id==='user-selector').access='view';`);
+ await h.window.eval('seReload()');h.window.eval('drawSelections()');await h.settle();
+ h.window.reviewCalls.length=0;
+ await h.choose('#seBoardGroup','sg-masters');
+ assert.equal(h.document.querySelector(navyWarning),null);
+ await h.choose('#seBoardGroup','sg-senior');
+ const dates=h.document.querySelector('#seBoardDate'),targetDate=dates.value,other=[...dates.options].find(o=>o.value!==targetDate).value;
+ await h.choose('#seBoardDate',other);
+ assert.match(h.document.querySelector(navyWarning).textContent,/^View Dev Navy · /);
+ h.window.HTMLElement.prototype.scrollIntoView=function(){h.window.scrolledTeamTitle=this;};
+ await h.click(navyWarning);
+ const title=h.document.querySelector('[data-se-team="dev-navy-upcoming"] .se-team-title h2');
+ assert.equal(h.document.querySelector('#seBoardDate').value,targetDate);
+ assert.ok(title.closest('.se-readonly-sheet'));
+ assert.equal(h.document.activeElement,title);assert.equal(h.window.scrolledTeamTitle,title);
+ assert.equal(h.document.querySelector('#seConfirmPublish'),null);
+ assert.equal(h.window.reviewCalls.length,0);
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
+});
+
+test('a stale warning recognises republication by another session and checks current publishing access',async t=>{
+ const h=await setup(t,{changedTeams:[navy,sky]});
+ h.window.eval(`const f=demoSelections.fixtures.find(f=>f.id==='dev-navy-upcoming');f.published.slots=structuredClone(f.slots);f.publication++;f.revision++;f.selection_unlocked_until=null;`);
+ await h.click(navyWarning);
+ assert.match(h.document.querySelector('#seContent').textContent,/No unpublished changes/);
+ assert.equal(h.document.querySelector('#seConfirmPublish').disabled,true);
+ const back=new Promise(resolve=>h.window.addEventListener('popstate',resolve,{once:true}));
+ await h.click('#seBackBoard');await back;await h.settle();
+ assert.equal(h.document.querySelector(navyWarning),null);
+ h.window.eval(`demoPermissions.groups.find(g=>g.id==='sg-senior').head_id='user-selector';`);
+ await h.click('[data-se-republication="dev-sky-upcoming"]');
+ assert.match(h.document.querySelector('#seNotice').textContent,/publishing access has changed/);
+ assert.match(h.document.querySelector('[data-se-republication="dev-sky-upcoming"]').textContent,/^View Dev Sky/);
+ assert.equal(h.document.querySelector('#seConfirmPublish'),null);
+ assert.equal(calls(h,'save_board').length,0);assert.equal(calls(h,'publish').length,0);
+ assert.deepEqual(h.errors.map(e=>e.message),[]);
 });

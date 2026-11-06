@@ -5,7 +5,7 @@ function setup(){const dom=new JSDOM('<div id="seContent"></div>'),s={selectionG
  {id:'a-new',selection_group_id:'a',details:{grade:'First XI',days:[{date:'2099-10-17'}]}},
  {id:'b-new',selection_group_id:'b',details:{grade:'Evening XI',days:[{date:'2099-10-19'}]}}
  ]}},calls=[];let mayLeave=true;
- const c=vm.createContext({Date,Intl,document:dom.window.document,ensureSelections:()=>s,seClubDate:()=> '2099-10-15',seOpt:(opts,v)=>opts.map(([id,n])=>`<option value="${id}" ${id===v?'selected':''}>${n}</option>`).join(''),confirmLeaveSelections:()=>mayLeave,recordSelectionNavigation:()=>calls.push('navigation'),seEditSelectionGroups:()=>calls.push('setup'),seBoard:()=>calls.push(c.seBoardFixtures().map(f=>f.id))});
+ const c=vm.createContext({Date,Intl,document:dom.window.document,ensureSelections:()=>s,seClubDate:()=> '2099-10-15',seOpt:(opts,v)=>opts.map(([id,n])=>`<option value="${id}" ${id===v?'selected':''}>${n}</option>`).join(''),confirmLeaveSelections:()=>mayLeave,recordSelectionNavigation:()=>calls.push('navigation'),seEditSelectionGroups:()=>calls.push('setup'),drawSelections:()=>calls.push(c.seBoardFixtures().map(f=>f.id))});
  vm.runInContext(['seClockMinutes','seSelectionFixtures','seBoardFixtures','seBoardGroupControl','seBindGroupControl'].map(extract).join('\n'),c);return {s,c,calls,dom,mayLeave:v=>mayLeave=v};}
 test('board date, stats fixture input and group dropdown share a single group scope',()=>{
  const h=setup();assert.deepEqual(Array.from(h.c.seSelectionFixtures(),f=>f.id),['a-old','a-new']);assert.deepEqual(Array.from(h.c.seBoardFixtures(),f=>f.id),['a-new']);
