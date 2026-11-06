@@ -3799,7 +3799,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.346.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.347.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -11511,7 +11511,7 @@ function socialSurname(name){
 }
 function socialNames(card){
  const snap=card.f.published,role=snap.details.match_roles?.['d'+(card.day+1)]||{},compare=(a,b)=>a.localeCompare(b,'en-AU',{sensitivity:'base',ignorePunctuation:true,numeric:true});
- return (snap.slots||[]).map(slot=>{const id=slot['d'+(card.day+1)],p=snap.players.find(x=>x.id===id);return {id,name:p?.name||'To be confirmed',marks:(id&&role.captain_id===id?' (C)':'')+(id&&role.keeper_id===id?' (WK)':'')};})
+ return (snap.slots||[]).map(slot=>{const id=slot['d'+(card.day+1)],p=snap.players.find(x=>x.id===id);return {id,name:p?.name||'TBC',marks:(id&&role.captain_id===id?' (C)':'')+(id&&role.keeper_id===id?' (WK)':'')};})
   .sort((a,b)=>Number(!a.id)-Number(!b.id)||compare(socialSurname(a.name),socialSurname(b.name))||compare(a.name,b.name));
 }
 function socialPhotoId(s,card){return socialFeatured(s,card).id;}
@@ -14012,7 +14012,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.346';
+const APP_UI_VERSION='0.8.62.347';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

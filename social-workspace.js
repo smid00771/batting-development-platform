@@ -82,7 +82,7 @@ function socialSurname(name){
 }
 function socialNames(card){
  const snap=card.f.published,role=snap.details.match_roles?.['d'+(card.day+1)]||{},compare=(a,b)=>a.localeCompare(b,'en-AU',{sensitivity:'base',ignorePunctuation:true,numeric:true});
- return (snap.slots||[]).map(slot=>{const id=slot['d'+(card.day+1)],p=snap.players.find(x=>x.id===id);return {id,name:p?.name||'To be confirmed',marks:(id&&role.captain_id===id?' (C)':'')+(id&&role.keeper_id===id?' (WK)':'')};})
+ return (snap.slots||[]).map(slot=>{const id=slot['d'+(card.day+1)],p=snap.players.find(x=>x.id===id);return {id,name:p?.name||'TBC',marks:(id&&role.captain_id===id?' (C)':'')+(id&&role.keeper_id===id?' (WK)':'')};})
   .sort((a,b)=>Number(!a.id)-Number(!b.id)||compare(socialSurname(a.name),socialSurname(b.name))||compare(a.name,b.name));
 }
 function socialPhotoId(s,card){return socialFeatured(s,card).id;}
