@@ -252,7 +252,7 @@ function savedBoardHarness(fixtures=[team('A'),team('B')]){
   return {data:{saved:true,revisions},error:null};
  }}});
  h.c.drawSelections=()=>{document.getElementById('seContent').innerHTML=h.s.data.fixtures.map(f=>h.c.seTeamCard(f)).join('');};
- vm.runInContext(['seRPC','seReload','seMutate','seCounts','seBoardCounts','seTeamChangeNotice','seCopyState','seCopyControls','seTeamCard'].map(extract).join('\n'),h.c);
+ vm.runInContext(['seRPC','seReload','seMutate','sePreviewBoardMove','seCounts','seBoardCounts','seTeamChangeNotice','seCopyState','seCopyControls','seTeamCard'].map(extract).join('\n'),h.c);
  return {...h,document,requests,stored:()=>stored};
 }
 test('full XI move survives save and reload, renders twelve with warning, and Undo restores both teams',async()=>{

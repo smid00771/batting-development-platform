@@ -237,7 +237,7 @@ test('the warning follows the group locally and takes a selector with view acces
  await h.choose('#seBoardGroup','sg-masters');
  assert.equal(h.document.querySelector(navyWarning),null);
  await h.choose('#seBoardGroup','sg-senior');
- const dates=h.document.querySelector('#seBoardDate'),targetDate=dates.value,other=[...dates.options].find(o=>o.value!==targetDate).value;
+ const dates=h.document.querySelector('#seBoardDate'),targetDate=h.window.eval("selectionState.data.fixtures.find(f=>f.id==='dev-navy-upcoming').details.days[0].date"),other=[...dates.options].find(o=>o.value!==targetDate).value;
  await h.choose('#seBoardDate',other);
  assert.match(h.document.querySelector(navyWarning).textContent,/^View Dev Navy · /);
  h.window.HTMLElement.prototype.scrollIntoView=function(){h.window.scrolledTeamTitle=this;};
