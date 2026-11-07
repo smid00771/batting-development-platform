@@ -48,3 +48,13 @@ test('copying across formats saves a bracketed day-only player and explains the 
  assert.match(h.document.querySelector('[data-se-copy-status="selection-first"]').textContent,/Day 1: 11\/11.*Day 2: 10\/11.*1 unavailable/);
  assert.equal(h.window.eval('selectionState.pending'),null);assert.deepEqual(h.errors.map(error=>error.message),[]);
 });
+
+test('all players available only on Day 1 receive a visible Day 2 explanation beside the copy button',async t=>{
+ const h=await setup(t);
+ h.window.eval(`const dayTwo=window.copyTarget.details.days[1].date;for(const p of demoSelections.roster)p.availability.available_dates=p.availability.available_dates.filter(date=>date!==dayTwo);`);
+ await h.window.eval('seReload()');h.window.eval('drawSelections()');await h.settle();h.window.copyCalls.length=0;
+ await h.click('[data-se-copylast="selection-first"]');
+ const status=h.document.querySelector('[data-se-copy-status="selection-first"]');
+ assert.equal(status.hidden,false);assert.equal(status.getAttribute('role'),'alert');assert.equal(h.document.activeElement,status);assert.match(status.textContent,/11 availability not confirmed \(Day 2: .+\).*available on both days/);
+ assert.equal(h.window.copyCalls.length,0);assert.deepEqual(plain(h.window.eval("selectionState.data.fixtures.find(f=>f.id==='selection-first').slots")),plain(h.window.copyTarget.slots));assert.deepEqual(h.errors.map(error=>error.message),[]);
+});

@@ -10,9 +10,9 @@ function harness({own=false,readOnly=false}={}){
  let allowed=true,c;
  c=vm.createContext({document,Date,session:{user:{id:'user'}},membership:{},selectionRoomController:null,
   ensureSelections:()=>s,seCanSetup:()=>!own&&!readOnly,seEsc:String,seAvailabilitySavedNotice:()=>'',seAvailabilitySetupDate:()=>'',seAvailabilityDateSetup(){},seBindAvailabilityFixtures(){},recordSelectionNavigation(){},
-  confirmLeaveSelections:()=>allowed,seReturnFromAvailability(){},socialLanding(){},drawSelections:()=>{if(s.view==='availability')c.seAvailability();else document.getElementById('seContent').textContent='Another section';},
+  confirmLeaveSelections:()=>allowed,seReturnFromAvailability(){},seRequestFixtureRefresh(){},socialLanding(){},drawSelections:()=>{if(s.view==='availability')c.seAvailability();else document.getElementById('seContent').textContent='Another section';},
   seMutate:async(action,data)=>{calls.push({action,data:JSON.parse(JSON.stringify(data))});person.availability={...data,revision:data.revision+1};s.formDirty=false;return true;}});
- vm.runInContext(['seAvailability','seChangeView'].map(extract).join('\n'),c);c.seAvailability('player');
+ vm.runInContext(['seAvailabilityMatchHint','seAvailabilityDateLabel','seAvailabilityTeamKey','seUsualGrades','seAvailability','seChangeView'].map(extract).join('\n'),c);c.seAvailability('player');
  const button=date=>document.querySelector('[data-se-date="'+date+'"]'),status=date=>button(date).dataset.seAvailability;
  return {c,s,person,document,calls,button,status,allow:value=>allowed=value,save:()=>document.getElementById('seAvailabilityForm').onsubmit({preventDefault(){}})};
 }

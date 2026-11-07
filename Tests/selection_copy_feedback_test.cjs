@@ -40,7 +40,15 @@ test('concurrent edits are not overwritten and the error appears beside Copy pre
 });
 test('zero eligible players leaves an existing draft intact and explains why',async()=>{
  const h=harness();h.target.slots[3].d1='current';h.s.data.roster[0].availability.available_dates=[];h.s.data.roster[1].availability.unavailable_dates=['2099-10-31'];h.sync();const before=plain(h.s.data);await h.c.seCopyLast('target');
- assert.equal(h.requests.length,0);assert.deepEqual(plain(h.s.data),before);assert.match(h.message(),/No players copied: 1 availability not confirmed; 1 unavailable.*Current team unchanged/);assert.equal(h.button().disabled,false);
+ assert.equal(h.requests.length,0);assert.deepEqual(plain(h.s.data),before);assert.match(h.message(),/No players copied: 1 availability not confirmed.*; 1 unavailable.*Current team unchanged/);assert.equal(h.button().disabled,false);
+});
+test('a missing second-day confirmation names the date visibly without changing availability or the draft',async()=>{
+ const h=harness();Object.assign(h.target.details,{format:'long_form',brackets:false});h.target.details.days.push({date:'2099-11-07',start:'10:00'});h.sync();const before=plain(h.s.data);
+ await h.c.seCopyLast('target');const message=h.document.querySelector('[data-se-copy-status]');
+ assert.equal(h.requests.length,0);assert.deepEqual(plain(h.s.data),before);assert.equal(message.hidden,false);assert.equal(message.getAttribute('role'),'alert');assert.equal(h.document.activeElement,message);
+ assert.match(message.textContent,/2 availability not confirmed \(Day 2: 2099-11-07\).*available on both days/);
+ for(const player of h.s.data.roster)player.availability.available_dates.push('2099-11-07');h.sync();await h.c.seCopyLast('target');
+ assert.equal(h.requests.length,1);assert.deepEqual(plain(h.s.data.fixtures[1].slots.slice(0,2)),[{d1:'a',d2:'a'},{d1:'b',d2:'b'}]);assert.equal(h.document.querySelector('[data-se-copy-status]').getAttribute('role'),'status');
 });
 test('partial copies keep gaps and count the unavailable players in the local confirmation',async()=>{
  const h=harness();h.s.data.roster[1].availability.available_dates=[];h.sync();await h.c.seCopyLast('target');assert.equal(h.s.data.fixtures[1].slots[0].d1,'a');assert.equal(h.s.data.fixtures[1].slots[1].d1,null);assert.match(h.message(),/1 of 11 players.*1 availability not confirmed/);

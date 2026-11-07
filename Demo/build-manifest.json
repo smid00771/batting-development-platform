@@ -1,12 +1,12 @@
 {
-  "appVersion": "0.8.62.350",
+  "appVersion": "0.8.62.351",
   "sources": {
     "action-feedback.js": "ac05754280949d1a30a92a8937e40309104998e9c323d7cc2031bd6feb66d1bc",
-    "app-design.css": "b62a4f7c946ca786504270690e27be87360261a787f6d299f47bc49347c742e6",
-    "app.js": "707ea3bfea98b698ebdb86eec8540a4f9fb33ae64b20d64b5854ace50dc207d7",
+    "app-design.css": "c38e5a8330c741889c6e6dcaeed3033e968ea9b57acdc9381d6e65b6d7a737ad",
+    "app.js": "b504d9142345420d873e4c35f22e059938f85b602d655898a6677399bf631c6f",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
-    "availability-fixtures.js": "4dfcfa67ec367f1cd4f946731a641728210bf6a51d49127f7f6c4128c229bc60",
+    "availability-fixtures.js": "895dc2ebc24e3c5085033ff384876895d8cf0688aa84400481a38613672c13a3",
     "award-performance.js": "29ae6c6b4b20f9797e42edd7f3b0a0c80b34517b7e1789201c6ea488ca551cdf",
     "batting-fixtures.js": "5a0a72b372b1aa8551fb6364c16442b6ecc7e6b03769fb197aac65301a30ea6d",
     "club-standings.js": "428e93abfda890d8ab7585a3a2da16717aa29397ec2d9f6bab157e9b11b58a4f",

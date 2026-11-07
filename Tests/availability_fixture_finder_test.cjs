@@ -31,7 +31,14 @@ test('multi-team choices retain both match days and same-date games, and remembe
  await h.click('#playerHomeShortcut');await h.click('#playerHomeAvailability');await h.click('#seFindFixtures');assert.equal(h.document.querySelectorAll('[data-fixture-team]:checked').length,0);
  assert.equal(lookups(h),1);assert.equal(h.document.querySelectorAll('[data-se-fixture]').length,0);
  const twoDay=data.fixtures.find(f=>f.days.length===2);await h.click(`[data-fixture-team="${twoDay.team_id}"]`);
- for(const day of twoDay.days){await h.choose('#seMonth',day.date.slice(0,7));assert.ok(h.document.querySelector(`[data-se-date="${day.date}"]`).dataset.seFixture);}
+ const beforeAvailability=h.window.eval('JSON.stringify(selectionState.data.roster.map(p=>p.availability))');
+ for(const day of twoDay.days){
+  await h.choose('#seMonth',day.date.slice(0,7));assert.ok(h.document.querySelector(`[data-se-date="${day.date}"]`).dataset.seFixture);
+  await h.click(`[data-se-date="${day.date}"]`);const hint=h.document.querySelector('.se-fixture-day .se-match-availability-hint');assert.match(hint.textContent,/Two-day match.*Each playing day needs its own availability/);
+  for(const matchDay of twoDay.days)assert.ok(hint.textContent.includes(new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(matchDay.date+'T12:00:00Z'))));
+  await h.click('[data-fixture-close]');closeDialog(h);
+ }
+ assert.equal(h.window.eval('JSON.stringify(selectionState.data.roster.map(p=>p.availability))'),beforeAvailability);
  assert.equal(lookups(h),1);assert.deepEqual(h.errors.map(e=>e.message),[]);
 });
 test('Add Trial game saves whole-club or multiple-team audiences without creating a selection team',async t=>{

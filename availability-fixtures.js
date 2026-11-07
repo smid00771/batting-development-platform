@@ -26,9 +26,9 @@ export function createAvailabilityFixtureFinder(h){
   for(const f of entry.data?.fixtures||[]){
    const trial=f.source==='trial',included=trial||selected.has(f.team_id)&&teams.has(f.team_id);
    if(!included)continue;
-   const team=trial?f.title:teams.get(f.team_id).name,audience=trial?(f.audience==='club'?'Whole club':(f.team_ids||[]).map(id=>teams.get(id)?.name).filter(Boolean).join(' + ')):'';
+   const team=trial?f.title:teams.get(f.team_id).name,audience=trial?(f.audience==='club'?'Whole club':(f.team_ids||[]).map(id=>teams.get(id)?.name).filter(Boolean).join(' + ')):'',matchDates=[...new Set((f.days||[]).map(day=>day.date).filter(date=>/^\d{4}-\d{2}-\d{2}$/.test(date)))].sort();
    for(const day of f.days||[]){if(!/^\d{4}-\d{2}-\d{2}$/.test(day.date)||day.date<entry.data.from_date)continue;
-    const rows=byDate.get(day.date)||[];rows.push({...day,id:f.id,source:f.source,team,audience,opposition:f.opposition});byDate.set(day.date,rows);}
+    const rows=byDate.get(day.date)||[];rows.push({...day,id:f.id,source:f.source,team,audience,opposition:f.opposition,matchDates});byDate.set(day.date,rows);}
   }
   for(const rows of byDate.values())rows.sort((a,b)=>(a.start||'').localeCompare(b.start||'')||a.team.localeCompare(b.team));
  }
@@ -70,7 +70,7 @@ export function createAvailabilityFixtureFinder(h){
   const rows=byDate.get(date);if(!h.current()||!rows?.length)return false;
   const dialog=document.createElement('dialog');dialog.className='se-fixture-day';dialog.setAttribute('aria-labelledby','seFixtureDayTitle');
   const label=new Intl.DateTimeFormat(undefined,{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z')),status=h.status(date);
-  dialog.innerHTML=`<h2 id="seFixtureDayTitle">${escape(label)}</h2><p>Team fixtures · selection not confirmed</p><ul>${rows.map(r=>`<li><strong>${escape(r.team)}</strong><span>${escape(r.audience||'v '+r.opposition)}</span><span>${r.day>1?'Day '+r.day+' · ':''}${escape(r.start||'Time TBC')}${r.ground?' · '+escape(r.ground):''}</span></li>`).join('')}</ul><p>Your availability</p><div class="se-actions">${[['available','Available'],['unavailable','Unavailable'],['unknown','Not set']].map(([value,text])=>`<button type="button" class="btn secondary" data-fixture-status="${value}" aria-pressed="${status===value}">${text}</button>`).join('')}</div><p>Changes are saved with your calendar’s Save button.</p><div class="se-actions"><button type="button" class="btn ghost se-close" data-fixture-close>Close</button></div>`;
+  dialog.innerHTML=`<h2 id="seFixtureDayTitle">${escape(label)}</h2><p>Team fixtures · selection not confirmed</p><ul>${rows.map(r=>`<li><strong>${escape(r.team)}</strong><span>${escape(r.audience||'v '+r.opposition)}</span><span>${r.day>1?'Day '+r.day+' · ':''}${escape(r.start||'Time TBC')}${r.ground?' · '+escape(r.ground):''}</span>${r.matchDates.length===2?`<span class="se-match-availability-hint"><strong>Two-day match — check both dates</strong> ${r.matchDates.map(date=>escape(new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z')))).join(' & ')}. Each playing day needs its own availability.</span>`:''}</li>`).join('')}</ul><p>Your availability</p><div class="se-actions">${[['available','Available'],['unavailable','Unavailable'],['unknown','Not set']].map(([value,text])=>`<button type="button" class="btn secondary" data-fixture-status="${value}" aria-pressed="${status===value}">${text}</button>`).join('')}</div><p>Changes are saved with your calendar’s Save button.</p><div class="se-actions"><button type="button" class="btn ghost se-close" data-fixture-close>Close</button></div>`;
   form.append(dialog);
   dialog.querySelectorAll('[data-fixture-status]').forEach(b=>b.onclick=()=>{if(h.current())h.setStatus(date,b.dataset.fixtureStatus);dialog.close();});
   dialog.querySelector('[data-fixture-close]').onclick=()=>dialog.close();

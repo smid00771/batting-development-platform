@@ -6,7 +6,7 @@ function setup(file,existing=true){
  const source=fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8'),dom=new JSDOM('<main id="seContent"></main>'),s={view:'availability',date:day,data:{roster_revision:4,access:{timezone:'Australia/Sydney'},availability_dates:existing?[{date:day,bulk_saved_at:'2026-10-15T22:05:00Z',updated_at:'2026-10-15T22:06:00Z'}]:[],roster:existing?[player('Alice',[],[day]),player('Bob',[day]),player('Casey',[day])]:[player('Alice'),player('Bob'),player('Casey')]}};
  const calls=[];let leave=true;
  const c=vm.createContext({document:dom.window.document,Date,Intl,FormData:dom.window.FormData,console,session:{user:{id:'admin'}},ensureSelections:()=>s,seCanSetup:()=>true,seEsc:x=>String(x??''),seClubDate:()=>day,confirmLeaveSelections:()=>leave,seNotice:()=>{},drawSelections:()=>c.seAvailability(),seMutate:async(action,data)=>{calls.push({action,data});return false;}});
- vm.runInContext(['seAvailabilityDateLabel','seAvailabilitySetupDate','seAvailabilitySavedNotice','seAvailabilityTeamKey','seAvailabilityTeams','seAvailabilityPool','seAvailabilityDateSetup','seAvailability'].map(n=>fn(source,n)).join('\n'),c);
+ vm.runInContext(['seUsualGrades','seAvailabilityDateLabel','seAvailabilitySetupDate','seAvailabilitySavedNotice','seAvailabilityTeamKey','seAvailabilityTeams','seAvailabilityPool','seAvailabilityMatchHint','seAvailabilityDateSetup','seAvailability'].map(n=>fn(source,n)).join('\n'),c);
  const change=(el,event='input')=>el.dispatchEvent(new dom.window.Event(event,{bubbles:true}));
  return {s,c,calls,doc:dom.window.document,change,leave:v=>leave=v,box:id=>dom.window.document.querySelector('[name="unavailable"][value="'+id+'"]'),submit:()=>dom.window.document.getElementById('seAvailabilityDateForm').onsubmit({preventDefault(){}})};
 }
@@ -44,6 +44,6 @@ for(const file of ['app.js','demo.html']){
 }
 for(const file of ['app.js','demo.html'])test(file+': a rejected concurrent save reloads current choices and clears the retry queue',async()=>{
  const source=fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8'),s={pending:null,busy:false,data:{}},crypto=require('node:crypto');let reloads=0,draws=0;
- const c=vm.createContext({crypto,ensureSelections:()=>s,selectionState:s,selectionEvidence:{pause(){}},seGuardFixtureEdit:()=>true,sePersist(){},seNotice(){},seLock(){},seRPC:async()=>{throw Error('A player updated their calendar. Reload before setting this date');},seReload:async()=>{reloads++;return true;},drawSelections:()=>draws++});
+ const c=vm.createContext({crypto,ensureSelections:()=>s,selectionState:s,selectionsScopeKey:()=>s.key,selectionEvidence:{pause(){}},seGuardFixtureEdit:()=>true,sePersist(){},seNotice(){},seLock(){},seRPC:async()=>{throw Error('A player updated their calendar. Reload before setting this date');},seReload:async()=>{reloads++;return true;},drawSelections:()=>draws++});
  vm.runInContext(['seButtonWorking','seMutate'].map(name=>fn(source,name)).join('\n'),c);assert.equal(await c.seMutate('availability_batch',{date:day}),false);assert.equal(s.pending,null);assert.equal(s.busy,false);assert.equal(reloads,1);assert.equal(draws,1);assert.match(s.notice,/Review the saved choices/);
 });

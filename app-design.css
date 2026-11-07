@@ -612,3 +612,5 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 
 /* Season stats keeps the existing private view beside public standings. */
 .cs-tabs{display:flex;gap:6px;border-bottom:1px solid var(--line,#dbe3e0);margin:8px 0}.cs-tabs button{min-height:44px}.cs-tabs [aria-current=page]{box-shadow:inset 0 -3px var(--navy,#173d32)}
+.se-copy-blocked{color:#9d3430;font-weight:600}
+.se-match-availability-hint{margin:8px 0;padding:8px 10px;border-left:3px solid #b47b25;background:#fff7e6;color:#63491d;font-size:13px}.se-match-availability-hint[hidden]{display:none}
