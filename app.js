@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.349';
+const APP_UI_VERSION='0.8.62.350';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19758,8 +19758,10 @@ async function seCopyLast(id){
  // Imported fixtures can have a blank competition label. A saved grade-group
  // identity remains authoritative even when those display labels differ.
  const sameTeam=d=>d?.grade_group_id&&f.details.grade_group_id?d.grade_group_id===f.details.grade_group_id:d?.grade===f.details.grade&&d.competition===f.details.competition;
- const last=s.data.fixtures.filter(x=>x.id!==id&&x.draft_visible!==false&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>sameTeam(x.details)&&x.details.format===f.details.format&&earlier(x.details)&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date)||(seClockMinutes(b.details.days[0].start)??-1)-(seClockMinutes(a.details.days[0].start)??-1))[0];
- if(!last){seCopyMessage(id,'There is no earlier team to copy for this grade and match format.');return;}
+ // A draw can change format between rounds. Carry forward the latest line-up;
+ // the target fixture below determines playing days, bracketing and availability.
+ const last=s.data.fixtures.filter(x=>x.id!==id&&x.draft_visible!==false&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>sameTeam(x.details)&&earlier(x.details)&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date)||(seClockMinutes(b.details.days[0].start)??-1)-(seClockMinutes(a.details.days[0].start)??-1))[0];
+ if(!last){seCopyMessage(id,'There is no earlier team to copy for this grade.');return;}
  const source=last.details.grade+' · '+seDate(last.details.days[0].date)+(last.details.days[0].start?' · '+last.details.days[0].start:'');
  const roster=new Map(s.data.roster.map(p=>[p.id,p])),used=[],identity=id=>String(roster.get(id)?.name||id||'').trim().toLowerCase().replace(/\s+/g,' ');
  // Match the server's overlapping-game guard, including legacy duplicate names.

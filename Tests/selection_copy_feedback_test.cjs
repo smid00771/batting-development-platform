@@ -8,7 +8,7 @@ function harness({hold=false,refreshHold=false}={}){
  const previous=fixture('previous','2099-10-24'),target=fixture('target','2099-10-31');previous.slots[0].d1='a';previous.slots[1].d1='b';target.details.competition='';
  const s={key:'user:club',view:'board',busy:false,pending:null,undo:[],data:{selector:true,fixtures:[previous,target],roster:['a','b','current'].map(id=>({id,name:id,active:true,availability:{available_dates:['2099-10-31']}}))}},requests=[],results=new Map();let stored=structuredClone(s.data),releaseRefresh,c;
  const render=()=>{document.getElementById('seContent').innerHTML=s.data.fixtures.filter(f=>f.id==='target').map(f=>c.seCopyControls(f)).join('');document.querySelector('[data-se-copylast]').onclick=()=>c.seCopyLast('target');if(s.pending)document.querySelectorAll('#seContent button').forEach(b=>b.disabled=true);if(s.pending?.copyLast&&!s.busy)c.seUpdateCopyStatus('target');};
- c=vm.createContext({document,structuredClone,crypto:webcrypto,sessionStorage:dom.window.sessionStorage,ensureSelections:()=>s,selectionState:s,selectionsScopeKey:()=>s.key,seEsc:String,seDate:String,seFixtureLocked:f=>!!f.published||!!f.locked,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>structuredClone(f),drawSelections:render,refreshClubMessageBadge(){},seReload:async()=>{if(refreshHold)await new Promise(r=>releaseRefresh=r);s.data=structuredClone(stored);return true;},seRPC:(action,data)=>new Promise((resolve,reject)=>{
+ c=vm.createContext({document,structuredClone,crypto:webcrypto,sessionStorage:dom.window.sessionStorage,currentTab:'teams',selectionEvidence:{pause(){}},ensureSelections:()=>s,selectionState:s,selectionsScopeKey:()=>s.key,seEsc:String,seDate:String,seFixtureLocked:f=>!!f.published||!!f.locked,seGuardFixtureEdit:()=>true,sePrepareMatch:f=>structuredClone(f),drawSelections:render,refreshClubMessageBadge(){},seReload:async()=>{if(refreshHold)await new Promise(r=>releaseRefresh=r);s.data=structuredClone(stored);return true;},seRPC:(action,data)=>new Promise((resolve,reject)=>{
   const finish=(error,commit=false)=>{
    if(error&&!commit){reject(error);return;}
    let result=results.get(data.request_id);
@@ -17,7 +17,7 @@ function harness({hold=false,refreshHold=false}={}){
   };
   requests.push({action,data:plain(data),finish});if(!hold)finish();
  })});
- vm.runInContext(['seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seDayStatus','seNotice','seLock','seButtonWorking','sePersist','seMutate','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(extract).join('\n'),c);render();
+ vm.runInContext(['seClockMinutes','seMatchDuration','seDayWindow','seOverlap','seDayStatus','seNotice','seLock','seButtonWorking','sePersist','seMutate','seTeamPlayerLimit','seCopyState','seCopyControls','seUpdateCopyStatus','seCopyMessage','seCopyLast'].map(extract).join('\n'),c);render();
  return {c,s,target,previous,requests,document,render,button:()=>document.querySelector('[data-se-copylast]'),message:()=>document.querySelector('[data-se-copy-status]').textContent,sync:()=>stored=structuredClone(s.data),releaseRefresh:()=>{refreshHold=false;releaseRefresh();},stored:()=>stored};
 }
 test('blank competition labels copy by grade identity, with immediate progress until the saved team reloads',async()=>{
@@ -51,8 +51,37 @@ test('two-day copies check each date and preserve bracket partners independently
  h.s.data.roster[0].availability={available_dates:['2099-10-31'],unavailable_dates:['2099-11-07']};h.s.data.roster[1].availability={available_dates:['2099-11-07'],unavailable_dates:['2099-10-31']};h.sync();await h.c.seCopyLast('target');
  const copied=h.s.data.fixtures[1];assert.deepEqual(plain(copied.slots[0]),{d1:'a',d2:'b'});assert.deepEqual(plain(copied.slots[1]),{d1:null,d2:null});assert.match(h.message(),/Day 1: 1\/11.*Day 2: 1\/11/);
 });
-test('different grade identities or formats cannot borrow a team, even with matching display names',async()=>{
- for(const change of [h=>h.previous.details.grade_group_id='other-grade',h=>h.previous.details.format='t20',h=>{delete h.previous.details.grade_group_id;delete h.target.details.grade_group_id;}]){
+test('different grade identities or unlinked competitions cannot borrow a team, even with matching display names',async()=>{
+ for(const change of [h=>h.previous.details.grade_group_id='other-grade',h=>{delete h.previous.details.grade_group_id;delete h.target.details.grade_group_id;}]){
   const h=harness();change(h);h.sync();await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.match(h.message(),/no earlier team/);
  }
+});
+
+test('the latest round takes precedence over an older matching format when copying into long form',async()=>{
+ const h=harness();h.target.details.format='long_form';h.target.details.brackets=false;h.target.details.round='6';h.target.details.days.push({date:'2099-11-07',start:'10:00'});
+ h.previous.details.round='5';
+ const older=structuredClone(h.previous);older.id='older';older.details.format='long_form';older.details.days=[{date:'2099-10-10',start:'10:00'},{date:'2099-10-17',start:'10:00'}];older.slots[0]={d1:'current',d2:'current'};older.slots[1]={d1:null,d2:null};h.s.data.fixtures.push(older);
+ for(const p of h.s.data.roster)p.availability.available_dates.push('2099-11-07');
+ const before=plain(h.target.details),source=plain(h.previous);h.sync();await h.c.seCopyLast('target');
+ const copied=h.s.data.fixtures[1];assert.deepEqual(plain(copied.details),before);assert.deepEqual(plain(copied.slots.slice(0,2)),[{d1:'a',d2:'a'},{d1:'b',d2:'b'}]);assert.deepEqual(plain(h.s.data.fixtures[0]),source);assert.match(h.message(),/2099-10-24.*Day 1: 2\/11.*Day 2: 2\/11/);
+});
+
+test('one-day to long-form copying checks both dates and uses the target bracketing rule',async()=>{
+ for(const brackets of [false,true]){
+  const h=harness();Object.assign(h.target.details,{format:'long_form',brackets});h.target.details.days.push({date:'2099-11-07',start:'10:00'});
+  h.s.data.roster[0].availability={available_dates:['2099-10-31'],unavailable_dates:['2099-11-07']};h.s.data.roster[1].availability.available_dates.push('2099-11-07');h.sync();await h.c.seCopyLast('target');
+  assert.deepEqual(plain(h.s.data.fixtures[1].slots.slice(0,2)),[{d1:brackets?'a':null,d2:null},{d1:'b',d2:'b'}]);assert.match(h.message(),/1 unavailable/);
+ }
+});
+
+test('long-form to one-day copying takes the first-day lineup and clears second-day slots',async()=>{
+ for(const format of ['limited_overs','t20']){
+  const h=harness();h.target.details.format=format;h.previous.details.format='long_form';h.previous.details.brackets=true;h.previous.details.days.push({date:'2099-10-25',start:'10:00'});h.previous.slots[0]={d1:'a',d2:'current'};h.previous.slots[1]={d1:'b',d2:'a'};h.sync();await h.c.seCopyLast('target');
+  assert.equal(h.requests.length,1);assert.deepEqual(plain(h.s.data.fixtures[1].slots.slice(0,2)),[{d1:'a',d2:null},{d1:'b',d2:null}]);assert.ok(h.s.data.fixtures[1].slots.every(slot=>slot.d2===null));assert.equal(h.s.data.fixtures[1].details.format,format);
+ }
+});
+
+test('fixtures without grade IDs can cross formats within the same named competition and team',async()=>{
+ const h=harness();delete h.previous.details.grade_group_id;delete h.target.details.grade_group_id;h.target.details.competition=h.previous.details.competition;h.previous.details.format='t20';h.sync();await h.c.seCopyLast('target');
+ assert.equal(h.requests.length,1);assert.equal(h.s.data.fixtures[1].slots[0].d1,'a');
 });
