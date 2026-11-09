@@ -1,7 +1,7 @@
 // Presentation only. Source grades, players and match figures are never rewritten.
 const normal=value=>String(value||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
 export function gradeLabels(value=[],grades=null){
- if(!Array.isArray(value)||value.length>40)throw Error('Use a short list of grade labels.');
+ if(!Array.isArray(value)||value.length>200)throw Error('Use a short list of grade labels.');
  const seen=new Set(),known=grades&&new Set(grades.map(normal));
  return value.map(item=>{
   if(!item||typeof item.grade!=='string'||typeof item.label!=='string'||!item.grade.trim()||item.grade.length>160||!item.label.trim()||item.label.length>40||/[<>\r\n]/.test(item.label)||seen.has(normal(item.grade))||known&&!known.has(normal(item.grade)))throw Error('The suggested label does not match a grade in this graphic.');
@@ -14,7 +14,7 @@ export function withGradeLabels(layout,changes=[],grades=null){
  for(const item of patch)aliases.set(normal(item.grade),item);
  return {...layout,grade_labels:gradeLabels([...aliases.values()])};
 }
-function gradeLabelFamily(value){
+export function gradeLabelFamily(value){
  const key=normal(value).replace(/\./g,'').replace(/\s*\([^)]*\)/g,'').trim();
  const women=key.match(/(?:^|\s)women(?:['’]?s)?\s+(1st|2nd)(?:\s+grade)?$/);
  if(women)return 'women-'+women[1];
@@ -49,8 +49,8 @@ export function checkGraphicLabel(canvas,ctx,{source,label,width,size,grade=fals
 }
 export function gradeLabelSchema(grades=[]){return {type:'array',maxItems:40,items:{type:'object',additionalProperties:false,required:['grade','label'],properties:{grade:{type:'string',...(grades.length?{enum:[...new Set(grades)]}:{maxLength:160})},label:{type:'string',minLength:1,maxLength:40}}}};}
 export const GRAPHIC_FIELDS={
- team_week:{top:[50,1200],bottom:[150,1320],font_scale:[75,120],text_colour:'colour',title_y:[0,1300],title_size:[40,160],week_y:[0,1320],week_size:[20,80],left:[20,160],figures_right:[650,910],grade_right:[950,1060],grade_align:['left','center','right'],show_logo:'boolean',logo_x:[0,100],logo_y:[0,100],logo_width:[3,60]},
- player_week:{title_y:[0,100],week_y:[0,100],name_y:[0,100],figures_y:[0,100],grade_y:[0,100],photo_x:[0,100],photo_y:[0,100],photo_size:[10,100],logo_x:[0,100],logo_y:[0,100],logo_size:[3,50],text_x:[0,100],text_width:[25,95],title_size:[20,120],name_size:[20,120],figures_size:[16,100],text_colour:'colour',show_logo:'boolean',show_photo:'boolean',text_panel:'boolean'},
+ team_week:{title_font:['sporting','modern','classic','condensed','sans','script'],week_font:['sporting','modern','classic','condensed','sans','script'],player_font:['sporting','modern','classic','condensed','sans','script'],score_font:['sporting','modern','classic','condensed','sans','script'],grade_font:['sporting','modern','classic','condensed','sans','script'],name_size:[18,100],figures_size:[18,100],grade_size:[16,90],top:[50,1200],bottom:[150,1320],font_scale:[75,120],text_colour:'colour',title_y:[0,1300],title_size:[40,160],week_y:[0,1320],week_size:[20,80],left:[20,160],figures_right:[650,910],grade_right:[950,1060],grade_align:['left','center','right'],show_logo:'boolean',logo_x:[0,100],logo_y:[0,100],logo_width:[3,60]},
+ player_week:{title_font:['sporting','modern','classic','condensed','sans','script'],week_font:['sporting','modern','classic','condensed','sans','script'],player_font:['sporting','modern','classic','condensed','sans','script'],score_font:['sporting','modern','classic','condensed','sans','script'],grade_font:['sporting','modern','classic','condensed','sans','script'],week_size:[16,80],grade_size:[16,80],title_y:[0,100],week_y:[0,100],name_y:[0,100],figures_y:[0,100],grade_y:[0,100],photo_x:[0,100],photo_y:[0,100],photo_size:[10,100],logo_x:[0,100],logo_y:[0,100],logo_size:[3,50],text_x:[0,100],text_width:[25,95],title_size:[20,120],name_size:[20,120],figures_size:[16,100],text_colour:'colour',show_logo:'boolean',show_photo:'boolean',text_panel:'boolean'},
  team_selections:{layout:['portrait','portrait_left','list'],theme:['gradient','solid','split'],frame:['cutout','rectangle','circle'],font:['bold','clean','classic'],marker:['arrows','badge','name'],header_layout:['integrated','banner','separate'],header_height:[200,440],photo_scale:[80,125],photo_shift:[-100,100],primary:'colour',accent:'colour'}
 };
 export function graphicPatch(kind,value){

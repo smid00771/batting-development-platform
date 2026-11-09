@@ -1,4 +1,4 @@
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.353';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.354';
 // One team-list workflow, with date-based or individually chosen published teams.
 export function createTeamSocialWorkflow(h){
  const esc=h.escape,el=id=>document.getElementById(id);

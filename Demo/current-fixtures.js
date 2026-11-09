@@ -455,3 +455,31 @@ window.__fixtureRpc=async(name,args={})=>{
   const result=demoArrivalRows[key]||old;demoArrivalReceipts[receipt]=structuredClone(result);return demoOK(result);
  }catch(e){return demoFail(e.message);}
 };
+
+// Club template setup is entirely local in the demo, including revisions and history.
+const demoGraphicSavedRpc=window.__fixtureDb.rpc;
+const demoGraphicState={preferences:{revision:0,grade_labels:[],style:{}},versions:[],receipts:new Map()};
+const demoGraphicAPI={team_week:'team_of_week_api',player_week:'player_of_week_api',results:'club_social_awards_api',century:'club_social_awards_api',five_wickets:'club_social_awards_api'};
+function demoGraphicLayout(layout={}){const pref=demoGraphicState.preferences,keys=new Set(pref.grade_labels.map(x=>x.grade.toLowerCase()));return {...layout,grade_labels:[...(layout.grade_labels||[]).filter(x=>!keys.has(x.grade.toLowerCase())),...fixtureClone(pref.grade_labels)],...pref.style};}
+async function demoGraphicContext(args){const designs={};for(const [kind,api] of Object.entries(demoGraphicAPI)){const response=await demoGraphicSavedRpc.call(window.__fixtureDb,api,{...args,p_action:'context',p_data:{week_end:socialEnsure().resultsWeek||demoAddDay(demoUpcomingSaturday(),-6)}});const d=response.data?.design||response.data?.designs?.[kind];if(d)designs[kind]={...d,layout:demoGraphicLayout(d.layout)};}return {preferences:fixtureClone(demoGraphicState.preferences),teams:fixtureGroups.filter(x=>x.active!==false).map(x=>({id:x.id,name:x.name})),designs};}
+window.__fixtureDb.rpc=async function(name,args={}){
+ if(name!=='club_graphic_setup_api'){const result=await demoGraphicSavedRpc.call(this,name,args);if(args.p_action==='context'&&result.data){result.data.graphic_preferences=fixtureClone(demoGraphicState.preferences);if(name==='team_of_week_api'||name==='player_of_week_api')result.data.design.layout=demoGraphicLayout(result.data.design.layout);if(name==='club_social_awards_api')for(const d of Object.values(result.data.designs||{}))d.layout=demoGraphicLayout(d.layout);}return result;}
+ if(!demoIsSocial())return demoFail('Socials Manager access required');const d=args.p_data||{},action=args.p_action,kind=d.kind;
+ try{const context=await demoGraphicContext(args);if(action==='context')return demoOK(context);
+  if(action==='history')return demoOK({versions:demoGraphicState.versions.filter(v=>v.kind===kind).slice(-30).reverse()});
+  const old=demoGraphicState.receipts.get(d.request_id);if(old){if(old.payload!==JSON.stringify(d))return demoFail('Retry the original change');return demoOK(old.result);}
+  const pref=demoGraphicState.preferences,previous=kind==='preferences'?pref:context.designs[kind],version=action==='restore'?demoGraphicState.versions.find(v=>v.id===d.version_id&&v.kind===kind):null;
+  if(action==='restore'&&!version)return demoFail('Choose a saved version');
+  if(action==='save_preferences'||kind==='preferences'){
+   if(d.revision!==pref.revision)return demoFail('Club preferences changed. Reload before saving');demoGraphicState.versions.push({id:demoId('graphic-version'),kind:'preferences',revision:pref.revision,snapshot:fixtureClone(pref),saved_at:new Date().toISOString()});
+   demoGraphicState.preferences={revision:pref.revision+1,grade_labels:fixtureClone(version?.snapshot.grade_labels||d.grade_labels),style:fixtureClone(version?.snapshot.style||d.style)};
+  }else{
+   if(d.shared_revision!==pref.revision)return demoFail('Club preferences changed. Reload before saving');if(d.revision!==(previous?.revision||0))return demoFail('Layout changed. Reload before saving');
+   const snapshot=fixtureClone(previous||{revision:0,layout:{}}),payload={...(version?.snapshot||d),kind,revision:d.revision};
+   const updated=await demoGraphicSavedRpc.call(this,demoGraphicAPI[kind],{...args,p_action:'save_design',p_data:payload});if(updated.error)return updated;
+   demoGraphicState.versions.push({id:demoId('graphic-version'),kind,revision:snapshot.revision,snapshot,saved_at:new Date().toISOString()});
+   if(d.label_changes?.length){const labels=new Map(pref.grade_labels.map(x=>[x.grade,x]));for(const x of d.label_changes)labels.set(x.grade,x);pref.grade_labels=[...labels.values()];pref.revision++;}
+  }
+  const next=await demoGraphicContext(args),result=action==='save_design'?{...next.designs[kind],preferences:next.preferences,saved:true}:next;demoGraphicState.receipts.set(d.request_id,{payload:JSON.stringify(d),result:fixtureClone(result)});return demoOK(result);
+ }catch(e){return demoFail(e.message);}
+};

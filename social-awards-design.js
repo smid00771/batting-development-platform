@@ -9,7 +9,7 @@ export const AWARD_TEMPLATE_FIELDS={
 export const AWARD_STYLE_FIELDS={
  ...AWARD_TEMPLATE_FIELDS,
  title_y:[0,100],title_size:[20,160],week_y:[0,100],week_size:[18,44],
- name_y:[0,100],name_size:[20,120],figures_y:[0,100],figures_size:[20,160],grade_y:[0,100],
+ name_y:[0,100],name_size:[20,120],figures_y:[0,100],figures_size:[20,160],grade_y:[0,100],single_grade_size:[16,80],
  rows_top:[15,65],rows_bottom:[70,98],row_gap:[12,90],row_inset:[24,90],row_radius:[0,36],row_opacity:[40,100],
  logo_x:[0,100],logo_y:[0,100],logo_size:[3,40],
  grade_size:[24,48],score_size:[28,48],player_size:[22,38],badge_size:[34,72],badge_angle:[-12,12],

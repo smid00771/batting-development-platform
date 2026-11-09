@@ -1,8 +1,8 @@
 import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.328';
 import {referenceBadgePair} from './social-award-lettering.js?v=0.8.62.294';
-import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.293';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.353';
-import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.293';
+import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.354';
+import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.354';
+import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.354';
 
 export const SOCIAL_AWARDS = [
  {key:'team_week',label:'Team of the Week',description:'Choose your XI from the round.'},
@@ -106,7 +106,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   if(layout.show_week)text(week,540,height*layout.week_y/100,980,layout.week_size,layout.text_colour,'week');
   text((item?.name||'CHOOSE A PERFORMANCE').toUpperCase(),540,height*layout.name_y/100,980,layout.name_size);
   text(item?awardFigures(item)+(kind==='century'?' RUNS':''):'',540,height*layout.figures_y/100,980,layout.figures_size,layout.text_colour,'score');
-  ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} 30px ${ctx.socialFont}`;const grade=graphicGrade(item?.grade,layout);checkGraphicLabel(canvas,ctx,{source:item?.grade,label:grade,width:980-ctx.measureText(item?.opposition?' · v '+item.opposition:'').width,size:30,grade:true});text([grade,item?.opposition&&'v '+item.opposition].filter(Boolean).join(' · '),540,height*layout.grade_y/100,980,30,layout.text_colour,'grade');return;
+  ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${layout.single_grade_size||30}px ${ctx.socialFont}`;const grade=graphicGrade(item?.grade,layout);checkGraphicLabel(canvas,ctx,{source:item?.grade,label:grade,width:980-ctx.measureText(item?.opposition?' · v '+item.opposition:'').width,size:layout.single_grade_size||30,grade:true});text([grade,item?.opposition&&'v '+item.opposition].filter(Boolean).join(' · '),540,height*layout.grade_y/100,980,layout.single_grade_size||30,layout.text_colour,'grade');return;
  }
  const titleBounds=!layout.includes_title?text(title(items.some(x=>x.provisional)?'MATCH UPDATE':'RESULTS'),540,height*layout.title_y/100,990,layout.title_size,layout.text_colour,'title'):null;
  let weekBounds=null;

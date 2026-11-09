@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.353';
+const APP_UI_VERSION='0.8.62.354';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19862,7 +19862,7 @@ function seBindAvailabilityFixtures(h){
  if(availabilityFixturesModule){mount();h.form.fixtureFinder?.decorate();return;}
  button.onclick=async()=>{
   button.disabled=true;panel.hidden=false;panel.textContent='Opening fixture finder…';
-  try{if(!availabilityFixturesDownload)availabilityFixturesDownload=import('./availability-fixtures.js?v=0.8.62.353').then(module=>availabilityFixturesModule=module).finally(()=>availabilityFixturesDownload=null);
+  try{if(!availabilityFixturesDownload)availabilityFixturesDownload=import('./availability-fixtures.js?v=0.8.62.354').then(module=>availabilityFixturesModule=module).finally(()=>availabilityFixturesDownload=null);
    await availabilityFixturesDownload;const finder=mount();if(finder){button.disabled=false;finder.open();}
   }catch{if(context.current()){panel.textContent='Could not open the fixture finder. Tap Find fixtures to try again.';button.disabled=false;}}
  };
@@ -20714,7 +20714,7 @@ function socialEnsure(){
  const scope=selectionsScopeKey();if(socialState?.scope!==scope){if(socialState){socialSandbox?.release(socialState);for(const u of socialState.urls.values())URL.revokeObjectURL(u);}socialState={scope,data:null,view:'graphics',urls:new Map(),images:new Map(),selected:new Set(),date:'',player:'',busy:false,dirty:false,design:null,pending:null,notice:'',render:0};}return socialState;
 }
 function socialHere(s){return s===socialState&&s.scope===selectionsScopeKey()&&currentTab==='teams'&&ensureSelections().view==='socials'&&ensureSelections().data?.socials===true;}
-function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.results?.busy||s.awards?.loading){alert(s.busy||s.week?.busy||s.playerWeek?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(!socialPublishing)return true;if(!socialAwardScopes.canLeave(s)||!socialAwardLabels.canLeave(s)||!socialAwards.canLeave(s)||!socialWeek.canLeave(s)||!socialPlayerWeek.canLeave(s)||!socialTeamWorkflow.canLeave(s))return false;if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
+function socialCanLeave(){const s=socialState;if(!s||s.scope!==selectionsScopeKey())return true;if(s.graphicSetup?.draft||s.graphicSetup?.pending||s.graphicSetup?.busy){alert('Save, undo or retry the club style change before leaving.');return false;}if(s.busy||s.pending||s.publishing?.coverPending||s.publishing?.schedulePending||s.publishing?.attentionPending||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.results?.busy||s.awards?.loading){alert(s.busy||s.week?.busy||s.playerWeek?.busy?'Please wait for the save to finish.':'A save is not confirmed. Retry it before leaving.');return false;}if(!socialPublishing)return true;if(!socialAwardScopes.canLeave(s)||!socialAwardLabels.canLeave(s)||!socialAwards.canLeave(s)||!socialWeek.canLeave(s)||!socialPlayerWeek.canLeave(s)||!socialTeamWorkflow.canLeave(s))return false;if((s.dirty||Object.keys(s.photoPositions||{}).length)&&!confirm('Discard unsaved artwork or photo position changes?'))return false;s.dirty=false;s.photoPositions={};s.design=s.data?socialDefaults(s.data):null;return true;}
 
 
 // Social team lists use surname order; role marks remain attached to the player.
@@ -20744,7 +20744,7 @@ async function loadSocialFeatures(){
  const current=()=>state===socialState&&scope===selectionsScopeKey()&&request===requestedFeatureScope()&&ensureSelections().data?.socials===true;
  const task={scope,request,state};socialEngineTask=task;
  task.promise=(async()=>{
-  const module=await import('./social-workspace.js?v=0.8.62.353');
+  const module=await import('./social-workspace.js?v=0.8.62.354');
   if(!current())return null;
   const engine=module.createSocialWorkspace({appNavigationBack,club,drawSelections,ensureSelections,matchReviewExtractUrl,mountScorecardTeam,normaliseHex,platformRole,recordSelectionNavigation,renderSocialPlatformSetup,restoreSocialNavigation,seDownload,seEsc,seFormatLabel,seNotice,seOpt,seReload,selectionsScopeKey,session,socialCanLeave,socialEnsure,socialHere,socialOpenFixture,socialState,supabase});
   await engine.loadSocialFeatures();if(!current())return null;

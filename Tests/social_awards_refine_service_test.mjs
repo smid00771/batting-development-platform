@@ -84,7 +84,7 @@ test('every graphic profile uses scoped grades, caller permissions and revision 
  for(const [kind,api] of [['team_week','team_of_week_api'],['player_week','player_of_week_api'],['team_selections','club_socials_api'],['results','club_social_awards_api'],['century','club_social_awards_api'],['five_wickets','club_social_awards_api']]){
   const layout=kind==='team_week'?{top:620,bottom:1230,left:65,figures_right:825,grade_right:1015}:{};
   const context={design:{revision:3,layout},designs:{[kind]:{revision:3,layout}},revision:3,candidates:[{grade},{grade:'1st Grade'}],fixtures:[{published:{details:{grade}}}],assets:[]};if(kind==='team_selections')context.design=layout;
-  const output={changes:{},grade_labels:[{grade,label:'Dev'}],badges:[],explanation:'Short label.',artwork_brief:null},base={...request(),kind,purpose:'graphic_refine',current:layout,preview_grades:[grade],grade_labels:[{grade,label:'Dev League'}]};
+  const output={changes:{},grade_labels:[{grade,label:'Dev'}],badges:[],explanation:'Short label.',artwork_brief:null},base={...request(),kind,purpose:'graphic_refine',brief:'Shorten Development League to Dev',current:layout,preview_grades:[grade],grade_labels:[{grade,label:'Dev League'}]};
   const good=setup({context,output}),result=await refineAward(base,good.options);assert.equal(result.status,200,kind+': '+JSON.stringify(result.body));assert.deepEqual(result.body.grade_labels,[{grade,label:'Dev'}]);
   assert.ok(good.calls.some(c=>c.body?.p_action==='context'&&c.url.endsWith('/'+api)));
   const prompt=JSON.parse(good.calls.find(c=>c.url.includes('openai')).body.input[0].content[0].text);assert.deepEqual(prompt.available_grades,[{grade,label:'Dev League'}]);
@@ -257,4 +257,22 @@ test('resizing Week 4 changes overlay type size and cannot route that resize to 
  const old={...layout};delete old.week_size;const legacy=setup({context,output:{...output,changes:{}}});assert.equal((await refineAward({...base,current:old},legacy.options)).status,200);assert.equal(legacy.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.week_size,undefined);
  const unsupported=setup({context,output});assert.equal((await refineAward({...base,current:old},unsupported.options)).status,502);
  const invalid=setup({context,output:{...output,changes:{week_size:200}}});assert.equal((await refineAward(base,invalid.options)).status,502);
+});
+
+
+test('Team and Player week reference matching has bounded measured geometry and rejects copied labels or figures',async()=>{
+ const {teamWeekLayout}=await import('../team-of-week.js'),{playerWeekLayout}=await import('../player-of-week.js'),{graphicSettings}=await import('../social-graphic-design.js');
+ for(const kind of ['team_week','player_week']){
+  const layout=kind==='team_week'?teamWeekLayout():playerWeekLayout(),path=kind==='team_week'?example.replace('/artwork/','/backgrounds/'):example;
+  const output={changes:Object.fromEntries(['title','week','grade','player','score'].map(role=>[role+'_font','condensed'])),grade_labels:[],graphic_label:null,artwork_brief:null,reference_geometry:{title_top:.1,title_height:.06,title_width:.8}};
+  const body={...request(),purpose:'graphic_refine',kind,current:graphicSettings(kind,layout),match_reference:true,reference_geometry:true,preview_grades:['Masters']};
+  const context={design:{revision:3,layout:{...layout,example_path:path}},candidates:[{grade:'Masters'}]};const good=setup({context,output});assert.equal((await refineAward(body,good.options)).status,200);
+  assert.equal(good.calls.filter(c=>c.body?.p_action==='style_request').length,1);assert.ok(good.calls.find(c=>c.url.includes('api.openai.com')).body.text.format.schema.properties.reference_geometry);
+  for(const patch of [{grade_labels:[{grade:'Masters',label:'OLD'}]},{graphic_label:'WEEK 1'},{artwork_brief:'Replace old names'}])assert.equal((await refineAward(body,setup({context,output:{...output,...patch}}).options)).status,502);
+ }
+});
+
+test('visual tweaks cannot invent preferred team abbreviations',async()=>{
+ const body={...request(),brief:'Make the player names larger',preview_grades:['Masters']},context={designs:{results:{revision:3,layout:{example_path:example}}},candidates:[{grade:'Masters'}]};
+ const {options}=setup({context,output:{changes:{player_size:32},grade_labels:[{grade:'Masters',label:'MSTRs'}]}});const result=await refineAward(body,options);assert.equal(result.status,422);assert.match(result.body.error,/saved labels are unchanged/);
 });

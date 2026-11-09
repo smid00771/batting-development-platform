@@ -22,3 +22,5 @@ export async function awardFontSpecimen(){
  keys.forEach((key,i)=>{const x=24+(i%2)*540,y=28+Math.floor(i/2)*220,weight=AWARD_FONT_WEIGHTS[key]||'700';ctx.font='18px Arial';ctx.fillText(key.toUpperCase(),x,y);ctx.font=`${weight} 58px ${AWARD_FONTS[key]}`;ctx.fillText('Results',x,y+66);ctx.font=`${weight} 30px ${AWARD_FONTS[key]}`;ctx.fillText('Alex Player  66*   Jordan  3/24',x,y+112);ctx.font=`${weight} 32px ${AWARD_FONTS[key]}`;ctx.fillText('WON · LOST · BY 20 RUNS',x,y+160);});
  return canvas;
 }
+
+export function awardRoleText(draw,ctx,layout,role,...args){const key=awardFont(layout,role);ctx.socialFont=AWARD_FONTS[key]||AWARD_FONTS.sporting;return draw(ctx,...args,AWARD_FONT_WEIGHTS[key]||'700');}
