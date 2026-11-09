@@ -1,6 +1,6 @@
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.352';
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.352';
+import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.353';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.353';
 import {playerWeekFigures,playerWeekRecommendations} from './player-week-ranking.js?v=0.8.62.270';
 
 export function playerWeekLayout(saved={}){

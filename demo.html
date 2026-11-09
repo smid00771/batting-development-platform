@@ -3801,7 +3801,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.352.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.353.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -9241,6 +9241,8 @@ function withGradeLabels(layout,changes=[],grades=null){
 }
 function gradeLabelFamily(value){
  const key=normal(value).replace(/\./g,'').replace(/\s*\([^)]*\)/g,'').trim();
+ const women=key.match(/(?:^|\s)women(?:['’]?s)?\s+(1st|2nd)(?:\s+grade)?$/);
+ if(women)return 'women-'+women[1];
  if(/^(?:rippit )?(?:dev(?:elopment)?(?: league)?)(?: (?:navy|sky))?$/.test(key))return 'development';
  if(/^(?:gilmour cup )?masters$/.test(key))return 'masters';
  if(/^(?:u16 |under 16 )?(?:(?:sg|simon) )?moore cup$/.test(key))return 'moore';
@@ -14027,7 +14029,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.352';
+const APP_UI_VERSION='0.8.62.353';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

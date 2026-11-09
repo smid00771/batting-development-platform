@@ -11,7 +11,9 @@ const labels=[
  {grade:'Dev League Sky',label:'DEV'},
  {grade:'Gilmour Cup Masters',label:'MSTRs'},
  {grade:'U16 SG Moore Cup',label:'SGs'},
- {grade:'Denis Broad OAM Cup',label:'DBs'}
+ {grade:'Denis Broad OAM Cup',label:'DBs'},
+ {grade:"Women's 1st Grade",label:'W 1ST'},
+ {grade:"Women's 2nd Grade",label:'W 2ND'}
 ];
 const layout={grade_labels:labels};
 
@@ -21,14 +23,17 @@ test('saved club labels cover known imported/team-name variants and retain their
   ['DEV',['Rippit Development League','Development League','Dev League Navy','Dev League Sky','Dev Navy','Dev Sky','  DEV   LEAGUE NAVY  ']],
   ['MSTRs',['Gilmour Cup Masters','Masters']],
   ['SGs',['U16 SG Moore Cup','S.G. Moore Cup','Simon Moore Cup','Moore Cup']],
-  ['DBs',['Denis Broad OAM Cup','Denis Broad Cup']]
+  ['DBs',['Denis Broad OAM Cup','Denis Broad Cup']],
+  ['W 1ST',["Women's 1st Grade",'Women’s 1st Grade','Womens 1st Grade',"Newcastle City Women's 1st Grade"]],
+  ['W 2ND',["Women's 2nd Grade",'Women’s 2nd Grade','Women 2nd Grade','Newcastle City Women’s 2nd Grade']]
  ])for(const name of names){
   assert.equal(teamWeekGrade(name,layout),expected,name);
   assert.equal(graphicGrade(name,layout,false,true),expected,name+' in an uppercase heading');
  }
  assert.equal(teamWeekGrade('1st Grade (Rippit Premiership)',layout),'1ST');
  assert.equal(graphicGrade('U21s',layout),'U21s');
- assert.equal(graphicGrade("Women's 1st Grade",layout),"Women's 1st Grade");
+ assert.equal(teamWeekGrade('2nd Grade',layout),'2ND');
+ assert.equal(graphicGrade("Men's 1st Grade",layout),"Men's 1st Grade");
  assert.equal(JSON.stringify(layout),before);
 });
 
@@ -40,14 +45,16 @@ test('other clubs and explicit team distinctions remain independent',()=>{
  assert.equal(graphicGrade('Dev League Sky',distinct,false,true),'Sky XI');
  assert.equal(graphicGrade('Rippit Development League',distinct),'Dev League');
  assert.equal(graphicGrade('Unrelated Development Squad',layout),'Unrelated Development Squad');
+ assert.equal(graphicGrade("Women's 1st Grade",{}),"Women's 1st Grade");
+ assert.equal(graphicGrade("Women's 2nd Grade",{grade_labels:[{grade:"Women's 1st Grade",label:'W 1ST'}]}),"Women's 2nd Grade");
 });
 
 test('Results, Century and Five wickets render the saved labels without changing scores or source grades',async()=>{
- const grades=['Dev League Navy','Gilmour Cup Masters','U16 SG Moore Cup','Denis Broad OAM Cup'];
+ const grades=['Dev League Navy','Gilmour Cup Masters','U16 SG Moore Cup','Denis Broad OAM Cup',"Women's 1st Grade",'Newcastle City Women’s 2nd Grade'];
  const items=grades.map((grade,i)=>({key:'match-'+i,grade,name:'Example Player '+i,our_team:'home',result:'Home won by 20 runs',opposition:'Visitors',stat:{runs:120,wickets:5,not_out:true},teams:[{id:'home',name:'Home'},{id:'away',name:'Visitors'}],innings:[{team_id:'home',runs:160,wickets:6,batters:[]},{team_id:'away',runs:140,wickets:10,bowlers:[]}]}));
  const before=JSON.stringify(items),s={design:{primary:'#073554',accent:'#128fd2'},data:{brand:{name:'Example Club'}}};
  for(const kind of ['results','century','five_wickets']){
-  const batches=kind==='results'?[items]:items.map(item=>[item]);
+  const batches=kind==='results'?[items.slice(0,4),items.slice(4)]:items.map(item=>[item]);
   for(const batch of batches){
    const canvas=createCanvas(1080,1350),drawn=[];
    const h={fontReady:async()=>{},text:(ctx,value,x,y,width,size)=>{drawn.push(value);ctx.font=`700 ${size}px Arial`;ctx.fillText(value,x,y,width);}};

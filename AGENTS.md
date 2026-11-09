@@ -1,3 +1,5 @@
+Women's 1st and 2nd grade labels on Newcastle City's social award graphics are W 1ST and W 2ND. Apply these saved aliases across all five award types, including source names with straight/curly apostrophes and club prefixes; keep the two grades distinct. User clarification, 9 November 2026.
+
 Newcastle City's social award graphics use the agreed saved labels DEV (both Dev sides), MSTRs (Masters), SGs (Moore Cup) and DBs (Denis Broad). Apply them consistently to Team of the Week, Player of the Week, Results, Century and Five wickets, including their exact capitalisation. Resolve known source-name variants through the club's saved aliases; preserve explicit team distinctions and other clubs' wording. Never rename source teams or change match figures. User correction, 9 November 2026.
 
 Flag two-day fixtures while setting availability: show both playing dates in the bulk form for the chosen teams and in individual calendars/fixture details when those fixtures are already loaded. Each date keeps its own availability; never infer the second day from the first or add background fixture requests. User clarification, 7 November 2026.

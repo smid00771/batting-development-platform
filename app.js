@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.352';
+const APP_UI_VERSION='0.8.62.353';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19862,7 +19862,7 @@ function seBindAvailabilityFixtures(h){
  if(availabilityFixturesModule){mount();h.form.fixtureFinder?.decorate();return;}
  button.onclick=async()=>{
   button.disabled=true;panel.hidden=false;panel.textContent='Opening fixture finder…';
-  try{if(!availabilityFixturesDownload)availabilityFixturesDownload=import('./availability-fixtures.js?v=0.8.62.352').then(module=>availabilityFixturesModule=module).finally(()=>availabilityFixturesDownload=null);
+  try{if(!availabilityFixturesDownload)availabilityFixturesDownload=import('./availability-fixtures.js?v=0.8.62.353').then(module=>availabilityFixturesModule=module).finally(()=>availabilityFixturesDownload=null);
    await availabilityFixturesDownload;const finder=mount();if(finder){button.disabled=false;finder.open();}
   }catch{if(context.current()){panel.textContent='Could not open the fixture finder. Tap Find fixtures to try again.';button.disabled=false;}}
  };
@@ -20744,7 +20744,7 @@ async function loadSocialFeatures(){
  const current=()=>state===socialState&&scope===selectionsScopeKey()&&request===requestedFeatureScope()&&ensureSelections().data?.socials===true;
  const task={scope,request,state};socialEngineTask=task;
  task.promise=(async()=>{
-  const module=await import('./social-workspace.js?v=0.8.62.352');
+  const module=await import('./social-workspace.js?v=0.8.62.353');
   if(!current())return null;
   const engine=module.createSocialWorkspace({appNavigationBack,club,drawSelections,ensureSelections,matchReviewExtractUrl,mountScorecardTeam,normaliseHex,platformRole,recordSelectionNavigation,renderSocialPlatformSetup,restoreSocialNavigation,seDownload,seEsc,seFormatLabel,seNotice,seOpt,seReload,selectionsScopeKey,session,socialCanLeave,socialEnsure,socialHere,socialOpenFixture,socialState,supabase});
   await engine.loadSocialFeatures();if(!current())return null;

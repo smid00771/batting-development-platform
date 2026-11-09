@@ -16,6 +16,8 @@ export function withGradeLabels(layout,changes=[],grades=null){
 }
 function gradeLabelFamily(value){
  const key=normal(value).replace(/\./g,'').replace(/\s*\([^)]*\)/g,'').trim();
+ const women=key.match(/(?:^|\s)women(?:['’]?s)?\s+(1st|2nd)(?:\s+grade)?$/);
+ if(women)return 'women-'+women[1];
  if(/^(?:rippit )?(?:dev(?:elopment)?(?: league)?)(?: (?:navy|sky))?$/.test(key))return 'development';
  if(/^(?:gilmour cup )?masters$/.test(key))return 'masters';
  if(/^(?:u16 |under 16 )?(?:(?:sg|simon) )?moore cup$/.test(key))return 'moore';
