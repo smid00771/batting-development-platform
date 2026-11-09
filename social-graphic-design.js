@@ -14,13 +14,26 @@ export function withGradeLabels(layout,changes=[],grades=null){
  for(const item of patch)aliases.set(normal(item.grade),item);
  return {...layout,grade_labels:gradeLabels([...aliases.values()])};
 }
-export function graphicGrade(value,layout={},compact=false){
- const raw=String(value||'').trim(),alias=Array.isArray(layout.grade_labels)&&layout.grade_labels.find(item=>normal(item?.grade)===normal(raw));
- if(alias&&typeof alias.label==='string'&&alias.label.trim()&&alias.label.length<=40)return alias.label.trim();
+function gradeLabelFamily(value){
+ const key=normal(value).replace(/\./g,'').replace(/\s*\([^)]*\)/g,'').trim();
+ if(/^(?:rippit )?(?:dev(?:elopment)?(?: league)?)(?: (?:navy|sky))?$/.test(key))return 'development';
+ if(/^(?:gilmour cup )?masters$/.test(key))return 'masters';
+ if(/^(?:u16 |under 16 )?(?:(?:sg|simon) )?moore cup$/.test(key))return 'moore';
+ if(/^denis broad(?: oam)?(?: cup)?$/.test(key))return 'broad';
+ return null;
+}
+export function graphicGrade(value,layout={},compact=false,uppercase=false){
+ const raw=String(value||'').trim(),aliases=(Array.isArray(layout.grade_labels)?layout.grade_labels:[]).filter(item=>typeof item?.grade==='string'&&typeof item.label==='string'&&item.label.trim()&&item.label.length<=40),alias=aliases.find(item=>normal(item.grade)===normal(raw));
+ if(alias)return alias.label.trim();
+ // Reuse the club's saved wording for known source-name variants only when
+ // every saved label in that family agrees. Explicit team labels win above.
+ const family=gradeLabelFamily(raw),labels=family?new Set(aliases.filter(item=>gradeLabelFamily(item.grade)===family).map(item=>item.label.trim())):new Set();
+ if(labels.size===1)return [...labels][0];
  const short=raw.replace(/^Rippit\s+(?=Development\s+League\b)/i,'').replace(/\bDevelopment\s+League\b/gi,'Dev League');
- if(!compact)return short;
  const ordinal=short.match(/\b(\d+)(st|nd|rd|th)\s+grade\b/i);
- return ordinal?ordinal[1]+ordinal[2].toUpperCase():short.replace(/\s*\([^)]*\)/g,'').trim();
+ const label=compact?(ordinal?ordinal[1]+ordinal[2].toUpperCase():short.replace(/\s*\([^)]*\)/g,'').trim()):short;
+ // Capitalise source wording when requested, never the club's saved label.
+ return uppercase?label.toUpperCase():label;
 }
 export function checkGraphicLabel(canvas,ctx,{source,label,width,size,grade=false,shortLabel=label}){
  if(!source||!label||!width||!size)return;

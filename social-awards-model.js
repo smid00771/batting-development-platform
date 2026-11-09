@@ -1,7 +1,7 @@
 import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.328';
 import {referenceBadgePair} from './social-award-lettering.js?v=0.8.62.294';
 import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.293';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.225';
+import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.352';
 import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.293';
 
 export const SOCIAL_AWARDS = [
@@ -185,7 +185,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   ctx.fillStyle=d.grade_colour||s.design?.primary||'#073554';
   if(d.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12*rowScale);ctx.lineTo(790,y-12*rowScale);ctx.lineTo(774,y+11*rowScale);ctx.lineTo(790,y+33*rowScale);ctx.lineTo(290,y+33*rowScale);ctx.lineTo(306,y+11*rowScale);ctx.closePath();ctx.fill();}
   else if(d.grade_style==='bar')ctx.fillRect(540-d.grade_width/2,y-12*rowScale,d.grade_width,45*rowScale);
-  const sourceGrade=graphicGrade(item.grade,d),grade=d.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
+  const grade=graphicGrade(item.grade,d,false,d.grade_case!=='preserve');ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
   const margin=d.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin,d,rowScale),marginHeight=lines.length*marginSize*1.15;
   const badgeLabel=resultLabel(outcome,d),badgeImage=lettering?.[badgeLabel];
   const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=badgeImage?Math.min(100*rowScale,d.badge_width*badgeImage.height/badgeImage.width):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);

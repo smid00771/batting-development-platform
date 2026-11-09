@@ -171,7 +171,7 @@ async function socialRender(s,card,canvas){
  }
  ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:64,headingWidth=largeCutout?690:952,textLines=[],matchText=teamSelectionText(card);
  checkGraphicLabel(canvas,ctx,{source:matchText.match,label:matchText.match,width:952,size:32});textLines.push([matchText.match,64,metaY,952,32,'700']);
- const gradeLabel=graphicGrade(d.grade,design).toUpperCase()+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?435:headingWidth,gradeSize=design.font==='bold'?144:94;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
+ const gradeLabel=graphicGrade(d.grade,design,false,true)+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?435:headingWidth,gradeSize=design.font==='bold'?144:94;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
  let y=titleY+48;
  for(const text of matchText.lines){const wrapped=socialWrap(ctx,text,detailsWidth,32,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+4;}}
  const names=socialNames(card),baseY=Math.max(headerH+330,y+32),line=Math.min(62,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?58:42,line*.94),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
@@ -844,7 +844,7 @@ let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.342'),import('./social-team-workflow.js?v=0.8.62.303'),import('./social-publishing.js?v=0.8.62.303'),import('./team-of-week.js?v=0.8.62.337'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.288'),import('./player-of-week.js?v=0.8.62.288'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.288'),import('./social-team-layout.js?v=0.8.62.288')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.352'),import('./social-team-workflow.js?v=0.8.62.352'),import('./social-publishing.js?v=0.8.62.303'),import('./team-of-week.js?v=0.8.62.352'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.352'),import('./player-of-week.js?v=0.8.62.352'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.352'),import('./social-team-layout.js?v=0.8.62.288')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];

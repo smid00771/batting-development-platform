@@ -3801,7 +3801,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.351.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.352.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -9239,13 +9239,26 @@ function withGradeLabels(layout,changes=[],grades=null){
  for(const item of patch)aliases.set(normal(item.grade),item);
  return {...layout,grade_labels:gradeLabels([...aliases.values()])};
 }
-function graphicGrade(value,layout={},compact=false){
- const raw=String(value||'').trim(),alias=Array.isArray(layout.grade_labels)&&layout.grade_labels.find(item=>normal(item?.grade)===normal(raw));
- if(alias&&typeof alias.label==='string'&&alias.label.trim()&&alias.label.length<=40)return alias.label.trim();
+function gradeLabelFamily(value){
+ const key=normal(value).replace(/\./g,'').replace(/\s*\([^)]*\)/g,'').trim();
+ if(/^(?:rippit )?(?:dev(?:elopment)?(?: league)?)(?: (?:navy|sky))?$/.test(key))return 'development';
+ if(/^(?:gilmour cup )?masters$/.test(key))return 'masters';
+ if(/^(?:u16 |under 16 )?(?:(?:sg|simon) )?moore cup$/.test(key))return 'moore';
+ if(/^denis broad(?: oam)?(?: cup)?$/.test(key))return 'broad';
+ return null;
+}
+function graphicGrade(value,layout={},compact=false,uppercase=false){
+ const raw=String(value||'').trim(),aliases=(Array.isArray(layout.grade_labels)?layout.grade_labels:[]).filter(item=>typeof item?.grade==='string'&&typeof item.label==='string'&&item.label.trim()&&item.label.length<=40),alias=aliases.find(item=>normal(item.grade)===normal(raw));
+ if(alias)return alias.label.trim();
+ // Reuse the club's saved wording for known source-name variants only when
+ // every saved label in that family agrees. Explicit team labels win above.
+ const family=gradeLabelFamily(raw),labels=family?new Set(aliases.filter(item=>gradeLabelFamily(item.grade)===family).map(item=>item.label.trim())):new Set();
+ if(labels.size===1)return [...labels][0];
  const short=raw.replace(/^Rippit\s+(?=Development\s+League\b)/i,'').replace(/\bDevelopment\s+League\b/gi,'Dev League');
- if(!compact)return short;
  const ordinal=short.match(/\b(\d+)(st|nd|rd|th)\s+grade\b/i);
- return ordinal?ordinal[1]+ordinal[2].toUpperCase():short.replace(/\s*\([^)]*\)/g,'').trim();
+ const label=compact?(ordinal?ordinal[1]+ordinal[2].toUpperCase():short.replace(/\s*\([^)]*\)/g,'').trim()):short;
+ // Capitalise source wording when requested, never the club's saved label.
+ return uppercase?label.toUpperCase():label;
 }
 function checkGraphicLabel(canvas,ctx,{source,label,width,size,grade=false,shortLabel=label}){
  if(!source||!label||!width||!size)return;
@@ -9626,7 +9639,7 @@ async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,images=
   ctx.fillStyle=d.grade_colour||s.design?.primary||'#073554';
   if(d.grade_style==='ribbon'){ctx.beginPath();ctx.moveTo(290,y-12*rowScale);ctx.lineTo(790,y-12*rowScale);ctx.lineTo(774,y+11*rowScale);ctx.lineTo(790,y+33*rowScale);ctx.lineTo(290,y+33*rowScale);ctx.lineTo(306,y+11*rowScale);ctx.closePath();ctx.fill();}
   else if(d.grade_style==='bar')ctx.fillRect(540-d.grade_width/2,y-12*rowScale,d.grade_width,45*rowScale);
-  const sourceGrade=graphicGrade(item.grade,d),grade=d.grade_case==='preserve'?sourceGrade:sourceGrade.toUpperCase();ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
+  const grade=graphicGrade(item.grade,d,false,d.grade_case!=='preserve');ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${d.grade_size}px ${ctx.socialFont}`;checkGraphicLabel(canvas,ctx,{source:item.grade,label:grade,width:d.grade_width-25,size:d.grade_size,grade:true});text(grade,540,y+10*rowScale,d.grade_width-25,d.grade_size,d.grade_style==='text'?(d.grade_colour||d.score_colour):d.grade_text_colour,'grade');
   const margin=d.show_margin?r.margin:'',{lines,size:marginSize}=marginLines(margin,d,rowScale),marginHeight=lines.length*marginSize*1.15;
   const badgeLabel=resultLabel(outcome,d),badgeImage=lettering?.[badgeLabel];
   const m=measure(badgeLabel,'badge',d.badge_size),badgeHeight=badgeImage?Math.min(100*rowScale,d.badge_width*badgeImage.height/badgeImage.width):['plain','glow'].includes(d.badge_style)?Math.max(30,m.actualBoundingBoxAscent+m.actualBoundingBoxDescent):Math.min(100,d.badge_size*1.45);
@@ -11280,7 +11293,7 @@ function createPlayerOfWeek(h){
   if(layout.text_panel){ctx.fillStyle='rgba(0,0,0,.35)';const y=Math.max(0,Math.min(layout.name_y,layout.figures_y,layout.grade_y)/100*height-65);ctx.fillRect(0,y,1080,height-y);}
   ctx.fillStyle=layout.text_colour;ctx.textAlign='center';if(!layout.includes_title)h.text(ctx,'PLAYER OF THE WEEK',centre,height*layout.title_y/100,textWidth,layout.title_size);checkGraphicLabel(canvas,ctx,{source:title,label:title.toUpperCase(),width:textWidth,size:28});h.text(ctx,title.toUpperCase(),centre,height*layout.week_y/100,textWidth,28);
   h.text(ctx,(winner?.name||'CHOOSE YOUR WINNER').toUpperCase(),centre,height*layout.name_y/100,textWidth,layout.name_size);
-  const f=winner?playerWeekFigures(winner):null,figures=f?[f.batting&&`${f.batting} RUNS`,f.bowling&&`${f.bowling}`].filter(Boolean).join('  •  '):'BATTING  •  BOWLING  •  PERSONAL PROGRESS';h.text(ctx,figures,centre,height*layout.figures_y/100,textWidth,layout.figures_size);const grade=winner?.grade||s.data.brand.name||'',label=graphicGrade(grade,layout).toUpperCase();checkGraphicLabel(canvas,ctx,{source:grade,label,width:textWidth,size:30,grade:!!winner?.grade});h.text(ctx,label,centre,height*layout.grade_y/100,textWidth,30);
+  const f=winner?playerWeekFigures(winner):null,figures=f?[f.batting&&`${f.batting} RUNS`,f.bowling&&`${f.bowling}`].filter(Boolean).join('  •  '):'BATTING  •  BOWLING  •  PERSONAL PROGRESS';h.text(ctx,figures,centre,height*layout.figures_y/100,textWidth,layout.figures_size);const grade=winner?.grade||s.data.brand.name||'',label=graphicGrade(grade,layout,false,true);checkGraphicLabel(canvas,ctx,{source:grade,label,width:textWidth,size:30,grade:!!winner?.grade});h.text(ctx,label,centre,height*layout.grade_y/100,textWidth,30);
  }
  async function paint(s){const w=state(s),token=++w.render,canvas=el('pwCanvas');if(!canvas)return;w.previewReady=false;controls(s);try{const buffer=document.createElement('canvas');await draw(s,buffer,w);if(!current(s,w)||token!==w.render||!canvas.isConnected)return;canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;w.previewReady=true;assistantSuggestions(assistantConfig(s));el('pwPreviewStatus').textContent=w.winner?'Review before saving.':'Choose a winner to finish the post.';controls(s);}catch(e){if(current(s,w)&&token===w.render){el('pwPreviewStatus').textContent=e.message;controls(s);}}}
  async function prepare(s){const w=state(s),key=imageKey(w);if(w.saved?.key===key)return w.saved;if(w.prepared?.key===key)return w.prepared;const canvas=document.createElement('canvas');await draw(s,canvas,w);const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob||blob.size>10485760)throw Error('Use a smaller background (finished image must be under 10 MB).');return w.prepared={key,blob,name:'Player-of-the-Week-'+w.end+'.png'};}
@@ -11602,7 +11615,7 @@ async function socialRender(s,card,canvas){
  }
  ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:64,headingWidth=largeCutout?690:952,textLines=[],matchText=teamSelectionText(card);
  checkGraphicLabel(canvas,ctx,{source:matchText.match,label:matchText.match,width:952,size:32});textLines.push([matchText.match,64,metaY,952,32,'700']);
- const gradeLabel=graphicGrade(d.grade,design).toUpperCase()+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?435:headingWidth,gradeSize=design.font==='bold'?144:94;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
+ const gradeLabel=graphicGrade(d.grade,design,false,true)+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?435:headingWidth,gradeSize=design.font==='bold'?144:94;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
  let y=titleY+48;
  for(const text of matchText.lines){const wrapped=socialWrap(ctx,text,detailsWidth,32,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+4;}}
  const names=socialNames(card),baseY=Math.max(headerH+330,y+32),line=Math.min(62,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?58:42,line*.94),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
@@ -14014,7 +14027,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.351';
+const APP_UI_VERSION='0.8.62.352';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

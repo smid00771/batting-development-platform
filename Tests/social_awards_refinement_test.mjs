@@ -64,7 +64,7 @@ context.settings.enabled=['results','century','five_wickets'];
 for(const kind of ['results','century','five_wickets']){
  const grade='Rippit Development League',key='grade-'+kind;context.designs[kind]||={revision:0,layout:{}};context.candidates.push(kind==='results'?{...items[0],key,signature:'grade-source',grade}:{key,signature:'grade-source',kind,grade,name:'Alex Example',player_id:'alex',stat:{runs:kind==='century'?125:19,wickets:5,not_out:true},opposition:'Visitors'});
  s.view=kind;await module.load(s,false);w.focus=key;w.chosen=new Set([key]);module.render(s);await settled();assert.ok(id('saRefineBrief'));const factsBefore=JSON.stringify(context.candidates);labels=[];
- await edit('Shorten Development League to Dev',answer({}, {grade_labels:[{grade,label:'Dev'}]}));assert.equal(w.layouts[kind].grade_labels[0].label,'Dev');assert.ok(labels.some(v=>v==='DEV'||v.startsWith('Dev ·')));assert.equal(JSON.stringify(context.candidates),factsBefore);
+ await edit('Shorten Development League to Dev',answer({}, {grade_labels:[{grade,label:'Dev'}]}));assert.equal(w.layouts[kind].grade_labels[0].label,'Dev');assert.ok(labels.some(v=>v==='Dev'||v.startsWith('Dev ·')));assert.equal(JSON.stringify(context.candidates),factsBefore);
  id('saUseRefinement').click();await settled();await module.load(s,false);module.render(s);await settled();assert.equal(w.layouts[kind].grade_labels[0].label,'Dev');assert.equal(JSON.stringify(context.candidates),factsBefore);
 }
 console.log('Passed: Results, Century and 5 Wickets display abbreviations persist without editing source grades.');
