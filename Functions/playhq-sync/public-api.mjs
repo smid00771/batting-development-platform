@@ -72,10 +72,28 @@ export function gradeFixtures(body,{teamId,gradeId,timezone}){
       const kind=String(game.type||'').toLowerCase().replace(/[^a-z0-9]/g,'');
       const format=({t20:'t20',twenty20:'t20',oneday:'limited_overs',limitedovers:'limited_overs',twoday:'long_form',multiday:'long_form',test:'long_form'})[kind]||null;
       let days=[];try{days=matchSchedule(game.schedule,body.playingSurfaces,timezone);}catch{}
-      fixtures.push({source:'playhq',source_match_id:game.id,source_grade_id:gradeId,source_team_id:teamId,source_status:game.status||null,source_updated_at:game.updatedAt||null,round:round.name||'',format,opposition:body.teams.find(t=>t.id===opponent?.id)?.name||null,opposition_id:opponent?.id||null,days,cancelled:['CANCELLED','CANCELED'].includes(game.status),requires_review:!format||!days.length||days.length>2});
+      const noPlay=gameNoPlay(game,teamId);
+      fixtures.push({source:'playhq',source_match_id:game.id,source_grade_id:gradeId,source_team_id:teamId,source_status:game.status||null,source_updated_at:game.updatedAt||null,source_outcome:game.teams.find(t=>t.id===teamId)?.outcome||null,no_play:noPlay,round:round.name||'',format,opposition:body.teams.find(t=>t.id===opponent?.id)?.name||null,opposition_id:opponent?.id||null,days,cancelled:!!noPlay||['CANCELLED','CANCELED'].includes(game.status),requires_review:!format||!days.length||days.length>2});
     }
   }
   return {fixtures,byes};
+}
+
+// A future FINAL fixture can already have an official forfeit. Never infer this
+// from a missing venue, a withdrawn opponent's name, or FINAL on its own. The
+// fixture feed and summary use different innings statistic wrappers.
+export function gameNoPlay(game,teamId){
+ const teams=game?.teams||[],ours=teams.filter(t=>t.id===teamId);
+ if(ours.length!==1)return null;
+ const played=(game.periods||[]).some(p=>(p.teams||[]).some(t=>
+  (t.appearances||[]).length>0||(t.statistics||t.outcome?.statistics||[]).some(s=>s.type!=='OVER_LIMIT'&&typeof s.value==='number'&&s.value>0)));
+ if(played)return null;
+ if(game.status==='BYE'||game.status==='FINAL'&&ours[0].outcome==='BYE')return 'bye';
+ if(game.status!=='FINAL'||teams.length!==2||teams[0].id===teams[1].id)return null;
+ const other=teams.find(t=>t.id!==teamId);
+ if(ours[0].outcome==='WON_BY_FORFEIT'&&other?.outcome==='LOST_BY_FORFEIT')return 'won_by_forfeit';
+ if(ours[0].outcome==='LOST_BY_FORFEIT'&&other?.outcome==='WON_BY_FORFEIT')return 'lost_by_forfeit';
+ return null;
 }
 
 const stats=values=>Object.fromEntries((values||[]).map(x=>[x.type,typeof x.value==='number'&&Number.isFinite(x.value)?x.value:null]));
@@ -87,7 +105,7 @@ export function oversToBalls(value){
 
 // Keep PlayHQ appearance IDs in their own namespace. They are not assumed to
 // equal the participant IDs supplied by the existing PlayCricket importer.
-export function gameSummary(body,expectedId){
+export function gameSummary(body,expectedId,teamId=null){
   const game=body?.data;
   if(game?.id!==id(expectedId)||!Array.isArray(game.teams)||!Array.isArray(game.appearances))throw Error('Incomplete or mismatched PlayHQ summary');
   const complete=game.status==='FINAL';
@@ -106,7 +124,7 @@ export function gameSummary(body,expectedId){
       return {...person,position:a.displayOrder,status:a.status,statistics:figures,balls_bowled:t.discipline==='BOWLING'?oversToBalls(figures.OVERS):null,provisional:!complete};
     })}))});
   }
-  return {source:'playhq',source_match_id:game.id,source_grade_id:game.gradeId,source_status:game.status,complete,has_figures:periods.some(p=>p.teams.some(t=>t.players.some(a=>Object.values(a.statistics).some(v=>v!==null)))),periods};
+  return {source:'playhq',source_match_id:game.id,source_grade_id:game.gradeId,source_status:game.status,...(teamId?{source_team_id:teamId,source_outcome:game.teams.find(t=>t.id===teamId)?.outcome||null,no_play:gameNoPlay(game,teamId)}:{}),complete,has_figures:periods.some(p=>p.teams.some(t=>t.players.some(a=>Object.values(a.statistics).some(v=>v!==null)))),periods};
 }
 
 // Proposed polling policy, not an activated schedule or a claim about provider limits.

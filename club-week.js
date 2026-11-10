@@ -8,10 +8,10 @@ export function missingAvailability(roster, dates) {
   return roster.filter(p => p.active).map(p => ({...p, missing: dates.filter(date => availability(p,date) === 'unset')})).filter(p => p.missing.length);
 }
 export function selectedOn(fixtures, playerId, date) {
-  return fixtures.flatMap(f => f.details?.cancelled ? [] : (f.details?.days || []).flatMap((d, day) => d.date !== date ? [] : f.slots.flatMap((s, slot) => s[dayKey(day)] === playerId ? [{fixtureId:f.id, grade:f.details.grade, slot, day}] : [])));
+  return fixtures.flatMap(f => (f.no_play||f.details?.cancelled) ? [] : (f.details?.days || []).flatMap((d, day) => d.date !== date ? [] : f.slots.flatMap((s, slot) => s[dayKey(day)] === playerId ? [{fixtureId:f.id, grade:f.details.grade, slot, day}] : [])));
 }
 export function openPlaces(fixtures) {
-  return fixtures.flatMap(f => f.details?.cancelled ? [] : (f.details?.days || []).flatMap((d, day) => f.slots.slice(0,11).flatMap((s, slot) => !s[dayKey(day)] ? [{fixtureId:f.id,grade:f.details.grade,date:d.date,day,slot}] : [])));
+  return fixtures.flatMap(f => (f.no_play||f.details?.cancelled) ? [] : (f.details?.days || []).flatMap((d, day) => f.slots.slice(0,11).flatMap((s, slot) => !s[dayKey(day)] ? [{fixtureId:f.id,grade:f.details.grade,date:d.date,day,slot}] : [])));
 }
 export function roleMatch(incumbent, candidate, format) {
   const differences=[];let score=0;
@@ -45,7 +45,7 @@ export function replaceInPlan({fixtures,fixtureId,slot,days,playerId,roster}) {
   if(target.details.days.length===2&&!target.details.brackets&&days.length!==2)throw Error('This team uses the same XI on both days.');
   if(next.some(f=>f.details.days.length===2&&!f.details.brackets&&f.details.days.some((d,i)=>dates.includes(d.date)&&f.slots.some(s=>s[dayKey(i)]===playerId))&&f.details.days.some(d=>!dates.includes(d.date))))throw Error('This move would split a team that uses the same XI on both days.');
   // Move only the matching playing dates. A bracket partner on another day stays put.
-  for(const f of next)if(!f.details.cancelled)f.details.days.forEach((d,day)=>{
+  for(const f of next)if(!f.no_play&&!f.details.cancelled)f.details.days.forEach((d,day)=>{
     if(!dates.includes(d.date))return;
     for(const s of f.slots)if(s[dayKey(day)]===playerId)s[dayKey(day)]=null;
   });
@@ -68,9 +68,9 @@ export function shareLink(origin,clubId,{view='published',date='',fixtureId=''}=
 }
 export function forecast(roster,fixtures,today,days=21) {
   const end=new Date(`${today}T12:00:00Z`);end.setUTCDate(end.getUTCDate()+days);
-  const dates=[...new Set(fixtures.filter(f=>!f.details?.cancelled).flatMap(f=>f.details.days.map(d=>d.date)))].filter(d=>d>=today&&d<=end.toISOString().slice(0,10)).sort();
+  const dates=[...new Set(fixtures.filter(f=>!f.no_play&&!f.details?.cancelled).flatMap(f=>f.details.days.map(d=>d.date)))].filter(d=>d>=today&&d<=end.toISOString().slice(0,10)).sort();
   return dates.map(date=>{
-    const matches=fixtures.filter(f=>!f.details?.cancelled&&f.details.days.some(d=>d.date===date)),active=roster.filter(p=>p.active),available=active.filter(p=>availability(p,date)==='available'),unset=active.filter(p=>availability(p,date)==='unset');
+    const matches=fixtures.filter(f=>!f.no_play&&!f.details?.cancelled&&f.details.days.some(d=>d.date===date)),active=roster.filter(p=>p.active),available=active.filter(p=>availability(p,date)==='available'),unset=active.filter(p=>availability(p,date)==='unset');
     return {date,required:matches.length*11,available:available.length,unset:unset.length,unavailable:active.length-available.length-unset.length,keepers:available.filter(p=>p.keeper).length,unknownRoles:available.filter(p=>p.batting==='unknown'||p.bowling==='unknown').length,teams:matches.length};
   });
 }

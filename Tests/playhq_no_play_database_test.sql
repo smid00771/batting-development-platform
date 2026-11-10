@@ -1,0 +1,84 @@
+-- Synthetic clubs and users only. Run inside a transaction; always roll back.
+create temp table no_play_test(c uuid,u uuid,ordinary uuid,season uuid,team uuid,grade uuid,fid uuid,manual uuid,src jsonb,published jsonb,details jsonb,slots jsonb);
+grant select on no_play_test to authenticated;
+do $setup$
+declare c uuid:=gen_random_uuid();u uuid:=gen_random_uuid();ordinary uuid:=gen_random_uuid();g uuid:=gen_random_uuid();sg uuid:=gen_random_uuid();season uuid:=gen_random_uuid();team uuid:=gen_random_uuid();grade uuid:=gen_random_uuid();mid uuid:=gen_random_uuid();pid uuid:=gen_random_uuid();fid uuid;manual uuid:=gen_random_uuid();src jsonb;original jsonb;before_slots jsonb;saved_revision int;outcome jsonb;
+begin
+ insert into auth.users(id,email) values(u,'no-play-admin-'||u||'@example.invalid'),(ordinary,'no-play-member-'||ordinary||'@example.invalid');
+ insert into public.user_profiles(user_id,display_name) values(u,'Synthetic no-play admin'),(ordinary,'Synthetic ordinary member');
+ insert into public.clubs(id,name,slug,created_by) values(c,'No play test club','no-play-'||c,u);
+ insert into public.club_memberships(club_id,user_id,role,permission_role) values(c,u,'admin','admin'),(c,ordinary,'player','none');
+ insert into club_selection_private.access(club_id,mode,status,head_selector_id,timezone) values(c,'standalone','active',u,'Australia/Sydney');
+ insert into public.playing_groups(id,club_id,name) values(g,c,'Example Navy');
+ insert into club_selection_private.selection_groups(id,club_id,name) values(sg,c,'Example competition');
+ insert into club_selection_private.selection_group_grades values(c,g,sg);
+ insert into club_selection_private.playhq_connections(club_id,organisation_id,association_id,secret_id,updated_by,verified_at,active_season_id,polling_enabled) values(c,gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),u,now(),season,false);
+ insert into club_selection_private.playhq_grade_mappings values(c,season,team,grade,g);
+ src:=jsonb_build_object('source_match_id',mid,'source_team_id',team,'source_grade_id',grade,'opposition','Visitors','format','limited_overs','source_status','UPCOMING','no_play',null,'cancelled',false,'days','[{"date":"2099-11-14","time":"13:30","start_at":"2099-11-14T02:30:00Z","ground":"TBA"}]'::jsonb);
+ perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(src));
+ select fixture_id into fid from club_selection_private.playhq_links where club_id=c and match_id=mid;
+ insert into club_selection_private.roster(id,club_id,name,user_id,active) values(pid,c,'Synthetic selected player',u,true);
+ insert into club_selection_private.availability(roster_id,available_dates,unavailable_dates) values(pid,'["2099-11-14"]','[]');
+ update club_selection_private.fixtures set slots=jsonb_set(slots,'{0,d1}',to_jsonb(pid::text)) where id=fid;
+ select details,slots into original,before_slots from club_selection_private.fixtures where id=fid;
+ assert club_selection_private.playhq_results_due(fid,null,now())>now()+interval '1 year','Ordinary future games still wait until the playing day';
+ outcome:=src||'{"source_status":"FINAL","source_outcome":"WON_BY_FORFEIT","no_play":"won_by_forfeit","cancelled":true}'::jsonb;
+ perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(outcome));
+ assert club_selection_private.fixture_no_play(c,fid)='won_by_forfeit','Forfeit recognised before the playing date';
+ assert (select details->'cancelled'='true'::jsonb and slots=before_slots from club_selection_private.fixtures where id=fid),'No-play fixture inactive, line-up retained';
+ assert club_selection_private.issues(fid)='[]'::jsonb,'No vacant-place or missing-captain warnings';
+ select f.revision into saved_revision from club_selection_private.fixtures f where id=fid;
+ perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(outcome));
+ assert (select f.revision=saved_revision from club_selection_private.fixtures f where id=fid),'Unchanged checks are idempotent';
+ perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(src));
+ assert club_selection_private.fixture_no_play(c,fid) is null and (select details=original and slots=before_slots from club_selection_private.fixtures where id=fid),'Provider correction restores the scheduled fixture';
+ -- Existing publication is protected by the normal review flow, while result
+ -- and no-play checks still see the official outcome immediately.
+ update club_selection_private.fixtures set published=jsonb_build_object('details',details,'slots',slots,'players','[]'::jsonb),publication=1,published_at=now() where id=fid;
+ perform club_selection_private.refresh_calendar_events(fid);
+ assert (select event->>'status'='CONFIRMED' and sequence=1 from club_selection_private.calendar_events where fixture_id=fid and user_id=u),'Published selection creates the calendar event';
+ perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(outcome));
+ assert (select pending_fixture is not null from club_selection_private.playhq_links where fixture_id=fid),'Published changes still require review';
+ assert (select details=original and published->'details'=original and slots=before_slots from club_selection_private.fixtures where id=fid),'Published snapshot and existing choices untouched';
+ assert club_selection_private.fixture_source_no_play(c,fid)='won_by_forfeit','Pending arrangement does not hide the result';
+ assert (select event->>'status'='CANCELLED' and sequence=2 from club_selection_private.calendar_events where fixture_id=fid and user_id=u),'Forfeit cancels calendar event without publication or messages';
+ perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(src));
+ assert (select event->>'status'='CONFIRMED' and sequence=3 from club_selection_private.calendar_events where fixture_id=fid and user_id=u),'Correction restores the same calendar event with increasing sequence';
+ perform club_selection_private.playhq_import_all(c,season,grade,team,jsonb_build_array(outcome));
+ update club_selection_private.playhq_links set summary='{"has_figures":true}' where fixture_id=fid;
+ assert club_selection_private.fixture_source_no_play(c,fid) is null,'Actual saved figures are never suppressed as no play';
+ update club_selection_private.playhq_links set summary=null where fixture_id=fid;
+ insert into club_selection_private.fixtures(id,club_id,details,slots) values(manual,c,original||'{"opposition":"Other visitors"}',before_slots);
+ assert not exists(select 1 from jsonb_array_elements(club_selection_private.issues(manual)) x where x->>'text' like '%also selected%'),'Existing players are free for another team despite the preserved published snapshot';
+ insert into no_play_test select c,u,ordinary,season,team,grade,fid,manual,src,published,details,slots from club_selection_private.fixtures where id=fid;
+ perform set_config('request.jwt.claim.sub',u::text,true);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',u,'role','authenticated')::text,true);
+end $setup$;
+set local role authenticated;
+do $authenticated$
+declare t no_play_test%rowtype;r jsonb;f jsonb;denied boolean;
+begin
+ select * into t from no_play_test;
+ r:=public.club_selections_api(t.c,'context');
+ select x into f from jsonb_array_elements(r->'fixtures') x where x->>'id'=t.fid::text;
+ assert f->>'no_play'='won_by_forfeit','Authorised board context carries the exact result';
+ r:=public.club_match_results_api(t.c,'fixture',jsonb_build_object('fixture_id',t.fid));
+ assert r#>>'{fixtures,0,no_play}'='won_by_forfeit' and r#>>'{playhq,source_no_play}'='won_by_forfeit','Results and board agree';
+ assert r->'cards'='[]'::jsonb,'No zero-score scorecard invented';
+ denied:=false;begin perform public.club_selections_api(t.c,'save_board',jsonb_build_object('request_id',gen_random_uuid(),'fixtures',jsonb_build_array(f)));exception when raise_exception then denied:=sqlerrm like 'No team selection%';end;
+ assert denied,'Stale clients cannot select a forfeit team';
+ denied:=false;begin perform public.club_match_results_api(t.c,'no_play',jsonb_build_object('fixture_id',t.fid,'reason',''));exception when raise_exception then denied:=sqlerrm like 'This result is recorded%';end;
+ assert denied,'Manual control cannot erase a provider result';
+ perform public.club_match_results_api(t.c,'no_play',jsonb_build_object('fixture_id',t.manual,'reason','won_by_forfeit'));
+ assert public.club_match_results_api(t.c,'fixture',jsonb_build_object('fixture_id',t.manual))#>>'{fixtures,0,no_play}'='won_by_forfeit','Manual fallback works through real authenticated RPC';
+ perform public.club_match_results_api(t.c,'no_play',jsonb_build_object('fixture_id',t.manual,'reason',''));
+ assert public.club_match_results_api(t.c,'fixture',jsonb_build_object('fixture_id',t.manual))#>>'{fixtures,0,no_play}' is null,'Manual fallback is undoable';
+ assert not has_function_privilege('authenticated','club_selection_private.fixture_no_play(uuid,uuid)','execute'),'No new private helper access';
+ denied:=false;begin perform public.club_match_results_api(gen_random_uuid(),'fixture',jsonb_build_object('fixture_id',t.fid));exception when raise_exception then denied:=true;end;
+ assert denied,'Foreign club rejected';
+ perform set_config('request.jwt.claim.sub',t.ordinary::text,true);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',t.ordinary,'role','authenticated')::text,true);
+ denied:=false;begin perform public.club_match_results_api(t.c,'no_play',jsonb_build_object('fixture_id',t.manual,'reason','bye'));exception when raise_exception then denied:=true;end;
+ assert denied,'Ordinary member cannot change result';
+end $authenticated$;
+reset role;

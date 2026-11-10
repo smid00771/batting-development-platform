@@ -56,7 +56,7 @@ Deno.serve(async(req:Request)=>{
      // Artwork failure must not stop score imports. Results can retry on demand.
      try{const logos=await teamLogos(card.teams,await logoTeams(api,context.season_id),card.upstream_grade_id);card.teams=card.teams.map((t:any)=>({...t,...logos.find((l:any)=>l.id===t.id)}));}catch{}
     }
-    result={...gameSummary(body,job.source_id),shared_scorecard:card};
+    result={...gameSummary(body,job.source_id,job.team_id),shared_scorecard:card};
    }
    await worker('finish',{job,result});return reply({checked:1});
   }catch(error){
