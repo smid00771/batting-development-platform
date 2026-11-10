@@ -93,3 +93,40 @@ test('fixtures without grade IDs can cross formats within the same named competi
  const h=harness();delete h.previous.details.grade_group_id;delete h.target.details.grade_group_id;h.target.details.competition=h.previous.details.competition;h.previous.details.format='t20';h.sync();await h.c.seCopyLast('target');
  assert.equal(h.requests.length,1);assert.equal(h.s.data.fixtures[1].slots[0].d1,'a');
 });
+
+test('copy retains an existing player in place and repeated copying makes no second save',async()=>{
+ const h=harness();h.target.slots[4].d1='current';h.target.details.captain_id='current';h.sync();const before=plain(h.target);
+ await h.c.seCopyLast('target');const saved=h.s.data.fixtures[1];
+ assert.equal(saved.slots[4].d1,'current');assert.deepEqual(plain(saved.slots.slice(0,2)),[{d1:'a',d2:null},{d1:'b',d2:null}]);assert.deepEqual(plain(saved.details),before.details);
+ assert.match(h.message(),/3 of 11 players.*Existing selections kept/);assert.deepEqual(plain(h.s.undo[0].before),[before]);
+ await h.c.seCopyLast('target');assert.equal(h.requests.length,1);assert.equal(h.s.undo.length,1);assert.match(h.message(),/already in this team.*Current team unchanged/);
+});
+
+test('copy preserves a bracketed pair, checks duplicates per day and never fills its empty partner',async()=>{
+ const h=harness();for(const f of [h.target,h.previous]){f.details.format='long_form';f.details.brackets=true;f.details.days.push({date:f.id==='target'?'2099-11-07':'2099-10-25',start:'10:00'});}
+ for(const p of h.s.data.roster)p.availability.available_dates.push('2099-11-07');
+ h.target.slots[0]={d1:'a',d2:'current'};h.target.slots[4]={d1:'current',d2:null};h.previous.slots[0]={d1:'a',d2:'b'};h.previous.slots[1]={d1:'b',d2:'a'};
+ const before=plain(h.target);h.sync();await h.c.seCopyLast('target');const saved=h.s.data.fixtures[1];
+ assert.deepEqual(plain(saved.slots[0]),before.slots[0]);assert.deepEqual(plain(saved.slots[4]),before.slots[4]);
+ assert.deepEqual(plain(saved.slots.slice(1,3)),[{d1:null,d2:'b'},{d1:'b',d2:'a'}]);
+ for(const day of ['d1','d2']){const players=saved.slots.map(s=>s[day]).filter(Boolean);assert.equal(players.length,new Set(players).size);}
+ await h.c.seCopyLast('target');assert.equal(h.requests.length,1);
+});
+
+test('copy keeps all source players beyond eleven instead of truncating an oversized draft',async()=>{
+ const h=harness();h.previous.slots=Array.from({length:13},(_,i)=>({d1:'source-'+i,d2:null}));
+ h.s.data.roster.push(...h.previous.slots.map(s=>({id:s.d1,name:s.d1,active:true,availability:{available_dates:['2099-10-31']}})));
+ h.target.slots[0].d1='current';h.sync();await h.c.seCopyLast('target');const saved=h.s.data.fixtures[1];
+ assert.equal(saved.slots.length,14);assert.equal(saved.slots[0].d1,'current');assert.deepEqual(plain(saved.slots.slice(1)),plain(h.previous.slots));assert.match(h.message(),/14 players/);
+});
+
+test('a copy exceeding the draft capacity leaves every existing choice unchanged',async()=>{
+ const h=harness();h.target.slots=Array.from({length:100},(_,i)=>({d1:'kept-'+i,d2:null}));h.sync();const before=plain(h.s.data);
+ await h.c.seCopyLast('target');assert.equal(h.requests.length,0);assert.deepEqual(plain(h.s.data),before);assert.match(h.message(),/100 selection slots.*Current team unchanged/);
+});
+
+test('no-play teams neither supply a previous lineup nor reserve players elsewhere',async()=>{
+ const h=harness();const forfeit=structuredClone(h.previous);forfeit.id='forfeit';forfeit.details.days[0].date='2099-10-25';forfeit.no_play='won_by_forfeit';forfeit.slots[0].d1='current';h.s.data.fixtures.push(forfeit);
+ const other=structuredClone(h.target);other.id='other';other.no_play='won_by_forfeit';other.slots[0].d1='a';h.s.data.fixtures.push(other);h.sync();await h.c.seCopyLast('target');
+ assert.deepEqual(plain(h.s.data.fixtures[1].slots.slice(0,2)),[{d1:'a',d2:null},{d1:'b',d2:null}]);assert.match(h.message(),/2099-10-24/);
+});

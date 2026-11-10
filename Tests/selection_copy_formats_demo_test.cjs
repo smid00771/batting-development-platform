@@ -58,3 +58,22 @@ test('all players available only on Day 1 receive a visible Day 2 explanation be
  assert.equal(status.hidden,false);assert.equal(status.getAttribute('role'),'alert');assert.equal(h.document.activeElement,status);assert.match(status.textContent,/11 availability not confirmed \(Day 2: .+\).*available on both days/);
  assert.equal(h.window.copyCalls.length,0);assert.deepEqual(plain(h.window.eval("selectionState.data.fixtures.find(f=>f.id==='selection-first').slots")),plain(h.window.copyTarget.slots));assert.deepEqual(h.errors.map(error=>error.message),[]);
 });
+
+test('a selector can keep a bracketed pair then copy eleven players, see the numbers warning and undo only the copy',async t=>{
+ const h=await setup(t,{brackets:true});
+ h.window.eval(`
+  const target=demoSelections.fixtures.find(f=>f.id==='selection-first'),dates=target.details.days.map(d=>d.date);
+  for(const slot of window.copySource.slots){const p=demoSelections.roster.find(p=>p.id===slot.d1);p.availability.available_dates=[...new Set([...p.availability.available_dates,...dates])];p.availability.unavailable_dates=p.availability.unavailable_dates.filter(d=>!dates.includes(d));}
+  for(const [id,name] of [['kept-one','Kept Day One'],['kept-two','Kept Day Two']])demoSelections.roster.push({...structuredClone(demoSelections.roster[0]),id,name,user_id:null,availability:{available_dates:dates,unavailable_dates:[]}});
+  target.slots[0]={d1:'kept-one',d2:'kept-two'};window.mergeTarget=structuredClone(target);
+ `);
+ await h.window.seReload();h.window.drawSelections();await h.settle();h.window.copyCalls.length=0;
+ await h.click('[data-se-copylast="selection-first"]');
+ const saved=plain(h.window.ensureSelections().data.fixtures.find(f=>f.id==='selection-first')),card=h.document.querySelector('[data-se-team="selection-first"]');
+ assert.deepEqual(saved.slots[0],{d1:'kept-one',d2:'kept-two'});assert.equal(saved.slots.length,12);
+ assert.deepEqual(saved.slots.slice(1),plain(h.window.copySource.slots).map(slot=>({d1:slot.d1,d2:slot.d1})));
+ assert.match(card.querySelector('.se-overflow').textContent,/Day 1: 12 players.*Day 2: 12 players/);assert.match(card.textContent,/Kept Day One.*Kept Day Two/);
+ assert.equal(saved.published,null);assert.deepEqual({...plain(saved.details),match_roles:null},{...plain(h.window.mergeTarget.details),match_roles:null});
+ await h.click('[data-se-copylast="selection-first"]');assert.equal(h.window.copyCalls.filter(x=>x.p_action==='save_board').length,1);
+ await h.click('#seUndo');assert.deepEqual(plain(h.window.ensureSelections().data.fixtures.find(f=>f.id==='selection-first').slots),plain(h.window.mergeTarget.slots));assert.deepEqual(h.errors,[]);
+});

@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.355';
+const APP_UI_VERSION='0.8.62.356';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19776,6 +19776,7 @@ async function seCopyLast(id){
  const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===id);if(!f||s.busy)return;
  if(s.pending){if(s.pending.copyLast?.id===id)return seMutate(s.pending.action,s.pending.data);seCopyMessage(id,'Finish the unconfirmed save before copying a team.');return;}
  if(f.published||seFixtureLocked(f)){seCopyMessage(id,'Copy previous team is only available for an unpublished, unlocked team.');return;}
+ if(f.no_play||f.details.cancelled){seCopyMessage(id,'No team selection is needed for this fixture.');return;}
  const targetDay=f.details.days[0],targetStart=seClockMinutes(targetDay.start);
  const earlier=details=>{const day=details.days?.[0];if(!day?.date)return false;if(day.date<targetDay.date)return true;const start=seClockMinutes(day.start);return day.date===targetDay.date&&start!==null&&targetStart!==null&&start<targetStart&&!details.days.some(previous=>f.details.days.some(next=>seOverlap(previous,next,details,f.details)));};
  // Imported fixtures can have a blank competition label. A saved grade-group
@@ -19783,24 +19784,36 @@ async function seCopyLast(id){
  const sameTeam=d=>d?.grade_group_id&&f.details.grade_group_id?d.grade_group_id===f.details.grade_group_id:d?.grade===f.details.grade&&d.competition===f.details.competition;
  // A draw can change format between rounds. Carry forward the latest line-up;
  // the target fixture below determines playing days, bracketing and availability.
- const last=s.data.fixtures.filter(x=>x.id!==id&&x.draft_visible!==false&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>sameTeam(x.details)&&earlier(x.details)&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date)||(seClockMinutes(b.details.days[0].start)??-1)-(seClockMinutes(a.details.days[0].start)??-1))[0];
+ const last=s.data.fixtures.filter(x=>x.id!==id&&x.draft_visible!==false&&!x.no_play&&!x.details.cancelled&&!x.published?.details?.cancelled).map(x=>x.published||x).filter(x=>sameTeam(x.details)&&earlier(x.details)&&Array.isArray(x.slots)&&x.slots.some(slot=>slot?.d1||slot?.d2)).sort((a,b)=>b.details.days[0].date.localeCompare(a.details.days[0].date)||(seClockMinutes(b.details.days[0].start)??-1)-(seClockMinutes(a.details.days[0].start)??-1))[0];
  if(!last){seCopyMessage(id,'There is no earlier team to copy for this grade.');return;}
  const source=last.details.grade+' · '+seDate(last.details.days[0].date)+(last.details.days[0].start?' · '+last.details.days[0].start:'');
  const roster=new Map(s.data.roster.map(p=>[p.id,p])),used=[],identity=id=>String(roster.get(id)?.name||id||'').trim().toLowerCase().replace(/\s+/g,' ');
  // Match the server's overlapping-game guard, including legacy duplicate names.
  // Never remove a player from another team to make a previous line-up fit.
- for(const other of s.data.fixtures){if(other.id===id||other.details.cancelled)continue;other.details.days.forEach((day,j)=>{for(const slot of other.slots){const pid=slot?.['d'+(j+1)];if(pid)used.push({player:identity(pid),day,details:other.details});}});}
+ for(const other of s.data.fixtures){if(other.id===id||other.no_play||other.details.cancelled)continue;other.details.days.forEach((day,j)=>{for(const slot of other.slots){const pid=slot?.['d'+(j+1)];if(pid)used.push({player:identity(pid),day,details:other.details});}});}
  const skipped={inactive:new Set(),unknown:new Set(),unavailable:new Set(),selected:new Set()},skippedDates={unknown:new Set(),unavailable:new Set()};
  const available=(id,day)=>{if(!id)return null;const p=roster.get(id),status=seDayStatus(p,day),reason=!p?.active?'inactive':status==='unavailable'?'unavailable':status!=='available'?'unknown':used.some(x=>x.player===identity(id)&&seOverlap(x.day,day,x.details,f.details))?'selected':null;if(reason){skipped[reason].add(id);skippedDates[reason]?.add(day.date);return null;}return id;};
- const copy=structuredClone(f);copy.slots=Array.from({length:Math.max(11,Math.min(seTeamPlayerLimit(f),last.slots.length))},(_,i)=>{
+ // Keep every current row, including a half-filled bracket. Add the previous
+ // batting order into empty rows, moving it down around the selector's choices.
+ // Deduplicate by playing day; a bracketed player can still be needed on Day 2.
+ const copy=structuredClone(f),present=f.details.days.map((_,i)=>new Set(copy.slots.map(slot=>slot['d'+(i+1)]).filter(Boolean).map(identity))),kept=copy.slots.some(slot=>slot.d1||slot.d2);
+ while(copy.slots.length<11)copy.slots.push({d1:null,d2:null});
+ const newPlayer=(id,i)=>id&&!present[i].has(identity(id))?available(id,f.details.days[i]):null;
+ let added=0,next=0;
+ for(let i=0;i<last.slots.length;i++){
   const slot=last.slots[i]||{};
-  let d1=available(slot.d1,f.details.days[0]),d2=f.details.days.length===2?available(f.details.brackets?slot.d2||slot.d1:slot.d1,f.details.days[1]):null;
+  let d1=newPlayer(slot.d1,0),d2=f.details.days.length===2?newPlayer(f.details.brackets?slot.d2||slot.d1:slot.d1,1):null;
   if(f.details.days.length===2&&!f.details.brackets&&(!d1||!d2))d1=d2=null;
-  if(d1)used.push({player:identity(d1),day:f.details.days[0],details:f.details});if(d2)used.push({player:identity(d2),day:f.details.days[1],details:f.details});return {d1,d2};
- });
+  if(!d1&&!d2)continue;
+  let position=Math.max(i,next);while(copy.slots[position]?.d1||copy.slots[position]?.d2)position++;
+  if(position>=100){seCopyMessage(id,'This copy would exceed 100 selection slots. Arrange or clear unused choices first. Current team unchanged.',{attention:true});return;}
+  while(copy.slots.length<=position)copy.slots.push({d1:null,d2:null});
+  copy.slots[position]={d1,d2};next=position+1;added++;
+  if(d1)present[0].add(identity(d1));if(d2)present[1].add(identity(d2));
+ }
  const counts=f.details.days.map((_,i)=>copy.slots.filter(slot=>slot['d'+(i+1)]).length),reasons=Object.entries(skipped).filter(([,ids])=>ids.size).map(([key,ids])=>ids.size+' '+({inactive:'not on the active playing list',unknown:'availability not confirmed',unavailable:'unavailable',selected:'already selected in overlapping games'})[key]+(skippedDates[key]?.size?' ('+f.details.days.flatMap((day,i)=>skippedDates[key].has(day.date)?[(f.details.days.length>1?'Day '+(i+1)+': ':'')+seDate(day.date)]:[]).join(' / ')+')':'')).join('; ');
- if(!counts.some(Boolean)){const both=f.details.days.length===2&&!f.details.brackets&&(skipped.unknown.size||skipped.unavailable.size);seCopyMessage(id,'No players copied'+(reasons?': '+reasons:'. No eligible players')+'. '+(both?'This team needs players available on both days. ':'')+'Current team unchanged.',{attention:true});return;}
- const message='Copied '+source+' · '+(counts.length===1?counts[0]+(counts[0]>11?' players':' of 11 players'):counts.map((n,i)=>'Day '+(i+1)+': '+n+(n>11?' players':'/11')).join(' · '))+' ✓'+(reasons?' · Gaps: '+reasons:'');
+ if(!added){const both=f.details.days.length===2&&!f.details.brackets&&(skipped.unknown.size||skipped.unavailable.size);seCopyMessage(id,'No players copied'+(reasons?': '+reasons:kept?'. Eligible players are already in this team':'. No eligible players')+'. '+(both?'This team needs players available on both days. ':'')+'Current team unchanged.',{attention:!!reasons||!kept});return;}
+ const message='Copied '+source+' · '+(counts.length===1?counts[0]+(counts[0]>11?' players':' of 11 players'):counts.map((n,i)=>'Day '+(i+1)+': '+n+(n>11?' players':'/11')).join(' · '))+' ✓'+(kept?' · Existing selections kept':'')+(reasons?' · Gaps: '+reasons:'');
  if(await seMutate('save_board',{fixtures:[copy]},{undo:[structuredClone(f)],copyLast:{id,message}}))seCopyMessage(id,message);
  else if(s===ensureSelections()&&!s.pending)seCopyMessage(id,s.notice||'The previous team could not be copied. Current team unchanged.');
 }
