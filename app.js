@@ -7,8 +7,8 @@ import {isLegacyOrigin,legacyAppRedirect,mirelionAppUrl} from './domain-routing.
 import {createStaffAssistController} from './assist-loader.js?v=0.8.62.304';
 import {assistLaunchFromSearch} from './assist-routing.js?v=0.8.62.271';
 import {FIELDING_RATINGS,fieldingLabel} from './player-fielding.js?v=0.8.62.288';
-import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.322';
-import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.288';
+import {createSelectionEvidenceSnapshot} from './selection-evidence-snapshot.js?v=0.8.62.360';
+import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.360';
 const returningPlayers=findReturningPlayers;
 import {createScorecardTeams} from './playcricket-team.js?v=0.8.62.345';
 // Club Batting 0.8.62.246 — Selection Group permissions
@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.359';
+const APP_UI_VERSION='0.8.62.360';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');

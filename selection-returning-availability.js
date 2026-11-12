@@ -4,6 +4,9 @@ const end = team => (team.days || []).map(day=>day.date).sort().at(-1) || '';
 const selected = (team,id) => (team.slots || []).some(slot=>slot.d1===id || slot.d2===id);
 const status = (person,day) => person.availability?.unavailable_dates?.includes(day.date) ? 'unavailable'
   : person.availability?.available_dates?.includes(day.date) ? 'available' : 'unknown';
+// Limited overs and long form continue the same grade competition. T20 has
+// its own return history and cannot turn another competition's absence into a move.
+const formatFamily = team => ['limited_overs','long_form'].includes(team.format) ? 'grade' : team.format;
 const sameGrade = (a,b) => a.grade_group_id && b.grade_group_id ? a.grade_group_id===b.grade_group_id
   : !!a.competition && a.competition===b.competition && a.grade===b.grade;
 const snapshot = team => team.published?.details && Array.isArray(team.published.slots)
@@ -15,7 +18,7 @@ export function findReturningPlayers({teams=[],references=[],roster=[],season={}
   const returns=[];
   for (const team of teams) {
     if (!team.returningEligible || team.cancelled || !inSeason(team,season) || date(team)<today) continue;
-    const past=history.filter(old=>old.id!==team.id&&sameGrade(old,team)&&old.format===team.format&&end(old)<date(team)&&end(old)<today)
+    const past=history.filter(old=>old.id!==team.id&&sameGrade(old,team)&&formatFamily(old)===formatFamily(team)&&end(old)<date(team)&&end(old)<today)
       .sort((a,b)=>date(b).localeCompare(date(a)) || String(b.days?.[0]?.start||'').localeCompare(String(a.days?.[0]?.start||'')));
     for (const person of roster) {
       if (!person.active || selected(team,person.id)) continue;
@@ -29,7 +32,7 @@ export function findReturningPlayers({teams=[],references=[],roster=[],season={}
       }
       if (!missed.length || !previous) continue;
       // A confirmed intervening grade move is not a return from an absence.
-      if (history.some(old=>old.historyConfirmed&&!sameGrade(old,team)&&date(old)>date(previous)&&end(old)<date(team)&&selected(old,person.id))) continue;
+      if (history.some(old=>old.historyConfirmed&&formatFamily(old)===formatFamily(team)&&!sameGrade(old,team)&&date(old)>date(previous)&&end(old)<date(team)&&selected(old,person.id))) continue;
       // Check clashes only for established returns, not every player on every draw.
       availableDays=availableDays.filter(day=>eligible(team,person,day));
       if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;

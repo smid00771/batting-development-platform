@@ -70,6 +70,37 @@ test('a single missed game qualifies, while cancelled and no-play fixtures do no
  assert.equal(h.find({noPlay:[missed.id]}).length,0);
  missed.cancelled=true;assert.equal(h.find().length,0,'An old published snapshot does not undo a cancellation');
 });
+test('available-again reminders continue between limited overs and long form while T20 stays separate',async()=>{
+ for(const [previous,current,wanted] of [
+  ['limited_overs','long_form',1],['long_form','limited_overs',1],
+  ['limited_overs','limited_overs',1],['long_form','long_form',1],['t20','t20',1],
+  ['t20','long_form',0],['long_form','t20',0],['t20','limited_overs',0],['limited_overs','t20',0]
+ ]){
+  const h=await setup(),f=h.f;
+  for(const old of f.references.filter(t=>t!==f.draft)){old.format=previous;old.published.details.format=previous;}
+  f.draft.format=current;
+  if(current==='long_form'){f.draft.days.push({date:'2026-11-07',start:'10:00'});f.person.availability.available_dates.push('2026-11-07');}
+  const rows=h.find({compare:false});assert.equal(rows.length,wanted,previous+' → '+current);
+  if(wanted){assert.deepEqual(rows[0].missed.map(t=>t.days[0].date),['2026-10-24','2026-10-17']);assert.equal(rows[0].previous.days[0].date,'2026-10-10');}
+ }
+});
+test('a T20 appearance in another grade does not hide a return to the continuing grade competition',async()=>{
+ const h=await setup(),f=h.f,other=structuredClone(f.references.find(t=>t.grade==='2nd Grade'));
+ other.id='separate-t20';other.format='t20';other.days=[{date:'2026-10-21',start:'17:00'}];
+ other.published.details={...other.published.details,format:'t20',days:other.days};other.published.slots[0]={d1:f.person.id};f.references.push(other);
+ assert.equal(h.find({compare:false}).length,1);
+ other.format='long_form';other.published.details.format='long_form';
+ assert.equal(h.find({compare:false}).length,0,'A confirmed move in the same continuing competition still prevents a false return');
+});
+test('the latest missed game and saved availability govern a return across a format transition',async()=>{
+ const h=await setup(),f=h.f;f.draft.format='long_form';
+ for(const old of f.references.filter(t=>t!==f.draft)){old.format='limited_overs';old.published.details.format='limited_overs';}
+ const latest=f.references.find(t=>t.grade==='1st Grade'&&t.days[0].date==='2026-10-24');
+ latest.format='long_form';latest.published.details.format='long_form';
+ assert.equal(h.find({compare:false})[0]?.missed.length,2,'The absence can span both formats');
+ f.person.availability.unavailable_dates=['2026-10-17'];
+ assert.equal(h.find({compare:false}).length,0,'An unanswered latest game does not fall back to an older unavailable game');
+});
 test('comparison separates pre-absence form from the incumbent’s exact cover games and exposes small samples',async()=>{
  const h=await setup(),entry=h.find()[0],summary=h.stats.buildSeasonStats(h.f.context),pair=h.engine.returningComparison(entry,entry.targets[0],summary);
  assert.equal(pair.incoming.matches,2);assert.equal(pair.incoming.average,40);assert.equal(pair.incoming.runs,80);

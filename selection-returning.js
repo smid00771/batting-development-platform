@@ -1,4 +1,4 @@
-import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.288';
+import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.360';
 import {spinBalanceChange} from './player-bowling.js?v=0.8.62.279';
 import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.288';
 
@@ -28,7 +28,7 @@ function roleMatch(team,incumbent,candidate,position,previousPosition,days) {
 }
 
 // A return is established by saved unavailability for consecutive missed
-// fixtures, following a confirmed selection in this grade and format. Never
+// fixtures, following a confirmed selection in this continuing grade competition. Never
 // infer injury, poor form or absence from an unanswered availability date.
 export function returningPlayers(options={}) {
   const entries=findReturningPlayers(options);

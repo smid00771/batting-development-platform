@@ -25,6 +25,16 @@ test('using the player updates the reminder after a confirmed save; undo restore
  h.f.draft.slots[0].d1='cover';h.refresh();assert.ok(h.dom.window.document.querySelector('[data-se-returning]'));assert.equal(h.scans(),3);
  h.f.person.availability.unavailable_dates.push('2026-10-31');h.refresh();assert.equal(h.dom.window.document.querySelector('[data-se-returning]'),null);
 });
+test('a format change still shows the available-again name on the quiet board and respects both playing dates',async t=>{
+ const h=await setup();t.after(()=>h.dom.window.close());
+ for(const old of h.f.references.filter(t=>t!==h.f.draft)){old.format='limited_overs';old.published.details.format='limited_overs';}
+ h.f.draft.format='long_form';h.f.draft.days.push({date:'2026-11-07',start:'10:00'});h.f.person.availability.available_dates.push('2026-11-07');
+ h.c.seMountReturningPlayers();const reminder=h.dom.window.document.querySelector('[data-se-returning]');
+ assert.ok(reminder);assert.match(reminder.textContent,/Alex Rowan.*2 games unavailable.*Day 1 \/ Day 2/s);
+ const rows=h.c.seReturningEntries();assert.equal(rows[0].targets.length,0);h.c.seMountReturningPlayers();assert.equal(h.scans(),1);
+ h.f.person.availability.unavailable_dates.push('2026-11-07');h.refresh();assert.equal(h.c.seReturningEntries().length,0,'An unbracketed return requires both dates');
+ h.f.draft.brackets=true;h.refresh();assert.deepEqual(Array.from(h.c.seReturningEntries()[0].availableDays),[0]);
+});
 test('quiet reminders retain no-play, overlap, season, access and club-context boundaries',async t=>{
  const h=await setup();t.after(()=>h.dom.window.close());h.c.seMountReturningPlayers();assert.ok(h.c.seReturningEntries().length);
  h.clashes(true);h.refresh();assert.equal(h.c.seReturningEntries().length,0);h.clashes(false);
@@ -39,6 +49,8 @@ test('returning names remain escaped and expandable without statistical work',as
 });
 test('delivered demo keeps reminders without a meeting button and updates only after selecting or undoing',async t=>{
  const {openDemo}=require('./helpers/demo_harness.cjs'),h=await openDemo('selections');t.after(h.close);h.window.scrollBy=()=>{};
+ const state=h.window.ensureSelections();for(const f of state.data.fixtures.filter(f=>f.id.startsWith('history-'))){f.details.format='limited_overs';if(f.published)f.published.details.format='limited_overs';}
+ state.data={...state.data};h.window.seMountReturningPlayers();
  const calls=[],db=h.window.__fixtureDb,original=db.rpc;db.rpc=async function(name,args){calls.push({name,action:args?.p_action});return original.call(this,name,args);};
  const reminder=()=>h.document.querySelector('[data-se-returning]');assert.match(reminder().textContent,/Sam Ellison/);
  const entries=h.window.seReturningEntries();assert.equal(h.document.getElementById('seMeeting'),null);assert.equal(h.window.seReturningEntries(),entries);
