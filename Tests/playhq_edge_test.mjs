@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {sharedScorecard} from '../Functions/playhq-sync/shared-scorecard.mjs';
+import {id,provider as dismissalProvider} from './helpers/dismissal_fixture.mjs';
 let handler;
 globalThis.Deno={env:{get:name=>({SUPABASE_URL:'https://test.supabase.co',SUPABASE_ANON_KEY:'anon-test',SUPABASE_SERVICE_ROLE_KEY:'service-test'})[name]},serve:fn=>handler=fn};
 await import('../Functions/playhq-sync/index.ts');
@@ -152,4 +153,37 @@ test('future imports retain all score identities and figures; failed artwork doe
   assert.equal(saved.match_id,before.match_id);assert.deepEqual(saved.innings,before.innings);assert.deepEqual(saved.teams.map(t=>[t.id,t.players]),before.teams.map(t=>[t.id,t.players]));
   assert.equal(!!saved.teams[0].logo_url,!fail);
  }
+});
+
+test('a scheduled result import stores exact dismissal links in the same shared scorecard',async()=>{
+ const raw=JSON.parse(fs.readFileSync(new URL('./fixtures/playhq/summary-v2.json',import.meta.url),'utf8'));
+ raw.data.appearances.forEach((p,i)=>Object.assign(p,{visible:true,firstName:'Example',lastName:String(i)}));
+ const season=id(800),context={season_id:season,timezone:'Australia/Melbourne',source_fixture:{source_match_id:raw.data.id,source_grade_id:raw.data.gradeId,source_team_id:raw.data.teams[0].id,format:'t20',days:[{date:'2023-11-25'}]}};
+ const before=await sharedScorecard(raw,context),gradeName='Example T20 Grade';
+ const video={id:id(801),status:'COMPLETED',matchType:'T20',isBallByBall:true,grade:{name:gradeName},matchSchedule:[{startDateTime:'2023-11-25T12:00:00+11:00'}],teams:before.teams.map((t,n)=>({id:id(810+n),displayName:t.name,owningOrganisation:{id:id(820+n),name:t.organisation},players:t.players.map((p,k)=>({participantId:id(900+n*50+k),name:p.name}))})),innings:[]};
+ for(const [n,inn]of before.innings.entries()){
+  const teamIndex=before.teams.findIndex(t=>t.id===inn.team_id),team=video.teams[teamIndex];
+  video.innings.push({id:id(830+n),battingTeamId:team.id,inningsNumber:inn.number,inningsCloseType:'End of Match',runsScored:inn.runs,totalExtras:inn.extras,numberOfWicketsFallen:inn.wickets,batting:inn.batters.map((b,k)=>({participantId:team.players.find(p=>p.name===b.name).participantId,batOrder:k+1,batInstance:1,dismissalType:b.status==='did_not_bat'?'Did Not Bat':b.not_out?'Not Out':'Caught',runsScored:b.runs,ballsFaced:b.balls,foursScored:b.fours,sixesScored:b.sixes,...(b.status!=='did_not_bat'&&b.not_out===false?{highlight:{id:id(1000+n*50+k),highLightType:'WICKET'}}:{})}))});
+ }
+ const provider=dismissalProvider({raw:video,card:before});let saved;
+ globalThis.fetch=async(url,options)=>{
+  const endpoint=String(url),body=options.body?JSON.parse(options.body):null;
+  if(endpoint.endsWith('/playhq_sync_worker')){
+   if(body.p_action==='claim')return json({club_id:club,kind:'results',source_id:raw.data.id,team_id:raw.data.teams[0].id,lease_id:'replay-lease'});
+   if(body.p_action==='connection')return json({key:'club-secret-test',generation:'replay-import'});
+   if(body.p_action==='scorecard_context')return json(context);
+   if(body.p_action==='finish'){assert.equal(body.p_data.job.lease_id,'replay-lease');saved=body.p_data.result.shared_scorecard;return json({saved:true});}
+   throw Error('Unexpected replay worker action');
+  }
+  if(endpoint.startsWith('https://grassrootsapiproxy.cricket.com.au')){assert.deepEqual(options.headers,{Accept:'application/json'});return provider.request(endpoint,options);}
+  if(endpoint.endsWith('/summary'))return json(raw);
+  if(endpoint.endsWith('/grades'))return json({data:[{id:raw.data.gradeId,name:gradeName}],metadata:{hasMore:false}});
+  if(endpoint.endsWith('/teams'))return json({data:[],metadata:{hasMore:false}});
+  throw Error('Unexpected request');
+ };
+ const response=await handler(request({action:'run',run_id:'run',token:'a'.repeat(64)}));assert.equal(response.status,200);
+ const expected=before.innings.flatMap(i=>i.batters).filter(b=>b.status!=='did_not_bat'&&b.not_out===false).length;
+ assert.ok(expected>0);assert.equal(saved.innings.flatMap(i=>i.batters).filter(b=>b.dismissal_video_url).length,expected);
+ for(const inn of saved.innings)for(const b of inn.batters)for(const key of ['dismissal_video_url','dismissal_video_thumbnail_url','dismissal_replay_source'])delete b[key];
+ assert.deepEqual(saved.innings,before.innings);assert.equal(saved.match_id,before.match_id);assert.equal(saved.provider,'playhq_au');
 });

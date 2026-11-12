@@ -17,6 +17,7 @@ test('pending results show club-local scheduling from the existing saved read on
  const dom=new JSDOM('<main></main>'),host=dom.window.document.querySelector('main');let reads=0;
  const context={playhq:{...playhq,next_check_at:'2099-10-31T08:05:00Z'},fixtures:[{id:'f',match_id:'match',days:[],format:'t20'}],cards:[]};
  const ui=createFixtureResults({supabase:{rpc:async()=>{reads++;return {data:context};},functions:{invoke:()=>{throw Error('Opening scores must not call PlayHQ');}}},escape,here:()=>true});
+ await settle();assert.equal(reads,0,'Preparing the app must not fetch scorecards before their page opens');
  ui.mount(host,{clubId:'c',fixtureId:'f'});await settle();assert.match(host.textContent,/Next automatic score check/);assert.equal(reads,1);
  context.cards=[{fixture_id:'f',snapshot_id:'saved',our_team:'ours',scorecard:{match_id:'match',status:'completed',teams:[{id:'ours',name:'Example club'}],innings:[]}}];
  ui.mount(host,{clubId:'c',fixtureId:'f'});await settle();assert.equal(host.querySelector('.fr-automatic-check'),null,'Completed results add no scheduling clutter');dom.window.close();

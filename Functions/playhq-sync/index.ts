@@ -2,7 +2,10 @@ import {linkedScorecard} from './linked-scorecard.mjs';
 import {publicAPI,clubTeams,gradeFixtures,gameSummary} from './public-api.mjs';
 import {teamLogos,summaryLogoTeams,seasonLogoCache} from './team-logos.mjs';
 import {normaliseLadders,standingsCatalogue,standingsDirectory,completeStandingsDirectory} from './standings.mjs';
+import {createDismissalEnricher,replayMetadataCache} from './dismissal-replays.mjs';
 const cachedSeasonTeams=seasonLogoCache();
+const cachedReplayGrades=replayMetadataCache();
+const enrichDismissals=createDismissalEnricher({onUnavailable:()=>console.warn('Dismissal replay lookup unavailable; scores retained for the next normal check.')});
 const origins=new Set(['https://mirelionhq.com','https://www.mirelionhq.com','https://clubbatting.com','https://www.clubbatting.com','https://clubbatting.com.au','https://www.clubbatting.com.au']);
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin')||'';
@@ -51,10 +54,19 @@ Deno.serve(async(req:Request)=>{
    else {
     const context=await worker('scorecard_context',{match_id:job.source_id,team_id:job.team_id});
     const body=await api.summary(job.source_id);
-    const card=await linkedScorecard(body,context);
+    let card=await linkedScorecard(body,context);
     if(card?.provider==='playhq_au'&&context.season_id){
      // Artwork failure must not stop score imports. Results can retry on demand.
      try{const logos=await teamLogos(card.teams,await logoTeams(api,context.season_id),card.upstream_grade_id);card.teams=card.teams.map((t:any)=>({...t,...logos.find((l:any)=>l.id===t.id)}));}catch{}
+     if(card.status==='completed'){
+      // Media is optional: a missing stream or provider outage must never
+      // interrupt scores, player links, awards or the existing retry schedule.
+      try{
+       const grades=await cachedReplayGrades(`${club}:${connection.generation}:${context.season_id}`,()=>api.grades(context.season_id));
+       const grade=grades.find((g:any)=>g.id===card.upstream_grade_id);
+       card=await enrichDismissals(card,{gradeName:grade?.name,sourceFixture:context.source_fixture});
+      }catch{console.warn('Dismissal replay catalogue unavailable; scores retained.');}
+     }
     }
     result={...gameSummary(body,job.source_id,job.team_id),shared_scorecard:card};
    }
