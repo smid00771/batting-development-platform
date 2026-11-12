@@ -14,6 +14,16 @@ function harness(source){
 function copyHarness(source){const h=harness(source);h.target.slots=Array.from({length:11},()=>({d1:null,d2:null}));return h;}
 for(const file of ['app.js','demo.html']){
  const source=fs.readFileSync(new URL('../'+file,'file://'+__filename),'utf8');
+ test(file+': representative-only bracketing saves and reopens without changing either player',async()=>{
+  const h=harness(source);h.c.seFixtureEditor(h.target);const form=h.document.getElementById('seFixtureForm');
+  assert.equal(h.document.getElementById('seBracketBasis').hidden,false);assert.equal(form.elements.bracket_basis.value,'general');
+  form.elements.bracket_basis.value='representative';await h.submit();
+  const saved=h.requests[0].data.fixtures[0];assert.equal(saved.details.bracket_basis,'representative');assert.equal(saved.details.brackets,true);
+  assert.deepEqual(plain(saved.slots),h.target.slots);assert.deepEqual(plain(h.requests[0].options.undo),[h.target]);
+  h.target.details=saved.details;h.c.seFixtureEditor(h.target);assert.equal(h.document.querySelector('[name=bracket_basis]').value,'representative');
+  h.document.querySelector('[name=brackets]').checked=false;h.document.querySelector('[name=brackets]').onchange();
+  assert.equal(h.document.getElementById('seBracketBasis').hidden,true);
+ });
  test(file+': cancelling bracket removal retains both players and does not save',async()=>{
   const h=harness(source);h.c.seFixtureEditor(h.target);h.document.querySelector('[name=brackets]').checked=false;h.confirm(false);await h.submit();
   assert.equal(h.requests.length,0);assert.match(h.prompts[0],/Blair → Alex/);assert.deepEqual(h.target.slots,[{d1:'a',d2:'b'}]);

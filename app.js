@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.358';
+const APP_UI_VERSION='0.8.62.359';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -19021,6 +19021,7 @@ function seFixtureEditor(f=null){
  <label class="se-check" id="seFixtureCalendarChoice" ${f?'hidden':''}><input name="include_in_fixture_calendar" type="checkbox" ${d.include_in_fixture_calendar===true?'checked':''} ${f?'disabled':''}>Include in fixtures calendar</label>
  <p class="help">Start time distinguishes separate games on the same date. If a time is missing, the games are treated as overlapping.</p>
  <label id="seBrackets" class="se-check"><input name="brackets" type="checkbox" ${d.brackets?'checked':''}>Bracketing permitted</label>
+ <label id="seBracketBasis" hidden>Bracketing rule<select name="bracket_basis">${seOpt([['general','Generally permitted'],['representative','Representative duty only']],d.bracket_basis||'general')}</select></label>
  <details><summary>Team balance &amp; match staff</summary><div class="se-form-grid"><label>Minimum frontline quicks<input name="min_quicks" type="number" min="0" max="11" value="${d.min_quicks??3}"></label><label>Minimum top/middle-order batters<input name="min_batters" type="number" min="0" max="11" value="${d.min_batters??5}"></label></div>
  ${s.data.members.map(m=>`<label class="se-check"><input type="checkbox" name="staff" value="${m.user_id}" ${(d.staff||[]).includes(m.user_id)?'checked':''}>${seEsc(m.name)}</label>`).join('')}</details>
  <label style="margin-top:12px">Meeting / match instructions<textarea name="meeting" maxlength="800" rows="2">${seEsc(d.meeting)}</textarea></label>
@@ -19032,13 +19033,14 @@ function seFixtureEditor(f=null){
  const defaultOvers=()=>{const r=defaultRow();return r?r.overs??'':form.elements.format.value==='t20'?20:'';};
  const isPast=f&&d.days?.[0]?.date<new Date().toLocaleDateString('en-CA',{timeZone:s.data.access.timezone||'Australia/Sydney'});
  form.elements.overs_override.checked=!!f&&(d.overs_source==='fixture'||isPast||!d.overs_source&&String(d.overs??'')!==String(defaultOvers()));
- const fillOvers=(dirty=true)=>{const bracketsAllowed=form.elements.format.value==='long_form';document.getElementById('seBrackets').hidden=!bracketsAllowed;form.elements.brackets.disabled=!bracketsAllowed;const row=defaultRow(),value=defaultOvers(),override=form.elements.overs_override.checked;document.getElementById('seOversDefault').textContent=(value!==''?value+' overs':'No fixed overs limit')+(row?' · from grade & format defaults':form.elements.format.value==='t20'?' · T20 default':' · no grade default set');document.getElementById('seOversOverride').hidden=!override;if(!override)form.elements.overs.value=value;if(dirty)s.formDirty=true;};
- seBindGrade(form,'grade',fillOvers);form.elements.format.onchange=fillOvers;form.elements.overs_override.onchange=fillOvers;fillOvers(false);
+ const fillOvers=(dirty=true)=>{const bracketsAllowed=form.elements.format.value==='long_form';document.getElementById('seBrackets').hidden=!bracketsAllowed;form.elements.brackets.disabled=!bracketsAllowed;document.getElementById('seBracketBasis').hidden=!bracketsAllowed||!form.elements.brackets.checked;const row=defaultRow(),value=defaultOvers(),override=form.elements.overs_override.checked;document.getElementById('seOversDefault').textContent=(value!==''?value+' overs':'No fixed overs limit')+(row?' · from grade & format defaults':form.elements.format.value==='t20'?' · T20 default':' · no grade default set');document.getElementById('seOversOverride').hidden=!override;if(!override)form.elements.overs.value=value;if(dirty)s.formDirty=true;};
+ seBindGrade(form,'grade',fillOvers);form.elements.format.onchange=fillOvers;form.elements.overs_override.onchange=fillOvers;form.elements.brackets.onchange=fillOvers;fillOvers(false);
  document.getElementById('seCancelEdit').onclick=()=>{if(confirmLeaveSelections())drawSelections();};
  form.onsubmit=async e=>{e.preventDefault();if(!fixtureResults.canLeave())return;const data=new FormData(form),grade=seReadGrade(form,'grade'),days=[0,1].filter(i=>data.get('date'+i)).map(i=>({date:data.get('date'+i),start:data.get('start'+i)}));
   if(days.length===2&&days[1].date<=days[0].date){document.getElementById('seFormError').textContent='Day 2 must follow Day 1.';return;}
   const sameGrade=grade.grade_group_id&&d.grade_group_id?grade.grade_group_id===d.grade_group_id:grade.grade===d.grade;
   const details={...d,...Object.fromEntries(['opposition','ground','meeting'].map(k=>[k,data.get(k).trim()])),competition:sameGrade?d.competition||'':'',grade:grade.grade,grade_group_id:grade.grade_group_id,format:data.get('format'),overs:data.get('overs')===''?null:Number(data.get('overs')),overs_source:data.has('overs_override')?'fixture':'default',captain_id:d.captain_id||null,days,brackets:data.get('format')==='long_form'&&data.has('brackets'),min_quicks:Number(data.get('min_quicks')),min_batters:Number(data.get('min_batters')),staff:data.getAll('staff'),cancelled:data.has('cancelled'),include_in_fixture_calendar:form.elements.include_in_fixture_calendar.disabled?d.include_in_fixture_calendar===true:data.has('include_in_fixture_calendar')};
+  if(details.brackets&&data.get('bracket_basis')==='representative')details.bracket_basis='representative';else delete details.bracket_basis;
   if(!s.data.selector){s.date=days[0].date;s.boardDateChosen=true;return seMutate('save_fixture',{id:f?.id||crypto.randomUUID(),revision:f?.revision||0,details});}
   let slots=structuredClone(f?.slots||seBlankSlots());if(f&&f.details.days.length===2&&days.length===1&&slots.some(x=>x.d2&&x.d1!==x.d2)&&!confirm('Changing to one day removes Day 2 selections from this draft. Continue?'))return;
   if(f&&f.details.brackets&&days.length===2&&!details.brackets){

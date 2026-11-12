@@ -1896,17 +1896,30 @@ function demoDropPrior(f){
  return {id:f.id,details:d,slots,ends:dates.at(-1),source:team?'completed_scorecard':f.published?'published':'unknown'};
 }
 
+function demoDropPreviousGradeAvailable(person,previous,current){
+ if(!person?.availability?.unavailable_dates?.length)return true;
+ const scope=d=>(typeof demoGroupFor==='function'&&demoGroupFor({details:d}))||String(d.competition||'').trim().toLowerCase();
+ const format=d=>['limited_overs','long_form'].includes(d.format)?'limited_overs':d.format||'';
+ const dates=d=>d.days.map(x=>x.date).sort(),ours=dates(current);
+ const higher=demoSelections.fixtures.filter(f=>!f.details.cancelled&&!f.no_play&&!demoSelections.result_sources?.[f.id]?.no_play&&scope(f.details)===scope(current)&&format(f.details)===format(current)&&(f.details.season||'')===(current.season||'')&&
+  (previous.grade_group_id&&f.details.grade_group_id?previous.grade_group_id===f.details.grade_group_id:String(previous.grade||'').trim().toLowerCase()===String(f.details.grade||'').trim().toLowerCase())&&dates(f.details)[0]<=ours.at(-1)&&dates(f.details).at(-1)>=ours[0]);
+ if(higher.length!==1)return true;
+ const d=higher[0].details,unavailable=dates(d).map(date=>person.availability.unavailable_dates.includes(date));
+ return d.brackets&&(d.bracket_basis||'general')==='general'?!unavailable.every(Boolean):!unavailable.some(Boolean);
+}
+
 function demoConversations(uid){
  const state=demoSelections,member=fixtureRows.club_memberships.find(m=>m.club_id===club.id&&m.user_id===uid),selector=state.selectors.includes(uid)||state.access.head_selector_id===uid,out=[];
  if(!member)return out;
  const key=x=>String(x||'').trim().toLowerCase(),week=x=>{const d=new Date(x+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);};
  const scope=d=>(typeof demoGroupFor==='function'&&demoGroupFor({details:d}))||key(d.competition),lineups=state.fixtures.map(demoDropPrior).filter(Boolean);
+ const comparisonFormat=d=>['limited_overs','long_form'].includes(d.format)?'limited_overs':d.format||'';
  for(const f of state.fixtures){
   if(f.details.cancelled||f.no_play||state.result_sources?.[f.id]?.no_play)continue;const d=f.details,start=d.days[0].date,level=seGradeLevel(d.competition,d.grade,state);if(!level)continue;
-  const eligible=lineups.filter(p=>scope(p.details)===scope(d)&&(p.details.format||'')===(d.format||'')&&(p.details.season||'')===(d.season||'')&&week(p.ends)<week(start)&&new Date(start)-new Date(p.ends)<=120*86400000),previousWeek=eligible.map(p=>week(p.ends)).sort().at(-1);
+  const eligible=lineups.filter(p=>scope(p.details)===scope(d)&&comparisonFormat(p.details)===comparisonFormat(d)&&(p.details.season||'')===(d.season||'')&&week(p.ends)<week(start)&&new Date(start)-new Date(p.ends)<=120*86400000),previousWeek=eligible.map(p=>week(p.ends)).sort().at(-1);
   for(const id of new Set(f.slots.flatMap(s=>[s.d1,s.d2]).filter(Boolean))){
    const prior=eligible.filter(p=>week(p.ends)===previousWeek&&p.slots.some(s=>s.d1===id||s.d2===id)).sort((a,b)=>(seGradeLevel(b.details.competition,b.details.grade,state)??Infinity)-(seGradeLevel(a.details.competition,a.details.grade,state)??Infinity)||b.ends.localeCompare(a.ends)||a.id.localeCompare(b.id))[0];
-   if(!prior)continue;const old=prior.details,oldLevel=seGradeLevel(old.competition,old.grade,state);if(!oldLevel||level<=oldLevel||!(selector||['coach','head_coach'].includes(member.permission_role)||demoCaptainUsers(old).includes(uid)))continue;
+   if(!prior)continue;const old=prior.details,oldLevel=seGradeLevel(old.competition,old.grade,state);if(!oldLevel||level<=oldLevel||!demoDropPreviousGradeAvailable(state.roster.find(p=>p.id===id),old,d)||!(selector||['coach','head_coach'].includes(member.permission_role)||demoCaptainUsers(old).includes(uid)))continue;
    const movement_key=JSON.stringify([prior.id,old.grade,d.grade,d.competition,d.format,start]),saved=state.conversation_status?.[f.id+':'+id+':'+movement_key];
    out.push({fixture_id:f.id,roster_id:id,name:state.roster.find(p=>p.id===id)?.name||'Player',previous_fixture_id:prior.id,previous_grade:old.grade,previous_date:prior.ends,grade:d.grade,competition:d.competition,format:d.format,date:start,movement_key,kind:'lower_grade',availability:'available',spoken_at:saved?.spoken_at||null,spoken_by:saved?.spoken_by||null,revision:saved?.revision||0});
   }
@@ -1938,6 +1951,7 @@ function demoSavedDrops(uid,includeSpoken=false){
  return (state.drop_reminders||[]).flatMap(m=>{
   const f=state.fixtures.find(f=>f.id===m.fixture_id),prior=state.fixtures.find(f=>f.id===m.previous_fixture_id),person=state.roster.find(p=>p.id===m.roster_id),previous=prior?.published?.details||prior?.details;
   if(!person?.active||!f||f.details.cancelled||m.fixture_identity!==demoDropIdentity(f.details)||!previous||previous.cancelled||previous.grade!==m.previous_grade||!f.slots.some(s=>s.d1===person.id||s.d2===person.id))return [];
+  if(!demoDropPreviousGradeAvailable(person,previous,f.details))return [];
   if(f.details.days.some((day,i)=>f.slots.some(s=>s['d'+(i+1)]===person.id)&&person.availability?.unavailable_dates?.includes(day.date)))return [];
   const level=typeof demoGrant==='function'?demoGrant(demoGroupFor(f)):selector?2:0,staff=['coach','head_coach'].includes(member.permission_role)||demoCaptainUsers(previous).includes(uid);
   if(!(level>0||staff))return [];

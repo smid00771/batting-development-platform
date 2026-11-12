@@ -1,9 +1,9 @@
 {
-  "appVersion": "0.8.62.358",
+  "appVersion": "0.8.62.359",
   "sources": {
     "action-feedback.js": "ac05754280949d1a30a92a8937e40309104998e9c323d7cc2031bd6feb66d1bc",
     "app-design.css": "c38e5a8330c741889c6e6dcaeed3033e968ea9b57acdc9381d6e65b6d7a737ad",
-    "app.js": "96a16e676d12e0e2d75cdbb12e1fc75587f20a400a1b48711d7ce87df8927da9",
+    "app.js": "cf45a7dc4655a86267eb592e702b67fe99b64bb4c444847401a192bed4ce59f0",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "availability-fixtures.js": "895dc2ebc24e3c5085033ff384876895d8cf0688aa84400481a38613672c13a3",
@@ -15,7 +15,7 @@
     "deferred-feature.js": "ab3d69675c974b10b5cbea9fcdecb9500306d0fc6d827ed06e35ed1c26c4780f",
     "Demo/current-fixtures.js": "097e5b40ec536314c32ab49720b1d32670d768a38fcf6378a476b32882db3023",
     "Demo/demo.css": "e8692b88ac16b44b09c26ecfea033e1f5e66e0efeedd80efe604d6819ba00c6c",
-    "Demo/fixtures.js": "a7fe99fcbd3cc9b96cb6b98e4d2f95c6f577e8df3380207de74843d4552a8137",
+    "Demo/fixtures.js": "86e586d6c4ae8b9747061ed515f46181de9245a4a4a1e3666c5b6026d990bc7b",
     "Demo/isolation.js": "ae711c7b1eff101ab5cc822caa67905ca3edcf27442cdf3e5e2f198666b3fa96",
     "Demo/journeys.js": "93843cc1379f57d45d7f94db82c963fe8ba8111309ce9cf824f1498445d5f954",
     "Demo/template.html": "57df21c9dce29c9b12d38197a61487cf38c583ab6370ba7f4a9a03e517f76aff",

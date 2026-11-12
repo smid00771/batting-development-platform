@@ -46,7 +46,7 @@ test('marking spoken removes only that highlight and stored completion survives 
 test('saved reminders respect changed availability and teams without creating new comparisons',async t=>{
  const h=await setup(t),w=h.window,d=h.document;await h.click('#seShowDropped');
  const id=d.querySelector('[data-se-conversation]').dataset.seConversationPlayer;
- w.eval(`demoSelections.roster.find(p=>p.id===${JSON.stringify(id)}).availability.unavailable_dates=[demoSelections.fixtures.find(f=>f.id==='selection-second').details.days[0].date]`);
+ w.eval(`demoSelections.roster.find(p=>p.id===${JSON.stringify(id)}).availability.unavailable_dates=demoSelections.fixtures.find(f=>f.id==='selection-second').details.days.map(day=>day.date)`);
  await h.window.renderSelections();await h.settle();assert.equal(d.querySelector('[data-se-conversation-player="'+id+'"]'),null);assert.equal(h.scans(),1);
  w.eval("demoSelections.fixtures.find(f=>f.id==='selection-second').details.grade='1st Grade'");
  await h.window.renderSelections();await h.settle();assert.equal(d.querySelector('.se-dropped'),null);assert.equal(h.scans(),1);assert.deepEqual(h.errors,[]);
