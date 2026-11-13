@@ -1,4 +1,4 @@
-import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.360';
+import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.361';
 import {spinBalanceChange} from './player-bowling.js?v=0.8.62.279';
 import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.288';
 
@@ -39,7 +39,7 @@ export function returningPlayers(options={}) {
       for (const [index,slot] of (team.slots || []).slice(0,11).entries()) {
         for (const id of new Set((team.days || []).map((_,day)=>slot['d'+(day+1)] || null))) {
           const days=team.days.flatMap((_,day)=>(slot['d'+(day+1)]||null)===id?[day]:[]);
-          if (days.some(day=>!availableDays.includes(day)) || !team.brackets && days.length!==team.days.length) continue;
+          if (days.some(day=>!availableDays.includes(day)) || (!team.brackets || team.bracket_basis==='representative') && days.length!==team.days.length) continue;
           const incumbent=people.get(id);
           const focus=id?roleMatch(team,incumbent,person,index+1,position,days):'place';
           if (id ? !focus : index+1!==position) continue;

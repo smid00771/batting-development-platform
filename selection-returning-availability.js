@@ -23,7 +23,7 @@ export function findReturningPlayers({teams=[],references=[],roster=[],season={}
     for (const person of roster) {
       if (!person.active || selected(team,person.id)) continue;
       let availableDays=(team.days || []).flatMap((day,i)=>status(person,day)==='available'?[i]:[]);
-      if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
+      if (!availableDays.length || (!team.brackets || team.bracket_basis==='representative') && availableDays.length!==team.days.length) continue;
       const missed=[];let previous=null;
       for (const old of past) {
         if (old.historyConfirmed && selected(old,person.id)) {previous=old;break;}
@@ -35,7 +35,7 @@ export function findReturningPlayers({teams=[],references=[],roster=[],season={}
       if (history.some(old=>old.historyConfirmed&&formatFamily(old)===formatFamily(team)&&!sameGrade(old,team)&&date(old)>date(previous)&&end(old)<date(team)&&selected(old,person.id))) continue;
       // Check clashes only for established returns, not every player on every draw.
       availableDays=availableDays.filter(day=>eligible(team,person,day));
-      if (!availableDays.length || !team.brackets && availableDays.length!==team.days.length) continue;
+      if (!availableDays.length || (!team.brackets || team.bracket_basis==='representative') && availableDays.length!==team.days.length) continue;
       const position=previous.slots.findIndex(slot=>slot.d1===person.id||slot.d2===person.id)+1;
       const targets=[];
       returns.push({key:JSON.stringify([team.id,person.id]),team,person,previous,position,missed,availableDays,targets});

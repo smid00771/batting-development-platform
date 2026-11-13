@@ -3,7 +3,7 @@ let analysisTask=null;
 function loadAnalysis(){
  return analysisTask||=(Promise.all([
   import('./season-stats.js?v=0.8.62.275'),import('./selection-evidence.js?v=0.8.62.288'),
-  import('./selection-returning.js?v=0.8.62.360'),import('./selection-evidence-ui.js?v=0.8.62.360'),
+  import('./selection-returning.js?v=0.8.62.361'),import('./selection-evidence-ui.js?v=0.8.62.361'),
   import('./selection-history.js?v=0.8.62.278')
  ]).then(parts=>Object.assign({},...parts)).catch(error=>{analysisTask=null;throw error;}));
 }
@@ -20,7 +20,7 @@ function basis(b){
  for(const team of b.teams){
   const days=team.days||[],slots=(team.slots||[]).map(s=>[s.d1||null,s.d2||null]);
   while(slots.length>11&&!slots.at(-1).some(Boolean))slots.pop();
-  const meta=[team.id,team.grade_group_id,team.grade,team.competition,team.format,team.level,days,team.brackets,!!team.cancelled,team.overs,
+  const meta=[team.id,team.grade_group_id,team.grade,team.competition,team.format,team.level,days,team.brackets,team.bracket_basis,!!team.cancelled,team.overs,
    days.map((_,i)=>[team.match_roles?.['d'+(i+1)]?.captain_id,team.match_roles?.['d'+(i+1)]?.keeper_id])];
   const ids=[...new Set(slots.flat().filter(Boolean))];
   teams.set(team.id,JSON.stringify([meta,slots,ids.map(id=>[personFacts(people.get(id)),availability(people.get(id),days)])]));

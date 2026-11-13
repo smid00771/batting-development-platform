@@ -109,3 +109,12 @@ test('copy keeps all thirteen players for a group with a normal allowance of thi
  await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots),slots);
  assert.match(h.notices.at(-1),/13 players/);
 });
+
+test('rep-only copying requires both days, preserves the current rep pair, and never copies an old rep absence',async()=>{
+ const h=copyHarness(fs.readFileSync('app.js','utf8'));h.target.details.bracket_basis='representative';
+ const old=fixture('played','2099-10-10',{slots:[{d1:'a',d2:'b',rep_player_id:'a',rep_absent_date:'2099-10-17'}]});h.s.data.fixtures.push(old);
+ h.unavailable.add('a:2099-11-07');await h.c.seCopyLast('target');assert.equal(h.requests.length,0,'One-day availability alone cannot create a rep exception');
+ h.unavailable.clear();await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests[0].data.fixtures[0].slots[0]),{d1:'a',d2:'a'},'The next match uses fresh availability, with no old rep reason');
+ const kept={d1:'a',d2:'b',rep_player_id:'a',rep_absent_date:'2099-11-07'};h.target.slots[0]=kept;h.s.data.roster.push({id:'new',name:'New player',active:true});old.slots.push({d1:'new',d2:'new'});
+ await h.c.seCopyLast('target');assert.deepEqual(plain(h.requests.at(-1).data.fixtures[0].slots[0]),kept,'A deliberately entered current exception is retained');
+});

@@ -60,3 +60,11 @@ test('delivered demo keeps reminders without a meeting button and updates only a
  await h.click('#seUndo');assert.match(reminder().textContent,/Sam Ellison/);
  assert.equal(calls.filter(c=>c.name==='club_season_stats_api').length,0,'Showing, selecting and undoing never restart optional analysis');assert.deepEqual(h.errors,[]);
 });
+
+test('a rep-only grade does not treat ordinary partial availability as an available-again return',async t=>{
+ const h=await setup();t.after(()=>h.dom.window.close());h.f.draft.format='long_form';h.f.draft.brackets=true;h.f.draft.bracket_basis='representative';h.f.draft.days.push({date:'2026-11-07',start:'10:00'});
+ for(const old of h.f.references.filter(t=>t!==h.f.draft)){old.format='limited_overs';old.published.details.format='limited_overs';}
+ h.c.seMountReturningPlayers();assert.equal(h.c.seReturningEntries().length,0);
+ h.f.person.availability.available_dates.push('2026-11-07');h.refresh();assert.equal(h.c.seReturningEntries().length,1,'Full availability still flags the return across a format change');
+ h.f.person.availability.available_dates.pop();h.f.draft.bracket_basis='general';h.refresh();assert.equal(h.c.seReturningEntries().length,1,'Normal bracketing retains single-day returns');
+});
