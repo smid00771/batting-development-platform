@@ -28,7 +28,7 @@ export function createSocialSandbox(h){
  }
  function selection(s){
   const b=ensure(s),team=b.teams.find(t=>t.id===b.team)||b.teams[0],cards=h.cards(team.f),card=cards.find(c=>c.day===b.day)||cards[0],key=card.key;
-  const ids=new Set(team.f.published.slots.map(slot=>slot['d'+(card.day+1)]).filter(Boolean));
+  const ids=new Set(team.f.published.slots.flatMap(slot=>card.split?[slot['d'+(card.day+1)]]:team.f.published.details.days.map((_,i)=>slot['d'+(i+1)])).filter(Boolean));
   const photos=s.data.assets.filter(a=>['photo','portrait'].includes(a.kind)&&(team.sample||ids.has(a.roster_id)));
   if(!Object.hasOwn(b.photos,key)){
    const featured=h.featured({...s,design:b.design},card),photo=featured.asset||photos[0];

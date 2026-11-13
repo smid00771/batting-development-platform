@@ -1,4 +1,4 @@
-import {graphicGrade,gradeLabels,gradeLabelFamily,withGradeLabels} from './social-graphic-design.js?v=0.8.62.354';
+import {graphicGrade,gradeLabels,gradeLabelFamily,withGradeLabels} from './social-graphic-design.js?v=0.8.62.362';
 
 export const CLUB_AWARDS={team_week:'Team of the Week',player_week:'Player of the Week',results:'Results',century:'Century',five_wickets:'5 Wickets'};
 export const CLUB_STYLE_FIELDS=['text_colour','title_font','week_font','grade_font','player_font','score_font'];

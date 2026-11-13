@@ -1,8 +1,8 @@
-import {graphicStudioHTML,bindGraphicStudio,refreshGraphicComparison} from './social-graphic-studio.js?v=0.8.62.354';
+import {graphicStudioHTML,bindGraphicStudio,refreshGraphicComparison} from './social-graphic-studio.js?v=0.8.62.362';
 import {awardFontsReady,awardRoleText} from './social-award-fonts.js?v=0.8.62.354';
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
-import {graphicGrade,checkGraphicLabel,graphicPlayerDisplays} from './social-graphic-design.js?v=0.8.62.354';
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.354';
+import {graphicPlayerName,graphicGrade,checkGraphicLabel,graphicPlayerDisplays} from './social-graphic-design.js?v=0.8.62.362';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.362';
 import {readTeamWeekReference} from './team-week-reference.js?v=0.8.62.166';
 import {awardPerformance} from './award-performance.js?v=0.8.62.266';
 import {teamWeekBasicRank,teamWeekBasicRecommendations} from './team-week-basic.js?v=0.8.62.270';
@@ -247,7 +247,7 @@ export function createTeamOfWeek(h){
   ctx.font=`700 ${size}px ${ctx.socialFont}`;const markerWidth=ctx.measureText('*').width+1,numberRight=layout.figures_right-markerWidth;
   for(const [i,p] of rows.entries()){
    const line=y(layout.top)+i*gap,figures=teamWeekFigures(p),notOut=figures.endsWith('*');
-   ctx.textAlign='left';text('player',p.name.toUpperCase(),layout.left,line,nameWidth,Math.min(layout.name_size||size,gap*.9));
+   ctx.textAlign='left';text('player',graphicPlayerName(p.name,layout,rows.map(row=>row.name)).toUpperCase(),layout.left,line,nameWidth,Math.min(layout.name_size||size,gap*.9));
    // Reserve the marker's space on every row so the digits align and team labels keep their gap.
    ctx.textAlign='right';text('score',notOut?figures.slice(0,-1):figures,numberRight,line,figureWidth-markerWidth,Math.min(layout.figures_size||size,gap*.9));
    if(notOut){ctx.textAlign='left';ctx.fillText('*',numberRight+1,line);}

@@ -1,4 +1,4 @@
-import {createClubGraphicSetup} from './social-club-style.js?v=0.8.62.354';
+import {createClubGraphicSetup} from './social-club-style.js?v=0.8.62.362';
 // Downloaded only when an authorised user opens the socials workspace.
 export function createSocialWorkspace(h){
  const {appNavigationBack,club,drawSelections,ensureSelections,matchReviewExtractUrl,mountScorecardTeam,normaliseHex,platformRole,recordSelectionNavigation,renderSocialPlatformSetup,restoreSocialNavigation,seDownload,seEsc,seFormatLabel,seNotice,seOpt,seReload,selectionsScopeKey,session,socialCanLeave,socialEnsure,socialHere,socialOpenFixture,socialState,supabase}=h;
@@ -17,7 +17,7 @@ function socialGuardArtwork(s,action,data){
 }
 async function socialRPC(s,action,data={}){if(!socialGuardArtwork(s,action,data))throw Object.assign(Error('Completed fixtures are read-only. Open Team-list artwork to preview designs.'),{code:'P0159'});if(action==='guide:import')return socialGuideImportSave(s,data);if(action.startsWith('prepare:'))return socialPrepRPC(s,action.slice(8),data);const clubId=s.scope.split(':').slice(1).join(':'),r=await supabase.rpc('club_socials_api',{p_club_id:clubId,p_action:action,p_data:data});if(r.error)throw Object.assign(Error(r.error.message||'Could not load social artwork.'),{code:r.error.code});return r.data;}
 function socialDefaults(d){
- return {header_layout:'separate',header_height:310,photo_scale:100,photo_shift:0,layout:'portrait',photo_policy:'choose',primary:normaliseHex(d.brand?.primary,'#073554'),accent:normaliseHex(d.brand?.accent,'#128FD2'),footer:'',theme:'gradient',frame:'cutout',font:'bold',marker:'arrows',brief:'',...(d.design||{})};
+ return {header_layout:'separate',header_height:310,heading_scale:100,photo_scale:100,photo_shift:0,layout:'portrait',photo_policy:'choose',primary:normaliseHex(d.brand?.primary,'#073554'),accent:normaliseHex(d.brand?.accent,'#128FD2'),footer:'',theme:'gradient',frame:'cutout',font:'bold',marker:'arrows',brief:'',...(d.design||{})};
 }
 async function socialRefresh(s){
  const drafts=s.photoPositions||{},previous=new Map((s.data?.fixtures||[]).flatMap(socialCards).map(card=>[card.key,socialPhotoPositionContext(s,card)]));
@@ -69,10 +69,8 @@ function socialDraw(s){
  if(!s.deferNavigation)recordSelectionNavigation();
 }
 function socialCards(f){
- const snap=f.published,d=snap.details,roles=d.match_roles||{},choices=f.features||[];
- const signature=day=>{const a=choices.find(x=>x.day===day);return JSON.stringify([a?.mode||'default',a?.roster_id||null,a?.asset_id||null,a?.photo_x||0,a?.photo_y||0,a?.photo_scale??null]);};
- const shared=d.days.length<2||snap.slots.every(slot=>slot.d1===slot.d2)&&['captain_id','keeper_id'].every(k=>roles.d1?.[k]===roles.d2?.[k])&&signature(1)===signature(2);
- return (shared?[0]:d.days.map((_,i)=>i)).map(day=>({f,day,split:!shared,key:f.id+':'+day}));
+ // A published team belongs to the whole fixture, including every bracket partner.
+ return [{f,day:0,split:false,key:f.id+':0'}];
 }
 function socialDate(v){return new Intl.DateTimeFormat('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(v+'T12:00:00Z'));}
 function socialTime(v){if(!/^\d{2}:\d{2}$/.test(v||''))return v||'';const [h,m]=v.split(':').map(Number);return `${h%12||12}${m?':'+String(m).padStart(2,'0'):''}${h<12?'am':'pm'}`;}
@@ -82,11 +80,35 @@ function socialSurname(name){
  const words=text.split(/\s+/);while(words.length>1&&/^(jr\.?|sr\.?|ii|iii|iv)$/i.test(words.at(-1)))words.pop();
  return words.at(-1)||'';
 }
-function socialNames(card){
- const snap=card.f.published,role=snap.details.match_roles?.['d'+(card.day+1)]||{},compare=(a,b)=>a.localeCompare(b,'en-AU',{sensitivity:'base',ignorePunctuation:true,numeric:true});
- return (snap.slots||[]).map(slot=>{const id=slot['d'+(card.day+1)],p=snap.players.find(x=>x.id===id);return {id,name:p?.name||'TBC',marks:(id&&role.captain_id===id?' (C)':'')+(id&&role.keeper_id===id?' (WK)':'')};})
-  .sort((a,b)=>Number(!a.id)-Number(!b.id)||compare(socialSurname(a.name),socialSurname(b.name))||compare(a.name,b.name));
+function socialDayTag(card,day){
+ const days=card.f.published.details.days,apart=days.length===2?(Date.parse(days[1].date)-Date.parse(days[0].date))/86400000:0;
+ return (apart>=6?'W':'D')+(day+1);
 }
+function socialRows(card){
+ const snap=card.f.published,days=card.split?[card.day]:snap.details.days.map((_,i)=>i),compare=(a,b)=>a.localeCompare(b,'en-AU',{sensitivity:'base',ignorePunctuation:true,numeric:true}),seen=new Set();
+ const person=(id,playing)=>{
+  const name=graphicPlayerName(snap.players.find(p=>p.id===id)?.name||'TBC',{},snap.players.map(p=>p.name)),tag=days.length>1&&playing.length<days.length?socialDayTag(card,playing[0]):'';
+  const roles=[['captain_id','C'],['keeper_id','WK']].map(([key,label])=>{const held=playing.filter(day=>id&&snap.details.match_roles?.['d'+(day+1)]?.[key]===id);return held.length?' ('+label+(held.length<playing.length?' '+held.map(day=>socialDayTag(card,day)).join('/'):'')+')':'';}).join('');
+  return {id,name,tag,roles,marks:roles+(tag?' ('+tag+')':''),days:playing};
+ };
+ const rows=[];
+ for(const slot of snap.slots||[]){
+  const members=[];
+  for(const day of days){
+   const id=slot['d'+(day+1)]||null;if(id&&seen.has(id))continue;
+   // A player in both daily XIs is listed once, even when their batting position changes.
+   const playing=id?days.filter(i=>snap.slots.some(row=>row['d'+(i+1)]===id)):days.filter(i=>!slot['d'+(i+1)]);
+   if(!id&&day!==playing[0])continue;
+   if(!id&&members.some(p=>!p.id))continue;
+   const entry=person(id,playing);if(id)seen.add(id);
+   if(playing.length===days.length)rows.push({members:[entry],bracket:false});else members.push(entry);
+  }
+  if(members.length)rows.push({members,bracket:true});
+ }
+ const order=(a,b)=>compare(socialSurname(a.members[0].name),socialSurname(b.members[0].name))||compare(a.members[0].name,b.members[0].name);
+ return rows.sort((a,b)=>Number(a.bracket)-Number(b.bracket)||Number(!a.members[0].id)-Number(!b.members[0].id)||order(a,b));
+}
+function socialNames(card){return socialRows(card).flatMap(row=>row.members);}
 function socialPhotoId(s,card){return socialFeatured(s,card).id;}
 function socialSelection(s){const mode=s.teamWorkflow?.teamScope||'date';return s.data.fixtures.filter(f=>s.selected.has(f.id)&&f.published&&(mode!=='date'||f.published.details.days[0].date===s.date)&&!socialFixtureCompleted(s,f)).sort((a,b)=>a.published.details.days[0].date.localeCompare(b.published.details.days[0].date)||a.published.details.grade.localeCompare(b.published.details.grade,'en',{numeric:true})||a.id.localeCompare(b.id));}
 function socialFixtureCalendar(s){
@@ -141,7 +163,7 @@ function socialFitImage(ctx,img,x,y,w,h,cover=false){if(!img)return;const r=(cov
 function socialText(ctx,text,x,y,width,size,weight='700',min=18){text=String(text??'');let fs=size;do{ctx.font=`${weight} ${fs}px ${ctx.socialFont||'Arial,sans-serif'}`;if(ctx.measureText(text).width<=width)break;fs--;}while(fs>min);ctx.fillText(text,x,y,width);return fs;}
 function socialWrap(ctx,text,width,size,max=3){ctx.font=`600 ${size}px ${ctx.socialFont||'Arial,sans-serif'}`;const words=String(text||'').split(/\s+/),lines=[];let line='';for(const word of words){const test=line?line+' '+word:word;if(line&&ctx.measureText(test).width>width){lines.push(line);line=word;}else line=test;}if(line)lines.push(line);if(lines.length>max&&size>16)return socialWrap(ctx,text,width,size-2,max+1);return {lines,size};}
 async function socialRender(s,card,canvas){
- const d=card.f.published.details,design={...s.design},featured=socialFeatured(s,card),showPortrait=design.layout!=='list',left=design.layout==='portrait_left';
+ const d=card.f.published.details,design={...s.design},featured=socialFeatured(s,card),showPortrait=design.layout!=='list',left=design.layout==='portrait_left',groups=socialRows(card),names=groups.flatMap(row=>row.members);
  const logoURL=/^data:image\/(png|jpeg|webp);base64,/.test(s.data.brand.logo||'')?s.data.brand.logo:null;
  const warnings=[],integratedLayout=!!socialAsset(s,'background')&&design.header_layout==='integrated';
  const load=async(asset,label)=>{try{return await socialImage(s,await socialAssetURL(s,asset));}catch(e){if(!s.previewOf||asset?.id===s.requiredPreviewAsset)throw e;warnings.push(label+' unavailable');return null;}};
@@ -156,8 +178,10 @@ async function socialRender(s,card,canvas){
  // A complete background contains its own header: no strip, tint or seam is painted over it.
  if(combined)socialFitImage(ctx,sponsors,0,0,1080,headerH);
  else if(!integrated){if(logo)socialFitImage(ctx,logo,45,28,185,200);else{ctx.fillStyle=ink;socialText(ctx,s.data.brand.name.toUpperCase(),50,105,sponsors?230:975,sponsors?27:44,'700');}if(sponsors)socialFitImage(ctx,sponsors,265,24,765,225);else if(logo){ctx.fillStyle=ink;const t=socialWrap(ctx,s.data.brand.name.toUpperCase(),730,38,2);t.lines.forEach((l,i)=>socialText(ctx,l,282,100+i*(t.size+10),730,t.size));}}
- const bounds=portrait?socialPhotoBounds(portrait):null,largeCutout=!!bounds?.transparent&&design.frame==='cutout',listX=showPortrait&&left?581:64,listWidth=showPortrait?(left?435:510):952,detailsX=showPortrait&&left?listX:64,detailsWidth=largeCutout?listWidth:1080-detailsX-64;
- const metaY=headerH+29,titleY=headerH+170,footer=String(design.footer||'').trim(),bottom=footer?1275:1315;
+ // Text geometry follows the template, never whether a photo has loaded or has transparency.
+ const bounds=portrait?socialPhotoBounds(portrait):null,largeCutout=!!bounds?.transparent&&design.frame==='cutout',listX=showPortrait&&left?581:64,listWidth=showPortrait?(left?435:510):952,detailsX=showPortrait&&left?listX:64,detailsWidth=showPortrait?listWidth:1080-detailsX-64;
+ const headingScale=Math.max(60,Math.min(120,Number(design.heading_scale)||100)),baseGradeSize=design.font==='bold'?144:94,gradeSize=baseGradeSize*headingScale/100,headingShift=gradeSize-baseGradeSize;
+ const metaY=headerH+29,titleY=headerH+170+headingShift,footer=String(design.footer||'').trim(),bottom=footer?1275:1315;
  const position=socialPhotoPosition(s,card),scale=position.scale/100;
  let photoX=left?20:590,photoY=headerH+266,photoW=470,photoH=(footer?1300:1350)-photoY;
  if(largeCutout){const shift=Math.max(-100,Math.min(100,Number(design.photo_shift)||0)),end=footer?1300:1350;
@@ -171,24 +195,33 @@ async function socialRender(s,card,canvas){
   }else if(design.frame==='circle'){ctx.beginPath();ctx.ellipse(photoX+photoW/2,photoY+photoH/2,photoW/2,photoW/2,0,0,Math.PI*2);ctx.clip();socialFitImage(ctx,portrait,photoX,photoY+(photoH-photoW)/2,photoW,photoW,true);}
   else socialFitImage(ctx,portrait,photoX,photoY,photoW,photoH,design.frame==='rectangle');ctx.restore();
  }
- ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:64,headingWidth=largeCutout?690:952,textLines=[],matchText=teamSelectionText(card);
+ ctx.fillStyle=ink;const headingX=showPortrait&&left?listX:64,headingWidth=showPortrait?690:952,textLines=[],matchText=teamSelectionText(card);
  checkGraphicLabel(canvas,ctx,{source:matchText.match,label:matchText.match,width:952,size:32});textLines.push([matchText.match,64,metaY,952,32,'700']);
- const gradeLabel=graphicGrade(d.grade,design,false,true)+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?435:headingWidth,gradeSize=design.font==='bold'?144:94;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
+ const gradeLabel=graphicGrade(d.grade,design,false,true)+(card.split?' · DAY '+(card.day+1):''),gradeWidth=showPortrait&&left?435:headingWidth;checkGraphicLabel(canvas,ctx,{source:d.grade,label:gradeLabel,shortLabel:graphicGrade(d.grade,design),width:gradeWidth,size:gradeSize,grade:true});textLines.push([gradeLabel,headingX-4,titleY,gradeWidth,gradeSize,'700',35]);
  let y=titleY+48;
  for(const text of matchText.lines){const wrapped=socialWrap(ctx,text,detailsWidth,32,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+4;}}
- const names=socialNames(card),baseY=Math.max(headerH+330,y+32),line=Math.min(62,(bottom-baseY)/Math.max(names.length-1,1)),font=Math.min(design.font==='bold'?58:42,line*.94),boxes=d.cancelled?[]:names.map((p,i)=>({x:listX,y:baseY+i*line-font,w:listWidth,h:font+3})),protection=socialNameProtection(ctx,boxes,ink);
- if(!integrated)socialDrawNameProtection(ctx,{x:listX-12,y:baseY-font-10,w:listWidth+24,h:(names.length-1)*line+font+24},protection);ctx.fillStyle=ink;textLines.forEach(args=>socialText(ctx,...args));
+ const baseY=Math.max(headerH+330+headingShift,y+32),rows=[];let offset=0;
+ for(const group of groups){group.members.forEach((person,i)=>rows.push({person,group,index:i,offset:offset+i*(group.bracket?49:62)}));offset+=group.bracket?group.members.length*49+10:62;}
+ const fit=Math.min(1,(bottom-baseY)/Math.max(rows.at(-1)?.offset||0,1));
+ for(const row of rows){row.y=baseY+row.offset*fit;row.font=(design.font==='bold'?(row.group.bracket?46:58):(row.group.bracket?34:42))*fit;row.x=listX+(row.group.bracket?22:0);row.width=listWidth-(row.group.bracket?84:0);}
+ const boxes=d.cancelled?[]:rows.map(row=>({x:listX,y:row.y-row.font,w:listWidth,h:row.font+3})),protection=socialNameProtection(ctx,boxes,ink),firstTop=rows[0]?rows[0].y-rows[0].font:baseY;
+ if(!integrated)socialDrawNameProtection(ctx,{x:listX-12,y:firstTop-10,w:listWidth+24,h:(rows.at(-1)?.y||baseY)-firstTop+24},protection);ctx.fillStyle=ink;textLines.forEach(args=>socialText(ctx,...args));
  if(d.cancelled){socialText(ctx,'MATCH',52,baseY+100,960,76,'700');socialText(ctx,'CANCELLED',52,baseY+190,960,76,'700');}
- else{ctx.save();if(integrated&&protection.alpha){ctx.shadowColor=protection.shade===0?'#000000CC':'#FFFFFFCC';ctx.shadowBlur=4;ctx.shadowOffsetY=1.5;}names.forEach((p,i)=>{const row=baseY+i*line,marked=!!portrait&&p.id===featured.id,name=(p.name+p.marks).toUpperCase();socialText(ctx,name,listX,row,listWidth,font,'700',18);if(marked){const end=listX+Math.min(listWidth,ctx.measureText(name).width);socialMarker(ctx,design.marker,left?listX-28:end+37,row-font*.30,design.marker==='arrows'?ink:design.accent,ink,left);}});ctx.restore();}
+ else{ctx.save();if(integrated&&protection.alpha){ctx.shadowColor=protection.shade===0?'#000000CC':'#FFFFFFCC';ctx.shadowBlur=4;ctx.shadowOffsetY=1.5;}for(const row of rows){
+  const p=row.person,marked=!!portrait&&p.id===featured.id,name=(p.name+p.roles).toUpperCase(),width=row.width-(marked&&row.group.bracket?34:0),actual=socialText(ctx,name,row.x,row.y,width,row.font,'700',18),end=row.x+Math.min(width,ctx.measureText(name).width);
+  if(p.tag)socialText(ctx,p.tag,listX+listWidth-48,row.y,48,Math.max(20,row.font*.70),'700');
+  if(row.group.bracket&&row.index===0&&row.group.members.length>1){const last=rows.find(other=>other.group===row.group&&other.index===row.group.members.length-1);ctx.save();ctx.strokeStyle=ink;ctx.globalAlpha=.6;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(listX+12,row.y-row.font*.72);ctx.lineTo(listX+3,row.y-row.font*.72);ctx.lineTo(listX+3,last.y-3);ctx.lineTo(listX+12,last.y-3);ctx.stroke();ctx.restore();}
+  if(marked)socialMarker(ctx,design.marker,left?listX-28:end+30,row.y-actual*.30,design.marker==='arrows'?ink:design.accent,ink,left);
+ }ctx.restore();}
  if(portrait&&!d.cancelled&&design.marker==='badge')socialMarker(ctx,'badge',left?55:1025,photoY+40,design.accent,ink);
  if(footer){checkGraphicLabel(canvas,ctx,{source:footer,label:footer,width:975,size:21});ctx.fillStyle=design.primary;ctx.fillRect(0,1300,1080,50);ctx.fillStyle=ink;socialText(ctx,footer,52,1331,975,21,'500');}
- Object.assign(canvas.dataset,{featuredPlayer:portrait?featured.id||'':'',photoMarker:portrait?design.marker:'',headerLayout:integrated?'integrated':combined?'banner':'separate',headerHeight:String(headerH),nameProtection:protection.alpha?(integrated?'text-shadow':'automatic'):'none',nameProtectionAlpha:protection.alpha.toFixed(2),largeCutout:String(largeCutout),photoLeft:photoX.toFixed(1),photoTop:photoY.toFixed(1),photoShiftX:String(position.x),photoShiftY:String(position.y),photoHeight:photoH.toFixed(1),photoWidth:photoW.toFixed(1),typeface:design.font==='bold'?(fontLoaded?'Club Sporting':'Arial'):design.font});
+ Object.assign(canvas.dataset,{teamPlayers:String(names.filter(p=>p.id).length),bracketPairs:String(groups.filter(row=>row.bracket&&row.members.length>1).length),featuredPlayer:portrait?featured.id||'':'',photoMarker:portrait?design.marker:'',headerLayout:integrated?'integrated':combined?'banner':'separate',headerHeight:String(headerH),nameProtection:protection.alpha?(integrated?'text-shadow':'automatic'):'none',nameProtectionAlpha:protection.alpha.toFixed(2),largeCutout:String(largeCutout),photoLeft:photoX.toFixed(1),photoTop:photoY.toFixed(1),photoShiftX:String(position.x),photoShiftY:String(position.y),photoHeight:photoH.toFixed(1),photoWidth:photoW.toFixed(1),typeface:design.font==='bold'?(fontLoaded?'Club Sporting':'Arial'):design.font});
  return {warnings,missingPhoto:showPortrait&&!portrait,photoExpected:!!featured.asset,invalid:featured.invalid};
 }
 async function socialPaintAll(s,fs){
  const render=s.render;for(const f of fs){let missing=false,invalid=false;try{for(const card of socialCards(f)){const canvas=document.querySelector(`[data-social-canvas="${CSS.escape(card.key)}"]`);if(!canvas||!socialHere(s)||s.render!==render)return;const result=await socialRender(s,card,canvas);missing||=result.missingPhoto;invalid||=result.invalid;}if(!socialHere(s)||s.render!==render)return;const label=document.querySelector(`[data-social-image-status="${CSS.escape(f.id)}"]`);if(label)label.textContent=invalid?'The featured player is no longer selected. Choose another player.':missing?'No player photo chosen.':'';}catch(e){if(socialHere(s)&&s.render===render){const label=document.querySelector(`[data-social-image-status="${CSS.escape(f.id)}"]`);if(label)label.textContent=e.message;}}}
 }
-function socialCaption(s,f){const d=f.published.details;return [s.data.brand.name+' — '+d.grade,d.cancelled?'MATCH CANCELLED':'Teams published',d.competition,'v '+d.opposition,seFormatLabel(d),...d.days.map((day,i)=>(d.days.length>1?'Day '+(i+1)+': ':'')+socialDate(day.date)+(day.start?' · '+socialTime(day.start):'')),d.ground,...(d.cancelled?[]:socialCards(f).flatMap(card=>[...(card.split?['','Day '+(card.day+1)+' team']:[]),...socialNames(card).map((p,i)=>(i+1)+'. '+p.name+p.marks)])),s.design.footer].filter(Boolean).join('\n');}
+function socialCaption(s,f){const d=f.published.details;return [s.data.brand.name+' — '+d.grade,d.cancelled?'MATCH CANCELLED':'Teams published',d.competition,'v '+d.opposition,seFormatLabel(d),...d.days.map((day,i)=>(d.days.length>1?socialDayTag(socialCards(f)[0],i)+': ':'')+socialDate(day.date)+(day.start?' · '+socialTime(day.start):'')),d.ground,...(d.cancelled?[]:socialCards(f).flatMap(card=>socialRows(card).map((row,i)=>(i+1)+'. '+row.members.map(p=>p.name+p.marks).join(' / ')))),s.design.footer].filter(Boolean).join('\n');}
 function socialUploadCard(s,kind,title,description,roster=null,preview={}){
  const a=socialAsset(s,kind,roster)||preview.asset,src=/^data:image\/(png|jpeg|webp);base64,/.test(preview.src||'')?preview.src:'',saved=!!(a||src);
  return `<section class="social-upload"><h3>${title}</h3><p>${description}</p>${saved?`<img ${a?`data-social-asset="${seEsc(a.id)}"`:`src="${seEsc(src)}"`} alt="${title}"><p class="social-status">Image saved</p>`:''}<label>${saved?'Replace image':'Choose image'}<input type="file" accept="image/png,image/jpeg,image/webp" data-social-upload="${kind}" ${roster?'data-roster="'+seEsc(roster)+'"':''}></label>${a?`<button class="btn ghost" data-social-remove="${seEsc(a.id)}" style="margin-top:10px">Remove image</button>`:''}${preview.content||''}</section>`;
@@ -235,11 +268,12 @@ async function socialDownload(s,fixtures,pack){
  }catch(e){if(socialHere(s))socialMessage(s,e.message);}finally{s.busy=false;if(socialHere(s))socialDraw(s);}
 }
 function socialPlayerPhotos(s,id){return s.data.assets.filter(a=>['portrait','photo'].includes(a.kind)&&a.roster_id===id).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||'')||a.id.localeCompare(b.id));}
+function socialFeatureChoice(card){return (card.f.features||[]).find(x=>x.day===card.day+1)||(!card.split?(card.f.features||[]).find(x=>x.day===2):null);}
 function socialFeatured(s,card){
- const choice=(card.f.features||[]).find(x=>x.day===card.day+1),names=socialNames(card);let id=null,asset=null;
+ const choice=socialFeatureChoice(card),names=socialNames(card);let id=null,asset=null;
  if(choice?.mode==='player'){id=choice.roster_id;asset=s.data.assets.find(a=>a.id===choice.asset_id&&a.roster_id===id&&['portrait','photo'].includes(a.kind))||null;}
  else if(!choice||choice.mode==='default'){
-  id=s.design.photo_policy==='match'?card.f.published.details.match_roles?.['d'+(card.day+1)]?.captain_id:s.design.photo_policy==='season'?card.f.season_portrait_id:null;
+  id=s.design.photo_policy==='match'?card.f.published.details.match_roles?.['d'+(card.day+1)]?.captain_id||(!card.split?card.f.published.details.match_roles?.d2?.captain_id:null):s.design.photo_policy==='season'?card.f.season_portrait_id:null;
   asset=socialPlayerPhotos(s,id)[0]||null;
  }
  const person=names.find(p=>p.id&&p.id===id)||null;
@@ -258,7 +292,7 @@ function socialFeatureRequest(card,mode,person=null,asset=null,position=null){
 function socialPhotoOffset(value){const number=Number(value);return Number.isFinite(number)?Math.max(-30,Math.min(30,Math.round(number))):0;}
 function socialPhotoScale(value){const number=Number(value??100);return Number.isFinite(number)?Math.max(50,Math.min(150,Math.round(number))):100;}
 function socialPhotoPosition(s,card){
- const choice=(card.f.features||[]).find(x=>x.day===card.day+1),draft=s.photoPositions?.[card.key];
+ const choice=socialFeatureChoice(card),draft=s.photoPositions?.[card.key];
  return {x:socialPhotoOffset(draft?.x??choice?.photo_x),y:socialPhotoOffset(draft?.y??choice?.photo_y),scale:socialPhotoScale(draft?.scale??choice?.photo_scale??s.design.photo_scale)};
 }
 function socialPhotoPositionLabel(axis,value){return axis==='scale'?value+'%':value?`${Math.abs(value)}% ${axis==='x'?(value<0?'left':'right'):(value<0?'up':'down')}`:'Original position';}
@@ -274,7 +308,7 @@ function socialPhotoPositionControls(s,card){
 function socialPreviewPhotoPosition(s,card,position){
  if(socialFixtureCompleted(s,card.f)){socialMessage(s,'Completed fixtures are read-only. Open Team-list artwork to preview designs.');socialDraw(s);return;}
  (s.photoPositions||={})[card.key]={x:socialPhotoOffset(position.x),y:socialPhotoOffset(position.y),scale:socialPhotoScale(position.scale??socialPhotoPosition(s,card).scale)};
- const value=s.photoPositions[card.key],key=CSS.escape(card.key),choice=(card.f.features||[]).find(x=>x.day===card.day+1);
+ const value=s.photoPositions[card.key],key=CSS.escape(card.key),choice=socialFeatureChoice(card);
  if(value.x===socialPhotoOffset(choice?.photo_x)&&value.y===socialPhotoOffset(choice?.photo_y)&&value.scale===socialPhotoScale(choice?.photo_scale??s.design.photo_scale))delete s.photoPositions[card.key];
  if(s.photoPositionConfirmed)delete s.photoPositionConfirmed[card.key];
  const confirm=document.querySelector(`[data-social-position-confirm="${key}"]`),status=document.querySelector(`[data-social-position-status="${key}"]`);
@@ -315,7 +349,7 @@ function socialPhotoControls(s,card){
  let guidance='Choose a player from this team.';
  if(selected==='none')guidance='This graphic will have no player photo.';
  else if(selected==='default'&&(match||season))guidance=featured.person
-  ? `${featured.person.name} · ${match?'captain for '+(card.split?'this day':'this game'):'season captain'}.`
+  ? `${featured.person.name} · ${match?'match captain'+(featured.person.tag?' ('+featured.person.tag+')':''):'season captain'}.`
   : `No ${match?'match':'season'} captain is in this published team. Choose a player to feature.`;
  return `<div class="social-feature"><label>Featured player${card.split?' · Day '+(card.day+1):''}<select data-social-person="${seEsc(card.key)}"><option value="default" ${selected==='default'?'selected':''}>${defaultLabel}</option><option value="none" ${selected==='none'?'selected':''}>No player photo</option>${featured.invalid?`<option selected value="${seEsc(selected)}">Previously featured player is no longer selected</option>`:''}${people.map(p=>`<option value="${seEsc(p.id)}" ${selected===p.id?'selected':''}>${seEsc(p.name)}</option>`).join('')}</select></label>${featured.invalid?'<p class="social-status social-changed">Choose a currently selected player before downloading.</p>':selected==='default'||!featured.person?`<p class="social-status">${seEsc(guidance)}</p>`:''}${featured.person?`${photos.length?`<label>Photo of ${seEsc(featured.person.name)}<select data-social-photo="${seEsc(card.key)}"><option value="">Choose a saved photo</option>${photos.map((a,i)=>`<option value="${seEsc(a.id)}" ${featured.asset?.id===a.id?'selected':''}>${seEsc(a.label||'Photo '+(i+1))}</option>`).join('')}</select></label>`:`<p class="social-status">No saved photo for ${seEsc(featured.person.name)} yet.</p>`}<label>Upload player photo (up to 20 MB)<input type="file" accept="image/png,image/jpeg,image/webp" data-social-team-photo="${seEsc(card.key)}" aria-label="Upload photo of ${seEsc(featured.person.name)}"></label><button class="btn ghost" data-social-guide-player="${seEsc(featured.person.id)}" data-social-guide-card="${seEsc(card.key)}">Create a cut-out</button>`:''}${socialPhotoPositionControls(s,card)}</div>`;
 }
@@ -841,12 +875,12 @@ async function socialAwardScopeChanged(s,kind){
  if(s.results){s.results.context=null;s.results.attempted=false;s.results.ack=null;s.results.token++;}
  if(api===socialAwards)await api.load(s,false);else await api.load(s,{preserve:false});
 }
-let socialClubSetup,socialAwardScopes,socialAwardLabels,socialAwardLabelHooks,socialResults,socialAwards,socialPlayerWeek,socialWeek,socialSandbox,socialTeamWorkflow,socialPublishing,graphicGrade,checkGraphicLabel,teamSelectionText;
+let socialClubSetup,socialAwardScopes,socialAwardLabels,socialAwardLabelHooks,socialResults,socialAwards,socialPlayerWeek,socialWeek,socialSandbox,socialTeamWorkflow,socialPublishing,graphicGrade,graphicPlayerName,checkGraphicLabel,teamSelectionText;
 let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.354'),import('./social-team-workflow.js?v=0.8.62.354'),import('./social-publishing.js?v=0.8.62.303'),import('./team-of-week.js?v=0.8.62.354'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.354'),import('./player-of-week.js?v=0.8.62.354'),import('./social-sandbox.js?v=0.8.62.288'),import('./social-graphic-design.js?v=0.8.62.354'),import('./social-team-layout.js?v=0.8.62.288')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.362'),import('./social-team-workflow.js?v=0.8.62.362'),import('./social-publishing.js?v=0.8.62.362'),import('./team-of-week.js?v=0.8.62.362'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.362'),import('./player-of-week.js?v=0.8.62.362'),import('./social-sandbox.js?v=0.8.62.362'),import('./social-graphic-design.js?v=0.8.62.362'),import('./social-team-layout.js?v=0.8.62.362')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];
@@ -856,7 +890,7 @@ async function initialiseSocialFeatures(){
   const {createSocialAwardLabels}=modules[6];
   const {createPlayerOfWeek}=modules[7];
   const {createSocialSandbox}=modules[8];
-  ({graphicGrade,checkGraphicLabel}=modules[9]);
+  ({graphicGrade,graphicPlayerName,checkGraphicLabel}=modules[9]);
   ({teamSelectionText}=modules[10]);
 socialAwardScopes=createSocialAwardScopes({supabase,here:socialHere,draw:socialDraw,canEdit:s=>{if(s.view==='team_week'&&s.week?.designDirty||s.view==='player_week'&&s.playerWeek?.layoutDirty){socialMessage(s,'Save the award layout before changing selection groups.');return false;}return socialCanLeave();},message:socialMessage,changed:socialAwardScopeChanged,locked:s=>!!(s.busy||s.results?.busy||s.week?.busy||s.week?.pending||s.playerWeek?.busy||s.playerWeek?.pending||s.awards?.busy||s.awards?.pending||s.awards?.loading)});
 socialAwardLabels=createSocialAwardLabels({supabase,here:socialHere,draw:socialDraw,canEdit:socialCanLeave,message:socialMessage});

@@ -1,5 +1,7 @@
 # Club graphic refinement
 
+Version 0.8.62.362 supports a saved Team selections `heading_scale` (60–120%, default 100). A heading-size request changes this setting only; it preserves the club's font, label, photos and artwork. Background-generation handoffs for this text adjustment are rejected. Older clients omit the field and are asked to refresh. The same setting is available without AI under Layout and colours, with revision-checked persistence and live preview. Tests cover schema compatibility and mocked provider responses; no live model request is required for the direct control.
+
 Deploy `Functions/club-social-style/index.ts` as `club-social-style` with JWT verification enabled. Include `award-refine.mjs` and the root `social-awards-design.js` and `social-graphic-design.js` dependencies with their relative paths intact.
 
 Version 0.8.62.225 adds `purpose: "graphic_refine"` for Team of the Week, Player of the Week and Team selections. Each uses its existing club-scoped context and saved design revision. Existing team style requests are unchanged. `purpose: "award_refine"` adds natural-language edits to Results, Century and 5 Wickets previews. It validates the signed-in user and club permission, checks the saved design revision, then uses the existing `style_request` allowance and limits (five per hour, thirty per day). Every attempt gets a new server-generated request ID. No new database migration or secret is required; it uses the existing `OPENAI_SOCIAL_STYLE_MODEL` / `OPENAI_GUIDE_MODEL` and `OPENAI_API_KEY` configuration.

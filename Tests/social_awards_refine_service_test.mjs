@@ -24,6 +24,18 @@ function setup(overrides={}){
  };
  return {calls,options:{url:'https://test.supabase.co',anon:'public-key',key:'test-provider-key',model:'configured-vision-model',authorization:'Bearer user-token',fetcher}};
 }
+test('team heading resizing changes the saved template setting without renaming grades or editing backgrounds',async()=>{
+ const body={...request(),purpose:'graphic_refine',kind:'team_selections',brief:'Make the grade heading smaller',current:{heading_scale:100,font:'bold',primary:'#225533'},preview_grades:['Regional XI']};
+ const context={revision:3,design:{heading_scale:100,font:'bold',primary:'#225533'},fixtures:[{published:{details:{grade:'Regional XI'}}}],assets:[]};
+ const h=setup({context,output:{changes:{heading_scale:80},grade_labels:[],explanation:'Smaller heading.',artwork_brief:null}});
+ const result=await refineAward(body,h.options);assert.equal(result.status,200);assert.deepEqual(result.body.changes,{heading_scale:80});
+ const schema=h.calls.find(c=>c.url.includes('openai')).body.text.format.schema;
+ assert.equal(schema.properties.changes.properties.heading_scale.minimum,60);
+ const bad=setup({context,output:{changes:{},grade_labels:[],explanation:'Edit image.',artwork_brief:'Make the grade heading smaller in the background.'}});
+ assert.equal((await refineAward(body,bad.options)).status,422,'Editable text cannot be sent to the artwork generator');
+ delete body.current.heading_scale;const older=setup({context,output:{changes:{},grade_labels:[],explanation:'Refresh for heading sizes.',artwork_brief:null}});
+ assert.equal((await refineAward(body,older.options)).status,200);assert.equal(older.calls.find(c=>c.url.includes('openai')).body.text.format.schema.properties.changes.properties.heading_scale,undefined);
+});
 test('uses the current preview, only this club’s saved example, configured model and existing allowance',async()=>{
  const {calls,options}=setup(),body=request();body.example_path='other-club/artwork/forged.png';body.request_id='reuse-me';
  const result=await refineAward(body,options);assert.equal(result.status,200);assert.equal(result.body.example_path,example);assert.equal(result.body.changes.badge_style,'brush');

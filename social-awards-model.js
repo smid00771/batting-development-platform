@@ -1,7 +1,7 @@
 import {resultsLayoutPlan,resultsRowPlan} from './social-results-layout.js?v=0.8.62.328';
 import {referenceBadgePair} from './social-award-lettering.js?v=0.8.62.294';
 import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont,awardFontsReady} from './social-award-fonts.js?v=0.8.62.354';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.354';
+import {graphicPlayerName,graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.362';
 import {safeAwardStyle,resultLabel,matchingResultBadgeCrops} from './social-awards-design.js?v=0.8.62.354';
 
 export const SOCIAL_AWARDS = [
@@ -104,7 +104,7 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
   image(logo,layout.logo_x,layout.logo_y,layout.logo_size,.25);
   if(!layout.includes_title)text(title(awardLabel(kind)),540,height*layout.title_y/100,990,layout.title_size,layout.text_colour,'title');
   if(layout.show_week)text(week,540,height*layout.week_y/100,980,layout.week_size,layout.text_colour,'week');
-  text((item?.name||'CHOOSE A PERFORMANCE').toUpperCase(),540,height*layout.name_y/100,980,layout.name_size);
+  text((item?.name?graphicPlayerName(item.name,layout):'CHOOSE A PERFORMANCE').toUpperCase(),540,height*layout.name_y/100,980,layout.name_size);
   text(item?awardFigures(item)+(kind==='century'?' RUNS':''):'',540,height*layout.figures_y/100,980,layout.figures_size,layout.text_colour,'score');
   ctx.socialFont=AWARD_FONTS[awardFont(layout,'grade')];ctx.font=`${AWARD_FONT_WEIGHTS[awardFont(layout,'grade')]||'700'} ${layout.single_grade_size||30}px ${ctx.socialFont}`;const grade=graphicGrade(item?.grade,layout);checkGraphicLabel(canvas,ctx,{source:item?.grade,label:grade,width:980-ctx.measureText(item?.opposition?' · v '+item.opposition:'').width,size:layout.single_grade_size||30,grade:true});text([grade,item?.opposition&&'v '+item.opposition].filter(Boolean).join(' · '),540,height*layout.grade_y/100,980,layout.single_grade_size||30,layout.text_colour,'grade');return;
  }
@@ -139,12 +139,8 @@ export async function drawAwardGraphic(h,s,canvas,{kind,items,layout,photo,week,
  };
  const band=(x,width,y,fn)=>{ctx.save();ctx.beginPath();ctx.rect(x,y,width,rowHeight);ctx.clip();fn();ctx.restore();};
  // Club-saved presentation labels never rewrite scorecards or player records.
- const displayName=value=>{
-  const normal=v=>String(v||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
-  const labels=Array.isArray(layout.player_name_labels)?layout.player_name_labels.slice(0,40):[];
-  const alias=labels.find(entry=>typeof entry?.name==='string'&&normal(entry.name)===normal(value));
-  return typeof alias?.label==='string'&&alias.label.trim()&&alias.label.length<=80&&!/[<>\x00-\x1f\x7f]/.test(alias.label)?alias.label.trim():value;
- };
+ const peers=items.flatMap(item=>{const r=resultsSummary(item);return [...r.batting,...r.bowling].map(p=>p.name);});
+ const displayName=value=>graphicPlayerName(value,layout,peers);
  const summaries=items.map(item=>{const r=resultsSummary(item);return {...r,batting:r.batting.map(p=>({...p,name:displayName(p.name)})),bowling:r.bowling.map(p=>({...p,name:displayName(p.name)}))};}),batting=summaries.flatMap(r=>r.batting),bowling=summaries.flatMap(r=>r.bowling);
 
  const rowScale=plan.rowScale,d={...layout};

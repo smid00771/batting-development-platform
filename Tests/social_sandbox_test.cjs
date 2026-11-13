@@ -1,5 +1,6 @@
 const socialSource=require('./helpers/social-source.cjs');
 const {test}=require('node:test');
+const {graphicPlayerName}=require('../social-graphic-design.js');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),{webcrypto}=require('node:crypto');
 const root=fs.existsSync(path.join(__dirname,'../app.js'))?'../':'../Website_Files/';
 const app=socialSource(fs.readFileSync(path.join(__dirname,root,'app.js'),'utf8')),demo=fs.readFileSync(path.join(__dirname,root,'demo.html'),'utf8'),moduleSource=fs.readFileSync(path.join(__dirname,root,'social-sandbox.js'),'utf8');
@@ -32,7 +33,7 @@ test('completed fixtures stay out of export selection and remain available in th
 function sandbox(){
  const nodes=new Map(),stamps=[],draws=[],applied=[],downloads=[],revoked=[],inputs=[{dataset:{sandboxSetting:'primary'},type:'color',value:'#AA3344'}];const positions=['x','y'].map(axis=>({dataset:{sandboxPosition:axis},value:0}));let confirmed=false;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',isConnected:true,width:1080,height:1350,dataset:{},addEventListener(event,fn){this['on'+event]=fn;},querySelectorAll:selector=>selector==='[data-sandbox-setting]'?inputs:selector==='[data-sandbox-position]'?positions:[],getContext:()=>({save(){},restore(){},fillRect(){},fillText:text=>stamps.push(text),drawImage(){}}),toBlob:fn=>fn({type:'image/png'})});return nodes.get(id);};
- const c=vm.createContext({console,Date:FixedDate,crypto:webcrypto,document:{getElementById:node,createElement:()=>node('temp-'+nodes.size)},window:{confirm:()=>confirmed},URL:{createObjectURL:()=> 'blob:trial-'+nodes.size,revokeObjectURL:url=>revoked.push(url)}});
+ const c=vm.createContext({graphicPlayerName,console,Date:FixedDate,crypto:webcrypto,document:{getElementById:node,createElement:()=>node('temp-'+nodes.size)},window:{confirm:()=>confirmed},URL:{createObjectURL:()=> 'blob:trial-'+nodes.size,revokeObjectURL:url=>revoked.push(url)}});
  vm.runInContext(part(app,'function socialCards(','function socialDate(')+part(app,'function socialSurname(','function socialPhotoId(')+part(app,'function socialPlayerPhotos(','function socialOversNotice(')+moduleSource.replace('export function','function'),c);
  const api=c.createSocialSandbox({here:()=>true,escape:String,defaults:d=>({...d.design}),groups:s=>s.data.groups||[],cards:c.socialCards,featured:c.socialFeatured,renderImage:async(s,card)=>draws.push({s,card}),normalize:async()=>({type:'image/png'}),message(){},download:(...args)=>downloads.push(args),applyDesign:async(s,d)=>applied.push(d)});
  const s={view:'sandbox',urls:new Map(),images:new Map(),data:{design:{layout:'portrait',frame:'cutout',primary:'#123456',accent:'#abcdef',font:'clean',marker:'arrows',photo_scale:100,photo_shift:0,theme:'solid',header_layout:'integrated',header_height:310,footer:''},brand:{name:'Example Club'},players:[{id:'real-player',name:'Real Player'}],assets:[{id:'real-photo',kind:'photo',roster_id:'real-player',path:'saved-photo',label:'Saved'}],fixtures:[fixture('real-fixture',['2026-10-10'])]}};
@@ -71,15 +72,16 @@ test('a club without grades or fixtures starts with one sample team',()=>{
  const h=sandbox();h.s.data.fixtures=[];h.s.data.assets=[];h.api.render(h.s);
  assert.equal(h.s.sandbox.teams.length,1);assert.equal(h.api.preview(h.s).card.f.published.details.grade,'Sample team');
 });
-test('two-day copies keep the correct player photos and independent slider positions',()=>{
+test('two-day sandbox uses one card and can feature either bracket partner',()=>{
  const h=sandbox(),f=h.s.data.fixtures[0];f.published.details.days.push({date:'2026-10-17'});
  f.published.players.push({id:'day-two',name:'Day Two Player'});f.published.slots[0].d2='day-two';
  h.s.data.assets.push({id:'day-two-photo',roster_id:'day-two',kind:'photo',path:'day-two-photo'});
  h.api.render(h.s);h.positions[0].value=-8;h.positions[0].oninput();
- h.node('sandboxDay').onchange({target:{value:'1'}});let p=h.api.preview(h.s);
- assert.equal(p.card.day,1);assert.equal(p.card.split,true);assert.equal(p.card.f.features[1].roster_id,'day-two');assert.equal(p.state.photoPositions[p.card.key].x,0);
- h.positions[1].value=6;h.positions[1].oninput();h.node('sandboxDay').onchange({target:{value:'0'}});p=h.api.preview(h.s);
- assert.equal(p.state.photoPositions[p.card.key].x,-8);assert.equal(p.state.photoPositions[p.card.key].y,-3);assert.equal(f.features[0].photo_x,4);
+ assert.doesNotMatch(h.node('socialContent').innerHTML,/id="sandboxDay"/);assert.match(h.node('socialContent').innerHTML,/day-two-photo/);
+ h.node('sandboxPhoto').onchange({target:{value:'day-two-photo'}});let p=h.api.preview(h.s);
+ assert.equal(p.card.day,0);assert.equal(p.card.split,false);assert.ok(p.card.f.features.every(x=>x.roster_id==='day-two'));assert.equal(p.state.photoPositions[p.card.key].x,0);
+ h.positions[1].value=6;h.positions[1].oninput();p=h.api.preview(h.s);
+ assert.equal(p.state.photoPositions[p.card.key].y,6);assert.equal(f.features[0].photo_x,4);
 });
 test('the photo adjustment group has one size slider and one control for each axis',()=>{
  const h=sandbox();h.api.render(h.s);const html=h.node('socialContent').innerHTML;

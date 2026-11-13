@@ -1,4 +1,4 @@
-import {GRAPHIC_FIELDS,graphicPatch} from './social-graphic-design.js?v=0.8.62.354';
+import {GRAPHIC_FIELDS,graphicPatch} from './social-graphic-design.js?v=0.8.62.362';
 import {AWARD_FONTS,AWARD_FONT_WEIGHTS,awardFont} from './social-award-fonts.js?v=0.8.62.354';
 
 import {graphicReference} from './social-graphic-reference-contract.js?v=0.8.62.354';

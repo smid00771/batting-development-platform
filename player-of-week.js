@@ -1,8 +1,8 @@
-import {graphicStudioHTML,bindGraphicStudio,refreshGraphicComparison} from './social-graphic-studio.js?v=0.8.62.354';
+import {graphicStudioHTML,bindGraphicStudio,refreshGraphicComparison} from './social-graphic-studio.js?v=0.8.62.362';
 import {awardFontsReady,awardRoleText} from './social-award-fonts.js?v=0.8.62.354';
 import {scopedAwardLabel} from './social-award-scopes.js?v=0.8.62.250';
-import {graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.354';
-import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.354';
+import {graphicPlayerName,graphicGrade,checkGraphicLabel} from './social-graphic-design.js?v=0.8.62.362';
+import {assistantState,assistantHTML,assistantControls,assistantSuggestions,bindAssistant,assistantCanLeave} from './social-graphic-assistant.js?v=0.8.62.362';
 import {playerWeekFigures,playerWeekRecommendations} from './player-week-ranking.js?v=0.8.62.270';
 
 export function playerWeekLayout(saved={}){
@@ -122,7 +122,7 @@ export function createPlayerOfWeek(h){
   const textWidth=1080*layout.text_width/100,centre=textWidth/2+(1080-textWidth)*layout.text_x/100;
   if(layout.text_panel){ctx.fillStyle='rgba(0,0,0,.35)';const y=Math.max(0,Math.min(layout.name_y,layout.figures_y,layout.grade_y)/100*height-65);ctx.fillRect(0,y,1080,height-y);}
   const text=(role,...args)=>awardRoleText(h.text,ctx,layout,role,...args);ctx.fillStyle=layout.text_colour;ctx.textAlign='center';if(!layout.includes_title)text('title','PLAYER OF THE WEEK',centre,height*layout.title_y/100,textWidth,layout.title_size);checkGraphicLabel(canvas,ctx,{source:title,label:title.toUpperCase(),width:textWidth,size:28});text('week',title.toUpperCase(),centre,height*layout.week_y/100,textWidth,layout.week_size||28);
-  text('player',(winner?.name||'CHOOSE YOUR WINNER').toUpperCase(),centre,height*layout.name_y/100,textWidth,layout.name_size);
+  text('player',(winner?.name?graphicPlayerName(winner.name,layout):'CHOOSE YOUR WINNER').toUpperCase(),centre,height*layout.name_y/100,textWidth,layout.name_size);
   const f=winner?playerWeekFigures(winner):null,figures=f?[f.batting&&`${f.batting} RUNS`,f.bowling&&`${f.bowling}`].filter(Boolean).join('  •  '):'BATTING  •  BOWLING  •  PERSONAL PROGRESS';text('score',figures,centre,height*layout.figures_y/100,textWidth,layout.figures_size);const grade=winner?.grade||s.data.brand.name||'',label=graphicGrade(grade,layout,false,true);checkGraphicLabel(canvas,ctx,{source:grade,label,width:textWidth,size:30,grade:!!winner?.grade});text('grade',label,centre,height*layout.grade_y/100,textWidth,layout.grade_size||30);
  }
  async function paint(s){const w=state(s),token=++w.render,canvas=el('pwCanvas');if(!canvas)return;w.previewReady=false;controls(s);try{const buffer=document.createElement('canvas');await draw(s,buffer,w);if(!current(s,w)||token!==w.render||!canvas.isConnected)return;canvas.width=buffer.width;canvas.height=buffer.height;canvas.getContext('2d').drawImage(buffer,0,0);canvas.graphicLabelWarnings=buffer.graphicLabelWarnings;w.previewReady=true;void refreshGraphicComparison(studioConfig(s));assistantSuggestions(assistantConfig(s));el('pwPreviewStatus').textContent=w.winner?'Review before saving.':'Choose a winner to finish the post.';controls(s);}catch(e){if(current(s,w)&&token===w.render){el('pwPreviewStatus').textContent=e.message;controls(s);}}}

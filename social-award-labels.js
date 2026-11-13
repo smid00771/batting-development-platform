@@ -1,4 +1,4 @@
-import {graphicLabel} from './social-graphic-design.js?v=0.8.62.354';
+import {graphicLabel} from './social-graphic-design.js?v=0.8.62.362';
 
 // Shared club preference; the actual label is stored separately for each awards week.
 export function createSocialAwardLabels(h){

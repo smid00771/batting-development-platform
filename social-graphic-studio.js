@@ -1,4 +1,4 @@
-import {GRAPHIC_FIELDS,graphicPatch,refinedGraphicLayout} from './social-graphic-design.js?v=0.8.62.354';
+import {GRAPHIC_FIELDS,graphicPatch,refinedGraphicLayout} from './social-graphic-design.js?v=0.8.62.362';
 import {AWARD_STYLE_FIELDS,visualPatch} from './social-awards-design.js?v=0.8.62.354';
 
 const groups={

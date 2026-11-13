@@ -11,6 +11,16 @@ function timeLabel(value){
  const [hour,minute]=text.split(':').map(Number);
  return `${hour%12||12}${minute?':'+String(minute).padStart(2,'0'):''}${hour<12?'AM':'PM'}`;
 }
+function fixtureDates(days){
+ const dates=days.map(day=>day?.date),labels=dates.map(dateLabel);
+ if(dates.length!==2||labels.some(label=>!label))return labels;
+ const [first,second]=dates.map(value=>new Date(value+'T12:00:00Z'));
+ if(first.getUTCFullYear()!==second.getUTCFullYear())return labels.map((label,i)=>label+' '+[first,second][i].getUTCFullYear());
+ if(first.getUTCMonth()!==second.getUTCMonth())return labels;
+ const weekday=date=>new Intl.DateTimeFormat('en-AU',{weekday:'long',timeZone:'UTC'}).format(date).toUpperCase();
+ const month=new Intl.DateTimeFormat('en-AU',{month:'long',timeZone:'UTC'}).format(first).toUpperCase();
+ return [`${weekday(first)} ${ordinal(first.getUTCDate())} & ${first.getUTCDay()===second.getUTCDay()?'':weekday(second)+' '}${ordinal(second.getUTCDate())} ${month}`];
+}
 // Match facts stay in the published fixture; this only formats their graphic overlay.
 export function teamSelectionText(card){
  const details=card.f.published.details,round=clean(card.f.round||details.round),opposition=clean(details.opposition),days=details.days||[];
@@ -19,5 +29,5 @@ export function teamSelectionText(card){
  const starts=selected.map(({day})=>timeLabel(day?.start)),sameStart=starts.every(value=>value===starts[0]);
  const start=sameStart?starts[0]:selected.map(({number},i)=>`DAY ${number}: ${starts[i]||'TIME TBC'}`).join(' / ');
  const timeGround=[start,clean(details.ground).toUpperCase()].filter(Boolean).join(' // ');
- return {match:[roundLabel,opposition?'V '+opposition:''].filter(Boolean).join(' ').toUpperCase(),lines:[timeGround,...selected.map(({day})=>dateLabel(day?.date))].filter(Boolean)};
+ return {match:[roundLabel,opposition?'V '+opposition:''].filter(Boolean).join(' ').toUpperCase(),lines:[timeGround,...fixtureDates(selected.map(({day})=>day))].filter(Boolean)};
 }

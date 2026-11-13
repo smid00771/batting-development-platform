@@ -48,7 +48,18 @@ function demoSeedCurrent({empty=false}={}){
   const f=fixtureClone(demoSelections.fixtures[0]),days=index<2?[{date:first,start:'12:00'},{date:second,start:'12:00'}]:[{date:first,start:'10:00'}];
   Object.assign(f,{id:key+'-upcoming',revision:1,publication:1});
   Object.assign(f.details,{grade,grade_group_id:'group-'+key,round:'4',format:index<2?'two_day':'limited_overs',overs:index<2?null:40,days,brackets:false,opposition:'River Example CC',match_roles:{d1:{captain_id:players[0].id,captain_manual:true,keeper_id:players[5].id,keeper_manual:true},...(index<2?{d2:{captain_id:players[0].id,captain_manual:true,keeper_id:players[5].id,keeper_manual:true}}:{})}});
-  f.slots=players.map(p=>({d1:p.id,d2:index<2?p.id:null}));f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(players)};demoSelections.fixtures.push(f);
+  f.slots=players.map(p=>({d1:p.id,d2:index<2?p.id:null}));
+  if(index===0){
+   // Three fictional bracket pairs demonstrate one whole-fixture team graphic.
+   f.details.brackets=true;f.details.bracket_basis='general';
+   for(const [j,slot] of [0,8,10].entries()){
+    const replacement={...fixtureClone(players[slot]),id:key+'-week-two-'+j,name:['Morgan Lawson','Quinn Mitchell','Reese Palmer'][j],external_id:'EXAMPLE-'+key+'-W2-'+j};
+    replacement.availability.available_dates=[second];replacement.availability.unavailable_dates=[first];players[slot].availability.available_dates=[first];players[slot].availability.unavailable_dates=[second];
+    players.push(replacement);demoSelections.roster.push(replacement);f.slots[slot].d2=replacement.id;
+    if(slot===0)f.details.match_roles.d2.captain_id=replacement.id;
+   }
+  }
+  f.published={details:fixtureClone(f.details),slots:fixtureClone(f.slots),players:fixtureClone(players)};demoSelections.fixtures.push(f);
  }
  demoSelections.selectors=['user-selector','user-head','user-masters-head'];demoSelections.access.head_selector_id='user-head';
  const mastersNames=['Drew Kelly','Lee Adams','Pat Foster','Cameron Ward','Les Turner','Andy Cross','Chris Cole','Ben Dunn','Glen Hill','Mark Ross','Paul Woods'];
