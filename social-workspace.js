@@ -201,14 +201,23 @@ async function socialRender(s,card,canvas){
  let y=titleY+48;
  for(const text of matchText.lines){const wrapped=socialWrap(ctx,text,detailsWidth,32,2);for(const line of wrapped.lines){textLines.push([line,detailsX,y,detailsWidth,wrapped.size,'700']);y+=wrapped.size+4;}}
  const baseY=Math.max(headerH+330+headingShift,y+32),rows=[];let offset=0;
- for(const group of groups){group.members.forEach((person,i)=>rows.push({person,group,index:i,offset:offset+i*(group.bracket?49:62)}));offset+=group.bracket?group.members.length*49+10:62;}
- const fit=Math.min(1,(bottom-baseY)/Math.max(rows.at(-1)?.offset||0,1));
- for(const row of rows){row.y=baseY+row.offset*fit;row.font=(design.font==='bold'?(row.group.bracket?46:58):(row.group.bracket?34:42))*fit;row.x=listX+(row.group.bracket?22:0);row.width=listWidth-(row.group.bracket?84:0);}
+ for(const group of groups){group.members.forEach((person,i)=>rows.push({person,group,index:i,offset:offset+i*62}));offset+=group.members.length*62+(group.bracket?10:0);}
+ const preferredSize=design.font==='bold'?58:42,heightFit=Math.min(1,(bottom-baseY)/Math.max(rows.at(-1)?.offset||0,1));
+ ctx.font=`700 ${preferredSize}px ${ctx.socialFont}`;let nameSize=preferredSize*heightFit;
+ for(const row of rows){
+  row.name=(row.person.name+row.person.roles).toUpperCase();row.x=listX+(row.group.bracket?22:0);
+  const markerSpace=showPortrait&&!left&&row.person.id===featured.id?(design.marker==='name'?80:design.marker==='badge'?52:38):0;
+  row.width=listWidth-(row.group.bracket?84:0)-markerSpace;
+  nameSize=Math.min(nameSize,preferredSize*(row.width-.5)/Math.max(1,ctx.measureText(row.name).width));
+ }
+ // Fit the complete roster once. Bracket partners and long names keep the same type size as everyone else.
+ nameSize=Math.max(1,Math.floor(nameSize));const fit=nameSize/preferredSize;
+ for(const row of rows){row.y=baseY+row.offset*fit;row.font=nameSize;}
  const boxes=d.cancelled?[]:rows.map(row=>({x:listX,y:row.y-row.font,w:listWidth,h:row.font+3})),protection=socialNameProtection(ctx,boxes,ink),firstTop=rows[0]?rows[0].y-rows[0].font:baseY;
  if(!integrated)socialDrawNameProtection(ctx,{x:listX-12,y:firstTop-10,w:listWidth+24,h:(rows.at(-1)?.y||baseY)-firstTop+24},protection);ctx.fillStyle=ink;textLines.forEach(args=>socialText(ctx,...args));
  if(d.cancelled){socialText(ctx,'MATCH',52,baseY+100,960,76,'700');socialText(ctx,'CANCELLED',52,baseY+190,960,76,'700');}
  else{ctx.save();if(integrated&&protection.alpha){ctx.shadowColor=protection.shade===0?'#000000CC':'#FFFFFFCC';ctx.shadowBlur=4;ctx.shadowOffsetY=1.5;}for(const row of rows){
-  const p=row.person,marked=!!portrait&&p.id===featured.id,name=(p.name+p.roles).toUpperCase(),width=row.width-(marked&&row.group.bracket?34:0),actual=socialText(ctx,name,row.x,row.y,width,row.font,'700',18),end=row.x+Math.min(width,ctx.measureText(name).width);
+  const p=row.person,marked=!!portrait&&p.id===featured.id,actual=socialText(ctx,row.name,row.x,row.y,row.width,row.font,'700',row.font),end=row.x+ctx.measureText(row.name).width;
   if(p.tag)socialText(ctx,p.tag,listX+listWidth-48,row.y,48,Math.max(20,row.font*.70),'700');
   if(row.group.bracket&&row.index===0&&row.group.members.length>1){const last=rows.find(other=>other.group===row.group&&other.index===row.group.members.length-1);ctx.save();ctx.strokeStyle=ink;ctx.globalAlpha=.6;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(listX+12,row.y-row.font*.72);ctx.lineTo(listX+3,row.y-row.font*.72);ctx.lineTo(listX+3,last.y-3);ctx.lineTo(listX+12,last.y-3);ctx.stroke();ctx.restore();}
   if(marked)socialMarker(ctx,design.marker,left?listX-28:end+30,row.y-actual*.30,design.marker==='arrows'?ink:design.accent,ink,left);
@@ -880,7 +889,7 @@ let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.362'),import('./social-team-workflow.js?v=0.8.62.362'),import('./social-publishing.js?v=0.8.62.362'),import('./team-of-week.js?v=0.8.62.362'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.362'),import('./player-of-week.js?v=0.8.62.362'),import('./social-sandbox.js?v=0.8.62.362'),import('./social-graphic-design.js?v=0.8.62.362'),import('./social-team-layout.js?v=0.8.62.362')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.362'),import('./social-team-workflow.js?v=0.8.62.362'),import('./social-publishing.js?v=0.8.62.363'),import('./team-of-week.js?v=0.8.62.362'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.362'),import('./player-of-week.js?v=0.8.62.362'),import('./social-sandbox.js?v=0.8.62.362'),import('./social-graphic-design.js?v=0.8.62.362'),import('./social-team-layout.js?v=0.8.62.362')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];

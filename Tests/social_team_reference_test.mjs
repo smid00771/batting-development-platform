@@ -43,7 +43,7 @@ function renderHarness({portrait=true,layout='portrait',transparent=true,frame='
  });
  vm.runInContext(part('function socialCards(','function socialSurname(')+part('function socialSurname(','function socialPhotoId(')+part('function socialText(','async function socialPaintAll(')+socialSource.functionSource(app,'socialCaption'),context);
  context.seFormatLabel=()=> 'Long form';
- const original=context.socialText;context.socialText=(ctx,text,x,y,width,size,...rest)=>{const actual=original(ctx,text,x,y,width,size,...rest);texts.push({text,x,y,width,size:actual,pixels:Math.min(width,ctx.measureText(text).width)});return actual;};
+ const original=context.socialText;context.socialText=(ctx,text,x,y,width,size,...rest)=>{const actual=original(ctx,text,x,y,width,size,...rest);texts.push({text,x,y,width,size:actual,pixels:ctx.measureText(text).width});return actual;};
  const canvas=createCanvas(1080,1350);canvas.dataset={};return {context,s,texts,markers,canvas};
 }
 test('the actual canvas has the reference hierarchy, compact match details, readable names and adjacent player marker',async()=>{
@@ -84,14 +84,26 @@ test('both bracket partners use compact display names while the published snapsh
  assert.match(h.context.socialCaption(h.s,source.f),/Arun Kumar \(C\) \(W1\) \/ Alex Smith \(C\) \(W2\)/);assert.deepEqual(source,before);
 });
 test('several bracket pairs have paired names, aligned week labels and no clipped final player',async()=>{
- for(const count of [1,3,5,11])for(const layout of ['portrait','portrait_left','list']){
+ for(const count of [1,2,3,5,11])for(const layout of ['portrait','portrait_left','list']){
   const h=renderHarness({layout}),source=bracketed(count);await h.context.socialRender(h.s,source,h.canvas);
   const names=h.texts.filter(r=>source.f.published.players.some(p=>r.text.startsWith(p.name.toUpperCase()))),tags=h.texts.filter(r=>/^W[12]$/.test(r.text));
   assert.equal(names.length,11+count);assert.equal(tags.length,count*2);assert.equal(new Set(tags.map(r=>r.x)).size,1);
+  assert.equal(new Set(names.map(r=>r.size)).size,1,'Every player uses the same font size, including bracket partners');
+  assert.ok(names.every(r=>r.pixels<=r.width),'Complete names must fit without individual shrinking or horizontal compression');
   assert.ok(names.every(r=>r.y<=1315&&r.x+r.pixels<=1016));assert.ok(names.every((r,i)=>!i||r.y-r.size>names[i-1].y),'Rows cannot overlap');
   if(count<=3)assert.ok(names.every(r=>r.size>=34),'Typical bracketed teams retain readable lettering');
   assert.equal(h.canvas.dataset.bracketPairs,String(count));assert.doesNotMatch(h.texts.find(r=>r.text==='FIRST GRADE').text,/DAY/);
   if(process.env.TEAM_REFERENCE_PREVIEW_DIR&&layout==='portrait')fs.writeFileSync(path.join(process.env.TEAM_REFERENCE_PREVIEW_DIR,'team-'+count+'-brackets.png'),h.canvas.toBuffer('image/png'));
+ }
+});
+test('one long name scales the whole roster uniformly while keeping the saved heading',async()=>{
+ for(const font of ['bold','clean','classic'])for(const count of [0,2,3]){
+  const baseline=renderHarness();baseline.s.design.font=font;await baseline.context.socialRender(baseline.s,bracketed(count),baseline.canvas);
+  const h=renderHarness(),source=bracketed(count);h.s.design.font=font;source.f.published.players.at(-1).name='Alexandria Montgomery-Wetherington';const before=structuredClone(source);
+  await h.context.socialRender(h.s,source,h.canvas);
+  const names=h.texts.filter(r=>source.f.published.players.some(p=>r.text.startsWith(p.name.toUpperCase())));
+  assert.equal(names.length,11+count);assert.equal(new Set(names.map(r=>r.size)).size,1);assert.ok(names.every(r=>r.pixels<=r.width&&r.y<=1315));
+  assert.deepEqual(source,before);assert.deepEqual(h.texts.find(r=>r.text==='FIRST GRADE'),baseline.texts.find(r=>r.text==='FIRST GRADE'));
  }
 });
 test('each club keeps its own typography and saved heading size with a missing, transparent or ordinary photo',async()=>{

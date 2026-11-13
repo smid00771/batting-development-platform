@@ -231,10 +231,10 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
    if(!demo&&(!p.checkedAt||Date.now()-p.checkedAt>60000))await load(s,false,true);
    const checks=fixtures.map(f=>({id:f.id,artwork_key:f.artwork_key}));
    if(!demo)await h.artwork(s,'validate_export',{fixtures:checks});
-   if(p.review?.state==='draft'&&p.review.renderer!=='social-awards.178'&&p.review.previewVersion==='0.8.62.362'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){p.review.caption=teamCaption(s);p.returnView=null;s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
+   if(p.review?.state==='draft'&&p.review.renderer!=='social-awards.178'&&p.review.previewVersion==='0.8.62.363'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){p.review.caption=teamCaption(s);p.returnView=null;s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
    const caption=teamCaption(s);
    if(p.review)for(const u of p.review.urls||[])URL.revokeObjectURL(u);
-   r={id:crypto.randomUUID(),renderer:'0.8.62.143',previewVersion:'0.8.62.362',fixtures:checks,images:[],blobs:[],urls:[],caption,selectionDate:s.date,targets:targets(p),state:'draft',destinations:[],uploaded:false};
+   r={id:crypto.randomUUID(),renderer:'0.8.62.143',previewVersion:'0.8.62.363',fixtures:checks,images:[],blobs:[],urls:[],caption,selectionDate:s.date,targets:targets(p),state:'draft',destinations:[],uploaded:false};
    for(let i=0;i<cards.length;i++){
     if(!h.here(s))return;const card=cards[i],canvas=document.createElement('canvas'),result=await h.renderImage(s,card,canvas);if(result?.invalid)throw Error('A featured player changed. Refresh and review again.');
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));if(!blob)throw Error('An image could not be prepared. Try again.');
