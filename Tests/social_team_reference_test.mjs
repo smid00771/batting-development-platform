@@ -89,6 +89,7 @@ test('several bracket pairs have paired names, aligned week labels and no clippe
   const names=h.texts.filter(r=>source.f.published.players.some(p=>r.text.startsWith(p.name.toUpperCase()))),tags=h.texts.filter(r=>/^W[12]$/.test(r.text));
   assert.equal(names.length,11+count);assert.equal(tags.length,count*2);assert.equal(new Set(tags.map(r=>r.x)).size,1);
   assert.equal(new Set(names.map(r=>r.size)).size,1,'Every player uses the same font size, including bracket partners');
+  assert.equal(new Set(names.map(r=>r.x)).size,1,'All player names share the same left edge, including bracket partners');
   assert.ok(names.every(r=>r.pixels<=r.width),'Complete names must fit without individual shrinking or horizontal compression');
   assert.ok(names.every(r=>r.y<=1315&&r.x+r.pixels<=1016));assert.ok(names.every((r,i)=>!i||r.y-r.size>names[i-1].y),'Rows cannot overlap');
   if(count<=3)assert.ok(names.every(r=>r.size>=34),'Typical bracketed teams retain readable lettering');

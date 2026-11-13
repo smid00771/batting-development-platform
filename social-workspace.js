@@ -205,7 +205,7 @@ async function socialRender(s,card,canvas){
  const preferredSize=design.font==='bold'?58:42,heightFit=Math.min(1,(bottom-baseY)/Math.max(rows.at(-1)?.offset||0,1));
  ctx.font=`700 ${preferredSize}px ${ctx.socialFont}`;let nameSize=preferredSize*heightFit;
  for(const row of rows){
-  row.name=(row.person.name+row.person.roles).toUpperCase();row.x=listX+(row.group.bracket?22:0);
+  row.name=(row.person.name+row.person.roles).toUpperCase();row.x=listX;
   const markerSpace=showPortrait&&!left&&row.person.id===featured.id?(design.marker==='name'?80:design.marker==='badge'?52:38):0;
   row.width=listWidth-(row.group.bracket?84:0)-markerSpace;
   nameSize=Math.min(nameSize,preferredSize*(row.width-.5)/Math.max(1,ctx.measureText(row.name).width));
@@ -219,8 +219,8 @@ async function socialRender(s,card,canvas){
  else{ctx.save();if(integrated&&protection.alpha){ctx.shadowColor=protection.shade===0?'#000000CC':'#FFFFFFCC';ctx.shadowBlur=4;ctx.shadowOffsetY=1.5;}for(const row of rows){
   const p=row.person,marked=!!portrait&&p.id===featured.id,actual=socialText(ctx,row.name,row.x,row.y,row.width,row.font,'700',row.font),end=row.x+ctx.measureText(row.name).width;
   if(p.tag)socialText(ctx,p.tag,listX+listWidth-48,row.y,48,Math.max(20,row.font*.70),'700');
-  if(row.group.bracket&&row.index===0&&row.group.members.length>1){const last=rows.find(other=>other.group===row.group&&other.index===row.group.members.length-1);ctx.save();ctx.strokeStyle=ink;ctx.globalAlpha=.6;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(listX+12,row.y-row.font*.72);ctx.lineTo(listX+3,row.y-row.font*.72);ctx.lineTo(listX+3,last.y-3);ctx.lineTo(listX+12,last.y-3);ctx.stroke();ctx.restore();}
-  if(marked)socialMarker(ctx,design.marker,left?listX-28:end+30,row.y-actual*.30,design.marker==='arrows'?ink:design.accent,ink,left);
+  if(row.group.bracket&&row.index===0&&row.group.members.length>1){const last=rows.find(other=>other.group===row.group&&other.index===row.group.members.length-1);ctx.save();ctx.strokeStyle=ink;ctx.globalAlpha=.6;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(listX-10,row.y-row.font*.72);ctx.lineTo(listX-19,row.y-row.font*.72);ctx.lineTo(listX-19,last.y-3);ctx.lineTo(listX-10,last.y-3);ctx.stroke();ctx.restore();}
+  if(marked)socialMarker(ctx,design.marker,left?listX-(row.group.bracket?56:28):end+30,row.y-actual*.30,design.marker==='arrows'?ink:design.accent,ink,left);
  }ctx.restore();}
  if(portrait&&!d.cancelled&&design.marker==='badge')socialMarker(ctx,'badge',left?55:1025,photoY+40,design.accent,ink);
  if(footer){checkGraphicLabel(canvas,ctx,{source:footer,label:footer,width:975,size:21});ctx.fillStyle=design.primary;ctx.fillRect(0,1300,1080,50);ctx.fillStyle=ink;socialText(ctx,footer,52,1331,975,21,'500');}
@@ -889,7 +889,7 @@ let socialFeaturesTask=null;
 async function initialiseSocialFeatures(){
  if(socialPublishing)return;
  if(!socialFeaturesTask)socialFeaturesTask=(async()=>{
-  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.362'),import('./social-team-workflow.js?v=0.8.62.362'),import('./social-publishing.js?v=0.8.62.363'),import('./team-of-week.js?v=0.8.62.362'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.362'),import('./player-of-week.js?v=0.8.62.362'),import('./social-sandbox.js?v=0.8.62.362'),import('./social-graphic-design.js?v=0.8.62.362'),import('./social-team-layout.js?v=0.8.62.362')]);
+  const modules=await Promise.all([import('./social-award-scopes.js?v=0.8.62.288'),import('./social-awards.js?v=0.8.62.362'),import('./social-team-workflow.js?v=0.8.62.362'),import('./social-publishing.js?v=0.8.62.364'),import('./team-of-week.js?v=0.8.62.362'),import('./shared-match-results.js?v=0.8.62.288'),import('./social-award-labels.js?v=0.8.62.362'),import('./player-of-week.js?v=0.8.62.362'),import('./social-sandbox.js?v=0.8.62.362'),import('./social-graphic-design.js?v=0.8.62.362'),import('./social-team-layout.js?v=0.8.62.362')]);
   const {createSocialAwardScopes}=modules[0];
   const {createSocialAwards}=modules[1];
   const {createTeamSocialWorkflow}=modules[2];

@@ -3803,7 +3803,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.363.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.364.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -10637,10 +10637,10 @@ ${pending?'<p>Save not confirmed. Retry uses the same request.</p><button class=
    if(!demo&&(!p.checkedAt||Date.now()-p.checkedAt>60000))await load(s,false,true);
    const checks=fixtures.map(f=>({id:f.id,artwork_key:f.artwork_key}));
    if(!demo)await h.artwork(s,'validate_export',{fixtures:checks});
-   if(p.review?.state==='draft'&&p.review.renderer!=='social-awards.178'&&p.review.previewVersion==='0.8.62.363'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){p.review.caption=teamCaption(s);p.returnView=null;s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
+   if(p.review?.state==='draft'&&p.review.renderer!=='social-awards.178'&&p.review.previewVersion==='0.8.62.364'&&JSON.stringify(p.review.fixtures)===JSON.stringify(checks)&&p.review.uploaded){p.review.caption=teamCaption(s);p.returnView=null;s.view='publish_review';h.message(s,'Ready to review. Nothing has been posted.');return;}
    const caption=teamCaption(s);
    if(p.review)for(const u of p.review.urls||[])URL.revokeObjectURL(u);
-   r={id:crypto.randomUUID(),renderer:'0.8.62.143',previewVersion:'0.8.62.363',fixtures:checks,images:[],blobs:[],urls:[],caption,selectionDate:s.date,targets:targets(p),state:'draft',destinations:[],uploaded:false};
+   r={id:crypto.randomUUID(),renderer:'0.8.62.143',previewVersion:'0.8.62.364',fixtures:checks,images:[],blobs:[],urls:[],caption,selectionDate:s.date,targets:targets(p),state:'draft',destinations:[],uploaded:false};
    for(let i=0;i<cards.length;i++){
     if(!h.here(s))return;const card=cards[i],canvas=document.createElement('canvas'),result=await h.renderImage(s,card,canvas);if(result?.invalid)throw Error('A featured player changed. Refresh and review again.');
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));if(!blob)throw Error('An image could not be prepared. Try again.');
@@ -11894,7 +11894,7 @@ async function socialRender(s,card,canvas){
  const preferredSize=design.font==='bold'?58:42,heightFit=Math.min(1,(bottom-baseY)/Math.max(rows.at(-1)?.offset||0,1));
  ctx.font=`700 ${preferredSize}px ${ctx.socialFont}`;let nameSize=preferredSize*heightFit;
  for(const row of rows){
-  row.name=(row.person.name+row.person.roles).toUpperCase();row.x=listX+(row.group.bracket?22:0);
+  row.name=(row.person.name+row.person.roles).toUpperCase();row.x=listX;
   const markerSpace=showPortrait&&!left&&row.person.id===featured.id?(design.marker==='name'?80:design.marker==='badge'?52:38):0;
   row.width=listWidth-(row.group.bracket?84:0)-markerSpace;
   nameSize=Math.min(nameSize,preferredSize*(row.width-.5)/Math.max(1,ctx.measureText(row.name).width));
@@ -11908,8 +11908,8 @@ async function socialRender(s,card,canvas){
  else{ctx.save();if(integrated&&protection.alpha){ctx.shadowColor=protection.shade===0?'#000000CC':'#FFFFFFCC';ctx.shadowBlur=4;ctx.shadowOffsetY=1.5;}for(const row of rows){
   const p=row.person,marked=!!portrait&&p.id===featured.id,actual=socialText(ctx,row.name,row.x,row.y,row.width,row.font,'700',row.font),end=row.x+ctx.measureText(row.name).width;
   if(p.tag)socialText(ctx,p.tag,listX+listWidth-48,row.y,48,Math.max(20,row.font*.70),'700');
-  if(row.group.bracket&&row.index===0&&row.group.members.length>1){const last=rows.find(other=>other.group===row.group&&other.index===row.group.members.length-1);ctx.save();ctx.strokeStyle=ink;ctx.globalAlpha=.6;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(listX+12,row.y-row.font*.72);ctx.lineTo(listX+3,row.y-row.font*.72);ctx.lineTo(listX+3,last.y-3);ctx.lineTo(listX+12,last.y-3);ctx.stroke();ctx.restore();}
-  if(marked)socialMarker(ctx,design.marker,left?listX-28:end+30,row.y-actual*.30,design.marker==='arrows'?ink:design.accent,ink,left);
+  if(row.group.bracket&&row.index===0&&row.group.members.length>1){const last=rows.find(other=>other.group===row.group&&other.index===row.group.members.length-1);ctx.save();ctx.strokeStyle=ink;ctx.globalAlpha=.6;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(listX-10,row.y-row.font*.72);ctx.lineTo(listX-19,row.y-row.font*.72);ctx.lineTo(listX-19,last.y-3);ctx.lineTo(listX-10,last.y-3);ctx.stroke();ctx.restore();}
+  if(marked)socialMarker(ctx,design.marker,left?listX-(row.group.bracket?56:28):end+30,row.y-actual*.30,design.marker==='arrows'?ink:design.accent,ink,left);
  }ctx.restore();}
  if(portrait&&!d.cancelled&&design.marker==='badge')socialMarker(ctx,'badge',left?55:1025,photoY+40,design.accent,ink);
  if(footer){checkGraphicLabel(canvas,ctx,{source:footer,label:footer,width:975,size:21});ctx.fillStyle=design.primary;ctx.fillRect(0,1300,1080,50);ctx.fillStyle=ink;socialText(ctx,footer,52,1331,975,21,'500');}
@@ -14319,7 +14319,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.363';
+const APP_UI_VERSION='0.8.62.364';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
