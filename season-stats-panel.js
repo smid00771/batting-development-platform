@@ -1,6 +1,8 @@
-import {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat, statsMatchesView, defaultStatsView} from './season-stats.js?v=0.8.62.365';
-import {buildSelectionEvidence} from './selection-evidence.js?v=0.8.62.365';
-import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.365';
+import {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat, statsMatchesView, defaultStatsView, statsViews, statsViewSettings, statsCompetitions, statsCombineCompetition} from './season-stats.js?v=0.8.62.366';
+import {buildSelectionEvidence} from './selection-evidence.js?v=0.8.62.366';
+import {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks} from './selection-evidence-ui.js?v=0.8.62.366';
+
+import {renderStatsSetup,bindStatsSetup,statsSetupChanged} from './season-stats-settings.js?v=0.8.62.366';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
@@ -18,7 +20,7 @@ function renderStatsIssues(issues) {
 }
 const css = `<style>
 .season-stats{--ss-line:var(--line,#dbe3e0);--ss-muted:var(--muted,#52627a);--ss-accent:var(--navy,#173d32);margin:8px 0;padding:16px;border:1px solid var(--ss-line);border-radius:10px;background:var(--mirelion-surface,#fff);color:var(--ink,#24344c)}
-.season-stats *{box-sizing:border-box}.season-stats h2{margin:0}.ss-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.season-stats .btn{min-height:44px}.ss-season{font-size:12px;color:var(--ss-muted);margin:0 0 8px}.ss-season summary{cursor:pointer;min-height:32px;align-content:center}.ss-season form{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:8px 0}.ss-season form label{display:grid;gap:4px}.ss-season input{min-height:44px}
+.season-stats *{box-sizing:border-box}.season-stats h2{margin:0}.ss-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.season-stats .btn{min-height:44px}.ss-season{font-size:12px;color:var(--ss-muted);margin:0 0 8px}.ss-season summary{cursor:pointer;min-height:32px;align-content:center}.ss-season form{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:8px 0}.ss-season form label{display:grid;gap:4px}.ss-season input{min-height:44px}.ss-season form[data-stats-view-setup]{display:block}.ss-setup-row{display:flex;gap:10px;flex-wrap:wrap;border:0;border-top:1px solid var(--ss-line);padding:8px 0;margin:8px 0;min-width:0}.ss-setup-row legend{font-weight:650;padding:0}.ss-setup-row label{flex:1 1 220px;min-width:0}.ss-setup-row select{width:100%;min-width:0;min-height:44px;font-size:16px}.ss-setup-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ss-modes{display:flex;align-items:center;gap:4px;padding:4px 0;border-bottom:1px solid var(--ss-line)}.season-stats .ss-modes .btn{border-color:transparent;background:transparent;border-radius:6px 6px 0 0;padding:9px 16px;color:var(--ss-muted)}.season-stats .ss-modes .btn[aria-pressed=true],#app .season-stats .ss-modes .btn[aria-pressed=true]{background:var(--soft,#edf1e9);color:var(--ss-accent);border-color:transparent;box-shadow:inset 0 -3px var(--ss-accent)}
 .ss-filters{display:grid;grid-template-columns:minmax(120px,1fr) minmax(120px,1fr) minmax(180px,1.25fr);align-items:end;gap:12px;margin:12px 0 2px}.ss-filters label{display:grid;gap:4px;min-width:0;font-size:12px;font-weight:600;color:var(--ss-muted)}.ss-filters input,.ss-filters select{width:100%;min-width:0;min-height:44px;margin:0;border:1px solid var(--ss-line);border-radius:7px;padding:8px 10px;font:inherit;font-size:15px;color:var(--ink,#24344c);background:var(--mirelion-surface,#fff)}.ss-search{grid-column:-2/-1}.ss-search input{font-weight:400}
 .ss-context{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;margin:2px 0 8px}.ss-caption{font-size:12px;color:var(--ss-muted);margin:6px 0}.ss-context .ss-caption{margin:0}.ss-refresh{margin-left:auto}.season-stats .ss-refresh{border:0;background:transparent;color:var(--ss-muted);font-size:12px;padding:6px}.ss-status:empty{display:none}.ss-issues{font-size:12px;margin:0;color:#79531f}.ss-issues.ss-source-notes{color:var(--ss-muted)}.ss-issues>summary{cursor:pointer;min-height:36px;align-content:center;font-weight:600}.ss-issues[open]{flex-basis:100%;order:2;padding:4px 10px;border:1px solid #e7c684;border-radius:6px;background:#fff8e8}.ss-source-notes[open]{border-color:var(--ss-line);background:var(--soft,#f4f5f2)}.ss-issue{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #e7d5b3}.ss-issue small{display:block}
@@ -76,7 +78,7 @@ export function renderStatsRows(rows, mode = 'batting', evidence = null, openabl
     const figures = batting
       ? figure('average','Average',rate(incomplete?null:row.average),{primary:true,note:averageNote}) + figure('strike_rate','SR',rate(incomplete?null:row.strike_rate),{note:incomplete?'Figures incomplete':row.balls===null?'Balls faced unavailable':'Strike rate: runs per 100 balls'}) + figure('runs','Runs',numeric(row.runs)) + figure('innings','Inns',numeric(row.innings)) + figure('not_outs','Not out',numeric(row.not_outs))
       : figure('wickets','Wickets',numeric(row.wickets),{primary:true}) + figure('bowling_average','Average',rate(incomplete?null:row.bowling_average)) + figure('economy','Econ',rate(incomplete?null:row.economy)) + figure('bowling_balls','Overs',statsOvers(row.bowling_balls)??'—') + figure('bowling_innings','Inns',numeric(row.bowling_innings));
-    return `<details class="ss-row" data-stats-player="${escape(row.id)}"><summary><span class="ss-name">${playerName(row.roster_id,row.name,openable)}<small>${escape(row.grade)}${row.competition ? ' · ' + escape(row.competition) : ' · Competition unknown · ' + escape(STATS_FORMATS[row.format] || row.format)}${incomplete ? '<span class="ss-incomplete"> · Figures incomplete</span>' : ''}</small></span><span class="ss-figures">${figures}</span><span class="ss-chevron" aria-hidden="true">⌄</span><span class="ss-sr-only">Match history and form guide</span></summary><div class="ss-detail"><div class="ss-detail-top"><dl class="ss-metrics">${metrics.map(([label,value]) => metric(label, value)).join('')}</dl>${renderEvidenceBadges(item,evidenceKey)}</div>${averageNote ? `<p class="ss-caption">${escape(averageNote)}${averageNote==='No dismissals yet'?'; average is unavailable.':''}</p>` : ''}<h3 class="ss-history-title">Match history</h3>${row.history.map(match => {
+    return `<details class="ss-row" data-stats-player="${escape(row.id)}"><summary><span class="ss-name">${playerName(row.roster_id,row.name,openable)}<small>${escape(row.grade)}${row.competition ? ' · ' + escape(row.competition) + (row.format!=='competition'?' · '+escape(STATS_FORMATS[row.format] || row.format):'') : ' · Competition unknown · ' + escape(STATS_FORMATS[row.format] || row.format)}${incomplete ? '<span class="ss-incomplete"> · Figures incomplete</span>' : ''}</small></span><span class="ss-figures">${figures}</span><span class="ss-chevron" aria-hidden="true">⌄</span><span class="ss-sr-only">Match history and form guide</span></summary><div class="ss-detail"><div class="ss-detail-top"><dl class="ss-metrics">${metrics.map(([label,value]) => metric(label, value)).join('')}</dl>${renderEvidenceBadges(item,evidenceKey)}</div>${averageNote ? `<p class="ss-caption">${escape(averageNote)}${averageNote==='No dismissals yet'?'; average is unavailable.':''}</p>` : ''}<h3 class="ss-history-title">Match history</h3>${row.history.map(match => {
       const scores = batting ? match.batting.map(x => x.dnb ? 'DNB' : x.runs + (x.not_out ? '*' : '') + (x.balls === null ? '' : ' (' + x.balls + ')')) : match.bowling.map(x => x.wickets + '/' + x.runs + (x.balls === null ? '' : ' · ' + statsOvers(x.balls) + ' ov'));
       if (batting ? match.batting_incomplete : match.bowling_incomplete) scores.push('Figures incomplete');
       const score = scores.join(' & ') || (batting ? match.batting_available ? 'DNB' : 'Batting unavailable' : match.bowling_available ? 'Did not bowl' : 'Bowling unavailable');
@@ -100,15 +102,18 @@ export function createSeasonStatsPanel(h) {
   function canLeave() {
     const s = active;
     if (!s || !here(s)) return true;
+    if (s.pendingViews || s.busy && s.savingViews) {h.alert?.('Confirm the stats setup save before leaving.'); return false;}
+    if (statsSetupChanged(s.context,s.state) && !h.confirm?.('Leave these unsaved stats settings?')) return false;
     if (s.busy && s.savingSeason) {h.alert?.('Please wait for the season dates to save.'); return false;}
     const draft = s.state.seasonDraft;
     if (draft && (draft.start !== s.context?.season.start || draft.end !== s.context?.season.end) && !h.confirm?.('Leave these unsaved season dates?')) return false;
     delete s.state.seasonDraft;
+    delete s.state.viewDraft;
     return true;
   }
   async function request(s, action = 'context', data = {}) {
     const result = await h.supabase.rpc('club_season_stats_api', {p_club_id:s.clubId, p_action:action, p_data:{...data,on_demand:true}});
-    if (result.error) throw Error(result.error.message);
+    if (result.error) throw Object.assign(Error(result.error.message),{confirmed:/^[A-Z0-9]{5}$/.test(result.error.code || '')});
     if (!Array.isArray(result.data?.cards) || !Array.isArray(result.data?.fixtures) || !result.data?.season?.start) throw Error('Season stats could not be loaded.');
     return result.data;
   }
@@ -116,25 +121,26 @@ export function createSeasonStatsPanel(h) {
     if (!here(s)) return;
     clearEvidenceLinks(s.host);
     const state = s.state, data = s.context;
+    if (data && !statsViews(data,state.competition).includes(state.format)) state.format=defaultStatsView(data,s.preferredFormat,state.competition);
     const open = new Set([...s.host.querySelectorAll('[data-stats-player][open]')].map(el => el.dataset.statsPlayer));
     const disabled = s.busy ? 'disabled' : '';
     const teamDate = team => team.days?.[0]?.date || '';
     const available = team => !team.cancelled && (!data || !teamDate(team) || teamDate(team) >= data.season.start && teamDate(team) <= data.season.end);
     const sourceTeams = resolveSelectionStatsTeams(s.teams || data?.fixtures || [],data?.season,[...(data?.fixtures || []),...(s.teams || [])]);
-    const allTeams = sourceTeams.filter(available).map(t => ({...t,format:statsFormat(t.format)}));
-    const viewTeam = team => state.format === 'competition' && team.competition && statsMatchesView(team.format, 'competition') ? {...team,format:'competition'} : team;
+    const allTeams = sourceTeams.filter(t=>available(t) && (state.competition == null || String(t.competition || '').trim()===state.competition)).map(t => ({...t,format:statsFormat(t.format)}));
+    const viewTeam = team => state.format === 'competition' && statsCombineCompetition(data,team.competition) && statsMatchesView(team.format, 'competition') ? {...team,format:'competition'} : team;
     const latestPublished = new Map();
     for (const fixture of sourceTeams) {
       if (!fixture.published?.details || !Array.isArray(fixture.published.slots)) continue;
       const team = {...fixture, ...fixture.published.details, slots:fixture.published.slots, level:fixture.published.level ?? fixture.level, lineupPublished:true};
       team.format = statsFormat(team.format);
-      if (!available(team)) continue;
+      if (!available(team) || state.competition != null && String(team.competition || '').trim()!==state.competition) continue;
       const projected = viewTeam(team), key = JSON.stringify([team.competition, team.grade, projected.format]), previous = latestPublished.get(key);
       if (!previous || teamDate(team) > teamDate(previous)) latestPublished.set(key, projected);
     }
     const publishedTeams = [...latestPublished.values()];
     const formatTeams = allTeams.filter(t => state.format && statsMatchesView(t.format, state.format)).map(viewTeam);
-    const formatPublished = publishedTeams.filter(t => t.format === state.format);
+    const formatPublished = publishedTeams.filter(t => state.format && (t.format === state.format || statsMatchesView(t.format,state.format)));
     const dates = [...new Set(formatTeams.map(teamDate).filter(Boolean))].sort().reverse();
     const populated = dates.filter(day => formatTeams.some(t => teamDate(t) === day && t.slots?.some(slot => slot.d1 || slot.d2)));
     const comparisonDate = state.compareDate === 'season' || !s.teams ? 'season' : dates.includes(state.compareDate) ? state.compareDate
@@ -143,43 +149,48 @@ export function createSeasonStatsPanel(h) {
       : populated.find(day => day <= (s.boardDate || data?.today || '9999-12-31')) || populated[0]
       || (dates.includes(s.boardDate) ? s.boardDate : dates[0]);
     const seasonTeams = new Map();
-    [...formatTeams].sort((a,b)=>teamDate(a).localeCompare(teamDate(b))).concat(formatPublished).forEach(t=>seasonTeams.set(JSON.stringify([t.competition,t.grade]),t));
+    [...formatTeams].sort((a,b)=>teamDate(a).localeCompare(teamDate(b))).concat(formatPublished).forEach(t=>seasonTeams.set(JSON.stringify([t.competition,t.grade,t.format]),t));
     const teams = (comparisonDate === 'season' ? [...seasonTeams.values()] : comparisonDate === 'published' ? formatPublished : formatTeams.filter(t => !comparisonDate || teamDate(t) === comparisonDate)).sort((a,b) => (a.level ?? 999) - (b.level ?? 999) || a.grade.localeCompare(b.grade, undefined, {numeric:true}));
     const showCompetition = new Set(teams.map(t => t.competition)).size > 1;
-    const teamLabel = team => escape(team.grade) + (showCompetition ? ' · ' + escape(team.competition || 'Competition unknown') : '');
+    const teamLabel = team => escape(team.grade) + (showCompetition ? ' · ' + escape(team.competition || 'Competition unknown') : '') + (state.format==='competition' && team.format!=='competition'?' · '+escape(STATS_FORMATS[team.format] || team.format):'');
     const previous = id => [...allTeams,...publishedTeams].find(t => t.id === id);
     const sameGrade = (team, old) => old && team.grade === old.grade && team.competition === old.competition;
     const primary = teams.find(t => t.id === state.firstTeam) || teams.find(t => sameGrade(t,previous(state.firstTeam))) || teams[0];
-    const lower = primary ? teams.filter(t => t.id !== primary.id && t.competition === primary.competition) : [];
+    const lower = primary ? teams.filter(t => t.id !== primary.id && t.competition === primary.competition && t.format === primary.format) : [];
     const secondary = lower.find(t => t.id === state.secondTeam) || lower.find(t => sameGrade(t,previous(state.secondTeam))) || lower.find(t => t.level > primary?.level) || lower[0];
     if (primary) state.firstTeam = primary.id;
     if (secondary) state.secondTeam = secondary.id;
     const canCompare = publishedTeams.some(t => publishedTeams.some(other => other.grade !== t.grade && other.competition === t.competition && other.format === t.format)) || allTeams.some(t => allTeams.some(other => other.grade !== t.grade && (!s.teams || teamDate(other) === teamDate(t)) && other.competition === t.competition && viewTeam(other).format === viewTeam(t).format));
     if (!canCompare) state.compare = false;
-    const allTotals = data ? buildSeasonStats(data, state.format === 'competition' ? {format:'competition'} : {}) : null;
+    const allTotals = data ? buildSeasonStats(data, {competition:state.competition,...(state.format === 'competition' ? {format:'competition'} : {})}) : null;
     if (allTotals && state.grade && !allTotals.groups.some(g=>g.id===state.grade)) {
       // Retain the selected grade when an old blank label resolves after sync.
       let grade;try { grade=JSON.parse(state.grade)?.[1]; } catch {}
       const matches=allTotals.groups.filter(g=>g.grade===grade);
       state.grade=matches.length===1?matches[0].id:'';
     }
-    const knownFormats = ['competition','limited_overs','long_form','t20'];
+    const knownFormats = statsViews(data || {},state.competition).filter(f=>f!=='unknown');
     const formats = [...knownFormats,...(allTotals?.formats || []).filter(f => !knownFormats.includes(f))];
     const viewLabel = f => f === 'competition' ? 'Competition' : ['limited_overs','long_form'].includes(f) ? STATS_FORMATS[f] + ' only' : STATS_FORMATS[f] || f;
+    const competitionNames=data?statsCompetitions(data):[];
+    const competitionPicker=competitionNames.length>1?`<label>Competition<select data-stats-competition ${disabled}><option value="">All competitions</option>${competitionNames.map(name=>`<option value="${escape(JSON.stringify(name))}" ${state.competition===name?'selected':''}>${escape(name || 'Competition unknown')}</option>`).join('')}</select></label>`:'';
     const formatPicker = `<label class="ss-format">Stats view<select data-stats-filter="format" ${disabled}>${formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(viewLabel(f))}</option>`).join('')}</select></label>`;
     const totals = data ? buildSeasonStats(data, state.compare ? {...state, groups:[primary, secondary].filter(Boolean).map(team => JSON.stringify([String(team.competition || '').trim(), String(team.grade || '').trim()]))} : state) : null;
     s.evidence = allTotals ? buildSelectionEvidence(allTotals,state.compare?[primary,secondary].filter(Boolean):[],s.roster,{seasonPlayers:state.compare && comparisonDate === 'season'}) : null;
     s.host.innerHTML = evidenceStyles + css + `<section class="season-stats" aria-label="Season stats"><div class="ss-top"><h2 tabindex="-1">Season stats</h2><button type="button" class="btn ghost" data-stats-close>Close stats</button></div>${data ? `
-      ${data.can_set_season ? `<details class="ss-season" ${state.seasonDraft ? 'open' : ''}><summary>${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</summary><form data-stats-season><label>Starts<input type="date" name="start" value="${escape(state.seasonDraft?.start ?? data.season.start)}" required ${disabled}></label><label>Ends<input type="date" name="end" value="${escape(state.seasonDraft?.end ?? data.season.end)}" required ${disabled}></label><button type="submit" class="btn secondary" ${disabled}>${s.savingSeason ? 'Saving…' : 'Save season dates'}</button></form></details>` : `<p class="ss-caption">${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</p>`}
+      ${data.can_set_season ? `<details class="ss-season" ${state.seasonDraft || state.viewDraft || state.setupOpen ? 'open' : ''} data-stats-setup><summary>${data.can_set_stats_views?'Stats setup · ':''}${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</summary><form data-stats-season><label>Starts<input type="date" name="start" value="${escape(state.seasonDraft?.start ?? data.season.start)}" required ${disabled}></label><label>Ends<input type="date" name="end" value="${escape(state.seasonDraft?.end ?? data.season.end)}" required ${disabled}></label><button type="submit" class="btn secondary" ${disabled}>${s.savingSeason ? 'Saving…' : 'Save season dates'}</button></form>${renderStatsSetup(data,state,s.busy ? 'disabled' : '',!!s.pendingViews)}</details>` : `<p class="ss-caption">${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</p>`}
 
       <div class="ss-modes" aria-label="Statistics type"><button class="btn ghost" type="button" data-stats-mode="batting" aria-pressed="${state.mode !== 'bowling' && !state.compare}">Batting</button><button class="btn ghost" type="button" data-stats-mode="bowling" aria-pressed="${state.mode === 'bowling' && !state.compare}">Bowling</button>${canCompare ? `<button class="btn ghost" type="button" data-stats-compare aria-pressed="${!!state.compare}">Compare grades</button>` : ''}</div>
-      ${!state.compare ? `<div class="ss-filters">${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${formatPicker}<label class="ss-search">Find player<input type="search" data-stats-search placeholder="Search players…" autocomplete="off" value="${escape(state.search || '')}"></label></div>` : ''}
-      <div class="ss-context"><p class="ss-caption">${totals.included} completed ${totals.included === 1 ? 'scorecard' : 'scorecards'} · ${escape(STATS_FORMATS[state.format] || 'Current season')}${totals.playing ? ' · ' + totals.playing + ' in progress' : ''}</p>
+      ${!state.compare ? `<div class="ss-filters">${competitionPicker}${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${formatPicker}<label class="ss-search">Find player<input type="search" data-stats-search placeholder="Search players…" autocomplete="off" value="${escape(state.search || '')}"></label></div>` : ''}
+      <div class="ss-context"><p class="ss-caption">${totals.included} completed ${totals.included === 1 ? 'scorecard' : 'scorecards'} · ${escape(state.format==='competition' && totals.rows.some(r=>r.format!=='competition')?'Competition views':STATS_FORMATS[state.format] || 'Current season')}${totals.playing ? ' · ' + totals.playing + ' in progress' : ''}</p>
       ${renderStatsIssues(totals.issues)}<button class="btn ghost ss-refresh" type="button" data-stats-refresh ${disabled}>${s.busy ? 'Updating…' : 'Update totals'}</button></div>
-      ${state.compare ? `<div class="ss-compare-controls">${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Players<select data-stats-date><option value="season" ${comparisonDate === 'season' ? 'selected' : ''}>All season players</option>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${(s.teams ? dates : []).map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(allTotals, primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s), comparisonDate === 'season') : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
+      ${state.compare ? `<div class="ss-compare-controls">${competitionPicker}${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Players<select data-stats-date><option value="season" ${comparisonDate === 'season' ? 'selected' : ''}>All season players</option>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${(s.teams ? dates : []).map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(allTotals, primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s), comparisonDate === 'season') : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
     if (totals && !state.compare) renderRows(s, totals, open);
     bindPlayerLinks(s);
     if (s.evidence) bindEvidenceDetails(s.host,s.evidence,()=>here(s));
+    bindStatsSetup(s.host,data,state,()=>draw(s),()=>void saveViews(s),!!s.pendingViews);
+    const setup=s.host.querySelector('[data-stats-setup]');if(setup)setup.ontoggle=()=>{state.setupOpen=setup.open;};
+    s.host.querySelector('[data-stats-competition]')?.addEventListener('change',e=>{state.competition=e.target.value?JSON.parse(e.target.value):undefined;state.grade='';state.firstTeam='';state.secondTeam='';state.format=defaultStatsView(data,s.preferredFormat,state.competition);draw(s);h.navigate?.();});
     s.host.querySelector('[data-stats-close]').onclick = () => {if (canLeave()) h.close(s);};
     s.host.querySelector('[data-stats-refresh]')?.addEventListener('click', () => {if (canLeave()) void load(s);});
     s.host.querySelectorAll('[data-stats-filter]').forEach(el => el.onchange = () => {state[el.dataset.statsFilter] = el.value; draw(s); h.navigate?.();});
@@ -194,7 +205,7 @@ export function createSeasonStatsPanel(h) {
       const form = el.closest('form'); state.seasonDraft = {start:form.querySelector('[name=start]').value, end:form.querySelector('[name=end]').value};
     }));
     s.host.querySelector('[data-stats-season]')?.addEventListener('submit', e => {
-      e.preventDefault(); if (s.busy) return;
+      e.preventDefault(); if (s.busy || s.pendingViews) return;
       const form = e.currentTarget, start = form.elements.start.value, end = form.elements.end.value;
       if (end < start || (Date.parse(end) - Date.parse(start)) / 86400000 > 366) {s.message = 'Choose season dates in order, up to one year apart.'; s.error = true; draw(s); return;}
       void load(s, {start, end, expected_revision:data.season.revision});
@@ -216,16 +227,31 @@ export function createSeasonStatsPanel(h) {
     s.busy = true; s.stale = false; s.savingSeason = !!settings; s.error = false; s.message = settings ? 'Saving season dates…' : 'Loading latest saved scores…'; draw(s);
     try {
       const data = await request(s, settings ? 'set_season' : 'context', settings || {});
+      const names=statsCompetitions(data);if(s.state.competition == null && names.length===1 && names[0])s.state.competition=names[0];
       if (!here(s)) return;
       s.context = data; h.updated?.(s.scope,data);
       if (settings) delete s.state.seasonDraft;
-      if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = defaultStatsView(data, s.preferredFormat);
+      if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = defaultStatsView(data, s.preferredFormat,s.state.competition);
       s.message = settings ? 'Season dates saved.' : '';
     } catch (error) {if (here(s)) {s.error = true; s.message = error.message || 'Season stats could not be loaded.';}}
-    finally {s.busy = false; s.savingSeason = false; draw(s); if (s.stale && here(s) && !s.state.seasonDraft) void load(s);}
+    finally {s.busy = false; s.savingSeason = false; draw(s); if (s.stale && here(s) && !s.state.seasonDraft && !s.state.viewDraft && !s.pendingViews) void load(s);}
   }
-  return {canLeave, invalidate() {h.invalidateBoard?.(); if (active) {active.stale = true; if (here(active) && !active.busy && !active.state.seasonDraft) void load(active);}}, mount(host, options) {
-    if (active?.host === host && active.scope === options.scope) {Object.assign(active,options); draw(active); if (active.stale && !active.busy && !active.state.seasonDraft) void load(active); return active;}
+  async function saveViews(s) {
+    if(s.busy || !here(s) || !s.context?.can_set_stats_views)return;
+    if(!s.pendingViews && !statsSetupChanged(s.context,s.state)){s.message='Stats setup is already saved.';s.error=false;draw(s);return;}
+    s.pendingViews ||= {settings:structuredClone(s.state.viewDraft),expected_revision:s.context.stats_views?.revision || 0,request_id:globalThis.crypto.randomUUID()};
+    s.busy=true;s.savingViews=true;s.error=false;s.message='Saving stats setup…';draw(s);
+    try {
+      const data=await request(s,'set_views',s.pendingViews);
+      if(!here(s))return;
+      s.context=data;h.updated?.(s.scope,data);s.pendingViews=null;delete s.state.viewDraft;
+      s.state.format=defaultStatsView(data,s.preferredFormat,s.state.competition);s.message='Stats setup saved.';
+    } catch(error) {
+      if(here(s)){if(error.confirmed)s.pendingViews=null;s.error=true;s.message=error.confirmed ? error.message : 'Save not confirmed. Retry the same save to check it safely.';}
+    } finally {s.busy=false;s.savingViews=false;draw(s);}
+  }
+  return {canLeave, invalidate() {h.invalidateBoard?.(); if (active) {active.stale = true; if (here(active) && !active.busy && !active.state.seasonDraft && !active.state.viewDraft && !active.pendingViews) void load(active);}}, mount(host, options) {
+    if (active?.host === host && active.scope === options.scope) {Object.assign(active,options); draw(active); if (active.stale && !active.busy && !active.state.seasonDraft && !active.state.viewDraft && !active.pendingViews) void load(active); return active;}
     if (active) clearEvidenceLinks(active.host);
     const s = {...options, host, state:options.state || {}, context:null, busy:false, message:'', error:false}; active = s; void load(s); return s;
   }};

@@ -1,3 +1,4 @@
+import {DEFAULT_STATS_VIEWS,validateStatsViewSettings} from './season-stats.js?v=0.8.62.366';
 // Fictional local data only. Share the demo's saved scorecards with other features.
 export function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday, getBattingAccess = () => false) {
   const copy = value => structuredClone(value);
@@ -28,10 +29,20 @@ export function createSeasonStatsDemo(getState, getCards, getLinks, getMember, g
     if (!state || args.p_club_id !== getClub() || !member?.user_id) throw Error('Current club membership is required');
     const admin = member.permission_role === 'admin';
     if (!(state.access.status !== 'disabled' && (admin || member.permission_role === 'captain' || state.selectors.includes(member.user_id) || state.access.head_selector_id === member.user_id)) && !(getBattingAccess() && ['admin','head_coach','coach','captain'].includes(member.permission_role))) throw Error('Current club coaching, selection or captain access is required');
-    if (!['context','set_season'].includes(args.p_action || 'context')) throw Error('Unknown season stats action');
+    if (!['context','set_season','set_views'].includes(args.p_action || 'context')) throw Error('Unknown season stats action');
     if ((args.p_action||'context')==='context'&&args.p_data?.on_demand!==true) throw Error('Analysis runs on request. Use Show form indicators or Compare returning players to calculate once.');
     let year = Number(today.slice(0,4)); if (today.slice(5,7) < '07') year--;
     state.stats_season ||= {start:year + '-07-01', end:(year+1) + '-06-30', revision:0};
+    if(args.p_action==='set_views') {
+      if(!admin)throw Error('Club Admin can change stats setup');
+      const d=args.p_data,settings=validateStatsViewSettings(d.settings),saved=state.stats_views;
+      if(!/^[0-9a-f-]{36}$/i.test(d.request_id || ''))throw Error('A stats setup request ID is required');
+      if(saved?.last_request===d.request_id){if(saved.updated_by!==member.user_id||JSON.stringify(saved.settings)!==JSON.stringify(settings))throw Error('Stats setup request was reused with different settings');}
+      else {
+        if(d.expected_revision!==(saved?.revision || 0))throw Error('Stats setup changed. Update totals before saving again');
+        state.stats_views={settings:copy(settings),revision:(saved?.revision || 0)+1,last_request:d.request_id,updated_by:member.user_id};
+      }
+    }
     if (args.p_action === 'set_season') {
       if (!admin) throw Error('Club Admin can change season dates');
       const d = args.p_data;
@@ -50,6 +61,6 @@ export function createSeasonStatsDemo(getState, getCards, getLinks, getMember, g
     const identities = state.roster.map(p => ({source_id:'demo-' + p.id, roster_id:p.id, name:p.name}));
     for (const item of state.scorecard_links || []) identities.push({source_id:item.source_id,roster_id:item.roster_id,name:state.roster.find(p => p.id === item.roster_id)?.name});
     for (const item of getLinks()) if (!identities.some(x => x.source_id === item.source_player_id)) identities.push({source_id:item.source_player_id,player_id:item.player_id});
-    return copy({season:{...season,label:season.start.slice(0,4) === season.end.slice(0,4) ? season.start.slice(0,4) : season.start.slice(0,4) + '/' + season.end.slice(2,4)}, today, can_set_season:admin, cards:wrapped, fixtures, identities});
+    return copy({season:{...season,label:season.start.slice(0,4) === season.end.slice(0,4) ? season.start.slice(0,4) : season.start.slice(0,4) + '/' + season.end.slice(2,4)}, today, can_set_season:admin,can_set_stats_views:admin,stats_views:{settings:state.stats_views?.settings || DEFAULT_STATS_VIEWS,revision:state.stats_views?.revision || 0}, cards:wrapped, fixtures, identities});
   };
 }

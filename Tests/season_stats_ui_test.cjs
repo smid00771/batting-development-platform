@@ -357,3 +357,45 @@ test('T20-only clubs default to T20 and explicit format choices survive refresh'
  const h=await harness({...data(),fixtures:t},{teams:t,state:{}});assert.equal(h.s.state.format,'t20');
  change(h,'[data-stats-filter=format]','limited_overs');h.click('[data-stats-refresh]');await tick();assert.equal(h.s.state.format,'limited_overs');
 });
+
+const configured=()=>({...data(),can_set_stats_views:true,stats_views:{revision:0,settings:{default:{combine:true,default_view:'auto'},competitions:{}}}});
+const setupSelect=(h,kind,value)=>change(h,`[data-stats-setup-${kind}]`,value);
+const submitViews=h=>h.host.querySelector('[data-stats-view-setup]').dispatchEvent(new h.dom.window.Event('submit',{bubbles:true,cancelable:true}));
+test('stats setup saves shared choices, protects drafts and keeps T20 separate',async()=>{
+ const h=await harness(configured(),{state:{}});setupSelect(h,'group','separate');setupSelect(h,'view','long_form');
+ assert.equal(h.calls.length,1);assert.ok(h.host.querySelector('[data-stats-setup]').open);h.allow(false);assert.equal(h.panel.canLeave(),false);
+ assert.equal([...h.host.querySelector('[data-stats-setup-view]').options].some(x=>x.value==='competition'),false);
+ h.reply(async(name,args)=>({data:{...configured(),stats_views:{settings:args.p_data.settings,revision:1}},error:null}));submitViews(h);await tick();
+ assert.equal(h.calls.length,2);assert.equal(h.calls[1].args.p_action,'set_views');assert.equal(h.s.state.format,'long_form');assert.equal(h.s.state.viewDraft,undefined);assert.equal(h.panel.canLeave(),true);
+ assert.match(h.host.textContent,/Stats setup saved/);assert.equal(h.host.querySelector('[data-stats-filter=format] option[value=competition]'),null);
+ assert.ok(h.host.querySelector('[data-stats-filter=format] option[value=t20]'));
+ const staff=await harness({...configured(),can_set_stats_views:false,can_set_season:false});assert.equal(staff.host.querySelector('[data-stats-view-setup]'),null);
+});
+test('unknown save outcome locks edits and retries the exact request; confirmed conflicts release it',async()=>{
+ const h=await harness(configured());setupSelect(h,'group','separate');h.reply(async()=>{throw Error('Lost response');});submitViews(h);await tick();
+ const payload=structuredClone(h.calls[1].args.p_data);assert.equal(h.panel.canLeave(),false);assert.equal(h.host.querySelector('[data-stats-setup-group]').disabled,true);
+ assert.equal(h.host.querySelector('[data-stats-view-setup] button[type=submit]').disabled,false);assert.match(h.host.textContent,/Retry save/);
+ h.reply(async(name,args)=>({data:{...configured(),stats_views:{settings:args.p_data.settings,revision:1}},error:null}));submitViews(h);await tick();assert.deepEqual(h.calls[2].args.p_data,payload);assert.equal(h.panel.canLeave(),true);
+ setupSelect(h,'group','combined');h.reply(async()=>({error:{code:'P0001',message:'Stats setup changed. Update totals before saving again'}}));submitViews(h);await tick();
+ assert.equal(h.s.pendingViews,null);assert.ok(h.s.state.viewDraft);h.allow(true);h.click('[data-stats-refresh]');await tick();assert.equal(h.s.state.viewDraft,undefined);
+});
+test('competition switching uses its saved default locally and a single competition honours its override',async()=>{
+ const fixtures=teams.map((team,i)=>({...team,competition:i?'County':'District',days:[{date:'2026-10-10'}]}));
+ const response=configured();response.fixtures=fixtures;response.stats_views.settings.competitions.County={combine:false,default_view:'long_form'};
+ const h=await harness(response,{teams:fixtures,state:{}});change(h,'[data-stats-competition]',JSON.stringify('County'));
+ assert.equal(h.s.state.format,'long_form');assert.equal(h.host.querySelector('[data-stats-filter=format] option[value=competition]'),null);assert.equal(h.calls.length,1);
+ change(h,'[data-stats-competition]',JSON.stringify('District'));assert.equal(h.s.state.format,'competition');assert.equal(h.calls.length,1);
+ response.fixtures=[fixtures[1]];const single=await harness(response,{teams:[fixtures[1]],state:{}});assert.equal(single.s.state.format,'long_form');
+});
+test('mixed policies compare published and all-season lineups only within the same format',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ for(let i=0;i<f.context.cards.length;i++){const format=i%4<2?'limited_overs':'long_form';f.context.cards[i].scorecard.format_key=format;f.context.fixtures[i].format=format;}
+ for(const team of [...f.teams]){const old=structuredClone(team);old.id+='-lo';old.format=old.published.details.format='limited_overs';old.days=old.published.details.days=[{date:'2026-10-17'}];f.teams.push(old);}
+ f.context.fixtures.push({...f.context.fixtures[0],id:'county',competition:'County'});
+ f.context.stats_views={settings:{default:{combine:true,default_view:'auto'},competitions:{NDCA:{combine:false,default_view:'long_form'}}}};
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster,state:{format:'competition'}});h.click('[data-stats-compare]');
+ assert.equal(h.host.querySelector('[data-stats-date]').value,'published');assert.equal(h.host.querySelector('[data-stats-team=firstTeam]').options.length,4);
+ assert.match(h.host.querySelector('[data-stats-team=firstTeam]').textContent,/Limited overs/);assert.match(h.host.querySelector('[data-stats-team=firstTeam]').textContent,/Long form/);
+ change(h,'[data-stats-team=firstTeam]','team-1-lo');assert.equal(h.s.state.secondTeam,'team-2-lo');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan10 average20 runs · 2 inns/);
+ change(h,'[data-stats-date]','season');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan10 average20 runs · 2 inns/);assert.equal(h.calls.length,1);
+});

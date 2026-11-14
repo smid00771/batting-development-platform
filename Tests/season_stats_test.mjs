@@ -258,3 +258,17 @@ test('combined grade comparisons use pooled figures without assigning a single-f
  assert.match(evidence.player('f1','r1').bat.reason,/individual|format-specific/);assert.equal(evidence.player('f1','r1').bat.state,'building');
  assert.equal(evidence.player('f1','r1').stats.runs,100);
 });
+
+test('club defaults and per-competition overrides keep split competitions separate even in the combined screen',async()=>{
+ const {statsViews,statsViewPolicy,validateStatsViewSettings}=await import('../season-stats.js');
+ const cards=[card('lo',{format_key:'limited_overs'}),card('lf'),card('other-lo',{competition:'County',format_key:'limited_overs'}),card('other-lf',{competition:'County'}),card('t20',{format_key:'t20'})];
+ const c=context(cards,{stats_views:{settings:{default:{combine:true,default_view:'auto'},competitions:{County:{combine:false,default_view:'long_form'}}}}});
+ const before=JSON.stringify(c),totals=buildSeasonStats(c,{format:'competition'}),rows=totals.rows.filter(r=>r.roster_id==='r1');
+ assert.deepEqual(rows.map(r=>[r.competition,r.format,r.matches]).sort(),[['County','limited_overs',1],['County','long_form',1],['District','competition',2]]);
+ assert.equal(buildSeasonStats(c,{format:'competition',competition:'County'}).included,2);
+ assert.equal(defaultStatsView(c,undefined,'County'),'long_form');assert.equal(statsViews(c,'County').includes('competition'),false);
+ assert.equal(statsViewPolicy(c,'District').combine,true);assert.equal(defaultStatsView(c,undefined,'District'),'competition');
+ assert.equal(buildSeasonStats(c,{format:'t20'}).included,1);assert.equal(JSON.stringify(c),before);
+ assert.deepEqual(validateStatsViewSettings(c.stats_views.settings),c.stats_views.settings);
+ assert.throws(()=>validateStatsViewSettings({default:{combine:false,default_view:'competition'},competitions:{}}));
+});

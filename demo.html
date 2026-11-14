@@ -3803,7 +3803,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.365.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.366.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -6198,15 +6198,45 @@ const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'limited
   longform:'long_form',twoday:'long_form',multiday:'long_form',test:'long_form',t20:'t20',twenty20:'t20'})[key(value)] || 'unknown';
 const statsMatchesView = (format, view) => !view || (view === 'competition'
   ? ['limited_overs','long_form'].includes(statsFormat(format)) : statsFormat(format) === view);
-function defaultStatsView(context = {}, preferredFormat) {
+const DEFAULT_STATS_VIEWS = {default:{combine:true,default_view:'auto'},competitions:{}};
+function validateStatsViewSettings(settings) {
+  const object=value=>value && typeof value==='object' && !Array.isArray(value);
+  if(!object(settings)||Object.keys(settings).length!==2||!object(settings.default)||!object(settings.competitions)||JSON.stringify(settings).length>16000)throw Error('Invalid stats setup');
+  if(Object.keys(settings.competitions).length>50||Object.keys(settings.competitions).some(name=>!name.trim()||name!==name.trim()||name.length>160))throw Error('Choose up to 50 named competition overrides');
+  for(const policy of [settings.default,...Object.values(settings.competitions)])if(!object(policy)||Object.keys(policy).length!==2||typeof policy.combine!=='boolean'||!['auto','competition','limited_overs','long_form','t20'].includes(policy.default_view)||!policy.combine&&policy.default_view==='competition')throw Error('Choose a valid grouping and default view');
+  return settings;
+}
+function statsViewSettings(context = {}) {
+  return context?.stats_views?.settings || DEFAULT_STATS_VIEWS;
+}
+function statsViewPolicy(context = {}, competition) {
+  const settings=statsViewSettings(context), name=String(competition || '').trim();
+  return name && Object.hasOwn(settings.competitions || {},name) ? settings.competitions[name] : settings.default || DEFAULT_STATS_VIEWS.default;
+}
+const statsCombineCompetition = (context, competition) => !!String(competition || '').trim() && statsViewPolicy(context,competition).combine === true;
+function statsCompetitions(context = {}) {
+  const season=context.season || {}, teams=resolveSelectionStatsTeams(context.fixtures || [],season);
+  return [...new Set([
+    ...teams.filter(f=>!f.cancelled && inSeason(dates(f)[0],season)).map(f=>String(f.competition || '').trim()),
+    ...latestStatsCards(context.cards).filter(c=>inSeason([...(c.scorecard.dates || [])].sort()[0],season)).map(c=>String(teams.find(f=>f.id===c.fixture_id || f.match_id===c.scorecard.match_id)?.competition || c.scorecard.competition || '').trim())
+  ])].sort((a,b)=>a.localeCompare(b));
+}
+function statsViews(context = {}, competition) {
+  const combined=competition == null ? statsViewPolicy(context).combine || statsCompetitions(context).some(c=>statsCombineCompetition(context,c)) : statsCombineCompetition(context,competition);
+  return [...(combined ? ['competition'] : []),'limited_overs','long_form','t20','unknown'];
+}
+function defaultStatsView(context = {}, preferredFormat, competition) {
+  const policy=statsViewPolicy(context,competition), available=statsViews(context,competition);
+  if (policy.default_view !== 'auto' && available.includes(policy.default_view)) return policy.default_view;
   if (statsFormat(preferredFormat) === 't20') return 't20';
-  if (['limited_overs','long_form'].includes(statsFormat(preferredFormat))) return 'competition';
   const season = context.season || {};
   const formats = new Set([
-    ...(context.fixtures || []).filter(f => !f.cancelled && inSeason(dates(f)[0],season)).map(f => statsFormat(f.format)),
-    ...latestStatsCards(context.cards).filter(c => inSeason([...(c.scorecard.dates || [])].sort()[0],season)).map(c => statsFormat(c.scorecard.format_key))
+    ...resolveSelectionStatsTeams(context.fixtures || [],season).filter(f => !f.cancelled && inSeason(dates(f)[0],season) && (competition == null || String(f.competition || '').trim() === competition)).map(f => statsFormat(f.format)),
+    ...latestStatsCards(context.cards).filter(c => inSeason([...(c.scorecard.dates || [])].sort()[0],season) && (competition == null || String(c.scorecard.competition || '').trim() === competition)).map(c => statsFormat(c.scorecard.format_key))
   ].filter(f => f !== 'unknown'));
-  return formats.size === 1 && formats.has('t20') ? 't20' : 'competition';
+  if (formats.size === 1 && formats.has('t20')) return 't20';
+  if (policy.combine && available.includes('competition')) return 'competition';
+  return ['limited_overs','long_form'].includes(statsFormat(preferredFormat)) ? statsFormat(preferredFormat) : ['limited_overs','long_form','t20'].find(f=>formats.has(f)) || 'limited_overs';
 }
 const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
@@ -6304,6 +6334,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   const rows = new Map(), issues = new Map(), groups = new Map(), formats = new Set(), matched = new Set();
   let included = 0, playing = 0;
   const matchesFilters = (group, format) => (!filters.grade || filters.grade === group)
+    && (filters.competition == null || JSON.parse(group)[0] === filters.competition)
     && (!Array.isArray(filters.groups) || filters.groups.includes(group))
     && statsMatchesView(format, filters.format);
   const problem = (id, message, fixture, card, grade, competition, format, requiresAttention = true) => {
@@ -6315,7 +6346,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   };
   const observeGroup = (competition, grade, format) => {
     const id = groupKey(competition, grade);
-    groups.set(id, {id, grade:grade || 'Grade unknown', competition:competition || ''});
+    if (filters.competition == null || String(competition || '').trim() === filters.competition) groups.set(id, {id, grade:grade || 'Grade unknown', competition:competition || ''});
     formats.add(format || 'unknown');
     return id;
   };
@@ -6350,7 +6381,7 @@ function buildSeasonStats(context = {}, filters = {}) {
     const format = statsFormat(card.format_key || fixture?.format);
     // Aggregate original innings together, then calculate rates once. Never
     // combine T20, or infer a continuous competition from an unknown label.
-    const rowFormat = filters.format === 'competition' && String(competition).trim() ? 'competition' : format;
+    const rowFormat = filters.format === 'competition' && statsCombineCompetition(context,competition) ? 'competition' : format;
     const group = observeGroup(competition, grade, format);
     if (!matchesFilters(group, format)) continue;
     const issue = (message, requiresAttention = true) => problem(card.match_id, message, fixture, card, grade, competition, format, requiresAttention);
@@ -6475,7 +6506,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   }));
   return {rows:result, groups:[...groups.values()].sort((a,b) => a.grade.localeCompare(b.grade, undefined, {numeric:true}) || a.competition.localeCompare(b.competition)), formats:[...formats], issues:[...issues.values()], included, playing, season};
 }
-return {STATS_FORMATS,statsFormat,statsMatchesView,defaultStatsView,statsOvers,statsRate,resolveSelectionStatsTeams,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
+return {STATS_FORMATS,statsFormat,statsMatchesView,DEFAULT_STATS_VIEWS,validateStatsViewSettings,statsViewSettings,statsViewPolicy,statsCombineCompetition,statsCompetitions,statsViews,defaultStatsView,statsOvers,statsRate,resolveSelectionStatsTeams,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
 const __demoModule14=(()=>{
@@ -12741,10 +12772,48 @@ function createClubStandings({supabase,here,close,confirm,alert,storage=globalTh
 return {ndcaRuleWeight,createClubStandings};
 })();
 
+const __demoModule62=(()=>{
+const {statsViewSettings,statsCompetitions}=__demoModule12;
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const labels={auto:'Automatic',competition:'Competition',limited_overs:'Limited overs only',long_form:'Long form only',t20:'T20'};
+const statsSetupChanged=(data,state)=>!!state.viewDraft && JSON.stringify(state.viewDraft)!==JSON.stringify(statsViewSettings(data));
+function renderStatsSetup(data,state,disabled='',pending=false){
+ if(!data?.can_set_stats_views)return '';
+ const settings=state.viewDraft||statsViewSettings(data),locked=disabled||pending?'disabled':'',names=[...new Set([...statsCompetitions(data),...Object.keys(settings.competitions||{})])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+ const row=(name=null)=>{
+  const own=name===null||Object.hasOwn(settings.competitions,name),policy=name===null?settings.default:own?settings.competitions[name]:settings.default;
+  const id=JSON.stringify(name),group=own?(policy.combine?'combined':'separate'):'inherit';
+  return `<fieldset class="ss-setup-row"><legend>${esc(name??'Club default')}</legend><label>Formats<select data-stats-setup-group="${esc(id)}" ${locked}>${name===null?'':`<option value="inherit" ${group==='inherit'?'selected':''}>Use club default</option>`}<option value="combined" ${group==='combined'?'selected':''}>Combine Limited overs + Long form</option><option value="separate" ${group==='separate'?'selected':''}>Keep formats separate</option></select></label><label>Default view<select data-stats-setup-view="${esc(id)}" ${locked} ${own?'':'disabled'}>${Object.entries(labels).filter(([value])=>value!=='competition'||policy.combine).map(([value,label])=>`<option value="${value}" ${value===policy.default_view?'selected':''}>${esc(label)}</option>`).join('')}</select></label></fieldset>`;
+ };
+ return `<form data-stats-view-setup><p class="ss-caption">Choose the club default, then any competition exceptions. T20 stays separate. Settings apply to all staff.</p>${row()}${names.map(name=>row(name)).join('')}<div class="ss-setup-actions"><button class="btn secondary" type="submit" ${disabled}>${pending?'Retry save':'Save stats setup'}</button><button class="btn ghost" type="button" data-stats-setup-cancel ${locked}>Cancel changes</button></div></form>`;
+}
+function bindStatsSetup(host,data,state,redraw,save,pending=false){
+ const change=(el,kind)=>{
+  if(pending)return;
+  const name=JSON.parse(el.dataset[kind==='group'?'statsSetupGroup':'statsSetupView']);
+  const settings=structuredClone(state.viewDraft||statsViewSettings(data));
+  let policy=name===null?settings.default:Object.hasOwn(settings.competitions,name)?settings.competitions[name]:{...settings.default};
+  if(kind==='group'){
+   if(el.value==='inherit'&&name!==null)delete settings.competitions[name];
+   else{policy.combine=el.value==='combined';if(!policy.combine&&policy.default_view==='competition')policy.default_view='auto';if(name!==null)settings.competitions[name]=policy;}
+  }else{policy.default_view=el.value;if(name!==null)settings.competitions[name]=policy;}
+  state.viewDraft=settings;state.setupOpen=true;redraw();
+  const attr=kind==='group'?'statsSetupGroup':'statsSetupView';
+  [...host.querySelectorAll(kind==='group'?'[data-stats-setup-group]':'[data-stats-setup-view]')].find(x=>x.dataset[attr]===JSON.stringify(name))?.focus({preventScroll:true});
+ };
+ host.querySelectorAll('[data-stats-setup-group]').forEach(el=>el.onchange=()=>change(el,'group'));
+ host.querySelectorAll('[data-stats-setup-view]').forEach(el=>el.onchange=()=>change(el,'view'));
+ host.querySelector('[data-stats-setup-cancel]')?.addEventListener('click',()=>{if(!pending){delete state.viewDraft;redraw();}});
+ host.querySelector('[data-stats-view-setup]')?.addEventListener('submit',event=>{event.preventDefault();save();});
+}
+return {statsSetupChanged,renderStatsSetup,bindStatsSetup};
+})();
+
 const __demoModule61=(()=>{
-const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat, statsMatchesView, defaultStatsView}=__demoModule12;
+const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat, statsMatchesView, defaultStatsView, statsViews, statsViewSettings, statsCompetitions, statsCombineCompetition}=__demoModule12;
 const {buildSelectionEvidence}=__demoModule13;
 const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule17;
+const {renderStatsSetup,bindStatsSetup,statsSetupChanged}=__demoModule62;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('en-AU', {maximumFractionDigits:2});
 const rate = value => Number.isFinite(value) ? value.toLocaleString('en-AU', {minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
@@ -12761,7 +12830,7 @@ function renderStatsIssues(issues) {
 }
 const css = `<style>
 .season-stats{--ss-line:var(--line,#dbe3e0);--ss-muted:var(--muted,#52627a);--ss-accent:var(--navy,#173d32);margin:8px 0;padding:16px;border:1px solid var(--ss-line);border-radius:10px;background:var(--mirelion-surface,#fff);color:var(--ink,#24344c)}
-.season-stats *{box-sizing:border-box}.season-stats h2{margin:0}.ss-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.season-stats .btn{min-height:44px}.ss-season{font-size:12px;color:var(--ss-muted);margin:0 0 8px}.ss-season summary{cursor:pointer;min-height:32px;align-content:center}.ss-season form{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:8px 0}.ss-season form label{display:grid;gap:4px}.ss-season input{min-height:44px}
+.season-stats *{box-sizing:border-box}.season-stats h2{margin:0}.ss-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.season-stats .btn{min-height:44px}.ss-season{font-size:12px;color:var(--ss-muted);margin:0 0 8px}.ss-season summary{cursor:pointer;min-height:32px;align-content:center}.ss-season form{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:8px 0}.ss-season form label{display:grid;gap:4px}.ss-season input{min-height:44px}.ss-season form[data-stats-view-setup]{display:block}.ss-setup-row{display:flex;gap:10px;flex-wrap:wrap;border:0;border-top:1px solid var(--ss-line);padding:8px 0;margin:8px 0;min-width:0}.ss-setup-row legend{font-weight:650;padding:0}.ss-setup-row label{flex:1 1 220px;min-width:0}.ss-setup-row select{width:100%;min-width:0;min-height:44px;font-size:16px}.ss-setup-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ss-modes{display:flex;align-items:center;gap:4px;padding:4px 0;border-bottom:1px solid var(--ss-line)}.season-stats .ss-modes .btn{border-color:transparent;background:transparent;border-radius:6px 6px 0 0;padding:9px 16px;color:var(--ss-muted)}.season-stats .ss-modes .btn[aria-pressed=true],#app .season-stats .ss-modes .btn[aria-pressed=true]{background:var(--soft,#edf1e9);color:var(--ss-accent);border-color:transparent;box-shadow:inset 0 -3px var(--ss-accent)}
 .ss-filters{display:grid;grid-template-columns:minmax(120px,1fr) minmax(120px,1fr) minmax(180px,1.25fr);align-items:end;gap:12px;margin:12px 0 2px}.ss-filters label{display:grid;gap:4px;min-width:0;font-size:12px;font-weight:600;color:var(--ss-muted)}.ss-filters input,.ss-filters select{width:100%;min-width:0;min-height:44px;margin:0;border:1px solid var(--ss-line);border-radius:7px;padding:8px 10px;font:inherit;font-size:15px;color:var(--ink,#24344c);background:var(--mirelion-surface,#fff)}.ss-search{grid-column:-2/-1}.ss-search input{font-weight:400}
 .ss-context{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;margin:2px 0 8px}.ss-caption{font-size:12px;color:var(--ss-muted);margin:6px 0}.ss-context .ss-caption{margin:0}.ss-refresh{margin-left:auto}.season-stats .ss-refresh{border:0;background:transparent;color:var(--ss-muted);font-size:12px;padding:6px}.ss-status:empty{display:none}.ss-issues{font-size:12px;margin:0;color:#79531f}.ss-issues.ss-source-notes{color:var(--ss-muted)}.ss-issues>summary{cursor:pointer;min-height:36px;align-content:center;font-weight:600}.ss-issues[open]{flex-basis:100%;order:2;padding:4px 10px;border:1px solid #e7c684;border-radius:6px;background:#fff8e8}.ss-source-notes[open]{border-color:var(--ss-line);background:var(--soft,#f4f5f2)}.ss-issue{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #e7d5b3}.ss-issue small{display:block}
@@ -12819,7 +12888,7 @@ function renderStatsRows(rows, mode = 'batting', evidence = null, openable = nul
     const figures = batting
       ? figure('average','Average',rate(incomplete?null:row.average),{primary:true,note:averageNote}) + figure('strike_rate','SR',rate(incomplete?null:row.strike_rate),{note:incomplete?'Figures incomplete':row.balls===null?'Balls faced unavailable':'Strike rate: runs per 100 balls'}) + figure('runs','Runs',numeric(row.runs)) + figure('innings','Inns',numeric(row.innings)) + figure('not_outs','Not out',numeric(row.not_outs))
       : figure('wickets','Wickets',numeric(row.wickets),{primary:true}) + figure('bowling_average','Average',rate(incomplete?null:row.bowling_average)) + figure('economy','Econ',rate(incomplete?null:row.economy)) + figure('bowling_balls','Overs',statsOvers(row.bowling_balls)??'—') + figure('bowling_innings','Inns',numeric(row.bowling_innings));
-    return `<details class="ss-row" data-stats-player="${escape(row.id)}"><summary><span class="ss-name">${playerName(row.roster_id,row.name,openable)}<small>${escape(row.grade)}${row.competition ? ' · ' + escape(row.competition) : ' · Competition unknown · ' + escape(STATS_FORMATS[row.format] || row.format)}${incomplete ? '<span class="ss-incomplete"> · Figures incomplete</span>' : ''}</small></span><span class="ss-figures">${figures}</span><span class="ss-chevron" aria-hidden="true">⌄</span><span class="ss-sr-only">Match history and form guide</span></summary><div class="ss-detail"><div class="ss-detail-top"><dl class="ss-metrics">${metrics.map(([label,value]) => metric(label, value)).join('')}</dl>${renderEvidenceBadges(item,evidenceKey)}</div>${averageNote ? `<p class="ss-caption">${escape(averageNote)}${averageNote==='No dismissals yet'?'; average is unavailable.':''}</p>` : ''}<h3 class="ss-history-title">Match history</h3>${row.history.map(match => {
+    return `<details class="ss-row" data-stats-player="${escape(row.id)}"><summary><span class="ss-name">${playerName(row.roster_id,row.name,openable)}<small>${escape(row.grade)}${row.competition ? ' · ' + escape(row.competition) + (row.format!=='competition'?' · '+escape(STATS_FORMATS[row.format] || row.format):'') : ' · Competition unknown · ' + escape(STATS_FORMATS[row.format] || row.format)}${incomplete ? '<span class="ss-incomplete"> · Figures incomplete</span>' : ''}</small></span><span class="ss-figures">${figures}</span><span class="ss-chevron" aria-hidden="true">⌄</span><span class="ss-sr-only">Match history and form guide</span></summary><div class="ss-detail"><div class="ss-detail-top"><dl class="ss-metrics">${metrics.map(([label,value]) => metric(label, value)).join('')}</dl>${renderEvidenceBadges(item,evidenceKey)}</div>${averageNote ? `<p class="ss-caption">${escape(averageNote)}${averageNote==='No dismissals yet'?'; average is unavailable.':''}</p>` : ''}<h3 class="ss-history-title">Match history</h3>${row.history.map(match => {
       const scores = batting ? match.batting.map(x => x.dnb ? 'DNB' : x.runs + (x.not_out ? '*' : '') + (x.balls === null ? '' : ' (' + x.balls + ')')) : match.bowling.map(x => x.wickets + '/' + x.runs + (x.balls === null ? '' : ' · ' + statsOvers(x.balls) + ' ov'));
       if (batting ? match.batting_incomplete : match.bowling_incomplete) scores.push('Figures incomplete');
       const score = scores.join(' & ') || (batting ? match.batting_available ? 'DNB' : 'Batting unavailable' : match.bowling_available ? 'Did not bowl' : 'Bowling unavailable');
@@ -12843,15 +12912,18 @@ function createSeasonStatsPanel(h) {
   function canLeave() {
     const s = active;
     if (!s || !here(s)) return true;
+    if (s.pendingViews || s.busy && s.savingViews) {h.alert?.('Confirm the stats setup save before leaving.'); return false;}
+    if (statsSetupChanged(s.context,s.state) && !h.confirm?.('Leave these unsaved stats settings?')) return false;
     if (s.busy && s.savingSeason) {h.alert?.('Please wait for the season dates to save.'); return false;}
     const draft = s.state.seasonDraft;
     if (draft && (draft.start !== s.context?.season.start || draft.end !== s.context?.season.end) && !h.confirm?.('Leave these unsaved season dates?')) return false;
     delete s.state.seasonDraft;
+    delete s.state.viewDraft;
     return true;
   }
   async function request(s, action = 'context', data = {}) {
     const result = await h.supabase.rpc('club_season_stats_api', {p_club_id:s.clubId, p_action:action, p_data:{...data,on_demand:true}});
-    if (result.error) throw Error(result.error.message);
+    if (result.error) throw Object.assign(Error(result.error.message),{confirmed:/^[A-Z0-9]{5}$/.test(result.error.code || '')});
     if (!Array.isArray(result.data?.cards) || !Array.isArray(result.data?.fixtures) || !result.data?.season?.start) throw Error('Season stats could not be loaded.');
     return result.data;
   }
@@ -12859,25 +12931,26 @@ function createSeasonStatsPanel(h) {
     if (!here(s)) return;
     clearEvidenceLinks(s.host);
     const state = s.state, data = s.context;
+    if (data && !statsViews(data,state.competition).includes(state.format)) state.format=defaultStatsView(data,s.preferredFormat,state.competition);
     const open = new Set([...s.host.querySelectorAll('[data-stats-player][open]')].map(el => el.dataset.statsPlayer));
     const disabled = s.busy ? 'disabled' : '';
     const teamDate = team => team.days?.[0]?.date || '';
     const available = team => !team.cancelled && (!data || !teamDate(team) || teamDate(team) >= data.season.start && teamDate(team) <= data.season.end);
     const sourceTeams = resolveSelectionStatsTeams(s.teams || data?.fixtures || [],data?.season,[...(data?.fixtures || []),...(s.teams || [])]);
-    const allTeams = sourceTeams.filter(available).map(t => ({...t,format:statsFormat(t.format)}));
-    const viewTeam = team => state.format === 'competition' && team.competition && statsMatchesView(team.format, 'competition') ? {...team,format:'competition'} : team;
+    const allTeams = sourceTeams.filter(t=>available(t) && (state.competition == null || String(t.competition || '').trim()===state.competition)).map(t => ({...t,format:statsFormat(t.format)}));
+    const viewTeam = team => state.format === 'competition' && statsCombineCompetition(data,team.competition) && statsMatchesView(team.format, 'competition') ? {...team,format:'competition'} : team;
     const latestPublished = new Map();
     for (const fixture of sourceTeams) {
       if (!fixture.published?.details || !Array.isArray(fixture.published.slots)) continue;
       const team = {...fixture, ...fixture.published.details, slots:fixture.published.slots, level:fixture.published.level ?? fixture.level, lineupPublished:true};
       team.format = statsFormat(team.format);
-      if (!available(team)) continue;
+      if (!available(team) || state.competition != null && String(team.competition || '').trim()!==state.competition) continue;
       const projected = viewTeam(team), key = JSON.stringify([team.competition, team.grade, projected.format]), previous = latestPublished.get(key);
       if (!previous || teamDate(team) > teamDate(previous)) latestPublished.set(key, projected);
     }
     const publishedTeams = [...latestPublished.values()];
     const formatTeams = allTeams.filter(t => state.format && statsMatchesView(t.format, state.format)).map(viewTeam);
-    const formatPublished = publishedTeams.filter(t => t.format === state.format);
+    const formatPublished = publishedTeams.filter(t => state.format && (t.format === state.format || statsMatchesView(t.format,state.format)));
     const dates = [...new Set(formatTeams.map(teamDate).filter(Boolean))].sort().reverse();
     const populated = dates.filter(day => formatTeams.some(t => teamDate(t) === day && t.slots?.some(slot => slot.d1 || slot.d2)));
     const comparisonDate = state.compareDate === 'season' || !s.teams ? 'season' : dates.includes(state.compareDate) ? state.compareDate
@@ -12886,43 +12959,48 @@ function createSeasonStatsPanel(h) {
       : populated.find(day => day <= (s.boardDate || data?.today || '9999-12-31')) || populated[0]
       || (dates.includes(s.boardDate) ? s.boardDate : dates[0]);
     const seasonTeams = new Map();
-    [...formatTeams].sort((a,b)=>teamDate(a).localeCompare(teamDate(b))).concat(formatPublished).forEach(t=>seasonTeams.set(JSON.stringify([t.competition,t.grade]),t));
+    [...formatTeams].sort((a,b)=>teamDate(a).localeCompare(teamDate(b))).concat(formatPublished).forEach(t=>seasonTeams.set(JSON.stringify([t.competition,t.grade,t.format]),t));
     const teams = (comparisonDate === 'season' ? [...seasonTeams.values()] : comparisonDate === 'published' ? formatPublished : formatTeams.filter(t => !comparisonDate || teamDate(t) === comparisonDate)).sort((a,b) => (a.level ?? 999) - (b.level ?? 999) || a.grade.localeCompare(b.grade, undefined, {numeric:true}));
     const showCompetition = new Set(teams.map(t => t.competition)).size > 1;
-    const teamLabel = team => escape(team.grade) + (showCompetition ? ' · ' + escape(team.competition || 'Competition unknown') : '');
+    const teamLabel = team => escape(team.grade) + (showCompetition ? ' · ' + escape(team.competition || 'Competition unknown') : '') + (state.format==='competition' && team.format!=='competition'?' · '+escape(STATS_FORMATS[team.format] || team.format):'');
     const previous = id => [...allTeams,...publishedTeams].find(t => t.id === id);
     const sameGrade = (team, old) => old && team.grade === old.grade && team.competition === old.competition;
     const primary = teams.find(t => t.id === state.firstTeam) || teams.find(t => sameGrade(t,previous(state.firstTeam))) || teams[0];
-    const lower = primary ? teams.filter(t => t.id !== primary.id && t.competition === primary.competition) : [];
+    const lower = primary ? teams.filter(t => t.id !== primary.id && t.competition === primary.competition && t.format === primary.format) : [];
     const secondary = lower.find(t => t.id === state.secondTeam) || lower.find(t => sameGrade(t,previous(state.secondTeam))) || lower.find(t => t.level > primary?.level) || lower[0];
     if (primary) state.firstTeam = primary.id;
     if (secondary) state.secondTeam = secondary.id;
     const canCompare = publishedTeams.some(t => publishedTeams.some(other => other.grade !== t.grade && other.competition === t.competition && other.format === t.format)) || allTeams.some(t => allTeams.some(other => other.grade !== t.grade && (!s.teams || teamDate(other) === teamDate(t)) && other.competition === t.competition && viewTeam(other).format === viewTeam(t).format));
     if (!canCompare) state.compare = false;
-    const allTotals = data ? buildSeasonStats(data, state.format === 'competition' ? {format:'competition'} : {}) : null;
+    const allTotals = data ? buildSeasonStats(data, {competition:state.competition,...(state.format === 'competition' ? {format:'competition'} : {})}) : null;
     if (allTotals && state.grade && !allTotals.groups.some(g=>g.id===state.grade)) {
       // Retain the selected grade when an old blank label resolves after sync.
       let grade;try { grade=JSON.parse(state.grade)?.[1]; } catch {}
       const matches=allTotals.groups.filter(g=>g.grade===grade);
       state.grade=matches.length===1?matches[0].id:'';
     }
-    const knownFormats = ['competition','limited_overs','long_form','t20'];
+    const knownFormats = statsViews(data || {},state.competition).filter(f=>f!=='unknown');
     const formats = [...knownFormats,...(allTotals?.formats || []).filter(f => !knownFormats.includes(f))];
     const viewLabel = f => f === 'competition' ? 'Competition' : ['limited_overs','long_form'].includes(f) ? STATS_FORMATS[f] + ' only' : STATS_FORMATS[f] || f;
+    const competitionNames=data?statsCompetitions(data):[];
+    const competitionPicker=competitionNames.length>1?`<label>Competition<select data-stats-competition ${disabled}><option value="">All competitions</option>${competitionNames.map(name=>`<option value="${escape(JSON.stringify(name))}" ${state.competition===name?'selected':''}>${escape(name || 'Competition unknown')}</option>`).join('')}</select></label>`:'';
     const formatPicker = `<label class="ss-format">Stats view<select data-stats-filter="format" ${disabled}>${formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(viewLabel(f))}</option>`).join('')}</select></label>`;
     const totals = data ? buildSeasonStats(data, state.compare ? {...state, groups:[primary, secondary].filter(Boolean).map(team => JSON.stringify([String(team.competition || '').trim(), String(team.grade || '').trim()]))} : state) : null;
     s.evidence = allTotals ? buildSelectionEvidence(allTotals,state.compare?[primary,secondary].filter(Boolean):[],s.roster,{seasonPlayers:state.compare && comparisonDate === 'season'}) : null;
     s.host.innerHTML = evidenceStyles + css + `<section class="season-stats" aria-label="Season stats"><div class="ss-top"><h2 tabindex="-1">Season stats</h2><button type="button" class="btn ghost" data-stats-close>Close stats</button></div>${data ? `
-      ${data.can_set_season ? `<details class="ss-season" ${state.seasonDraft ? 'open' : ''}><summary>${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</summary><form data-stats-season><label>Starts<input type="date" name="start" value="${escape(state.seasonDraft?.start ?? data.season.start)}" required ${disabled}></label><label>Ends<input type="date" name="end" value="${escape(state.seasonDraft?.end ?? data.season.end)}" required ${disabled}></label><button type="submit" class="btn secondary" ${disabled}>${s.savingSeason ? 'Saving…' : 'Save season dates'}</button></form></details>` : `<p class="ss-caption">${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</p>`}
+      ${data.can_set_season ? `<details class="ss-season" ${state.seasonDraft || state.viewDraft || state.setupOpen ? 'open' : ''} data-stats-setup><summary>${data.can_set_stats_views?'Stats setup · ':''}${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</summary><form data-stats-season><label>Starts<input type="date" name="start" value="${escape(state.seasonDraft?.start ?? data.season.start)}" required ${disabled}></label><label>Ends<input type="date" name="end" value="${escape(state.seasonDraft?.end ?? data.season.end)}" required ${disabled}></label><button type="submit" class="btn secondary" ${disabled}>${s.savingSeason ? 'Saving…' : 'Save season dates'}</button></form>${renderStatsSetup(data,state,s.busy ? 'disabled' : '',!!s.pendingViews)}</details>` : `<p class="ss-caption">${escape(data.season.label)} · ${escape(date(data.season.start))}–${escape(date(data.season.end))}</p>`}
 
       <div class="ss-modes" aria-label="Statistics type"><button class="btn ghost" type="button" data-stats-mode="batting" aria-pressed="${state.mode !== 'bowling' && !state.compare}">Batting</button><button class="btn ghost" type="button" data-stats-mode="bowling" aria-pressed="${state.mode === 'bowling' && !state.compare}">Bowling</button>${canCompare ? `<button class="btn ghost" type="button" data-stats-compare aria-pressed="${!!state.compare}">Compare grades</button>` : ''}</div>
-      ${!state.compare ? `<div class="ss-filters">${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${formatPicker}<label class="ss-search">Find player<input type="search" data-stats-search placeholder="Search players…" autocomplete="off" value="${escape(state.search || '')}"></label></div>` : ''}
-      <div class="ss-context"><p class="ss-caption">${totals.included} completed ${totals.included === 1 ? 'scorecard' : 'scorecards'} · ${escape(STATS_FORMATS[state.format] || 'Current season')}${totals.playing ? ' · ' + totals.playing + ' in progress' : ''}</p>
+      ${!state.compare ? `<div class="ss-filters">${competitionPicker}${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${formatPicker}<label class="ss-search">Find player<input type="search" data-stats-search placeholder="Search players…" autocomplete="off" value="${escape(state.search || '')}"></label></div>` : ''}
+      <div class="ss-context"><p class="ss-caption">${totals.included} completed ${totals.included === 1 ? 'scorecard' : 'scorecards'} · ${escape(state.format==='competition' && totals.rows.some(r=>r.format!=='competition')?'Competition views':STATS_FORMATS[state.format] || 'Current season')}${totals.playing ? ' · ' + totals.playing + ' in progress' : ''}</p>
       ${renderStatsIssues(totals.issues)}<button class="btn ghost ss-refresh" type="button" data-stats-refresh ${disabled}>${s.busy ? 'Updating…' : 'Update totals'}</button></div>
-      ${state.compare ? `<div class="ss-compare-controls">${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Players<select data-stats-date><option value="season" ${comparisonDate === 'season' ? 'selected' : ''}>All season players</option>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${(s.teams ? dates : []).map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(allTotals, primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s), comparisonDate === 'season') : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
+      ${state.compare ? `<div class="ss-compare-controls">${competitionPicker}${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Players<select data-stats-date><option value="season" ${comparisonDate === 'season' ? 'selected' : ''}>All season players</option>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${(s.teams ? dates : []).map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(allTotals, primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s), comparisonDate === 'season') : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
     if (totals && !state.compare) renderRows(s, totals, open);
     bindPlayerLinks(s);
     if (s.evidence) bindEvidenceDetails(s.host,s.evidence,()=>here(s));
+    bindStatsSetup(s.host,data,state,()=>draw(s),()=>void saveViews(s),!!s.pendingViews);
+    const setup=s.host.querySelector('[data-stats-setup]');if(setup)setup.ontoggle=()=>{state.setupOpen=setup.open;};
+    s.host.querySelector('[data-stats-competition]')?.addEventListener('change',e=>{state.competition=e.target.value?JSON.parse(e.target.value):undefined;state.grade='';state.firstTeam='';state.secondTeam='';state.format=defaultStatsView(data,s.preferredFormat,state.competition);draw(s);h.navigate?.();});
     s.host.querySelector('[data-stats-close]').onclick = () => {if (canLeave()) h.close(s);};
     s.host.querySelector('[data-stats-refresh]')?.addEventListener('click', () => {if (canLeave()) void load(s);});
     s.host.querySelectorAll('[data-stats-filter]').forEach(el => el.onchange = () => {state[el.dataset.statsFilter] = el.value; draw(s); h.navigate?.();});
@@ -12937,7 +13015,7 @@ function createSeasonStatsPanel(h) {
       const form = el.closest('form'); state.seasonDraft = {start:form.querySelector('[name=start]').value, end:form.querySelector('[name=end]').value};
     }));
     s.host.querySelector('[data-stats-season]')?.addEventListener('submit', e => {
-      e.preventDefault(); if (s.busy) return;
+      e.preventDefault(); if (s.busy || s.pendingViews) return;
       const form = e.currentTarget, start = form.elements.start.value, end = form.elements.end.value;
       if (end < start || (Date.parse(end) - Date.parse(start)) / 86400000 > 366) {s.message = 'Choose season dates in order, up to one year apart.'; s.error = true; draw(s); return;}
       void load(s, {start, end, expected_revision:data.season.revision});
@@ -12959,16 +13037,31 @@ function createSeasonStatsPanel(h) {
     s.busy = true; s.stale = false; s.savingSeason = !!settings; s.error = false; s.message = settings ? 'Saving season dates…' : 'Loading latest saved scores…'; draw(s);
     try {
       const data = await request(s, settings ? 'set_season' : 'context', settings || {});
+      const names=statsCompetitions(data);if(s.state.competition == null && names.length===1 && names[0])s.state.competition=names[0];
       if (!here(s)) return;
       s.context = data; h.updated?.(s.scope,data);
       if (settings) delete s.state.seasonDraft;
-      if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = defaultStatsView(data, s.preferredFormat);
+      if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = defaultStatsView(data, s.preferredFormat,s.state.competition);
       s.message = settings ? 'Season dates saved.' : '';
     } catch (error) {if (here(s)) {s.error = true; s.message = error.message || 'Season stats could not be loaded.';}}
-    finally {s.busy = false; s.savingSeason = false; draw(s); if (s.stale && here(s) && !s.state.seasonDraft) void load(s);}
+    finally {s.busy = false; s.savingSeason = false; draw(s); if (s.stale && here(s) && !s.state.seasonDraft && !s.state.viewDraft && !s.pendingViews) void load(s);}
   }
-  return {canLeave, invalidate() {h.invalidateBoard?.(); if (active) {active.stale = true; if (here(active) && !active.busy && !active.state.seasonDraft) void load(active);}}, mount(host, options) {
-    if (active?.host === host && active.scope === options.scope) {Object.assign(active,options); draw(active); if (active.stale && !active.busy && !active.state.seasonDraft) void load(active); return active;}
+  async function saveViews(s) {
+    if(s.busy || !here(s) || !s.context?.can_set_stats_views)return;
+    if(!s.pendingViews && !statsSetupChanged(s.context,s.state)){s.message='Stats setup is already saved.';s.error=false;draw(s);return;}
+    s.pendingViews ||= {settings:structuredClone(s.state.viewDraft),expected_revision:s.context.stats_views?.revision || 0,request_id:globalThis.crypto.randomUUID()};
+    s.busy=true;s.savingViews=true;s.error=false;s.message='Saving stats setup…';draw(s);
+    try {
+      const data=await request(s,'set_views',s.pendingViews);
+      if(!here(s))return;
+      s.context=data;h.updated?.(s.scope,data);s.pendingViews=null;delete s.state.viewDraft;
+      s.state.format=defaultStatsView(data,s.preferredFormat,s.state.competition);s.message='Stats setup saved.';
+    } catch(error) {
+      if(here(s)){if(error.confirmed)s.pendingViews=null;s.error=true;s.message=error.confirmed ? error.message : 'Save not confirmed. Retry the same save to check it safely.';}
+    } finally {s.busy=false;s.savingViews=false;draw(s);}
+  }
+  return {canLeave, invalidate() {h.invalidateBoard?.(); if (active) {active.stale = true; if (here(active) && !active.busy && !active.state.seasonDraft && !active.state.viewDraft && !active.pendingViews) void load(active);}}, mount(host, options) {
+    if (active?.host === host && active.scope === options.scope) {Object.assign(active,options); draw(active); if (active.stale && !active.busy && !active.state.seasonDraft && !active.state.viewDraft && !active.pendingViews) void load(active); return active;}
     if (active) clearEvidenceLinks(active.host);
     const s = {...options, host, state:options.state || {}, context:null, busy:false, message:'', error:false}; active = s; void load(s); return s;
   }};
@@ -12976,7 +13069,7 @@ function createSeasonStatsPanel(h) {
 return {renderGradeComparison,renderStatsRows,createSeasonStatsPanel};
 })();
 
-const __demoModule62=(()=>{
+const __demoModule63=(()=>{
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const choices=(rows,value)=>rows.map(([id,name])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(name)}</option>`).join('');
 const definiteError=e=>/^(P[0-9A-Z]{4}|[0-9]{5}|PT\d{3})$/.test(e?.code||'');
@@ -13039,7 +13132,7 @@ function createSelectionGroupPermissions(h){
 return {createSelectionGroupPermissions};
 })();
 
-const __demoModule64=(()=>{
+const __demoModule65=(()=>{
 // Incremental changes to an already saved club setup.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const label=t=>[t?.grade?.name,t?.name!==t?.grade?.name?t?.name:null].filter(Boolean).join(' · ');
@@ -13098,8 +13191,8 @@ function createSelectionGroupManager(h){
 return {createSelectionGroupManager};
 })();
 
-const __demoModule63=(()=>{
-const {createSelectionGroupManager}=__demoModule64;
+const __demoModule64=(()=>{
+const {createSelectionGroupManager}=__demoModule65;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Read saved groups and the cached source names. Opening this page never imports.
 function createSelectionGroupPage(h){
@@ -13135,7 +13228,7 @@ function createSelectionGroupPage(h){
 return {createSelectionGroupPage};
 })();
 
-const __demoModule65=(()=>{
+const __demoModule66=(()=>{
 const PLAYCRICKET_SUPPORT='https://playcricket-support.zendesk.com/hc/en-us/requests/new';
 const PLAYHQ_ACCESS_GUIDE='https://support.playhq.com/hc/en-us/articles/23949453276572-How-To-Use-PlayHQ-API-s';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13199,8 +13292,8 @@ function createPlayCricketConnection(h){
 return {PLAYCRICKET_SUPPORT,PLAYHQ_ACCESS_GUIDE,accessRequestText,createPlayCricketConnection};
 })();
 
-const __demoModule67=(()=>{
-const {createSelectionGroupManager}=__demoModule64;
+const __demoModule68=(()=>{
+const {createSelectionGroupManager}=__demoModule65;
 // Build groups from imported teams, then align existing grades before saving.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -13292,8 +13385,8 @@ function createSelectionGroups(h){
 return {selectionGroupDraft,createSelectionGroups};
 })();
 
-const __demoModule66=(()=>{
-const {createSelectionGroups}=__demoModule67;
+const __demoModule67=(()=>{
+const {createSelectionGroups}=__demoModule68;
 // Saved team links drive fixture loading. Source credentials stay server-side.
 function createPlayHQImport(h){
  let active=null;const remembered=new Map();
@@ -13377,7 +13470,7 @@ function createPlayHQImport(h){
 return {createPlayHQImport};
 })();
 
-const __demoModule68=(()=>{
+const __demoModule69=(()=>{
 // Optional linked-club setup. Dates themselves come from published selections.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function createPlanReminderSettings(h){
@@ -13407,7 +13500,7 @@ function createPlanReminderSettings(h){
 return {createPlanReminderSettings};
 })();
 
-const __demoModule69=(()=>{
+const __demoModule70=(()=>{
 /* A fixture owns its shared scorecard, independently of selection locks and awards. */
 const {scorecardReplayUrl,renderDismissalReplay}=__demoModule3;
 const {weeklyResultCoverage,cardStatus}=__demoModule53;
@@ -13484,7 +13577,7 @@ function createFixtureResults(h){
 return {noPlayResultLabel,automaticScoreCheckText,renderFixtureScorecard,createFixtureResults};
 })();
 
-const __demoModule71=(()=>{
+const __demoModule72=(()=>{
 // Shared, side-effect-free helpers for club-week planning. Publication remains server-authorised.
 const dayKey = index => `d${index + 1}`;
 function availability(person, date) {
@@ -13564,8 +13657,8 @@ function forecast(roster,fixtures,today,days=21) {
 return {dayKey,availability,missingAvailability,selectedOn,openPlaces,roleMatch,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,shareLink,forecast};
 })();
 
-const __demoModule70=(()=>{
-const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule71;
+const __demoModule71=(()=>{
+const {dayKey,missingAvailability,replacementOptions,replaceInPlan,startWithdrawal,changedTeams,openPlaces,shareLink,forecast}=__demoModule72;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLabel=date=>date?new Date(date+'T12:00:00Z').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}):'';
 const button=(text,action,extra='')=>`<button type="button" class="btn ghost" data-cw="${action}" ${extra}>${esc(text)}</button>`;
@@ -13615,7 +13708,7 @@ function createClubWeekUI(h){
 return {createClubWeekUI};
 })();
 
-const __demoModule72=(()=>{
+const __demoModule73=(()=>{
 const escapeAssist=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const assistCategories={help:'Help with the platform',enquiry:'Products and subscriptions',idea:'Suggest a change'};
 const assistTime=value=>new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
@@ -13830,7 +13923,7 @@ function assistStyles(){return `<style>
 return {createMirelionAssist};
 })();
 
-const __demoModule73=(()=>{
+const __demoModule74=(()=>{
 /* One-time Club Batting setup. This screen is only mounted for the Platform Owner. */
 async function renderSocialPlatformSetup({supabase,host,escape:esc}){
  if(!host)return;
@@ -13869,9 +13962,9 @@ async function renderSocialPlatformSetup({supabase,host,escape:esc}){
 return {renderSocialPlatformSetup};
 })();
 
-const __demoModule74=(()=>{
-const {createPlayHQImport}=__demoModule66;
-const {createPlayCricketConnection}=__demoModule65;
+const __demoModule75=(()=>{
+const {createPlayHQImport}=__demoModule67;
+const {createPlayCricketConnection}=__demoModule66;
 const {createFixtureCalendarTrials}=__demoModule27;
 // A separate entry point for clubs without Select, using the same fixture services.
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13961,7 +14054,7 @@ function createBattingFixtures(h){
 return {createBattingFixtures};
 })();
 
-const __demoModule75=(()=>{
+const __demoModule76=(()=>{
 // Fictional, in-memory adapter. Never writes to a club or contacts PlayCricket.
 function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
  const copy=value=>JSON.parse(JSON.stringify(value));
@@ -14020,7 +14113,7 @@ function createScorecardTeamDemo(getState,getCard,getPlayers=()=>[]){
 return {createScorecardTeamDemo};
 })();
 
-const __demoModule76=(()=>{
+const __demoModule77=(()=>{
 /* Demo-only memory store. It never requests or changes a real scorecard. */
 function createTeamWeekDemo(clubName,sharedScores=null){
  const files=new Map(),editions=new Map();let design={background_path:null,layout:{},revision:0};
@@ -14048,8 +14141,8 @@ function createTeamWeekDemo(clubName,sharedScores=null){
 return {createTeamWeekDemo};
 })();
 
-const __demoModule77=(()=>{
-const {createTeamWeekDemo}=__demoModule76;
+const __demoModule78=(()=>{
+const {createTeamWeekDemo}=__demoModule77;
 /* Demo records remain in memory; no live club writes or imported-score changes. */
 function createPlayerWeekDemo(clubName,sharedScores=null){
  const scores=createTeamWeekDemo(clubName,sharedScores),files=new Map(),editions=new Map(),profiles={};let design={layout:{},revision:0};
@@ -14069,7 +14162,7 @@ function createPlayerWeekDemo(clubName,sharedScores=null){
 return {createPlayerWeekDemo};
 })();
 
-const __demoModule78=(()=>{
+const __demoModule79=(()=>{
 /* Fictional shared scores for the public demo. No network requests or club writes. */
 function createSharedResultsDemo(getState,getCards,getLinks){
  const clone=x=>JSON.parse(JSON.stringify(x));
@@ -14109,7 +14202,8 @@ function createSharedResultsDemo(getState,getCards,getLinks){
 return {createSharedResultsDemo};
 })();
 
-const __demoModule79=(()=>{
+const __demoModule80=(()=>{
+const {DEFAULT_STATS_VIEWS,validateStatsViewSettings}=__demoModule12;
 // Fictional local data only. Share the demo's saved scorecards with other features.
 function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub, getToday, getBattingAccess = () => false) {
   const copy = value => structuredClone(value);
@@ -14140,10 +14234,20 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
     if (!state || args.p_club_id !== getClub() || !member?.user_id) throw Error('Current club membership is required');
     const admin = member.permission_role === 'admin';
     if (!(state.access.status !== 'disabled' && (admin || member.permission_role === 'captain' || state.selectors.includes(member.user_id) || state.access.head_selector_id === member.user_id)) && !(getBattingAccess() && ['admin','head_coach','coach','captain'].includes(member.permission_role))) throw Error('Current club coaching, selection or captain access is required');
-    if (!['context','set_season'].includes(args.p_action || 'context')) throw Error('Unknown season stats action');
+    if (!['context','set_season','set_views'].includes(args.p_action || 'context')) throw Error('Unknown season stats action');
     if ((args.p_action||'context')==='context'&&args.p_data?.on_demand!==true) throw Error('Analysis runs on request. Use Show form indicators or Compare returning players to calculate once.');
     let year = Number(today.slice(0,4)); if (today.slice(5,7) < '07') year--;
     state.stats_season ||= {start:year + '-07-01', end:(year+1) + '-06-30', revision:0};
+    if(args.p_action==='set_views') {
+      if(!admin)throw Error('Club Admin can change stats setup');
+      const d=args.p_data,settings=validateStatsViewSettings(d.settings),saved=state.stats_views;
+      if(!/^[0-9a-f-]{36}$/i.test(d.request_id || ''))throw Error('A stats setup request ID is required');
+      if(saved?.last_request===d.request_id){if(saved.updated_by!==member.user_id||JSON.stringify(saved.settings)!==JSON.stringify(settings))throw Error('Stats setup request was reused with different settings');}
+      else {
+        if(d.expected_revision!==(saved?.revision || 0))throw Error('Stats setup changed. Update totals before saving again');
+        state.stats_views={settings:copy(settings),revision:(saved?.revision || 0)+1,last_request:d.request_id,updated_by:member.user_id};
+      }
+    }
     if (args.p_action === 'set_season') {
       if (!admin) throw Error('Club Admin can change season dates');
       const d = args.p_data;
@@ -14162,13 +14266,13 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
     const identities = state.roster.map(p => ({source_id:'demo-' + p.id, roster_id:p.id, name:p.name}));
     for (const item of state.scorecard_links || []) identities.push({source_id:item.source_id,roster_id:item.roster_id,name:state.roster.find(p => p.id === item.roster_id)?.name});
     for (const item of getLinks()) if (!identities.some(x => x.source_id === item.source_player_id)) identities.push({source_id:item.source_player_id,player_id:item.player_id});
-    return copy({season:{...season,label:season.start.slice(0,4) === season.end.slice(0,4) ? season.start.slice(0,4) : season.start.slice(0,4) + '/' + season.end.slice(2,4)}, today, can_set_season:admin, cards:wrapped, fixtures, identities});
+    return copy({season:{...season,label:season.start.slice(0,4) === season.end.slice(0,4) ? season.start.slice(0,4) : season.start.slice(0,4) + '/' + season.end.slice(2,4)}, today, can_set_season:admin,can_set_stats_views:admin,stats_views:{settings:state.stats_views?.settings || DEFAULT_STATS_VIEWS,revision:state.stats_views?.revision || 0}, cards:wrapped, fixtures, identities});
   };
 }
 return {createSeasonStatsDemo};
 })();
 
-const __demoModule80=(()=>{
+const __demoModule81=(()=>{
 /* The public demo uses the live award UI with fictional, in-memory records. */
 function createSocialAwardsDemo(getState, getResults, getSocial, getMember, getUser) {
   const copy = value => structuredClone(value), records = new WeakMap();
@@ -14301,17 +14405,17 @@ const {findReturningPlayers}=__demoModule16;
 
 const {createScorecardTeams}=__demoModule19;
 
-const {createScorecardTeamDemo}=__demoModule75;
+const {createScorecardTeamDemo}=__demoModule76;
 
-const {createTeamWeekDemo}=__demoModule76;
+const {createTeamWeekDemo}=__demoModule77;
 
-const {createPlayerWeekDemo}=__demoModule77;
+const {createPlayerWeekDemo}=__demoModule78;
 
-const {createSharedResultsDemo}=__demoModule78;
+const {createSharedResultsDemo}=__demoModule79;
 
-const {createSeasonStatsDemo}=__demoModule79;
+const {createSeasonStatsDemo}=__demoModule80;
 
-const {createSocialAwardsDemo}=__demoModule80;
+const {createSocialAwardsDemo}=__demoModule81;
 
 const {selectionCallLink}=__demoModule25;
 
@@ -14342,7 +14446,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.365';
+const APP_UI_VERSION='0.8.62.366';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -17310,7 +17414,7 @@ function clubNavigationRoute(){
   if(currentTab==='messages'){const m=ensureClubMessages();route.messages={mode:m.mode,openId:m.mode==='compose'?null:m.openId};}
   if(currentTab==='team_review')route.teamReview=serializeTeamReviewState();
   if(currentTab==='batting_fixtures')route.battingFixtures={...battingFixturesRoute};
-  if(currentTab==='season_stats')route.seasonStats={section:seasonStatsRoute.section,standings:{...seasonStatsRoute.standings},returnTab:seasonStatsRoute.returnTab,filters:{...seasonStatsRoute.filters,seasonDraft:undefined}};
+  if(currentTab==='season_stats')route.seasonStats={section:seasonStatsRoute.section,standings:{...seasonStatsRoute.standings},returnTab:seasonStatsRoute.returnTab,filters:{...seasonStatsRoute.filters,seasonDraft:undefined,viewDraft:undefined}};
   if(currentTab==='myplan')route.planSection=builderSection;
   if(currentTab==='dashboard')route.homeStage=clubHomeExpandedStage;
   if(currentTab==='workshop_preview'&&workshopPreview){
@@ -35196,12 +35300,12 @@ const seasonStatsPanel=createDeferredController({load:()=>Promise.resolve(__demo
   else if(canUseTeamReview())await openFixtureMatchReview({fixtureId:id});
  }
 }),scope:requestedFeatureScope,name:'season stats',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
-const selectionGroupPermissions=createDeferredController({load:()=>Promise.resolve(__demoModule62),create:({createSelectionGroupPermissions})=>createSelectionGroupPermissions({
+const selectionGroupPermissions=createDeferredController({load:()=>Promise.resolve(__demoModule63),create:({createSelectionGroupPermissions})=>createSelectionGroupPermissions({
  here:()=>currentTab==='teams'&&selectionState?.view==='settings',alert,confirm,group:()=>selectionState?.selectionGroup,
  rpc:async(action,data)=>{const r=await supabase.rpc('selection_group_permissions',{p_club_id:club.id,p_action:action,p_data:data});if(r.error)throw r.error;return r.data;},
  saved:()=>seReload(),inviteURL:()=>location.origin+location.pathname,copy:text=>navigator.clipboard.writeText(text)
 }),scope:requestedFeatureScope,name:'Selection Group permissions',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
-const selectionGroupSetup=createDeferredController({load:()=>Promise.resolve(__demoModule63),create:({createSelectionGroupPage})=>createSelectionGroupPage({
+const selectionGroupSetup=createDeferredController({load:()=>Promise.resolve(__demoModule64),create:({createSelectionGroupPage})=>createSelectionGroupPage({
  supabase,clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.view==='selection_groups',alert,confirm,
  saved:async()=>{teamReviewCache=null;sharedTeamsState=null;await loadSelectionsAccess();await loadMatchCaptainAccess();await seReload();},loadSeason:groupId=>{if(confirmLeaveSelections())seImportFixtures(groupId);},
  captains:()=>{if(confirmLeaveSelections())void openSharedTeams();},manual:()=>{if(confirmLeaveSelections())void openSharedTeams(true);}
@@ -35212,12 +35316,12 @@ function seEditSelectionGroups(groupId=null){
  const host=document.getElementById('seContent');host.innerHTML='<section class="se-card se-drawer"><h2>Selection Groups</h2><div id="seGroupsSetup"></div></section>';
  void selectionGroupSetup.mount(document.getElementById('seGroupsSetup'),{selectionGroupId:s.groupAddTeam||null});s.groupAddTeam=null;
 }
-const playCricketConnection=createDeferredController({load:()=>Promise.resolve(__demoModule65),create:({createPlayCricketConnection})=>createPlayCricketConnection({supabase,clubId:()=>club?.id,
+const playCricketConnection=createDeferredController({load:()=>Promise.resolve(__demoModule66),create:({createPlayCricketConnection})=>createPlayCricketConnection({supabase,clubId:()=>club?.id,
  here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_connection',
  copy:text=>navigator.clipboard.writeText(text),back:()=>seChangeView('settings'),
  season:()=>{if(confirmLeaveSelections())seImportFixtures();},alert,confirm}),scope:requestedFeatureScope,name:'Connect PlayCricket',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 function sePlayCricketConnection(){const s=ensureSelections();if(!s.data?.admin)return;recordSelectionDrawer('playhq_connection');void playCricketConnection.mount(document.getElementById('seContent'));}
-const playhqImport=createDeferredController({load:()=>Promise.resolve(__demoModule66),create:({createPlayHQImport})=>createPlayHQImport({supabase,connect:()=>{if(confirmLeaveSelections())sePlayCricketConnection();},clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),
+const playhqImport=createDeferredController({load:()=>Promise.resolve(__demoModule67),create:({createPlayHQImport})=>createPlayHQImport({supabase,connect:()=>{if(confirmLeaveSelections())sePlayCricketConnection();},clubId:()=>club?.id,here:()=>currentTab==='teams'&&selectionState?.navigationDrawer?.kind==='playhq_import',manual:()=>seFixtureEditor(),
  manualGrades:()=>openSharedTeams(true),captains:()=>openSharedTeams(),back:()=>{ensureSelections().navigationDrawer=null;drawSelections();},openFixture:id=>{const f=ensureSelections().data.fixtures.find(x=>x.id===id);if(f)seFixtureEditor(f);},refresh:()=>seReload(),alert:message=>alert(message),confirm:message=>confirm(message)}),scope:requestedFeatureScope,name:'season fixtures',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 function seImportFixtures(selectionGroupId=null){const s=ensureSelections();if(!seCanSetup())return;recordSelectionDrawer('playhq_import');playhqImport.mount(document.getElementById('seContent'),{groups:s.data.groups||[],existing:s.data.fixtures||[],selectionGroupId});}
 async function openFixtureMatchReview(fixture){
@@ -35229,11 +35333,11 @@ async function openFixtureMatchReview(fixture){
  resetTeamReviewState();const s=ensureTeamReviewState();s.group=f.group_id;s.fixtures=data.fixtures;s.teamsEnabled=data.teams_enabled;teamReviewUseFixture(f,s);
  currentTab='team_review';await renderTab();
 }
-const planReminderSettings=createDeferredController({load:()=>Promise.resolve(__demoModule68),create:({createPlanReminderSettings})=>createPlanReminderSettings({
+const planReminderSettings=createDeferredController({load:()=>Promise.resolve(__demoModule69),create:({createPlanReminderSettings})=>createPlanReminderSettings({
  supabase,scope:selectionsScopeKey,uuid:()=>crypto.randomUUID(),alert,confirm,saved:refreshPlanDeadlineViews
 }),scope:requestedFeatureScope,name:'Plan reminders',passive:{canLeave:()=>true,hasChanges:()=>false}});
 window.addEventListener('beforeunload',event=>{if(planReminderSettings.hasChanges()){event.preventDefault();event.returnValue='';}});
-const fixtureResults=createDeferredController({load:()=>Promise.resolve(__demoModule69),create:({createFixtureResults})=>createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async drawer=>{seFixtureScoresChanged();await seReload();const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===drawer.fixtureId);if(!s.formDirty&&s.key===drawer.scope&&s.navigationDrawer===drawer.drawer&&f?.no_play)seFixtureEditor(f);},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();seRefreshIdentityReviewNotice();}}),scope:requestedFeatureScope,name:'fixture results',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
+const fixtureResults=createDeferredController({load:()=>Promise.resolve(__demoModule70),create:({createFixtureResults})=>createFixtureResults({supabase,escape:seEsc,extractUrl:matchReviewExtractUrl,alert:message=>alert(message),confirm:message=>confirm(message),here:s=>currentTab==='teams'&&selectionState?.key===s.scope&&selectionState?.navigationDrawer===s.drawer,loaded:seFixtureResultLoaded,changed:async drawer=>{seFixtureScoresChanged();await seReload();const s=ensureSelections(),f=s.data.fixtures.find(x=>x.id===drawer.fixtureId);if(!s.formDirty&&s.key===drawer.scope&&s.navigationDrawer===drawer.drawer&&f?.no_play)seFixtureEditor(f);},openMatchReview:openFixtureMatchReview,reviewPlayHQ:()=>{if(confirmLeaveSelections())seImportFixtures();},teamCheck:mountScorecardTeam,teamChanged:async()=>{seFixtureScoresChanged();await seReload();seRefreshIdentityReviewNotice();}}),scope:requestedFeatureScope,name:'fixture results',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}}});
 
 function seApplyWeekLaunch(s){
  const launch=s.weekLaunch;if(!launch)return;delete s.weekLaunch;
@@ -35242,7 +35346,7 @@ function seApplyWeekLaunch(s){
  else if(launch.view==='published'||launch.view==='board'){s.view=seBoardAccess(s.data)?'board':'published';if(date){s.date=date;s.boardDateChosen=true;s.publishedWeek=sePublishedWeekStart(date);}}
  if(launch.plan&&s.data.selector){s.view='board';s.weekLaunchPlan=launch.plan;}
 }
-const clubWeek=createDeferredController({load:()=>Promise.resolve(__demoModule70),create:({createClubWeekUI})=>createClubWeekUI({
+const clubWeek=createDeferredController({load:()=>Promise.resolve(__demoModule71),create:({createClubWeekUI})=>createClubWeekUI({
  read:()=>{const s=ensureSelections();return {data:s.data,drawer:s.navigationDrawer,view:currentTab==='teams'?s.view:'',date:s.date,clubId:club?.id,userId:session?.user?.id,clubName:club?.name,today:seClubDate(),launchPlan:s.weekLaunchPlan};},
  consumePlan:()=>{delete ensureSelections().weekLaunchPlan;},
  rpc:async(action,data)=>{const r=await supabase.rpc('club_week_api',{p_club_id:club.id,p_action:action,p_data:data});if(r.error){const e=Error(r.error.message);e.definite=!!r.error.code;throw e;}return r.data;},
@@ -35253,7 +35357,7 @@ const clubWeek=createDeferredController({load:()=>Promise.resolve(__demoModule70
 }),scope:requestedFeatureScope,name:'club tools',passive:{canLeave:()=>true,hasChanges:()=>false,isOpen:()=>false,invalidate:()=>{}},host:()=>null,onError:()=>seNotice('Club tools could not load. Reopen this section to try again.')});
 let assistFromGuide=false,pendingAssistLaunch=null;
 const mirelionAssist=createStaffAssistController({
- load:()=>Promise.resolve(__demoModule72),
+ load:()=>Promise.resolve(__demoModule73),
  allowed:()=>!!(platformRole&&document.getElementById('platformPage'))||canUseMirelionAssist(),
  scope:()=>JSON.stringify([session?.user?.id,club?.id,!!document.getElementById('platformPage'),currentTab,platformView,selectionAccess?.assist_staff]),
  create:module=>module.createMirelionAssist({
@@ -35282,13 +35386,13 @@ async function renderMirelionAssist(){
 
 async function mountVideoCredits(host,options){const identity=requestedFeatureScope();try{const module=await Promise.resolve(__demoModule26);if(identity===requestedFeatureScope()&&host?.isConnected)return module.mountVideoCredits(host,options);}catch{if(host?.isConnected&&identity===requestedFeatureScope())host.textContent='Call credits could not load. Reopen Settings to try again.';}}
 
-const socialPlatformSetupPanel=createDeferredController({load:()=>Promise.resolve(__demoModule73),create:module=>({mount:module.renderSocialPlatformSetup}),host:args=>args[0].host,scope:requestedFeatureScope,name:'social accounts setup'});
+const socialPlatformSetupPanel=createDeferredController({load:()=>Promise.resolve(__demoModule74),create:module=>({mount:module.renderSocialPlatformSetup}),host:args=>args[0].host,scope:requestedFeatureScope,name:'social accounts setup'});
 function renderSocialPlatformSetup(options){return socialPlatformSetupPanel.mount(options);}
 
 // Standalone Club Batting exposes fixture setup only after existing product access is known.
 let battingFixturesRoute={};
 function canUseBattingFixtures(){return canUseTeamReview()&&!productTrialWaiting()&&!selectionsStandalone()&&selectionAccess?.key===selectionsScopeKey()&&selectionAccess.enabled===false&&!selectionAccess.error;}
-const battingFixtures=createDeferredController({load:()=>Promise.resolve(__demoModule74),create:({createBattingFixtures})=>createBattingFixtures({
+const battingFixtures=createDeferredController({load:()=>Promise.resolve(__demoModule75),create:({createBattingFixtures})=>createBattingFixtures({
  supabase,scope:selectionsScopeKey,clubId:()=>club?.id,here:()=>currentTab==='batting_fixtures'&&canUseBattingFixtures(),
  today:todayIso,uuid:()=>crypto.randomUUID(),alert,confirm,copy:text=>navigator.clipboard.writeText(text),
  teams:manual=>openSharedTeams(manual),review:id=>openFixtureMatchReview({fixtureId:id}),
@@ -38120,7 +38224,7 @@ const demoSeasonStats=createSeasonStatsDemo(()=>demoSelections,()=>demoScorecard
 
 const demoBeforeSeasonStatsRpc=window.__fixtureDb.rpc;
 
-window.__fixtureDb.rpc=async function(name,args){if(name==='club_selection_history_api')return {data:{players:(args.p_data?.roster_ids||[]).map(id=>({roster_id:id,records:[]})),identity_status:'unconfirmed_name_and_club'},error:null};if(name==='club_season_stats_api'){try{return {data:demoSeasonStats(args),error:null};}catch(error){return {data:null,error:{message:error.message}};}}return demoBeforeSeasonStatsRpc.call(this,name,args);};
+window.__fixtureDb.rpc=async function(name,args){if(name==='club_selection_history_api')return {data:{players:(args.p_data?.roster_ids||[]).map(id=>({roster_id:id,records:[]})),identity_status:'unconfirmed_name_and_club'},error:null};if(name==='club_season_stats_api'){try{return {data:demoSeasonStats(args),error:null};}catch(error){return {data:null,error:{message:error.message,code:'P0001'}};}}return demoBeforeSeasonStatsRpc.call(this,name,args);};
 
 const demoSocialAwards=createSocialAwardsDemo(()=>demoSelections,()=>demoSharedResults,()=>demoSocial,()=>membership,()=>session?.user.id);
 

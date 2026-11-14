@@ -13,15 +13,45 @@ export const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'
   longform:'long_form',twoday:'long_form',multiday:'long_form',test:'long_form',t20:'t20',twenty20:'t20'})[key(value)] || 'unknown';
 export const statsMatchesView = (format, view) => !view || (view === 'competition'
   ? ['limited_overs','long_form'].includes(statsFormat(format)) : statsFormat(format) === view);
-export function defaultStatsView(context = {}, preferredFormat) {
+export const DEFAULT_STATS_VIEWS = {default:{combine:true,default_view:'auto'},competitions:{}};
+export function validateStatsViewSettings(settings) {
+  const object=value=>value && typeof value==='object' && !Array.isArray(value);
+  if(!object(settings)||Object.keys(settings).length!==2||!object(settings.default)||!object(settings.competitions)||JSON.stringify(settings).length>16000)throw Error('Invalid stats setup');
+  if(Object.keys(settings.competitions).length>50||Object.keys(settings.competitions).some(name=>!name.trim()||name!==name.trim()||name.length>160))throw Error('Choose up to 50 named competition overrides');
+  for(const policy of [settings.default,...Object.values(settings.competitions)])if(!object(policy)||Object.keys(policy).length!==2||typeof policy.combine!=='boolean'||!['auto','competition','limited_overs','long_form','t20'].includes(policy.default_view)||!policy.combine&&policy.default_view==='competition')throw Error('Choose a valid grouping and default view');
+  return settings;
+}
+export function statsViewSettings(context = {}) {
+  return context?.stats_views?.settings || DEFAULT_STATS_VIEWS;
+}
+export function statsViewPolicy(context = {}, competition) {
+  const settings=statsViewSettings(context), name=String(competition || '').trim();
+  return name && Object.hasOwn(settings.competitions || {},name) ? settings.competitions[name] : settings.default || DEFAULT_STATS_VIEWS.default;
+}
+export const statsCombineCompetition = (context, competition) => !!String(competition || '').trim() && statsViewPolicy(context,competition).combine === true;
+export function statsCompetitions(context = {}) {
+  const season=context.season || {}, teams=resolveSelectionStatsTeams(context.fixtures || [],season);
+  return [...new Set([
+    ...teams.filter(f=>!f.cancelled && inSeason(dates(f)[0],season)).map(f=>String(f.competition || '').trim()),
+    ...latestStatsCards(context.cards).filter(c=>inSeason([...(c.scorecard.dates || [])].sort()[0],season)).map(c=>String(teams.find(f=>f.id===c.fixture_id || f.match_id===c.scorecard.match_id)?.competition || c.scorecard.competition || '').trim())
+  ])].sort((a,b)=>a.localeCompare(b));
+}
+export function statsViews(context = {}, competition) {
+  const combined=competition == null ? statsViewPolicy(context).combine || statsCompetitions(context).some(c=>statsCombineCompetition(context,c)) : statsCombineCompetition(context,competition);
+  return [...(combined ? ['competition'] : []),'limited_overs','long_form','t20','unknown'];
+}
+export function defaultStatsView(context = {}, preferredFormat, competition) {
+  const policy=statsViewPolicy(context,competition), available=statsViews(context,competition);
+  if (policy.default_view !== 'auto' && available.includes(policy.default_view)) return policy.default_view;
   if (statsFormat(preferredFormat) === 't20') return 't20';
-  if (['limited_overs','long_form'].includes(statsFormat(preferredFormat))) return 'competition';
   const season = context.season || {};
   const formats = new Set([
-    ...(context.fixtures || []).filter(f => !f.cancelled && inSeason(dates(f)[0],season)).map(f => statsFormat(f.format)),
-    ...latestStatsCards(context.cards).filter(c => inSeason([...(c.scorecard.dates || [])].sort()[0],season)).map(c => statsFormat(c.scorecard.format_key))
+    ...resolveSelectionStatsTeams(context.fixtures || [],season).filter(f => !f.cancelled && inSeason(dates(f)[0],season) && (competition == null || String(f.competition || '').trim() === competition)).map(f => statsFormat(f.format)),
+    ...latestStatsCards(context.cards).filter(c => inSeason([...(c.scorecard.dates || [])].sort()[0],season) && (competition == null || String(c.scorecard.competition || '').trim() === competition)).map(c => statsFormat(c.scorecard.format_key))
   ].filter(f => f !== 'unknown'));
-  return formats.size === 1 && formats.has('t20') ? 't20' : 'competition';
+  if (formats.size === 1 && formats.has('t20')) return 't20';
+  if (policy.combine && available.includes('competition')) return 'competition';
+  return ['limited_overs','long_form'].includes(statsFormat(preferredFormat)) ? statsFormat(preferredFormat) : ['limited_overs','long_form','t20'].find(f=>formats.has(f)) || 'limited_overs';
 }
 export const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 export const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
@@ -119,6 +149,7 @@ export function buildSeasonStats(context = {}, filters = {}) {
   const rows = new Map(), issues = new Map(), groups = new Map(), formats = new Set(), matched = new Set();
   let included = 0, playing = 0;
   const matchesFilters = (group, format) => (!filters.grade || filters.grade === group)
+    && (filters.competition == null || JSON.parse(group)[0] === filters.competition)
     && (!Array.isArray(filters.groups) || filters.groups.includes(group))
     && statsMatchesView(format, filters.format);
   const problem = (id, message, fixture, card, grade, competition, format, requiresAttention = true) => {
@@ -130,7 +161,7 @@ export function buildSeasonStats(context = {}, filters = {}) {
   };
   const observeGroup = (competition, grade, format) => {
     const id = groupKey(competition, grade);
-    groups.set(id, {id, grade:grade || 'Grade unknown', competition:competition || ''});
+    if (filters.competition == null || String(competition || '').trim() === filters.competition) groups.set(id, {id, grade:grade || 'Grade unknown', competition:competition || ''});
     formats.add(format || 'unknown');
     return id;
   };
@@ -165,7 +196,7 @@ export function buildSeasonStats(context = {}, filters = {}) {
     const format = statsFormat(card.format_key || fixture?.format);
     // Aggregate original innings together, then calculate rates once. Never
     // combine T20, or infer a continuous competition from an unknown label.
-    const rowFormat = filters.format === 'competition' && String(competition).trim() ? 'competition' : format;
+    const rowFormat = filters.format === 'competition' && statsCombineCompetition(context,competition) ? 'competition' : format;
     const group = observeGroup(competition, grade, format);
     if (!matchesFilters(group, format)) continue;
     const issue = (message, requiresAttention = true) => problem(card.match_id, message, fixture, card, grade, competition, format, requiresAttention);
