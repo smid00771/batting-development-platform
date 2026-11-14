@@ -16,3 +16,14 @@ Validation:
 - Public browser and deployed-byte verification are recorded in the deployment follow-up.
 
 Migration: `supabase/migrations/20261114090704_season_stats_view_settings.sql`, with reviewable source in `Database/season_stats_view_settings.sql`.
+
+## Deployment verification
+
+Published application commit `1c38b1d67a8b84c52f9baf546d7a1c87bdb3e9f0` to main. GitHub Pages build/deploy run `43580360254` completed successfully. All 12 deployed application/demo/preview assets byte-match the tested checkout; SHA-256 records are in `stats-366/deployed-files.json`.
+
+The deployed, rebuilt demo was visually checked through its normal Club Admin → More → Season stats journey in a real browser, at 1200 px and 390 px using `Tests/demo-responsive-preview.html`. The setup disclosure, dates, grouping/default selects and save controls fit both widths. Saved Example District as separate formats with Long form only as its opening view, selected that competition and confirmed the Long form screen with eight scorecards and no combined choice. Club default and other competitions remained unchanged. This only changed fictional demo state.
+
+- [Desktop setup](stats-366/desktop.jpg)
+- [Phone setup](stats-366/phone.jpg)
+
+The final migration (including FK index) was rerun locally: all five checks passed. Hosted synthetic tests left both settings tables empty, confirming Newcastle City and existing clubs retain their defaults.

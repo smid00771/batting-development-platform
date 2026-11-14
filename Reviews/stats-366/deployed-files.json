@@ -1,0 +1,62 @@
+[
+  {
+    "file": "app.html",
+    "matches": true,
+    "sha256": "e88137680fd8f5a97d4387d16608d943fbbc260e26a960a01dd21c7d4843316d"
+  },
+  {
+    "file": "app-start.js",
+    "matches": true,
+    "sha256": "62c9e1d9e26776c1516301694513cecc648a25bcb73f8ee7e030f57f41a17c2b"
+  },
+  {
+    "file": "app.js",
+    "matches": true,
+    "sha256": "aaa1d4adfabdff7faeecb70f1e7dc7505f9487d7285ecf8192c3ff2952a31881"
+  },
+  {
+    "file": "season-stats.js",
+    "matches": true,
+    "sha256": "956c91124d92bb8d0b9bb1d436dd21b52c77773e74da1554386b6d97fb010e94"
+  },
+  {
+    "file": "season-stats-panel.js",
+    "matches": true,
+    "sha256": "d9d0d4c933f7098599337ae39979f607c71ddd1875b7920798b3ed2b3ded5653"
+  },
+  {
+    "file": "season-stats-settings.js",
+    "matches": true,
+    "sha256": "9205f8986b7c70c84ab668d4351fcf2f6829b17d5a757932234239165483fbd4"
+  },
+  {
+    "file": "selection-evidence-snapshot.js",
+    "matches": true,
+    "sha256": "a9d4e7bfbc881a37c843fae003938a353140d823f91e3e81abb8e2d36a1110e5"
+  },
+  {
+    "file": "selection-evidence-ui.js",
+    "matches": true,
+    "sha256": "47dad5a7a4af2dd1c20344e66a9119f842fc9918c3d7729b024607a685b2eaec"
+  },
+  {
+    "file": "selection-history.js",
+    "matches": true,
+    "sha256": "fb4710538c49419b72b3309dbe422c750d3df4b1dfdc87b6dce6329b32623ffb"
+  },
+  {
+    "file": "selection-returning.js",
+    "matches": true,
+    "sha256": "1587a6f8d39528696663618bc8c263ff4c88aa680d1eceb1432b128bbe4077e3"
+  },
+  {
+    "file": "demo.html",
+    "matches": true,
+    "sha256": "15e8ad71bd95a00386ec76ae15ddc77f58d47a1ef3141441b18f7a1d04510eb0"
+  },
+  {
+    "file": "Tests/demo-responsive-preview.html",
+    "matches": true,
+    "sha256": "88acf68d762289993cf16b77ecba26be8474d563eae21359add05b850de43cec"
+  }
+]
