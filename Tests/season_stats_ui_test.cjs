@@ -362,8 +362,8 @@ const configured=()=>({...data(),can_set_stats_views:true,stats_views:{revision:
 const setupSelect=(h,kind,value)=>change(h,`[data-stats-setup-${kind}]`,value);
 const submitViews=h=>h.host.querySelector('[data-stats-view-setup]').dispatchEvent(new h.dom.window.Event('submit',{bubbles:true,cancelable:true}));
 test('stats setup saves shared choices, protects drafts and keeps T20 separate',async()=>{
- const h=await harness(configured(),{state:{}});setupSelect(h,'group','separate');setupSelect(h,'view','long_form');
- assert.equal(h.calls.length,1);assert.ok(h.host.querySelector('[data-stats-setup]').open);h.allow(false);assert.equal(h.panel.canLeave(),false);
+ const h=await harness(configured(),{state:{}});assert.equal(h.host.querySelector('[data-stats-setup]').hidden,true);h.click('[data-stats-setup-toggle]');assert.equal(h.host.querySelector('[data-stats-setup]').hidden,false);assert.equal(h.host.querySelector('[data-stats-setup-toggle]').getAttribute('aria-expanded'),'true');h.click('[data-stats-setup-toggle]');assert.equal(h.host.querySelector('[data-stats-setup]').hidden,true);h.click('[data-stats-setup-toggle]');setupSelect(h,'group','separate');setupSelect(h,'view','long_form');
+ assert.equal(h.calls.length,1);assert.equal(h.host.querySelector('[data-stats-setup]').hidden,false);h.allow(false);assert.equal(h.panel.canLeave(),false);
  assert.equal([...h.host.querySelector('[data-stats-setup-view]').options].some(x=>x.value==='competition'),false);
  h.reply(async(name,args)=>({data:{...configured(),stats_views:{settings:args.p_data.settings,revision:1}},error:null}));submitViews(h);await tick();
  assert.equal(h.calls.length,2);assert.equal(h.calls[1].args.p_action,'set_views');assert.equal(h.s.state.format,'long_form');assert.equal(h.s.state.viewDraft,undefined);assert.equal(h.panel.canLeave(),true);
