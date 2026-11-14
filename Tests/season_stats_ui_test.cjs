@@ -283,13 +283,13 @@ test('published teams are selected within the explicit format and never switch f
  assert.equal(h.s.state.firstTeam,long[0].id);assert.equal(h.s.state.secondTeam,long[1].id);
 });
 
-test('limited overs is the current-format default and long form stays an explicit empty reference view',async()=>{
+test('competition is the default and long form stays an explicit empty reference view',async()=>{
  const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
  f.context.cards.forEach(c=>c.scorecard.format_key='limited_overs');
  f.context.fixtures.forEach(t=>t.format='limited_overs');
  f.teams.forEach(t=>{t.format='limited_overs';t.published.details.format='limited_overs';});
  const h=await harness(f.context,{teams:f.teams,roster:f.roster,state:{},preferredFormat:'limited_overs'});
- assert.equal(h.host.querySelector('[data-stats-filter=format]').value,'limited_overs');
+ assert.equal(h.host.querySelector('[data-stats-filter=format]').value,'competition');
  h.click('[data-stats-compare]');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan10 average/);
  assert.ok(h.host.querySelector('[data-stats-filter=format]'));
  change(h,'[data-stats-filter=format]','long_form');
@@ -318,4 +318,42 @@ test('a published long-form lineup cannot replace the limited-overs selection an
  assert.doesNotMatch(h.host.querySelector('[role=table]').textContent,/30 average120 runs/);
  change(h,'[data-stats-filter=format]','limited_overs');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan30 average120 runs/);
  assert.equal(h.calls.length,1);
+});
+
+test('competition view combines both formats across batting, bowling and selected or all-season grade comparisons without extra requests',async()=>{
+ const {selectionEvidenceFixture}=await import('./fixtures/selection_evidence_fixture.mjs'),f=selectionEvidenceFixture();
+ for(let i=0;i<f.context.cards.length;i++){
+  const format=i%4<2?'limited_overs':'long_form';f.context.cards[i].scorecard.format_key=format;f.context.fixtures[i].format=format;
+ }
+ // The last published team in one grade is still from the limited-overs phase.
+ const old=structuredClone(f.teams[1]);old.id='old-second';old.format=old.published.details.format='limited_overs';old.days=old.published.details.days=[{date:'2026-10-17'}];
+ delete f.teams[1].published;f.teams.push(old);
+ const t20=structuredClone(f.teams[0]);t20.id='separate-t20';t20.format=t20.published.details.format='t20';t20.days=t20.published.details.days=[{date:'2026-10-25'}];f.teams.push(t20);
+ const dev=structuredClone(f.teams[0]);dev.id='dev-published';dev.grade=dev.published.details.grade='Dev Navy';f.teams.push(dev);
+ const later=structuredClone(dev);later.id='dev-future';later.days=[{date:'2026-11-14'}];delete later.published;f.teams.push(later);
+ const h=await harness(f.context,{teams:f.teams,roster:f.roster,state:{}});
+ assert.equal(h.s.state.format,'competition');assert.equal(h.host.querySelector('[data-stats-filter=format]').selectedOptions[0].textContent,'Competition');
+ assert.match(h.host.textContent,/8 completed scorecards · Limited overs \+ long form/);
+ const alex=()=>[...h.host.querySelectorAll('.ss-row')].find(r=>r.querySelector('.ss-name').textContent.startsWith('Alex Rowan'));
+ assert.equal(alex().querySelector('[data-stat=runs] strong').textContent,'40');assert.equal(alex().querySelector('[data-stat=innings] strong').textContent,'4');
+ assert.match(alex().querySelector('.ss-detail').textContent,/Limited overs/);assert.match(alex().querySelector('.ss-detail').textContent,/Long form/);
+ h.click('[data-stats-mode=bowling]');assert.equal(h.s.state.format,'competition');assert.ok(h.host.querySelector('[data-stat=bowling_average]'));
+ h.click('[data-stats-compare]');assert.equal(h.s.state.firstTeam,'team-1');assert.equal(h.s.state.secondTeam,'old-second');assert.equal(h.host.querySelector('[data-stats-date]').value,'published');
+ assert.equal(h.host.querySelector('[data-stats-team=firstTeam]').options.length,3,'One latest published team per grade across both formats; T20 excluded');
+ assert.match(h.host.querySelector('[role=table]').textContent,/Pat Hart8 average12 wickets · 32\.0 overs · 4 inns/);
+ h.click('[data-stats-compare-mode=batting]');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan10 average40 runs · 4 inns/);
+ change(h,'[data-stats-team=firstTeam]','old-second');assert.equal(h.s.state.format,'competition','Choosing a grade retains the combined view');
+ change(h,'[data-stats-date]','season');assert.match(h.host.querySelector('[role=table]').textContent,/Alex Rowan10 average40 runs · 4 inns/);
+ change(h,'[data-stats-filter=format]','limited_overs');assert.equal(h.s.state.format,'limited_overs');
+ h.click('[data-stats-mode=batting]');assert.equal(alex().querySelector('[data-stat=runs] strong').textContent,'20');
+ change(h,'[data-stats-filter=format]','long_form');assert.equal(alex().querySelector('[data-stat=runs] strong').textContent,'20');
+ change(h,'[data-stats-filter=format]','t20');assert.equal(h.host.querySelector('.ss-row'),null);assert.match(h.host.textContent,/0 completed scorecards · T20/);
+ change(h,'[data-stats-filter=format]','competition');assert.equal(alex().querySelector('[data-stat=runs] strong').textContent,'40');
+ h.panel.mount(h.host,h.options);assert.equal(h.s.state.format,'competition');assert.equal(h.calls.length,1);
+});
+
+test('T20-only clubs default to T20 and explicit format choices survive refresh',async()=>{
+ const t=teams.map(team=>({...team,format:'t20',days:[{date:'2026-10-10'}]}));
+ const h=await harness({...data(),fixtures:t},{teams:t,state:{}});assert.equal(h.s.state.format,'t20');
+ change(h,'[data-stats-filter=format]','limited_overs');h.click('[data-stats-refresh]');await tick();assert.equal(h.s.state.format,'limited_overs');
 });

@@ -7,9 +7,22 @@ const number = value => Number.isInteger(value) && value >= 0;
 const dates = fixture => (fixture.days || []).map(day => typeof day === 'string' ? day : day.date).filter(Boolean).sort();
 const inSeason = (date, season) => !!date && date >= season.start && date <= season.end;
 const groupKey = (competition, grade) => JSON.stringify([String(competition || '').trim(), String(grade || '').trim()]);
-export const STATS_FORMATS = {limited_overs:'Limited overs', t20:'T20', long_form:'Long form', unknown:'Format unknown'};
+// "competition" is a stats view, never a stored fixture format.
+export const STATS_FORMATS = {competition:'Limited overs + long form', limited_overs:'Limited overs', t20:'T20', long_form:'Long form', unknown:'Format unknown'};
 export const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'limited_overs',oneday:'limited_overs',
   longform:'long_form',twoday:'long_form',multiday:'long_form',test:'long_form',t20:'t20',twenty20:'t20'})[key(value)] || 'unknown';
+export const statsMatchesView = (format, view) => !view || (view === 'competition'
+  ? ['limited_overs','long_form'].includes(statsFormat(format)) : statsFormat(format) === view);
+export function defaultStatsView(context = {}, preferredFormat) {
+  if (statsFormat(preferredFormat) === 't20') return 't20';
+  if (['limited_overs','long_form'].includes(statsFormat(preferredFormat))) return 'competition';
+  const season = context.season || {};
+  const formats = new Set([
+    ...(context.fixtures || []).filter(f => !f.cancelled && inSeason(dates(f)[0],season)).map(f => statsFormat(f.format)),
+    ...latestStatsCards(context.cards).filter(c => inSeason([...(c.scorecard.dates || [])].sort()[0],season)).map(c => statsFormat(c.scorecard.format_key))
+  ].filter(f => f !== 'unknown'));
+  return formats.size === 1 && formats.has('t20') ? 't20' : 'competition';
+}
 export const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 export const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
 
@@ -75,7 +88,7 @@ export function latestStatsCards(cards = []) {
 }
 
 // These positions describe the current selection, never an inferred historical
-// batting position. Each figure remains specific to its competition/grade/format.
+// batting position. Each figure remains specific to its competition/grade/view.
 export function compareSelectedGrades(summary, first, second, roster = []) {
   if (!first || !second || first.id === second.id || first.competition !== second.competition || first.format !== second.format) return [];
   const players = new Map(roster.map(p => [p.id, p]));
@@ -107,7 +120,7 @@ export function buildSeasonStats(context = {}, filters = {}) {
   let included = 0, playing = 0;
   const matchesFilters = (group, format) => (!filters.grade || filters.grade === group)
     && (!Array.isArray(filters.groups) || filters.groups.includes(group))
-    && (!filters.format || filters.format === format);
+    && statsMatchesView(format, filters.format);
   const problem = (id, message, fixture, card, grade, competition, format, requiresAttention = true) => {
     const group = groupKey(competition, grade);
     if (!matchesFilters(group, format)) return;
@@ -150,6 +163,9 @@ export function buildSeasonStats(context = {}, filters = {}) {
     const grade = fixture?.grade || wrapped.grade_hint || card.grade || 'Grade unknown';
     const competition = fixture?.competition || card.competition || '';
     const format = statsFormat(card.format_key || fixture?.format);
+    // Aggregate original innings together, then calculate rates once. Never
+    // combine T20, or infer a continuous competition from an unknown label.
+    const rowFormat = filters.format === 'competition' && String(competition).trim() ? 'competition' : format;
     const group = observeGroup(competition, grade, format);
     if (!matchesFilters(group, format)) continue;
     const issue = (message, requiresAttention = true) => problem(card.match_id, message, fixture, card, grade, competition, format, requiresAttention);
@@ -182,18 +198,18 @@ export function buildSeasonStats(context = {}, filters = {}) {
       if (!player?.player_id) return null;
       const person = playerKey(player.player_id);
       if (conflicts.has(person)) return null;
-      const id = JSON.stringify([person, group, format]);
+      const id = JSON.stringify([person, group, rowFormat]);
       let row = rows.get(id);
       if (!row) {
         row = {id, person_id:person, roster_id:identities.get(player.player_id)?.roster_id || null,
-          name:identities.get(player.player_id)?.name || player.name || 'Player', grade, competition, group, format,
+          name:identities.get(player.player_id)?.name || player.name || 'Player', grade, competition, group, format:rowFormat,
           matches:0, innings:0, runs:0, not_outs:0, dismissals:0, balls:0, fours:0, sixes:0,
           fifties:0, hundreds:0, ducks:0, high_score:null, bowling_innings:0, wickets:0, conceded:0,
           bowling_balls:0, maidens:0, five_wickets:0, best_bowling:null, batting_complete:true, bowling_complete:true, history:[]};
         rows.set(id, row);
       }
       if (!matchRows.has(id)) {
-        const match = {match_id:card.match_id, date, opposition:fixture?.opposition || card.teams.find(t => t.id !== team.id)?.name || '',
+        const match = {match_id:card.match_id, date, format, opposition:fixture?.opposition || card.teams.find(t => t.id !== team.id)?.name || '',
           url:card.url || null, fixture_id:fixture?.id || null, batting:[], bowling:[], batting_available:false, bowling_available:false, batting_incomplete:false, bowling_incomplete:false};
         row.matches++; row.history.push(match); matchRows.set(id, match);
       }

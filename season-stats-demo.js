@@ -12,7 +12,7 @@ export function createSeasonStatsDemo(getState, getCards, getLinks, getMember, g
         const players = [...new Set(fixture.slots.map(slot => slot.d1).filter(Boolean))].map(id => ({player_id:'demo-' + id, name:state.roster.find(p => p.id === id)?.name || 'Demo player'}));
         const our = 'example-home-' + teamIndex, away = 'example-away';
         cards['example-stats-' + matchId] = {provider:'playcricket_au', schema_version:2, match_id:matchId, url:null,
-          dates:[day], status:'completed', format_key:d.format, grade:d.grade, competition:d.competition,
+          dates:[day], status:'completed', format_key:d.format === 'long_form' && round < 2 ? 'limited_overs' : d.format, grade:d.grade, competition:d.competition,
           teams:[{id:our, name:'Example club', lineup_available:true, players}, {id:away, name:['Bay Example CC','Hill Example CC','River Example CC'][round]}],
           innings:[{id:matchId + '-bat', team_id:our, number:1, complete:true, batters:players.map((p,i) => ({...p,
             status:i > 8 ? 'did_not_bat' : 'played', runs:i > 8 ? null : (13 + i * 9 + round * 17 + teamIndex * 6) % 81,

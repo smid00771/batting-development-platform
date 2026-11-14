@@ -1,8 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildSeasonStats,compareSelectedGrades,statsOvers,resolveSelectionStatsTeams} from '../season-stats.js';
+import {buildSeasonStats,compareSelectedGrades,compareSeasonGrades,statsOvers,resolveSelectionStatsTeams,defaultStatsView} from '../season-stats.js';
 import {renderStatsRows,renderGradeComparison} from '../season-stats-panel.js';
 import {createSeasonStatsDemo} from '../season-stats-demo.js';
+import {buildSelectionEvidence} from '../selection-evidence.js';
 
 const clone = x => structuredClone(x);
 const batter = (id='p1',runs=50,not_out=false,extra={}) => ({player_id:id,name:id,status:'played',runs,not_out,balls:40,fours:4,sixes:1,importable:true,...extra});
@@ -192,4 +193,68 @@ test('explicit source format aliases are canonicalised without using dates or po
  assert.equal(buildSeasonStats(c,{format:'t20'}).included,1);
  assert.equal(buildSeasonStats(c,{format:'unknown'}).included,1);
  assert.equal(JSON.stringify(c),before);
+});
+
+test('competition totals pool original limited-overs and long-form innings, keeping T20, grades and competitions separate',()=>{
+ const limited=card('limited',{format_key:'limited_overs'}),long=card('long');
+ limited.scorecard.innings[0].batters=[batter('p1',50,false,{balls:40})];
+ limited.scorecard.innings[1].bowlers=[bowler('p2',{wickets:2,runs:18,balls:31})];
+ long.scorecard.innings[0].batters=[batter('p1',20,false,{balls:20})];
+ long.scorecard.innings.push({id:'long-bat-2',number:2,team_id:'us',complete:true,batters:[batter('p1',30,true,{balls:30})]},
+  {id:'long-bowl-2',number:2,team_id:'them',complete:true,bowling_available:true,bowlers:[bowler('p2',{wickets:1,runs:12,balls:18})]});
+ const t20=card('t20',{format_key:'t20'}),other=card('other',{competition:'Another competition'}),lower=card('lower',{grade:'2nd Grade'}),unknown=card('unknown',{format_key:'unknown'});
+ t20.scorecard.innings[0].batters[0].runs=999;
+ const c=context([limited,long,t20,other,lower,unknown]),before=JSON.stringify(c),summary=buildSeasonStats(c,{format:'competition'});
+ const rows=summary.rows.filter(r=>r.group===JSON.stringify(['District','1st Grade'])),bat=rows.find(r=>r.roster_id==='r1'),ball=rows.find(r=>r.roster_id==='r2');
+ assert.equal(summary.included,4);assert.equal(rows.length,2);
+ assert.deepEqual([bat.matches,bat.innings,bat.runs,bat.not_outs,bat.dismissals,bat.average],[2,3,100,1,2,50]);
+ assert.equal(bat.strike_rate,10000/90);assert.equal(bat.high_score.runs,50);assert.equal(bat.fifties,1);
+ assert.deepEqual([ball.wickets,ball.conceded,ball.bowling_balls,ball.bowling_average,ball.economy,ball.bowling_strike_rate],[6,60,90,10,4,15]);
+ assert.equal(ball.bowling_innings,3);assert.deepEqual(ball.best_bowling,{wickets:3,runs:30});
+ assert.deepEqual(new Set(bat.history.map(m=>m.format)),new Set(['limited_overs','long_form']));
+ assert.equal(summary.rows.filter(r=>r.roster_id==='r1').length,3,'Other competitions and grades remain distinct');
+ assert.equal(player(buildSeasonStats(c,{format:'t20'})).runs,999);
+ assert.equal(player(buildSeasonStats(c,{format:'limited_overs'})).runs,50);
+ assert.equal(JSON.stringify(c),before,'Projection does not change fixtures, formats or source figures');
+ const only=buildSeasonStats(c,{format:'competition',grade:JSON.stringify(['District','1st Grade'])});assert.equal(only.included,2);assert.equal(only.rows.length,2);
+ const html=renderStatsRows([bat]);assert.match(html,/Limited overs/);assert.match(html,/Long form/);
+});
+
+test('combined totals retain correction, missing-data and identity safeguards across formats',()=>{
+ const old=card('limited',{format_key:'limited_overs'}),corrected=clone(old),long=card('long');
+ corrected.snapshot_id='new';corrected.fetched_at='2026-10-12T00:00:00Z';corrected.scorecard.innings[0].batters[0].runs=80;
+ long.scorecard.innings[0].batters[0].balls=null;long.scorecard.innings[1].bowling_available=false;long.scorecard.innings[1].bowlers=[];
+ const c=context([old,long,corrected,corrected]);let r=buildSeasonStats(c,{format:'competition'});
+ assert.equal(r.included,2);assert.equal(player(r).matches,2);assert.equal(player(r).runs,130);assert.equal(player(r).average,65);assert.equal(player(r).strike_rate,null);
+ assert.equal(player(r,'r2').bowling_complete,false);assert.equal(player(r,'r2').bowling_average,null);assert.equal(r.issues.length,1);
+ long.scorecard.innings[0].batters[0].importable=false;r=buildSeasonStats(c,{format:'competition'});assert.equal(player(r).average,null);assert.equal(player(r).batting_complete,false);
+ const unresolved=context([card('a',{competition:'',format_key:'limited_overs'}),card('b',{competition:''})]);
+ assert.equal(buildSeasonStats(unresolved,{format:'competition'}).rows.filter(x=>x.roster_id==='r1').length,2,'Unknown competition labels never establish a combined competition');
+});
+
+test('competition view counts and issues exclude T20, unknown formats and no-play matches',()=>{
+ const fixtures=[fixture('lo',{format:'limited_overs',match_id:null}),fixture('long',{match_id:null}),fixture('t20',{format:'t20',match_id:null}),fixture('unknown',{format:'unknown',match_id:null}),fixture('no-play',{match_id:null,no_play:'bye'})];
+ const c=context([card('live-lo',{format_key:'limited_overs',status:'live',dates:['2026-10-09']}),card('live-t20',{format_key:'t20',status:'live'})],{fixtures});
+ const r=buildSeasonStats(c,{format:'competition'});assert.equal(r.included,0);assert.equal(r.playing,1);
+ assert.deepEqual(new Set(r.issues.map(x=>x.fixture_id||x.id)),new Set(['live-lo','lo','long']));
+});
+
+test('the default follows continuous competitions while T20-only seasons stay standalone',()=>{
+ assert.equal(defaultStatsView(context([card()])), 'competition');
+ assert.equal(defaultStatsView(context([card('lo',{format_key:'limited_overs'})])), 'competition');
+ assert.equal(defaultStatsView(context([card('t20',{format_key:'t20'}),card('old',{dates:['2025-10-10']})])), 't20');
+ assert.equal(defaultStatsView(context([card()]),'t20'),'t20');
+ assert.equal(defaultStatsView(context([])),'competition');
+});
+
+test('combined grade comparisons use pooled figures without assigning a single-format form rating',()=>{
+ const c=context([card(),card('lo',{format_key:'limited_overs'}),card('lower',{grade:'2nd Grade'})]);
+ const summary=buildSeasonStats(c,{format:'competition'}),roster=[{id:'r1',name:'Alex',active:true,batting:'top',bowling:'none'},{id:'r2',name:'Jamie',active:true,bowling:'pace',bowling_load:'frontline'}];
+ const first={id:'f1',competition:'District',grade:'1st Grade',format:'competition',slots:[{d1:'r1',d2:'r2'}]},second={...first,id:'f2',grade:'2nd Grade',slots:[{d1:'r1'}]};
+ const rows=compareSelectedGrades(summary,first,second,roster);assert.equal(rows[0].first[0].stats.runs,100);assert.equal(rows[0].first[1].day,2);
+ assert.equal(compareSeasonGrades(summary,first,second,roster)[0].first[0].stats.matches,2);
+ assert.equal(compareSelectedGrades(summary,first,{...second,format:'t20'},roster).length,0);
+ const evidence=buildSelectionEvidence(summary,[first,second],roster);assert.equal(evidence.pairs.length,0);
+ assert.match(evidence.player('f1','r1').bat.reason,/individual|format-specific/);assert.equal(evidence.player('f1','r1').bat.state,'building');
+ assert.equal(evidence.player('f1','r1').stats.runs,100);
 });

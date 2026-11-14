@@ -2,9 +2,9 @@
 let analysisTask=null;
 function loadAnalysis(){
  return analysisTask||=(Promise.all([
-  import('./season-stats.js?v=0.8.62.275'),import('./selection-evidence.js?v=0.8.62.288'),
-  import('./selection-returning.js?v=0.8.62.361'),import('./selection-evidence-ui.js?v=0.8.62.361'),
-  import('./selection-history.js?v=0.8.62.278')
+  import('./season-stats.js?v=0.8.62.365'),import('./selection-evidence.js?v=0.8.62.365'),
+  import('./selection-returning.js?v=0.8.62.365'),import('./selection-evidence-ui.js?v=0.8.62.365'),
+  import('./selection-history.js?v=0.8.62.365')
  ]).then(parts=>Object.assign({},...parts)).catch(error=>{analysisTask=null;throw error;}));
 }
 

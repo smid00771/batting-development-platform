@@ -89,6 +89,11 @@ export function gradeBenchmark(team, discipline) {
 }
 function assess(team,person,row) {
   const bat=battingEvidence(row), ball=bowlingEvidence(row,person,team.format);
+  if (team.format === 'competition') {
+    const neutral = evidence => ({...evidence,ready:false,state:'building',baseline:null,
+      reason:'Choose Limited overs only or Long form only for format-specific form ratings'});
+    return {bat:neutral(bat),ball:ball.applicable ? neutral(ball) : null};
+  }
   const evaluate = (discipline,evidence) => {
     if (discipline === 'ball' && !evidence.applicable) return null;
     const base=gradeBenchmark(team,discipline), knownRole=discipline === 'bat' ? role(person) : bowlingRole(person);

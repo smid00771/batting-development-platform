@@ -1,6 +1,6 @@
 import {findReturningPlayers} from './selection-returning-availability.js?v=0.8.62.361';
 import {spinBalanceChange} from './player-bowling.js?v=0.8.62.279';
-import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.288';
+import {battingPositionFits, bowlingJobFits, battingEvidence, bowlingEvidence} from './selection-evidence.js?v=0.8.62.365';
 
 const date = team => team.days?.[0]?.date || '';
 const selected = (team,id) => (team.slots || []).some(slot=>slot.d1===id || slot.d2===id);

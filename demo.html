@@ -3803,7 +3803,7 @@ html :is(#app,dialog,[role="dialog"]) :is(h1,h2,[aria-level="1"],[aria-level="2"
 </header>
 <section id="demoContext" class="demo-context" hidden aria-label="Your demo role">
  <p><strong id="demoRole"></strong><span id="demoHint"></span></p>
- <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.364.</p></details>
+ <details id="demoAbout"><summary>Access &amp; demo limits</summary><div id="demoPermissions"></div><p>Fictional Harbour Example Cricket Club. Changes stay in this tab and reset when you reload. Provider connections, AI, calls, invitations and posting are simulated; no real keys or accounts are needed. App 0.8.62.365.</p></details>
 </section>
 <p id="demoStatus" class="demo-status" role="status" hidden></p>
 <main id="demoWelcome"></main>
@@ -6192,9 +6192,22 @@ const number = value => Number.isInteger(value) && value >= 0;
 const dates = fixture => (fixture.days || []).map(day => typeof day === 'string' ? day : day.date).filter(Boolean).sort();
 const inSeason = (date, season) => !!date && date >= season.start && date <= season.end;
 const groupKey = (competition, grade) => JSON.stringify([String(competition || '').trim(), String(grade || '').trim()]);
-const STATS_FORMATS = {limited_overs:'Limited overs', t20:'T20', long_form:'Long form', unknown:'Format unknown'};
+// "competition" is a stats view, never a stored fixture format.
+const STATS_FORMATS = {competition:'Limited overs + long form', limited_overs:'Limited overs', t20:'T20', long_form:'Long form', unknown:'Format unknown'};
 const statsFormat = value => ({limitedovers:'limited_overs',limitedover:'limited_overs',oneday:'limited_overs',
   longform:'long_form',twoday:'long_form',multiday:'long_form',test:'long_form',t20:'t20',twenty20:'t20'})[key(value)] || 'unknown';
+const statsMatchesView = (format, view) => !view || (view === 'competition'
+  ? ['limited_overs','long_form'].includes(statsFormat(format)) : statsFormat(format) === view);
+function defaultStatsView(context = {}, preferredFormat) {
+  if (statsFormat(preferredFormat) === 't20') return 't20';
+  if (['limited_overs','long_form'].includes(statsFormat(preferredFormat))) return 'competition';
+  const season = context.season || {};
+  const formats = new Set([
+    ...(context.fixtures || []).filter(f => !f.cancelled && inSeason(dates(f)[0],season)).map(f => statsFormat(f.format)),
+    ...latestStatsCards(context.cards).filter(c => inSeason([...(c.scorecard.dates || [])].sort()[0],season)).map(c => statsFormat(c.scorecard.format_key))
+  ].filter(f => f !== 'unknown'));
+  return formats.size === 1 && formats.has('t20') ? 't20' : 'competition';
+}
 const statsOvers = balls => number(balls) ? `${Math.floor(balls / 6)}.${balls % 6}` : null;
 const statsRate = (numerator, denominator, factor = 1) => number(numerator) && denominator > 0 ? numerator * factor / denominator : null;
 
@@ -6260,7 +6273,7 @@ function latestStatsCards(cards = []) {
 }
 
 // These positions describe the current selection, never an inferred historical
-// batting position. Each figure remains specific to its competition/grade/format.
+// batting position. Each figure remains specific to its competition/grade/view.
 function compareSelectedGrades(summary, first, second, roster = []) {
   if (!first || !second || first.id === second.id || first.competition !== second.competition || first.format !== second.format) return [];
   const players = new Map(roster.map(p => [p.id, p]));
@@ -6292,7 +6305,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   let included = 0, playing = 0;
   const matchesFilters = (group, format) => (!filters.grade || filters.grade === group)
     && (!Array.isArray(filters.groups) || filters.groups.includes(group))
-    && (!filters.format || filters.format === format);
+    && statsMatchesView(format, filters.format);
   const problem = (id, message, fixture, card, grade, competition, format, requiresAttention = true) => {
     const group = groupKey(competition, grade);
     if (!matchesFilters(group, format)) return;
@@ -6335,6 +6348,9 @@ function buildSeasonStats(context = {}, filters = {}) {
     const grade = fixture?.grade || wrapped.grade_hint || card.grade || 'Grade unknown';
     const competition = fixture?.competition || card.competition || '';
     const format = statsFormat(card.format_key || fixture?.format);
+    // Aggregate original innings together, then calculate rates once. Never
+    // combine T20, or infer a continuous competition from an unknown label.
+    const rowFormat = filters.format === 'competition' && String(competition).trim() ? 'competition' : format;
     const group = observeGroup(competition, grade, format);
     if (!matchesFilters(group, format)) continue;
     const issue = (message, requiresAttention = true) => problem(card.match_id, message, fixture, card, grade, competition, format, requiresAttention);
@@ -6367,18 +6383,18 @@ function buildSeasonStats(context = {}, filters = {}) {
       if (!player?.player_id) return null;
       const person = playerKey(player.player_id);
       if (conflicts.has(person)) return null;
-      const id = JSON.stringify([person, group, format]);
+      const id = JSON.stringify([person, group, rowFormat]);
       let row = rows.get(id);
       if (!row) {
         row = {id, person_id:person, roster_id:identities.get(player.player_id)?.roster_id || null,
-          name:identities.get(player.player_id)?.name || player.name || 'Player', grade, competition, group, format,
+          name:identities.get(player.player_id)?.name || player.name || 'Player', grade, competition, group, format:rowFormat,
           matches:0, innings:0, runs:0, not_outs:0, dismissals:0, balls:0, fours:0, sixes:0,
           fifties:0, hundreds:0, ducks:0, high_score:null, bowling_innings:0, wickets:0, conceded:0,
           bowling_balls:0, maidens:0, five_wickets:0, best_bowling:null, batting_complete:true, bowling_complete:true, history:[]};
         rows.set(id, row);
       }
       if (!matchRows.has(id)) {
-        const match = {match_id:card.match_id, date, opposition:fixture?.opposition || card.teams.find(t => t.id !== team.id)?.name || '',
+        const match = {match_id:card.match_id, date, format, opposition:fixture?.opposition || card.teams.find(t => t.id !== team.id)?.name || '',
           url:card.url || null, fixture_id:fixture?.id || null, batting:[], bowling:[], batting_available:false, bowling_available:false, batting_incomplete:false, bowling_incomplete:false};
         row.matches++; row.history.push(match); matchRows.set(id, match);
       }
@@ -6459,7 +6475,7 @@ function buildSeasonStats(context = {}, filters = {}) {
   }));
   return {rows:result, groups:[...groups.values()].sort((a,b) => a.grade.localeCompare(b.grade, undefined, {numeric:true}) || a.competition.localeCompare(b.competition)), formats:[...formats], issues:[...issues.values()], included, playing, season};
 }
-return {STATS_FORMATS,statsFormat,statsOvers,statsRate,resolveSelectionStatsTeams,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
+return {STATS_FORMATS,statsFormat,statsMatchesView,defaultStatsView,statsOvers,statsRate,resolveSelectionStatsTeams,latestStatsCards,compareSelectedGrades,compareSeasonGrades,buildSeasonStats};
 })();
 
 const __demoModule14=(()=>{
@@ -6651,6 +6667,11 @@ function gradeBenchmark(team, discipline) {
 }
 function assess(team,person,row) {
   const bat=battingEvidence(row), ball=bowlingEvidence(row,person,team.format);
+  if (team.format === 'competition') {
+    const neutral = evidence => ({...evidence,ready:false,state:'building',baseline:null,
+      reason:'Choose Limited overs only or Long form only for format-specific form ratings'});
+    return {bat:neutral(bat),ball:ball.applicable ? neutral(ball) : null};
+  }
   const evaluate = (discipline,evidence) => {
     if (discipline === 'ball' && !evidence.applicable) return null;
     const base=gradeBenchmark(team,discipline), knownRole=discipline === 'bat' ? role(person) : bowlingRole(person);
@@ -12721,7 +12742,7 @@ return {ndcaRuleWeight,createClubStandings};
 })();
 
 const __demoModule61=(()=>{
-const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat}=__demoModule12;
+const {buildSeasonStats, resolveSelectionStatsTeams, compareSelectedGrades, compareSeasonGrades, STATS_FORMATS, statsOvers, statsFormat, statsMatchesView, defaultStatsView}=__demoModule12;
 const {buildSelectionEvidence}=__demoModule13;
 const {evidenceStyles, renderEvidenceBadges, bindEvidenceDetails, clearEvidenceLinks}=__demoModule17;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -12779,7 +12800,7 @@ function renderGradeComparison(summary, first, second, roster, evidence = buildS
 .ss-compare [data-evidence-row].se-comparison-linked{box-shadow:none;border-radius:0;background:none}
 .ss-compare .se-comparison-active>[data-evidence-anchor]{background:#fff4d9;box-shadow:0 0 0 3px #fff4d9;border-radius:3px}
 .ss-compare .se-evidence-connectors g{opacity:.75}
-.ss-compare .se-evidence-connectors g.se-comparison-active,.ss-compare .se-evidence-connectors [role=button]:focus-visible{opacity:1}.ss-compare-cell{min-width:0;overflow-wrap:anywhere}.ss-compare-cell strong,.ss-compare-cell span,.ss-compare-cell small{display:block}.ss-compare-cell strong{font-size:14px}.ss-compare-cell span{margin-top:5px;font-size:14px}.ss-compare-cell small{font-size:12px;color:#52627a;margin:3px 0}.ss-compare-cell>div+div{border-top:1px dashed #dbe3ed;margin-top:8px;padding-top:8px}.ss-position{font-size:12px;color:#52627a;padding-top:2px}.ss-compare-head{font-weight:700}.ss-compare-head small{display:block;font-size:12px;font-weight:400}</style><p class="ss-caption">${seasonPlayers ? 'All season players, alphabetically' : (first.lineupPublished ? 'Published' : 'Selected')+' batting order'} · ${escape(STATS_FORMATS[first.format] || first.format)} season ${bowling ? 'bowling' : 'batting'} figures in each grade. Averages are not adjusted for grade strength. Open Form guide for the rough assessment.</p><div class="ss-compare${seasonPlayers ? ' ss-compare-season' : ''}" role="table" aria-label="${seasonPlayers ? 'All season players and' : 'Selected batting orders and'} season ${bowling ? 'bowling' : 'batting'} figures"><div class="ss-compare-row ss-compare-head" role="row">${seasonPlayers ? '' : '<span role="columnheader">#</span>'}<span role="columnheader">${escape(first.grade)}${!seasonPlayers && first.days?.[0]?.date ? `<small>Line-up: ${escape(date(first.days[0].date))}</small>` : ''}</span><span role="columnheader">${escape(second.grade)}${!seasonPlayers && second.days?.[0]?.date ? `<small>Line-up: ${escape(date(second.days[0].date))}</small>` : ''}</span></div>${rows.map(row => `<div class="ss-compare-row" role="row">${seasonPlayers ? '' : `<span class="ss-position" role="rowheader">${row.position}</span>`}<div class="ss-compare-cell" role="cell">${cell(row.first,first)}</div><div class="ss-compare-cell" role="cell">${cell(row.second,second)}</div></div>`).join('')}</div>`;
+.ss-compare .se-evidence-connectors g.se-comparison-active,.ss-compare .se-evidence-connectors [role=button]:focus-visible{opacity:1}.ss-compare-cell{min-width:0;overflow-wrap:anywhere}.ss-compare-cell strong,.ss-compare-cell span,.ss-compare-cell small{display:block}.ss-compare-cell strong{font-size:14px}.ss-compare-cell span{margin-top:5px;font-size:14px}.ss-compare-cell small{font-size:12px;color:#52627a;margin:3px 0}.ss-compare-cell>div+div{border-top:1px dashed #dbe3ed;margin-top:8px;padding-top:8px}.ss-position{font-size:12px;color:#52627a;padding-top:2px}.ss-compare-head{font-weight:700}.ss-compare-head small{display:block;font-size:12px;font-weight:400}</style><p class="ss-caption">${seasonPlayers ? 'All season players, alphabetically' : (first.lineupPublished ? 'Published' : 'Selected')+' batting order'} · ${escape(STATS_FORMATS[first.format] || first.format)} season ${bowling ? 'bowling' : 'batting'} figures in each grade. Averages are not adjusted for grade strength. ${first.format === 'competition' ? 'Choose an individual format for form ratings.' : 'Open Form guide for the rough assessment.'}</p><div class="ss-compare${seasonPlayers ? ' ss-compare-season' : ''}" role="table" aria-label="${seasonPlayers ? 'All season players and' : 'Selected batting orders and'} season ${bowling ? 'bowling' : 'batting'} figures"><div class="ss-compare-row ss-compare-head" role="row">${seasonPlayers ? '' : '<span role="columnheader">#</span>'}<span role="columnheader">${escape(first.grade)}${!seasonPlayers && first.days?.[0]?.date ? `<small>Line-up: ${escape(date(first.days[0].date))}</small>` : ''}</span><span role="columnheader">${escape(second.grade)}${!seasonPlayers && second.days?.[0]?.date ? `<small>Line-up: ${escape(date(second.days[0].date))}</small>` : ''}</span></div>${rows.map(row => `<div class="ss-compare-row" role="row">${seasonPlayers ? '' : `<span class="ss-position" role="rowheader">${row.position}</span>`}<div class="ss-compare-cell" role="cell">${cell(row.first,first)}</div><div class="ss-compare-cell" role="cell">${cell(row.second,second)}</div></div>`).join('')}</div>`;
 }
 
 function renderStatsRows(rows, mode = 'batting', evidence = null, openable = null) {
@@ -12798,12 +12819,12 @@ function renderStatsRows(rows, mode = 'batting', evidence = null, openable = nul
     const figures = batting
       ? figure('average','Average',rate(incomplete?null:row.average),{primary:true,note:averageNote}) + figure('strike_rate','SR',rate(incomplete?null:row.strike_rate),{note:incomplete?'Figures incomplete':row.balls===null?'Balls faced unavailable':'Strike rate: runs per 100 balls'}) + figure('runs','Runs',numeric(row.runs)) + figure('innings','Inns',numeric(row.innings)) + figure('not_outs','Not out',numeric(row.not_outs))
       : figure('wickets','Wickets',numeric(row.wickets),{primary:true}) + figure('bowling_average','Average',rate(incomplete?null:row.bowling_average)) + figure('economy','Econ',rate(incomplete?null:row.economy)) + figure('bowling_balls','Overs',statsOvers(row.bowling_balls)??'—') + figure('bowling_innings','Inns',numeric(row.bowling_innings));
-    return `<details class="ss-row" data-stats-player="${escape(row.id)}"><summary><span class="ss-name">${playerName(row.roster_id,row.name,openable)}<small>${escape(row.grade)}${row.competition ? ' · ' + escape(row.competition) : ''}${incomplete ? '<span class="ss-incomplete"> · Figures incomplete</span>' : ''}</small></span><span class="ss-figures">${figures}</span><span class="ss-chevron" aria-hidden="true">⌄</span><span class="ss-sr-only">Match history and form guide</span></summary><div class="ss-detail"><div class="ss-detail-top"><dl class="ss-metrics">${metrics.map(([label,value]) => metric(label, value)).join('')}</dl>${renderEvidenceBadges(item,evidenceKey)}</div>${averageNote ? `<p class="ss-caption">${escape(averageNote)}${averageNote==='No dismissals yet'?'; average is unavailable.':''}</p>` : ''}<h3 class="ss-history-title">Match history</h3>${row.history.map(match => {
+    return `<details class="ss-row" data-stats-player="${escape(row.id)}"><summary><span class="ss-name">${playerName(row.roster_id,row.name,openable)}<small>${escape(row.grade)}${row.competition ? ' · ' + escape(row.competition) : ' · Competition unknown · ' + escape(STATS_FORMATS[row.format] || row.format)}${incomplete ? '<span class="ss-incomplete"> · Figures incomplete</span>' : ''}</small></span><span class="ss-figures">${figures}</span><span class="ss-chevron" aria-hidden="true">⌄</span><span class="ss-sr-only">Match history and form guide</span></summary><div class="ss-detail"><div class="ss-detail-top"><dl class="ss-metrics">${metrics.map(([label,value]) => metric(label, value)).join('')}</dl>${renderEvidenceBadges(item,evidenceKey)}</div>${averageNote ? `<p class="ss-caption">${escape(averageNote)}${averageNote==='No dismissals yet'?'; average is unavailable.':''}</p>` : ''}<h3 class="ss-history-title">Match history</h3>${row.history.map(match => {
       const scores = batting ? match.batting.map(x => x.dnb ? 'DNB' : x.runs + (x.not_out ? '*' : '') + (x.balls === null ? '' : ' (' + x.balls + ')')) : match.bowling.map(x => x.wickets + '/' + x.runs + (x.balls === null ? '' : ' · ' + statsOvers(x.balls) + ' ov'));
       if (batting ? match.batting_incomplete : match.bowling_incomplete) scores.push('Figures incomplete');
       const score = scores.join(' & ') || (batting ? match.batting_available ? 'DNB' : 'Batting unavailable' : match.bowling_available ? 'Did not bowl' : 'Bowling unavailable');
       const url = link(match.url);
-      return `<div class="ss-match"><span>${escape(date(match.date))} · v ${escape(match.opposition)}${url ? `<small><a href="${escape(url)}" target="_blank" rel="noopener">Scorecard</a></small>` : ''}</span><span class="ss-match-score">${escape(score)}</span></div>`;
+      return `<div class="ss-match"><span>${escape(date(match.date))} · v ${escape(match.opposition)}${row.format === 'competition' ? ' · ' + escape(STATS_FORMATS[match.format] || match.format) : ''}${url ? `<small><a href="${escape(url)}" target="_blank" rel="noopener">Scorecard</a></small>` : ''}</span><span class="ss-match-score">${escape(score)}</span></div>`;
     }).join('')}</div></details>`;
   }).join('');
 }
@@ -12844,17 +12865,18 @@ function createSeasonStatsPanel(h) {
     const available = team => !team.cancelled && (!data || !teamDate(team) || teamDate(team) >= data.season.start && teamDate(team) <= data.season.end);
     const sourceTeams = resolveSelectionStatsTeams(s.teams || data?.fixtures || [],data?.season,[...(data?.fixtures || []),...(s.teams || [])]);
     const allTeams = sourceTeams.filter(available).map(t => ({...t,format:statsFormat(t.format)}));
+    const viewTeam = team => state.format === 'competition' && team.competition && statsMatchesView(team.format, 'competition') ? {...team,format:'competition'} : team;
     const latestPublished = new Map();
     for (const fixture of sourceTeams) {
       if (!fixture.published?.details || !Array.isArray(fixture.published.slots)) continue;
       const team = {...fixture, ...fixture.published.details, slots:fixture.published.slots, level:fixture.published.level ?? fixture.level, lineupPublished:true};
       team.format = statsFormat(team.format);
       if (!available(team)) continue;
-      const key = JSON.stringify([team.competition, team.grade, team.format]), previous = latestPublished.get(key);
-      if (!previous || teamDate(team) > teamDate(previous)) latestPublished.set(key, team);
+      const projected = viewTeam(team), key = JSON.stringify([team.competition, team.grade, projected.format]), previous = latestPublished.get(key);
+      if (!previous || teamDate(team) > teamDate(previous)) latestPublished.set(key, projected);
     }
     const publishedTeams = [...latestPublished.values()];
-    const formatTeams = allTeams.filter(t => t.format === state.format);
+    const formatTeams = allTeams.filter(t => state.format && statsMatchesView(t.format, state.format)).map(viewTeam);
     const formatPublished = publishedTeams.filter(t => t.format === state.format);
     const dates = [...new Set(formatTeams.map(teamDate).filter(Boolean))].sort().reverse();
     const populated = dates.filter(day => formatTeams.some(t => teamDate(t) === day && t.slots?.some(slot => slot.d1 || slot.d2)));
@@ -12875,18 +12897,19 @@ function createSeasonStatsPanel(h) {
     const secondary = lower.find(t => t.id === state.secondTeam) || lower.find(t => sameGrade(t,previous(state.secondTeam))) || lower.find(t => t.level > primary?.level) || lower[0];
     if (primary) state.firstTeam = primary.id;
     if (secondary) state.secondTeam = secondary.id;
-    const canCompare = publishedTeams.some(t => publishedTeams.some(other => other.id !== t.id && other.competition === t.competition && other.format === t.format)) || allTeams.some(t => allTeams.some(other => other.grade !== t.grade && (!s.teams || teamDate(other) === teamDate(t)) && other.competition === t.competition && other.format === t.format));
+    const canCompare = publishedTeams.some(t => publishedTeams.some(other => other.grade !== t.grade && other.competition === t.competition && other.format === t.format)) || allTeams.some(t => allTeams.some(other => other.grade !== t.grade && (!s.teams || teamDate(other) === teamDate(t)) && other.competition === t.competition && viewTeam(other).format === viewTeam(t).format));
     if (!canCompare) state.compare = false;
-    const allTotals = data ? buildSeasonStats(data) : null;
+    const allTotals = data ? buildSeasonStats(data, state.format === 'competition' ? {format:'competition'} : {}) : null;
     if (allTotals && state.grade && !allTotals.groups.some(g=>g.id===state.grade)) {
       // Retain the selected grade when an old blank label resolves after sync.
       let grade;try { grade=JSON.parse(state.grade)?.[1]; } catch {}
       const matches=allTotals.groups.filter(g=>g.grade===grade);
       state.grade=matches.length===1?matches[0].id:'';
     }
-    const knownFormats = ['limited_overs','long_form','t20'];
+    const knownFormats = ['competition','limited_overs','long_form','t20'];
     const formats = [...knownFormats,...(allTotals?.formats || []).filter(f => !knownFormats.includes(f))];
-    const formatPicker = `<label class="ss-format">Format<select data-stats-filter="format" ${disabled}>${formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(STATS_FORMATS[f] || f)}</option>`).join('')}</select></label>`;
+    const viewLabel = f => f === 'competition' ? 'Competition' : ['limited_overs','long_form'].includes(f) ? STATS_FORMATS[f] + ' only' : STATS_FORMATS[f] || f;
+    const formatPicker = `<label class="ss-format">Stats view<select data-stats-filter="format" ${disabled}>${formats.map(f => `<option value="${escape(f)}" ${state.format === f ? 'selected' : ''}>${escape(viewLabel(f))}</option>`).join('')}</select></label>`;
     const totals = data ? buildSeasonStats(data, state.compare ? {...state, groups:[primary, secondary].filter(Boolean).map(team => JSON.stringify([String(team.competition || '').trim(), String(team.grade || '').trim()]))} : state) : null;
     s.evidence = allTotals ? buildSelectionEvidence(allTotals,state.compare?[primary,secondary].filter(Boolean):[],s.roster,{seasonPlayers:state.compare && comparisonDate === 'season'}) : null;
     s.host.innerHTML = evidenceStyles + css + `<section class="season-stats" aria-label="Season stats"><div class="ss-top"><h2 tabindex="-1">Season stats</h2><button type="button" class="btn ghost" data-stats-close>Close stats</button></div>${data ? `
@@ -12896,7 +12919,7 @@ function createSeasonStatsPanel(h) {
       ${!state.compare ? `<div class="ss-filters">${totals.groups.length > 1 ? `<label>Grade<select data-stats-filter="grade" ${disabled}><option value="">All grades</option>${totals.groups.map(g => `<option value="${escape(g.id)}" ${state.grade === g.id ? 'selected' : ''}>${escape(g.grade)}${totals.groups.some(other => other.id !== g.id && other.grade === g.grade) ? ' · ' + escape(g.competition || 'Competition unknown') : ''}</option>`).join('')}</select></label>` : ''}${formatPicker}<label class="ss-search">Find player<input type="search" data-stats-search placeholder="Search players…" autocomplete="off" value="${escape(state.search || '')}"></label></div>` : ''}
       <div class="ss-context"><p class="ss-caption">${totals.included} completed ${totals.included === 1 ? 'scorecard' : 'scorecards'} · ${escape(STATS_FORMATS[state.format] || 'Current season')}${totals.playing ? ' · ' + totals.playing + ' in progress' : ''}</p>
       ${renderStatsIssues(totals.issues)}<button class="btn ghost ss-refresh" type="button" data-stats-refresh ${disabled}>${s.busy ? 'Updating…' : 'Update totals'}</button></div>
-      ${state.compare ? `<div class="ss-compare-controls">${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Players<select data-stats-date><option value="season" ${comparisonDate === 'season' ? 'selected' : ''}>All season players</option>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${(s.teams ? dates : []).map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(buildSeasonStats(data), primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s), comparisonDate === 'season') : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
+      ${state.compare ? `<div class="ss-compare-controls">${formatPicker}<div class="ss-compare-mode" role="group" aria-label="Comparison figures"><span>Figures</span><div><button type="button" class="btn ghost" data-stats-compare-mode="batting" aria-pressed="${state.mode !== 'bowling'}">Batting</button><button type="button" class="btn ghost" data-stats-compare-mode="bowling" aria-pressed="${state.mode === 'bowling'}">Bowling</button></div></div>${dates.length || formatPublished.length ? `<label>Players<select data-stats-date><option value="season" ${comparisonDate === 'season' ? 'selected' : ''}>All season players</option>${formatPublished.length ? `<option value="published" ${comparisonDate === 'published' ? 'selected' : ''}>Last published teams</option>` : ''}${(s.teams ? dates : []).map(day => `<option value="${escape(day)}" ${day === comparisonDate ? 'selected' : ''}>${escape(date(day))} · Current</option>`).join('')}</select></label>` : ''}<label>Team<select data-stats-team="firstTeam">${teams.map(t => `<option value="${escape(t.id)}" ${t.id === primary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label><label>Compare with<select data-stats-team="secondTeam">${lower.map(t => `<option value="${escape(t.id)}" ${t.id === secondary?.id ? 'selected' : ''}>${teamLabel(t)}</option>`).join('')}</select></label></div>${primary && secondary ? renderGradeComparison(allTotals, primary, secondary, s.roster, s.evidence, state.mode, openablePlayers(s), comparisonDate === 'season') : `<p class="ss-empty">No comparable ${escape(STATS_FORMATS[state.format] || 'matching format')} line-ups in this season.</p>`}` : `<div data-stats-rows></div>`}` : ''}<p class="ss-status" role="${s.error ? 'alert' : 'status'}" aria-live="polite">${escape(s.message)}</p>${!data && !s.busy ? '<button class="btn" type="button" data-stats-refresh>Try again</button>' : ''}</section>`;
     if (totals && !state.compare) renderRows(s, totals, open);
     bindPlayerLinks(s);
     if (s.evidence) bindEvidenceDetails(s.host,s.evidence,()=>here(s));
@@ -12907,7 +12930,7 @@ function createSeasonStatsPanel(h) {
     s.host.querySelectorAll('[data-stats-compare-mode]').forEach(el => el.onclick = () => {state.mode = el.dataset.statsCompareMode; draw(s); h.navigate?.(); s.host.querySelector(`[data-stats-compare-mode="${state.mode}"]`)?.focus({preventScroll:true});});
     s.host.querySelector('[data-stats-compare]')?.addEventListener('click', () => {state.compare = !state.compare; state.grade = ''; draw(s); h.navigate?.();});
     s.host.querySelector('[data-stats-date]')?.addEventListener('change', e => {state.compareDate = e.target.value; draw(s); h.navigate?.();});
-    s.host.querySelectorAll('[data-stats-team]').forEach(el => el.onchange = () => {state[el.dataset.statsTeam] = el.value; if (el.dataset.statsTeam === 'firstTeam') {state.secondTeam = ''; state.format = teams.find(t => t.id === el.value)?.format || state.format;} draw(s); h.navigate?.();});
+    s.host.querySelectorAll('[data-stats-team]').forEach(el => el.onchange = () => {state[el.dataset.statsTeam] = el.value; if (el.dataset.statsTeam === 'firstTeam') state.secondTeam = ''; draw(s); h.navigate?.();});
     s.host.querySelector('[data-stats-search]')?.addEventListener('input', e => {state.search = e.target.value; renderRows(s, totals, new Set([...s.host.querySelectorAll('[data-stats-player][open]')].map(el=>el.dataset.statsPlayer)));});
     s.host.querySelectorAll('[data-stats-fixture]').forEach(el => el.onclick = () => {if (canLeave()) h.openFixture(s, el.dataset.statsFixture);});
     s.host.querySelectorAll('[data-stats-season] input').forEach(el => el.addEventListener('input', () => {
@@ -12939,7 +12962,7 @@ function createSeasonStatsPanel(h) {
       if (!here(s)) return;
       s.context = data; h.updated?.(s.scope,data);
       if (settings) delete s.state.seasonDraft;
-      if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = statsFormat(s.preferredFormat) !== 'unknown' ? statsFormat(s.preferredFormat) : 'limited_overs';
+      if (!Object.hasOwn(STATS_FORMATS,s.state.format)) s.state.format = defaultStatsView(data, s.preferredFormat);
       s.message = settings ? 'Season dates saved.' : '';
     } catch (error) {if (here(s)) {s.error = true; s.message = error.message || 'Season stats could not be loaded.';}}
     finally {s.busy = false; s.savingSeason = false; draw(s); if (s.stale && here(s) && !s.state.seasonDraft) void load(s);}
@@ -14101,7 +14124,7 @@ function createSeasonStatsDemo(getState, getCards, getLinks, getMember, getClub,
         const players = [...new Set(fixture.slots.map(slot => slot.d1).filter(Boolean))].map(id => ({player_id:'demo-' + id, name:state.roster.find(p => p.id === id)?.name || 'Demo player'}));
         const our = 'example-home-' + teamIndex, away = 'example-away';
         cards['example-stats-' + matchId] = {provider:'playcricket_au', schema_version:2, match_id:matchId, url:null,
-          dates:[day], status:'completed', format_key:d.format, grade:d.grade, competition:d.competition,
+          dates:[day], status:'completed', format_key:d.format === 'long_form' && round < 2 ? 'limited_overs' : d.format, grade:d.grade, competition:d.competition,
           teams:[{id:our, name:'Example club', lineup_available:true, players}, {id:away, name:['Bay Example CC','Hill Example CC','River Example CC'][round]}],
           innings:[{id:matchId + '-bat', team_id:our, number:1, complete:true, batters:players.map((p,i) => ({...p,
             status:i > 8 ? 'did_not_bat' : 'played', runs:i > 8 ? null : (13 + i * 9 + round * 17 + teamIndex * 6) % 81,
@@ -14319,7 +14342,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.364';
+const APP_UI_VERSION='0.8.62.365';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
