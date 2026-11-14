@@ -1,0 +1,27 @@
+[
+  {
+    "file": "app.html",
+    "matches": true,
+    "sha256": "f2648203c89346459c31c2f0417f8a346de2a9fa5c9bd3b6fe7a05bd91dfa3fd"
+  },
+  {
+    "file": "app-start.js",
+    "matches": true,
+    "sha256": "a13c58d070bbad95e78f52d4bee1309b799c5d42665b9291618f7a2d94a120df"
+  },
+  {
+    "file": "app.js",
+    "matches": true,
+    "sha256": "fa47f9648b6892ae2233458200b5982e938a216cf5b8b761a40d4441bc2c71b4"
+  },
+  {
+    "file": "season-stats-panel.js",
+    "matches": true,
+    "sha256": "a960047e6d8f9acba427839c6122960f86d80bcadab15e45a2eea94c4a46aa19"
+  },
+  {
+    "file": "demo.html",
+    "matches": true,
+    "sha256": "f3ea1153387c57566cc6348310963c6284bd0f1b003079b76a6d2fd408efa10a"
+  }
+]
