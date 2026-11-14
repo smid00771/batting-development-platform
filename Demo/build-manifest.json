@@ -1,9 +1,9 @@
 {
-  "appVersion": "0.8.62.366",
+  "appVersion": "0.8.62.367",
   "sources": {
     "action-feedback.js": "ac05754280949d1a30a92a8937e40309104998e9c323d7cc2031bd6feb66d1bc",
     "app-design.css": "c38e5a8330c741889c6e6dcaeed3033e968ea9b57acdc9381d6e65b6d7a737ad",
-    "app.js": "aaa1d4adfabdff7faeecb70f1e7dc7505f9487d7285ecf8192c3ff2952a31881",
+    "app.js": "79bee1335bbe582c0910c3c9456ec301598d47f184bfbcaccbc8e95119a3ac06",
     "assist-loader.js": "55930bda95399b5ad13b6852302d0ad54f1e038d3923f45aff314876aa3d133f",
     "assist-routing.js": "002d29154788cfce75411a66fd6ad4806cf9583f47a4b3afc3936b782142284a",
     "availability-fixtures.js": "895dc2ebc24e3c5085033ff384876895d8cf0688aa84400481a38613672c13a3",
@@ -45,7 +45,7 @@
     "prediction-workspace.js": "5d2f118dd98737321ffc38cafa722d717e6ee353f57fae52e046641abc8f85da",
     "scorecard-replays.js": "9695786cd4ba63e303d7a3dfc63b2cc0fb565bb02344c2b4102376d2e9906ab9",
     "season-stats-demo.js": "6ef4fe53fd002f0fb89fc519f3d3e9980b0d66eeebc4af449b022bb03a4a9b23",
-    "season-stats-panel.js": "d9d0d4c933f7098599337ae39979f607c71ddd1875b7920798b3ed2b3ded5653",
+    "season-stats-panel.js": "13aad22ac33c90a102e4e58533fd93fc514cf6905110ba446624501f18ad27c3",
     "season-stats-settings.js": "9205f8986b7c70c84ab668d4351fcf2f6829b17d5a757932234239165483fbd4",
     "season-stats.js": "956c91124d92bb8d0b9bb1d436dd21b52c77773e74da1554386b6d97fb010e94",
     "selection-evidence-snapshot.js": "a9d4e7bfbc881a37c843fae003938a353140d823f91e3e81abb8e2d36a1110e5",

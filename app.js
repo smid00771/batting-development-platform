@@ -25,7 +25,7 @@ const app=document.getElementById('app');
 const appActionFeedback=createActionFeedback({document});
 const readCoaching=createCoachingReader({rpc:(name,args)=>supabase.rpc(name,args),scope:()=>[session?.user?.id,club?.id]});
 const legacyAppSession=isLegacyOrigin(location.href)&&new URLSearchParams(location.search).get('legacy')==='1';
-const APP_UI_VERSION='0.8.62.366';
+const APP_UI_VERSION='0.8.62.367';
 
 // BEGIN SHARED HEADING STYLES V89
 const appHeadingStyle=document.createElement('style');
@@ -20867,7 +20867,7 @@ async function renderSeasonStats(){
   teams:d?.fixtures.map(f=>({...f.details,id:f.id,slots:f.slots,published:f.published}))||null,roster:d?.roster||[],boardDate:selectionState?.key===scope?selectionState.date:null});
 }
 const clubStandingsPanel=createDeferredController({load:()=>import('./club-standings.js?v=0.8.62.345'),create:({createClubStandings})=>createClubStandings({supabase,here:s=>currentTab==='season_stats'&&seasonStatsRoute.section==='ladders'&&s.scope===selectionsScopeKey()&&canUseClubStandings(),close:closeSeasonStats,confirm:message=>confirm(message),alert:message=>alert(message)}),scope:requestedFeatureScope,name:'club standings',passive:{canLeave:()=>true,hasChanges:()=>false,invalidate:()=>{}}});
-const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.366'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,alert:message=>alert(message),confirm:message=>confirm(message),
+const seasonStatsPanel=createDeferredController({load:()=>import('./season-stats-panel.js?v=0.8.62.367'),create:({createSeasonStatsPanel})=>createSeasonStatsPanel({supabase,alert:message=>alert(message),confirm:message=>confirm(message),
  here:s=>currentTab==='season_stats'&&seasonStatsRoute.section!=='ladders'&&s.scope===selectionsScopeKey()&&canUseSeasonStats(),
  close:closeSeasonStats,navigate:()=>recordAppNavigation(clubNavigationRoute()),
  canOpenPlayer:()=>selectionsEnabled()&&selectionState?.key===selectionsScopeKey()&&seCanSetup(selectionState.data),
