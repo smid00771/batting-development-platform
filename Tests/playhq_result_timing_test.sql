@@ -40,9 +40,16 @@ begin
  assert club_selection_private.playhq_results_due(fid,'2026-10-26 03:00+00','2026-10-26 03:00+00')='2026-10-26 05:00+00'::timestamptz,'Delayed results retry every two hours';
  assert club_selection_private.playhq_results_due(fid,'2026-11-03 03:00+00','2026-11-03 03:00+00')='2026-11-04 03:00+00'::timestamptz,'Late results continue daily';
  update club_selection_private.fixtures set details=jsonb_set(details,'{days}','[{"date":"2026-10-25","start":"10:00"},{"date":"2026-11-01","start":"10:00"}]') where id=fid;
- assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:00+00')='2026-10-25 01:30+00'::timestamptz,'Day 1 score downloads are retained';
+ assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:00+00')='2026-10-25 01:30+00'::timestamptz,'Non-long-form timing is unchanged';
  assert club_selection_private.playhq_results_due(fid,'2026-11-01 01:00+00','2026-11-01 01:00+00')='2026-11-01 01:30+00'::timestamptz,'Next playing day bounds the wait';
  assert club_selection_private.playhq_results_due(fid,'2026-11-01 01:30+00','2026-11-01 01:30+00')='2026-11-01 02:00+00'::timestamptz,'Day 2 gets a fresh 30-minute retry window';
+ update club_selection_private.fixtures set details=jsonb_set(details,'{format}','"long_form"') where id=fid;
+ assert club_selection_private.playhq_results_due(fid,null,'2026-10-25 01:00+00')='2026-11-01 07:00+00'::timestamptz,'Long form starts only after the final playing day';
+ assert club_selection_private.playhq_results_due(fid,'2026-10-25 07:00+00','2026-10-25 08:00+00')='2026-11-01 07:00+00'::timestamptz,'No Day 1 result retry';
+ assert club_selection_private.playhq_results_due(fid,'2026-10-25 07:00+00','2026-10-29 08:00+00')='2026-11-01 07:00+00'::timestamptz,'No result checks between the two days';
+ assert club_selection_private.playhq_results_due(fid,null,'2026-11-01 07:00+00')='2026-11-01 07:00+00'::timestamptz,'Final finish opens the first check';
+ assert club_selection_private.playhq_results_due(fid,'2026-11-01 07:00+00','2026-11-01 07:00+00')='2026-11-01 07:30+00'::timestamptz,'Final-day missing result retries in 30 minutes';
+ update club_selection_private.fixtures set details=jsonb_set(details,'{format}','"t20"') where id=fid;
  -- Exercise the actual worker with an expected finish earlier today.
  update club_selection_private.fixtures set details=jsonb_set(details,'{days}',jsonb_build_array(jsonb_build_object('date',to_char((now()-interval '6 hours') at time zone 'Australia/Sydney','YYYY-MM-DD'),'start',to_char((now()-interval '6 hours') at time zone 'Australia/Sydney','HH24:MI')))) where id=fid;
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
